@@ -3,8 +3,8 @@
   "version": "0.2.8",
   "description": "ReactorPro Server",
   "author": {
-    "name": "Neural Nomads",
-    "email": "codenomad@neuralnomads.ai"
+    "name": "Hyperspace",
+    "email": "support@hyperspace.ai"
   },
   "repository": {
     "type": "git",
@@ -13,7 +13,7 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "codenomad": "dist/bin.js"
+    "reactorpro": "dist/bin.js"
   },
   "scripts": {
     "build": "npm run build:ui && npm run prepare-ui && tsc -p tsconfig.json",
