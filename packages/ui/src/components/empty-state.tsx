@@ -1,7 +1,7 @@
 import { Component } from "solid-js"
 import { Loader2 } from "lucide-solid"
 
-const reactorProIcon = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
+const reactorProIcon = new URL("../images/ReactorPro.png", import.meta.url).href
 
 interface EmptyStateProps {
   onSelectFolder: () => void

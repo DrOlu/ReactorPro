@@ -6,7 +6,7 @@ import DirectoryBrowserDialog from "./directory-browser-dialog"
 import Kbd from "./kbd"
 import { openNativeFolderDialog, supportsNativeDialogs } from "../lib/native/native-functions"
 
-const reactorProLogo = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
+const reactorProLogo = new URL("../images/ReactorPro.png", import.meta.url).href
 
 
 interface FolderSelectionViewProps {

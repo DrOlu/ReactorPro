@@ -15,7 +15,7 @@ const SCROLL_SCOPE = "session"
 const SCROLL_SENTINEL_MARGIN_PX = 48
 const USER_SCROLL_INTENT_WINDOW_MS = 600
 const SCROLL_INTENT_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"])
-const reactorProLogo = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
+const reactorProLogo = new URL("../images/ReactorPro.png", import.meta.url).href
 
 function formatTokens(tokens: number): string {
   return formatTokenTotal(tokens)
