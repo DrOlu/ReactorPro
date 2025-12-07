@@ -3,8 +3,8 @@
   "version": "0.2.8",
   "description": "ReactorPro - AI coding assistant",
   "author": {
-    "name": "Neural Nomads",
-    "email": "codenomad@neuralnomads.ai"
+    "name": "Hyperspace",
+    "email": "support@hyperspace.ai"
   },
   "type": "module",
   "main": "dist/main/main.js",
@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@hyperspace/reactorpro": "file:../server",
-    "@codenomad/ui": "file:../ui"
+    "@hyperspace/reactorpro-ui": "file:../ui"
   },
   "devDependencies": {
     "7zip-bin": "^5.2.0",
