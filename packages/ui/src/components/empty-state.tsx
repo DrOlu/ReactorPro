@@ -1,7 +1,7 @@
 import { Component } from "solid-js"
 import { Loader2 } from "lucide-solid"
 
-const codeNomadIcon = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
+const reactorProIcon = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
 
 interface EmptyStateProps {
   onSelectFolder: () => void
@@ -13,7 +13,7 @@ const EmptyState: Component<EmptyStateProps> = (props) => {
     <div class="flex h-full w-full items-center justify-center bg-surface-secondary">
       <div class="max-w-[500px] px-8 py-12 text-center">
         <div class="mb-8 flex justify-center">
-          <img src={codeNomadIcon} alt="ReactorPro logo" class="h-24 w-auto" loading="lazy" />
+          <img src={reactorProIcon} alt="ReactorPro logo" class="h-24 w-auto" loading="lazy" />
         </div>
 
         <h1 class="mb-3 text-3xl font-semibold text-primary">ReactorPro</h1>

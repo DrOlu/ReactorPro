@@ -41,11 +41,11 @@ interface CliOptions {
 
 const DEFAULT_PORT = 9898
 const DEFAULT_HOST = "127.0.0.1"
-const DEFAULT_CONFIG_PATH = "~/.config/codenomad/config.json"
+const DEFAULT_CONFIG_PATH = "~/.config/reactorpro/config.json"
 
 function parseCliOptions(argv: string[]): CliOptions {
   const program = new Command()
-    .name("codenomad")
+    .name("reactorpro")
     .description("ReactorPro CLI server")
     .version(packageJson.version, "-v, --version", "Show the CLI version")
     .addOption(new Option("--host <host>", "Host interface to bind").env("CLI_HOST").default(DEFAULT_HOST))

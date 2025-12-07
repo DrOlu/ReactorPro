@@ -36,7 +36,7 @@ interface CliEntryResolution {
   runnerPath?: string
 }
 
-const DEFAULT_CONFIG_PATH = "~/.config/codenomad/config.json"
+const DEFAULT_CONFIG_PATH = "~/.config/reactorpro/config.json"
 
 function resolveConfigPath(configPath?: string): string {
   const target = configPath && configPath.trim().length > 0 ? configPath : DEFAULT_CONFIG_PATH
@@ -351,14 +351,14 @@ export class CliProcessManager extends EventEmitter {
  
   private resolveProdEntry(): string {
     try {
-      const entry = nodeRequire.resolve("@neuralnomads/codenomad/dist/bin.js")
+      const entry = nodeRequire.resolve("@hyperspace/reactorpro/dist/bin.js")
       if (existsSync(entry)) {
         return entry
       }
     } catch {
       // fall through to error below
     }
-    throw new Error("Unable to locate ReactorPro CLI build (dist/bin.js). Run npm run build --workspace @neuralnomads/codenomad.")
+    throw new Error("Unable to locate ReactorPro CLI build (dist/bin.js). Run npm run build --workspace @hyperspace/reactorpro.")
   }
 }
 

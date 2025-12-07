@@ -136,7 +136,7 @@ const loggerControls: LoggerControls = {
 
 function exposeLoggerControls(): void {
   if (typeof window === "undefined") return
-  window.codenomadLogger = loggerControls
+  window.reactorproLogger = loggerControls
 }
 
 exposeLoggerControls()
