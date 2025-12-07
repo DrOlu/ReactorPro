@@ -1,6 +1,6 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js"
 import { render } from "solid-js/web"
-import iconUrl from "../../images/ReactorPro-Icon.png"
+import iconUrl from "../../images/ReactorPro.png"
 import { runtimeEnv, isTauriHost } from "../../lib/runtime-env"
 import "../../index.css"
 import "./loading.css"
@@ -8,7 +8,7 @@ import "./loading.css"
 const phrases = [
   "Warming up the AI neurons…",
   "Convincing the AI to stop daydreaming…",
-  "Polishing the AI’s code goggles…",
+  "Polishing the AI's code goggles…",
   "Asking the AI to stop reorganizing your files…",
   "Feeding the AI additional coffee…",
   "Teaching the AI not to delete node_modules (again)…",
