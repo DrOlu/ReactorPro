@@ -6,7 +6,7 @@ import DirectoryBrowserDialog from "./directory-browser-dialog"
 import Kbd from "./kbd"
 import { openNativeFolderDialog, supportsNativeDialogs } from "../lib/native/native-functions"
 
-const reactorProLogo = new URL("../images/ReactorPro.png", import.meta.url).href
+
 
 
 interface FolderSelectionViewProps {
@@ -243,9 +243,6 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
             </div>
           </Show>
         <div class="mb-6 text-center shrink-0">
-          <div class="mb-3 flex justify-center">
-            <img src={reactorProLogo} alt="ReactorPro logo" class="h-32 w-auto sm:h-48" loading="lazy" />
-          </div>
           <h1 class="mb-2 text-3xl font-semibold text-primary">ReactorPro</h1>
           <p class="text-base text-secondary">Select a folder to start coding with AI</p>
         </div>
