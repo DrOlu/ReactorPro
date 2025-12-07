@@ -1,0 +1,257 @@
+name: Sync from Upstream
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild even if no changes'
+        required: false
+        default: false
+        type: boolean
+      upstream_branch:
+        description: 'Upstream branch to sync from'
+        required: false
+        default: 'dev'
+        type: string
+
+permissions:
+  id-token: write
+  contents: write
+  actions: write
+
+env:
+  UPSTREAM_REPO: 'NeuralNomadsAI/CodeNomad'
+  UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'dev' }}
+  NODE_VERSION: 20
+
+jobs:
+  check-and-sync:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.sync.outputs.has_changes }}
+      new_version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout ReactorPro
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.REPO_PAT }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream "https://github.com/${{ env.UPSTREAM_REPO }}.git" || true
+          git fetch upstream ${{ env.UPSTREAM_BRANCH }}
+
+      - name: Check for upstream changes
+        id: check
+        run: |
+          # Get the last synced commit (stored in a file or use merge-base)
+          LAST_SYNC=$(cat .last-upstream-sync 2>/dev/null || echo "")
+          UPSTREAM_HEAD=$(git rev-parse upstream/${{ env.UPSTREAM_BRANCH }})
+          
+          if [ "$LAST_SYNC" = "$UPSTREAM_HEAD" ]; then
+            echo "No new upstream changes"
+            echo "has_new_commits=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New upstream commits detected"
+            echo "has_new_commits=true" >> "$GITHUB_OUTPUT"
+            echo "upstream_head=$UPSTREAM_HEAD" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync upstream changes
+        id: sync
+        if: steps.check.outputs.has_new_commits == 'true' || github.event.inputs.force_rebuild == 'true'
+        run: |
+          set +e  # Don't exit on error
+          
+          echo "=== Attempting to merge upstream changes ==="
+          
+          # Try to merge upstream changes
+          MERGE_OUTPUT=$(git merge upstream/${{ env.UPSTREAM_BRANCH }} --no-edit -m "Sync from upstream ${{ env.UPSTREAM_REPO }}@${{ env.UPSTREAM_BRANCH }}" 2>&1)
+          MERGE_EXIT=$?
+          
+          if [ $MERGE_EXIT -ne 0 ]; then
+            echo "::warning::Merge conflict detected. Attempting automatic resolution..."
+            
+            # Check if there are conflicts
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "Conflicts in files:"
+              git diff --name-only --diff-filter=U
+              
+              # For conflicts, prefer upstream changes then reapply branding
+              # This is a simple strategy - take upstream and rebrand
+              git checkout --theirs .
+              git add .
+              
+              echo "Resolved conflicts by taking upstream version. Will rebrand next."
+            else
+              echo "::error::Merge failed but no conflicts found. Manual intervention needed."
+              git merge --abort || true
+              exit 1
+            fi
+          fi
+          
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Apply rebranding
+        if: steps.sync.outputs.has_changes == 'true' || github.event.inputs.force_rebuild == 'true'
+        run: |
+          echo "=== Applying ReactorPro rebranding ==="
+          
+          # Run the rebranding script
+          if [ -f scripts/rebrand.sh ]; then
+            chmod +x scripts/rebrand.sh
+            ./scripts/rebrand.sh
+          else
+            echo "Rebranding script not found, applying inline rebranding..."
+            
+            # Inline rebranding for critical files
+            find . -type f \
+              -not -path "./.git/*" \
+              -not -path "./node_modules/*" \
+              -not -path "./dist/*" \
+              -not -path "./build/*" \
+              -not -path "./target/*" \
+              -not -name "*.lock" \
+              -not -name "package-lock.json" \
+              -not -name "rebrand.sh" \
+              -not -name "sync-upstream.yml" \
+              \( -name "*.json" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" -o -name "*.md" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.html" \) \
+              -exec sed -i \
+                -e 's/CodeNomad/ReactorPro/g' \
+                -e 's/codenomad/reactorpro/g' \
+                -e 's/code-nomad/reactor-pro/g' \
+                -e 's/NeuralNomads/Hyperspace/g' \
+                -e 's/neuralnomads/hyperspace/g' \
+                -e 's/NeuralNomadsAI/Hyperspace/g' \
+                -e 's/@neuralnomads\//@hyperspace\//g' \
+              {} \;
+          fi
+
+      - name: Update sync marker
+        if: steps.sync.outputs.has_changes == 'true'
+        run: |
+          git rev-parse upstream/${{ env.UPSTREAM_BRANCH }} > .last-upstream-sync
+
+      - name: Bump version for sync
+        id: version
+        if: steps.sync.outputs.has_changes == 'true'
+        run: |
+          # Read current version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          
+          # Parse version components
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          
+          # Increment patch version
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          
+          echo "Bumping version from $CURRENT_VERSION to $NEW_VERSION"
+          npm version $NEW_VERSION --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+          
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Commit changes
+        if: steps.sync.outputs.has_changes == 'true'
+        run: |
+          git add -A
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Sync from upstream and rebrand to ReactorPro v${{ steps.version.outputs.version }}"
+          fi
+
+      - name: Push changes
+        if: steps.sync.outputs.has_changes == 'true'
+        run: |
+          git push origin main
+
+  trigger-build:
+    needs: check-and-sync
+    if: needs.check-and-sync.outputs.has_changes == 'true' || github.event.inputs.force_rebuild == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for release workflow)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Trigger release workflow
+        env:
+          GH_TOKEN: ${{ secrets.REPO_PAT }}
+        run: |
+          echo "Triggering release workflow for ReactorPro..."
+          # The push to main should auto-trigger release.yml
+          # But we can also manually dispatch if needed
+          gh workflow run release.yml --ref main || echo "Release workflow will be triggered by push"
+
+  notify-failure:
+    needs: [check-and-sync, trigger-build]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create issue for sync failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Upstream Sync Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## Automatic Upstream Sync Failed
+            
+            **Upstream Repository:** NeuralNomadsAI/CodeNomad
+            **Upstream Branch:** ${{ env.UPSTREAM_BRANCH }}
+            **Workflow Run:** [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            ### Possible Causes:
+            - Merge conflicts that couldn't be auto-resolved
+            - Breaking changes in upstream
+            - Network issues
+            
+            ### Required Action:
+            1. Review the workflow logs
+            2. Manually sync and resolve any conflicts
+            3. Run the rebranding script: \`./scripts/rebrand.sh\`
+            4. Push the resolved changes
+            
+            ---
+            *This issue was automatically created by the sync-upstream workflow*
+            `;
+            
+            // Check if similar issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'sync-failure'
+            });
+            
+            const existingIssue = issues.data.find(i => i.title.includes('Upstream Sync Failed'));
+            
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['sync-failure', 'automated']
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `Sync failed again at ${new Date().toISOString()}. [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+              });
+            }
