@@ -1,10 +1,10 @@
 {
-  "name": "@codenomad/tauri-app",
+  "name": "@hyperspace/reactorpro-tauri-app",
   "version": "0.2.8",
   "private": true,
   "scripts": {
     "dev": "npx --yes @tauri-apps/cli@^2.9.4 dev",
-    "dev:ui": "npm run dev --workspace @codenomad/ui",
+    "dev:ui": "npm run dev --workspace @hyperspace/reactorpro-ui",
     "dev:prep": "node ./scripts/dev-prep.js",
     "dev:bootstrap": "npm run dev:prep && npm run dev:ui",
     "prebuild": "node ./scripts/prebuild.js",
