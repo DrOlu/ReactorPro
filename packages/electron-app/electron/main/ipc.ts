@@ -32,6 +32,12 @@ export function setupCliIPC(mainWindow: BrowserWindow, cliManager: CliProcessMan
     }
   })
 
+  // Remove existing handlers to prevent "Attempted to register a second handler" error
+  // when createWindow is called multiple times (e.g., on macOS activate event)
+  ipcMain.removeHandler("cli:getStatus")
+  ipcMain.removeHandler("cli:restart")
+  ipcMain.removeHandler("dialog:open")
+
   ipcMain.handle("cli:getStatus", async () => cliManager.getStatus())
 
   ipcMain.handle("cli:restart", async () => {
