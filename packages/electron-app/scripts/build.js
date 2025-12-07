@@ -77,7 +77,8 @@ function run(command, args, options = {}) {
 }
 
 function printAvailablePlatforms() {
-  console.error(`\nAvailable platforms:`)
+  console.error(`
+Available platforms:`)
   for (const [name, cfg] of Object.entries(platforms)) {
     console.error(`  - ${name.padEnd(12)} : ${cfg.description}`)
   }
@@ -92,19 +93,26 @@ async function build(platform) {
     process.exit(1)
   }
 
-  console.log(`\n🔨 Building for: ${config.description}\n`)
+  console.log(`
+🔨 Building for: ${config.description}
+`)
 
   try {
-    console.log("📦 Step 1/3: Building CLI dependency...\n")
-    await run(npmCmd, ["run", "build", "--workspace", "@neuralnomads/codenomad"], {
+    console.log("📦 Step 1/3: Building CLI dependency...
+")
+    await run(npmCmd, ["run", "build", "--workspace", "@hyperspace/reactorpro"], {
       cwd: workspaceRoot,
       env: { NODE_PATH: workspaceNodeModulesPath },
     })
 
-    console.log("\n📦 Step 2/3: Building Electron app...\n")
+    console.log("
+📦 Step 2/3: Building Electron app...
+")
     await run(npmCmd, ["run", "build"])
 
-    console.log("\n📦 Step 3/3: Packaging binaries...\n")
+    console.log("
+📦 Step 3/3: Packaging binaries...
+")
     const distPath = join(appDir, "dist")
     if (!existsSync(distPath)) {
       throw new Error("dist/ directory not found. Build failed.")
@@ -112,10 +120,13 @@ async function build(platform) {
 
     await run(npxCmd, ["electron-builder", "--publish=never", ...config.args])
 
-    console.log("\n✅ Build complete!")
-    console.log(`📁 Binaries available in: ${join(appDir, "release")}\n`)
+    console.log("
+✅ Build complete!")
+    console.log(`📁 Binaries available in: ${join(appDir, "release")}
+`)
   } catch (error) {
-    console.error("\n❌ Build failed:", error)
+    console.error("
+❌ Build failed:", error)
     process.exit(1)
   }
 }
