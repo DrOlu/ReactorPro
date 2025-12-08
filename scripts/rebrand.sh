@@ -130,11 +130,15 @@ echo ""
 echo "Renaming image files..."
 if [ -f "$PROJECT_ROOT/images/CodeNomad-Icon.png" ]; then
     mv "$PROJECT_ROOT/images/CodeNomad-Icon.png" "$PROJECT_ROOT/images/ReactorPro-Icon.png"
-    echo "  Renamed: CodeNomad-Icon.png → ReactorPro-Icon.png"
+    echo "  Renamed: images/CodeNomad-Icon.png → ReactorPro-Icon.png"
 fi
 if [ -f "$PROJECT_ROOT/images/CodeNomad-Icon-original.png" ]; then
     mv "$PROJECT_ROOT/images/CodeNomad-Icon-original.png" "$PROJECT_ROOT/images/ReactorPro-Icon-original.png"
-    echo "  Renamed: CodeNomad-Icon-original.png → ReactorPro-Icon-original.png"
+    echo "  Renamed: images/CodeNomad-Icon-original.png → ReactorPro-Icon-original.png"
+fi
+if [ -f "$PROJECT_ROOT/packages/ui/src/images/CodeNomad-Icon.png" ]; then
+    mv "$PROJECT_ROOT/packages/ui/src/images/CodeNomad-Icon.png" "$PROJECT_ROOT/packages/ui/src/images/ReactorPro-Icon.png"
+    echo "  Renamed: packages/ui/src/images/CodeNomad-Icon.png → ReactorPro-Icon.png"
 fi
 
 echo ""
