@@ -125,5 +125,17 @@ find "$PROJECT_ROOT" -name "package.json" -not -path "*/node_modules/*" | while 
     fi
 done
 
+# Rename image files
+echo ""
+echo "Renaming image files..."
+if [ -f "$PROJECT_ROOT/images/CodeNomad-Icon.png" ]; then
+    mv "$PROJECT_ROOT/images/CodeNomad-Icon.png" "$PROJECT_ROOT/images/ReactorPro-Icon.png"
+    echo "  Renamed: CodeNomad-Icon.png → ReactorPro-Icon.png"
+fi
+if [ -f "$PROJECT_ROOT/images/CodeNomad-Icon-original.png" ]; then
+    mv "$PROJECT_ROOT/images/CodeNomad-Icon-original.png" "$PROJECT_ROOT/images/ReactorPro-Icon-original.png"
+    echo "  Renamed: CodeNomad-Icon-original.png → ReactorPro-Icon-original.png"
+fi
+
 echo ""
 echo "Rebranding complete!"
