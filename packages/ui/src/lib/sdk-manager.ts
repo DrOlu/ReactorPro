@@ -1,5 +1,5 @@
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/client"
-import { REACTORPRO_API_BASE } from "./api-client"
+import { CODENOMAD_API_BASE } from "./api-client"
 
 class SDKManager {
   private clients = new Map<string, OpencodeClient>()
@@ -31,7 +31,7 @@ class SDKManager {
 
 function buildInstanceBaseUrl(proxyPath: string): string {
   const normalized = normalizeProxyPath(proxyPath)
-  const base = stripTrailingSlashes(REACTORPRO_API_BASE)
+  const base = stripTrailingSlashes(CODENOMAD_API_BASE)
   return `${base}${normalized}/`
 }
 

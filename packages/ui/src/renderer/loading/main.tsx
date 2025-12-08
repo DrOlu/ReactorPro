@@ -1,14 +1,14 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js"
 import { render } from "solid-js/web"
-import iconUrl from "../../images/ReactorPro.png"
-import { runtimeEnv, isTauriHost, isElectronHost } from "../../lib/runtime-env"
+import iconUrl from "../../images/ReactorPro-Icon.png"
+import { runtimeEnv, isTauriHost } from "../../lib/runtime-env"
 import "../../index.css"
 import "./loading.css"
 
 const phrases = [
   "Warming up the AI neurons…",
   "Convincing the AI to stop daydreaming…",
-  "Polishing the AI's code goggles…",
+  "Polishing the AI’s code goggles…",
   "Asking the AI to stop reorganizing your files…",
   "Feeding the AI additional coffee…",
   "Teaching the AI not to delete node_modules (again)…",
@@ -22,7 +22,6 @@ interface CliStatus {
   state?: string
   url?: string | null
   error?: string | null
-  message?: string | null
 }
 
 interface TauriBridge {
@@ -30,14 +29,6 @@ interface TauriBridge {
   event?: {
     listen: (event: string, handler: (payload: { payload: unknown }) => void) => Promise<() => void>
   }
-}
-
-interface ElectronAPI {
-  onCliStatus: (callback: (data: CliStatus) => void) => () => void
-  onCliReady: (callback: (data: CliStatus) => void) => () => void
-  onCliError: (callback: (data: { message: string }) => void) => () => void
-  getCliStatus: () => Promise<CliStatus>
-  restartCli: () => Promise<CliStatus>
 }
 
 function pickPhrase(previous?: string) {
@@ -61,17 +52,6 @@ function getTauriBridge(): TauriBridge | null {
     return null
   }
   return bridge
-}
-
-function getElectronAPI(): ElectronAPI | null {
-  if (typeof window === "undefined") {
-    return null
-  }
-  const api = (window as { electronAPI?: ElectronAPI }).electronAPI
-  if (!api || !api.onCliStatus || !api.getCliStatus) {
-    return null
-  }
-  return api
 }
 
 function annotateDocument() {
@@ -139,64 +119,8 @@ function LoadingApp() {
       }
     }
 
-    async function bootstrapElectron(electronAPI: ElectronAPI | null) {
-      if (!electronAPI) {
-        return
-      }
-      try {
-        // Subscribe to CLI ready event (primary navigation trigger)
-        const unsubReady = electronAPI.onCliReady((data: CliStatus) => {
-          if (data.url) {
-            setError(null)
-            setStatus(null)
-            navigateTo(data.url)
-          }
-        })
-        unsubscribers.push(unsubReady)
-
-        // Subscribe to CLI status updates
-        const unsubStatus = electronAPI.onCliStatus((data: CliStatus) => {
-          if (data.state === "ready" && data.url) {
-            setError(null)
-            setStatus(null)
-            navigateTo(data.url)
-          } else if (data.state === "error" && data.error) {
-            setError(data.error)
-            setStatus("Encountered an issue")
-          } else if (data.state === "starting") {
-            setError(null)
-            setStatus("Starting server...")
-          }
-        })
-        unsubscribers.push(unsubStatus)
-
-        // Subscribe to CLI errors
-        const unsubError = electronAPI.onCliError((data: { message: string }) => {
-          if (data.message) {
-            setError(data.message)
-            setStatus("Encountered an issue")
-          }
-        })
-        unsubscribers.push(unsubError)
-
-        // Check initial status
-        const status = await electronAPI.getCliStatus()
-        if (status?.state === "ready" && status.url) {
-          navigateTo(status.url)
-        } else if (status?.state === "error" && status.error) {
-          setError(status.error)
-          setStatus("Encountered an issue")
-        }
-      } catch (err) {
-        setError(String(err))
-        setStatus("Encountered an issue")
-      }
-    }
-
     if (isTauriHost()) {
       void bootstrapTauri(getTauriBridge())
-    } else if (isElectronHost()) {
-      void bootstrapElectron(getElectronAPI())
     }
 
     onCleanup(() => {

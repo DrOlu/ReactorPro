@@ -17,7 +17,7 @@ function ensureUiBuild() {
   }
 
   console.log("[dev-prep] UI loader build missing; running workspace build…")
-  execSync("npm --workspace @hyperspace/reactorpro-ui run build", {
+  execSync("npm --workspace @reactorpro/ui run build", {
     cwd: workspaceRoot,
     stdio: "inherit",
   })

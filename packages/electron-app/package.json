@@ -1,18 +1,18 @@
 {
   "name": "@hyperspace/reactorpro-electron-app",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "ReactorPro - AI coding assistant",
   "author": {
-    "name": "Hyperspace",
-    "email": "support@hyperspace.ai"
+    "name": "Neural Nomads",
+    "email": "reactorpro@hyperspace.ai"
   },
   "type": "module",
   "main": "dist/main/main.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Hyperspace/ReactorPro.git"
+    "url": "https://github.com/HyperspaceAI/ReactorPro.git"
   },
-  "homepage": "https://github.com/Hyperspace/ReactorPro",
+  "homepage": "https://github.com/HyperspaceAI/ReactorPro",
   "scripts": {
     "dev": "electron-vite dev",
     "dev:electron": "NODE_ENV=development ELECTRON_ENABLE_LOGGING=1 NODE_OPTIONS=\"--import tsx\" electron electron/main/main.ts",
@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@hyperspace/reactorpro": "file:../server",
-    "@hyperspace/reactorpro-ui": "file:../ui"
+    "@reactorpro/ui": "file:../ui"
   },
   "devDependencies": {
     "7zip-bin": "^5.2.0",

@@ -87,24 +87,24 @@ async function build(platform) {
   const config = platforms[platform]
 
   if (!config) {
-    console.error(`Unknown platform: ${platform}`)
+    console.error(`❌ Unknown platform: ${platform}`)
     printAvailablePlatforms()
     process.exit(1)
   }
 
-  console.log(`\nBuilding for: ${config.description}\n`)
+  console.log(`\n🔨 Building for: ${config.description}\n`)
 
   try {
-    console.log("Step 1/3: Building CLI dependency...\n")
+    console.log("📦 Step 1/3: Building CLI dependency...\n")
     await run(npmCmd, ["run", "build", "--workspace", "@hyperspace/reactorpro"], {
       cwd: workspaceRoot,
       env: { NODE_PATH: workspaceNodeModulesPath },
     })
 
-    console.log("\nStep 2/3: Building Electron app...\n")
+    console.log("\n📦 Step 2/3: Building Electron app...\n")
     await run(npmCmd, ["run", "build"])
 
-    console.log("\nStep 3/3: Packaging binaries...\n")
+    console.log("\n📦 Step 3/3: Packaging binaries...\n")
     const distPath = join(appDir, "dist")
     if (!existsSync(distPath)) {
       throw new Error("dist/ directory not found. Build failed.")
@@ -112,10 +112,10 @@ async function build(platform) {
 
     await run(npxCmd, ["electron-builder", "--publish=never", ...config.args])
 
-    console.log("\nBuild complete!")
-    console.log(`Binaries available in: ${join(appDir, "release")}\n`)
+    console.log("\n✅ Build complete!")
+    console.log(`📁 Binaries available in: ${join(appDir, "release")}\n`)
   } catch (error) {
-    console.error("\nBuild failed:", error)
+    console.error("\n❌ Build failed:", error)
     process.exit(1)
   }
 }
@@ -123,9 +123,9 @@ async function build(platform) {
 const platform = process.argv[2] || "mac"
 
 console.log(`
-========================================
-   ReactorPro - Binary Builder
-========================================
+╔════════════════════════════════════════╗
+║   ReactorPro - Binary Builder          ║
+╚════════════════════════════════════════╝
 `)
 
 await build(platform)

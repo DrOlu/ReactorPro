@@ -1,14 +1,14 @@
 {
   "name": "@hyperspace/reactorpro",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "ReactorPro Server",
   "author": {
-    "name": "Hyperspace",
-    "email": "support@hyperspace.ai"
+    "name": "Neural Nomads",
+    "email": "reactorpro@hyperspace.ai"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Hyperspace/ReactorPro.git"
+    "url": "https://github.com/HyperspaceAI/ReactorPro.git"
   },
   "type": "module",
   "main": "dist/index.js",

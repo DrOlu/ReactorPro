@@ -44,7 +44,7 @@ fn navigate_main(app: &AppHandle, url: &str) {
     }
 }
 
-const DEFAULT_CONFIG_PATH: &str = "~/.config/codenomad/config.json";
+const DEFAULT_CONFIG_PATH: &str = "~/.config/reactorpro/config.json";
 
 #[derive(Debug, Deserialize)]
 struct PreferencesConfig {
@@ -409,7 +409,7 @@ impl CliProcessManager {
         ready: &Arc<AtomicBool>,
     ) {
         let mut buffer = String::new();
-        let port_regex = Regex::new(r"CodeNomad Server is ready at http://[^:]+:(\d+)").ok();
+        let port_regex = Regex::new(r"ReactorPro Server is ready at http://[^:]+:(\d+)").ok();
         let http_regex = Regex::new(r":(\d{2,5})(?!.*:\d)").ok();
 
         loop {
@@ -540,7 +540,7 @@ impl CliEntry {
         }
 
         Err(anyhow::anyhow!(
-            "Unable to locate CodeNomad CLI build (dist/bin.js). Please build @neuralnomads/codenomad."
+            "Unable to locate ReactorPro CLI build (dist/bin.js). Please build @hyperspace/reactorpro."
         ))
     }
 

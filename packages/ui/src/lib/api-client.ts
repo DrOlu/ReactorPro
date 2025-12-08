@@ -21,12 +21,12 @@ import { getLogger } from "./logger"
 
 const FALLBACK_API_BASE = "http://127.0.0.1:9898"
 const RUNTIME_BASE = typeof window !== "undefined" ? window.location?.origin : undefined
-const DEFAULT_BASE = typeof window !== "undefined" ? window.__REACTORPRO_API_BASE__ ?? RUNTIME_BASE ?? FALLBACK_API_BASE : FALLBACK_API_BASE
-const DEFAULT_EVENTS_PATH = typeof window !== "undefined" ? window.__REACTORPRO_EVENTS_URL__ ?? "/api/events" : "/api/events"
-const API_BASE = import.meta.env.VITE_REACTORPRO_API_BASE ?? DEFAULT_BASE
+const DEFAULT_BASE = typeof window !== "undefined" ? window.__CODENOMAD_API_BASE__ ?? RUNTIME_BASE ?? FALLBACK_API_BASE : FALLBACK_API_BASE
+const DEFAULT_EVENTS_PATH = typeof window !== "undefined" ? window.__CODENOMAD_EVENTS_URL__ ?? "/api/events" : "/api/events"
+const API_BASE = import.meta.env.VITE_CODENOMAD_API_BASE ?? DEFAULT_BASE
 const EVENTS_URL = buildEventsUrl(API_BASE, DEFAULT_EVENTS_PATH)
 
-export const REACTORPRO_API_BASE = API_BASE
+export const CODENOMAD_API_BASE = API_BASE
 
 function buildEventsUrl(base: string | undefined, path: string): string {
   if (path.startsWith("http://") || path.startsWith("https://")) {

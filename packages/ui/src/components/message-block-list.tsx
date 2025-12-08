@@ -3,6 +3,10 @@ import VirtualItem from "./virtual-item"
 import MessageBlock from "./message-block"
 import type { InstanceMessageStore } from "../stores/message-v2/instance-store"
 
+export function getMessageAnchorId(messageId: string) {
+  return `message-anchor-${messageId}`
+}
+
 const VIRTUAL_ITEM_MARGIN_PX = 800
 const ESTIMATED_MESSAGE_HEIGHT = 320
 const INITIAL_FORCE_MIN_ITEMS = 12
@@ -73,14 +77,16 @@ export default function MessageBlockList(props: MessageBlockListProps) {
           }
           return (
             <VirtualItem
-              cacheKey={messageId()}
-              scrollContainer={props.scrollContainer}
-              threshold={VIRTUAL_ITEM_MARGIN_PX}
-              placeholderClass="message-stream-placeholder"
-              virtualizationEnabled={() => !props.loading}
-              forceVisible={forceVisible}
-              onMeasured={handleMeasured}
-            >
+               id={getMessageAnchorId(messageId())}
+               cacheKey={messageId()}
+               scrollContainer={props.scrollContainer}
+               threshold={VIRTUAL_ITEM_MARGIN_PX}
+               placeholderClass="message-stream-placeholder"
+               virtualizationEnabled={() => !props.loading}
+               forceVisible={forceVisible}
+               onMeasured={handleMeasured}
+             >
+
               <MessageBlock
                 messageId={messageId()}
                 instanceId={props.instanceId}

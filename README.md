@@ -41,7 +41,13 @@ We are also working on a lightweight, high-performance version built with [Tauri
 Run ReactorPro as a local server and access it via your web browser. Perfect for remote development (SSH/VPN) or running as a service.
 
 ```bash
-npx @neuralnomads/codenomad --launch
+npx @hyperspace/reactorpro --launch
+```
+
+For dev version
+
+```bash
+npx @hyperspace/reactorpro@dev --launch
 ```
 
 This command starts the server and opens the web client in your default browser.
@@ -85,4 +91,4 @@ To build the Desktop App from source:
 
 1.  Clone the repo.
 2.  Run `npm install` (requires pnpm or npm 7+ for workspaces).
-3.  Run `npm run build --workspace @neuralnomads/codenomad-electron-app`.
+3.  Run `npm run build --workspace @hyperspace/reactorpro-electron-app`.

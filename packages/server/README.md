@@ -28,15 +28,15 @@
 You can run ReactorPro directly without installing it:
 
 ```sh
-npx @neuralnomads/codenomad --launch
+npx @hyperspace/reactorpro --launch
 ```
 
 ### Install Globally
-Or install it globally to use the `codenomad` command:
+Or install it globally to use the `reactorpro` command:
 
 ```sh
-npm install -g @neuralnomads/codenomad
-codenomad --launch
+npm install -g @hyperspace/reactorpro
+reactorpro --launch
 ```
 
 ### Common Flags
@@ -53,6 +53,6 @@ You can configure the server using flags or environment variables:
 | `--log-level <level>` | `CLI_LOG_LEVEL` | Logging level (trace, debug, info, warn, error) |
 
 ### Data Storage
-- **Config**: `~/.config/codenomad/config.json`
-- **Instance Data**: `~/.config/codenomad/instances` (chat history, etc.)
+- **Config**: `~/.config/reactorpro/config.json`
+- **Instance Data**: `~/.config/reactorpro/instances` (chat history, etc.)
 

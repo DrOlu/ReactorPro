@@ -18,7 +18,7 @@ const serverInstallCommand =
 const serverDevInstallCommand =
   "npm install --workspace @hyperspace/reactorpro --include-workspace-root=false --install-strategy=nested --fund=false --audit=false"
 const uiDevInstallCommand =
-  "npm install --workspace @hyperspace/reactorpro-ui --include-workspace-root=false --install-strategy=nested --fund=false --audit=false"
+  "npm install --workspace @reactorpro/ui --include-workspace-root=false --install-strategy=nested --fund=false --audit=false"
 
 const envWithRootBin = {
   ...process.env,
@@ -66,7 +66,7 @@ function ensureUiBuild() {
   }
 
   console.log("[prebuild] ui build missing; running workspace build...")
-  execSync("npm --workspace @hyperspace/reactorpro-ui run build", {
+  execSync("npm --workspace @reactorpro/ui run build", {
     cwd: workspaceRoot,
     stdio: "inherit",
   })

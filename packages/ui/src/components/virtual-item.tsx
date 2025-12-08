@@ -99,6 +99,7 @@ interface VirtualItemProps {
   virtualizationEnabled?: Accessor<boolean>
   forceVisible?: Accessor<boolean>
   onMeasured?: () => void
+  id?: string
 }
 
 export default function VirtualItem(props: VirtualItemProps) {
@@ -268,7 +269,7 @@ export default function VirtualItem(props: VirtualItemProps) {
   const placeholderClass = () => ["virtual-item-placeholder", props.placeholderClass].filter(Boolean).join(" ")
  
   return (
-    <div ref={setWrapperRef} class={wrapperClass()} style={{ width: "100%" }}>
+    <div ref={setWrapperRef} id={props.id} class={wrapperClass()} style={{ width: "100%" }}>
       <div
         class={placeholderClass()}
         style={{

@@ -1,7 +1,8 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import Kbd from "./kbd"
-import MessageBlockList from "./message-block-list"
+import MessageBlockList, { getMessageAnchorId } from "./message-block-list"
 import MessageListHeader from "./message-list-header"
+import MessageTimeline, { buildTimelineSegments, type TimelineSegment } from "./message-timeline"
 import { useConfig } from "../stores/preferences"
 import { getSessionInfo } from "../stores/sessions"
 import { showCommandPalette } from "../stores/command-palette"
@@ -15,7 +16,8 @@ const SCROLL_SCOPE = "session"
 const SCROLL_SENTINEL_MARGIN_PX = 48
 const USER_SCROLL_INTENT_WINDOW_MS = 600
 const SCROLL_INTENT_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"])
-
+const QUOTE_SELECTION_MAX_LENGTH = 2000
+const codeNomadLogo = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
 
 function formatTokens(tokens: number): string {
   return formatTokenTotal(tokens)
@@ -31,6 +33,7 @@ export interface MessageSectionProps {
   showSidebarToggle?: boolean
   onSidebarToggle?: () => void
   forceCompactStatusLayout?: boolean
+  onQuoteSelection?: (text: string, mode: "quote" | "code") => void
 }
 
 export default function MessageSection(props: MessageSectionProps) {
@@ -76,14 +79,21 @@ export default function MessageSection(props: MessageSectionProps) {
   const handleCommandPaletteClick = () => {
     showCommandPalette(props.instanceId)
   }
-
+ 
+  const handleTimelineSegmentClick = (segment: TimelineSegment) => {
+    if (typeof document === "undefined") return
+    const anchor = document.getElementById(getMessageAnchorId(segment.messageId))
+    anchor?.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
+ 
   const messageIndexMap = createMemo(() => {
+
     const map = new Map<string, number>()
     const ids = messageIds()
     ids.forEach((id, index) => map.set(id, index))
     return map
   })
-
+ 
   const lastAssistantIndex = createMemo(() => {
     const ids = messageIds()
     const resolvedStore = store()
@@ -95,8 +105,25 @@ export default function MessageSection(props: MessageSectionProps) {
     }
     return -1
   })
-
+ 
+  const timelineSegments = createMemo<TimelineSegment[]>(() => {
+    const ids = messageIds()
+    const resolvedStore = store()
+    const segments: TimelineSegment[] = []
+    ids.forEach((messageId) => {
+      const record = resolvedStore.getMessage(messageId)
+      if (!record) return
+      const built = buildTimelineSegments(props.instanceId, record)
+      segments.push(...built)
+    })
+    return segments
+  })
+ 
+  const hasTimelineSegments = () => timelineSegments().length > 0
+  const [activeMessageId, setActiveMessageId] = createSignal<string | null>(null)
+ 
   const changeToken = createMemo(() => String(sessionRevision()))
+
 
   const scrollCache = useScrollCache({
     instanceId: () => props.instanceId,
@@ -112,10 +139,14 @@ export default function MessageSection(props: MessageSectionProps) {
   const [showScrollBottomButton, setShowScrollBottomButton] = createSignal(false)
   const [topSentinelVisible, setTopSentinelVisible] = createSignal(true)
   const [bottomSentinelVisible, setBottomSentinelVisible] = createSignal(true)
+  const [quoteSelection, setQuoteSelection] = createSignal<{ text: string; top: number; left: number } | null>(null)
 
   let containerRef: HTMLDivElement | undefined
+  let shellRef: HTMLDivElement | undefined
   let pendingScrollFrame: number | null = null
+
   let pendingAnchorScroll: number | null = null
+
   let pendingScrollPersist: number | null = null
   let userScrollIntentUntil = 0
   let detachScrollIntentListeners: (() => void) | undefined
@@ -160,9 +191,20 @@ export default function MessageSection(props: MessageSectionProps) {
     containerRef = element || undefined
     setScrollElement(containerRef)
     attachScrollIntentListeners(containerRef)
+    if (!containerRef) {
+      clearQuoteSelection()
+    }
   }
 
+  function setShellElement(element: HTMLDivElement | null) {
+    shellRef = element || undefined
+    if (!shellRef) {
+      clearQuoteSelection()
+    }
+  }
+ 
   function updateScrollIndicatorsFromVisibility() {
+
     const hasItems = messageIds().length > 0
     setShowScrollBottomButton(hasItems && !bottomSentinelVisible())
     setShowScrollTopButton(hasItems && !topSentinelVisible())
@@ -212,7 +254,74 @@ export default function MessageSection(props: MessageSectionProps) {
     })
   }
 
+  function clearQuoteSelection() {
+    setQuoteSelection(null)
+  }
+
+  function isSelectionWithinStream(range: Range | null) {
+    if (!range || !containerRef) return false
+    const node = range.commonAncestorContainer
+    if (!node) return false
+    return containerRef.contains(node)
+  }
+
+  function updateQuoteSelectionFromSelection() {
+    if (!props.onQuoteSelection || typeof window === "undefined") {
+      clearQuoteSelection()
+      return
+    }
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      clearQuoteSelection()
+      return
+    }
+    const range = selection.getRangeAt(0)
+    if (!isSelectionWithinStream(range)) {
+      clearQuoteSelection()
+      return
+    }
+    const shell = shellRef
+    if (!shell) {
+      clearQuoteSelection()
+      return
+    }
+    const rawText = selection.toString().trim()
+    if (!rawText) {
+      clearQuoteSelection()
+      return
+    }
+    const limited =
+      rawText.length > QUOTE_SELECTION_MAX_LENGTH ? rawText.slice(0, QUOTE_SELECTION_MAX_LENGTH).trimEnd() : rawText
+    if (!limited) {
+      clearQuoteSelection()
+      return
+    }
+    const rects = range.getClientRects()
+    const anchorRect = rects.length > 0 ? rects[0] : range.getBoundingClientRect()
+    const shellRect = shell.getBoundingClientRect()
+    const relativeTop = Math.max(anchorRect.top - shellRect.top - 40, 8)
+    const maxLeft = Math.max(shell.clientWidth - 180, 8)
+    const relativeLeft = Math.min(Math.max(anchorRect.left - shellRect.left, 8), maxLeft)
+    setQuoteSelection({ text: limited, top: relativeTop, left: relativeLeft })
+  }
+
+  function handleStreamMouseUp() {
+    updateQuoteSelectionFromSelection()
+  }
+
+  function handleQuoteSelectionRequest(mode: "quote" | "code") {
+    const info = quoteSelection()
+    if (!info || !props.onQuoteSelection) return
+    props.onQuoteSelection(info.text, mode)
+    clearQuoteSelection()
+    if (typeof window !== "undefined") {
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+    }
+  }
+ 
   function handleContentRendered() {
+
     scheduleAnchorScroll()
   }
 
@@ -235,9 +344,11 @@ export default function MessageSection(props: MessageSectionProps) {
         }
       }
 
+      clearQuoteSelection()
       scheduleScrollPersist()
     })
   }
+
 
   createEffect(() => {
     if (props.registerScrollToBottom) {
@@ -246,9 +357,39 @@ export default function MessageSection(props: MessageSectionProps) {
   })
 
   createEffect(() => {
+    if (!props.onQuoteSelection) {
+      clearQuoteSelection()
+    }
+  })
+
+  createEffect(() => {
+    if (typeof document === "undefined") return
+    const handleSelectionChange = () => updateQuoteSelectionFromSelection()
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!shellRef) return
+      if (!shellRef.contains(event.target as Node)) {
+        clearQuoteSelection()
+      }
+    }
+    document.addEventListener("selectionchange", handleSelectionChange)
+    document.addEventListener("pointerdown", handlePointerDown)
+    onCleanup(() => {
+      document.removeEventListener("selectionchange", handleSelectionChange)
+      document.removeEventListener("pointerdown", handlePointerDown)
+    })
+  })
+ 
+  createEffect(() => {
+    if (props.loading) {
+      clearQuoteSelection()
+    }
+  })
+
+  createEffect(() => {
     const target = containerRef
     const loading = props.loading
     if (!target || loading || hasRestoredScroll) return
+
 
     scrollCache.restore(target, {
       onApplied: (snapshot) => {
@@ -329,8 +470,43 @@ export default function MessageSection(props: MessageSectionProps) {
     observer.observe(bottomTarget)
     onCleanup(() => observer.disconnect())
   })
-
+ 
+  createEffect(() => {
+    const container = scrollElement()
+    const ids = messageIds()
+    if (!container || ids.length === 0) return
+    if (typeof document === "undefined") return
+ 
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let best: IntersectionObserverEntry | null = null
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue
+          if (!best || entry.boundingClientRect.top < best.boundingClientRect.top) {
+            best = entry
+          }
+        }
+        if (best) {
+          const anchorId = (best.target as HTMLElement).id
+          const messageId = anchorId.startsWith("message-anchor-") ? anchorId.slice("message-anchor-".length) : anchorId
+          setActiveMessageId((current) => (current === messageId ? current : messageId))
+        }
+      },
+      { root: container, rootMargin: "-10% 0px -80% 0px", threshold: 0 },
+    )
+ 
+    ids.forEach((messageId) => {
+      const anchor = document.getElementById(getMessageAnchorId(messageId))
+      if (anchor) {
+        observer.observe(anchor)
+      }
+    })
+ 
+    onCleanup(() => observer.disconnect())
+  })
+ 
   onCleanup(() => {
+
 
     if (pendingScrollFrame !== null) {
       cancelAnimationFrame(pendingScrollFrame)
@@ -347,6 +523,7 @@ export default function MessageSection(props: MessageSectionProps) {
     if (containerRef) {
       scrollCache.persist(containerRef, { atBottomOffset: SCROLL_SENTINEL_MARGIN_PX })
     }
+    clearQuoteSelection()
   })
 
   return (
@@ -362,72 +539,111 @@ export default function MessageSection(props: MessageSectionProps) {
         forceCompactStatusLayout={props.forceCompactStatusLayout}
       />
 
-      <div class="message-stream" ref={setContainerRef} onScroll={handleScroll}>
-        <div ref={setTopSentinel} aria-hidden="true" style={{ height: "1px" }} />
-        <Show when={!props.loading && messageIds().length === 0}>
-          <div class="empty-state">
-            <div class="empty-state-content">
-              <h3>Start a conversation</h3>
-              <p>Type a message below or open the Command Palette:</p>
-              <ul>
-                <li>
-                  <span>Command Palette</span>
-                  <Kbd shortcut="cmd+shift+p" class="ml-2" />
-                </li>
-                <li>Ask about your codebase</li>
-                <li>
-                  Attach files with <code>@</code>
-                </li>
-              </ul>
+      <div class={`message-layout${hasTimelineSegments() ? " message-layout--with-timeline" : ""}`}>
+        <div class="message-stream-shell" ref={setShellElement}>
+          <div class="message-stream" ref={setContainerRef} onScroll={handleScroll} onMouseUp={handleStreamMouseUp}>
+            <div ref={setTopSentinel} aria-hidden="true" style={{ height: "1px" }} />
+            <Show when={!props.loading && messageIds().length === 0}>
+              <div class="empty-state">
+                <div class="empty-state-content">
+                  <div class="flex flex-col items-center gap-3 mb-6">
+                    <img src={codeNomadLogo} alt="ReactorPro logo" class="h-48 w-auto" loading="lazy" />
+                    <h1 class="text-3xl font-semibold text-primary">ReactorPro</h1>
+                  </div>
+                  <h3>Start a conversation</h3>
+                  <p>Type a message below or open the Command Palette:</p>
+                  <ul>
+                    <li>
+                      <span>Command Palette</span>
+                      <Kbd shortcut="cmd+shift+p" class="ml-2" />
+                    </li>
+                    <li>Ask about your codebase</li>
+                    <li>
+                      Attach files with <code>@</code>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </Show>
+ 
+            <Show when={props.loading}>
+              <div class="loading-state">
+                <div class="spinner" />
+                <p>Loading messages...</p>
+              </div>
+            </Show>
+ 
+            <MessageBlockList
+              instanceId={props.instanceId}
+              sessionId={props.sessionId}
+              store={store}
+              messageIds={messageIds}
+              messageIndexMap={messageIndexMap}
+              lastAssistantIndex={lastAssistantIndex}
+              showThinking={() => preferences().showThinkingBlocks}
+              thinkingDefaultExpanded={() => (preferences().thinkingBlocksExpansion ?? "expanded") === "expanded"}
+              showUsageMetrics={showUsagePreference}
+              scrollContainer={scrollElement}
+              loading={props.loading}
+              onRevert={props.onRevert}
+              onFork={props.onFork}
+              onContentRendered={handleContentRendered}
+              setBottomSentinel={setBottomSentinel}
+            />
+          </div>
+ 
+          <Show when={showScrollTopButton() || showScrollBottomButton()}>
+            <div class="message-scroll-button-wrapper">
+              <Show when={showScrollTopButton()}>
+                <button type="button" class="message-scroll-button" onClick={() => scrollToTop()} aria-label="Scroll to first message">
+                  <span class="message-scroll-icon" aria-hidden="true">↑</span>
+                </button>
+              </Show>
+              <Show when={showScrollBottomButton()}>
+                <button
+                  type="button"
+                  class="message-scroll-button"
+                  onClick={() => scrollToBottom()}
+                  aria-label="Scroll to latest message"
+                >
+                  <span class="message-scroll-icon" aria-hidden="true">↓</span>
+                </button>
+              </Show>
             </div>
-          </div>
-        </Show>
-
-        <Show when={props.loading}>
-          <div class="loading-state">
-            <div class="spinner" />
-            <p>Loading messages...</p>
-          </div>
-        </Show>
-
-        <MessageBlockList
-          instanceId={props.instanceId}
-          sessionId={props.sessionId}
-          store={store}
-          messageIds={messageIds}
-          messageIndexMap={messageIndexMap}
-          lastAssistantIndex={lastAssistantIndex}
-          showThinking={() => preferences().showThinkingBlocks}
-          thinkingDefaultExpanded={() => (preferences().thinkingBlocksExpansion ?? "expanded") === "expanded"}
-          showUsageMetrics={showUsagePreference}
-          scrollContainer={scrollElement}
-          loading={props.loading}
-          onRevert={props.onRevert}
-          onFork={props.onFork}
-          onContentRendered={handleContentRendered}
-          setBottomSentinel={setBottomSentinel}
-        />
-      </div>
-
-      <Show when={showScrollTopButton() || showScrollBottomButton()}>
-        <div class="message-scroll-button-wrapper">
-          <Show when={showScrollTopButton()}>
-            <button type="button" class="message-scroll-button" onClick={() => scrollToTop()} aria-label="Scroll to first message">
-              <span class="message-scroll-icon" aria-hidden="true">↑</span>
-            </button>
           </Show>
-          <Show when={showScrollBottomButton()}>
-            <button
-              type="button"
-              class="message-scroll-button"
-              onClick={() => scrollToBottom()}
-              aria-label="Scroll to latest message"
-            >
-              <span class="message-scroll-icon" aria-hidden="true">↓</span>
-            </button>
+
+          <Show when={quoteSelection()}>
+            {(selection) => (
+              <div
+                class="message-quote-popover"
+                style={{ top: `${selection().top}px`, left: `${selection().left}px` }}
+              >
+                <div class="message-quote-button-group">
+                  <button type="button" class="message-quote-button" onClick={() => handleQuoteSelectionRequest("quote")}>
+                    Add as quote
+                  </button>
+                  <button type="button" class="message-quote-button" onClick={() => handleQuoteSelectionRequest("code")}>
+                    Add as code
+                  </button>
+                </div>
+              </div>
+            )}
           </Show>
         </div>
-      </Show>
+ 
+        <Show when={hasTimelineSegments()}>
+          <div class="message-timeline-sidebar">
+            <MessageTimeline
+              segments={timelineSegments()}
+              onSegmentClick={handleTimelineSegmentClick}
+              activeMessageId={activeMessageId()}
+              instanceId={props.instanceId}
+              sessionId={props.sessionId}
+            />
+          </div>
+        </Show>
+      </div>
+
     </div>
   )
 }

@@ -5,10 +5,6 @@ const electronAPI = {
     ipcRenderer.on("cli:status", (_, data) => callback(data))
     return () => ipcRenderer.removeAllListeners("cli:status")
   },
-  onCliReady: (callback) => {
-    ipcRenderer.on("cli:ready", (_, data) => callback(data))
-    return () => ipcRenderer.removeAllListeners("cli:ready")
-  },
   onCliError: (callback) => {
     ipcRenderer.on("cli:error", (_, data) => callback(data))
     return () => ipcRenderer.removeAllListeners("cli:error")
