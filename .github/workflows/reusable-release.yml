@@ -69,12 +69,14 @@ jobs:
       release_name: ${{ needs.prepare-release.outputs.release_name }}
     secrets: inherit
 
-  publish-server:
-    needs:
-      - prepare-release
-      - build-and-upload
-    uses: ./.github/workflows/manual-npm-publish.yml
-    with:
-      version: ${{ needs.prepare-release.outputs.version }}
-      dist_tag: ${{ inputs.dist_tag }}
-    secrets: inherit
+  # Disabled: npm publishing requires @hyperspace org and valid npm token
+  # To re-enable, uncomment this block and configure NPM_TOKEN secret
+  # publish-server:
+  #   needs:
+  #     - prepare-release
+  #     - build-and-upload
+  #   uses: ./.github/workflows/manual-npm-publish.yml
+  #   with:
+  #     version: ${{ needs.prepare-release.outputs.version }}
+  #     dist_tag: ${{ inputs.dist_tag }}
+  #   secrets: inherit
