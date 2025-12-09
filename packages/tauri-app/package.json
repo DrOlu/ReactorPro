@@ -1,6 +1,6 @@
 {
   "name": "@reactorpro/tauri-app",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "scripts": {
     "dev": "npx --yes @tauri-apps/cli@^2.9.4 dev",

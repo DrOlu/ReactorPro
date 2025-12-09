@@ -24,7 +24,7 @@ permissions:
   issues: write
 
 env:
-  UPSTREAM_REPO: 'NeuralNomadsAI/CodeNomad'
+  UPSTREAM_REPO: 'HyperspaceAI/ReactorPro'
   UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'dev' }}
   NODE_VERSION: 20
 
@@ -211,7 +211,7 @@ jobs:
             const body = `
             ## Automatic Upstream Sync Failed
             
-            **Upstream Repository:** NeuralNomadsAI/CodeNomad
+            **Upstream Repository:** HyperspaceAI/ReactorPro
             **Upstream Branch:** ${{ env.UPSTREAM_BRANCH }}
             **Workflow Run:** [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
             

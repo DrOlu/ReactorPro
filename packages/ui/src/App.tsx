@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createEffect, createSignal } from "solid-js"
+import { Component, Show, createMemo, createEffect, createSignal, onMount, onCleanup } from "solid-js"
 import { Dialog } from "@kobalte/core/dialog"
 import { Toaster } from "solid-toast"
 import AlertDialog from "./components/alert-dialog"
@@ -14,6 +14,7 @@ import { useCommands } from "./lib/hooks/use-commands"
 import { useAppLifecycle } from "./lib/hooks/use-app-lifecycle"
 import { getLogger } from "./lib/logger"
 import { initReleaseNotifications } from "./stores/releases"
+import { runtimeEnv } from "./lib/runtime-env"
 import {
   hasInstances,
   isSelectingFolder,
@@ -52,6 +53,7 @@ const App: Component = () => {
     preferences,
     recordWorkspaceLaunch,
     toggleShowThinkingBlocks,
+    toggleShowTimelineTools,
     toggleAutoCleanupBlankSessions,
     toggleUsageMetrics,
     setDiffViewMode,
@@ -222,6 +224,7 @@ const App: Component = () => {
     preferences,
     toggleAutoCleanupBlankSessions,
     toggleShowThinkingBlocks,
+    toggleShowTimelineTools,
     toggleUsageMetrics,
     setDiffViewMode,
     setToolOutputExpansion,
@@ -245,6 +248,28 @@ const App: Component = () => {
     setShowFolderSelection,
     getActiveInstance: activeInstance,
     getActiveSessionIdForInstance: activeSessionIdForInstance,
+  })
+
+  // Listen for Tauri menu events
+  onMount(() => {
+    if (runtimeEnv.host === "tauri") {
+      const tauriBridge = (window as { __TAURI__?: { event?: { listen: (event: string, handler: (event: { payload: unknown }) => void) => Promise<() => void> } } }).__TAURI__
+      if (tauriBridge?.event) {
+        let unlistenMenu: (() => void) | null = null
+        
+        tauriBridge.event.listen("menu:newInstance", () => {
+          handleNewInstanceRequest()
+        }).then((unlisten) => {
+          unlistenMenu = unlisten
+        }).catch((error) => {
+          log.error("Failed to listen for menu:newInstance event", error)
+        })
+
+        onCleanup(() => {
+          unlistenMenu?.()
+        })
+      }
+    }
   })
 
   return (
