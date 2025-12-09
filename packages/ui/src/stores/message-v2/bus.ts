@@ -8,15 +8,37 @@ const log = getLogger("session")
 class MessageStoreBus {
   private stores = new Map<string, InstanceMessageStore>()
   private teardownHandlers = new Set<(instanceId: string) => void>()
+  private sessionClearHandlers = new Set<(instanceId: string, sessionId: string) => void>()
 
   registerInstance(instanceId: string, store?: InstanceMessageStore): InstanceMessageStore {
     if (this.stores.has(instanceId)) {
       return this.stores.get(instanceId) as InstanceMessageStore
     }
 
-    const resolved = store ?? createInstanceMessageStore(instanceId)
+    const resolved =
+      store ??
+      createInstanceMessageStore(instanceId, {
+        onSessionCleared: (id, sessionId) => this.notifySessionCleared(id, sessionId),
+      })
     this.stores.set(instanceId, resolved)
     return resolved
+  }
+
+  onSessionCleared(handler: (instanceId: string, sessionId: string) => void): () => void {
+    this.sessionClearHandlers.add(handler)
+    return () => {
+      this.sessionClearHandlers.delete(handler)
+    }
+  }
+
+  private notifySessionCleared(instanceId: string, sessionId: string) {
+    for (const handler of this.sessionClearHandlers) {
+      try {
+        handler(instanceId, sessionId)
+      } catch (error) {
+        log.error("Failed to run session clear handler", error)
+      }
+    }
   }
 
   getInstance(instanceId: string): InstanceMessageStore | undefined {

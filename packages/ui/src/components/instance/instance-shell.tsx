@@ -1,9 +1,11 @@
-import { Show, createMemo, createSignal, onCleanup, onMount, type Component } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type Component } from "solid-js"
 import type { Accessor } from "solid-js"
 import type { Instance } from "../../types/instance"
 import type { Command } from "../../lib/commands"
 import { activeParentSessionId, activeSessionId as activeSessionMap, getSessionFamily, setActiveSession } from "../../stores/sessions"
 import { keyboardRegistry, type KeyboardShortcut } from "../../lib/keyboard-registry"
+import { messageStoreBus } from "../../stores/message-v2/bus"
+import { clearSessionRenderCache } from "../message-block"
 import { buildCustomCommandEntries } from "../../lib/command-utils"
 import { getCommands as getInstanceCommands } from "../../stores/commands"
 import { isOpen as isCommandPaletteOpen, hideCommandPalette } from "../../stores/command-palette"
@@ -34,11 +36,14 @@ interface InstanceShellProps {
 
 const DEFAULT_SESSION_SIDEBAR_WIDTH = 350
 const MOBILE_SIDEBAR_BREAKPOINT = 1024
+const SESSION_CACHE_LIMIT = 2
 
 const InstanceShell: Component<InstanceShellProps> = (props) => {
   const [sessionSidebarWidth, setSessionSidebarWidth] = createSignal(DEFAULT_SESSION_SIDEBAR_WIDTH)
   const [isCompactLayout, setIsCompactLayout] = createSignal(false)
   const [isSidebarOpen, setIsSidebarOpen] = createSignal(true)
+  const [cachedSessionIds, setCachedSessionIds] = createSignal<string[]>([])
+  const [pendingEvictions, setPendingEvictions] = createSignal<string[]>([])
   const sidebarId = `session-sidebar-${props.instance.id}`
   let previousIsCompact = false
 
@@ -77,11 +82,16 @@ const InstanceShell: Component<InstanceShellProps> = (props) => {
     return activeSessionMap().get(props.instance.id) || null
   })
 
+  const parentSessionIdForInstance = createMemo(() => {
+    return activeParentSessionId().get(props.instance.id) || null
+  })
+ 
   const activeSessionForInstance = createMemo(() => {
     const sessionId = activeSessionIdForInstance()
     if (!sessionId || sessionId === "info") return null
     return activeSessions().get(sessionId) ?? null
   })
+
 
   const customCommands = createMemo(() => buildCustomCommandEntries(props.instance.id, getInstanceCommands(props.instance.id)))
   const instancePaletteCommands = createMemo(() => [...props.paletteCommands(), ...customCommands()])
@@ -96,6 +106,74 @@ const InstanceShell: Component<InstanceShellProps> = (props) => {
   const handleSessionSelect = (sessionId: string) => {
     setActiveSession(props.instance.id, sessionId)
   }
+
+  const evictSession = (sessionId: string) => {
+    if (!sessionId) return
+    log.info("Evicting cached session", { instanceId: props.instance.id, sessionId })
+    const store = messageStoreBus.getInstance(props.instance.id)
+    store?.clearSession(sessionId)
+    clearSessionRenderCache(props.instance.id, sessionId)
+  }
+
+  const scheduleEvictions = (ids: string[]) => {
+    if (!ids.length) return
+    setPendingEvictions((current) => {
+      const existing = new Set(current)
+      const next = [...current]
+      ids.forEach((id) => {
+        if (!existing.has(id)) {
+          next.push(id)
+          existing.add(id)
+        }
+      })
+      return next
+    })
+  }
+
+  createEffect(() => {
+    const pending = pendingEvictions()
+    if (!pending.length) return
+    const cached = new Set(cachedSessionIds())
+    const remaining: string[] = []
+    pending.forEach((id) => {
+      if (cached.has(id)) {
+        remaining.push(id)
+      } else {
+        evictSession(id)
+      }
+    })
+    if (remaining.length !== pending.length) {
+      setPendingEvictions(remaining)
+    }
+  })
+
+  createEffect(() => {
+    const sessionsMap = activeSessions()
+    const parentId = parentSessionIdForInstance()
+    const activeId = activeSessionIdForInstance()
+    setCachedSessionIds((current) => {
+      const next: string[] = []
+      const append = (id: string | null) => {
+        if (!id || id === "info") return
+        if (!sessionsMap.has(id)) return
+        if (next.includes(id)) return
+        next.push(id)
+      }
+
+      append(parentId)
+      append(activeId)
+      current.forEach((id) => append(id))
+
+      const limit = parentId ? SESSION_CACHE_LIMIT + 1 : SESSION_CACHE_LIMIT
+      const trimmed = next.length > limit ? next.slice(0, limit) : next
+      const trimmedSet = new Set(trimmed)
+      const removed = current.filter((id) => !trimmedSet.has(id))
+      if (removed.length) {
+        scheduleEvictions(removed)
+      }
+      return trimmed
+    })
+  })
 
   return (
     <>
@@ -212,8 +290,7 @@ const InstanceShell: Component<InstanceShellProps> = (props) => {
               when={activeSessionIdForInstance() === "info"}
               fallback={
                 <Show
-                  when={activeSessionIdForInstance()}
-                  keyed
+                  when={cachedSessionIds().length > 0 && activeSessionIdForInstance()}
                   fallback={
                     <div class="flex items-center justify-center h-full">
                       <div class="text-center text-gray-500 dark:text-gray-400">
@@ -223,18 +300,31 @@ const InstanceShell: Component<InstanceShellProps> = (props) => {
                     </div>
                   }
                 >
-                  {(sessionId) => (
-                    <SessionView
-                      sessionId={sessionId}
-                      activeSessions={activeSessions()}
-                      instanceId={props.instance.id}
-                      instanceFolder={props.instance.folder}
-                      escapeInDebounce={props.escapeInDebounce}
-                      showSidebarToggle={shouldShowSidebarToggle()}
-                      onSidebarToggle={() => setIsSidebarOpen(true)}
-                      forceCompactStatusLayout={shouldShowSidebarToggle()}
-                    />
-                  )}
+                  <For each={cachedSessionIds()}>
+                    {(sessionId) => {
+                      const isActive = () => activeSessionIdForInstance() === sessionId
+                      return (
+                        <div
+                          class="session-cache-pane flex flex-col flex-1 min-h-0"
+                          style={{ display: isActive() ? "flex" : "none" }}
+                          data-session-id={sessionId}
+                          aria-hidden={!isActive()}
+                        >
+                          <SessionView
+                            sessionId={sessionId}
+                            activeSessions={activeSessions()}
+                            instanceId={props.instance.id}
+                            instanceFolder={props.instance.folder}
+                            escapeInDebounce={props.escapeInDebounce}
+                            showSidebarToggle={shouldShowSidebarToggle()}
+                            onSidebarToggle={() => setIsSidebarOpen(true)}
+                            forceCompactStatusLayout={shouldShowSidebarToggle()}
+                            isActive={isActive()}
+                          />
+                        </div>
+                      )
+                    }}
+                  </For>
                 </Show>
               }
             >

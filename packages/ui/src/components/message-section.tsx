@@ -34,6 +34,7 @@ export interface MessageSectionProps {
   onSidebarToggle?: () => void
   forceCompactStatusLayout?: boolean
   onQuoteSelection?: (text: string, mode: "quote" | "code") => void
+  isActive?: boolean
 }
 
 export default function MessageSection(props: MessageSectionProps) {
@@ -134,7 +135,12 @@ export default function MessageSection(props: MessageSectionProps) {
 
   const [scrollElement, setScrollElement] = createSignal<HTMLDivElement | undefined>()
   const [topSentinel, setTopSentinel] = createSignal<HTMLDivElement | null>(null)
-  const [bottomSentinel, setBottomSentinel] = createSignal<HTMLDivElement | null>(null)
+  const [bottomSentinelSignal, setBottomSentinelSignal] = createSignal<HTMLDivElement | null>(null)
+  const bottomSentinel = () => bottomSentinelSignal()
+  const setBottomSentinel = (element: HTMLDivElement | null) => {
+    setBottomSentinelSignal(element)
+    resolvePendingActiveScroll()
+  }
   const [autoScroll, setAutoScroll] = createSignal(true)
   const [showScrollTopButton, setShowScrollTopButton] = createSignal(false)
   const [showScrollBottomButton, setShowScrollBottomButton] = createSignal(false)
@@ -153,6 +159,12 @@ export default function MessageSection(props: MessageSectionProps) {
   let detachScrollIntentListeners: (() => void) | undefined
   let hasRestoredScroll = false
   let suppressAutoScrollOnce = false
+  let pendingActiveScroll = false
+  let scrollToBottomFrame: number | null = null
+  let scrollToBottomDelayedFrame: number | null = null
+  let pendingInitialScroll = true
+
+  const [initialRenderComplete, setInitialRenderComplete] = createSignal(false)
 
   function markUserScrollIntent() {
     const now = typeof performance !== "undefined" ? performance.now() : Date.now()
@@ -194,7 +206,9 @@ export default function MessageSection(props: MessageSectionProps) {
     attachScrollIntentListeners(containerRef)
     if (!containerRef) {
       clearQuoteSelection()
+      return
     }
+    resolvePendingActiveScroll()
   }
 
   function setShellElement(element: HTMLDivElement | null) {
@@ -207,8 +221,10 @@ export default function MessageSection(props: MessageSectionProps) {
   function updateScrollIndicatorsFromVisibility() {
 
     const hasItems = messageIds().length > 0
-    setShowScrollBottomButton(hasItems && !bottomSentinelVisible())
-    setShowScrollTopButton(hasItems && !topSentinelVisible())
+    const bottomVisible = bottomSentinelVisible()
+    const topVisible = topSentinelVisible()
+    setShowScrollBottomButton(hasItems && !bottomVisible)
+    setShowScrollTopButton(hasItems && !topVisible)
   }
 
   function scheduleScrollPersist() {
@@ -216,7 +232,7 @@ export default function MessageSection(props: MessageSectionProps) {
     pendingScrollPersist = requestAnimationFrame(() => {
       pendingScrollPersist = null
       if (!containerRef) return
-      scrollCache.persist(containerRef, { atBottomOffset: SCROLL_SENTINEL_MARGIN_PX })
+      // scrollCache.persist(containerRef, { atBottomOffset: SCROLL_SENTINEL_MARGIN_PX })
     })
   }
  
@@ -230,6 +246,39 @@ export default function MessageSection(props: MessageSectionProps) {
     sentinel?.scrollIntoView({ block: "end", inline: "nearest", behavior })
     setAutoScroll(true)
     scheduleScrollPersist()
+  }
+
+  function clearScrollToBottomFrames() {
+    if (scrollToBottomFrame !== null) {
+      cancelAnimationFrame(scrollToBottomFrame)
+      scrollToBottomFrame = null
+    }
+    if (scrollToBottomDelayedFrame !== null) {
+      cancelAnimationFrame(scrollToBottomDelayedFrame)
+      scrollToBottomDelayedFrame = null
+    }
+  }
+
+  function requestScrollToBottom(immediate = true) {
+    if (!containerRef || !bottomSentinel()) {
+      pendingActiveScroll = true
+      return
+    }
+    pendingActiveScroll = false
+    clearScrollToBottomFrames()
+    scrollToBottomFrame = requestAnimationFrame(() => {
+      scrollToBottomFrame = null
+      scrollToBottomDelayedFrame = requestAnimationFrame(() => {
+        scrollToBottomDelayedFrame = null
+        scrollToBottom(immediate)
+      })
+    })
+  }
+
+  function resolvePendingActiveScroll() {
+    if (!pendingActiveScroll) return
+    if (!props.isActive) return
+    requestScrollToBottom(true)
   }
  
   function scrollToTop(immediate = false) {
@@ -322,11 +371,18 @@ export default function MessageSection(props: MessageSectionProps) {
   }
  
   function handleContentRendered() {
-
+    if (props.loading) {
+      return
+    }
     scheduleAnchorScroll()
   }
 
+  function handleInitialRenderComplete() {
+    setInitialRenderComplete(true)
+  }
+
   function handleScroll() {
+
     if (!containerRef) return
     if (pendingScrollFrame !== null) {
       cancelAnimationFrame(pendingScrollFrame)
@@ -353,7 +409,29 @@ export default function MessageSection(props: MessageSectionProps) {
 
   createEffect(() => {
     if (props.registerScrollToBottom) {
-      props.registerScrollToBottom(() => scrollToBottom(true))
+      props.registerScrollToBottom(() => requestScrollToBottom(true))
+    }
+  })
+
+  let lastActiveState = false
+  createEffect(() => {
+    const active = Boolean(props.isActive)
+    if (active && !lastActiveState) {
+      requestScrollToBottom(true)
+    }
+    lastActiveState = active
+  })
+
+  createEffect(() => {
+    const loading = Boolean(props.loading)
+    if (loading) {
+      pendingInitialScroll = true
+      setInitialRenderComplete(false)
+      return
+    }
+    if (pendingInitialScroll && initialRenderComplete()) {
+      pendingInitialScroll = false
+      requestScrollToBottom(false)
     }
   })
 
@@ -362,6 +440,7 @@ export default function MessageSection(props: MessageSectionProps) {
       clearQuoteSelection()
     }
   })
+
 
   createEffect(() => {
     if (typeof document === "undefined") return
@@ -392,16 +471,16 @@ export default function MessageSection(props: MessageSectionProps) {
     if (!target || loading || hasRestoredScroll) return
 
 
-    scrollCache.restore(target, {
-      onApplied: (snapshot) => {
-        if (snapshot) {
-          setAutoScroll(snapshot.atBottom)
-        } else {
-          setAutoScroll(bottomSentinelVisible())
-        }
-        updateScrollIndicatorsFromVisibility()
-      },
-    })
+    // scrollCache.restore(target, {
+    //   onApplied: (snapshot) => {
+    //     if (snapshot) {
+    //       setAutoScroll(snapshot.atBottom)
+    //     } else {
+    //       setAutoScroll(bottomSentinelVisible())
+    //     }
+    //     updateScrollIndicatorsFromVisibility()
+    //   },
+    // })
 
     hasRestoredScroll = true
   })
@@ -518,11 +597,12 @@ export default function MessageSection(props: MessageSectionProps) {
     if (pendingAnchorScroll !== null) {
       cancelAnimationFrame(pendingAnchorScroll)
     }
+    clearScrollToBottomFrames()
     if (detachScrollIntentListeners) {
       detachScrollIntentListeners()
     }
     if (containerRef) {
-      scrollCache.persist(containerRef, { atBottomOffset: SCROLL_SENTINEL_MARGIN_PX })
+      // scrollCache.persist(containerRef, { atBottomOffset: SCROLL_SENTINEL_MARGIN_PX })
     }
     clearQuoteSelection()
   })
@@ -590,7 +670,11 @@ export default function MessageSection(props: MessageSectionProps) {
               onFork={props.onFork}
               onContentRendered={handleContentRendered}
               setBottomSentinel={setBottomSentinel}
+              suspendMeasurements={() => props.isActive === false}
+              onInitialRenderComplete={handleInitialRenderComplete}
             />
+
+
           </div>
  
           <Show when={showScrollTopButton() || showScrollBottomButton()}>

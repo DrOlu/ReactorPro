@@ -98,6 +98,7 @@ interface VirtualItemProps {
   placeholderClass?: string
   virtualizationEnabled?: Accessor<boolean>
   forceVisible?: Accessor<boolean>
+  suspendMeasurements?: Accessor<boolean>
   onMeasured?: () => void
   id?: string
 }
@@ -138,10 +139,12 @@ export default function VirtualItem(props: VirtualItemProps) {
     if (!virtualizationEnabled()) return false
     return !isIntersecting()
   })
+  const measurementsSuspended = () => Boolean(props.suspendMeasurements?.())
  
    let wrapperRef: HTMLDivElement | undefined
-
+ 
   let contentRef: HTMLDivElement | undefined
+
   let resizeObserver: ResizeObserver | undefined
   let intersectionCleanup: (() => void) | undefined
 
@@ -176,22 +179,26 @@ export default function VirtualItem(props: VirtualItemProps) {
   }
 
   function updateMeasuredHeight() {
-    if (!contentRef) return
+    if (!contentRef || measurementsSuspended()) return
     const next = contentRef.offsetHeight
     if (next === measuredHeight()) return
     persistMeasurement(next)
   }
-
+ 
   function setupResizeObserver() {
-    if (!contentRef) return
+    if (!contentRef || measurementsSuspended()) return
     cleanupResizeObserver()
     if (typeof ResizeObserver === "undefined") {
       updateMeasuredHeight()
       return
     }
-    resizeObserver = new ResizeObserver(() => updateMeasuredHeight())
+    resizeObserver = new ResizeObserver(() => {
+      if (measurementsSuspended()) return
+      updateMeasuredHeight()
+    })
     resizeObserver.observe(contentRef)
   }
+
 
   function refreshIntersectionObserver(targetRoot: Element | Document | null) {
     cleanupIntersectionObserver()
@@ -219,7 +226,7 @@ export default function VirtualItem(props: VirtualItemProps) {
     contentRef = element ?? undefined
     if (contentRef) {
       queueMicrotask(() => {
-        if (shouldHideContent()) return
+        if (shouldHideContent() || measurementsSuspended()) return
         updateMeasuredHeight()
         setupResizeObserver()
       })
@@ -228,8 +235,9 @@ export default function VirtualItem(props: VirtualItemProps) {
     }
   }
  
+  
   createEffect(() => {
-    if (shouldHideContent()) {
+    if (shouldHideContent() || measurementsSuspended()) {
       cleanupResizeObserver()
     } else if (contentRef) {
       queueMicrotask(() => {
@@ -238,6 +246,7 @@ export default function VirtualItem(props: VirtualItemProps) {
       })
     }
   })
+
  
   createEffect(() => {
     const key = props.cacheKey
@@ -283,9 +292,6 @@ export default function VirtualItem(props: VirtualItemProps) {
   const placeholderClass = () => ["virtual-item-placeholder", props.placeholderClass].filter(Boolean).join(" ")
   const lazyContent = createMemo<JSX.Element | null>(() => {
     if (shouldHideContent()) return null
-    if (import.meta.env?.DEV) {
-      console.debug("rendering virtual item", props.cacheKey)
-    }
     return resolved()
   })
 

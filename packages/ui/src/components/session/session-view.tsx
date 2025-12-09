@@ -26,6 +26,7 @@ interface SessionViewProps {
   showSidebarToggle?: boolean
   onSidebarToggle?: () => void
   forceCompactStatusLayout?: boolean
+  isActive?: boolean
 }
 
 export const SessionView: Component<SessionViewProps> = (props) => {
@@ -38,6 +39,16 @@ export const SessionView: Component<SessionViewProps> = (props) => {
     return getSessionBusyStatus(props.instanceId, currentSession.id)
   })
   let scrollToBottomHandle: (() => void) | undefined
+  function scheduleScrollToBottom() {
+    if (!scrollToBottomHandle) return
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollToBottomHandle?.())
+    })
+  }
+  createEffect(() => {
+    if (!props.isActive) return
+    scheduleScrollToBottom()
+  })
   let quoteHandler: ((text: string, mode: "quote" | "code") => void) | null = null
  
   createEffect(() => {
@@ -63,10 +74,10 @@ export const SessionView: Component<SessionViewProps> = (props) => {
   }
  
   async function handleSendMessage(prompt: string, attachments: Attachment[]) {
-
-    if (scrollToBottomHandle) {
-      scrollToBottomHandle()
+    if (scrollToBottomHandle && import.meta.env?.DEV) {
+      console.debug("[SessionView] handleSendMessage scroll", props.sessionId)
     }
+    scheduleScrollToBottom()
     await sendMessage(props.instanceId, props.sessionId, prompt, attachments)
   }
 
@@ -193,9 +204,17 @@ export const SessionView: Component<SessionViewProps> = (props) => {
                loading={messagesLoading()}
                onRevert={handleRevert}
                onFork={handleFork}
-               registerScrollToBottom={(fn) => {
-                 scrollToBottomHandle = fn
-               }}
+               isActive={props.isActive}
+                registerScrollToBottom={(fn) => {
+                  scrollToBottomHandle = fn
+                  if (props.isActive) {
+                    scheduleScrollToBottom()
+                  }
+                }}
+
+
+
+
                showSidebarToggle={props.showSidebarToggle}
                onSidebarToggle={props.onSidebarToggle}
                forceCompactStatusLayout={props.forceCompactStatusLayout}

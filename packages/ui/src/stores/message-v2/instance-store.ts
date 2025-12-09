@@ -1,7 +1,9 @@
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { SetStoreFunction } from "solid-js/store"
+import { getLogger } from "../../lib/logger"
 import type { ClientPart, MessageInfo } from "../../types/message"
+import { clearRecordDisplayCacheForMessages } from "./record-display-cache"
 import type {
   InstanceMessageState,
   MessageRecord,
@@ -16,6 +18,12 @@ import type {
   SessionUsageState,
   UsageEntry,
 } from "./types"
+
+const storeLog = getLogger("session")
+
+interface MessageStoreHooks {
+  onSessionCleared?: (instanceId: string, sessionId: string) => void
+}
 
 function createInitialState(instanceId: string): InstanceMessageState {
   return {
@@ -202,7 +210,7 @@ export interface InstanceMessageStore {
   clearInstance: () => void
 }
 
-export function createInstanceMessageStore(instanceId: string): InstanceMessageStore {
+export function createInstanceMessageStore(instanceId: string, hooks?: MessageStoreHooks): InstanceMessageStore {
   const [state, setState] = createStore<InstanceMessageState>(createInitialState(instanceId))
 
 
@@ -696,80 +704,92 @@ export function createInstanceMessageStore(instanceId: string): InstanceMessageS
    function clearSession(sessionId: string) {
      if (!sessionId) return
 
-     const messageIds = Object.values(state.messages)
-       .filter((record) => record.sessionId === sessionId)
-       .map((record) => record.id)
+    const messageIds = Object.values(state.messages)
+      .filter((record) => record.sessionId === sessionId)
+      .map((record) => record.id)
+ 
+    storeLog.info("Clearing session data", { instanceId, sessionId, messageCount: messageIds.length })
+    clearRecordDisplayCacheForMessages(instanceId, messageIds)
+ 
+    batch(() => {
+      setState("messages", (prev) => {
+        const next = { ...prev }
+        messageIds.forEach((id) => delete next[id])
+        return next
+      })
 
-     // Remove message-level data
-     setState("messages", (prev) => {
-       const next = { ...prev }
-       messageIds.forEach((id) => delete next[id])
-       return next
-     })
+      setState("messageInfoVersion", (prev) => {
+        const next = { ...prev }
+        messageIds.forEach((id) => delete next[id])
+        return next
+      })
 
-     setState("messageInfoVersion", (prev) => {
-       const next = { ...prev }
-       messageIds.forEach((id) => delete next[id])
-       return next
-     })
+      messageIds.forEach((id) => messageInfoCache.delete(id))
 
-     messageIds.forEach((id) => messageInfoCache.delete(id))
+      setState("pendingParts", (prev) => {
+        const next = { ...prev }
+        messageIds.forEach((id) => {
+          if (next[id]) delete next[id]
+        })
+        return next
+      })
 
-     setState("pendingParts", (prev) => {
-       const next = { ...prev }
-       messageIds.forEach((id) => {
-         if (next[id]) delete next[id]
-       })
-       return next
-     })
+      setState("permissions", "byMessage", (prev) => {
+        const next = { ...prev }
+        messageIds.forEach((id) => {
+          if (next[id]) delete next[id]
+        })
+        return next
+      })
 
-     setState("permissions", "byMessage", (prev) => {
-       const next = { ...prev }
-       messageIds.forEach((id) => {
-         if (next[id]) delete next[id]
-       })
-       return next
-     })
+      setState("usage", (prev) => {
+        const next = { ...prev }
+        delete next[sessionId]
+        return next
+      })
 
-     // Remove session-level data
-     setState("usage", (prev) => {
-       const next = { ...prev }
-       delete next[sessionId]
-       return next
-     })
+      setState("sessionRevisions", (prev) => {
+        const next = { ...prev }
+        delete next[sessionId]
+        return next
+      })
 
-     setState("sessionRevisions", (prev) => {
-       const next = { ...prev }
-       delete next[sessionId]
-       return next
-     })
+      setState("scrollState", (prev) => {
+        const next = { ...prev }
+        const prefix = `${sessionId}:`
+        Object.keys(next).forEach((key) => {
+          if (key.startsWith(prefix)) {
+            delete next[key]
+          }
+        })
+        return next
+      })
 
-     setState("scrollState", (prev) => {
-       const next = { ...prev }
-       const prefix = `${sessionId}:`
-       Object.keys(next).forEach((key) => {
-         if (key.startsWith(prefix)) {
-           delete next[key]
-         }
-       })
-       return next
-     })
+      setState("sessions", sessionId, (current) => {
+        if (!current) return current
+        return { ...current, messageIds: [] }
+      })
 
-     setState("sessions", (prev) => {
-       const next = { ...prev }
-       delete next[sessionId]
-       return next
-     })
+      setState("sessions", (prev) => {
+        const next = { ...prev }
+        delete next[sessionId]
+        return next
+      })
 
-     setState("sessionOrder", (ids) => ids.filter((id) => id !== sessionId))
-   }
+      setState("sessionOrder", (ids) => ids.filter((id) => id !== sessionId))
+    })
+ 
+    hooks?.onSessionCleared?.(instanceId, sessionId)
+  }
 
+ 
    function clearInstance() {
      messageInfoCache.clear()
      setState(reconcile(createInitialState(instanceId)))
    }
  
    return {
+
      instanceId,
      state,
      setState,

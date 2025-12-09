@@ -125,6 +125,10 @@ function makeSessionCacheKey(instanceId: string, sessionId: string) {
   return `${instanceId}:${sessionId}`
 }
 
+export function clearSessionRenderCache(instanceId: string, sessionId: string) {
+  renderCaches.delete(makeSessionCacheKey(instanceId, sessionId))
+}
+
 function getSessionRenderCache(instanceId: string, sessionId: string): SessionRenderCache {
   const key = makeSessionCacheKey(instanceId, sessionId)
   let cache = renderCaches.get(key)

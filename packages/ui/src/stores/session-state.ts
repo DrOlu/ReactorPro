@@ -39,7 +39,31 @@ const [loading, setLoading] = createSignal({
 const [messagesLoaded, setMessagesLoaded] = createSignal<Map<string, Set<string>>>(new Map())
 const [sessionInfoByInstance, setSessionInfoByInstance] = createSignal<Map<string, Map<string, SessionInfo>>>(new Map())
 
+function clearLoadedFlag(instanceId: string, sessionId: string) {
+  if (!instanceId || !sessionId) return
+  setMessagesLoaded((prev) => {
+    const existing = prev.get(instanceId)
+    if (!existing || !existing.has(sessionId)) {
+      return prev
+    }
+    const next = new Map(prev)
+    const updated = new Set(existing)
+    updated.delete(sessionId)
+    if (updated.size === 0) {
+      next.delete(instanceId)
+    } else {
+      next.set(instanceId, updated)
+    }
+    return next
+  })
+}
+
+messageStoreBus.onSessionCleared((instanceId, sessionId) => {
+  clearLoadedFlag(instanceId, sessionId)
+})
+
 function getDraftKey(instanceId: string, sessionId: string): string {
+
   return `${instanceId}:${sessionId}`
 }
 
@@ -357,8 +381,9 @@ export {
   setSessionCompactionState,
   setSessionPendingPermission,
   setActiveSession,
-
+ 
   setActiveParentSession,
+
   clearActiveParentSession,
   getActiveSession,
   getActiveParentSession,

@@ -44,3 +44,10 @@ export function clearRecordDisplayCacheForInstance(instanceId: string) {
     }
   }
 }
+
+export function clearRecordDisplayCacheForMessages(instanceId: string, messageIds: Iterable<string>) {
+  for (const messageId of messageIds) {
+    if (typeof messageId !== "string" || messageId.length === 0) continue
+    recordDisplayCache.delete(makeCacheKey(instanceId, messageId))
+  }
+}
