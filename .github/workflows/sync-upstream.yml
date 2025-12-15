@@ -24,7 +24,7 @@ permissions:
   issues: write
 
 env:
-  UPSTREAM_REPO: 'HyperspaceAI/ReactorPro'
+  UPSTREAM_REPO: 'NeuralNomadsAI/CodeNomad'
   UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'dev' }}
   NODE_VERSION: 20
 
@@ -88,7 +88,6 @@ jobs:
               git diff --name-only --diff-filter=U
               
               # For conflicts, prefer upstream changes then reapply branding
-              # This is a simple strategy - take upstream and rebrand
               git checkout --theirs .
               git add .
               
@@ -127,13 +126,13 @@ jobs:
               -not -name "sync-upstream.yml" \
               \( -name "*.json" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" -o -name "*.md" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.html" \) \
               -exec sed -i \
-                -e 's/ReactorPro/ReactorPro/g' \
-                -e 's/reactorpro/reactorpro/g' \
-                -e 's/reactor-pro/reactor-pro/g' \
-                -e 's/Hyperspace/Hyperspace/g' \
-                -e 's/hyperspace/hyperspace/g' \
-                -e 's/HyperspaceAI/Hyperspace/g' \
-                -e 's/@hyperspace\//@hyperspace\//g' \
+                -e 's/CodeNomad/ReactorPro/g' \
+                -e 's/codenomad/reactorpro/g' \
+                -e 's/code-nomad/reactor-pro/g' \
+                -e 's/NeuralNomads/Hyperspace/g' \
+                -e 's/neuralnomads/hyperspace/g' \
+                -e 's/NeuralNomadsAI/HyperspaceAI/g' \
+                -e 's/@neuralnomads\//@hyperspace\//g' \
               {} \;
           fi
 
@@ -194,8 +193,6 @@ jobs:
           GH_TOKEN: ${{ secrets.REPO_PAT }}
         run: |
           echo "Triggering release workflow for ReactorPro..."
-          # The push to main should auto-trigger release.yml
-          # But we can also manually dispatch if needed
           gh workflow run release.yml --ref main || echo "Release workflow will be triggered by push"
 
   notify-failure:
@@ -207,13 +204,13 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const title = `Upstream Sync Failed - ${new Date().toISOString().split('T')[0]}`;
-            const body = `
+            const title = \`Upstream Sync Failed - \${new Date().toISOString().split('T')[0]}\`;
+            const body = \`
             ## Automatic Upstream Sync Failed
             
-            **Upstream Repository:** HyperspaceAI/ReactorPro
-            **Upstream Branch:** ${{ env.UPSTREAM_BRANCH }}
-            **Workflow Run:** [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            **Upstream Repository:** NeuralNomadsAI/CodeNomad
+            **Upstream Branch:** \${{ env.UPSTREAM_BRANCH }}
+            **Workflow Run:** [View Run](https://github.com/\${{ github.repository }}/actions/runs/\${{ github.run_id }})
             
             ### Possible Causes:
             - Merge conflicts that couldn't be auto-resolved
@@ -223,12 +220,12 @@ jobs:
             ### Required Action:
             1. Review the workflow logs
             2. Manually sync and resolve any conflicts
-            3. Run the rebranding script: \`./scripts/rebrand.sh\`
+            3. Run the rebranding script: \\\`./scripts/rebrand.sh\\\`
             4. Push the resolved changes
             
             ---
             *This issue was automatically created by the sync-upstream workflow*
-            `;
+            \`;
             
             // Check if similar issue already exists
             const issues = await github.rest.issues.listForRepo({
@@ -253,6 +250,6 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: existingIssue.number,
-                body: `Sync failed again at ${new Date().toISOString()}. [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+                body: \`Sync failed again at \${new Date().toISOString()}. [View Run](https://github.com/\${{ github.repository }}/actions/runs/\${{ github.run_id }})\`
               });
             }
