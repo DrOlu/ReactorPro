@@ -6,6 +6,7 @@ import type { ClientPart, MessageInfo } from "../../types/message"
 import { clearRecordDisplayCacheForMessages } from "./record-display-cache"
 import type {
   InstanceMessageState,
+  LatestTodoSnapshot,
   MessageRecord,
   MessageUpsertInput,
   PartUpdateInput,
@@ -41,6 +42,7 @@ function createInitialState(instanceId: string): InstanceMessageState {
     },
     usage: {},
     scrollState: {},
+    latestTodos: {},
   }
 }
 
@@ -206,6 +208,7 @@ export interface InstanceMessageStore {
   getSessionRevision: (sessionId: string) => number
   getSessionMessageIds: (sessionId: string) => string[]
   getMessage: (messageId: string) => MessageRecord | undefined
+  getLatestTodoSnapshot: (sessionId: string) => LatestTodoSnapshot | undefined
   clearSession: (sessionId: string) => void
   clearInstance: () => void
 }
@@ -213,8 +216,54 @@ export interface InstanceMessageStore {
 export function createInstanceMessageStore(instanceId: string, hooks?: MessageStoreHooks): InstanceMessageStore {
   const [state, setState] = createStore<InstanceMessageState>(createInitialState(instanceId))
 
+  const TODO_TOOL_NAME = "todowrite"
 
   const messageInfoCache = new Map<string, MessageInfo>()
+
+  function isCompletedTodoPart(part: ClientPart | undefined): boolean {
+    if (!part || (part as any).type !== "tool") {
+      return false
+    }
+    const toolName = typeof (part as any).tool === "string" ? (part as any).tool : ""
+    if (toolName !== TODO_TOOL_NAME) {
+      return false
+    }
+    const toolState = (part as any).state
+    if (!toolState || typeof toolState !== "object") {
+      return false
+    }
+    return (toolState as { status?: string }).status === "completed"
+  }
+
+  function recordLatestTodoSnapshot(sessionId: string, snapshot: LatestTodoSnapshot) {
+    if (!sessionId) return
+    setState("latestTodos", sessionId, (existing) => {
+      if (existing && existing.timestamp > snapshot.timestamp) {
+        return existing
+      }
+      return snapshot
+    })
+  }
+
+  function maybeUpdateLatestTodoFromRecord(record: MessageRecord | undefined) {
+    if (!record || !Array.isArray(record.partIds) || record.partIds.length === 0) {
+      return
+    }
+    for (let index = record.partIds.length - 1; index >= 0; index -= 1) {
+      const partId = record.partIds[index]
+      const partRecord = record.parts[partId]
+      if (!partRecord) continue
+      if (isCompletedTodoPart(partRecord.data)) {
+        const timestamp = typeof record.updatedAt === "number" ? record.updatedAt : Date.now()
+        recordLatestTodoSnapshot(record.sessionId, { messageId: record.id, partId, timestamp })
+        break
+      }
+    }
+  }
+
+  function clearLatestTodoSnapshot(sessionId: string) {
+    setState("latestTodos", sessionId, undefined)
+  }
 
   function bumpSessionRevision(sessionId: string) {
     if (!sessionId) return
@@ -365,6 +414,10 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
         updatedAt: Date.now(),
       }))
 
+      Object.values(normalizedRecords).forEach((record) => {
+        maybeUpdateLatestTodoFromRecord(record)
+      })
+
       bumpSessionRevision(sessionId)
     })
   }
@@ -405,9 +458,11 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
     const shouldBump = Boolean(input.bumpRevision || normalizedParts)
     const now = Date.now()
 
+    let nextRecord: MessageRecord | undefined
+
     setState("messages", input.id, (previous) => {
       const revision = previous ? previous.revision + (shouldBump ? 1 : 0) : 0
-      return {
+      const record: MessageRecord = {
         id: input.id,
         sessionId: input.sessionId,
         role: input.role,
@@ -419,7 +474,13 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
         partIds: normalizedParts ? normalizedParts.ids : previous?.partIds ?? [],
         parts: normalizedParts ? normalizedParts.map : previous?.parts ?? {},
       }
+      nextRecord = record
+      return record
     })
+
+    if (nextRecord) {
+      maybeUpdateLatestTodoFromRecord(nextRecord)
+    }
 
     insertMessageIntoSession(input.sessionId, input.id)
     flushPendingParts(input.id)
@@ -471,6 +532,14 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
         }
       }),
     )
+
+    if (isCompletedTodoPart(cloned)) {
+      recordLatestTodoSnapshot(message.sessionId, {
+        messageId: input.messageId,
+        partId,
+        timestamp: Date.now(),
+      })
+    }
  
     // Any part update can change the rendered height of the message
     // list, so we treat it as a session revision for scroll purposes.
@@ -557,6 +626,7 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
       setState("pendingParts", options.newId, pending)
     }
     clearPendingPartsForMessage(options.oldId)
+    maybeUpdateLatestTodoFromRecord(cloned)
   }
 
   function setMessageInfo(messageId: string, info: MessageInfo) {
@@ -778,6 +848,8 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
 
       setState("sessionOrder", (ids) => ids.filter((id) => id !== sessionId))
     })
+
+    clearLatestTodoSnapshot(sessionId)
  
     hooks?.onSessionCleared?.(instanceId, sessionId)
   }
@@ -812,10 +884,12 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
      setScrollSnapshot,
      getScrollSnapshot,
      getSessionRevision: getSessionRevisionValue,
-     getSessionMessageIds: (sessionId: string) => state.sessions[sessionId]?.messageIds ?? [],
-     getMessage: (messageId: string) => state.messages[messageId],
-     clearSession,
-     clearInstance,
-   }
- }
+      getSessionMessageIds: (sessionId: string) => state.sessions[sessionId]?.messageIds ?? [],
+      getMessage: (messageId: string) => state.messages[messageId],
+      getLatestTodoSnapshot: (sessionId: string) => state.latestTodos[sessionId],
+      clearSession,
+      clearInstance,
+    }
+  }
+
 

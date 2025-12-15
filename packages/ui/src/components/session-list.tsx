@@ -1,13 +1,14 @@
-import { Component, For, Show, createSignal, createEffect, onCleanup, onMount, createMemo, JSX } from "solid-js"
+import { Component, For, Show, createSignal, createMemo, JSX } from "solid-js"
 import type { Session, SessionStatus } from "../types/session"
 import { getSessionStatus } from "../stores/session-status"
-import { MessageSquare, Info, X, Copy, Trash2 } from "lucide-solid"
+import { MessageSquare, Info, X, Copy, Trash2, Pencil } from "lucide-solid"
 import KeyboardHint from "./keyboard-hint"
 import Kbd from "./kbd"
+import SessionRenameDialog from "./session-rename-dialog"
 import { keyboardRegistry } from "../lib/keyboard-registry"
 import { formatShortcut } from "../lib/keyboard-utils"
 import { showToastNotification } from "../lib/notifications"
-import { deleteSession, loading } from "../stores/sessions"
+import { deleteSession, loading, renameSession } from "../stores/sessions"
 import { getLogger } from "../lib/logger"
 const log = getLogger("session")
 
@@ -24,13 +25,7 @@ interface SessionListProps {
   showFooter?: boolean
   headerContent?: JSX.Element
   footerContent?: JSX.Element
-  onWidthChange?: (width: number) => void
 }
-
-const MIN_WIDTH = 200
-const MAX_WIDTH = 520
-const DEFAULT_WIDTH = 360
-const STORAGE_KEY = "opencode-session-sidebar-width-v7"
 
 function formatSessionStatus(status: SessionStatus): string {
   switch (status) {
@@ -62,10 +57,8 @@ function arraysEqual(prev: readonly string[] | undefined, next: readonly string[
 }
 
 const SessionList: Component<SessionListProps> = (props) => {
-  const [sidebarWidth, setSidebarWidth] = createSignal(DEFAULT_WIDTH)
-  const [isResizing, setIsResizing] = createSignal(false)
-  const [startX, setStartX] = createSignal(0)
-  const [startWidth, setStartWidth] = createSignal(DEFAULT_WIDTH)
+  const [renameTarget, setRenameTarget] = createSignal<{ id: string; title: string; label: string } | null>(null)
+  const [isRenaming, setIsRenaming] = createSignal(false)
   const infoShortcut = keyboardRegistry.get("switch-to-info")
  
   const isSessionDeleting = (sessionId: string) => {
@@ -76,34 +69,6 @@ const SessionList: Component<SessionListProps> = (props) => {
   const selectSession = (sessionId: string) => {
     props.onSelect(sessionId)
   }
-
-
-  let mouseMoveHandler: ((event: MouseEvent) => void) | null = null
-  let mouseUpHandler: (() => void) | null = null
-  let touchMoveHandler: ((event: TouchEvent) => void) | null = null
-  let touchEndHandler: (() => void) | null = null
-
-  onMount(() => {
-    if (typeof window === "undefined") return
-    const saved = window.localStorage.getItem(STORAGE_KEY)
-    if (!saved) return
-
-    const width = Number.parseInt(saved, 10)
-    if (Number.isFinite(width) && width >= MIN_WIDTH && width <= MAX_WIDTH) {
-      setSidebarWidth(width)
-      setStartWidth(width)
-    }
-  })
-
-  createEffect(() => {
-    if (typeof window === "undefined") return
-    const width = sidebarWidth()
-    window.localStorage.setItem(STORAGE_KEY, width.toString())
-  })
-
-  createEffect(() => {
-    props.onWidthChange?.(sidebarWidth())
-  })
  
   const copySessionId = async (event: MouseEvent, sessionId: string) => {
     event.stopPropagation()
@@ -132,96 +97,35 @@ const SessionList: Component<SessionListProps> = (props) => {
       showToastNotification({ message: "Unable to delete session", variant: "error" })
     }
   }
- 
-  const clampWidth = (width: number) => Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width))
 
+  const openRenameDialog = (sessionId: string) => {
+    const session = props.sessions.get(sessionId)
+    if (!session) return
+    const label = session.title && session.title.trim() ? session.title : sessionId
+    setRenameTarget({ id: sessionId, title: session.title ?? "", label })
+  }
+
+  const closeRenameDialog = () => {
+    setRenameTarget(null)
+  }
+
+  const handleRenameSubmit = async (nextTitle: string) => {
+    const target = renameTarget()
+    if (!target) return
+ 
+    setIsRenaming(true)
+    try {
+      await renameSession(props.instanceId, target.id, nextTitle)
+      setRenameTarget(null)
+    } catch (error) {
+      log.error(`Failed to rename session ${target.id}:`, error)
+      showToastNotification({ message: "Unable to rename session", variant: "error" })
+    } finally {
+      setIsRenaming(false)
+    }
+  }
  
 
-  const removeMouseListeners = () => {
-    if (mouseMoveHandler) {
-      document.removeEventListener("mousemove", mouseMoveHandler)
-      mouseMoveHandler = null
-    }
-    if (mouseUpHandler) {
-      document.removeEventListener("mouseup", mouseUpHandler)
-      mouseUpHandler = null
-    }
-  }
- 
-  const removeTouchListeners = () => {
-    if (touchMoveHandler) {
-      document.removeEventListener("touchmove", touchMoveHandler)
-      touchMoveHandler = null
-    }
-    if (touchEndHandler) {
-      document.removeEventListener("touchend", touchEndHandler)
-      touchEndHandler = null
-    }
-  }
- 
-  const stopResizing = () => {
-    setIsResizing(false)
-    removeMouseListeners()
-    removeTouchListeners()
-  }
- 
-  const handleMouseMove = (event: MouseEvent) => {
-    if (!isResizing()) return
-    const diff = event.clientX - startX()
-    const newWidth = clampWidth(startWidth() + diff)
-    setSidebarWidth(newWidth)
-  }
- 
-  const handleMouseUp = () => {
-    stopResizing()
-  }
- 
-  const handleTouchMove = (event: TouchEvent) => {
-    if (!isResizing()) return
-    const touch = event.touches[0]
-    if (!touch) return
-    const diff = touch.clientX - startX()
-    const newWidth = clampWidth(startWidth() + diff)
-    setSidebarWidth(newWidth)
-  }
- 
-  const handleTouchEnd = () => {
-    stopResizing()
-  }
- 
-  const handleMouseDown = (event: MouseEvent) => {
-    event.preventDefault()
-    setIsResizing(true)
-    setStartX(event.clientX)
-    setStartWidth(sidebarWidth())
- 
-    mouseMoveHandler = handleMouseMove
-    mouseUpHandler = handleMouseUp
- 
-    document.addEventListener("mousemove", handleMouseMove)
-    document.addEventListener("mouseup", handleMouseUp)
-  }
- 
-  const handleTouchStart = (event: TouchEvent) => {
-    event.preventDefault()
-    const touch = event.touches[0]
-    if (!touch) return
-    setIsResizing(true)
-    setStartX(touch.clientX)
-    setStartWidth(sidebarWidth())
- 
-    touchMoveHandler = handleTouchMove
-    touchEndHandler = handleTouchEnd
- 
-    document.addEventListener("touchmove", handleTouchMove)
-    document.addEventListener("touchend", handleTouchEnd)
-  }
- 
-  onCleanup(() => {
-    removeMouseListeners()
-    removeTouchListeners()
-  })
- 
   const SessionRow: Component<{ sessionId: string; canClose?: boolean }> = (rowProps) => {
     const session = () => props.sessions.get(rowProps.sessionId)
     if (!session()) {
@@ -280,6 +184,19 @@ const SessionList: Component<SessionListProps> = (props) => {
                 title="Copy session ID"
               >
                 <Copy class="w-3 h-3" />
+              </span>
+              <span
+                class={`session-item-close opacity-80 hover:opacity-100 ${isActive() ? "hover:bg-white/20" : "hover:bg-surface-hover"}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  openRenameDialog(rowProps.sessionId)
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Rename session"
+                title="Rename session"
+              >
+                <Pencil class="w-3 h-3" />
               </span>
               <span
                 class={`session-item-close opacity-80 hover:opacity-100 ${isActive() ? "hover:bg-white/20" : "hover:bg-surface-hover"}`}
@@ -348,14 +265,6 @@ const SessionList: Component<SessionListProps> = (props) => {
     <div
       class="session-list-container bg-surface-secondary border-r border-base flex flex-col w-full"
     >
-      <div
-        class="session-resize-handle"
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
-        role="presentation"
-        aria-hidden="true"
-      />
-
       <Show when={props.showHeader !== false}>
         <div class="session-list-header p-3 border-b border-base">
           {props.headerContent ?? (
@@ -418,8 +327,18 @@ const SessionList: Component<SessionListProps> = (props) => {
           {props.footerContent ?? null}
         </div>
       </Show>
+
+      <SessionRenameDialog
+        open={Boolean(renameTarget())}
+        currentTitle={renameTarget()?.title ?? ""}
+        sessionLabel={renameTarget()?.label}
+        isSubmitting={isRenaming()}
+        onRename={handleRenameSubmit}
+        onClose={closeRenameDialog}
+      />
     </div>
   )
 }
 
 export default SessionList
+

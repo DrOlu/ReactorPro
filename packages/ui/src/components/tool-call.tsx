@@ -17,7 +17,8 @@ import type {
   ToolRendererContext,
   ToolScrollHelpers,
 } from "./tool-call/types"
-import { getRelativePath, getToolIcon, getToolName, isToolStateCompleted, isToolStateError, isToolStateRunning } from "./tool-call/utils"
+import { getRelativePath, getToolIcon, getToolName, isToolStateCompleted, isToolStateError, isToolStateRunning, getDefaultToolAction } from "./tool-call/utils"
+import { resolveTitleForTool } from "./tool-call/tool-title"
 import { getLogger } from "../lib/logger"
 
 const log = getLogger("session")
@@ -117,21 +118,16 @@ function extractDiagnostics(state: ToolState | undefined): DiagnosticEntry[] {
   ].find((value) => typeof value === "string" && value.length > 0) as string | undefined
 
   const normalizedPreferred = preferredPath ? normalizeDiagnosticPath(preferredPath) : undefined
+  if (!normalizedPreferred) return []
   const candidateEntries = Object.entries(diagnosticsMap).filter(([, items]) => Array.isArray(items) && items.length > 0)
   if (candidateEntries.length === 0) return []
 
-  const prioritizedEntries = (() => {
-    if (!normalizedPreferred) return candidateEntries
-    const matched = candidateEntries.filter(([path]) => {
-      const normalized = normalizeDiagnosticPath(path)
-      if (normalized === normalizedPreferred) return true
-      if (normalized.endsWith(`/${normalizedPreferred}`)) return true
-      const normalizedBase = normalized.split("/").pop()
-      const preferredBase = normalizedPreferred.split("/").pop()
-      return normalizedBase && preferredBase ? normalizedBase === preferredBase : false
-    })
-    return matched.length > 0 ? matched : candidateEntries
-  })()
+  const prioritizedEntries = candidateEntries.filter(([path]) => {
+    const normalized = normalizeDiagnosticPath(path)
+    return normalized === normalizedPreferred
+  })
+
+  if (prioritizedEntries.length === 0) return []
 
   const entries: DiagnosticEntry[] = []
   for (const [pathKey, list] of prioritizedEntries) {
@@ -632,6 +628,17 @@ export default function ToolCall(props: ToolCallProps) {
     const disableHighlight = options.disableHighlight || false
     const messageClass = `message-text tool-call-markdown${size === "large" ? " tool-call-markdown-large" : ""}`
 
+    const state = toolState()
+    const shouldDeferMarkdown = Boolean(state && (state.status === "running" || state.status === "pending") && disableHighlight)
+    if (shouldDeferMarkdown) {
+      return (
+        <div class={messageClass} ref={(element) => scrollHelpers.registerContainer(element)} onScroll={scrollHelpers.handleScroll}>
+          <pre class="whitespace-pre-wrap break-words text-sm font-mono">{options.content}</pre>
+          {scrollHelpers.renderSentinel()}
+        </div>
+      )
+    }
+
     const markdownPart: TextPart = { type: "text", text: options.content }
     const cached = markdownCache.get<RenderCache>()
     if (cached) {
@@ -699,6 +706,12 @@ export default function ToolCall(props: ToolCallProps) {
 
   const renderToolTitle = () => {
     const state = toolState()
+    const currentTool = toolName()
+
+    if (currentTool !== "task") {
+      return resolveTitleForTool({ toolName: currentTool, state })
+    }
+
     if (!state) return getRendererAction()
     if (state.status === "pending") return getRendererAction()
 
@@ -713,7 +726,7 @@ export default function ToolCall(props: ToolCallProps) {
       return state.title
     }
 
-    return getToolName(toolName())
+    return getToolName(currentTool)
   }
 
   const renderToolBody = () => {
@@ -906,34 +919,4 @@ export default function ToolCall(props: ToolCallProps) {
       </Show>
     </div>
   )
-}
-
-function getDefaultToolAction(toolName: string) {
-  switch (toolName) {
-    case "task":
-      return "Delegating..."
-    case "bash":
-      return "Writing command..."
-    case "edit":
-      return "Preparing edit..."
-    case "webfetch":
-      return "Fetching from the web..."
-    case "glob":
-      return "Finding files..."
-    case "grep":
-      return "Searching content..."
-    case "list":
-      return "Listing directory..."
-    case "read":
-      return "Reading file..."
-    case "write":
-      return "Preparing write..."
-    case "todowrite":
-    case "todoread":
-      return "Planning..."
-    case "patch":
-      return "Preparing patch..."
-    default:
-      return "Working..."
-  }
 }

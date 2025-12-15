@@ -18,8 +18,10 @@ import type { MessageRecord } from "../../stores/message-v2/types"
 import { messageStoreBus } from "../../stores/message-v2/bus"
 import { cleanupBlankSessions } from "../../stores/session-state"
 import { getLogger } from "../logger"
+import { emitSessionSidebarRequest } from "../session-sidebar-events"
 
 const log = getLogger("actions")
+
 
 export interface UseCommandsOptions {
   preferences: Accessor<Preferences>
@@ -191,7 +193,10 @@ export function useCommands(options: UseCommandsOptions) {
         if (ids.length <= 1) return
         const current = ids.indexOf(activeSessionMap().get(instanceId) || "")
         const next = (current + 1) % ids.length
-        if (ids[next]) setActiveSession(instanceId, ids[next])
+        if (ids[next]) {
+          setActiveSession(instanceId, ids[next])
+          emitSessionSidebarRequest({ instanceId, action: "show-session-list" })
+        }
       },
     })
 
@@ -212,7 +217,10 @@ export function useCommands(options: UseCommandsOptions) {
         if (ids.length <= 1) return
         const current = ids.indexOf(activeSessionMap().get(instanceId) || "")
         const prev = current <= 0 ? ids.length - 1 : current - 1
-        if (ids[prev]) setActiveSession(instanceId, ids[prev])
+        if (ids[prev]) {
+          setActiveSession(instanceId, ids[prev])
+          emitSessionSidebarRequest({ instanceId, action: "show-session-list" })
+        }
       },
     })
 
@@ -345,21 +353,9 @@ export function useCommands(options: UseCommandsOptions) {
       keywords: ["model", "llm", "ai"],
       shortcut: { key: "M", meta: true, shift: true },
       action: () => {
-        const modelInput = document.querySelector("[data-model-selector]") as HTMLInputElement
-        if (modelInput) {
-          modelInput.focus()
-          setTimeout(() => {
-            const event = new KeyboardEvent("keydown", {
-              key: "ArrowDown",
-              code: "ArrowDown",
-              keyCode: 40,
-              which: 40,
-              bubbles: true,
-              cancelable: true,
-            })
-            modelInput.dispatchEvent(event)
-          }, 10)
-        }
+        const instance = activeInstance()
+        if (!instance) return
+        emitSessionSidebarRequest({ instanceId: instance.id, action: "focus-model-selector" })
       },
     })
 
@@ -371,21 +367,9 @@ export function useCommands(options: UseCommandsOptions) {
       keywords: ["agent", "mode"],
       shortcut: { key: "A", meta: true, shift: true },
       action: () => {
-        const agentTrigger = document.querySelector("[data-agent-selector]") as HTMLElement
-        if (agentTrigger) {
-          agentTrigger.focus()
-          setTimeout(() => {
-            const event = new KeyboardEvent("keydown", {
-              key: "Enter",
-              code: "Enter",
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
-              cancelable: true,
-            })
-            agentTrigger.dispatchEvent(event)
-          }, 50)
-        }
+        const instance = activeInstance()
+        if (!instance) return
+        emitSessionSidebarRequest({ instanceId: instance.id, action: "focus-agent-selector" })
       },
     })
 

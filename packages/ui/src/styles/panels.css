@@ -362,7 +362,7 @@
 
 /* Panel component utilities */
 .panel {
-  @apply rounded-lg shadow-sm border overflow-hidden;
+  @apply rounded-lg shadow-sm border overflow-hidden min-w-0;
   background-color: var(--surface-base);
   border-color: var(--border-base);
   color: var(--text-primary);
@@ -415,7 +415,8 @@
 }
 
 .panel-list {
-  @apply max-h-[400px] overflow-y-auto;
+  @apply max-h-[400px] overflow-y-auto w-full min-w-0;
+  overflow-x: hidden;
 }
 
 .panel-list--fill {
@@ -438,7 +439,7 @@
 }
 
 .panel-list-item-content {
-  @apply flex-1 text-left px-4 py-3 flex items-center justify-between gap-3 outline-none transition-colors w-full;
+  @apply flex-1 text-left px-4 py-3 flex items-center justify-between gap-3 outline-none transition-colors w-full min-w-0;
 }
 
 .panel-list-item-content:hover {
@@ -487,6 +488,7 @@
   @apply flex flex-1 min-h-0 flex-col;
   background-color: var(--surface-base);
   color: inherit;
+  overflow: hidden;
 }
 
 /* Session list component */
@@ -534,8 +536,16 @@
 }
 
 .session-resize-handle {
-  @apply absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent transition-colors;
+  @apply absolute top-0 w-1 h-full cursor-col-resize bg-transparent transition-colors;
   z-index: 10;
+}
+
+.session-resize-handle--left {
+  right: 0;
+}
+
+.session-resize-handle--right {
+  left: 0;
 }
 
 .session-resize-handle:hover {
@@ -544,7 +554,17 @@
 
 .session-resize-handle::before {
   content: "";
-  @apply absolute top-0 left-0 w-2 h-full -translate-x-1/2;
+  @apply absolute top-0 h-full w-2;
+}
+
+.session-resize-handle--left::before {
+  right: 0;
+  transform: translateX(50%);
+}
+
+.session-resize-handle--right::before {
+  left: 0;
+  transform: translateX(-50%);
 }
 
 .session-list-header {

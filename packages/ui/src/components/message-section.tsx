@@ -1,15 +1,11 @@
-import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import Kbd from "./kbd"
 import MessageBlockList, { getMessageAnchorId } from "./message-block-list"
-import MessageListHeader from "./message-list-header"
 import MessageTimeline, { buildTimelineSegments, type TimelineSegment } from "./message-timeline"
 import { useConfig } from "../stores/preferences"
 import { getSessionInfo } from "../stores/sessions"
-import { showCommandPalette } from "../stores/command-palette"
 import { messageStoreBus } from "../stores/message-v2/bus"
 import { useScrollCache } from "../lib/hooks/use-scroll-cache"
-import { sseManager } from "../lib/sse-manager"
-import { formatTokenTotal } from "../lib/formatters"
 import type { InstanceMessageStore } from "../stores/message-v2/instance-store"
 
 const SCROLL_SCOPE = "session"
@@ -18,10 +14,6 @@ const USER_SCROLL_INTENT_WINDOW_MS = 600
 const SCROLL_INTENT_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"])
 const QUOTE_SELECTION_MAX_LENGTH = 2000
 const codeNomadLogo = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
-
-function formatTokens(tokens: number): string {
-  return formatTokenTotal(tokens)
-}
 
 export interface MessageSectionProps {
   instanceId: string
@@ -77,24 +69,11 @@ export default function MessageSection(props: MessageSectionProps) {
     return `${showThinking}|${thinkingExpansion}|${showUsage}`
   })
 
-  const connectionStatus = () => sseManager.getStatus(props.instanceId)
-  const handleCommandPaletteClick = () => {
-    showCommandPalette(props.instanceId)
-  }
- 
   const handleTimelineSegmentClick = (segment: TimelineSegment) => {
     if (typeof document === "undefined") return
     const anchor = document.getElementById(getMessageAnchorId(segment.messageId))
     anchor?.scrollIntoView({ block: "start", behavior: "smooth" })
   }
- 
-  const messageIndexMap = createMemo(() => {
-
-    const map = new Map<string, number>()
-    const ids = messageIds()
-    ids.forEach((id, index) => map.set(id, index))
-    return map
-  })
  
   const lastAssistantIndex = createMemo(() => {
     const ids = messageIds()
@@ -108,23 +87,57 @@ export default function MessageSection(props: MessageSectionProps) {
     return -1
   })
  
-  const timelineSegments = createMemo<TimelineSegment[]>(() => {
-    const ids = messageIds()
-    const resolvedStore = store()
+  const [timelineSegments, setTimelineSegments] = createSignal<TimelineSegment[]>([])
+  const hasTimelineSegments = () => timelineSegments().length > 0
+
+  const seenTimelineMessageIds = new Set<string>()
+  const seenTimelineSegmentKeys = new Set<string>()
+
+  function makeTimelineKey(segment: TimelineSegment) {
+    return `${segment.messageId}:${segment.id}:${segment.type}`
+  }
+
+  function seedTimeline() {
+    seenTimelineMessageIds.clear()
+    seenTimelineSegmentKeys.clear()
+    const ids = untrack(messageIds)
+    const resolvedStore = untrack(store)
     const segments: TimelineSegment[] = []
     ids.forEach((messageId) => {
       const record = resolvedStore.getMessage(messageId)
       if (!record) return
+      seenTimelineMessageIds.add(messageId)
       const built = buildTimelineSegments(props.instanceId, record)
-      segments.push(...built)
+      built.forEach((segment) => {
+        const key = makeTimelineKey(segment)
+        if (seenTimelineSegmentKeys.has(key)) return
+        seenTimelineSegmentKeys.add(key)
+        segments.push(segment)
+      })
     })
-    return segments
-  })
- 
-  const hasTimelineSegments = () => timelineSegments().length > 0
+    setTimelineSegments(segments)
+  }
+
+  function appendTimelineForMessage(messageId: string) {
+    const record = untrack(() => store().getMessage(messageId))
+    if (!record) return
+    const built = buildTimelineSegments(props.instanceId, record)
+    if (built.length === 0) return
+    const newSegments: TimelineSegment[] = []
+    built.forEach((segment) => {
+      const key = makeTimelineKey(segment)
+      if (seenTimelineSegmentKeys.has(key)) return
+      seenTimelineSegmentKeys.add(key)
+      newSegments.push(segment)
+    })
+    if (newSegments.length > 0) {
+      setTimelineSegments((prev) => [...prev, ...newSegments])
+    }
+  }
   const [activeMessageId, setActiveMessageId] = createSignal<string | null>(null)
  
   const changeToken = createMemo(() => String(sessionRevision()))
+  const isActive = createMemo(() => props.isActive !== false)
 
 
   const scrollCache = useScrollCache({
@@ -163,8 +176,6 @@ export default function MessageSection(props: MessageSectionProps) {
   let scrollToBottomFrame: number | null = null
   let scrollToBottomDelayedFrame: number | null = null
   let pendingInitialScroll = true
-
-  const [initialRenderComplete, setInitialRenderComplete] = createSignal(false)
 
   function markUserScrollIntent() {
     const now = typeof performance !== "undefined" ? performance.now() : Date.now()
@@ -236,11 +247,12 @@ export default function MessageSection(props: MessageSectionProps) {
     })
   }
  
-  function scrollToBottom(immediate = false) {
+  function scrollToBottom(immediate = false, options?: { suppressAutoAnchor?: boolean }) {
     if (!containerRef) return
     const sentinel = bottomSentinel()
     const behavior = immediate ? "auto" : "smooth"
-    if (!immediate) {
+    const suppressAutoAnchor = options?.suppressAutoAnchor ?? !immediate
+    if (suppressAutoAnchor) {
       suppressAutoScrollOnce = true
     }
     sentinel?.scrollIntoView({ block: "end", inline: "nearest", behavior })
@@ -260,6 +272,10 @@ export default function MessageSection(props: MessageSectionProps) {
   }
 
   function requestScrollToBottom(immediate = true) {
+    if (!isActive()) {
+      pendingActiveScroll = true
+      return
+    }
     if (!containerRef || !bottomSentinel()) {
       pendingActiveScroll = true
       return
@@ -277,7 +293,7 @@ export default function MessageSection(props: MessageSectionProps) {
 
   function resolvePendingActiveScroll() {
     if (!pendingActiveScroll) return
-    if (!props.isActive) return
+    if (!isActive()) return
     requestScrollToBottom(true)
   }
  
@@ -292,8 +308,15 @@ export default function MessageSection(props: MessageSectionProps) {
 
   function scheduleAnchorScroll(immediate = false) {
     if (!autoScroll()) return
+    if (!isActive()) {
+      pendingActiveScroll = true
+      return
+    }
     const sentinel = bottomSentinel()
-    if (!sentinel) return
+    if (!sentinel) {
+      pendingActiveScroll = true
+      return
+    }
     if (pendingAnchorScroll !== null) {
       cancelAnimationFrame(pendingAnchorScroll)
       pendingAnchorScroll = null
@@ -377,10 +400,6 @@ export default function MessageSection(props: MessageSectionProps) {
     scheduleAnchorScroll()
   }
 
-  function handleInitialRenderComplete() {
-    setInitialRenderComplete(true)
-  }
-
   function handleScroll() {
 
     if (!containerRef) return
@@ -404,6 +423,7 @@ export default function MessageSection(props: MessageSectionProps) {
       clearQuoteSelection()
       scheduleScrollPersist()
     })
+
   }
 
 
@@ -415,9 +435,14 @@ export default function MessageSection(props: MessageSectionProps) {
 
   let lastActiveState = false
   createEffect(() => {
-    const active = Boolean(props.isActive)
-    if (active && !lastActiveState) {
-      requestScrollToBottom(true)
+    const active = isActive()
+    if (active) {
+      resolvePendingActiveScroll()
+      if (!lastActiveState && autoScroll()) {
+        requestScrollToBottom(true)
+      }
+    } else if (autoScroll()) {
+      pendingActiveScroll = true
     }
     lastActiveState = active
   })
@@ -426,12 +451,123 @@ export default function MessageSection(props: MessageSectionProps) {
     const loading = Boolean(props.loading)
     if (loading) {
       pendingInitialScroll = true
-      setInitialRenderComplete(false)
       return
     }
-    if (pendingInitialScroll && initialRenderComplete()) {
-      pendingInitialScroll = false
-      requestScrollToBottom(false)
+    if (!pendingInitialScroll) {
+      return
+    }
+    const container = scrollElement()
+    const sentinel = bottomSentinel()
+    if (!container || !sentinel || messageIds().length === 0) {
+      return
+    }
+    pendingInitialScroll = false
+    requestScrollToBottom(true)
+  })
+
+  let previousTimelineIds: string[] = []
+  let previousLastTimelineMessageId: string | null = null
+  let previousLastTimelinePartCount = 0
+
+  createEffect(() => {
+    const loading = Boolean(props.loading)
+    const ids = messageIds()
+
+    if (loading) {
+      previousTimelineIds = []
+      previousLastTimelineMessageId = null
+      previousLastTimelinePartCount = 0
+      setTimelineSegments([])
+      seenTimelineMessageIds.clear()
+      seenTimelineSegmentKeys.clear()
+      return
+    }
+
+    if (previousTimelineIds.length === 0 && ids.length > 0) {
+      seedTimeline()
+      previousTimelineIds = ids.slice()
+      return
+    }
+
+    if (ids.length < previousTimelineIds.length) {
+      seedTimeline()
+      previousTimelineIds = ids.slice()
+      return
+    }
+
+    if (ids.length === previousTimelineIds.length) {
+      let changedIndex = -1
+      let changeCount = 0
+      for (let index = 0; index < ids.length; index++) {
+        if (ids[index] !== previousTimelineIds[index]) {
+          changedIndex = index
+          changeCount += 1
+          if (changeCount > 1) break
+        }
+      }
+      if (changeCount === 1 && changedIndex >= 0) {
+        const oldId = previousTimelineIds[changedIndex]
+        const newId = ids[changedIndex]
+        if (seenTimelineMessageIds.has(oldId) && !seenTimelineMessageIds.has(newId)) {
+          seenTimelineMessageIds.delete(oldId)
+          seenTimelineMessageIds.add(newId)
+          setTimelineSegments((prev) => {
+            const next = prev.map((segment) => {
+              if (segment.messageId !== oldId) return segment
+              const updatedId = segment.id.replace(oldId, newId)
+              return { ...segment, messageId: newId, id: updatedId }
+            })
+            seenTimelineSegmentKeys.clear()
+            next.forEach((segment) => seenTimelineSegmentKeys.add(makeTimelineKey(segment)))
+            return next
+          })
+          previousTimelineIds = ids.slice()
+          return
+        }
+      }
+    }
+
+    const newIds: string[] = []
+    ids.forEach((id) => {
+      if (!seenTimelineMessageIds.has(id)) {
+        newIds.push(id)
+      }
+    })
+
+    if (newIds.length > 0) {
+      newIds.forEach((id) => {
+        seenTimelineMessageIds.add(id)
+        appendTimelineForMessage(id)
+      })
+    }
+
+    previousTimelineIds = ids.slice()
+  })
+
+  createEffect(() => {
+    if (props.loading) return
+    const ids = messageIds()
+    if (ids.length === 0) return
+    const lastId = ids[ids.length - 1]
+    if (!lastId) return
+    const record = store().getMessage(lastId)
+    if (!record) return
+    const partCount = record.partIds.length
+    if (lastId === previousLastTimelineMessageId && partCount === previousLastTimelinePartCount) {
+      return
+    }
+    previousLastTimelineMessageId = lastId
+    previousLastTimelinePartCount = partCount
+    const built = buildTimelineSegments(props.instanceId, record)
+    const newSegments: TimelineSegment[] = []
+    built.forEach((segment) => {
+      const key = makeTimelineKey(segment)
+      if (seenTimelineSegmentKeys.has(key)) return
+      seenTimelineSegmentKeys.add(key)
+      newSegments.push(segment)
+    })
+    if (newSegments.length > 0) {
+      setTimelineSegments((prev) => [...prev, ...newSegments])
     }
   })
 
@@ -609,17 +745,6 @@ export default function MessageSection(props: MessageSectionProps) {
 
   return (
     <div class="message-stream-container">
-      <MessageListHeader
-        usedTokens={tokenStats().used}
-        availableTokens={tokenStats().avail}
-        connectionStatus={connectionStatus()}
-        onCommandPalette={handleCommandPaletteClick}
-        formatTokens={formatTokens}
-        showSidebarToggle={props.showSidebarToggle}
-        onSidebarToggle={props.onSidebarToggle}
-        forceCompactStatusLayout={props.forceCompactStatusLayout}
-      />
-
       <div class={`message-layout${hasTimelineSegments() ? " message-layout--with-timeline" : ""}`}>
         <div class="message-stream-shell" ref={setShellElement}>
           <div class="message-stream" ref={setContainerRef} onScroll={handleScroll} onMouseUp={handleStreamMouseUp}>
@@ -659,7 +784,6 @@ export default function MessageSection(props: MessageSectionProps) {
               sessionId={props.sessionId}
               store={store}
               messageIds={messageIds}
-              messageIndexMap={messageIndexMap}
               lastAssistantIndex={lastAssistantIndex}
               showThinking={() => preferences().showThinkingBlocks}
               thinkingDefaultExpanded={() => (preferences().thinkingBlocksExpansion ?? "expanded") === "expanded"}
@@ -670,8 +794,7 @@ export default function MessageSection(props: MessageSectionProps) {
               onFork={props.onFork}
               onContentRendered={handleContentRendered}
               setBottomSentinel={setBottomSentinel}
-              suspendMeasurements={() => props.isActive === false}
-              onInitialRenderComplete={handleInitialRenderComplete}
+              suspendMeasurements={() => !isActive()}
             />
 
 
@@ -688,7 +811,7 @@ export default function MessageSection(props: MessageSectionProps) {
                 <button
                   type="button"
                   class="message-scroll-button"
-                  onClick={() => scrollToBottom()}
+                  onClick={() => scrollToBottom(false, { suppressAutoAnchor: false })}
                   aria-label="Scroll to latest message"
                 >
                   <span class="message-scroll-icon" aria-hidden="true">↓</span>

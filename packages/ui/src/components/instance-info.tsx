@@ -1,134 +1,26 @@
-import { Component, Show, For, createSignal, createEffect, onCleanup } from "solid-js"
-import type { Instance, RawMcpStatus } from "../types/instance"
-import { fetchLspStatus, updateInstance } from "../stores/instances"
-import { getLogger } from "../lib/logger"
-
-const log = getLogger("session")
+import { Component, For, Show, createMemo } from "solid-js"
+import type { Instance } from "../types/instance"
+import { useOptionalInstanceMetadataContext } from "../lib/contexts/instance-metadata-context"
+import InstanceServiceStatus from "./instance-service-status"
 
 interface InstanceInfoProps {
   instance: Instance
   compact?: boolean
 }
 
-type ParsedMcpStatus = {
-  name: string
-  status: "running" | "stopped" | "error"
-  error?: string
-}
-
-function parseMcpStatus(status: RawMcpStatus): ParsedMcpStatus[] {
-  if (!status || typeof status !== "object") return []
-
-  const result: ParsedMcpStatus[] = []
-
-  for (const [name, value] of Object.entries(status)) {
-    if (!value || typeof value !== "object") continue
-    const rawStatus = (value as { status?: string }).status
-    if (!rawStatus) continue
-
-    let mappedStatus: ParsedMcpStatus["status"]
-    if (rawStatus === "connected") {
-      mappedStatus = "running"
-    } else if (rawStatus === "failed") {
-      mappedStatus = "error"
-    } else {
-      mappedStatus = "stopped"
-    }
-
-    result.push({
-      name,
-      status: mappedStatus,
-      error: typeof (value as { error?: unknown }).error === "string" ? (value as { error?: string }).error : undefined,
-    })
-  }
-
-  return result
-}
-
-const pendingMetadataRequests = new Set<string>()
-
 const InstanceInfo: Component<InstanceInfoProps> = (props) => {
-  const [isLoadingMetadata, setIsLoadingMetadata] = createSignal(true)
+  const metadataContext = useOptionalInstanceMetadataContext()
+  const isLoadingMetadata = metadataContext?.isLoading ?? (() => false)
+  const instanceAccessor = metadataContext?.instance ?? (() => props.instance)
+  const metadataAccessor = metadataContext?.metadata ?? (() => props.instance.metadata)
 
-  const metadata = () => props.instance.metadata
-  const binaryVersion = () => props.instance.binaryVersion || metadata()?.version
-  const mcpServers = () => {
-    const status = metadata()?.mcpStatus
-    return status ? parseMcpStatus(status) : []
-  }
-  const lspServers = () => metadata()?.lspStatus ?? []
-
-  createEffect(() => {
-    const instance = props.instance
-    const instanceId = instance.id
-    const client = instance.client
-    const hasMetadata = Boolean(instance.metadata)
-
-    if (!client) {
-      setIsLoadingMetadata(false)
-      pendingMetadataRequests.delete(instanceId)
-      return
-    }
-
-    if (hasMetadata) {
-      setIsLoadingMetadata(false)
-      pendingMetadataRequests.delete(instanceId)
-      return
-    }
-
-    if (pendingMetadataRequests.has(instanceId)) {
-      setIsLoadingMetadata(true)
-      return
-    }
-
-    let cancelled = false
-    pendingMetadataRequests.add(instanceId)
-    setIsLoadingMetadata(true)
-
-    void (async () => {
-      try {
-        const [projectResult, mcpResult, lspResult] = await Promise.allSettled([
-          client.project.current(),
-          client.mcp.status(),
-          fetchLspStatus(instanceId),
-        ])
-
-        if (cancelled) {
-          return
-        }
-
-        const project = projectResult.status === "fulfilled" ? projectResult.value.data : undefined
-        const mcpStatus = mcpResult.status === "fulfilled" ? (mcpResult.value.data as RawMcpStatus) : undefined
-        const lspStatus = lspResult.status === "fulfilled" ? lspResult.value ?? [] : undefined
-
-        const nextMetadata = {
-          ...(instance.metadata ?? {}),
-          ...(project ? { project } : {}),
-          ...(mcpStatus ? { mcpStatus } : {}),
-          ...(lspStatus ? { lspStatus } : {}),
-        }
-
-        if (!nextMetadata.version && instance.binaryVersion) {
-          nextMetadata.version = instance.binaryVersion
-        }
-
-        updateInstance(instanceId, { metadata: nextMetadata })
-
-      } catch (error) {
-        if (!cancelled) {
-          log.error("Failed to load instance metadata", error)
-        }
-      } finally {
-        pendingMetadataRequests.delete(instanceId)
-        if (!cancelled) {
-          setIsLoadingMetadata(false)
-        }
-      }
-    })()
-
-    onCleanup(() => {
-      cancelled = true
-    })
+  const currentInstance = () => instanceAccessor()
+  const metadata = () => metadataAccessor()
+  const binaryVersion = () => currentInstance().binaryVersion || metadata()?.version
+  const environmentVariables = () => currentInstance().environmentVariables
+  const environmentEntries = createMemo(() => {
+    const env = environmentVariables()
+    return env ? Object.entries(env) : []
   })
 
   return (
@@ -140,7 +32,7 @@ const InstanceInfo: Component<InstanceInfoProps> = (props) => {
         <div>
           <div class="text-xs font-medium text-muted uppercase tracking-wide mb-1">Folder</div>
           <div class="text-xs text-primary font-mono break-all px-2 py-1.5 rounded border bg-surface-secondary border-base">
-            {props.instance.folder}
+            {currentInstance().folder}
           </div>
         </div>
 
@@ -189,24 +81,24 @@ const InstanceInfo: Component<InstanceInfoProps> = (props) => {
           </div>
         </Show>
 
-        <Show when={props.instance.binaryPath}>
+        <Show when={currentInstance().binaryPath}>
           <div>
             <div class="text-xs font-medium text-muted uppercase tracking-wide mb-1">
               Binary Path
             </div>
             <div class="text-xs font-mono break-all px-2 py-1.5 rounded border bg-surface-secondary border-base text-primary">
-              {props.instance.binaryPath}
+              {currentInstance().binaryPath}
             </div>
           </div>
         </Show>
 
-        <Show when={props.instance.environmentVariables && Object.keys(props.instance.environmentVariables).length > 0}>
+        <Show when={environmentEntries().length > 0}>
           <div>
             <div class="text-xs font-medium text-muted uppercase tracking-wide mb-1.5">
-              Environment Variables ({Object.keys(props.instance.environmentVariables!).length})
+              Environment Variables ({environmentEntries().length})
             </div>
             <div class="space-y-1">
-              <For each={Object.entries(props.instance.environmentVariables!)}>
+              <For each={environmentEntries()}>
                 {([key, value]) => (
                   <div class="flex items-center gap-2 px-2 py-1.5 rounded border bg-surface-secondary border-base">
                     <span class="text-xs font-mono font-medium flex-1 text-primary" title={key}>
@@ -222,79 +114,7 @@ const InstanceInfo: Component<InstanceInfoProps> = (props) => {
           </div>
         </Show>
 
-        <Show when={!isLoadingMetadata() && lspServers().length > 0}>
-          <div>
-            <div class="text-xs font-medium text-muted uppercase tracking-wide mb-1.5">
-              LSP Servers
-            </div>
-            <div class="space-y-1.5">
-              <For each={lspServers()}>
-                {(server) => (
-                  <div class="px-2 py-1.5 rounded border bg-surface-secondary border-base">
-                    <div class="flex items-center justify-between gap-2">
-                      <div class="flex flex-col flex-1 min-w-0">
-                        <span class="text-xs text-primary font-medium truncate">{server.name ?? server.id}</span>
-                        <span class="text-[11px] text-secondary truncate" title={server.root}>
-                          {server.root}
-                        </span>
-                      </div>
-                      <div class="flex items-center gap-1.5 flex-shrink-0 text-xs text-secondary">
-                        <div class={`status-dot ${server.status === "connected" ? "ready animate-pulse" : "error"}`} />
-                        <span>{server.status === "connected" ? "Connected" : "Error"}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </For>
-            </div>
-          </div>
-        </Show>
-
-        <Show when={!isLoadingMetadata() && mcpServers().length > 0}>
-          <div>
-            <div class="text-xs font-medium text-muted uppercase tracking-wide mb-1.5">
-              MCP Servers
-            </div>
-            <div class="space-y-1.5">
-              <For each={mcpServers()}>
-                {(server) => (
-                  <div class="px-2 py-1.5 rounded border bg-surface-secondary border-base">
-                    <div class="flex items-center justify-between gap-2">
-                      <span class="text-xs text-primary font-medium truncate">{server.name}</span>
-                      <div class="flex items-center gap-1.5 flex-shrink-0 text-xs text-secondary">
-                        <div
-                          class={`status-dot ${
-                            server.status === "running"
-                              ? "ready animate-pulse"
-                              : server.status === "error"
-                                ? "error"
-                                : "stopped"
-                          }`}
-                        />
-                        <span>
-                          {
-                            server.status === "running"
-                              ? "Connected"
-                              : server.status === "error"
-                                ? "Error"
-                                : "Disabled"
-                          }
-                        </span>
-                      </div>
-                    </div>
-                    <Show when={server.error}>
-                      {(error) => (
-                        <div class="text-[11px] mt-1 break-words" style={{ color: "var(--status-error)" }}>
-                          {error()}
-                        </div>
-                      )}
-                    </Show>
-                  </div>
-                )}
-              </For>
-            </div>
-          </div>
-        </Show>
+        <InstanceServiceStatus initialInstance={props.instance} class="space-y-3" />
 
         <Show when={isLoadingMetadata()}>
           <div class="text-xs text-muted py-1">
@@ -317,21 +137,19 @@ const InstanceInfo: Component<InstanceInfoProps> = (props) => {
           <div class="space-y-1 text-xs">
             <div class="flex justify-between items-center">
               <span class="text-secondary">Port:</span>
-              <span class="text-primary font-mono">{props.instance.port}</span>
+              <span class="text-primary font-mono">{currentInstance().port}</span>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-secondary">PID:</span>
-              <span class="text-primary font-mono">{props.instance.pid}</span>
+              <span class="text-primary font-mono">{currentInstance().pid}</span>
             </div>
             <div class="flex justify-between items-center">
               <span class="text-secondary">Status:</span>
-              <span
-                class={`status-badge ${props.instance.status}`}
-              >
+              <span class={`status-badge ${currentInstance().status}`}>
                 <div
-                  class={`status-dot ${props.instance.status === "ready" ? "ready" : props.instance.status === "starting" ? "starting" : props.instance.status === "error" ? "error" : "stopped"} ${props.instance.status === "ready" || props.instance.status === "starting" ? "animate-pulse" : ""}`}
+                  class={`status-dot ${currentInstance().status === "ready" ? "ready" : currentInstance().status === "starting" ? "starting" : currentInstance().status === "error" ? "error" : "stopped"} ${currentInstance().status === "ready" || currentInstance().status === "starting" ? "animate-pulse" : ""}`}
                 />
-                {props.instance.status}
+                {currentInstance().status}
               </span>
             </div>
           </div>

@@ -224,11 +224,11 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
   return (
     <>
       <div
-        class="flex h-screen w-full items-start justify-center overflow-hidden py-6 relative"
+        class="flex h-screen w-full items-start justify-center overflow-hidden py-6 px-4 sm:px-6 relative"
         style="background-color: var(--surface-secondary)"
       >
         <div
-          class="w-full max-w-3xl h-full px-8 pb-2 flex flex-col overflow-hidden"
+          class="w-full max-w-3xl h-full px-4 sm:px-8 pb-2 flex flex-col overflow-hidden"
           aria-busy={isLoading() ? "true" : "false"}
         >
           <Show when={props.onOpenRemoteAccess}>

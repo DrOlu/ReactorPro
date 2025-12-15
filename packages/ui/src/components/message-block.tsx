@@ -204,7 +204,7 @@ interface MessageBlockProps {
   instanceId: string
   sessionId: string
   store: () => InstanceMessageStore
-  messageIndexMap: () => Map<string, number>
+  messageIndex: number
   lastAssistantIndex: () => number
   showThinking: () => boolean
   thinkingDefaultExpanded: () => boolean
@@ -223,7 +223,7 @@ export default function MessageBlock(props: MessageBlockProps) {
     const current = record()
     if (!current) return null
 
-    const index = props.messageIndexMap().get(current.id) ?? 0
+    const index = props.messageIndex
     const lastAssistantIdx = props.lastAssistantIndex()
     const isQueued = current.role === "user" && (lastAssistantIdx === -1 || index > lastAssistantIdx)
     const info = messageInfo()

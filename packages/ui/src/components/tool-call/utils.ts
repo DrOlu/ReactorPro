@@ -192,3 +192,33 @@ export function readToolStatePayload(state?: ToolState): {
     output: isToolStateCompleted(state) ? state.output : undefined,
   }
 }
+
+export function getDefaultToolAction(toolName: string) {
+  switch (toolName) {
+    case "task":
+      return "Delegating..."
+    case "bash":
+      return "Writing command..."
+    case "edit":
+      return "Preparing edit..."
+    case "webfetch":
+      return "Fetching from the web..."
+    case "glob":
+      return "Finding files..."
+    case "grep":
+      return "Searching content..."
+    case "list":
+      return "Listing directory..."
+    case "read":
+      return "Reading file..."
+    case "write":
+      return "Preparing write..."
+    case "todowrite":
+    case "todoread":
+      return "Planning..."
+    case "patch":
+      return "Preparing patch..."
+    default:
+      return "Working..."
+  }
+}

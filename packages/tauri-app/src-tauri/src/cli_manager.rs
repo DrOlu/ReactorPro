@@ -602,7 +602,7 @@ fn resolve_dev_entry(_app: &AppHandle) -> Option<String> {
     first_existing(candidates)
 }
 
-fn resolve_dist_entry(app: &AppHandle) -> Option<String> {
+fn resolve_dist_entry(_app: &AppHandle) -> Option<String> {
     let base = workspace_root();
     let mut candidates: Vec<Option<PathBuf>> = vec![
         base.as_ref().map(|p| p.join("packages/server/dist/bin.js")),
@@ -611,45 +611,29 @@ fn resolve_dist_entry(app: &AppHandle) -> Option<String> {
         base.as_ref().map(|p| p.join("server/dist/index.js")),
     ];
 
-    // Use Tauri's resource resolver which handles platform differences correctly
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        log_line(&format!("Tauri resource_dir: {}", resource_dir.display()));
-        candidates.push(Some(resource_dir.join("server/dist/bin.js")));
-        candidates.push(Some(resource_dir.join("server/dist/index.js")));
-        candidates.push(Some(resource_dir.join("resources/server/dist/bin.js")));
-        candidates.push(Some(resource_dir.join("resources/server/dist/index.js")));
-    }
-
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            log_line(&format!("Executable dir: {}", dir.display()));
-            
-            // macOS: Resources folder is at ../Resources relative to executable
-            let macos_resources = dir.join("../Resources");
-            candidates.push(Some(macos_resources.join("server/dist/bin.js")));
-            candidates.push(Some(macos_resources.join("server/dist/index.js")));
-            candidates.push(Some(macos_resources.join("resources/server/dist/bin.js")));
-            candidates.push(Some(macos_resources.join("resources/server/dist/index.js")));
+            let resources = dir.join("../Resources");
+            candidates.push(Some(resources.join("server/dist/bin.js")));
+            candidates.push(Some(resources.join("server/dist/index.js")));
+            candidates.push(Some(resources.join("server/dist/server/bin.js")));
+            candidates.push(Some(resources.join("server/dist/server/index.js")));
+            candidates.push(Some(resources.join("resources/server/dist/bin.js")));
+            candidates.push(Some(resources.join("resources/server/dist/index.js")));
+            candidates.push(Some(resources.join("resources/server/dist/server/bin.js")));
+            candidates.push(Some(resources.join("resources/server/dist/server/index.js")));
 
-            // Windows NSIS: Resources are in same directory as executable or in subdirectories
-            candidates.push(Some(dir.join("server/dist/bin.js")));
-            candidates.push(Some(dir.join("server/dist/index.js")));
-            candidates.push(Some(dir.join("resources/server/dist/bin.js")));
-            candidates.push(Some(dir.join("resources/server/dist/index.js")));
-            
-            // Linux AppImage/deb/rpm: Resources might be relative to executable
-            candidates.push(Some(dir.join("../share/reactorpro/server/dist/bin.js")));
-            candidates.push(Some(dir.join("../share/reactorpro/server/dist/index.js")));
-            candidates.push(Some(dir.join("../lib/reactorpro/server/dist/bin.js")));
-            candidates.push(Some(dir.join("../lib/reactorpro/server/dist/index.js")));
-        }
-    }
-
-    // Log all candidates for debugging
-    for (i, candidate) in candidates.iter().enumerate() {
-        if let Some(path) = candidate {
-            let exists = path.exists();
-            log_line(&format!("candidate[{}]: {} (exists={})", i, path.display(), exists));
+            let linux_resource_roots = [dir.join("../lib/ReactorPro"), dir.join("../lib/reactorpro")];
+            for root in linux_resource_roots {
+                candidates.push(Some(root.join("server/dist/bin.js")));
+                candidates.push(Some(root.join("server/dist/index.js")));
+                candidates.push(Some(root.join("server/dist/server/bin.js")));
+                candidates.push(Some(root.join("server/dist/server/index.js")));
+                candidates.push(Some(root.join("resources/server/dist/bin.js")));
+                candidates.push(Some(root.join("resources/server/dist/index.js")));
+                candidates.push(Some(root.join("resources/server/dist/server/bin.js")));
+                candidates.push(Some(root.join("resources/server/dist/server/index.js")));
+            }
         }
     }
 

@@ -6,9 +6,11 @@ import FolderSelectionView from "./components/folder-selection-view"
 import { showConfirmDialog } from "./stores/alerts"
 import InstanceTabs from "./components/instance-tabs"
 import InstanceDisconnectedModal from "./components/instance-disconnected-modal"
-import InstanceShell from "./components/instance/instance-shell"
+import InstanceShell from "./components/instance/instance-shell2"
 import { RemoteAccessOverlay } from "./components/remote-access-overlay"
+import { InstanceMetadataProvider } from "./lib/contexts/instance-metadata-context"
 import { initMarkdown } from "./lib/markdown"
+
 import { useTheme } from "./lib/theme"
 import { useCommands } from "./lib/hooks/use-commands"
 import { useAppLifecycle } from "./lib/hooks/use-app-lifecycle"
@@ -23,6 +25,7 @@ import {
   showFolderSelection,
   setShowFolderSelection,
 } from "./stores/ui"
+import { instances as instanceStore } from "./stores/instances"
 import { useConfig } from "./stores/preferences"
 import {
   createInstance,
@@ -65,6 +68,13 @@ const App: Component = () => {
   const [launchErrorBinary, setLaunchErrorBinary] = createSignal<string | null>(null)
   const [isAdvancedSettingsOpen, setIsAdvancedSettingsOpen] = createSignal(false)
   const [remoteAccessOpen, setRemoteAccessOpen] = createSignal(false)
+  const [instanceTabBarHeight, setInstanceTabBarHeight] = createSignal(0)
+
+  const updateInstanceTabBarHeight = () => {
+    if (typeof document === "undefined") return
+    const element = document.querySelector<HTMLElement>(".tab-bar-instance")
+    setInstanceTabBarHeight(element?.offsetHeight ?? 0)
+  }
 
   createEffect(() => {
     void initMarkdown(isDark()).catch((error) => log.error("Failed to initialize markdown", error))
@@ -72,6 +82,19 @@ const App: Component = () => {
 
   createEffect(() => {
     initReleaseNotifications()
+  })
+
+  createEffect(() => {
+    instances()
+    hasInstances()
+    requestAnimationFrame(() => updateInstanceTabBarHeight())
+  })
+
+  onMount(() => {
+    updateInstanceTabBarHeight()
+    const handleResize = () => updateInstanceTabBarHeight()
+    window.addEventListener("resize", handleResize)
+    onCleanup(() => window.removeEventListener("resize", handleResize))
   })
 
   const activeInstance = createMemo(() => getActiveInstance())
@@ -328,20 +351,26 @@ const App: Component = () => {
               <For each={Array.from(instances().values())}>
                 {(instance) => {
                   const isActiveInstance = () => activeInstanceId() === instance.id
-                  return (
-                    <div class="flex-1 min-h-0" style={{ display: isActiveInstance() ? "flex" : "none" }}>
-                      <InstanceShell
-                        instance={instance}
-                        escapeInDebounce={escapeInDebounce()}
-                        paletteCommands={paletteCommands}
-                        onCloseSession={(sessionId) => handleCloseSession(instance.id, sessionId)}
-                        onNewSession={() => handleNewSession(instance.id)}
-                        handleSidebarAgentChange={(sessionId, agent) => handleSidebarAgentChange(instance.id, sessionId, agent)}
-                        handleSidebarModelChange={(sessionId, model) => handleSidebarModelChange(instance.id, sessionId, model)}
-                        onExecuteCommand={executeCommand}
-                      />
-                    </div>
-                  )
+                  const isVisible = () => isActiveInstance() && !showFolderSelection()
+                    return (
+                      <div class="flex-1 min-h-0 overflow-hidden" style={{ display: isVisible() ? "flex" : "none" }}>
+                        <InstanceMetadataProvider instance={instance}>
+                          <InstanceShell
+                            instance={instance}
+                            escapeInDebounce={escapeInDebounce()}
+                            paletteCommands={paletteCommands}
+                            onCloseSession={(sessionId) => handleCloseSession(instance.id, sessionId)}
+                            onNewSession={() => handleNewSession(instance.id)}
+                            handleSidebarAgentChange={(sessionId, agent) => handleSidebarAgentChange(instance.id, sessionId, agent)}
+                            handleSidebarModelChange={(sessionId, model) => handleSidebarModelChange(instance.id, sessionId, model)}
+                            onExecuteCommand={executeCommand}
+                            tabBarOffset={instanceTabBarHeight()}
+                          />
+                        </InstanceMetadataProvider>
+
+                      </div>
+                    )
+
                 }}
               </For>
 

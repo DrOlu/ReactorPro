@@ -74,9 +74,6 @@ export const SessionView: Component<SessionViewProps> = (props) => {
   }
  
   async function handleSendMessage(prompt: string, attachments: Attachment[]) {
-    if (scrollToBottomHandle && import.meta.env?.DEV) {
-      console.debug("[SessionView] handleSendMessage scroll", props.sessionId)
-    }
     scheduleScrollToBottom()
     await sendMessage(props.instanceId, props.sessionId, prompt, attachments)
   }

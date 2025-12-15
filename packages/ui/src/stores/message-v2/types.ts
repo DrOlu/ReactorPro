@@ -88,6 +88,12 @@ export interface SessionUsageState {
   latestMessageId?: string
 }
 
+export interface LatestTodoSnapshot {
+  messageId: string
+  partId: string
+  timestamp: number
+}
+
 export interface InstanceMessageState {
   instanceId: string
   sessions: Record<string, SessionRecord>
@@ -99,6 +105,7 @@ export interface InstanceMessageState {
   permissions: InstancePermissionState
   usage: Record<string, SessionUsageState>
   scrollState: Record<string, ScrollSnapshot>
+  latestTodos: Record<string, LatestTodoSnapshot | undefined>
 }
 
 export interface SessionUpsertInput {
