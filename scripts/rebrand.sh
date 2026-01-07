@@ -23,6 +23,7 @@ EXCLUDE_PATTERNS=(
     "*.lock"
     "package-lock.json"
     "scripts/rebrand.sh"
+    "sync-upstream.yml"
 )
 
 # Build find exclude arguments
@@ -34,6 +35,11 @@ done
 # Function to perform replacements in a file
 rebrand_file() {
     local file="$1"
+    
+    # Skip sync-upstream.yml to preserve upstream reference
+    if [[ "$file" == *"sync-upstream.yml"* ]]; then
+        return 0
+    fi
     
     # Skip binary files
     if file "$file" | grep -q "binary"; then
@@ -91,6 +97,7 @@ done < <(find "$PROJECT_ROOT" -type f \
     -not -name "*.lock" \
     -not -name "package-lock.json" \
     -not -name "rebrand.sh" \
+    -not -name "sync-upstream.yml" \
     -not -name "*.png" \
     -not -name "*.jpg" \
     -not -name "*.jpeg" \
