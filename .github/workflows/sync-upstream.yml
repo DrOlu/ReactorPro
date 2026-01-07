@@ -2,7 +2,6 @@ name: Sync from Upstream
 
 on:
   schedule:
-    # Run every 6 hours
     - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
@@ -24,7 +23,7 @@ permissions:
   issues: write
 
 env:
-  UPSTREAM_REPO: 'HyperspaceAI/ReactorPro'
+  UPSTREAM_REPO: 'NeuralNomadsAI/CodeNomad'
   UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'dev' }}
   NODE_VERSION: 20
 
@@ -66,11 +65,6 @@ jobs:
             echo "upstream_head=$UPSTREAM_HEAD" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Backup local workflow
-        if: steps.check.outputs.has_new_commits == 'true' || github.event.inputs.force_rebuild == 'true'
-        run: |
-          cp .github/workflows/sync-upstream.yml /tmp/sync-upstream.yml.bak
-
       - name: Sync upstream changes
         id: sync
         if: steps.check.outputs.has_new_commits == 'true' || github.event.inputs.force_rebuild == 'true'
@@ -102,10 +96,13 @@ jobs:
           
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
 
-      - name: Restore local workflow
+      - name: Fix sync workflow upstream reference
         if: steps.sync.outputs.has_changes == 'true' || github.event.inputs.force_rebuild == 'true'
         run: |
-          cp /tmp/sync-upstream.yml.bak .github/workflows/sync-upstream.yml
+          echo "=== Fixing UPSTREAM_REPO in sync-upstream.yml ==="
+          sed -i "s|UPSTREAM_REPO: 'HyperspaceAI/ReactorPro'|UPSTREAM_REPO: 'NeuralNomadsAI/CodeNomad'|g" .github/workflows/sync-upstream.yml
+          sed -i "s|UPSTREAM_REPO: \"HyperspaceAI/ReactorPro\"|UPSTREAM_REPO: 'NeuralNomadsAI/CodeNomad'|g" .github/workflows/sync-upstream.yml
+          sed -i "s|HyperspaceAI/ReactorPro|NeuralNomadsAI/CodeNomad|g" .github/workflows/sync-upstream.yml
           git add .github/workflows/sync-upstream.yml
 
       - name: Apply rebranding
@@ -131,13 +128,13 @@ jobs:
               -not -name "sync-upstream.yml" \
               \( -name "*.json" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" -o -name "*.md" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.html" \) \
               -exec sed -i \
-                -e 's/ReactorPro/ReactorPro/g' \
-                -e 's/reactorpro/reactorpro/g' \
-                -e 's/reactor-pro/reactor-pro/g' \
-                -e 's/Hyperspace/Hyperspace/g' \
-                -e 's/hyperspace/hyperspace/g' \
-                -e 's/HyperspaceAI/HyperspaceAI/g' \
-                -e 's/@hyperspace\//@hyperspace\//g' \
+                -e 's/CodeNomad/ReactorPro/g' \
+                -e 's/codenomad/reactorpro/g' \
+                -e 's/code-nomad/reactor-pro/g' \
+                -e 's/NeuralNomads/Hyperspace/g' \
+                -e 's/neuralnomads/hyperspace/g' \
+                -e 's/NeuralNomadsAI/HyperspaceAI/g' \
+                -e 's/@neuralnomads\//@hyperspace\//g' \
               {} \;
           fi
 
@@ -209,7 +206,7 @@ jobs:
             const body = `
             ## Automatic Upstream Sync Failed
             
-            **Upstream Repository:** HyperspaceAI/ReactorPro
+            **Upstream Repository:** NeuralNomadsAI/CodeNomad
             **Upstream Branch:** ${{ env.UPSTREAM_BRANCH }}
             **Workflow Run:** [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
             
