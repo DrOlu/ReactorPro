@@ -24,7 +24,7 @@ permissions:
   issues: write
 
 env:
-  UPSTREAM_REPO: 'NeuralNomadsAI/CodeNomad'
+  UPSTREAM_REPO: 'HyperspaceAI/ReactorPro'
   UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'dev' }}
   NODE_VERSION: 20
 
@@ -131,13 +131,13 @@ jobs:
               -not -name "sync-upstream.yml" \
               \( -name "*.json" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" -o -name "*.md" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.html" \) \
               -exec sed -i \
-                -e 's/CodeNomad/ReactorPro/g' \
-                -e 's/codenomad/reactorpro/g' \
-                -e 's/code-nomad/reactor-pro/g' \
-                -e 's/NeuralNomads/Hyperspace/g' \
-                -e 's/neuralnomads/hyperspace/g' \
-                -e 's/NeuralNomadsAI/HyperspaceAI/g' \
-                -e 's/@neuralnomads\//@hyperspace\//g' \
+                -e 's/ReactorPro/ReactorPro/g' \
+                -e 's/reactorpro/reactorpro/g' \
+                -e 's/reactor-pro/reactor-pro/g' \
+                -e 's/Hyperspace/Hyperspace/g' \
+                -e 's/hyperspace/hyperspace/g' \
+                -e 's/HyperspaceAI/HyperspaceAI/g' \
+                -e 's/@hyperspace\//@hyperspace\//g' \
               {} \;
           fi
 
@@ -209,7 +209,7 @@ jobs:
             const body = `
             ## Automatic Upstream Sync Failed
             
-            **Upstream Repository:** NeuralNomadsAI/CodeNomad
+            **Upstream Repository:** HyperspaceAI/ReactorPro
             **Upstream Branch:** ${{ env.UPSTREAM_BRANCH }}
             **Workflow Run:** [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
             
