@@ -83,10 +83,10 @@ Try running with one of these environment variables:
 
 ```bash
 # Most reliable workaround (can reduce rendering performance)
-WEBKIT_DISABLE_DMABUF_RENDERER=1 codenomad
+WEBKIT_DISABLE_DMABUF_RENDERER=1 reactorpro
 
 # Alternative for some Wayland setups
-__NV_DISABLE_EXPLICIT_SYNC=1 codenomad
+__NV_DISABLE_EXPLICIT_SYNC=1 reactorpro
 ```
 
 If you're running the Tauri AppImage and want the workaround applied every time, create a tiny wrapper script on your `PATH`:
@@ -94,7 +94,7 @@ If you're running the Tauri AppImage and want the workaround applied every time,
 ```bash
 #!/bin/bash
 export WEBKIT_DISABLE_DMABUF_RENDERER=1
-exec ~/.local/share/bauh/appimage/installed/codenomad/CodeNomad-Tauri-0.4.0-linux-x64.AppImage "$@"
+exec ~/.local/share/bauh/appimage/installed/reactorpro/ReactorPro-Tauri-0.4.0-linux-x64.AppImage "$@"
 ```
 
 Upstream tracking: https://github.com/tauri-apps/tauri/issues/10702
