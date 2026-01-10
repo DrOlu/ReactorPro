@@ -26,14 +26,19 @@ import MenuIcon from "@suid/icons-material/Menu"
 import MenuOpenIcon from "@suid/icons-material/MenuOpen"
 import PushPinIcon from "@suid/icons-material/PushPin"
 import PushPinOutlinedIcon from "@suid/icons-material/PushPinOutlined"
+import InfoOutlinedIcon from "@suid/icons-material/InfoOutlined"
 import type { Instance } from "../../types/instance"
 import type { Command } from "../../lib/commands"
 import type { BackgroundProcess } from "../../../../server/src/api-types"
+import type { Session } from "../../types/session"
 import {
   activeParentSessionId,
   activeSessionId as activeSessionMap,
   getSessionFamily,
   getSessionInfo,
+  getSessionThreads,
+  sessions,
+  setActiveParentSession,
   setActiveSession,
 } from "../../stores/sessions"
 import { keyboardRegistry, type KeyboardShortcut } from "../../lib/keyboard-registry"
@@ -87,7 +92,7 @@ const MAX_SESSION_SIDEBAR_WIDTH = 360
 const RIGHT_DRAWER_WIDTH = 260
 const MIN_RIGHT_DRAWER_WIDTH = 200
 const MAX_RIGHT_DRAWER_WIDTH = 380
-const SESSION_CACHE_LIMIT = 2
+const SESSION_CACHE_LIMIT = 5
 const APP_BAR_HEIGHT = 56
 const LEFT_DRAWER_STORAGE_KEY = "opencode-session-sidebar-width-v8"
 const RIGHT_DRAWER_STORAGE_KEY = "opencode-session-right-drawer-width-v1"
@@ -267,6 +272,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     props.tabBarOffset
     requestAnimationFrame(() => measureDrawerHost())
   })
+
+  const allInstanceSessions = createMemo<Map<string, Session>>(() => {
+    return sessions().get(props.instance.id) ?? new Map()
+  })
+
+  const sessionThreads = createMemo(() => getSessionThreads(props.instance.id))
 
   const activeSessions = createMemo(() => {
     const parentId = activeParentSessionId().get(props.instance.id)
@@ -477,7 +488,26 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   })
 
   const handleSessionSelect = (sessionId: string) => {
-    setActiveSession(props.instance.id, sessionId)
+    if (sessionId === "info") {
+      setActiveSession(props.instance.id, sessionId)
+      return
+    }
+
+    const session = allInstanceSessions().get(sessionId)
+    if (!session) return
+
+    if (session.parentId === null) {
+      setActiveParentSession(props.instance.id, sessionId)
+      return
+    }
+
+    const parentId = session.parentId
+    if (!parentId) return
+
+    batch(() => {
+      setActiveParentSession(props.instance.id, parentId)
+      setActiveSession(props.instance.id, sessionId)
+    })
   }
 
 
@@ -522,23 +552,27 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   })
 
   createEffect(() => {
-    const sessionsMap = activeSessions()
-    const parentId = parentSessionIdForInstance()
+    const instanceSessions = allInstanceSessions()
     const activeId = activeSessionIdForInstance()
+
     setCachedSessionIds((current) => {
-      const next: string[] = []
-      const append = (id: string | null) => {
+      const next = current.filter((id) => id !== "info" && instanceSessions.has(id))
+
+      const touch = (id: string | null) => {
         if (!id || id === "info") return
-        if (!sessionsMap.has(id)) return
-        if (next.includes(id)) return
-        next.push(id)
+        if (!instanceSessions.has(id)) return
+
+        const index = next.indexOf(id)
+        if (index !== -1) {
+          next.splice(index, 1)
+        }
+        next.unshift(id)
       }
 
-      append(parentId)
-      append(activeId)
+      touch(activeId)
 
-      const limit = parentId ? SESSION_CACHE_LIMIT + 1 : SESSION_CACHE_LIMIT
-      const trimmed = next.length > limit ? next.slice(0, limit) : next
+      const trimmed = next.length > SESSION_CACHE_LIMIT ? next.slice(0, SESSION_CACHE_LIMIT) : next
+
       const trimmedSet = new Set(trimmed)
       const removed = current.filter((id) => !trimmedSet.has(id))
       if (removed.length) {
@@ -815,6 +849,15 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
           </div>
         </div>
         <div class="flex items-center gap-2">
+          <IconButton
+            size="small"
+            color="inherit"
+            aria-label="Instance Info"
+            title="Instance Info"
+            onClick={() => handleSessionSelect("info")}
+          >
+            <InfoOutlinedIcon fontSize="small" />
+          </IconButton>
           <Show when={!isPhoneLayout()}>
             <IconButton
               size="small"
@@ -832,15 +875,10 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       <div class="session-sidebar flex flex-col flex-1 min-h-0">
         <SessionList
           instanceId={props.instance.id}
-          sessions={activeSessions()}
+          sessions={allInstanceSessions()}
+          threads={sessionThreads()}
           activeSessionId={activeSessionIdForInstance()}
           onSelect={handleSessionSelect}
-          onClose={(id) => {
-            const result = props.onCloseSession(id)
-            if (result instanceof Promise) {
-              void result.catch((error) => log.error("Failed to close session:", error))
-            }
-          }}
           onNew={() => {
             const result = props.onNewSession()
             if (result instanceof Promise) {
