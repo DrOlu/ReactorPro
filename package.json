@@ -1,6 +1,6 @@
 {
   "name": "reactorpro-workspace",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "private": true,
   "description": "ReactorPro monorepo workspace",
   "workspaces": {

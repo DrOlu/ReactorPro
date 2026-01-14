@@ -1,74 +1,41 @@
-export type PluginEvent = {
-  type: string
-  properties?: Record<string, unknown>
-}
+import { createReactorProRequester, type ReactorProConfig, type PluginEvent } from "./request"
 
-export type ReactorProConfig = {
-  instanceId: string
-  baseUrl: string
-}
-
-export function getReactorProConfig(): ReactorProConfig {
-  return {
-    instanceId: requireEnv("CODENOMAD_INSTANCE_ID"),
-    baseUrl: requireEnv("CODENOMAD_BASE_URL"),
-  }
-}
+export { getReactorProConfig, type ReactorProConfig, type PluginEvent } from "./request"
 
 export function createReactorProClient(config: ReactorProConfig) {
-  return {
-    postEvent: (event: PluginEvent) => postPluginEvent(config.baseUrl, config.instanceId, event),
-    startEvents: (onEvent: (event: PluginEvent) => void) => startPluginEvents(config.baseUrl, config.instanceId, onEvent),
-  }
-}
+  const requester = createReactorProRequester(config)
 
-function requireEnv(key: string): string {
-  const value = process.env[key]
-  if (!value || !value.trim()) {
-    throw new Error(`[ReactorProPlugin] Missing required env var ${key}`)
+  return {
+    postEvent: (event: PluginEvent) =>
+      requester.requestVoid("/event", {
+        method: "POST",
+        body: JSON.stringify(event),
+      }),
+    startEvents: (onEvent: (event: PluginEvent) => void) => startPluginEvents(requester, onEvent),
   }
-  return value
 }
 
 function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
-async function postPluginEvent(baseUrl: string, instanceId: string, event: PluginEvent) {
-  const url = `${baseUrl.replace(/\/+$/, "")}/workspaces/${instanceId}/plugin/event`
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(event),
-  })
-
-  if (!response.ok) {
-    throw new Error(`[ReactorProPlugin] POST ${url} failed (${response.status})`)
-  }
-}
-
-async function startPluginEvents(baseUrl: string, instanceId: string, onEvent: (event: PluginEvent) => void) {
-  const url = `${baseUrl.replace(/\/+$/, "")}/workspaces/${instanceId}/plugin/events`
-
+async function startPluginEvents(
+  requester: ReturnType<typeof createReactorProRequester>,
+  onEvent: (event: PluginEvent) => void,
+) {
   // Fail plugin startup if we cannot establish the initial connection.
-  const initialBody = await connectWithRetries(url, 3)
+  const initialBody = await connectWithRetries(requester, 3)
 
   // After startup, keep reconnecting; throw after 3 consecutive failures.
-  void consumeWithReconnect(url, onEvent, initialBody)
+  void consumeWithReconnect(requester, onEvent, initialBody)
 }
 
-async function connectWithRetries(url: string, maxAttempts: number) {
+async function connectWithRetries(requester: ReturnType<typeof createReactorProRequester>, maxAttempts: number) {
   let lastError: unknown
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const response = await fetch(url, { headers: { Accept: "text/event-stream" } })
-      if (!response.ok || !response.body) {
-        throw new Error(`[ReactorProPlugin] SSE unavailable (${response.status})`)
-      }
-      return response.body
+      return await requester.requestSseBody("/events")
     } catch (error) {
       lastError = error
       await delay(500 * attempt)
@@ -76,11 +43,12 @@ async function connectWithRetries(url: string, maxAttempts: number) {
   }
 
   const reason = lastError instanceof Error ? lastError.message : String(lastError)
-  throw new Error(`[ReactorProPlugin] Failed to connect to ReactorPro after ${maxAttempts} retries: ${reason}`)
+  const url = requester.buildUrl("/events")
+  throw new Error(`[ReactorProPlugin] Failed to connect to ReactorPro at ${url} after ${maxAttempts} retries: ${reason}`)
 }
 
 async function consumeWithReconnect(
-  url: string,
+  requester: ReturnType<typeof createReactorProRequester>,
   onEvent: (event: PluginEvent) => void,
   initialBody: ReadableStream<Uint8Array>,
 ) {
@@ -90,7 +58,7 @@ async function consumeWithReconnect(
   while (true) {
     try {
       if (!body) {
-        body = await connectWithRetries(url, 3)
+        body = await connectWithRetries(requester, 3)
       }
 
       await consumeSseBody(body, onEvent)

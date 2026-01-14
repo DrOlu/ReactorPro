@@ -1,5 +1,5 @@
 import { Component, For, Show, createSignal, createMemo, createEffect, JSX, onCleanup } from "solid-js"
-import type { Session, SessionStatus } from "../types/session"
+import type { SessionStatus } from "../types/session"
 import type { SessionThread } from "../stores/session-state"
 import { getSessionStatus } from "../stores/session-status"
 import { Bot, User, Copy, Trash2, Pencil, ShieldAlert, ChevronDown } from "lucide-solid"
@@ -14,6 +14,7 @@ import {
   isSessionParentExpanded,
   loading,
   renameSession,
+  sessions as sessionStateSessions,
   setActiveSessionFromList,
   toggleSessionParentExpanded,
 } from "../stores/sessions"
@@ -25,7 +26,6 @@ const log = getLogger("session")
 
 interface SessionListProps {
   instanceId: string
-  sessions: Map<string, Session>
   threads: SessionThread[]
   activeSessionId: string | null
   onSelect: (sessionId: string) => void
@@ -58,7 +58,7 @@ const SessionList: Component<SessionListProps> = (props) => {
  
 
   const selectSession = (sessionId: string) => {
-    const session = props.sessions.get(sessionId)
+    const session = sessionStateSessions().get(props.instanceId)?.get(sessionId)
     const parentId = session?.parentId ?? session?.id
     if (parentId) {
       ensureSessionParentExpanded(props.instanceId, parentId)
@@ -132,7 +132,7 @@ const SessionList: Component<SessionListProps> = (props) => {
   }
 
   const openRenameDialog = (sessionId: string) => {
-    const session = props.sessions.get(sessionId)
+    const session = sessionStateSessions().get(props.instanceId)?.get(sessionId)
     if (!session) return
     const label = session.title && session.title.trim() ? session.title : sessionId
     setRenameTarget({ id: sessionId, title: session.title ?? "", label })
@@ -167,7 +167,7 @@ const SessionList: Component<SessionListProps> = (props) => {
     expanded?: boolean
     onToggleExpand?: () => void
   }> = (rowProps) => {
-    const session = () => props.sessions.get(rowProps.sessionId)
+    const session = createMemo(() => sessionStateSessions().get(props.instanceId)?.get(rowProps.sessionId))
     if (!session()) {
       return <></>
     }
@@ -293,7 +293,7 @@ const SessionList: Component<SessionListProps> = (props) => {
     const activeId = props.activeSessionId
     if (!activeId || activeId === "info") return null
 
-    const activeSession = props.sessions.get(activeId)
+    const activeSession = sessionStateSessions().get(props.instanceId)?.get(activeId)
     if (!activeSession) return null
 
     return activeSession.parentId ?? activeSession.id

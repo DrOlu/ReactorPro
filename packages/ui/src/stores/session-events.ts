@@ -240,8 +240,20 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     const messageId = typeof info.id === "string" ? info.id : undefined
     if (!sessionId || !messageId) return
 
+    const timeInfo = (info.time ?? {}) as { created?: number; updated?: number; completed?: number }
+    const nextUpdated =
+      typeof timeInfo.completed === "number" && timeInfo.completed > 0
+        ? timeInfo.completed
+        : typeof timeInfo.updated === "number" && timeInfo.updated > 0
+          ? timeInfo.updated
+          : typeof timeInfo.created === "number" && timeInfo.created > 0
+            ? timeInfo.created
+            : Date.now()
+
     withSession(instanceId, sessionId, (session) => {
-      session.time = { ...(session.time ?? {}), updated: Date.now() }
+      const currentUpdated = session.time?.updated ?? 0
+      if (nextUpdated <= currentUpdated) return false
+      session.time = { ...(session.time ?? {}), updated: nextUpdated }
     })
 
     const store = messageStoreBus.getOrCreate(instanceId)
