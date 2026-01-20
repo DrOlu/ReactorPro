@@ -198,14 +198,14 @@ fn build_menu(app: &AppHandle) -> tauri::Result<()> {
 
     // App menu (macOS only)
     if is_mac {
-        let app_menu = SubmenuBuilder::new(app, "CodeNomad")
-            .text("about", "About CodeNomad")
+        let app_menu = SubmenuBuilder::new(app, "ReactorPro")
+            .text("about", "About ReactorPro")
             .separator()
-            .text("hide", "Hide CodeNomad")
+            .text("hide", "Hide ReactorPro")
             .text("hide_others", "Hide Others")
             .text("show_all", "Show All")
             .separator()
-            .text("quit", "Quit CodeNomad")
+            .text("quit", "Quit ReactorPro")
             .build()?;
         submenus.push(app_menu);
     }

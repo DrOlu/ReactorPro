@@ -150,7 +150,26 @@ function ensureRollupPlatformBinary() {
   })
 }
 
+function removeOpenCodeConfigSelfLink() {
+  // npm can create self-referential symlinks for scoped packages.
+  // These cause ELOOP errors on Windows during recursive copies.
+  const selfLinkPaths = [
+    path.join(serverRoot, "dist", "opencode-config", "node_modules", "@reactorpro", "opencode-config"),
+    path.join(serverRoot, "dist", "opencode-config", "node_modules", "@codenomad", "opencode-config"),
+  ]
+
+  for (const selfLink of selfLinkPaths) {
+    if (fs.existsSync(selfLink)) {
+      fs.rmSync(selfLink, { recursive: true, force: true })
+      console.log(`[prebuild] removed self-referential link at ${selfLink}`)
+    }
+  }
+}
+
 function copyServerArtifacts() {
+  // Remove any self-referential symlinks before copying
+  removeOpenCodeConfigSelfLink()
+
   fs.rmSync(serverDest, { recursive: true, force: true })
   fs.mkdirSync(serverDest, { recursive: true })
 
