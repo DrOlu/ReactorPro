@@ -1,0 +1,141 @@
+{
+  "name": "@hyperspace/reactorpro-electron-app",
+  "version": "0.8.0",
+  "description": "ReactorPro - AI coding assistant",
+  "author": {
+    "name": "Hyperspace",
+    "email": "reactorpro@hyperspace.ng"
+  },
+  "type": "module",
+  "main": "dist/main/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DrOlu/ReactorPro.git"
+  },
+  "homepage": "https://github.com/DrOlu/ReactorPro",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:electron": "NODE_ENV=development ELECTRON_ENABLE_LOGGING=1 NODE_OPTIONS=\"--import tsx\" electron electron/main/main.ts",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "preview": "electron-vite preview",
+    "build:binaries": "node scripts/build.js",
+    "build:mac": "node scripts/build.js mac",
+    "build:mac-x64": "node scripts/build.js mac-x64",
+    "build:mac-arm64": "node scripts/build.js mac-arm64",
+    "build:win": "node scripts/build.js win",
+    "build:win-arm64": "node scripts/build.js win-arm64",
+    "build:linux": "node scripts/build.js linux",
+    "build:linux-arm64": "node scripts/build.js linux-arm64",
+    "build:linux-rpm": "node scripts/build.js linux-rpm",
+    "build:all": "node scripts/build.js all",
+    "package:mac": "electron-builder --mac",
+    "package:win": "electron-builder --win",
+    "package:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "@hyperspace/reactorpro": "file:../server",
+    "@reactorpro/ui": "file:../ui"
+  },
+  "devDependencies": {
+    "7zip-bin": "^5.2.0",
+    "app-builder-bin": "^4.2.0",
+    "electron": "39.0.0",
+    "electron-builder": "^24.0.0",
+    "electron-vite": "4.0.1",
+    "png2icons": "^2.0.1",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "vite-plugin-solid": "^2.10.0"
+  },
+  "build": {
+    "appId": "ng.hyperspace.reactorpro",
+    "productName": "ReactorPro",
+    "directories": {
+      "output": "release",
+      "buildResources": "electron/resources"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/resources",
+        "to": "",
+        "filter": [
+          "!icon.icns",
+          "!icon.ico"
+        ]
+      },
+      {
+        "from": "../server/dist/opencode-config",
+        "to": "opencode-config"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "ReactorPro-${version}-${os}-${arch}.${ext}",
+      "icon": "electron/resources/icon.icns"
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "ReactorPro-${version}-${os}-${arch}.${ext}",
+      "icon": "electron/resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "ReactorPro-${version}-${os}-${arch}.${ext}",
+      "category": "Development",
+      "icon": "electron/resources/icon.png"
+    }
+  },
+  "private": true
+}

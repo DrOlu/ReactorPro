@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ReactorPro",
+  "version": "0.8.0",
+  "identifier": "ng.hyperspace.reactorpro",
+  "build": {
+    "beforeDevCommand": "npm run dev:bootstrap",
+    "beforeBuildCommand": "npm run bundle:server",
+    "frontendDist": "resources/ui-loading"
+  },
+
+ 
+
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "ReactorPro",
+        "url": "loading.html",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 800,
+        "minHeight": 600,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "theme": "Dark",
+        "backgroundColor": "#1a1a1a",
+        "zoomHotkeysEnabled": true
+      }
+    ],
+    "security": {
+      "assetProtocol": {
+        "scope": ["**"]
+      },
+      "capabilities": ["main-window-native-dialogs"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "resources": [
+      "resources/server",
+      "resources/ui-loading"
+    ],
+    "icon": ["icon.icns", "icon.ico", "icon.png"],
+    "targets": ["app", "appimage", "deb", "rpm", "nsis"]
+  }
+}

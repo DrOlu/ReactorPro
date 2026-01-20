@@ -1,0 +1,33 @@
+{
+  "name": "reactorpro-workspace",
+  "version": "0.8.0",
+  "private": true,
+  "description": "ReactorPro monorepo workspace",
+  "workspaces": {
+    "packages": [
+      "packages/server",
+      "packages/ui",
+      "packages/electron-app",
+      "packages/tauri-app"
+    ]
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @hyperspace/reactorpro-electron-app",
+    "dev:electron": "npm run dev --workspace @hyperspace/reactorpro-electron-app",
+    "dev:tauri": "npm run dev --workspace @reactorpro/tauri-app",
+    "build": "npm run build --workspace @hyperspace/reactorpro-electron-app",
+    "build:tauri": "npm run build --workspace @reactorpro/tauri-app",
+    "build:ui": "npm run build --workspace @reactorpro/ui",
+    "build:mac-x64": "npm run build:mac-x64 --workspace @hyperspace/reactorpro-electron-app",
+    "build:binaries": "npm run build:binaries --workspace @hyperspace/reactorpro-electron-app",
+    "typecheck": "npm run typecheck --workspace @reactorpro/ui && npm run typecheck --workspace @hyperspace/reactorpro-electron-app",
+    "bumpVersion": "npm version --workspaces --include-workspace-root --no-git-tag-version"
+  },
+  "dependencies": {
+    "7zip-bin": "^5.2.0",
+    "google-auth-library": "^10.5.0"
+  },
+  "devDependencies": {
+    "baseline-browser-mapping": "^2.9.11"
+  }
+}

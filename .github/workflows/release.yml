@@ -1,0 +1,17 @@
+name: Release Binaries
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  release:
+    uses: ./.github/workflows/reusable-release.yml
+    with:
+      dist_tag: latest
+    secrets: inherit
