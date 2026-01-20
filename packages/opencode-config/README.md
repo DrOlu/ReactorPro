@@ -1,16 +1,16 @@
 # opencode-config
 
 ## TLDR
-Template config + plugins injected into every OpenCode instance that CodeNomad launches. It provides a CodeNomad bridge plugin for local event exchange between the CLI server and opencode.
+Template config + plugins injected into every OpenCode instance that ReactorPro launches. It provides a ReactorPro bridge plugin for local event exchange between the CLI server and opencode.
 
 ## What it is
-A packaged config directory that CodeNomad copies into `~/.config/codenomad/opencode-config` for production builds or uses directly in dev. OpenCode autoloads any `plugin/*.ts` or `plugin/*.js` from this directory.
+A packaged config directory that ReactorPro copies into `~/.config/codenomad/opencode-config` for production builds or uses directly in dev. OpenCode autoloads any `plugin/*.ts` or `plugin/*.js` from this directory.
 
 ## How it works
-- CodeNomad sets `OPENCODE_CONFIG_DIR` when spawning each opencode instance (`packages/server/src/workspaces/manager.ts`).
+- ReactorPro sets `OPENCODE_CONFIG_DIR` when spawning each opencode instance (`packages/server/src/workspaces/manager.ts`).
 - This template is synced from `packages/opencode-config` (`packages/server/src/opencode-config.ts`, `packages/server/scripts/copy-opencode-config.mjs`).
 - OpenCode autoloads plugins from `plugin/` (`packages/opencode-config/plugin/codenomad.ts`).
-- The `CodeNomadPlugin` reads `CODENOMAD_INSTANCE_ID` + `CODENOMAD_BASE_URL`, connects to `GET /workspaces/:id/plugin/events`, and posts to `POST /workspaces/:id/plugin/event` (`packages/opencode-config/plugin/lib/client.ts`).
+- The `ReactorProPlugin` reads `CODENOMAD_INSTANCE_ID` + `CODENOMAD_BASE_URL`, connects to `GET /workspaces/:id/plugin/events`, and posts to `POST /workspaces/:id/plugin/event` (`packages/opencode-config/plugin/lib/client.ts`).
 - The server exposes the plugin routes and maps events into the UI SSE pipeline (`packages/server/src/server/routes/plugin.ts`, `packages/server/src/plugins/handlers.ts`).
 
 ## Expectations

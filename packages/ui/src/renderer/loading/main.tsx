@@ -1,6 +1,6 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js"
 import { render } from "solid-js/web"
-import iconUrl from "../../images/CodeNomad-Icon.png"
+import iconUrl from "../../images/ReactorPro-Icon.png"
 import { runtimeEnv, isTauriHost } from "../../lib/runtime-env"
 import "../../index.css"
 import "./loading.css"
@@ -8,7 +8,7 @@ import "./loading.css"
 const phrases = [
   "Warming up the AI neurons…",
   "Convincing the AI to stop daydreaming…",
-  "Polishing the AI’s code goggles…",
+  "Polishing the AI's code goggles…",
   "Asking the AI to stop reorganizing your files…",
   "Feeding the AI additional coffee…",
   "Teaching the AI not to delete node_modules (again)…",
@@ -136,9 +136,9 @@ function LoadingApp() {
 
   return (
     <div class="loading-wrapper" role="status" aria-live="polite">
-      <img src={iconUrl} alt="CodeNomad" class="loading-logo" width="180" height="180" />
+      <img src={iconUrl} alt="ReactorPro" class="loading-logo" width="180" height="180" />
       <div class="loading-heading">
-        <h1 class="loading-title">CodeNomad</h1>
+        <h1 class="loading-title">ReactorPro</h1>
         <Show when={status()}>{(statusText) => <p class="loading-status">{statusText()}</p>}</Show>
       </div>
       <div class="loading-card">
