@@ -1,0 +1,385 @@
+name: Sync from Upstream
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild even if no upstream changes'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REPO: NeuralNomadsAI/CodeNomad
+  UPSTREAM_BRANCH: main
+
+jobs:
+  sync-and-rebrand:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check_changes.outputs.has_changes }}
+      new_version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout ReactorPro
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git || true
+          git fetch upstream ${{ env.UPSTREAM_BRANCH }}
+
+      - name: Check for upstream changes
+        id: check_changes
+        run: |
+          # Get the last synced upstream commit (stored in .upstream-commit)
+          LAST_SYNCED=""
+          if [ -f .upstream-commit ]; then
+            LAST_SYNCED=$(cat .upstream-commit)
+          fi
+          
+          UPSTREAM_HEAD=$(git rev-parse upstream/${{ env.UPSTREAM_BRANCH }})
+          
+          echo "Last synced: $LAST_SYNCED"
+          echo "Upstream HEAD: $UPSTREAM_HEAD"
+          
+          if [ "$LAST_SYNCED" = "$UPSTREAM_HEAD" ] && [ "${{ inputs.force_rebuild }}" != "true" ]; then
+            echo "No upstream changes detected"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Upstream changes detected or force rebuild requested"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "upstream_commit=$UPSTREAM_HEAD" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Create a temporary branch for merging
+          git checkout -B sync-upstream
+          
+          # Merge upstream, preferring upstream for conflicts in most files
+          # but keeping our branding files
+          git merge upstream/${{ env.UPSTREAM_BRANCH }} \
+            -X theirs \
+            --no-edit \
+            --allow-unrelated-histories || true
+          
+          # If there are conflicts, resolve them
+          if git status | grep -q "Unmerged paths"; then
+            echo "Resolving merge conflicts..."
+            # Accept upstream for all source files
+            git checkout --theirs . 2>/dev/null || true
+            git add -A
+          fi
+
+      - name: Setup Node
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply ReactorPro branding
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Applying ReactorPro branding..."
+          
+          # ============================================
+          # Package.json files - Update names and branding
+          # ============================================
+          
+          # Root package.json
+          if [ -f package.json ]; then
+            node -e "
+              const pkg = require('./package.json');
+              pkg.name = '@hyperspace/reactorpro-monorepo';
+              pkg.author = 'Hyperspace <reactorpro@hyperspace.ng>';
+              pkg.repository = { type: 'git', url: 'https://github.com/DrOlu/ReactorPro.git' };
+              pkg.homepage = 'https://github.com/DrOlu/ReactorPro';
+              pkg.bugs = { url: 'https://github.com/DrOlu/ReactorPro/issues' };
+              require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+          fi
+          
+          # Server package.json
+          if [ -f packages/server/package.json ]; then
+            node -e "
+              const pkg = require('./packages/server/package.json');
+              pkg.name = '@hyperspace/reactorpro';
+              pkg.author = 'Hyperspace <reactorpro@hyperspace.ng>';
+              pkg.repository = { type: 'git', url: 'https://github.com/DrOlu/ReactorPro.git' };
+              pkg.homepage = 'https://github.com/DrOlu/ReactorPro';
+              pkg.bugs = { url: 'https://github.com/DrOlu/ReactorPro/issues' };
+              pkg.bin = pkg.bin || {};
+              pkg.bin['reactorpro'] = pkg.bin['codenomad'] || './dist/bin.js';
+              delete pkg.bin['codenomad'];
+              require('fs').writeFileSync('packages/server/package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+          fi
+          
+          # Electron app package.json
+          if [ -f packages/electron-app/package.json ]; then
+            node -e "
+              const pkg = require('./packages/electron-app/package.json');
+              pkg.name = '@hyperspace/reactorpro-electron-app';
+              pkg.productName = 'ReactorPro';
+              pkg.author = 'Hyperspace <reactorpro@hyperspace.ng>';
+              pkg.repository = { type: 'git', url: 'https://github.com/DrOlu/ReactorPro.git' };
+              pkg.homepage = 'https://github.com/DrOlu/ReactorPro';
+              
+              // Update build config
+              if (pkg.build) {
+                pkg.build.appId = 'ng.hyperspace.reactorpro';
+                pkg.build.productName = 'ReactorPro';
+                if (pkg.build.mac) pkg.build.mac.artifactName = 'ReactorPro-\${version}-\${os}-\${arch}.\${ext}';
+                if (pkg.build.win) pkg.build.win.artifactName = 'ReactorPro-\${version}-\${os}-\${arch}.\${ext}';
+                if (pkg.build.linux) pkg.build.linux.artifactName = 'ReactorPro-\${version}-\${os}-\${arch}.\${ext}';
+              }
+              
+              // Update dependencies references
+              if (pkg.dependencies) {
+                if (pkg.dependencies['@neuralnomads/codenomad']) {
+                  pkg.dependencies['@hyperspace/reactorpro'] = pkg.dependencies['@neuralnomads/codenomad'];
+                  delete pkg.dependencies['@neuralnomads/codenomad'];
+                }
+                if (pkg.dependencies['@codenomad/ui']) {
+                  pkg.dependencies['@reactorpro/ui'] = pkg.dependencies['@codenomad/ui'];
+                  delete pkg.dependencies['@codenomad/ui'];
+                }
+              }
+              
+              require('fs').writeFileSync('packages/electron-app/package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+          fi
+          
+          # Tauri app package.json
+          if [ -f packages/tauri-app/package.json ]; then
+            node -e "
+              const pkg = require('./packages/tauri-app/package.json');
+              pkg.name = '@reactorpro/tauri-app';
+              require('fs').writeFileSync('packages/tauri-app/package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+          fi
+          
+          # UI package.json
+          if [ -f packages/ui/package.json ]; then
+            node -e "
+              const pkg = require('./packages/ui/package.json');
+              pkg.name = '@reactorpro/ui';
+              require('fs').writeFileSync('packages/ui/package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+          fi
+          
+          # OpenCode config package.json
+          if [ -f packages/opencode-config/package.json ]; then
+            node -e "
+              const pkg = require('./packages/opencode-config/package.json');
+              pkg.name = '@reactorpro/opencode-config';
+              require('fs').writeFileSync('packages/opencode-config/package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+          fi
+
+      - name: Apply source code branding
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Applying source code branding changes..."
+          
+          # ============================================
+          # Tauri configuration
+          # ============================================
+          if [ -f packages/tauri-app/src-tauri/tauri.conf.json ]; then
+            node -e "
+              const conf = require('./packages/tauri-app/src-tauri/tauri.conf.json');
+              conf.productName = 'ReactorPro';
+              conf.identifier = 'ng.hyperspace.reactorpro';
+              if (conf.app && conf.app.windows && conf.app.windows[0]) {
+                conf.app.windows[0].title = 'ReactorPro';
+              }
+              require('fs').writeFileSync('packages/tauri-app/src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+            "
+          fi
+          
+          # ============================================
+          # Rust source files (Tauri)
+          # ============================================
+          
+          # main.rs - Menu labels
+          if [ -f packages/tauri-app/src-tauri/src/main.rs ]; then
+            sed -i 's/SubmenuBuilder::new(app, "CodeNomad")/SubmenuBuilder::new(app, "ReactorPro")/g' packages/tauri-app/src-tauri/src/main.rs
+            sed -i 's/"About CodeNomad"/"About ReactorPro"/g' packages/tauri-app/src-tauri/src/main.rs
+            sed -i 's/"Hide CodeNomad"/"Hide ReactorPro"/g' packages/tauri-app/src-tauri/src/main.rs
+            sed -i 's/"Quit CodeNomad"/"Quit ReactorPro"/g' packages/tauri-app/src-tauri/src/main.rs
+          fi
+          
+          # cli_manager.rs - Token prefix, regex, paths
+          if [ -f packages/tauri-app/src-tauri/src/cli_manager.rs ]; then
+            sed -i 's/codenomad_session/reactorpro_session/g' packages/tauri-app/src-tauri/src/cli_manager.rs
+            sed -i 's|~/.config/codenomad/|~/.config/reactorpro/|g' packages/tauri-app/src-tauri/src/cli_manager.rs
+            sed -i 's/CodeNomad Server is ready/ReactorPro Server is ready/g' packages/tauri-app/src-tauri/src/cli_manager.rs
+            sed -i 's/CODENOMAD_BOOTSTRAP_TOKEN/REACTORPRO_BOOTSTRAP_TOKEN/g' packages/tauri-app/src-tauri/src/cli_manager.rs
+            sed -i 's/@neuralnomads\/codenomad/@hyperspace\/reactorpro/g' packages/tauri-app/src-tauri/src/cli_manager.rs
+            sed -i 's/CodeNomad CLI/ReactorPro CLI/g' packages/tauri-app/src-tauri/src/cli_manager.rs
+            sed -i 's|lib/CodeNomad|lib/ReactorPro|g' packages/tauri-app/src-tauri/src/cli_manager.rs
+            sed -i 's|lib/codenomad|lib/reactorpro|g' packages/tauri-app/src-tauri/src/cli_manager.rs
+          fi
+          
+          # ============================================
+          # Server TypeScript files
+          # ============================================
+          
+          # auth/manager.ts - Token prefix, cookie, username
+          if [ -f packages/server/src/auth/manager.ts ]; then
+            sed -i 's/CODENOMAD_BOOTSTRAP_TOKEN/REACTORPRO_BOOTSTRAP_TOKEN/g' packages/server/src/auth/manager.ts
+            sed -i 's/codenomad_session/reactorpro_session/g' packages/server/src/auth/manager.ts
+            sed -i 's/"codenomad"/"reactorpro"/g' packages/server/src/auth/manager.ts
+          fi
+          
+          # workspaces/opencode-auth.ts
+          if [ -f packages/server/src/workspaces/opencode-auth.ts ]; then
+            sed -i 's/"codenomad"/"reactorpro"/g' packages/server/src/workspaces/opencode-auth.ts
+          fi
+          
+          # ============================================
+          # Electron TypeScript files
+          # ============================================
+          
+          # process-manager.ts
+          if [ -f packages/electron-app/electron/main/process-manager.ts ]; then
+            sed -i 's/CODENOMAD_BOOTSTRAP_TOKEN/REACTORPRO_BOOTSTRAP_TOKEN/g' packages/electron-app/electron/main/process-manager.ts
+          fi
+          
+          # main.ts
+          if [ -f packages/electron-app/electron/main/main.ts ]; then
+            sed -i 's/codenomad_session/reactorpro_session/g' packages/electron-app/electron/main/main.ts
+          fi
+          
+          # ============================================
+          # Copy scripts - Fix symlink paths
+          # ============================================
+          if [ -f packages/server/scripts/copy-opencode-config.mjs ]; then
+            sed -i 's/@codenomad/@reactorpro/g' packages/server/scripts/copy-opencode-config.mjs
+          fi
+          
+          # ============================================
+          # HTML files - Page titles
+          # ============================================
+          find packages -name "*.html" -type f -exec sed -i 's/<title>CodeNomad<\/title>/<title>ReactorPro<\/title>/g' {} \; 2>/dev/null || true
+          find packages -name "*.html" -type f -exec sed -i 's/CodeNomad/ReactorPro/g' {} \; 2>/dev/null || true
+          
+          # ============================================
+          # README and docs
+          # ============================================
+          if [ -f README.md ]; then
+            sed -i 's/CodeNomad/ReactorPro/g' README.md
+            sed -i 's/codenomad/reactorpro/g' README.md
+            sed -i 's/NeuralNomadsAI/DrOlu/g' README.md
+            sed -i 's/neuralnomads/hyperspace/g' README.md
+          fi
+          
+          # ============================================
+          # GitHub templates
+          # ============================================
+          find .github -name "*.yml" -type f -exec sed -i 's/CodeNomad/ReactorPro/g' {} \; 2>/dev/null || true
+          find .github -name "*.md" -type f -exec sed -i 's/CodeNomad/ReactorPro/g' {} \; 2>/dev/null || true
+
+      - name: Apply workflow branding
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Update workflow references to use ReactorPro package names
+          if [ -f .github/workflows/build-and-upload.yml ]; then
+            sed -i 's/@neuralnomads\/codenomad/@hyperspace\/reactorpro/g' .github/workflows/build-and-upload.yml
+            sed -i 's/@codenomad\//@reactorpro\//g' .github/workflows/build-and-upload.yml
+            sed -i 's/CodeNomad/ReactorPro/g' .github/workflows/build-and-upload.yml
+          fi
+          
+          if [ -f .github/workflows/manual-npm-publish.yml ]; then
+            sed -i 's/@neuralnomads\/codenomad/@hyperspace\/reactorpro/g' .github/workflows/manual-npm-publish.yml
+          fi
+
+      - name: Copy ReactorPro icons
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Copy icons if they exist in the icons2 directory
+          if [ -d icons2 ]; then
+            echo "Copying ReactorPro icons..."
+            
+            # Electron icons
+            if [ -f icons2/icon.png ]; then
+              cp icons2/icon.png packages/electron-app/electron/resources/icon.png 2>/dev/null || true
+            fi
+            if [ -f icons2/icon.icns ]; then
+              cp icons2/icon.icns packages/electron-app/electron/resources/icon.icns 2>/dev/null || true
+            fi
+            if [ -f icons2/icon.ico ]; then
+              cp icons2/icon.ico packages/electron-app/electron/resources/icon.ico 2>/dev/null || true
+            fi
+            
+            # Tauri icons
+            if [ -f icons2/icon.png ]; then
+              cp icons2/icon.png packages/tauri-app/src-tauri/icons/icon.png 2>/dev/null || true
+              cp icons2/icon.png packages/tauri-app/src-tauri/icons/128x128.png 2>/dev/null || true
+              cp icons2/icon.png packages/tauri-app/src-tauri/icons/128x128@2x.png 2>/dev/null || true
+              cp icons2/icon.png packages/tauri-app/src-tauri/icons/32x32.png 2>/dev/null || true
+            fi
+            if [ -f icons2/icon.icns ]; then
+              cp icons2/icon.icns packages/tauri-app/src-tauri/icons/icon.icns 2>/dev/null || true
+            fi
+            if [ -f icons2/icon.ico ]; then
+              cp icons2/icon.ico packages/tauri-app/src-tauri/icons/icon.ico 2>/dev/null || true
+            fi
+          fi
+
+      - name: Determine version
+        if: steps.check_changes.outputs.has_changes == 'true'
+        id: version
+        run: |
+          # Get upstream version and use it
+          UPSTREAM_VERSION=$(node -p "require('./package.json').version")
+          echo "Upstream version: $UPSTREAM_VERSION"
+          echo "version=$UPSTREAM_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Save upstream commit marker
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "${{ steps.check_changes.outputs.upstream_commit }}" > .upstream-commit
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git add -A
+          
+          UPSTREAM_COMMIT="${{ steps.check_changes.outputs.upstream_commit }}"
+          SHORT_COMMIT="${UPSTREAM_COMMIT:0:7}"
+          
+          git commit -m "chore: Sync from upstream CodeNomad ($SHORT_COMMIT)
+
+          - Merged latest changes from ${{ env.UPSTREAM_REPO }}
+          - Applied ReactorPro branding
+          - Updated package names and configurations
+          
+          Upstream commit: $UPSTREAM_COMMIT" || echo "No changes to commit"
+          
+          git checkout main
+          git merge sync-upstream --no-edit
+          git push origin main
+
+  trigger-release:
+    needs: sync-and-rebrand
+    if: needs.sync-and-rebrand.outputs.has_changes == 'true'
+    uses: ./.github/workflows/reusable-release.yml
+    with:
+      dist_tag: latest
+    secrets: inherit
