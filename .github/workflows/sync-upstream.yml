@@ -298,23 +298,19 @@ jobs:
           fi
           
           # ============================================
-          # GitHub templates
+          # GitHub issue/PR templates (NOT workflows - those can't be pushed by GITHUB_TOKEN)
           # ============================================
-          find .github -name "*.yml" -type f -exec sed -i 's/CodeNomad/ReactorPro/g' {} \; 2>/dev/null || true
           find .github -name "*.md" -type f -exec sed -i 's/CodeNomad/ReactorPro/g' {} \; 2>/dev/null || true
+          # Skip .github/workflows/*.yml - GITHUB_TOKEN cannot modify workflow files
 
-      - name: Apply workflow branding
+      - name: Restore workflow files from backup
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          # Update workflow references to use ReactorPro package names
-          if [ -f .github/workflows/build-and-upload.yml ]; then
-            sed -i 's/@neuralnomads\/codenomad/@hyperspace\/reactorpro/g' .github/workflows/build-and-upload.yml
-            sed -i 's/@codenomad\//@reactorpro\//g' .github/workflows/build-and-upload.yml
-            sed -i 's/CodeNomad/ReactorPro/g' .github/workflows/build-and-upload.yml
-          fi
-          
-          if [ -f .github/workflows/manual-npm-publish.yml ]; then
-            sed -i 's/@neuralnomads\/codenomad/@hyperspace\/reactorpro/g' .github/workflows/manual-npm-publish.yml
+          # Restore our workflow files (GITHUB_TOKEN can't push workflow changes)
+          # This ensures upstream workflow changes don't break our sync
+          if [ -d /tmp/workflow-backup ]; then
+            cp -r /tmp/workflow-backup/* .github/workflows/
+            echo "Restored workflow files from backup"
           fi
 
       - name: Copy ReactorPro icons
@@ -367,21 +363,36 @@ jobs:
       - name: Commit and push changes
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
+          # Reset workflow files to HEAD to ensure no changes there
+          git checkout HEAD -- .github/workflows/ 2>/dev/null || true
+          
+          # Stage all other changes
           git add -A
+          
+          # Unstage any workflow file changes (double safety)
+          git reset HEAD -- .github/workflows/ 2>/dev/null || true
+          
+          # Re-add everything except workflows
+          git add -A -- ':!.github/workflows/'
           
           UPSTREAM_COMMIT="${{ steps.check_changes.outputs.upstream_commit }}"
           SHORT_COMMIT="${UPSTREAM_COMMIT:0:7}"
           
-          git commit -m "chore: Sync from upstream CodeNomad ($SHORT_COMMIT)
+          # Check if there are any changes to commit (excluding workflows)
+          if git diff --cached --quiet; then
+            echo "No non-workflow changes to commit"
+          else
+            git commit -m "chore: Sync from upstream CodeNomad ($SHORT_COMMIT)
 
           - Merged latest changes from ${{ env.UPSTREAM_REPO }}
           - Applied ReactorPro branding
           - Updated package names and configurations
           
-          Upstream commit: $UPSTREAM_COMMIT" || echo "No changes to commit"
+          Upstream commit: $UPSTREAM_COMMIT"
+          fi
           
           git checkout main
-          git merge sync-upstream --no-edit
+          git merge sync-upstream --no-edit || echo "Nothing to merge"
           git push origin main
 
   trigger-release:
