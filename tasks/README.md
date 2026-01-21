@@ -1,6 +1,6 @@
 # Task Management
 
-This directory contains the task breakdown for building ReactorPro.
+This directory contains the task breakdown for building CodeNomad.
 
 ## Structure
 

@@ -49,8 +49,8 @@ const DEFAULT_CONFIG_PATH = "~/.config/codenomad/config.json"
 
 function parseCliOptions(argv: string[]): CliOptions {
   const program = new Command()
-    .name("reactorpro")
-    .description("ReactorPro CLI server")
+    .name("codenomad")
+    .description("CodeNomad CLI server")
     .version(packageJson.version, "-v, --version", "Show the CLI version")
     .addOption(new Option("--host <host>", "Host interface to bind").env("CLI_HOST").default(DEFAULT_HOST))
     .addOption(new Option("--port <number>", "Port for the HTTP server").env("CLI_PORT").default(DEFAULT_PORT).argParser(parsePort))
@@ -153,7 +153,7 @@ async function main() {
     authPassword: options.authPassword ? "[REDACTED]" : undefined,
   }
 
-  logger.info({ options: logOptions }, "Starting ReactorPro CLI server")
+  logger.info({ options: logOptions }, "Starting CodeNomad CLI server")
 
   const eventBus = new EventBus(eventLogger)
 
@@ -236,7 +236,7 @@ async function main() {
 
   const startInfo = await server.start()
   logger.info({ port: startInfo.port, host: options.host }, "HTTP server listening")
-  console.log(`ReactorPro Server is ready at ${startInfo.url}`)
+  console.log(`CodeNomad Server is ready at ${startInfo.url}`)
 
   if (options.launch) {
     await launchInBrowser(startInfo.url, logger.child({ component: "launcher" }))

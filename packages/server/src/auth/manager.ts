@@ -6,9 +6,9 @@ import { TokenManager } from "./token-manager"
 import { SessionManager } from "./session-manager"
 import { isLoopbackAddress, parseCookies } from "./http-auth"
 
-export const BOOTSTRAP_TOKEN_STDOUT_PREFIX = "REACTORPRO_BOOTSTRAP_TOKEN:" as const
-export const DEFAULT_AUTH_USERNAME = "reactorpro" as const
-export const DEFAULT_AUTH_COOKIE_NAME = "reactorpro_session" as const
+export const BOOTSTRAP_TOKEN_STDOUT_PREFIX = "CODENOMAD_BOOTSTRAP_TOKEN:" as const
+export const DEFAULT_AUTH_USERNAME = "codenomad" as const
+export const DEFAULT_AUTH_COOKIE_NAME = "codenomad_session" as const
 
 export interface AuthManagerInit {
   configPath: string

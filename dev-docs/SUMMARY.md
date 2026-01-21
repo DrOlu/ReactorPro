@@ -1,4 +1,4 @@
-# ReactorPro - Project Summary
+# CodeNomad - Project Summary
 
 ## Current Status
 
@@ -6,7 +6,7 @@ We have completed the MVP milestones (Phases 1-3) and are now operating in post-
 
 ## What We've Created
 
-A comprehensive specification and task breakdown for building the ReactorPro desktop application.
+A comprehensive specification and task breakdown for building the CodeNomad desktop application.
 
 ## Directory Structure
 

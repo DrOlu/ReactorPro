@@ -1,18 +1,18 @@
 {
-  "name": "@hyperspace/reactorpro-electron-app",
+  "name": "@neuralnomads/codenomad-electron-app",
   "version": "0.7.4",
-  "description": "ReactorPro - AI coding assistant",
+  "description": "CodeNomad - AI coding assistant",
   "author": {
-    "name": "Hyperspace",
-    "email": "reactorpro@hyperspace.ng"
+    "name": "Neural Nomads",
+    "email": "codenomad@neuralnomads.ai"
   },
   "type": "module",
   "main": "dist/main/main.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DrOlu/ReactorPro.git"
+    "url": "https://github.com/NeuralNomadsAI/CodeNomad.git"
   },
-  "homepage": "https://github.com/DrOlu/ReactorPro",
+  "homepage": "https://github.com/NeuralNomadsAI/CodeNomad",
   "scripts": {
     "dev": "electron-vite dev",
     "dev:electron": "NODE_ENV=development ELECTRON_ENABLE_LOGGING=1 NODE_OPTIONS=\"--import tsx\" electron electron/main/main.ts",
@@ -34,8 +34,8 @@
     "package:linux": "electron-builder --linux"
   },
   "dependencies": {
-    "@hyperspace/reactorpro": "file:../server",
-    "@reactorpro/ui": "file:../ui"
+    "@neuralnomads/codenomad": "file:../server",
+    "@codenomad/ui": "file:../ui"
   },
   "devDependencies": {
     "7zip-bin": "^5.2.0",
@@ -51,8 +51,8 @@
     "vite-plugin-solid": "^2.10.0"
   },
   "build": {
-    "appId": "ng.hyperspace.reactorpro",
-    "productName": "ReactorPro",
+    "appId": "ai.opencode.client",
+    "productName": "CodeNomad",
     "directories": {
       "output": "release",
       "buildResources": "electron/resources"
@@ -86,7 +86,7 @@
           ]
         }
       ],
-      "artifactName": "ReactorPro-${version}-${os}-${arch}.${ext}",
+      "artifactName": "CodeNomad-${version}-${os}-${arch}.${ext}",
       "icon": "electron/resources/icon.icns"
     },
     "dmg": {
@@ -113,7 +113,7 @@
           ]
         }
       ],
-      "artifactName": "ReactorPro-${version}-${os}-${arch}.${ext}",
+      "artifactName": "CodeNomad-${version}-${os}-${arch}.${ext}",
       "icon": "electron/resources/icon.ico"
     },
     "nsis": {
@@ -132,7 +132,7 @@
           ]
         }
       ],
-      "artifactName": "ReactorPro-${version}-${os}-${arch}.${ext}",
+      "artifactName": "CodeNomad-${version}-${os}-${arch}.${ext}",
       "category": "Development",
       "icon": "electron/resources/icon.png"
     }

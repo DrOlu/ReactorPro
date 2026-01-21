@@ -1,10 +1,10 @@
-# ReactorPro UI
+# CodeNomad UI
 
-This package contains the frontend user interface for ReactorPro, built with [SolidJS](https://www.solidjs.com/) and [Tailwind CSS](https://tailwindcss.com/).
+This package contains the frontend user interface for CodeNomad, built with [SolidJS](https://www.solidjs.com/) and [Tailwind CSS](https://tailwindcss.com/).
 
 ## Overview
 
-The UI is designed to be a high-performance, low-latency cockpit for managing OpenCode sessions. It connects to the ReactorPro server (either running locally via CLI or embedded in the Electron app).
+The UI is designed to be a high-performance, low-latency cockpit for managing OpenCode sessions. It connects to the CodeNomad server (either running locally via CLI or embedded in the Electron app).
 
 ## Features
 
@@ -41,13 +41,13 @@ The UI now routes all logging through a lightweight wrapper around [`debug`](htt
 - `session` – Session/model state, prompt handling, tool calls
 - `actions` – User-driven interactions in UI components
 
-You can enable or disable namespaces from DevTools (in dev or production builds) via the global `window.reactorproLogger` helpers:
+You can enable or disable namespaces from DevTools (in dev or production builds) via the global `window.codenomadLogger` helpers:
 
 ```js
-window.reactorproLogger?.listLoggerNamespaces() // => [{ name: "sse", enabled: false }, ...]
-window.reactorproLogger?.enableLogger("sse") // turn on SSE logs
-window.reactorproLogger?.disableLogger("sse") // turn them off again
-window.reactorproLogger?.enableAllLoggers() // optional helper
+window.codenomadLogger?.listLoggerNamespaces() // => [{ name: "sse", enabled: false }, ...]
+window.codenomadLogger?.enableLogger("sse") // turn on SSE logs
+window.codenomadLogger?.disableLogger("sse") // turn them off again
+window.codenomadLogger?.enableAllLoggers() // optional helper
 ```
 
 Enabled namespaces are persisted in `localStorage` under `opencode:logger:namespaces`, so your preference survives reloads.

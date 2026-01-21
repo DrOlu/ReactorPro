@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ReactorPro",
-  "version": "0.7.4",
-  "identifier": "ng.hyperspace.reactorpro",
+  "productName": "CodeNomad",
+  "version": "0.1.0",
+  "identifier": "ai.opencode.client",
   "build": {
     "beforeDevCommand": "npm run dev:bootstrap",
     "beforeBuildCommand": "npm run bundle:server",
@@ -16,7 +16,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "ReactorPro",
+        "title": "CodeNomad",
         "url": "loading.html",
         "width": 1400,
         "height": 900,

@@ -13,7 +13,7 @@ const SCROLL_SENTINEL_MARGIN_PX = 48
 const USER_SCROLL_INTENT_WINDOW_MS = 600
 const SCROLL_INTENT_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"])
 const QUOTE_SELECTION_MAX_LENGTH = 2000
-const reactorProLogo = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
+const codeNomadLogo = new URL("../images/CodeNomad-Icon.png", import.meta.url).href
 
 export interface MessageSectionProps {
   instanceId: string
@@ -753,8 +753,8 @@ export default function MessageSection(props: MessageSectionProps) {
               <div class="empty-state">
                 <div class="empty-state-content">
                   <div class="flex flex-col items-center gap-3 mb-6">
-                    <img src={reactorProLogo} alt="ReactorPro logo" class="h-48 w-auto" loading="lazy" />
-                    <h1 class="text-3xl font-semibold text-primary">ReactorPro</h1>
+                    <img src={codeNomadLogo} alt="CodeNomad logo" class="h-48 w-auto" loading="lazy" />
+                    <h1 class="text-3xl font-semibold text-primary">CodeNomad</h1>
                   </div>
                   <h3>Start a conversation</h3>
                   <p>Type a message below or open the Command Palette:</p>

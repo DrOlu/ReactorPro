@@ -9,7 +9,7 @@ import { buildUserShellCommand, getUserShellEnv, supportsUserShell } from "./use
 
 const nodeRequire = createRequire(import.meta.url)
 
-const BOOTSTRAP_TOKEN_PREFIX = "REACTORPRO_BOOTSTRAP_TOKEN:"
+const BOOTSTRAP_TOKEN_PREFIX = "CODENOMAD_BOOTSTRAP_TOKEN:"
 
 type CliState = "starting" | "ready" | "error" | "stopped"
 type ListeningMode = "local" | "all"
@@ -99,7 +99,7 @@ export class CliProcessManager extends EventEmitter {
     const args = this.buildCliArgs(options, host)
 
     console.info(
-      `[cli] launching ReactorPro CLI (${options.dev ? "dev" : "prod"}) using ${cliEntry.runner} at ${cliEntry.entry} (host=${host})`,
+      `[cli] launching CodeNomad CLI (${options.dev ? "dev" : "prod"}) using ${cliEntry.runner} at ${cliEntry.entry} (host=${host})`,
     )
 
     const env = supportsUserShell() ? getUserShellEnv() : { ...process.env }
@@ -257,7 +257,7 @@ export class CliProcessManager extends EventEmitter {
   }
 
   private extractPort(line: string): number | null {
-    const readyMatch = line.match(/ReactorPro Server is ready at http:\/\/[^:]+:(\d+)/i)
+    const readyMatch = line.match(/CodeNomad Server is ready at http:\/\/[^:]+:(\d+)/i)
     if (readyMatch) {
       return parseInt(readyMatch[1], 10)
     }
@@ -366,14 +366,14 @@ export class CliProcessManager extends EventEmitter {
  
   private resolveProdEntry(): string {
     try {
-      const entry = nodeRequire.resolve("@hyperspace/reactorpro/dist/bin.js")
+      const entry = nodeRequire.resolve("@neuralnomads/codenomad/dist/bin.js")
       if (existsSync(entry)) {
         return entry
       }
     } catch {
       // fall through to error below
     }
-    throw new Error("Unable to locate ReactorPro CLI build (dist/bin.js). Run npm run build --workspace @hyperspace/reactorpro.")
+    throw new Error("Unable to locate CodeNomad CLI build (dist/bin.js). Run npm run build --workspace @neuralnomads/codenomad.")
   }
 }
 

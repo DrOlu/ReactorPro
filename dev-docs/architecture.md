@@ -1,8 +1,8 @@
-# ReactorPro Architecture
+# CodeNomad Architecture
 
 ## Overview
 
-ReactorPro is a cross-platform desktop application built with Electron that provides a multi-instance, multi-session interface for interacting with OpenCode servers. Each instance manages its own OpenCode server process and can handle multiple concurrent sessions.
+CodeNomad is a cross-platform desktop application built with Electron that provides a multi-instance, multi-session interface for interacting with OpenCode servers. Each instance manages its own OpenCode server process and can handle multiple concurrent sessions.
 
 ## High-Level Architecture
 

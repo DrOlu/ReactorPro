@@ -173,7 +173,7 @@ packages/opencode-client/
 
 **src/App.tsx:**
 
-- Basic component with "Hello ReactorPro"
+- Basic component with "Hello CodeNomad"
 - Display environment info
 - Basic styling with TailwindCSS
 
@@ -203,7 +203,7 @@ packages/opencode-client/
 **electron-builder.yml** or in package.json:
 
 - appId: ai.opencode.client
-- Product name: ReactorPro
+- Product name: CodeNomad
 - Build resources: electron/resources
 - Files to include: dist/, package.json
 - Directories:
@@ -237,7 +237,7 @@ release/
 1. Run `bun install`
 2. Run `bun run dev`
 3. Verify Electron window opens
-4. Verify "Hello ReactorPro" displays
+4. Verify "Hello CodeNomad" displays
 5. Make a change to App.tsx
 6. Verify hot reload updates UI
 7. Run `bun run typecheck`

@@ -327,7 +327,7 @@ function finalizeCliSwap(url: string) {
   mainWindow.loadURL(url).catch((error) => console.error("[cli] failed to load CLI view:", error))
 }
 
-const SESSION_COOKIE_NAME = "reactorpro_session"
+const SESSION_COOKIE_NAME = "codenomad_session"
 let bootstrapExchangeInFlight = false
 
 function extractCookieValue(setCookieHeader: string | string[] | undefined, name: string): string | null {

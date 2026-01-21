@@ -16,9 +16,9 @@ const sources = ["dist", "public", "node_modules", "package.json"]
 const serverInstallCommand =
   "npm install --omit=dev --ignore-scripts --workspaces=false --package-lock=false --install-strategy=shallow --fund=false --audit=false"
 const serverDevInstallCommand =
-  "npm install --workspace @hyperspace/reactorpro --include-workspace-root=false --install-strategy=nested --fund=false --audit=false"
+  "npm install --workspace @neuralnomads/codenomad --include-workspace-root=false --install-strategy=nested --fund=false --audit=false"
 const uiDevInstallCommand =
-  "npm install --workspace @reactorpro/ui --include-workspace-root=false --install-strategy=nested --fund=false --audit=false"
+  "npm install --workspace @codenomad/ui --include-workspace-root=false --install-strategy=nested --fund=false --audit=false"
 
 const envWithRootBin = {
   ...process.env,
@@ -45,7 +45,7 @@ function ensureServerBuild() {
   }
 
   console.log("[prebuild] server build missing; running workspace build...")
-  execSync("npm --workspace @hyperspace/reactorpro run build", {
+  execSync("npm --workspace @neuralnomads/codenomad run build", {
     cwd: workspaceRoot,
     stdio: "inherit",
     env: {
@@ -66,7 +66,7 @@ function ensureUiBuild() {
   }
 
   console.log("[prebuild] ui build missing; running workspace build...")
-  execSync("npm --workspace @reactorpro/ui run build", {
+  execSync("npm --workspace @codenomad/ui run build", {
     cwd: workspaceRoot,
     stdio: "inherit",
   })
@@ -150,26 +150,7 @@ function ensureRollupPlatformBinary() {
   })
 }
 
-function removeOpenCodeConfigSelfLink() {
-  // npm can create self-referential symlinks for scoped packages.
-  // These cause ELOOP errors on Windows during recursive copies.
-  const selfLinkPaths = [
-    path.join(serverRoot, "dist", "opencode-config", "node_modules", "@reactorpro", "opencode-config"),
-    path.join(serverRoot, "dist", "opencode-config", "node_modules", "@codenomad", "opencode-config"),
-  ]
-
-  for (const selfLink of selfLinkPaths) {
-    if (fs.existsSync(selfLink)) {
-      fs.rmSync(selfLink, { recursive: true, force: true })
-      console.log(`[prebuild] removed self-referential link at ${selfLink}`)
-    }
-  }
-}
-
 function copyServerArtifacts() {
-  // Remove any self-referential symlinks before copying
-  removeOpenCodeConfigSelfLink()
-
   fs.rmSync(serverDest, { recursive: true, force: true })
   fs.mkdirSync(serverDest, { recursive: true })
 

@@ -1,14 +1,14 @@
-# ReactorPro
+# CodeNomad
 
 ## A fast, multi-instance workspace for running OpenCode sessions.
 
-ReactorPro is built for people who live inside OpenCode for hours on end and need a cockpit, not a kiosk. It delivers a premium, low-latency workspace that favors speed, clarity, and direct control.
+CodeNomad is built for people who live inside OpenCode for hours on end and need a cockpit, not a kiosk. It delivers a premium, low-latency workspace that favors speed, clarity, and direct control.
 
 ![Multi-instance workspace](docs/screenshots/newSession.png)
 _Manage multiple OpenCode sessions side-by-side._
 
 <details>
-<summary>More Screenshots</summary>
+<summary>📸 More Screenshots</summary>
 
 ![Command palette overlay](docs/screenshots/command-palette.png)
 _Global command palette for keyboard-first control._
@@ -17,7 +17,7 @@ _Global command palette for keyboard-first control._
 _Rich media previews for images and assets._
 
 ![Browser Support](docs/screenshots/browser-support.png)
-_Browser support via ReactorPro Server._
+_Browser support via CodeNomad Server._
 
 </details>
 
@@ -25,29 +25,29 @@ _Browser support via ReactorPro Server._
 
 Choose the way that fits your workflow:
 
-### Desktop App (Recommended)
+### 🖥️ Desktop App (Recommended)
 The best experience. A native application (Electron-based) with global shortcuts, deeper system integration, and a dedicated window.
 
-- **Download**: Grab the latest installer for macOS, Windows, or Linux from the [Releases Page](https://github.com/DrOlu/ReactorPro/releases).
+- **Download**: Grab the latest installer for macOS, Windows, or Linux from the [Releases Page](https://github.com/shantur/CodeNomad/releases).
 - **Run**: Install and launch like any other app.
 
-### Tauri App (Experimental)
+### 🦀 Tauri App (Experimental)
 We are also working on a lightweight, high-performance version built with [Tauri](https://tauri.app). It is currently in active development.
 
-- **Download**: Experimental builds are available on the [Releases Page](https://github.com/DrOlu/ReactorPro/releases).
+- **Download**: Experimental builds are available on the [Releases Page](https://github.com/shantur/CodeNomad/releases).
 - **Source**: Check out `packages/tauri-app` if you're interested in contributing.
 
-### ReactorPro Server
-Run ReactorPro as a local server and access it via your web browser. Perfect for remote development (SSH/VPN) or running as a service.
+### 💻 CodeNomad Server
+Run CodeNomad as a local server and access it via your web browser. Perfect for remote development (SSH/VPN) or running as a service.
 
 ```bash
-npx @hyperspace/reactorpro --launch
+npx @neuralnomads/codenomad --launch
 ```
 
 For dev version
 
 ```bash
-npx @hyperspace/reactorpro@dev --launch
+npx @neuralnomads/codenomad@dev --launch
 ```
 
 This command starts the server and opens the web client in your default browser.
@@ -67,14 +67,14 @@ This command starts the server and opens the web client in your default browser.
 ## Troubleshooting
 
 ### macOS says the app is damaged
-If macOS reports that "ReactorPro.app is damaged and can't be opened," Gatekeeper flagged the download because the app is not yet notarized. You can clear the quarantine flag after moving ReactorPro into `/Applications`:
+If macOS reports that "CodeNomad.app is damaged and can't be opened," Gatekeeper flagged the download because the app is not yet notarized. You can clear the quarantine flag after moving CodeNomad into `/Applications`:
 
 ```bash
-xattr -l /Applications/ReactorPro.app
-xattr -dr com.apple.quarantine /Applications/ReactorPro.app
+xattr -l /Applications/CodeNomad.app
+xattr -dr com.apple.quarantine /Applications/CodeNomad.app
 ```
 
-After removing the quarantine attribute, launch the app normally. On Intel Macs you may also need to approve ReactorPro from **System Settings -> Privacy & Security** the first time you run it.
+After removing the quarantine attribute, launch the app normally. On Intel Macs you may also need to approve CodeNomad from **System Settings → Privacy & Security** the first time you run it.
 
 ### Linux (Wayland + NVIDIA): Tauri AppImage closes immediately
 On some Wayland compositor + NVIDIA driver setups, WebKitGTK can fail to initialize its DMA-BUF/GBM path and the Tauri build may exit right away.
@@ -83,10 +83,10 @@ Try running with one of these environment variables:
 
 ```bash
 # Most reliable workaround (can reduce rendering performance)
-WEBKIT_DISABLE_DMABUF_RENDERER=1 reactorpro
+WEBKIT_DISABLE_DMABUF_RENDERER=1 codenomad
 
 # Alternative for some Wayland setups
-__NV_DISABLE_EXPLICIT_SYNC=1 reactorpro
+__NV_DISABLE_EXPLICIT_SYNC=1 codenomad
 ```
 
 If you're running the Tauri AppImage and want the workaround applied every time, create a tiny wrapper script on your `PATH`:
@@ -94,14 +94,14 @@ If you're running the Tauri AppImage and want the workaround applied every time,
 ```bash
 #!/bin/bash
 export WEBKIT_DISABLE_DMABUF_RENDERER=1
-exec ~/.local/share/bauh/appimage/installed/reactorpro/ReactorPro-Tauri-0.8.0-linux-x64.AppImage "$@"
+exec ~/.local/share/bauh/appimage/installed/codenomad/CodeNomad-Tauri-0.4.0-linux-x64.AppImage "$@"
 ```
 
 Upstream tracking: https://github.com/tauri-apps/tauri/issues/10702
 
 ## Architecture & Development
 
-ReactorPro is a monorepo split into specialized packages. If you want to contribute or build from source, check out the individual package documentation:
+CodeNomad is a monorepo split into specialized packages. If you want to contribute or build from source, check out the individual package documentation:
 
 | Package | Description |
 |---------|-------------|
@@ -114,9 +114,4 @@ To build the Desktop App from source:
 
 1.  Clone the repo.
 2.  Run `npm install` (requires pnpm or npm 7+ for workspaces).
-3.  Run `npm run build --workspace @hyperspace/reactorpro-electron-app`.
-
-## Contact
-
-- Email: reactorpro@hyperspace.ng
-- Company: Hyperspace
+3.  Run `npm run build --workspace @neuralnomads/codenomad-electron-app`.

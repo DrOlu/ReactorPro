@@ -168,7 +168,7 @@ export function createHttpServer(deps: HttpServerDeps) {
 
     const requiresAuthForApi = pathname.startsWith("/api/") || pathname.startsWith("/workspaces/")
     if (requiresAuthForApi && !session) {
-      // Allow OpenCode plugin -> ReactorPro calls with per-instance basic auth.
+      // Allow OpenCode plugin -> CodeNomad calls with per-instance basic auth.
       const pluginMatch = pathname.match(/^\/workspaces\/([^/]+)\/plugin(?:\/|$)/)
       if (pluginMatch) {
         const workspaceId = pluginMatch[1]
@@ -291,7 +291,7 @@ export function createHttpServer(deps: HttpServerDeps) {
       deps.serverMeta.port = actualPort
       deps.serverMeta.listeningMode = deps.host === "0.0.0.0" || !isLoopbackHost(deps.host) ? "all" : "local"
       deps.logger.info({ port: actualPort, host: deps.host }, "HTTP server listening")
-      console.log(`ReactorPro Server is ready at ${serverUrl}`)
+      console.log(`CodeNomad Server is ready at ${serverUrl}`)
 
       return { port: actualPort, url: serverUrl, displayHost }
     },

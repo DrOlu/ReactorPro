@@ -10,6 +10,7 @@ const cliRoot = path.resolve(__dirname, "..")
 const sourceDir = path.resolve(cliRoot, "../opencode-config")
 const targetDir = path.resolve(cliRoot, "dist/opencode-config")
 const nodeModulesDir = path.resolve(sourceDir, "node_modules")
+const selfLinkDir = path.resolve(nodeModulesDir, "@codenomad", "opencode-config")
 const npmExecPath = process.env.npm_execpath
 const npmNodeExecPath = process.env.npm_node_execpath
 
@@ -51,26 +52,10 @@ if (!existsSync(nodeModulesDir)) {
 
 // npm can create a self-referential link for scoped packages on Windows.
 // That link causes recursive copies (ELOOP) during bundling.
-// Clean up both old (@codenomad) and new (@reactorpro) names.
-const selfLinkPaths = [
-  path.resolve(nodeModulesDir, "@reactorpro", "opencode-config"),
-  path.resolve(nodeModulesDir, "@codenomad", "opencode-config"),
-]
-for (const linkPath of selfLinkPaths) {
-  rmSync(linkPath, { recursive: true, force: true })
-}
+rmSync(selfLinkDir, { recursive: true, force: true })
 
 rmSync(targetDir, { recursive: true, force: true })
 mkdirSync(path.dirname(targetDir), { recursive: true })
 cpSync(sourceDir, targetDir, { recursive: true })
-
-// Also clean up any self-referential links in the copied target
-const targetSelfLinkPaths = [
-  path.resolve(targetDir, "node_modules", "@reactorpro", "opencode-config"),
-  path.resolve(targetDir, "node_modules", "@codenomad", "opencode-config"),
-]
-for (const linkPath of targetSelfLinkPaths) {
-  rmSync(linkPath, { recursive: true, force: true })
-}
 
 console.log(`[copy-opencode-config] Copied ${sourceDir} -> ${targetDir}`)

@@ -163,8 +163,8 @@ export function RemoteAccessOverlay(props: RemoteAccessOverlayProps) {
             <header class="remote-header">
               <div>
                 <p class="remote-eyebrow">Remote handover</p>
-                <h2 class="remote-title">Connect to ReactorPro remotely</h2>
-                <p class="remote-subtitle">Use the addresses below to open ReactorPro from another device.</p>
+                <h2 class="remote-title">Connect to CodeNomad remotely</h2>
+                <p class="remote-subtitle">Use the addresses below to open CodeNomad from another device.</p>
               </div>
               <button type="button" class="remote-close" onClick={props.onClose} aria-label="Close remote access">
                 ×
@@ -228,7 +228,7 @@ export function RemoteAccessOverlay(props: RemoteAccessOverlayProps) {
                   fallback={<div class="remote-card">Authentication status unavailable.</div>}
                 >
                   <div class="remote-card">
-                    <p class="remote-help">Username: {authStatus()!.username ?? "reactorpro"}</p>
+                    <p class="remote-help">Username: {authStatus()!.username ?? "codenomad"}</p>
                     <p class="remote-help">
                       {authStatus()!.passwordUserProvided
                         ? "A password is set for remote access."

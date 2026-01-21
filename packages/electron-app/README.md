@@ -1,10 +1,10 @@
-# ReactorPro App
+# CodeNomad App
 
-This package contains the native desktop application shell for ReactorPro, built with [Electron](https://www.electronjs.org/).
+This package contains the native desktop application shell for CodeNomad, built with [Electron](https://www.electronjs.org/).
 
 ## Overview
 
-The Electron app wraps the ReactorPro UI and Server into a standalone executable. It provides deeper system integration, such as:
+The Electron app wraps the CodeNomad UI and Server into a standalone executable. It provides deeper system integration, such as:
 - Native window management
 - Global keyboard shortcuts
 - Application menu integration

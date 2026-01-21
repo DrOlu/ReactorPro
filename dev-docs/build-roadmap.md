@@ -1,8 +1,8 @@
-# ReactorPro Build Roadmap
+# CodeNomad Build Roadmap
 
 ## Overview
 
-This document outlines the phased approach to building the ReactorPro desktop application. Each phase builds incrementally on the previous, with clear deliverables and milestones.
+This document outlines the phased approach to building the CodeNomad desktop application. Each phase builds incrementally on the previous, with clear deliverables and milestones.
 
 **Status:** MVP (Phases 1-3) is complete. Focus now shifts to post-MVP phases starting with multi-instance support and advanced input refinements.
 

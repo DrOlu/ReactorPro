@@ -32,7 +32,7 @@ fn workspace_root() -> Option<PathBuf> {
     })
 }
 
-const SESSION_COOKIE_NAME: &str = "reactorpro_session";
+const SESSION_COOKIE_NAME: &str = "codenomad_session";
 
 fn navigate_main(app: &AppHandle, url: &str) {
     if let Some(win) = app.webview_windows().get("main") {
@@ -130,7 +130,7 @@ fn set_session_cookie(app: &AppHandle, base_url: &str, session_id: &str) -> anyh
     Ok(())
 }
 
-const DEFAULT_CONFIG_PATH: &str = "~/.config/reactorpro/config.json";
+const DEFAULT_CONFIG_PATH: &str = "~/.config/codenomad/config.json";
 
 #[derive(Debug, Deserialize)]
 struct PreferencesConfig {
@@ -503,9 +503,9 @@ impl CliProcessManager {
         bootstrap_token: &Arc<Mutex<Option<String>>>,
     ) {
         let mut buffer = String::new();
-        let port_regex = Regex::new(r"ReactorPro Server is ready at http://[^:]+:(\d+)").ok();
+        let port_regex = Regex::new(r"CodeNomad Server is ready at http://[^:]+:(\d+)").ok();
         let http_regex = Regex::new(r":(\d{2,5})(?!.*:\d)").ok();
-        let token_prefix = "REACTORPRO_BOOTSTRAP_TOKEN:";
+        let token_prefix = "CODENOMAD_BOOTSTRAP_TOKEN:";
 
         loop {
             buffer.clear();
@@ -676,7 +676,7 @@ impl CliEntry {
         }
 
         Err(anyhow::anyhow!(
-            "Unable to locate ReactorPro CLI build (dist/bin.js). Please build @hyperspace/reactorpro."
+            "Unable to locate CodeNomad CLI build (dist/bin.js). Please build @neuralnomads/codenomad."
         ))
     }
 
@@ -760,7 +760,7 @@ fn resolve_dist_entry(_app: &AppHandle) -> Option<String> {
             candidates.push(Some(resources.join("resources/server/dist/server/bin.js")));
             candidates.push(Some(resources.join("resources/server/dist/server/index.js")));
 
-            let linux_resource_roots = [dir.join("../lib/ReactorPro"), dir.join("../lib/reactorpro")];
+            let linux_resource_roots = [dir.join("../lib/CodeNomad"), dir.join("../lib/codenomad")];
             for root in linux_resource_roots {
                 candidates.push(Some(root.join("server/dist/bin.js")));
                 candidates.push(Some(root.join("server/dist/index.js")));

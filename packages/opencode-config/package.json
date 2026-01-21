@@ -1,6 +1,6 @@
 {
-  "name": "@reactorpro/opencode-config",
-  "version": "0.7.4",
+  "name": "@codenomad/opencode-config",
+  "version": "0.5.0",
   "private": true,
   "dependencies": {
     "@opencode-ai/plugin": "1.1.16"
