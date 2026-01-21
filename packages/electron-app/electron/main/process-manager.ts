@@ -9,7 +9,7 @@ import { buildUserShellCommand, getUserShellEnv, supportsUserShell } from "./use
 
 const nodeRequire = createRequire(import.meta.url)
 
-const BOOTSTRAP_TOKEN_PREFIX = "CODENOMAD_BOOTSTRAP_TOKEN:"
+const BOOTSTRAP_TOKEN_PREFIX = "REACTORPRO_BOOTSTRAP_TOKEN:"
 
 type CliState = "starting" | "ready" | "error" | "stopped"
 type ListeningMode = "local" | "all"

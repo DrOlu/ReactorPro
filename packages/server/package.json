@@ -1,19 +1,16 @@
 {
-  "name": "@neuralnomads/codenomad",
+  "name": "@hyperspace/reactorpro",
   "version": "0.7.4",
   "description": "CodeNomad Server",
-  "author": {
-    "name": "Neural Nomads",
-    "email": "codenomad@neuralnomads.ai"
-  },
+  "author": "Hyperspace <reactorpro@hyperspace.ng>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/NeuralNomadsAI/CodeNomad.git"
+    "url": "https://github.com/DrOlu/ReactorPro.git"
   },
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "codenomad": "dist/bin.js"
+    "reactorpro": "dist/bin.js"
   },
   "scripts": {
     "build": "npm run build:ui && npm run prepare-ui && tsc -p tsconfig.json && node ./scripts/copy-auth-pages.mjs && npm run prepare-config",
@@ -39,5 +36,9 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",
     "typescript": "^5.6.3"
+  },
+  "homepage": "https://github.com/DrOlu/ReactorPro",
+  "bugs": {
+    "url": "https://github.com/DrOlu/ReactorPro/issues"
   }
 }

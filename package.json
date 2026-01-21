@@ -1,5 +1,5 @@
 {
-  "name": "codenomad-workspace",
+  "name": "@hyperspace/reactorpro-monorepo",
   "version": "0.7.4",
   "private": true,
   "description": "CodeNomad monorepo workspace",
@@ -29,5 +29,14 @@
   },
   "devDependencies": {
     "baseline-browser-mapping": "^2.9.11"
+  },
+  "author": "Hyperspace <reactorpro@hyperspace.ng>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DrOlu/ReactorPro.git"
+  },
+  "homepage": "https://github.com/DrOlu/ReactorPro",
+  "bugs": {
+    "url": "https://github.com/DrOlu/ReactorPro/issues"
   }
 }

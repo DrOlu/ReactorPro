@@ -51,7 +51,7 @@ jobs:
         run: npm install @rollup/rollup-linux-x64-gnu --no-save
 
       - name: Build server package (includes UI bundling)
-        run: npm run build --workspace @neuralnomads/codenomad
+        run: npm run build --workspace @hyperspace/reactorpro
 
       - name: Set publish metadata
         shell: bash
@@ -71,4 +71,4 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
         run: |
-          npm publish --workspace @neuralnomads/codenomad --access public --tag ${DIST_TAG} --provenance
+          npm publish --workspace @hyperspace/reactorpro --access public --tag ${DIST_TAG} --provenance

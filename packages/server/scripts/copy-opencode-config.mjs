@@ -10,7 +10,7 @@ const cliRoot = path.resolve(__dirname, "..")
 const sourceDir = path.resolve(cliRoot, "../opencode-config")
 const targetDir = path.resolve(cliRoot, "dist/opencode-config")
 const nodeModulesDir = path.resolve(sourceDir, "node_modules")
-const selfLinkDir = path.resolve(nodeModulesDir, "@codenomad", "opencode-config")
+const selfLinkDir = path.resolve(nodeModulesDir, "@reactorpro", "opencode-config")
 const npmExecPath = process.env.npm_execpath
 const npmNodeExecPath = process.env.npm_node_execpath
 
