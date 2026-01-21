@@ -363,24 +363,21 @@ jobs:
       - name: Commit and push changes
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          # Reset workflow files to HEAD to ensure no changes there
-          git checkout HEAD -- .github/workflows/ 2>/dev/null || true
+          # Restore workflow files from our backup (before merge)
+          if [ -d /tmp/workflow-backup ]; then
+            cp -r /tmp/workflow-backup/* .github/workflows/
+            echo "Restored workflow files from pre-merge backup"
+          fi
           
-          # Stage all other changes
+          # Stage all changes
           git add -A
-          
-          # Unstage any workflow file changes (double safety)
-          git reset HEAD -- .github/workflows/ 2>/dev/null || true
-          
-          # Re-add everything except workflows
-          git add -A -- ':!.github/workflows/'
           
           UPSTREAM_COMMIT="${{ steps.check_changes.outputs.upstream_commit }}"
           SHORT_COMMIT="${UPSTREAM_COMMIT:0:7}"
           
-          # Check if there are any changes to commit (excluding workflows)
+          # Check if there are any changes to commit
           if git diff --cached --quiet; then
-            echo "No non-workflow changes to commit"
+            echo "No changes to commit"
           else
             git commit -m "chore: Sync from upstream CodeNomad ($SHORT_COMMIT)
 
@@ -392,7 +389,22 @@ jobs:
           fi
           
           git checkout main
+          
+          # Before merging, save current main's workflow files
+          mkdir -p /tmp/main-workflows
+          cp -r .github/workflows/* /tmp/main-workflows/ 2>/dev/null || true
+          
           git merge sync-upstream --no-edit || echo "Nothing to merge"
+          
+          # After merge, restore main's workflow files (critical: GITHUB_TOKEN can't change these)
+          cp -r /tmp/main-workflows/* .github/workflows/ 2>/dev/null || true
+          
+          # If workflow files changed, amend the merge commit
+          if ! git diff --quiet .github/workflows/; then
+            git add .github/workflows/
+            git commit --amend --no-edit
+          fi
+          
           git push origin main
 
   trigger-release:
