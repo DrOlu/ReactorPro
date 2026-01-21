@@ -72,8 +72,11 @@ jobs:
           # Create a temporary branch for merging
           git checkout -B sync-upstream
           
+          # Backup our workflow files (GITHUB_TOKEN can't push workflow changes)
+          mkdir -p /tmp/workflow-backup
+          cp -r .github/workflows/* /tmp/workflow-backup/ 2>/dev/null || true
+          
           # Merge upstream, preferring upstream for conflicts in most files
-          # but keeping our branding files
           git merge upstream/${{ env.UPSTREAM_BRANCH }} \
             -X theirs \
             --no-edit \
@@ -82,10 +85,14 @@ jobs:
           # If there are conflicts, resolve them
           if git status | grep -q "Unmerged paths"; then
             echo "Resolving merge conflicts..."
-            # Accept upstream for all source files
+            # Accept upstream for all source files except workflows
             git checkout --theirs . 2>/dev/null || true
             git add -A
           fi
+          
+          # Restore our workflow files (can't be modified by GITHUB_TOKEN)
+          cp -r /tmp/workflow-backup/* .github/workflows/ 2>/dev/null || true
+          git add .github/workflows/
 
       - name: Setup Node
         if: steps.check_changes.outputs.has_changes == 'true'
