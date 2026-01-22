@@ -354,18 +354,15 @@ jobs:
               cp icons2/icon.ico packages/electron-app/electron/resources/icon.ico 2>/dev/null || true
             fi
             
-            # Tauri icons
+            # Tauri icons (directly in src-tauri/, not in icons/ subfolder)
             if [ -f icons2/icon.png ]; then
-              cp icons2/icon.png packages/tauri-app/src-tauri/icons/icon.png 2>/dev/null || true
-              cp icons2/icon.png packages/tauri-app/src-tauri/icons/128x128.png 2>/dev/null || true
-              cp icons2/icon.png packages/tauri-app/src-tauri/icons/128x128@2x.png 2>/dev/null || true
-              cp icons2/icon.png packages/tauri-app/src-tauri/icons/32x32.png 2>/dev/null || true
+              cp icons2/icon.png packages/tauri-app/src-tauri/icon.png 2>/dev/null || true
             fi
             if [ -f icons2/icon.icns ]; then
-              cp icons2/icon.icns packages/tauri-app/src-tauri/icons/icon.icns 2>/dev/null || true
+              cp icons2/icon.icns packages/tauri-app/src-tauri/icon.icns 2>/dev/null || true
             fi
             if [ -f icons2/icon.ico ]; then
-              cp icons2/icon.ico packages/tauri-app/src-tauri/icons/icon.ico 2>/dev/null || true
+              cp icons2/icon.ico packages/tauri-app/src-tauri/icon.ico 2>/dev/null || true
             fi
           fi
 
