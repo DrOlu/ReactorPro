@@ -1,5 +1,5 @@
 {
-  "name": "@neuralnomads/codenomad",
+  "name": "@hyperspace/reactorpro",
   "version": "0.7.5",
   "description": "CodeNomad Server",
   "author": "Hyperspace <reactorpro@hyperspace.ng>",
@@ -10,7 +10,7 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "reactorpro": "dist/bin.js"
+    "reactorpro": "./dist/bin.js"
   },
   "scripts": {
     "build": "npm run build:ui && npm run prepare-ui && tsc -p tsconfig.json && node ./scripts/copy-auth-pages.mjs && npm run prepare-config",

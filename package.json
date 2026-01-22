@@ -1,5 +1,5 @@
 {
-  "name": "codenomad-workspace",
+  "name": "@hyperspace/reactorpro-monorepo",
   "version": "0.7.5",
   "private": true,
   "description": "CodeNomad monorepo workspace",
