@@ -66,8 +66,11 @@ jobs:
 
       - name: Reinstall electron-builder to fix nested dependencies
         run: |
-          npm uninstall electron-builder --no-save || true
-          npm install electron-builder@24.13.3 --no-save
+          # Remove and reinstall electron-builder with all nested deps
+          rm -rf node_modules/electron-builder node_modules/builder-util node_modules/app-builder-bin node_modules/app-builder-lib
+          npm install electron-builder@24.13.3 app-builder-bin@5.0.0-alpha.11 --no-save --force
+          # Verify binary exists
+          ls -la node_modules/app-builder-bin/*/x64/ || ls -la node_modules/app-builder-bin/
 
       - name: Build macOS binaries (Electron)
         run: npm run build:mac --workspace @hyperspace/reactorpro-electron-app
@@ -112,8 +115,12 @@ jobs:
 
       - name: Reinstall electron-builder to fix nested dependencies
         run: |
-          npm uninstall electron-builder --no-save || true
-          npm install electron-builder@24.13.3 --no-save
+          # Remove and reinstall electron-builder with all nested deps
+          Remove-Item -Recurse -Force node_modules/electron-builder, node_modules/builder-util, node_modules/app-builder-bin, node_modules/app-builder-lib -ErrorAction SilentlyContinue
+          npm install electron-builder@24.13.3 app-builder-bin@5.0.0-alpha.11 --no-save --force
+          # Verify binary exists
+          Get-ChildItem -Recurse node_modules/app-builder-bin -Filter "*.exe" | Select-Object -First 5
+        shell: pwsh
 
       - name: Build Windows binaries (Electron)
         run: npm run build:win --workspace @hyperspace/reactorpro-electron-app
@@ -155,8 +162,11 @@ jobs:
 
       - name: Reinstall electron-builder to fix nested dependencies
         run: |
-          npm uninstall electron-builder --no-save || true
-          npm install electron-builder@24.13.3 --no-save
+          # Remove and reinstall electron-builder with all nested deps
+          rm -rf node_modules/electron-builder node_modules/builder-util node_modules/app-builder-bin node_modules/app-builder-lib
+          npm install electron-builder@24.13.3 app-builder-bin@5.0.0-alpha.11 --no-save --force
+          # Verify binary exists
+          ls -la node_modules/app-builder-bin/linux/x64/ || ls -la node_modules/app-builder-bin/
 
       - name: Build Linux binaries (Electron)
         run: npm run build:linux --workspace @hyperspace/reactorpro-electron-app
@@ -629,8 +639,11 @@ jobs:
 
       - name: Reinstall electron-builder to fix nested dependencies
         run: |
-          npm uninstall electron-builder --no-save || true
-          npm install electron-builder@24.13.3 --no-save
+          # Remove and reinstall electron-builder with all nested deps
+          rm -rf node_modules/electron-builder node_modules/builder-util node_modules/app-builder-bin node_modules/app-builder-lib
+          npm install electron-builder@24.13.3 app-builder-bin@5.0.0-alpha.11 --no-save --force
+          # Verify binary exists
+          ls -la node_modules/app-builder-bin/linux/x64/ || ls -la node_modules/app-builder-bin/
 
       - name: Build Linux RPM binaries
         run: npm run build:linux-rpm --workspace @hyperspace/reactorpro-electron-app
