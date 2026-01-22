@@ -1,6 +1,6 @@
 {
-  "name": "@hyperspace/reactorpro",
-  "version": "0.7.5",
+  "name": "@neuralnomads/codenomad",
+  "version": "0.8.0",
   "description": "CodeNomad Server",
   "author": "Hyperspace <reactorpro@hyperspace.ng>",
   "repository": {
@@ -29,9 +29,11 @@
     "fuzzysort": "^2.0.4",
     "pino": "^9.4.0",
     "undici": "^6.19.8",
+    "yauzl": "^2.10.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/yauzl": "^2.10.0",
     "cross-env": "^7.0.3",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",
