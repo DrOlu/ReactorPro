@@ -290,6 +290,7 @@ jobs:
           
           if [ -f packages/tauri-app/scripts/prebuild.js ]; then
             sed -i 's/@neuralnomads\/codenomad/@hyperspace\/reactorpro/g' packages/tauri-app/scripts/prebuild.js
+            sed -i 's/@codenomad\/ui/@reactorpro\/ui/g' packages/tauri-app/scripts/prebuild.js
           fi
           
           # process-manager.ts - npm package reference
