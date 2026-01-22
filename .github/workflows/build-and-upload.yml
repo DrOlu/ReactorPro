@@ -64,8 +64,10 @@ jobs:
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-darwin-x64 --no-save
 
-      - name: Ensure app-builder-bin for electron-builder
-        run: npm install app-builder-bin --no-save
+      - name: Reinstall electron-builder to fix nested dependencies
+        run: |
+          npm uninstall electron-builder --no-save || true
+          npm install electron-builder@24.13.3 --no-save
 
       - name: Build macOS binaries (Electron)
         run: npm run build:mac --workspace @hyperspace/reactorpro-electron-app
@@ -108,8 +110,10 @@ jobs:
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-win32-x64-msvc --no-save
 
-      - name: Ensure app-builder-bin for electron-builder
-        run: npm install app-builder-bin --no-save
+      - name: Reinstall electron-builder to fix nested dependencies
+        run: |
+          npm uninstall electron-builder --no-save || true
+          npm install electron-builder@24.13.3 --no-save
 
       - name: Build Windows binaries (Electron)
         run: npm run build:win --workspace @hyperspace/reactorpro-electron-app
@@ -149,8 +153,10 @@ jobs:
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-linux-x64-gnu --no-save
 
-      - name: Ensure app-builder-bin for electron-builder
-        run: npm install app-builder-bin --no-save
+      - name: Reinstall electron-builder to fix nested dependencies
+        run: |
+          npm uninstall electron-builder --no-save || true
+          npm install electron-builder@24.13.3 --no-save
 
       - name: Build Linux binaries (Electron)
         run: npm run build:linux --workspace @hyperspace/reactorpro-electron-app
@@ -621,8 +627,10 @@ jobs:
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-linux-x64-gnu --no-save
 
-      - name: Ensure app-builder-bin for electron-builder
-        run: npm install app-builder-bin --no-save
+      - name: Reinstall electron-builder to fix nested dependencies
+        run: |
+          npm uninstall electron-builder --no-save || true
+          npm install electron-builder@24.13.3 --no-save
 
       - name: Build Linux RPM binaries
         run: npm run build:linux-rpm --workspace @hyperspace/reactorpro-electron-app
