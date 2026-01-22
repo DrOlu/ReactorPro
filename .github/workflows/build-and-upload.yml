@@ -57,7 +57,9 @@ jobs:
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
-        run: npm ci --workspaces --include=optional
+        run: |
+          # Use npm install instead of npm ci to handle rebranded package names
+          npm install --workspaces --include=optional || npm install --include=optional
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-darwin-x64 --no-save
@@ -98,7 +100,7 @@ jobs:
         shell: bash
 
       - name: Install dependencies
-        run: npm ci --workspaces --include=optional
+        run: npm install --workspaces --include=optional || npm install --include=optional
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-win32-x64-msvc --no-save
@@ -136,7 +138,7 @@ jobs:
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
-        run: npm ci --workspaces --include=optional
+        run: npm install --workspaces --include=optional || npm install --include=optional
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-linux-x64-gnu --no-save
@@ -179,7 +181,7 @@ jobs:
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
-        run: npm ci --workspaces --include=optional
+        run: npm install --workspaces --include=optional || npm install --include=optional
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-darwin-x64 --no-save
@@ -252,7 +254,7 @@ jobs:
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
-        run: npm ci --workspaces --include=optional
+        run: npm install --workspaces --include=optional || npm install --include=optional
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-darwin-arm64 --no-save
@@ -326,7 +328,7 @@ jobs:
         shell: bash
 
       - name: Install dependencies
-        run: npm ci --workspaces --include=optional
+        run: npm install --workspaces --include=optional || npm install --include=optional
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-win32-x64-msvc --no-save
@@ -416,7 +418,7 @@ jobs:
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
-        run: npm ci --workspaces --include=optional
+        run: npm install --workspaces --include=optional || npm install --include=optional
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-linux-x64-gnu --no-save
@@ -533,7 +535,7 @@ jobs:
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
-        run: npm ci --workspaces --include=optional
+        run: npm install --workspaces --include=optional || npm install --include=optional
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-linux-arm64-gnu --no-save
@@ -605,7 +607,7 @@ jobs:
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install project dependencies
-        run: npm ci --workspaces --include=optional
+        run: npm install --workspaces --include=optional || npm install --include=optional
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-linux-x64-gnu --no-save
