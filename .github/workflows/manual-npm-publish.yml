@@ -45,7 +45,10 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Install dependencies
-        run: npm ci --workspaces
+        run: |
+          # Use npm install instead of npm ci to handle rebranded package names
+          # that may not be in sync with the lock file
+          npm install --workspaces || npm install
 
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-linux-x64-gnu --no-save
