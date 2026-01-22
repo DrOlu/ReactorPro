@@ -1,6 +1,6 @@
 {
-  "name": "@reactorpro/tauri-app",
-  "version": "0.7.4",
+  "name": "@codenomad/tauri-app",
+  "version": "0.7.5",
   "private": true,
   "scripts": {
     "dev": "tauri dev",
