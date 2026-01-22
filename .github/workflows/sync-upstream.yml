@@ -282,6 +282,28 @@ jobs:
           fi
           
           # ============================================
+          # Build scripts - Workspace references
+          # ============================================
+          if [ -f packages/electron-app/scripts/build.js ]; then
+            sed -i 's/@neuralnomads\/codenomad/@hyperspace\/reactorpro/g' packages/electron-app/scripts/build.js
+          fi
+          
+          if [ -f packages/tauri-app/scripts/prebuild.js ]; then
+            sed -i 's/@neuralnomads\/codenomad/@hyperspace\/reactorpro/g' packages/tauri-app/scripts/prebuild.js
+          fi
+          
+          # process-manager.ts - npm package reference
+          if [ -f packages/electron-app/electron/main/process-manager.ts ]; then
+            sed -i 's/@neuralnomads\/codenomad/@hyperspace\/reactorpro/g' packages/electron-app/electron/main/process-manager.ts
+          fi
+          
+          # Root package.json scripts - Workspace references
+          if [ -f package.json ]; then
+            sed -i 's/@neuralnomads\/codenomad-electron-app/@hyperspace\/reactorpro-electron-app/g' package.json
+            sed -i 's/@codenomad\/ui/@reactorpro\/ui/g' package.json
+          fi
+          
+          # ============================================
           # HTML files - Page titles
           # ============================================
           find packages -name "*.html" -type f -exec sed -i 's/<title>CodeNomad<\/title>/<title>ReactorPro<\/title>/g' {} \; 2>/dev/null || true
