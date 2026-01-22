@@ -366,14 +366,14 @@ export class CliProcessManager extends EventEmitter {
  
   private resolveProdEntry(): string {
     try {
-      const entry = nodeRequire.resolve("@neuralnomads/codenomad/dist/bin.js")
+      const entry = nodeRequire.resolve("@hyperspace/reactorpro/dist/bin.js")
       if (existsSync(entry)) {
         return entry
       }
     } catch {
       // fall through to error below
     }
-    throw new Error("Unable to locate CodeNomad CLI build (dist/bin.js). Run npm run build --workspace @neuralnomads/codenomad.")
+    throw new Error("Unable to locate CodeNomad CLI build (dist/bin.js). Run npm run build --workspace @hyperspace/reactorpro.")
   }
 }
 

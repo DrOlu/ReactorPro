@@ -12,15 +12,15 @@
     ]
   },
   "scripts": {
-    "dev": "npm run dev --workspace @neuralnomads/codenomad-electron-app",
-    "dev:electron": "npm run dev --workspace @neuralnomads/codenomad-electron-app",
+    "dev": "npm run dev --workspace @hyperspace/reactorpro-electron-app",
+    "dev:electron": "npm run dev --workspace @hyperspace/reactorpro-electron-app",
     "dev:tauri": "npm run dev --workspace @codenomad/tauri-app",
-    "build": "npm run build --workspace @neuralnomads/codenomad-electron-app",
+    "build": "npm run build --workspace @hyperspace/reactorpro-electron-app",
     "build:tauri": "npm run build --workspace @codenomad/tauri-app",
-    "build:ui": "npm run build --workspace @codenomad/ui",
-    "build:mac-x64": "npm run build:mac-x64 --workspace @neuralnomads/codenomad-electron-app",
-    "build:binaries": "npm run build:binaries --workspace @neuralnomads/codenomad-electron-app",
-    "typecheck": "npm run typecheck --workspace @codenomad/ui && npm run typecheck --workspace @neuralnomads/codenomad-electron-app",
+    "build:ui": "npm run build --workspace @reactorpro/ui",
+    "build:mac-x64": "npm run build:mac-x64 --workspace @hyperspace/reactorpro-electron-app",
+    "build:binaries": "npm run build:binaries --workspace @hyperspace/reactorpro-electron-app",
+    "typecheck": "npm run typecheck --workspace @reactorpro/ui && npm run typecheck --workspace @hyperspace/reactorpro-electron-app",
     "bumpVersion": "npm version --workspaces --include-workspace-root --no-git-tag-version"
   },
   "dependencies": {
