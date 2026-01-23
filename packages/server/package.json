@@ -1,7 +1,7 @@
 {
   "name": "@hyperspace/reactorpro",
   "version": "0.8.1",
-  "description": "CodeNomad Server",
+  "description": "ReactorPro Server",
   "author": "Hyperspace <reactorpro@hyperspace.ng>",
   "repository": {
     "type": "git",

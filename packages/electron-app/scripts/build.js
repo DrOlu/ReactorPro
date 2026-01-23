@@ -134,7 +134,7 @@ const platform = process.argv[2] || "mac"
 
 console.log(`
 ╔════════════════════════════════════════╗
-║   CodeNomad - Binary Builder          ║
+║   ReactorPro - Binary Builder         ║
 ╚════════════════════════════════════════╝
 `)
 

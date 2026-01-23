@@ -291,7 +291,7 @@ export function createHttpServer(deps: HttpServerDeps) {
       deps.serverMeta.port = actualPort
       deps.serverMeta.listeningMode = deps.host === "0.0.0.0" || !isLoopbackHost(deps.host) ? "all" : "local"
       deps.logger.info({ port: actualPort, host: deps.host }, "HTTP server listening")
-      console.log(`CodeNomad Server is ready at ${serverUrl}`)
+      console.log(`ReactorPro Server is ready at ${serverUrl}`)
 
       return { port: actualPort, url: serverUrl, displayHost }
     },
