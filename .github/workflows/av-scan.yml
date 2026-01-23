@@ -589,7 +589,7 @@ jobs:
             
             # Send via AgentMail API
             RESPONSE=$(curl -s -X POST \
-              "https://api.cyberagent.ng/v0/inboxes/${SENDER_EMAIL}/messages" \
+              "https://api.cyberagent.ng/v0/inboxes/${SENDER_EMAIL}/messages/send" \
               -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
               -H "Content-Type: application/json" \
               -d "$(jq -n \
@@ -597,7 +597,7 @@ jobs:
                 --arg subject "$SUBJECT" \
                 --arg body "$BODY" \
                 '{
-                  "to": [{"email": $to}],
+                  "to": $to,
                   "subject": $subject,
                   "text": $body
                 }')" 2>&1)
