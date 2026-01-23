@@ -1,0 +1,217 @@
+{
+  "vendors": [
+    {
+      "name": "Microsoft Defender",
+      "priority": "critical",
+      "email": null,
+      "web_form": "https://www.microsoft.com/en-us/wdsi/filesubmission",
+      "notes": "Requires web form - cannot automate via email"
+    },
+    {
+      "name": "Google Safe Browsing",
+      "priority": "critical",
+      "email": "google-at-virustotal@google.com",
+      "web_form": "https://safebrowsing.google.com/safebrowsing/report_error/",
+      "notes": "Email for VirusTotal issues"
+    },
+    {
+      "name": "Norton/Symantec",
+      "priority": "high",
+      "email": "false.positives@broadcom.com",
+      "web_form": "https://submit.norton.com",
+      "notes": "Broadcom now owns Symantec"
+    },
+    {
+      "name": "McAfee",
+      "priority": "high",
+      "email": "datasubmission@mcafee.com",
+      "web_form": "https://www.mcafee.com/en-us/consumer-support/dispute-detection-allowlisting.html",
+      "notes": "McAfee Gateway Edition email"
+    },
+    {
+      "name": "Kaspersky",
+      "priority": "high",
+      "email": "newvirus@kaspersky.com",
+      "web_form": "https://opentip.kaspersky.com/",
+      "notes": "OpenTIP for hash lookup"
+    },
+    {
+      "name": "Avast",
+      "priority": "high",
+      "email": "DL-Virus@gendigital.com",
+      "web_form": "https://www.avast.com/report-false-positive",
+      "notes": "Gen Digital (formerly NortonLifeLock) owns Avast"
+    },
+    {
+      "name": "AVG",
+      "priority": "high",
+      "email": "DL-Virus@gendigital.com",
+      "web_form": "https://www.avg.com/false-positive-file-form",
+      "notes": "Same as Avast - both owned by Gen Digital"
+    },
+    {
+      "name": "Bitdefender",
+      "priority": "high",
+      "email": "virus_submission@bitdefender.com",
+      "web_form": "https://www.bitdefender.com/consumer/support/answer/40673/",
+      "notes": "Also: oemsamples@bitdefender.com"
+    },
+    {
+      "name": "ESET",
+      "priority": "high",
+      "email": "samples@eset.com",
+      "web_form": "https://support.eset.com/kb141/",
+      "notes": "Standard samples submission"
+    },
+    {
+      "name": "Trend Micro",
+      "priority": "medium",
+      "email": "virus_doctor@trendmicro.com",
+      "web_form": "https://www.trendmicro.com/en_us/about/legal/detection-reevaluation.html",
+      "notes": "Detection re-evaluation"
+    },
+    {
+      "name": "Malwarebytes",
+      "priority": "medium",
+      "email": null,
+      "web_form": "https://forums.malwarebytes.com/forum/122-false-positives/",
+      "notes": "Forum-based or support ticket only"
+    },
+    {
+      "name": "Sophos",
+      "priority": "medium",
+      "email": "samples@sophos.com",
+      "web_form": "https://support.sophos.com/support/s/filesubmission",
+      "notes": "Email samples directly"
+    },
+    {
+      "name": "F-Secure",
+      "priority": "medium",
+      "email": "spyware-samples@f-secure.com",
+      "web_form": "https://www.f-secure.com/en/business/support-and-downloads/submit-a-sample",
+      "notes": "Also: vsamples@f-secure.com"
+    },
+    {
+      "name": "Avira",
+      "priority": "medium",
+      "email": "novirus@avira.com",
+      "web_form": "https://www.avira.com/en/analysis/submit",
+      "notes": "No cloud version"
+    },
+    {
+      "name": "Fortinet",
+      "priority": "medium",
+      "email": "submitvirus@fortinet.com",
+      "web_form": "https://www.fortiguard.com/faq/classificationdispute",
+      "notes": "FortiGuard classification dispute"
+    },
+    {
+      "name": "Panda",
+      "priority": "medium",
+      "email": "falsepositives@pandasecurity.com",
+      "web_form": null,
+      "notes": "Direct email preferred"
+    },
+    {
+      "name": "CrowdStrike",
+      "priority": "medium",
+      "email": "VTscanner@crowdstrike.com",
+      "web_form": null,
+      "notes": "VirusTotal specific scanner"
+    },
+    {
+      "name": "SentinelOne",
+      "priority": "medium",
+      "email": "report@sentinelone.com",
+      "web_form": null,
+      "notes": "Static ML engine"
+    },
+    {
+      "name": "Emsisoft",
+      "priority": "low",
+      "email": "fp@emsisoft.com",
+      "web_form": "https://www.emsisoft.com/en/help/contact/",
+      "notes": "Dedicated FP email"
+    },
+    {
+      "name": "K7",
+      "priority": "low",
+      "email": "reportfp@labs.k7computing.com",
+      "web_form": "https://support.k7computing.com/index.php?/ticket/submit-ticket",
+      "notes": "Labs FP reporting"
+    },
+    {
+      "name": "Ikarus",
+      "priority": "low",
+      "email": "fp@ikarus.at",
+      "web_form": null,
+      "notes": "Also: false-positive@ikarus.at"
+    },
+    {
+      "name": "ClamAV",
+      "priority": "low",
+      "email": null,
+      "web_form": "https://www.clamav.net/reports/fp",
+      "notes": "Web form only"
+    },
+    {
+      "name": "DrWeb",
+      "priority": "low",
+      "email": "vms@drweb.com",
+      "web_form": "https://vms.drweb.com/sendvirus/",
+      "notes": "VMS submission"
+    },
+    {
+      "name": "GData",
+      "priority": "low",
+      "email": null,
+      "web_form": "https://www.gdata.de/help/en/general/GeneralInformation/submitFileAppURL",
+      "notes": "Web form only"
+    },
+    {
+      "name": "Trellix",
+      "priority": "low",
+      "email": "datasubmission@trellix.com",
+      "web_form": null,
+      "notes": "Formerly FireEye/McAfee Enterprise"
+    },
+    {
+      "name": "Cyren",
+      "priority": "low",
+      "email": "support@cyren.com",
+      "web_form": "https://www.cyren.com/support/reporting-av-misclassifications",
+      "notes": "AV misclassification reporting"
+    },
+    {
+      "name": "ZoneAlarm",
+      "priority": "low",
+      "email": "zonealarm_VT_reports@checkpoint.com",
+      "web_form": null,
+      "notes": "Check Point product"
+    },
+    {
+      "name": "Tencent",
+      "priority": "low",
+      "email": "TAVfp@tencent.com",
+      "web_form": null,
+      "notes": "TAV FP reporting"
+    },
+    {
+      "name": "Baidu",
+      "priority": "low",
+      "email": "bav@baidu.com",
+      "web_form": null,
+      "notes": "Baidu Antivirus"
+    },
+    {
+      "name": "Qihoo 360",
+      "priority": "low",
+      "email": "support@360safe.com",
+      "web_form": "https://www.360totalsecurity.com/en/suspicion/false-positive/",
+      "notes": "360 Total Security"
+    }
+  ],
+  "email_vendors_count": 25,
+  "web_only_vendors_count": 5,
+  "last_updated": "2026-01-24"
+}
