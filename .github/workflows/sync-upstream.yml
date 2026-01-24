@@ -325,6 +325,20 @@ jobs:
           # ============================================
           find .github -name "*.md" -type f -exec sed -i 's/CodeNomad/ReactorPro/g' {} \; 2>/dev/null || true
           # Skip .github/workflows/*.yml - GITHUB_TOKEN cannot modify workflow files
+          
+          # ============================================
+          # Release monitor - Update URLs to ReactorPro
+          # ============================================
+          if [ -f packages/server/src/releases/release-monitor.ts ]; then
+            sed -i 's|https://api.github.com/repos/NeuralNomadsAI/CodeNomad/releases/latest|https://api.github.com/repos/DrOlu/ReactorPro/releases/latest|g' packages/server/src/releases/release-monitor.ts
+            sed -i 's/CodeNomad-CLI/ReactorPro-CLI/g' packages/server/src/releases/release-monitor.ts
+            sed -i 's|https://github.com/NeuralNomadsAI/CodeNomad/releases/tag/|https://reactorpro.ng/download.html|g' packages/server/src/releases/release-monitor.ts
+          fi
+          
+          # Cloudflare release config
+          if [ -f packages/cloudflare/release-config.json ]; then
+            sed -i 's|https://github.com/NeuralNomadsAI/CodeNomad/releases/latest|https://reactorpro.ng/download.html|g' packages/cloudflare/release-config.json
+          fi
 
       - name: Restore workflow files from backup
         if: steps.check_changes.outputs.has_changes == 'true'
