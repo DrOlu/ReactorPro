@@ -141,6 +141,9 @@ jobs:
             [ -f "$zip" ] || continue
             echo "Processing: $zip"
             
+            # Get absolute path for the zip
+            ZIP_ABS="$(cd "$(dirname "$zip")" && pwd)/$(basename "$zip")"
+            
             EXTRACT_DIR="$RUNNER_TEMP/extract_$(basename "$zip" .zip)"
             mkdir -p "$EXTRACT_DIR"
             unzip -q "$zip" -d "$EXTRACT_DIR"
@@ -157,9 +160,9 @@ jobs:
               codesign --verify --verbose "$app" 2>/dev/null || echo "Verification skipped"
             done
             
-            # Re-create the zip
-            rm -f "$zip"
-            (cd "$EXTRACT_DIR" && zip -r -q "$zip" .)
+            # Re-create the zip using absolute path
+            rm -f "$ZIP_ABS"
+            (cd "$EXTRACT_DIR" && zip -r -q "$ZIP_ABS" .)
             rm -rf "$EXTRACT_DIR"
           done
           
@@ -438,6 +441,9 @@ jobs:
             [ -f "$zip" ] || continue
             echo "Processing: $zip"
             
+            # Get absolute path for the zip
+            ZIP_ABS="$(cd "$(dirname "$zip")" && pwd)/$(basename "$zip")"
+            
             EXTRACT_DIR="$RUNNER_TEMP/extract_$(basename "$zip" .zip)"
             mkdir -p "$EXTRACT_DIR"
             unzip -q "$zip" -d "$EXTRACT_DIR"
@@ -451,8 +457,9 @@ jobs:
               codesign --verify --verbose "$app" 2>/dev/null || echo "Verification skipped"
             done
             
-            rm -f "$zip"
-            (cd "$EXTRACT_DIR" && zip -r -q "$zip" .)
+            # Re-create the zip using absolute path
+            rm -f "$ZIP_ABS"
+            (cd "$EXTRACT_DIR" && zip -r -q "$ZIP_ABS" .)
             rm -rf "$EXTRACT_DIR"
           done
           
@@ -582,6 +589,9 @@ jobs:
             [ -f "$zip" ] || continue
             echo "Processing: $zip"
             
+            # Get absolute path for the zip
+            ZIP_ABS="$(cd "$(dirname "$zip")" && pwd)/$(basename "$zip")"
+            
             EXTRACT_DIR="$RUNNER_TEMP/extract_$(basename "$zip" .zip)"
             mkdir -p "$EXTRACT_DIR"
             unzip -q "$zip" -d "$EXTRACT_DIR"
@@ -595,8 +605,9 @@ jobs:
               codesign --verify --verbose "$app" 2>/dev/null || echo "Verification skipped"
             done
             
-            rm -f "$zip"
-            (cd "$EXTRACT_DIR" && zip -r -q "$zip" .)
+            # Re-create the zip using absolute path
+            rm -f "$ZIP_ABS"
+            (cd "$EXTRACT_DIR" && zip -r -q "$ZIP_ABS" .)
             rm -rf "$EXTRACT_DIR"
           done
           
