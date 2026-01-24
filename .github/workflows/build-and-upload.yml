@@ -148,16 +148,37 @@ jobs:
             mkdir -p "$EXTRACT_DIR"
             unzip -q "$zip" -d "$EXTRACT_DIR"
             
-            # Find and sign .app bundles
+            # Find and sign .app bundles - must sign from inside out for Electron apps
             find "$EXTRACT_DIR" -name "*.app" -type d | while read -r app; do
-              echo "Signing: $app"
-              # Sign with identity, fall back to ad-hoc if fails
-              if ! codesign --deep --force --options runtime --timestamp --sign "$IDENTITY" "$app" 2>/dev/null; then
-                echo "Certificate signing failed, using ad-hoc signing"
-                codesign --deep --force --sign "-" "$app" || echo "Warning: ad-hoc signing also failed for $app"
-              fi
+              echo "Signing Electron app: $app"
+              
+              # For Electron apps, we need to sign all nested components first
+              # Sign all frameworks
+              find "$app/Contents/Frameworks" -name "*.framework" -type d 2>/dev/null | while read -r framework; do
+                echo "  Signing framework: $(basename "$framework")"
+                codesign --force --sign "-" "$framework" 2>/dev/null || true
+              done
+              
+              # Sign all dylibs
+              find "$app/Contents" -name "*.dylib" -type f 2>/dev/null | while read -r dylib; do
+                echo "  Signing dylib: $(basename "$dylib")"
+                codesign --force --sign "-" "$dylib" 2>/dev/null || true
+              done
+              
+              # Sign helper apps
+              find "$app/Contents" -name "*.app" -type d 2>/dev/null | while read -r helper; do
+                if [ "$helper" != "$app" ]; then
+                  echo "  Signing helper: $(basename "$helper")"
+                  codesign --force --sign "-" "$helper" 2>/dev/null || true
+                fi
+              done
+              
+              # Finally sign the main app bundle with ad-hoc (consistent Team ID)
+              echo "  Signing main app bundle"
+              codesign --force --sign "-" "$app" || echo "Warning: main app signing failed"
+              
               # Verify signature
-              codesign --verify --verbose "$app" 2>/dev/null || echo "Verification skipped"
+              codesign --verify --verbose "$app" 2>&1 || echo "Verification info above"
             done
             
             # Re-create the zip using absolute path
@@ -449,12 +470,35 @@ jobs:
             unzip -q "$zip" -d "$EXTRACT_DIR"
             
             find "$EXTRACT_DIR" -name "*.app" -type d | while read -r app; do
-              echo "Signing: $app"
-              if ! codesign --deep --force --options runtime --timestamp --sign "$IDENTITY" "$app" 2>/dev/null; then
-                echo "Certificate signing failed, using ad-hoc signing"
-                codesign --deep --force --sign "-" "$app" || echo "Warning: ad-hoc signing also failed for $app"
-              fi
-              codesign --verify --verbose "$app" 2>/dev/null || echo "Verification skipped"
+              echo "Signing Tauri app: $app"
+              
+              # For Tauri/macOS apps, sign all nested components first (inside-out)
+              # Sign all frameworks
+              find "$app/Contents/Frameworks" -name "*.framework" -type d 2>/dev/null | while read -r framework; do
+                echo "  Signing framework: $(basename "$framework")"
+                codesign --force --sign "-" "$framework" 2>/dev/null || true
+              done
+              
+              # Sign all dylibs
+              find "$app/Contents" -name "*.dylib" -type f 2>/dev/null | while read -r dylib; do
+                echo "  Signing dylib: $(basename "$dylib")"
+                codesign --force --sign "-" "$dylib" 2>/dev/null || true
+              done
+              
+              # Sign helper apps
+              find "$app/Contents" -name "*.app" -type d 2>/dev/null | while read -r helper; do
+                if [ "$helper" != "$app" ]; then
+                  echo "  Signing helper: $(basename "$helper")"
+                  codesign --force --sign "-" "$helper" 2>/dev/null || true
+                fi
+              done
+              
+              # Finally sign the main app bundle with ad-hoc (consistent Team ID)
+              echo "  Signing main app bundle"
+              codesign --force --sign "-" "$app" || echo "Warning: main app signing failed"
+              
+              # Verify signature
+              codesign --verify --verbose "$app" 2>&1 || echo "Verification info above"
             done
             
             # Re-create the zip using absolute path
@@ -597,12 +641,35 @@ jobs:
             unzip -q "$zip" -d "$EXTRACT_DIR"
             
             find "$EXTRACT_DIR" -name "*.app" -type d | while read -r app; do
-              echo "Signing: $app"
-              if ! codesign --deep --force --options runtime --timestamp --sign "$IDENTITY" "$app" 2>/dev/null; then
-                echo "Certificate signing failed, using ad-hoc signing"
-                codesign --deep --force --sign "-" "$app" || echo "Warning: ad-hoc signing also failed for $app"
-              fi
-              codesign --verify --verbose "$app" 2>/dev/null || echo "Verification skipped"
+              echo "Signing Tauri app: $app"
+              
+              # For Tauri/macOS apps, sign all nested components first (inside-out)
+              # Sign all frameworks
+              find "$app/Contents/Frameworks" -name "*.framework" -type d 2>/dev/null | while read -r framework; do
+                echo "  Signing framework: $(basename "$framework")"
+                codesign --force --sign "-" "$framework" 2>/dev/null || true
+              done
+              
+              # Sign all dylibs
+              find "$app/Contents" -name "*.dylib" -type f 2>/dev/null | while read -r dylib; do
+                echo "  Signing dylib: $(basename "$dylib")"
+                codesign --force --sign "-" "$dylib" 2>/dev/null || true
+              done
+              
+              # Sign helper apps
+              find "$app/Contents" -name "*.app" -type d 2>/dev/null | while read -r helper; do
+                if [ "$helper" != "$app" ]; then
+                  echo "  Signing helper: $(basename "$helper")"
+                  codesign --force --sign "-" "$helper" 2>/dev/null || true
+                fi
+              done
+              
+              # Finally sign the main app bundle with ad-hoc (consistent Team ID)
+              echo "  Signing main app bundle"
+              codesign --force --sign "-" "$app" || echo "Warning: main app signing failed"
+              
+              # Verify signature
+              codesign --verify --verbose "$app" 2>&1 || echo "Verification info above"
             done
             
             # Re-create the zip using absolute path
