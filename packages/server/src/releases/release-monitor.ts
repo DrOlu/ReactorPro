@@ -85,7 +85,7 @@ async function fetchLatestRelease(options: ReleaseMonitorOptions): Promise<Lates
   return {
     version: normalizedVersion,
     tag: tagFromServer,
-    url: json.html_url ?? `https://reactorpro.ng/download.html`,
+    url: "https://reactorpro.ng/download.html",
     channel: json.prerelease || normalizedVersion.includes("-") ? "dev" : "stable",
     publishedAt: json.published_at ?? json.created_at,
     notes: json.body,
