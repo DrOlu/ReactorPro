@@ -230,7 +230,7 @@ export function RemoteAccessOverlay(props: RemoteAccessOverlayProps) {
                 >
                   <div class="remote-card">
                     <p class="remote-help">
-                      {t("remoteAccess.username", { username: authStatus()!.username ?? "codenomad" })}
+                      {t("remoteAccess.username", { username: authStatus()!.username ?? "reactorpro" })}
                     </p>
                     <p class="remote-help">
                       {authStatus()!.passwordUserProvided
