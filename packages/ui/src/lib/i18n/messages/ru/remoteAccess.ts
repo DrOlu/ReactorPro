@@ -1,7 +1,7 @@
 export const remoteAccessMessages = {
   "remoteAccess.eyebrow": "Удаленная передача управления",
-  "remoteAccess.title": "Подключитесь к CodeNomad удаленно",
-  "remoteAccess.subtitle": "Используйте адреса ниже, чтобы открыть CodeNomad с другого устройства.",
+  "remoteAccess.title": "Подключитесь к ReactorPro удаленно",
+  "remoteAccess.subtitle": "Используйте адреса ниже, чтобы открыть ReactorPro с другого устройства.",
   "remoteAccess.close": "Закрыть удаленный доступ",
   "remoteAccess.refresh": "Обновить",
 

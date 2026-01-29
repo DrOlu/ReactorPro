@@ -1,5 +1,5 @@
 export const loadingScreenMessages = {
-  "loadingScreen.logoAlt": "CodeNomad ロゴ",
+  "loadingScreen.logoAlt": "ReactorPro ロゴ",
   "loadingScreen.status.issue": "問題が発生しました",
   "loadingScreen.actions.showAnother": "別のメッセージを表示",
   "loadingScreen.errors.missingRoot": "読み込み用のルート要素が見つかりません",

@@ -20,7 +20,7 @@ const templateDir = isDevBuild
 
 export function getOpencodeConfigDir(): string {
   if (!existsSync(templateDir)) {
-    throw new Error(`CodeNomad Opencode config template missing at ${templateDir}`)
+    throw new Error(`ReactorPro Opencode config template missing at ${templateDir}`)
   }
 
   if (isDevBuild) {

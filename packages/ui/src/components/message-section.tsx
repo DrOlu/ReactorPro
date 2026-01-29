@@ -14,7 +14,7 @@ const SCROLL_SENTINEL_MARGIN_PX = 48
 const USER_SCROLL_INTENT_WINDOW_MS = 600
 const SCROLL_INTENT_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"])
 const QUOTE_SELECTION_MAX_LENGTH = 2000
-const codeNomadLogo = new URL("../images/CodeNomad-Icon.png", import.meta.url).href
+const codeNomadLogo = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
 
 export interface MessageSectionProps {
   instanceId: string

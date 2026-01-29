@@ -1,10 +1,10 @@
-# CodeNomad UI
+# ReactorPro UI
 
-This package contains the frontend user interface for CodeNomad, built with [SolidJS](https://www.solidjs.com/) and [Tailwind CSS](https://tailwindcss.com/).
+This package contains the frontend user interface for ReactorPro, built with [SolidJS](https://www.solidjs.com/) and [Tailwind CSS](https://tailwindcss.com/).
 
 ## Overview
 
-The UI is designed to be a high-performance, low-latency cockpit for managing OpenCode sessions. It connects to the CodeNomad server (either running locally via CLI or embedded in the Electron app).
+The UI is designed to be a high-performance, low-latency cockpit for managing OpenCode sessions. It connects to the ReactorPro server (either running locally via CLI or embedded in the Electron app).
 
 ## Features
 

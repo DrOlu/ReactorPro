@@ -8,8 +8,8 @@ export const messagingMessages = {
   "messageListHeader.connection.connecting": "接続中...",
   "messageListHeader.connection.disconnected": "切断",
 
-  "messageSection.empty.logoAlt": "CodeNomad ロゴ",
-  "messageSection.empty.brandTitle": "CodeNomad",
+  "messageSection.empty.logoAlt": "ReactorPro ロゴ",
+  "messageSection.empty.brandTitle": "ReactorPro",
   "messageSection.empty.title": "会話を始める",
   "messageSection.empty.description": "下にメッセージを入力するか、コマンドパレットを開いてください:",
   "messageSection.empty.tips.commandPalette": "コマンドパレット",

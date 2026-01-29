@@ -1,12 +1,12 @@
 export const folderSelectionMessages = {
   "folderSelection.language.ariaLabel": "言語",
 
-  "folderSelection.logoAlt": "CodeNomad ロゴ",
+  "folderSelection.logoAlt": "ReactorPro ロゴ",
   "folderSelection.tagline": "フォルダを選択して AI でコーディングを開始",
 
-  "folderSelection.links.github": "CodeNomad の GitHub",
-  "folderSelection.links.githubStars": "CodeNomad の GitHub スター",
-  "folderSelection.links.discord": "CodeNomad の Discord",
+  "folderSelection.links.github": "ReactorPro の GitHub",
+  "folderSelection.links.githubStars": "ReactorPro の GitHub スター",
+  "folderSelection.links.discord": "ReactorPro の Discord",
 
   "folderSelection.empty.title": "最近使ったフォルダはありません",
   "folderSelection.empty.description": "フォルダを選択して開始",

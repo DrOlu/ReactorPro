@@ -8,8 +8,8 @@ export const messagingMessages = {
   "messageListHeader.connection.connecting": "Подключение…",
   "messageListHeader.connection.disconnected": "Отключено",
 
-  "messageSection.empty.logoAlt": "Логотип CodeNomad",
-  "messageSection.empty.brandTitle": "CodeNomad",
+  "messageSection.empty.logoAlt": "Логотип ReactorPro",
+  "messageSection.empty.brandTitle": "ReactorPro",
   "messageSection.empty.title": "Начните разговор",
   "messageSection.empty.description": "Введите сообщение ниже или откройте палитру команд:",
   "messageSection.empty.tips.commandPalette": "Палитра команд",

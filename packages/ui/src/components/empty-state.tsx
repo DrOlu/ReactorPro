@@ -2,7 +2,7 @@ import { Component } from "solid-js"
 import { Loader2 } from "lucide-solid"
 import { useI18n } from "../lib/i18n"
 
-const codeNomadIcon = new URL("../images/CodeNomad-Icon.png", import.meta.url).href
+const codeNomadIcon = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
 
 interface EmptyStateProps {
   onSelectFolder: () => void

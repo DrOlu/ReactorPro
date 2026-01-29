@@ -329,7 +329,7 @@ async function fetchManifest(url: string, logger: Logger): Promise<RemoteUiManif
       signal: controller.signal,
       headers: {
         Accept: "application/json",
-        "User-Agent": "CodeNomad-CLI",
+        "User-Agent": "ReactorPro-CLI",
       },
     })
     if (!response.ok) {
@@ -419,7 +419,7 @@ async function downloadFile(url: string, targetPath: string, logger: Logger) {
       signal: controller.signal,
       headers: {
         Accept: "application/octet-stream",
-        "User-Agent": "CodeNomad-CLI",
+        "User-Agent": "ReactorPro-CLI",
       },
     })
     if (!response.ok || !response.body) {

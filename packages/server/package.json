@@ -1,14 +1,14 @@
 {
   "name": "@neuralnomads/codenomad",
   "version": "0.9.2",
-  "description": "CodeNomad Server",
+  "description": "ReactorPro Server",
   "author": {
-    "name": "Neural Nomads",
+    "name": "Hyperspace Technologies",
     "email": "codenomad@neuralnomads.ai"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/NeuralNomadsAI/CodeNomad.git"
+    "url": "https://github.com/DrOlu/ReactorPro.git"
   },
   "type": "module",
   "main": "dist/index.js",

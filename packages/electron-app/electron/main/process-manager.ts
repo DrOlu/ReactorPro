@@ -99,7 +99,7 @@ export class CliProcessManager extends EventEmitter {
     const args = this.buildCliArgs(options, host)
 
     console.info(
-      `[cli] launching CodeNomad CLI (${options.dev ? "dev" : "prod"}) using ${cliEntry.runner} at ${cliEntry.entry} (host=${host})`,
+      `[cli] launching ReactorPro CLI (${options.dev ? "dev" : "prod"}) using ${cliEntry.runner} at ${cliEntry.entry} (host=${host})`,
     )
 
     const env = supportsUserShell() ? getUserShellEnv() : { ...process.env }
@@ -260,7 +260,7 @@ export class CliProcessManager extends EventEmitter {
   }
 
   private extractPort(line: string): number | null {
-    const readyMatch = line.match(/CodeNomad Server is ready at http:\/\/[^:]+:(\d+)/i)
+    const readyMatch = line.match(/ReactorPro Server is ready at http:\/\/[^:]+:(\d+)/i)
     if (readyMatch) {
       return parseInt(readyMatch[1], 10)
     }
@@ -376,6 +376,6 @@ export class CliProcessManager extends EventEmitter {
     } catch {
       // fall through to error below
     }
-    throw new Error("Unable to locate CodeNomad CLI build (dist/bin.js). Run npm run build --workspace @neuralnomads/codenomad.")
+    throw new Error("Unable to locate ReactorPro CLI build (dist/bin.js). Run npm run build --workspace @neuralnomads/codenomad.")
   }
 }

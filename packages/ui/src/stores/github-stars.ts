@@ -4,7 +4,7 @@ import { getLogger } from "../lib/logger"
 const log = getLogger("api")
 
 const STORAGE_KEY = "codenomad:github:stars"
-const REPO_API_URL = "https://api.github.com/repos/NeuralNomadsAI/CodeNomad"
+const REPO_API_URL = "https://api.github.com/repos/DrOlu/ReactorPro"
 
 function readStoredStars(): number | null {
   if (typeof window === "undefined") return null

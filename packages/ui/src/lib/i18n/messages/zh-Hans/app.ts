@@ -13,8 +13,8 @@ export const appMessages = {
   "app.stopInstance.confirmLabel": "停止",
   "app.stopInstance.cancelLabel": "继续运行",
 
-  "emptyState.logoAlt": "CodeNomad 徽标",
-  "emptyState.brandTitle": "CodeNomad",
+  "emptyState.logoAlt": "ReactorPro 徽标",
+  "emptyState.brandTitle": "ReactorPro",
   "emptyState.tagline": "选择文件夹，开始与 AI 一起编码",
   "emptyState.actions.selectFolder": "选择文件夹",
   "emptyState.actions.selecting": "正在选择...",
@@ -23,7 +23,7 @@ export const appMessages = {
   "emptyState.multipleInstances": "同一个文件夹可以同时打开多个实例",
 
   "releases.upgradeRequired.title": "需要升级",
-  "releases.upgradeRequired.message.withVersion": "更新到 CodeNomad {version} 以使用最新的 UI。",
-  "releases.upgradeRequired.message.noVersion": "更新 CodeNomad 以使用最新的 UI。",
+  "releases.upgradeRequired.message.withVersion": "更新到 ReactorPro {version} 以使用最新的 UI。",
+  "releases.upgradeRequired.message.noVersion": "更新 ReactorPro 以使用最新的 UI。",
   "releases.upgradeRequired.action.getUpdate": "获取更新",
 } as const

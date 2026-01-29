@@ -2,7 +2,7 @@
   "name": "codenomad-workspace",
   "version": "0.9.2",
   "private": true,
-  "description": "CodeNomad monorepo workspace",
+  "description": "ReactorPro monorepo workspace",
   "workspaces": {
     "packages": [
       "packages/server",

@@ -1,6 +1,6 @@
-# Building CodeNomad Binaries
+# Building ReactorPro Binaries
 
-This guide explains how to build distributable binaries for CodeNomad.
+This guide explains how to build distributable binaries for ReactorPro.
 
 ## Prerequisites
 
@@ -87,17 +87,17 @@ Binaries are generated in the `release/` directory:
 
 ```
 release/
-├── CodeNomad-0.1.0-mac-universal.dmg
-├── CodeNomad-0.1.0-mac-universal.zip
-├── CodeNomad-0.1.0-win-x64.exe
-├── CodeNomad-0.1.0-linux-x64.AppImage
+├── ReactorPro-0.1.0-mac-universal.dmg
+├── ReactorPro-0.1.0-mac-universal.zip
+├── ReactorPro-0.1.0-win-x64.exe
+├── ReactorPro-0.1.0-linux-x64.AppImage
 └── ...
 ```
 
 ## File Naming Convention
 
 ```
-CodeNomad-{version}-{os}-{arch}.{ext}
+ReactorPro-{version}-{os}-{arch}.{ext}
 ```
 
 - **version**: From package.json (e.g., `0.1.0`)
@@ -223,13 +223,13 @@ See [electron-builder docs](https://www.electron.build/) for details.
 
 ## Brand Assets
 
-- `images/CodeNomad-Icon.png` — primary asset for in-app logo placements and the 1024×1024 master icon used to generate packaged app icons
+- `images/ReactorPro-Icon.png` — primary asset for in-app logo placements and the 1024×1024 master icon used to generate packaged app icons
 
 To update the binaries:
 
-1. Run `node scripts/generate-icons.js images/CodeNomad-Icon.png electron/resources` to round the corners and emit fresh `icon.icns`, `icon.ico`, and `icon.png` files.
+1. Run `node scripts/generate-icons.js images/ReactorPro-Icon.png electron/resources` to round the corners and emit fresh `icon.icns`, `icon.ico`, and `icon.png` files.
 2. (Optional) Pass `--radius` to tweak the corner curvature or `--name` to change the filename prefix.
-3. If you prefer manual control, export `images/CodeNomad-Icon.png` with your tool of choice and place the generated files in `electron/resources/`.
+3. If you prefer manual control, export `images/ReactorPro-Icon.png` with your tool of choice and place the generated files in `electron/resources/`.
 
 ## Clean Build
 

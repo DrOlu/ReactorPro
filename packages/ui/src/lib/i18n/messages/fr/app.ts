@@ -13,8 +13,8 @@ export const appMessages = {
   "app.stopInstance.confirmLabel": "Arrêter",
   "app.stopInstance.cancelLabel": "Laisser tourner",
 
-  "emptyState.logoAlt": "Logo CodeNomad",
-  "emptyState.brandTitle": "CodeNomad",
+  "emptyState.logoAlt": "Logo ReactorPro",
+  "emptyState.brandTitle": "ReactorPro",
   "emptyState.tagline": "Sélectionnez un dossier pour commencer à coder avec l'IA",
   "emptyState.actions.selectFolder": "Sélectionner un dossier",
   "emptyState.actions.selecting": "Sélection...",
@@ -23,7 +23,7 @@ export const appMessages = {
   "emptyState.multipleInstances": "Vous pouvez avoir plusieurs instances du même dossier",
 
   "releases.upgradeRequired.title": "Mise à jour requise",
-  "releases.upgradeRequired.message.withVersion": "Mettez à jour vers CodeNomad {version} pour utiliser la dernière UI.",
-  "releases.upgradeRequired.message.noVersion": "Mettez à jour CodeNomad pour utiliser la dernière UI.",
+  "releases.upgradeRequired.message.withVersion": "Mettez à jour vers ReactorPro {version} pour utiliser la dernière UI.",
+  "releases.upgradeRequired.message.noVersion": "Mettez à jour ReactorPro pour utiliser la dernière UI.",
   "releases.upgradeRequired.action.getUpdate": "Obtenir la mise à jour",
 } as const

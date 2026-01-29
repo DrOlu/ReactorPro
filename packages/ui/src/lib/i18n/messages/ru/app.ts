@@ -13,8 +13,8 @@ export const appMessages = {
   "app.stopInstance.confirmLabel": "Остановить",
   "app.stopInstance.cancelLabel": "Оставить запущенным",
 
-  "emptyState.logoAlt": "Логотип CodeNomad",
-  "emptyState.brandTitle": "CodeNomad",
+  "emptyState.logoAlt": "Логотип ReactorPro",
+  "emptyState.brandTitle": "ReactorPro",
   "emptyState.tagline": "Выберите папку, чтобы начать писать код с AI",
   "emptyState.actions.selectFolder": "Выбрать папку",
   "emptyState.actions.selecting": "Выбор…",
@@ -23,7 +23,7 @@ export const appMessages = {
   "emptyState.multipleInstances": "Можно иметь несколько экземпляров одной и той же папки",
 
   "releases.upgradeRequired.title": "Требуется обновление",
-  "releases.upgradeRequired.message.withVersion": "Обновите CodeNomad до версии {version}, чтобы использовать последний UI.",
-  "releases.upgradeRequired.message.noVersion": "Обновите CodeNomad, чтобы использовать последний UI.",
+  "releases.upgradeRequired.message.withVersion": "Обновите ReactorPro до версии {version}, чтобы использовать последний UI.",
+  "releases.upgradeRequired.message.noVersion": "Обновите ReactorPro, чтобы использовать последний UI.",
   "releases.upgradeRequired.action.getUpdate": "Получить обновление",
 } as const

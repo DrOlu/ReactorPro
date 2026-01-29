@@ -12,7 +12,7 @@ import { githubStars } from "../stores/github-stars"
 import { formatCompactCount } from "../lib/formatters"
 import { useI18n, type Locale } from "../lib/i18n"
 
-const codeNomadLogo = new URL("../images/CodeNomad-Icon.png", import.meta.url).href
+const codeNomadLogo = new URL("../images/ReactorPro-Icon.png", import.meta.url).href
 
 
 interface FolderSelectionViewProps {
@@ -328,10 +328,10 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
             <div class="mb-3 flex justify-center">
               <img src={codeNomadLogo} alt={t("folderSelection.logoAlt")} class="h-32 w-auto sm:h-48" loading="lazy" />
             </div>
-            <h1 class="mb-2 text-3xl font-semibold text-primary">CodeNomad</h1>
+            <h1 class="mb-2 text-3xl font-semibold text-primary">ReactorPro</h1>
             <div class="mt-3 flex justify-center gap-2">
               <a
-                href="https://github.com/NeuralNomadsAI/CodeNomad"
+                href="https://github.com/DrOlu/ReactorPro"
                 target="_blank"
                 rel="noreferrer"
                 class="selector-button selector-button-secondary w-auto p-2 inline-flex items-center justify-center"
@@ -339,13 +339,13 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                 title={t("folderSelection.links.github")}
                 onClick={(event) => {
                   event.preventDefault()
-                  openExternalLink("https://github.com/NeuralNomadsAI/CodeNomad")
+                  openExternalLink("https://github.com/DrOlu/ReactorPro")
                 }}
               >
                 <GitHubMarkIcon class="w-4 h-4" />
               </a>
               <a
-                href="https://github.com/NeuralNomadsAI/CodeNomad"
+                href="https://github.com/DrOlu/ReactorPro"
                 target="_blank"
                 rel="noreferrer"
                 class="selector-button selector-button-secondary w-auto px-3 py-1.5 inline-flex items-center justify-center gap-1.5"
@@ -353,7 +353,7 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                 title={t("folderSelection.links.githubStars")}
                 onClick={(event) => {
                   event.preventDefault()
-                  openExternalLink("https://github.com/NeuralNomadsAI/CodeNomad")
+                  openExternalLink("https://github.com/DrOlu/ReactorPro")
                 }}
               >
                 <Star class="w-4 h-4" />

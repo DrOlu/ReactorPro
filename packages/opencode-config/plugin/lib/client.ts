@@ -1,9 +1,9 @@
-import { createCodeNomadRequester, type CodeNomadConfig, type PluginEvent } from "./request"
+import { createReactorProRequester, type ReactorProConfig, type PluginEvent } from "./request"
 
-export { getCodeNomadConfig, type CodeNomadConfig, type PluginEvent } from "./request"
+export { getReactorProConfig, type ReactorProConfig, type PluginEvent } from "./request"
 
-export function createCodeNomadClient(config: CodeNomadConfig) {
-  const requester = createCodeNomadRequester(config)
+export function createReactorProClient(config: ReactorProConfig) {
+  const requester = createReactorProRequester(config)
 
   return {
     postEvent: (event: PluginEvent) =>
@@ -20,7 +20,7 @@ function delay(ms: number) {
 }
 
 async function startPluginEvents(
-  requester: ReturnType<typeof createCodeNomadRequester>,
+  requester: ReturnType<typeof createReactorProRequester>,
   onEvent: (event: PluginEvent) => void,
 ) {
   // Fail plugin startup if we cannot establish the initial connection.
@@ -30,7 +30,7 @@ async function startPluginEvents(
   void consumeWithReconnect(requester, onEvent, initialBody)
 }
 
-async function connectWithRetries(requester: ReturnType<typeof createCodeNomadRequester>, maxAttempts: number) {
+async function connectWithRetries(requester: ReturnType<typeof createReactorProRequester>, maxAttempts: number) {
   let lastError: unknown
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -44,11 +44,11 @@ async function connectWithRetries(requester: ReturnType<typeof createCodeNomadRe
 
   const reason = lastError instanceof Error ? lastError.message : String(lastError)
   const url = requester.buildUrl("/events")
-  throw new Error(`[CodeNomadPlugin] Failed to connect to CodeNomad at ${url} after ${maxAttempts} retries: ${reason}`)
+  throw new Error(`[ReactorProPlugin] Failed to connect to ReactorPro at ${url} after ${maxAttempts} retries: ${reason}`)
 }
 
 async function consumeWithReconnect(
-  requester: ReturnType<typeof createCodeNomadRequester>,
+  requester: ReturnType<typeof createReactorProRequester>,
   onEvent: (event: PluginEvent) => void,
   initialBody: ReadableStream<Uint8Array>,
 ) {
@@ -69,7 +69,7 @@ async function consumeWithReconnect(
       consecutiveFailures += 1
       if (consecutiveFailures >= 3) {
         const reason = error instanceof Error ? error.message : String(error)
-        throw new Error(`[CodeNomadPlugin] Plugin event stream failed after 3 retries: ${reason}`)
+        throw new Error(`[ReactorProPlugin] Plugin event stream failed after 3 retries: ${reason}`)
       }
       await delay(500 * consecutiveFailures)
     }

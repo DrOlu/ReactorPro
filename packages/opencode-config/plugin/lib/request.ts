@@ -3,19 +3,19 @@ export type PluginEvent = {
   properties?: Record<string, unknown>
 }
 
-export type CodeNomadConfig = {
+export type ReactorProConfig = {
   instanceId: string
   baseUrl: string
 }
 
-export function getCodeNomadConfig(): CodeNomadConfig {
+export function getReactorProConfig(): ReactorProConfig {
   return {
     instanceId: requireEnv("CODENOMAD_INSTANCE_ID"),
     baseUrl: requireEnv("CODENOMAD_BASE_URL"),
   }
 }
 
-export function createCodeNomadRequester(config: CodeNomadConfig) {
+export function createReactorProRequester(config: ReactorProConfig) {
   const baseUrl = config.baseUrl.replace(/\/+$/, "")
   const pluginBase = `${baseUrl}/workspaces/${encodeURIComponent(config.instanceId)}/plugin`
   const authorization = buildInstanceAuthorizationHeader()
@@ -90,7 +90,7 @@ export function createCodeNomadRequester(config: CodeNomadConfig) {
 function requireEnv(key: string): string {
   const value = process.env[key]
   if (!value || !value.trim()) {
-    throw new Error(`[CodeNomadPlugin] Missing required env var ${key}`)
+    throw new Error(`[ReactorProPlugin] Missing required env var ${key}`)
   }
   return value
 }

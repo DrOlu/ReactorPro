@@ -1,5 +1,5 @@
 export const loadingScreenMessages = {
-  "loadingScreen.logoAlt": "CodeNomad 徽标",
+  "loadingScreen.logoAlt": "ReactorPro 徽标",
   "loadingScreen.status.issue": "遇到问题",
   "loadingScreen.actions.showAnother": "换一句",
   "loadingScreen.errors.missingRoot": "未找到加载根元素",

@@ -1,5 +1,5 @@
 export const loadingScreenMessages = {
-  "loadingScreen.logoAlt": "Logo de CodeNomad",
+  "loadingScreen.logoAlt": "Logo de ReactorPro",
   "loadingScreen.status.issue": "Se produjo un problema",
   "loadingScreen.actions.showAnother": "Mostrar otra",
   "loadingScreen.errors.missingRoot": "No se encontró el elemento raíz de carga",

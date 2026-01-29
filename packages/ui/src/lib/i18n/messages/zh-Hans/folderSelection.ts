@@ -1,12 +1,12 @@
 export const folderSelectionMessages = {
   "folderSelection.language.ariaLabel": "语言",
 
-  "folderSelection.logoAlt": "CodeNomad 徽标",
+  "folderSelection.logoAlt": "ReactorPro 徽标",
   "folderSelection.tagline": "选择文件夹，开始与 AI 一起编码",
 
-  "folderSelection.links.github": "CodeNomad 的 GitHub",
-  "folderSelection.links.githubStars": "CodeNomad GitHub Star 数",
-  "folderSelection.links.discord": "CodeNomad 的 Discord",
+  "folderSelection.links.github": "ReactorPro 的 GitHub",
+  "folderSelection.links.githubStars": "ReactorPro GitHub Star 数",
+  "folderSelection.links.discord": "ReactorPro 的 Discord",
 
   "folderSelection.empty.title": "没有最近的文件夹",
   "folderSelection.empty.description": "浏览并选择文件夹以开始使用",

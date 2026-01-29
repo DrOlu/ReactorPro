@@ -1,12 +1,12 @@
 export const folderSelectionMessages = {
   "folderSelection.language.ariaLabel": "Langue",
 
-  "folderSelection.logoAlt": "Logo CodeNomad",
+  "folderSelection.logoAlt": "Logo ReactorPro",
   "folderSelection.tagline": "Sélectionnez un dossier pour commencer à coder avec l'IA",
 
-  "folderSelection.links.github": "GitHub de CodeNomad",
-  "folderSelection.links.githubStars": "Stars GitHub de CodeNomad",
-  "folderSelection.links.discord": "Discord de CodeNomad",
+  "folderSelection.links.github": "GitHub de ReactorPro",
+  "folderSelection.links.githubStars": "Stars GitHub de ReactorPro",
+  "folderSelection.links.discord": "Discord de ReactorPro",
 
   "folderSelection.empty.title": "Aucun dossier récent",
   "folderSelection.empty.description": "Parcourez un dossier pour commencer",

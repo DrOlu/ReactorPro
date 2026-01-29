@@ -1,10 +1,10 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { createCodeNomadClient, getCodeNomadConfig } from "./lib/client"
+import { createReactorProClient, getReactorProConfig } from "./lib/client"
 import { createBackgroundProcessTools } from "./lib/background-process"
 
-export async function CodeNomadPlugin(input: PluginInput) {
-  const config = getCodeNomadConfig()
-  const client = createCodeNomadClient(config)
+export async function ReactorProPlugin(input: PluginInput) {
+  const config = getReactorProConfig()
+  const client = createReactorProClient(config)
   const backgroundProcessTools = createBackgroundProcessTools(config, { baseDir: input.directory })
 
   await client.startEvents((event) => {
