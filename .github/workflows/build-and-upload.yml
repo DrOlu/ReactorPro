@@ -213,8 +213,8 @@ jobs:
           ARTIFACT_DIR="packages/tauri-app/release-tauri"
           rm -rf "$ARTIFACT_DIR"
           mkdir -p "$ARTIFACT_DIR"
-          if [ -d "$BUNDLE_ROOT/macos/CodeNomad.app" ]; then
-            ditto -ck --sequesterRsrc --keepParent "$BUNDLE_ROOT/macos/CodeNomad.app" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-macos-x64.zip"
+          if [ -d "$BUNDLE_ROOT/macos/ReactorPro.app" ]; then
+            ditto -ck --sequesterRsrc --keepParent "$BUNDLE_ROOT/macos/ReactorPro.app" "$ARTIFACT_DIR/ReactorPro-Tauri-${VERSION}-macos-x64.zip"
           fi
 
       - name: Upload Tauri release assets (macOS)
@@ -286,8 +286,8 @@ jobs:
           ARTIFACT_DIR="packages/tauri-app/release-tauri"
           rm -rf "$ARTIFACT_DIR"
           mkdir -p "$ARTIFACT_DIR"
-          if [ -d "$BUNDLE_ROOT/macos/CodeNomad.app" ]; then
-            ditto -ck --sequesterRsrc --keepParent "$BUNDLE_ROOT/macos/CodeNomad.app" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-macos-arm64.zip"
+          if [ -d "$BUNDLE_ROOT/macos/ReactorPro.app" ]; then
+            ditto -ck --sequesterRsrc --keepParent "$BUNDLE_ROOT/macos/ReactorPro.app" "$ARTIFACT_DIR/ReactorPro-Tauri-${VERSION}-macos-arm64.zip"
           fi
 
       - name: Upload Tauri release assets (macOS arm64)
@@ -364,7 +364,7 @@ jobs:
           New-Item -ItemType Directory -Path $artifactDir | Out-Null
           $exe = Get-ChildItem -Path $bundleRoot -Recurse -File -Filter *.exe | Select-Object -First 1
           if ($null -ne $exe) {
-            $dest = Join-Path $artifactDir ("CodeNomad-Tauri-$env:VERSION-windows-x64.zip")
+            $dest = Join-Path $artifactDir ("ReactorPro-Tauri-$env:VERSION-windows-x64.zip")
             Compress-Archive -Path $exe.Directory.FullName -DestinationPath $dest -Force
           }
 
@@ -465,9 +465,9 @@ jobs:
             exit 1
           fi
 
-          cp "$appimage" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.AppImage"
-          cp "$deb" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.deb"
-          cp "$rpm" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.rpm"
+          cp "$appimage" "$ARTIFACT_DIR/ReactorPro-Tauri-${VERSION}-linux-x64.AppImage"
+          cp "$deb" "$ARTIFACT_DIR/ReactorPro-Tauri-${VERSION}-linux-x64.deb"
+          cp "$rpm" "$ARTIFACT_DIR/ReactorPro-Tauri-${VERSION}-linux-x64.rpm"
 
       - name: Upload Tauri release assets (Linux)
         if: ${{ inputs.upload && inputs.tag != '' }}
@@ -558,9 +558,9 @@ jobs:
           first_artifact=$(find "$SEARCH_ROOT" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.tar.gz" \) | head -n1)
           fallback_bin="$SEARCH_ROOT/release/codenomad-tauri"
           if [ -n "$first_artifact" ]; then
-            zip -j "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.zip" "$first_artifact"
+            zip -j "$ARTIFACT_DIR/ReactorPro-Tauri-${VERSION}-linux-x64.zip" "$first_artifact"
           elif [ -f "$fallback_bin" ]; then
-            zip -j "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.zip" "$fallback_bin"
+            zip -j "$ARTIFACT_DIR/ReactorPro-Tauri-${VERSION}-linux-x64.zip" "$fallback_bin"
           else
             echo "No bundled artifact found under $SEARCH_ROOT and no binary at $fallback_bin" >&2
             exit 1
