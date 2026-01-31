@@ -50,8 +50,8 @@
     "nextResult": "下一个结果 (F3)"
   },
   "onboarding": {
-    "title": "欢迎使用 AiderDesk",
-    "description": "AiderDesk 是您的 AI 辅助编程桌面伴侣。本应用将 Aider 的 AI 编程助手功能带到用户友好的界面中，帮助您：",
+    "title": "欢迎使用 ReactorPro",
+    "description": "ReactorPro 是您的专业 AI 平台。本应用将 Aider 的 AI 编程助手功能带到用户友好的界面中，帮助您：",
     "skipForNow": "暂时跳过",
     "finish": "完成设置",
     "features": {
@@ -93,7 +93,7 @@
       "description": "配置您的 LLM 提供商以在 Aider 和 Agent 模式中使用。您可以为各种提供商设置 API 密钥和其他设置。",
       "configureLater": "如果您愿意，可以稍后在设置中配置这些。",
       "connectTitle": "连接您的AI模型",
-      "connectDescription": "AiderDesk 支持多个AI提供商，包括OpenAI、Anthropic、Google Gemini等。您的API密钥安全存储在本地机器上，绝不会被共享。",
+      "connectDescription": "ReactorPro 支持多个AI提供商，包括OpenAI、Anthropic、Google Gemini等。您的API密钥安全存储在本地机器上，绝不会被共享。",
       "advancedUsersNote": "高级用户：您也可以在下一步的Aider配置部分使用环境变量配置提供商。",
       "advancedSettings": "高级设置",
       "order": "排序",
@@ -116,7 +116,7 @@
     },
     "agent": {
       "title": "认识您的AI代理",
-      "description": "通过 AiderDesk 的代理模式发现自主AI辅助的强大功能。您的AI代理可以独立工作来完成复杂任务。",
+      "description": "通过 ReactorPro 的代理模式发现自主AI辅助的强大功能。您的AI代理可以独立工作来完成复杂任务。",
       "capabilities": "代理功能：",
       "autonomousPlanning": "自主任务规划：",
       "autonomousPlanningDesc": "将复杂请求分解为可管理的步骤并系统性地执行它们。",
@@ -131,9 +131,9 @@
     },
     "complete": {
       "title": "设置完成！",
-      "description": "恭喜！您已成功设置 AiderDesk。现在您可以开始使用 AI 辅助编程了。",
+      "description": "恭喜！您已成功设置 ReactorPro。现在您可以开始使用 AI 辅助编程了。",
       "ready": "点击'完成设置'开始您的编程之旅。",
-      "success": "引导完成成功！欢迎使用 AiderDesk。"
+      "success": "引导完成成功！欢迎使用 ReactorPro。"
     },
     "errors": {
       "navigationFailed": "导航失败。请重试。",
@@ -676,11 +676,11 @@
       "version": "版本",
       "notAvailable": "不可用",
       "checkForUpdates": "检查更新",
-      "newAiderVersionAvailable": "新的 Aider 版本可用 ({{version}}) - 重启 AiderDesk 以安装。",
+      "newAiderVersionAvailable": "新的 Aider 版本可用 ({{version}}) - 重启 ReactorPro 以安装。",
       "updateAvailable": "有可用更新",
       "downloadUpdate": "下载",
       "downloadingUpdate": "正在下载更新",
-      "newAiderDeskVersionReady": "新版本已准备好。重启 AiderDesk 以应用更新。",
+      "newReactorProVersionReady": "新版本已准备好。重启 ReactorPro 以应用更新。",
       "downloadAutomatically": "自动下载更新",
       "releaseNotes": "发行说明",
       "openLogsDirectory": "打开日志目录",
@@ -1256,7 +1256,7 @@
   },
   "telemetry": {
     "title": "遥测信息",
-    "message": "为了帮助我们改进 AiderDesk，我们会收集匿名遥测数据。这包括功能使用情况和性能指标等信息。绝不会收集个人数据或代码。",
+    "message": "为了帮助我们改进 ReactorPro，我们会收集匿名遥测数据。这包括功能使用情况和性能指标等信息。绝不会收集个人数据或代码。",
     "enabledLabel": "启用匿名遥测"
   },
   "promptBehavior": {
@@ -1273,7 +1273,7 @@
     "modeAtSign": "@ 提及模式"
   },
   "server": {
-    "description": "启用 服务器，允许您通过浏览器在端口 24337 访问 AiderDesk",
+    "description": "启用 服务器，允许您通过浏览器在端口 24337 访问 ReactorPro",
     "serverStatus": "服务器状态",
     "running": "运行中",
     "enableBasicAuth": "启用基本身份验证",
@@ -1471,7 +1471,7 @@
     "noChanges": "没有更改"
   },
   "welcomeMessage": {
-    "title": "AiderDesk",
+    "title": "ReactorPro",
     "subtitle": "您的 AI 驱动编程助手",
     "features": {
       "title": "您可以做什么：",

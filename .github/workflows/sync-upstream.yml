@@ -202,6 +202,17 @@ jobs:
           if [ -f Dockerfile ]; then
             sed -i -e 's/aider-desk/reactorpro/g' -e 's/AiderDesk/ReactorPro/g' Dockerfile
           fi
+          
+          # ============================================
+          # Locale files - Update branding in i18n
+          # ============================================
+          if [ -f src/common/locales/en.json ]; then
+            sed -i 's/AiderDesk/ReactorPro/g' src/common/locales/en.json
+            sed -i 's/AI-assisted coding/AI platform for Professionals/g' src/common/locales/en.json
+          fi
+          if [ -f src/common/locales/zh.json ]; then
+            sed -i 's/AiderDesk/ReactorPro/g' src/common/locales/zh.json
+          fi
 
       - name: Copy ReactorPro icons
         if: steps.check_changes.outputs.has_changes == 'true'
