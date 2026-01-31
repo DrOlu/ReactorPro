@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
 
-import { server } from '../aider-desk-mcp-server';
+import { server } from '../reactorpro-mcp-server';
 
 vi.mock('axios');
 
