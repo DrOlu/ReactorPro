@@ -28,10 +28,10 @@ https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-a
 
 ## Where Skills live
 
-AiderDesk loads skills from two locations:
+ReactorPro loads skills from two locations:
 
-- **Home-level skills**: `~/.aider-desk/skills/`
-- **Project-level skills**: `.aider-desk/skills/` (in your project root)
+- **Home-level skills**: `~/.reactorpro/skills/`
+- **Project-level skills**: `.reactorpro/skills/` (in your project root)
 
 This lets you keep personal skills globally, while sharing project-specific skills with your repository.
 

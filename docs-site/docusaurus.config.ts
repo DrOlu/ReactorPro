@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'AiderDesk',
+  title: 'ReactorPro',
   //themes: ['@docusaurus/theme-search-algolia'],
   tagline: 'AI-Powered Coding',
   favicon: 'img/favicon.ico',
@@ -16,7 +16,7 @@ const config: Config = {
     v4: true, // Improve compatibility with the upcoming Docusaurus v4
   },
 
-  url: 'https://aiderdesk.hotovo.com',
+  url: 'https://aiderdesk.hyperspace.com',
   baseUrl: '/',
 
   // Add Google Fonts for Nunito
@@ -44,8 +44,8 @@ const config: Config = {
     },
   ],
 
-  organizationName: 'hotovo',
-  projectName: 'aider-desk',
+  organizationName: 'hyperspace',
+  projectName: 'reactorpro',
   trailingSlash: false,
 
   onBrokenLinks: 'throw',
@@ -121,9 +121,9 @@ const config: Config = {
     //   //... other Algolia params
     // },
     navbar: {
-      title: 'AiderDesk',
+      title: 'ReactorPro',
       logo: {
-        alt: 'AiderDesk Logo',
+        alt: 'ReactorPro Logo',
         src: '/img/icon.png',
         href: '/',
       },
@@ -135,7 +135,7 @@ const config: Config = {
           activeBaseRegex: '^/docs',
         },
         {
-          href: 'https://github.com/hotovo/aider-desk',
+          href: 'https://github.com/hyperspace/reactorpro',
           label: 'GitHub',
           position: 'right',
           className: 'navbar__item--no-external-icon',
@@ -144,7 +144,7 @@ const config: Config = {
     },
     footer: {
       style: 'dark',
-      copyright: `Copyright © ${new Date().getFullYear()} AiderDesk contributors. Happy coding!`,
+      copyright: `Copyright © ${new Date().getFullYear()} ReactorPro contributors. Happy coding!`,
     },
     prism: {
       theme: prismThemes.github,

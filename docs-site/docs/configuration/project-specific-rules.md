@@ -9,15 +9,15 @@ To ensure the AI agent adheres to the specific conventions, architecture, and be
 
 ## Rule File Locations
 
-AiderDesk supports multiple levels of rule files that are automatically included in the agent's context:
+ReactorPro supports multiple levels of rule files that are automatically included in the agent's context:
 
-### 1. Project-Level Rules (`.aider-desk/rules/`)
+### 1. Project-Level Rules (`.reactorpro/rules/`)
 
-AiderDesk automatically looks for a directory named `.aider-desk/rules/` in the root of your project. Any markdown files (`.md`) placed in this directory will be automatically read and included in the agent's system prompt as read-only context.
+ReactorPro automatically looks for a directory named `.reactorpro/rules/` in the root of your project. Any markdown files (`.md`) placed in this directory will be automatically read and included in the agent's system prompt as read-only context.
 
 This allows you to create a persistent set of instructions that guide every agent interaction within that project.
 
-### 2. Agent-Specific Rules (`.aider-desk/agents/{profile}/rules/`)
+### 2. Agent-Specific Rules (`.reactorpro/agents/{profile}/rules/`)
 
 Each agent profile can have its own `rules/` directory containing markdown files with instructions specific to that agent. This allows you to:
 
@@ -25,7 +25,7 @@ Each agent profile can have its own `rules/` directory containing markdown files
 - Override or extend project-level rules for specific agents
 - Provide agent-specific guidance while maintaining project-wide standards
 
-### 3. Global Rules (`~/.aider-desk/agents/{profile}/rules/`)
+### 3. Global Rules (`~/.reactorpro/agents/{profile}/rules/`)
 
 Global agent profiles can also have their own `rules/` directories, which are inherited by project-level profiles with the same ID.
 
@@ -33,9 +33,9 @@ Global agent profiles can also have their own `rules/` directories, which are in
 
 When multiple rule sources exist, they are combined in the following order:
 
-1. **Global agent rules** (from `~/.aider-desk/agents/{profile}/rules/`)
-2. **Project-level rules** (from `$projectDir/.aider-desk/rules/`)
-3. **Project agent rules** (from `$projectDir/.aider-desk/agents/{profile}/rules/`)
+1. **Global agent rules** (from `~/.reactorpro/agents/{profile}/rules/`)
+2. **Project-level rules** (from `$projectDir/.reactorpro/rules/`)
+3. **Project agent rules** (from `$projectDir/.reactorpro/agents/{profile}/rules/`)
 
 This allows project-level profiles to extend and customize global profiles while maintaining a consistent foundation.
 
@@ -43,7 +43,7 @@ This allows project-level profiles to extend and customize global profiles while
 
 Good candidates for rule files include:
 
-#### Project-Level Rules (`.aider-desk/rules/`)
+#### Project-Level Rules (`.reactorpro/rules/`)
 - **High-level architecture overview**: Describe the main components and how they interact.
 - **Coding conventions**: Specify code style, naming conventions, or patterns that are unique to your project.
 - **Technology stack**: List the key libraries, frameworks, and tools used.
@@ -60,7 +60,7 @@ Good candidates for rule files include:
 
 #### For Project-Level Rules
 ```
-.aider-desk/rules/
+.reactorpro/rules/
 ├── architecture.md          # High-level system design
 ├── coding-standards.md      # Code style and conventions
 ├── testing-guidelines.md    # Testing practices and requirements
@@ -69,11 +69,11 @@ Good candidates for rule files include:
 
 #### For Agent-Specific Rules
 ```
-.aider-desk/agents/code-reviewer/rules/
+.reactorpro/agents/code-reviewer/rules/
 ├── review-checklist.md      # What to look for during code reviews
 └── security-focus.md        # Security-specific review guidelines
 
-.aider-desk/agents/refactoring/rules/
+.reactorpro/agents/refactoring/rules/
 ├── refactoring-patterns.md  # Common refactoring patterns to use
 └── backward-compatibility.md # Rules for maintaining compatibility
 ```
@@ -88,7 +88,7 @@ Since rule files are stored as regular markdown files, you can:
 - **Review rule changes** through pull requests
 
 ### Real-time Updates
-AiderDesk automatically monitors rule files for changes:
+ReactorPro automatically monitors rule files for changes:
 - **Immediate application**: Changes to rule files are applied instantly without restarting
 - **File watching**: The system detects additions, modifications, and deletions
 - **Error handling**: Malformed rule files are skipped with warnings in the logs

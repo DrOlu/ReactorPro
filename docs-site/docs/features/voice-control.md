@@ -5,7 +5,7 @@ sidebar_label: "Voice Control"
 
 # Voice Control
 
-Voice Control allows you to use speech-to-text functionality to dictate your prompts directly into the chat input field. This feature provides a hands-free way to interact with AiderDesk, making it easier to input long or complex prompts without typing.
+Voice Control allows you to use speech-to-text functionality to dictate your prompts directly into the chat input field. This feature provides a hands-free way to interact with ReactorPro, making it easier to input long or complex prompts without typing.
 
 ## Supported Providers
 

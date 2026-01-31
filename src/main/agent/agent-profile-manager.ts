@@ -357,7 +357,7 @@ export class AgentProfileManager {
           } else {
             // If no config.json exists, check if this is a project-level directory
             // and if there's a corresponding global profile, merge project-level rule files
-            if (agentsDir.includes('.aider-desk/agents')) {
+            if (agentsDir.includes('.reactorpro/agents')) {
               await this.mergeProjectRuleFilesIntoGlobalProfile(entry.name, agentsDir);
             }
           }

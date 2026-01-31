@@ -252,7 +252,7 @@ const initWindow = async (store: Store): Promise<BrowserWindow> => {
 
 app.whenReady().then(async () => {
   try {
-    electronApp.setAppUserModelId('com.hotovo.aider-desk');
+    electronApp.setAppUserModelId('com.hyperspace.reactorpro');
 
     if (!HEADLESS_MODE) {
       // Setup custom menu only in GUI mode
@@ -263,7 +263,7 @@ app.whenReady().then(async () => {
       });
     }
 
-    logger.info('------------ Starting AiderDesk... ------------');
+    logger.info('------------ Starting ReactorPro... ------------');
     logger.info('Initializing fix-path...');
     (await import('fix-path')).default();
 
@@ -275,7 +275,7 @@ app.whenReady().then(async () => {
         width: 400,
         icon,
       });
-      progressBar.title = 'Starting AiderDesk...';
+      progressBar.title = 'Starting ReactorPro...';
       progressBar.setDetail('Initializing core components...');
 
       await new Promise((resolve) => {
@@ -330,7 +330,7 @@ app.whenReady().then(async () => {
       });
     }
   } catch (error) {
-    logger.error('Failed to start AiderDesk:', error);
+    logger.error('Failed to start ReactorPro:', error);
     app.quit();
   }
 });

@@ -402,7 +402,7 @@ export const createTasksToolset = (settings: SettingsData, task: Task, profile: 
         logger.error('Error executing task search command:', error);
         task.addLogMessage(
           'error',
-          `Task search failed with error:\n\n${errorMessage}\n\nPlease, consider reporting an issue at https://github.com/hotovo/aider-desk/issues. Thank you.`,
+          `Task search failed with error:\n\n${errorMessage}\n\nPlease, consider reporting an issue at https://github.com/hyperspace/reactorpro/issues. Thank you.`,
         );
         return errorMessage;
       }
@@ -500,7 +500,7 @@ export const createSearchParentTaskTool = (task: Task, promptContext?: PromptCon
         logger.error('Error executing parent task search command:', error);
         task.addLogMessage(
           'error',
-          `Parent task search failed with error:\n\n${errorMessage}\n\nPlease, consider reporting an issue at https://github.com/hotovo/aider-desk/issues. Thank you.`,
+          `Parent task search failed with error:\n\n${errorMessage}\n\nPlease, consider reporting an issue at https://github.com/hyperspace/reactorpro/issues. Thank you.`,
         );
         return errorMessage;
       }

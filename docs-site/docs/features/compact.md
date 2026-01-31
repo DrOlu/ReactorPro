@@ -5,11 +5,11 @@ sidebar_label: "Compact Conversation"
 
 # `/compact` Command
 
-The `/compact` command helps you summarize your conversation history with AiderDesk. This is particularly useful for long conversations, as it condenses the previous interactions into a concise summary, allowing the AI agent to maintain context more efficiently without being overwhelmed by excessive history.
+The `/compact` command helps you summarize your conversation history with ReactorPro. This is particularly useful for long conversations, as it condenses the previous interactions into a concise summary, allowing the AI agent to maintain context more efficiently without being overwhelmed by excessive history.
 
 ## What It Does
 
-When you run `/compact`, AiderDesk analyzes the entire conversation history in the current project. It then generates a structured summary that includes:
+When you run `/compact`, ReactorPro analyzes the entire conversation history in the current project. It then generates a structured summary that includes:
 
 -   The primary request and overall intent of the conversation.
 -   Key technical concepts discussed.

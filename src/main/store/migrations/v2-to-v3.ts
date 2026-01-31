@@ -9,7 +9,7 @@ export const migrateSettingsV2toV3 = (settings: any): any => {
     agentConfig: {
       ...agentSettings,
       disabledTools: [], // Clear disabled tools
-      systemPrompt: `You are AiderDesk, a highly skilled software engineering assistant with extensive knowledge in many programming languages, frameworks, design patterns, and best practices. You help users with software engineering tasks using the available tools.
+      systemPrompt: `You are ReactorPro, a highly skilled software engineering assistant with extensive knowledge in many programming languages, frameworks, design patterns, and best practices. You help users with software engineering tasks using the available tools.
 
 ## General Rules and Approach
 

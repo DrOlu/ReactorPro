@@ -1,10 +1,10 @@
 # Look and Feel
 
-AiderDesk provides extensive customization options for themes and fonts, allowing you to personalize the application's appearance to match your preferences and workflow.
+ReactorPro provides extensive customization options for themes and fonts, allowing you to personalize the application's appearance to match your preferences and workflow.
 
 ## Overview
 
-The Look and Feel settings in AiderDesk are built on a flexible CSS custom properties system that enables:
+The Look and Feel settings in ReactorPro are built on a flexible CSS custom properties system that enables:
 
 - **Dynamic theme switching** without application restart
 - **Comprehensive color theming** covering all UI elements
@@ -15,7 +15,7 @@ The Look and Feel settings in AiderDesk are built on a flexible CSS custom prope
 
 ### How Themes Work
 
-AiderDesk themes are implemented using CSS custom properties (variables) that define the complete color palette for the application. Each theme is a self-contained SCSS file that defines:
+ReactorPro themes are implemented using CSS custom properties (variables) that define the complete color palette for the application. Each theme is a self-contained SCSS file that defines:
 
 - **Background colors** (primary, secondary, tertiary, etc.)
 - **Text colors** (primary, secondary, muted, etc.)
@@ -24,11 +24,11 @@ AiderDesk themes are implemented using CSS custom properties (variables) that de
 - **Status colors** (success, warning, error, info)
 - **Specialized colors** for code blocks, diff viewers, and agent indicators
 
-When you select a theme, AiderDesk applies the corresponding CSS class to the document body, which activates all the color variables defined in that theme.
+When you select a theme, ReactorPro applies the corresponding CSS class to the document body, which activates all the color variables defined in that theme.
 
 ### Available Themes
 
-AiderDesk includes 14 carefully crafted themes:
+ReactorPro includes 14 carefully crafted themes:
 
 #### Dark Themes
 - **Dark** - The default theme with balanced contrast and modern appearance
@@ -63,7 +63,7 @@ AiderDesk includes 14 carefully crafted themes:
 
 ### How Fonts Work
 
-AiderDesk's font system is built on web fonts with CSS custom properties:
+ReactorPro's font system is built on web fonts with CSS custom properties:
 
 - **Font Files**: All fonts are included as TrueType (.ttf) files
 - **@font-face Declarations**: Each font is properly declared in CSS for cross-browser compatibility
@@ -72,7 +72,7 @@ AiderDesk's font system is built on web fonts with CSS custom properties:
 
 ### Available Fonts
 
-AiderDesk includes 19 carefully selected fonts covering various styles:
+ReactorPro includes 19 carefully selected fonts covering various styles:
 
 #### Monospace/Code Fonts
 - **Sono** - The default font, modern and highly readable
@@ -113,7 +113,7 @@ AiderDesk includes 19 carefully selected fonts covering various styles:
 
 ### Adding a New Theme
 
-To contribute a new theme to AiderDesk, follow these steps:
+To contribute a new theme to ReactorPro, follow these steps:
 
 #### 1. Create the Theme SCSS File
 
@@ -225,7 +225,7 @@ Before submitting your theme, ensure it:
 
 ### Adding a New Font
 
-To contribute a new font to AiderDesk, follow these steps:
+To contribute a new font to ReactorPro, follow these steps:
 
 #### 1. Obtain the Font File
 
@@ -342,4 +342,4 @@ If you encounter issues with fonts:
 - **Maintenance**: Be prepared to maintain your contribution over time
 - **Community**: Engage with user feedback and make improvements based on usage
 
-By following these guidelines, you can help make AiderDesk more customizable and enjoyable for everyone in the community.
+By following these guidelines, you can help make ReactorPro more customizable and enjoyable for everyone in the community.

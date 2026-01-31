@@ -5,7 +5,7 @@ sidebar_label: "MCP Servers"
 
 # MCP Servers
 
-AiderDesk's Agent Mode can be extended with external tools through the **Model Context Protocol (MCP)**. By connecting to MCP servers, you can grant the agent new capabilities, such as web browsing, accessing documentation, or interacting with custom internal services.
+ReactorPro's Agent Mode can be extended with external tools through the **Model Context Protocol (MCP)**. By connecting to MCP servers, you can grant the agent new capabilities, such as web browsing, accessing documentation, or interacting with custom internal services.
 
 ## What is MCP?
 
@@ -24,7 +24,7 @@ You can manage your MCP servers in **Settings > Agent**.
 
 ### Configuration Format
 
-The configuration is a JSON object that specifies how to run the MCP server. AiderDesk will start and manage the server process for you.
+The configuration is a JSON object that specifies how to run the MCP server. ReactorPro will start and manage the server process for you.
 
 The configuration requires a `command` and an array of `args`. You can also provide environment variables in an `env` object.
 

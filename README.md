@@ -1,24 +1,24 @@
 
-# ✨ AiderDesk: The AI-Powered Development Platform
+# ✨ ReactorPro: The AI-Powered Development Platform
 
-[![Documentation](https://img.shields.io/badge/Docs-blue?logo=ReadTheDocs&logoColor=white)](https://aiderdesk.hotovo.com/docs)
+[![Documentation](https://img.shields.io/badge/Docs-blue?logo=ReadTheDocs&logoColor=white)](https://reactorpro.ng/docs)
 [![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/dyM3G9nTe4)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hotovo/aider-desk)
-[![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/hotovo/aider-desk)](https://gitmcp.io/hotovo/aider-desk)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hotovo/reactorpro)
+[![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/hotovo/reactorpro)](https://gitmcp.io/hotovo/reactorpro)
 
-**AiderDesk transforms how you write software** by combining an autonomous AI agent, powerful code generation, and a comprehensive toolset into a single desktop application. Whether you're building complex features, refactoring large codebases, or automating repetitive tasks, AiderDesk gives you an intelligent coding companion that works the way you do.
+**ReactorPro transforms how you write software** by combining an autonomous AI agent, powerful code generation, and a comprehensive toolset into a single desktop application. Whether you're building complex features, refactoring large codebases, or automating repetitive tasks, ReactorPro gives you an intelligent coding companion that works the way you do.
 
 ## 🎬 Overview
 
 <div align="center">
   <a href="https://www.youtube.com/watch?v=KSWlhB-O2SE">
-    <img src="https://img.youtube.com/vi/9oyIdntCh7g/0.jpg" alt="AiderDesk Overview Video" width=400>
+    <img src="https://img.youtube.com/vi/9oyIdntCh7g/0.jpg" alt="ReactorPro Overview Video" width=400>
   </a>
 </div>
 
 ## ✨ Key Features
 
-AiderDesk is packed with features designed for modern software development:
+ReactorPro is packed with features designed for modern software development:
 
 * **🤖 Autonomous Agent Mode**: An intelligent AI agent (powered by Vercel AI SDK) that autonomously plans and executes complex tasks—from implementing features to refactoring entire modules. Just describe what you need, and the agent breaks it down, explores your codebase, uses the right tools, and delivers results.
 * **🧩 Extensible Tool Ecosystem**:
@@ -34,22 +34,22 @@ AiderDesk is packed with features designed for modern software development:
 * **📂 Advanced Task Management**: Organize work with tasks that include chat history, context files, cost tracking, todos, and optional Git worktree isolation for safe experimentation.
 * **🌿 Git Worktrees**: Create isolated development environments for safe, parallel feature development. Multiple merge strategies with built-in revert support.
 * **🔌 Effortless IDE Integration**: Automatically sync context files with your active editor in:
-  * IntelliJ IDEA ([Plugin](https://plugins.jetbrains.com/plugin/26313-aiderdesk-connector) | [GitHub](https://github.com/hotovo/aider-desk-connector-intellij-plugin))
-  * VSCode ([Extension](https://marketplace.visualstudio.com/items?itemName=hotovo-sk.aider-desk-connector) | [GitHub](https://github.com/hotovo/aider-desk-connector-vscode-extension))
+  * IntelliJ IDEA ([Plugin](https://plugins.jetbrains.com/plugin/26313-aiderdesk-connector) | [GitHub](https://github.com/hotovo/reactorpro-connector-intellij-plugin))
+  * VSCode ([Extension](https://marketplace.visualstudio.com/items?itemName=hotovo-sk.reactorpro-connector) | [GitHub](https://github.com/hotovo/reactorpro-connector-vscode-extension))
 * **🧩 MCP Server Support**: Connect to any Model Context Protocol (MCP) server to add external capabilities (web browsing, database access, custom tools).
 * **⚙️ Hooks & Automation**: JavaScript hooks for workflow automation—respond to events, modify behavior, and integrate with external tools.
 * **📊 Usage Dashboard**: Visualize token usage, costs, and model distribution with interactive charts and tables.
 * **💰 Cost Tracking**: Monitor token usage and associated costs per task for both Aider and Agent.
-* **🌐 REST API**: Integrate AiderDesk with external tools and workflows.
-* **🌐 AiderDesk as MCP Server**: Expose AiderDesk's core functionality to other MCP-compatible clients (Claude Desktop, Cursor, etc.).
+* **🌐 REST API**: Integrate ReactorPro with external tools and workflows.
+* **🌐 ReactorPro as MCP Server**: Expose ReactorPro's core functionality to other MCP-compatible clients (Claude Desktop, Cursor, etc.).
 
-[**Learn more about AiderDesk →**](https://aiderdesk.hotovo.com/docs)
+[**Learn more about ReactorPro →**](https://reactorpro.ng/docs)
 
 ---
 
 ### 🤖 Agent Mode: Autonomous AI Assistant
 
-AiderDesk's Agent Mode transforms the application into a powerful, autonomous coding companion. Instead of just generating code snippets, the agent can:
+ReactorPro's Agent Mode transforms the application into a powerful, autonomous coding companion. Instead of just generating code snippets, the agent can:
 
 - **Plan Multi-Step Work**: Break down complex requests like "implement OAuth authentication" into actionable steps
 - **Intelligently Explore**: Use semantic search and grep to understand your codebase structure
@@ -78,13 +78,13 @@ AiderDesk's Agent Mode transforms the application into a powerful, autonomous co
 - **Aider**: AI-powered code generation and refactoring
 - **Aider with Power Search**: Hybrid approach combining code generation with advanced search
 
-[**Learn more about Agent Mode →**](https://aiderdesk.hotovo.com/docs/agent-mode)
+[**Learn more about Agent Mode →**](https://reactorpro.ng/docs/agent-mode)
 
 ---
 
 ### 🌿 Git Worktrees: Isolated Development Environments
 
-AiderDesk's Git Worktrees feature provides professional-grade isolation for your development work, enabling safe experimentation and parallel development without affecting your main project branch.
+ReactorPro's Git Worktrees feature provides professional-grade isolation for your development work, enabling safe experimentation and parallel development without affecting your main project branch.
 
 #### Key Benefits:
 
@@ -107,13 +107,13 @@ AiderDesk's Git Worktrees feature provides professional-grade isolation for your
 - **Squash & Merge**: Creates a single clean commit with AI-generated message
 - **Uncommitted Only**: Transfers work-in-progress changes without merging commits
 
-[**Learn more about Git Worktrees →**](https://aiderdesk.hotovo.com/docs/features/git-worktrees)
+[**Learn more about Git Worktrees →**](https://reactorpro.ng/docs/features/git-worktrees)
 
 ---
 
 ### 🧠 Memory: AI That Learns Your Project
 
-AiderDesk's Memory system enables the agent to **store and retrieve durable, project-scoped knowledge** across tasks. This helps the agent remember:
+ReactorPro's Memory system enables the agent to **store and retrieve durable, project-scoped knowledge** across tasks. This helps the agent remember:
 
 - **Your Preferences**: Formatting rules, frameworks you prefer, naming conventions
 - **Architectural Decisions**: "We use Zod for validation", "REST client lives in src/renderer/src/api/"
@@ -126,7 +126,7 @@ AiderDesk's Memory system enables the agent to **store and retrieve durable, pro
 - **Agent Integration**: Automatically retrieves relevant memories at task start and stores outcomes after completion
 - **Manual Management**: Browse, filter, and delete memories from Settings
 
-[**Learn more about Memory →**](https://aiderdesk.hotovo.com/docs/features/memory)
+[**Learn more about Memory →**](https://reactorpro.ng/docs/features/memory)
 
 ---
 
@@ -142,16 +142,16 @@ Skills let you package **reusable, on-demand expertise** that the agent can load
 
 - **Repeatable Workflows**: "How we do releases", "how we write PR descriptions"
 - **Domain-Specific Playbooks**: Internal processes, project conventions, brand guidelines
-- **Project-Specific Knowledge**: Keep `.aider-desk/skills/` in your repo for team sharing
-- **Global Skills**: Personal skills in `~/.aider-desk/skills/` for all your projects
+- **Project-Specific Knowledge**: Keep `.reactorpro/skills/` in your repo for team sharing
+- **Global Skills**: Personal skills in `~/.reactorpro/skills/` for all your projects
 
-[**Learn more about Skills →**](https://aiderdesk.hotovo.com/docs/features/skills)
+[**Learn more about Skills →**](https://reactorpro.ng/docs/features/skills)
 
 ---
 
 ### 🎛️ Hooks: Automate Workflows
 
-Hooks allow you to **extend AiderDesk's behavior** by executing custom JavaScript code in response to system events. Automate workflows, enforce rules, or integrate with external tools.
+Hooks allow you to **extend ReactorPro's behavior** by executing custom JavaScript code in response to system events. Automate workflows, enforce rules, or integrate with external tools.
 
 #### Hook Events:
 
@@ -164,16 +164,16 @@ Hooks allow you to **extend AiderDesk's behavior** by executing custom JavaScrip
 
 #### Locations:
 
-- **Global Hooks**: `~/.aider-desk/hooks/` (all projects)
-- **Project Hooks**: `.aider-desk/hooks/` (project-specific)
+- **Global Hooks**: `~/.reactorpro/hooks/` (all projects)
+- **Project Hooks**: `.reactorpro/hooks/` (project-specific)
 
-[**Learn more about Hooks →**](https://aiderdesk.hotovo.com/docs/features/hooks)
+[**Learn more about Hooks →**](https://reactorpro.ng/docs/features/hooks)
 
 ---
 
 ### 📂 Task System: Organize Your Work
 
-AiderDesk's task management system provides a comprehensive way to organize work with:
+ReactorPro's task management system provides a comprehensive way to organize work with:
 
 - **Complete State**: Chat history, context files, todos, costs, and metadata
 - **Working Modes**: Local development or isolated Git worktree
@@ -181,9 +181,9 @@ AiderDesk's task management system provides a comprehensive way to organize work
 - **Todo System**: Built-in checklists that agents can manage automatically
 - **Task Operations**: Create, rename, duplicate, delete, export (Markdown/Image)
 
-Tasks are stored per project in `.aider-desk/tasks/` with full state persistence.
+Tasks are stored per project in `.reactorpro/tasks/` with full state persistence.
 
-[**Learn more about Task System →**](https://aiderdesk.hotovo.com/docs/features/tasks)
+[**Learn more about Task System →**](https://reactorpro.ng/docs/features/tasks)
 
 ---
 
@@ -197,16 +197,16 @@ Keep the AI focused on the relevant code with flexible context management option
   </a>
 </div>
 
-1. **Automatic IDE Sync**: Use the IntelliJ IDEA or VSCode plugins to automatically add/remove the currently active file(s) in your editor to/from the AiderDesk context.
-2. **Manual Control**: Utilize the "Context Files" sidebar in AiderDesk, which displays your project's file tree. Click files to manually add or remove them from the context, giving you precise control.
+1. **Automatic IDE Sync**: Use the IntelliJ IDEA or VSCode plugins to automatically add/remove the currently active file(s) in your editor to/from the ReactorPro context.
+2. **Manual Control**: Utilize the "Context Files" sidebar in ReactorPro, which displays your project's file tree. Click files to manually add or remove them from the context, giving you precise control.
 
-[**Learn more about Context Files →**](https://aiderdesk.hotovo.com/docs/features/ide-integration)
+[**Learn more about Context Files →**](https://reactorpro.ng/docs/features/ide-integration)
 
 ---
 
 ### 💰 Cost Optimization
 
-AiderDesk provides multiple ways to optimize your AI spending:
+ReactorPro provides multiple ways to optimize your AI spending:
 
 - **Per-Task Cost Tracking**: Separate tracking for Aider and Agent operations
 - **Usage Dashboard**: Visualize token usage, costs, and model distribution
@@ -217,7 +217,7 @@ AiderDesk provides multiple ways to optimize your AI spending:
 - **Context Optimization**: Agent only loads what's needed (skills, memories)
 - **Tool Approval Control**: Set tools to "Always", "Ask", or "Never" to prevent unnecessary operations
 
-[**Learn more about Cost Optimization →**](https://aiderdesk.hotovo.com/docs/features/usage-dashboard)
+[**Learn more about Cost Optimization →**](https://reactorpro.ng/docs/features/usage-dashboard)
 
 ---
 
@@ -225,13 +225,13 @@ AiderDesk provides multiple ways to optimize your AI spending:
 
 ### Quick Start
 
-1. Download the latest release for your OS from [Releases](https://github.com/hotovo/aider-desk/releases).
+1. Download the latest release for your OS from [Releases](https://github.com/hotovo/reactorpro/releases).
 2. Run the executable.
 
 ### Recommended First Steps
 
 1. **Try Agent Mode**: Switch to Agent mode (`/agent`) and ask to agent to explore your codebase or implement a feature
-2. **Create a Skill**: Add a skill to `.aider-desk/skills/` to encode your team's conventions
+2. **Create a Skill**: Add a skill to `.reactorpro/skills/` to encode your team's conventions
 3. **Set Up Memory**: Enable Memory tools in Agent Settings to let to agent learn your project patterns
 
 ### Troubleshooting
@@ -245,7 +245,7 @@ To prevent automatic updates, set the `AIDER_DESK_NO_AUTO_UPDATE` environment va
 
 ### Custom Aider Version
 
-By default, AiderDesk installs the latest version of the `aider-chat` Python package. If you need to use a specific version of Aider, you can set the `AIDER_DESK_AIDER_VERSION` environment variable.
+By default, ReactorPro installs the latest version of the `aider-chat` Python package. If you need to use a specific version of Aider, you can set the `AIDER_DESK_AIDER_VERSION` environment variable.
 
 For example, to use Aider version 0.83.1:
 
@@ -264,7 +264,7 @@ You can also specify a git URL for installing a development version of Aider:
 export AIDER_DESK_AIDER_VERSION=git+https://github.com/user/aider.git@branch-name
 ```
 
-This variable will be used during the initial setup and when AiderDesk checks for updates. For more detailed information, please refer to [our docs](https://aiderdesk.hotovo.com/docs/advanced/custom-aider-version).
+This variable will be used during the initial setup and when ReactorPro checks for updates. For more detailed information, please refer to [our docs](https://reactorpro.ng/docs/advanced/custom-aider-version).
 
 ## 👨‍💻 Development Setup
 
@@ -272,8 +272,8 @@ If you want to run from source, you can follow these steps:
 
 ```bash
 # Clone the repository
-$ git clone https://github.com/hotovo/aider-desk.git
-$ cd aider-desk
+$ git clone https://github.com/hotovo/reactorpro.git
+$ cd reactorpro
 
 # Install dependencies
 $ npm install
@@ -294,7 +294,7 @@ $ npm run build:linux
 
 ## 🤝 Contributing
 
-We welcome contributions from the community! Here's how you can help improve aider-desk:
+We welcome contributions from the community! Here's how you can help improve reactorpro:
 
 1. **Fork the repository** on GitHub
 2. **Create a new branch** for your feature or bugfix:
@@ -317,6 +317,6 @@ For major changes, please open an issue first to discuss what you would like to 
 ## ⭐ Star History
 
 [![Star History
-Chart](https://api.star-history.com/svg?repos=hotovo/aider-desk&type=Date)](https://star-history.com/#hotovo/aider-desk&Date)
+Chart](https://api.star-history.com/svg?repos=hotovo/reactorpro&type=Date)](https://star-history.com/#hotovo/reactorpro&Date)
 
 Thank you ❤️

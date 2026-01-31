@@ -704,8 +704,8 @@ export class EventsHandler {
     return await this.versionsManager.getVersions(forceRefresh);
   }
 
-  async downloadLatestAiderDesk(): Promise<void> {
-    await this.versionsManager.downloadLatestAiderDesk();
+  async downloadLatestReactorPro(): Promise<void> {
+    await this.versionsManager.downloadLatestReactorPro();
   }
 
   getReleaseNotes(): string | null {

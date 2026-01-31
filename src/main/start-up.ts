@@ -180,7 +180,7 @@ const installAiderConnectorRequirements = async (cleanInstall: boolean, updatePr
 
 const setupMcpServer = async () => {
   if (isDev()) {
-    logger.info('Skipping AiderDesk MCP server setup in dev mode');
+    logger.info('Skipping ReactorPro MCP server setup in dev mode');
     return;
   }
 
@@ -234,7 +234,7 @@ export type UpdateProgressData = {
 export type UpdateProgressFunction = (data: UpdateProgressData) => void;
 
 export const performStartUp = async (updateProgress: UpdateProgressFunction): Promise<boolean> => {
-  logger.info('Starting AiderDesk setup process');
+  logger.info('Starting ReactorPro setup process');
 
   if (fs.existsSync(SETUP_COMPLETE_FILENAME) && fs.existsSync(PYTHON_VENV_DIR)) {
     logger.info('Setup previously completed, performing update check');
@@ -251,7 +251,7 @@ export const performStartUp = async (updateProgress: UpdateProgressFunction): Pr
   await delay(1000);
 
   if (!fs.existsSync(AIDER_DESK_DATA_DIR)) {
-    logger.info(`Creating AiderDesk directory: ${AIDER_DESK_DATA_DIR}`);
+    logger.info(`Creating ReactorPro directory: ${AIDER_DESK_DATA_DIR}`);
     fs.mkdirSync(AIDER_DESK_DATA_DIR, { recursive: true });
   }
   updateProgress({
@@ -314,10 +314,10 @@ export const performStartUp = async (updateProgress: UpdateProgressFunction): Pr
       progress: 100,
     });
 
-    logger.info('AiderDesk setup completed successfully');
+    logger.info('ReactorPro setup completed successfully');
     return true;
   } catch (error) {
-    logger.error('AiderDesk setup failed', { error });
+    logger.error('ReactorPro setup failed', { error });
 
     // Clean up if setup fails
     if (fs.existsSync(PYTHON_VENV_DIR)) {

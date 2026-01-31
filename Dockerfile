@@ -1,4 +1,4 @@
-# Multi-stage build for AiderDesk Docker image
+# Multi-stage build for ReactorPro Docker image
 # Python 3.12 is required for Aider connector
 FROM node:24-slim AS builder
 

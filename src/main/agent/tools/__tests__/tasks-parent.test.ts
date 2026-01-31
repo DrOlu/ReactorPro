@@ -30,7 +30,7 @@ describe('Tasks Tools - search_parent_task', () => {
 
   const TASKS_TOOL_GROUP_NAME = 'tasks';
   const TASKS_TOOL_SEARCH_PARENT_TASK = 'search_parent_task';
-  const AIDER_DESK_TASKS_DIR = '.aider-desk/tasks';
+  const AIDER_DESK_TASKS_DIR = '.reactorpro/tasks';
 
   beforeEach(async () => {
     vi.clearAllMocks();

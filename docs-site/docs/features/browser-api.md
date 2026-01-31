@@ -5,11 +5,11 @@ sidebar_label: "Browser API"
 
 # Browser API Implementation
 
-The Browser API provides a JavaScript/TypeScript interface for interacting with AiderDesk directly from web browsers, enabling browser-based integrations and applications.
+The Browser API provides a JavaScript/TypeScript interface for interacting with ReactorPro directly from web browsers, enabling browser-based integrations and applications.
 
 ## Overview
 
-The Browser API combines the [REST API](./rest-api) with [SocketIO real-time events](./socketio-events) to provide a complete programmatic interface to AiderDesk. This allows developers to build web-based IDE plugins, dashboards, and integrations that work seamlessly with AiderDesk.
+The Browser API combines the [REST API](./rest-api) with [SocketIO real-time events](./socketio-events) to provide a complete programmatic interface to ReactorPro. This allows developers to build web-based IDE plugins, dashboards, and integrations that work seamlessly with ReactorPro.
 
 ### Architecture
 
@@ -17,7 +17,7 @@ The Browser API consists of three main components:
 
 1. **HTTP Client**: Axios-based REST API client for synchronous operations
 2. **SocketIO Client**: Real-time event streaming for live updates
-3. **ApplicationAPI Interface**: Unified TypeScript interface matching the main AiderDesk API
+3. **ApplicationAPI Interface**: Unified TypeScript interface matching the main ReactorPro API
 
 ## Getting Started
 
@@ -35,7 +35,7 @@ import { BrowserApi } from './browser-api';
 // Initialize the API
 const api = new BrowserApi();
 
-// Connect to AiderDesk (default port 24337)
+// Connect to ReactorPro (default port 24337)
 await api.initialize();
 
 // Start a project
@@ -58,7 +58,7 @@ unsubscribe();
 ### Project Management
 
 #### `startProject(baseDir: string)`
-Starts a new AiderDesk project.
+Starts a new ReactorPro project.
 
 ```javascript
 await api.startProject('/path/to/project');
@@ -279,7 +279,7 @@ const modelsInfo = await api.loadModelsInfo();
 ```javascript
 import { BrowserApi } from './browser-api';
 
-class AiderDeskIntegration {
+class ReactorProIntegration {
   constructor() {
     this.api = new BrowserApi();
     this.currentProject = null;
@@ -366,7 +366,7 @@ class AiderDeskIntegration {
 }
 
 // Usage
-const integration = new AiderDeskIntegration();
+const integration = new ReactorProIntegration();
 await integration.initialize('/path/to/my/project');
 await integration.runPrompt('Create a user authentication system');
 ```
@@ -475,7 +475,7 @@ class EventManager {
 import { useEffect, useState } from 'react';
 import { BrowserApi } from './browser-api';
 
-export function useAiderDesk(projectDir) {
+export function useReactorPro(projectDir) {
   const [api, setApi] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [response, setResponse] = useState('');

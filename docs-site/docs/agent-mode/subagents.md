@@ -15,7 +15,7 @@ sidebar_label: "Subagents"
 - [Advanced Usage](#advanced-usage)
 - [Troubleshooting](#troubleshooting)
 
-Subagents are specialized AI assistants that can be created and configured within AiderDesk to handle specific types of tasks. They enable more efficient problem-solving by providing task-specific configurations with customized system prompts and separate tool access permissions.
+Subagents are specialized AI assistants that can be created and configured within ReactorPro to handle specific types of tasks. They enable more efficient problem-solving by providing task-specific configurations with customized system prompts and separate tool access permissions.
 
 ## What are Subagents?
 
@@ -50,7 +50,7 @@ Subagents enable strategic model selection for different tasks, significantly re
 ### Creating a Subagent
 
 1. **Open Agent Settings**
-   - Navigate to **Settings > Agent** in the AiderDesk interface
+   - Navigate to **Settings > Agent** in the ReactorPro interface
 
 2. **Create or Edit a Profile**
    - Create a new agent profile or edit an existing one
@@ -280,4 +280,4 @@ This strategic approach ensures optimal AI spending while maintaining high-quali
 - Review tool approval settings in the Agent Settings
 - Test subagents with simple tasks to isolate configuration issues
 
-Subagents in AiderDesk provide a powerful way to specialize AI assistance for your specific workflow needs, enabling more efficient, reliable, and cost-effective AI-powered development.
+Subagents in ReactorPro provide a powerful way to specialize AI assistance for your specific workflow needs, enabling more efficient, reliable, and cost-effective AI-powered development.

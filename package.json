@@ -1,13 +1,13 @@
 {
-  "name": "aider-desk",
+  "name": "reactorpro",
   "version": "0.51.0-dev",
-  "description": "Aider desktop application wrapper",
+  "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
-  "author": "Hotovo",
-  "homepage": "https://aiderdesk.hotovo.com",
+  "author": "Hyperspace Technologies <agent@reactorpro.ng>",
+  "homepage": "https://reactorpro.ng",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hotovo/aider-desk.git"
+    "url": "https://github.com/DrOlu/ReactorPro.git"
   },
   "scripts": {
     "format": "prettier --write .",

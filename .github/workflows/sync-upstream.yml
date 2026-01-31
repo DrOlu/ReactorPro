@@ -1,0 +1,281 @@
+name: Sync from Upstream
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild even if no upstream changes'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  UPSTREAM_REPO: hotovo/aider-desk
+  UPSTREAM_BRANCH: main
+
+jobs:
+  sync-and-rebrand:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check_changes.outputs.has_changes }}
+      new_version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout ReactorPro
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git || true
+          git fetch upstream ${{ env.UPSTREAM_BRANCH }}
+
+      - name: Check for upstream changes
+        id: check_changes
+        run: |
+          # Get the last synced upstream commit (stored in .upstream-commit)
+          LAST_SYNCED=""
+          if [ -f .upstream-commit ]; then
+            LAST_SYNCED=$(cat .upstream-commit)
+          fi
+          
+          UPSTREAM_HEAD=$(git rev-parse upstream/${{ env.UPSTREAM_BRANCH }})
+          
+          echo "Last synced: $LAST_SYNCED"
+          echo "Upstream HEAD: $UPSTREAM_HEAD"
+          
+          if [ "$LAST_SYNCED" = "$UPSTREAM_HEAD" ] && [ "${{ inputs.force_rebuild }}" != "true" ]; then
+            echo "No upstream changes detected"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Upstream changes detected or force rebuild requested"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "upstream_commit=$UPSTREAM_HEAD" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Create a temporary branch for merging
+          git checkout -B sync-upstream
+          
+          # Backup our workflow files and icons
+          mkdir -p /tmp/workflow-backup
+          mkdir -p /tmp/icons-backup
+          cp -r .github/workflows/* /tmp/workflow-backup/ 2>/dev/null || true
+          cp -r build/icon.* /tmp/icons-backup/ 2>/dev/null || true
+          cp -r resources/icon.* /tmp/icons-backup/ 2>/dev/null || true
+          
+          # Merge upstream, preferring upstream for conflicts in most files
+          git merge upstream/${{ env.UPSTREAM_BRANCH }} \
+            -X theirs \
+            --no-edit \
+            --allow-unrelated-histories || true
+          
+          # If there are conflicts, resolve them
+          if git status | grep -q "Unmerged paths"; then
+            echo "Resolving merge conflicts..."
+            git checkout --theirs . 2>/dev/null || true
+            git add -A
+          fi
+          
+          # Restore our workflow files
+          cp -r /tmp/workflow-backup/* .github/workflows/ 2>/dev/null || true
+          git add .github/workflows/
+
+      - name: Setup Node
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply ReactorPro branding
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Applying ReactorPro branding..."
+          
+          # ============================================
+          # Package.json - Update names and branding
+          # ============================================
+          if [ -f package.json ]; then
+            node -e "
+              const pkg = require('./package.json');
+              pkg.name = 'reactorpro';
+              pkg.description = 'ReactorPro - AI coding agent for software engineers';
+              pkg.author = 'Hyperspace Technologies <agent@reactorpro.ng>';
+              pkg.homepage = 'https://reactorpro.ng';
+              pkg.repository = { type: 'git', url: 'https://github.com/DrOlu/ReactorPro.git' };
+              require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+          fi
+          
+          # ============================================
+          # electron-builder.yml
+          # ============================================
+          if [ -f electron-builder.yml ]; then
+            sed -i 's/com.hotovo.aider-desk/ng.hyperspace.reactorpro/g' electron-builder.yml
+            sed -i 's/productName: aider-desk/productName: ReactorPro/g' electron-builder.yml
+            sed -i 's/executableName: aider-desk/executableName: reactorpro/g' electron-builder.yml
+            sed -i 's/maintainer: Hotovo/maintainer: Hyperspace Technologies/g' electron-builder.yml
+          fi
+
+      - name: Apply source code branding
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Applying source code branding changes..."
+          
+          # ============================================
+          # Source files - visible strings only
+          # ============================================
+          find src -type f \( -name "*.ts" -o -name "*.tsx" \) -exec sed -i \
+            -e 's/AiderDesk/ReactorPro/g' \
+            -e 's/Aider Desk/ReactorPro/g' \
+            -e 's/aider-desk/reactorpro/g' \
+            -e 's/aiderdesk/reactorpro/g' {} \;
+          
+          # Update Hotovo references
+          find src -type f \( -name "*.ts" -o -name "*.tsx" \) -exec sed -i \
+            -e 's/Hotovo/Hyperspace Technologies/g' \
+            -e 's/hotovo/hyperspace/g' {} \;
+          
+          # Update URLs
+          find src -type f \( -name "*.ts" -o -name "*.tsx" \) -exec sed -i \
+            -e 's|aiderdesk.hotovo.com|reactorpro.ng|g' \
+            -e 's|hotovo/aider-desk|DrOlu/ReactorPro|g' {} \;
+          
+          # ============================================
+          # HTML files
+          # ============================================
+          find src -name "*.html" -type f -exec sed -i \
+            -e 's/AiderDesk/ReactorPro/g' \
+            -e 's/aider-desk/reactorpro/g' {} \;
+          
+          # ============================================
+          # README.md
+          # ============================================
+          if [ -f README.md ]; then
+            sed -i 's/AiderDesk/ReactorPro/g' README.md
+            sed -i 's/aider-desk/reactorpro/g' README.md
+            sed -i 's/Aider Desk/ReactorPro/g' README.md
+            sed -i 's/aider desk/ReactorPro/g' README.md
+            sed -i 's/hotovo\/aider-desk/DrOlu\/ReactorPro/g' README.md
+            sed -i 's/Hotovo/Hyperspace Technologies/g' README.md
+            sed -i 's/aiderdesk.hotovo.com/reactorpro.ng/g' README.md
+          fi
+          
+          # ============================================
+          # docs-site
+          # ============================================
+          if [ -d docs-site ]; then
+            find docs-site -type f \( -name "*.md" -o -name "*.json" -o -name "*.js" -o -name "*.ts" -o -name "*.tsx" \) -exec sed -i \
+              -e 's/AiderDesk/ReactorPro/g' \
+              -e 's/aider-desk/reactorpro/g' \
+              -e 's/Aider Desk/ReactorPro/g' \
+              -e 's/Hotovo/Hyperspace Technologies/g' \
+              -e 's/hotovo/hyperspace/g' \
+              -e 's|aiderdesk.hotovo.com|reactorpro.ng|g' {} \;
+          fi
+          
+          # ============================================
+          # AGENTS.md
+          # ============================================
+          if [ -f AGENTS.md ]; then
+            sed -i -e 's/AiderDesk/ReactorPro/g' -e 's/aider-desk/reactorpro/g' AGENTS.md
+          fi
+          
+          # ============================================
+          # Dockerfile
+          # ============================================
+          if [ -f Dockerfile ]; then
+            sed -i -e 's/aider-desk/reactorpro/g' -e 's/AiderDesk/ReactorPro/g' Dockerfile
+          fi
+
+      - name: Copy ReactorPro icons
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Restore icons from backup
+          if [ -d /tmp/icons-backup ]; then
+            echo "Restoring ReactorPro icons..."
+            cp /tmp/icons-backup/icon.* build/ 2>/dev/null || true
+            cp /tmp/icons-backup/icon.png resources/ 2>/dev/null || true
+          fi
+
+      - name: Determine version
+        if: steps.check_changes.outputs.has_changes == 'true'
+        id: version
+        run: |
+          UPSTREAM_VERSION=$(node -p "require('./package.json').version")
+          echo "Upstream version: $UPSTREAM_VERSION"
+          echo "version=$UPSTREAM_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Save upstream commit marker
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "${{ steps.check_changes.outputs.upstream_commit }}" > .upstream-commit
+
+      - name: Regenerate package-lock.json
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Regenerating package-lock.json with updated package names..."
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts || true
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Restore workflow files
+          if [ -d /tmp/workflow-backup ]; then
+            cp -r /tmp/workflow-backup/* .github/workflows/
+          fi
+          
+          git add -A
+          
+          UPSTREAM_COMMIT="${{ steps.check_changes.outputs.upstream_commit }}"
+          SHORT_COMMIT="${UPSTREAM_COMMIT:0:7}"
+          
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: Sync from upstream aider-desk ($SHORT_COMMIT)
+
+          - Merged latest changes from ${{ env.UPSTREAM_REPO }}
+          - Applied ReactorPro branding
+          - Updated package names and configurations
+          
+          Upstream commit: $UPSTREAM_COMMIT"
+          fi
+          
+          git checkout main
+          
+          mkdir -p /tmp/main-workflows
+          cp -r .github/workflows/* /tmp/main-workflows/ 2>/dev/null || true
+          
+          git merge sync-upstream --no-edit || echo "Nothing to merge"
+          
+          cp -r /tmp/main-workflows/* .github/workflows/ 2>/dev/null || true
+          
+          if ! git diff --quiet .github/workflows/; then
+            git add .github/workflows/
+            git commit --amend --no-edit
+          fi
+          
+          git push origin main
+
+  trigger-release:
+    needs: sync-and-rebrand
+    if: needs.sync-and-rebrand.outputs.has_changes == 'true'
+    uses: ./.github/workflows/release.yml
+    secrets: inherit

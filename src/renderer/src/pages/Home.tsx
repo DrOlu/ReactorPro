@@ -72,15 +72,15 @@ export const Home = () => {
     [api, setOptimisticOpenProjects],
   );
 
-  const isAiderDeskUpdateAvailable = versions?.aiderDeskAvailableVersion && versions.aiderDeskAvailableVersion !== versions.aiderDeskCurrentVersion;
+  const isReactorProUpdateAvailable = versions?.aiderDeskAvailableVersion && versions.aiderDeskAvailableVersion !== versions.aiderDeskCurrentVersion;
   const isAiderUpdateAvailable = versions?.aiderAvailableVersion && versions.aiderAvailableVersion !== versions.aiderCurrentVersion;
-  const isUpdateAvailable = isAiderDeskUpdateAvailable || isAiderUpdateAvailable;
+  const isUpdateAvailable = isReactorProUpdateAvailable || isAiderUpdateAvailable;
   const isDownloading = typeof versions?.aiderDeskDownloadProgress === 'number';
   const showUpdateIcon = isDownloading || isUpdateAvailable || versions?.aiderDeskNewVersionReady;
 
   useEffect(() => {
     if (versions?.aiderDeskNewVersionReady && !hasShownUpdateNotification) {
-      showInfoNotification(t('settings.about.newAiderDeskVersionReady'));
+      showInfoNotification(t('settings.about.newReactorProVersionReady'));
       hasShownUpdateNotification = true;
     }
   }, [versions, t]);
@@ -459,12 +459,12 @@ export const Home = () => {
 
   const getUpdateTooltip = () => {
     if (versions?.aiderDeskNewVersionReady) {
-      return t('settings.about.newAiderDeskVersionReady');
+      return t('settings.about.newReactorProVersionReady');
     }
     if (isDownloading && versions?.aiderDeskDownloadProgress) {
       return `${t('settings.about.downloadingUpdate')}: ${Math.round(versions.aiderDeskDownloadProgress)}%`;
     }
-    if (isAiderDeskUpdateAvailable) {
+    if (isReactorProUpdateAvailable) {
       return t('settings.about.updateAvailable');
     }
     if (isAiderUpdateAvailable && versions?.aiderAvailableVersion) {

@@ -7,24 +7,24 @@ sidebar_label: 'Introduction'
 
 # Introduction
 
-AiderDesk supercharges your coding workflow by combining the power of [aider](https://aider.chat) with an intuitive desktop interface, enabling seamless AI-assisted code generation, modification, and project management.
+ReactorPro supercharges your coding workflow by combining the power of [aider](https://aider.chat) with an intuitive desktop interface, enabling seamless AI-assisted code generation, modification, and project management.
 
 ## Getting Started
 
 ### Installation
 
-1. **Download** the latest version for your operating system from our [Releases page](https://github.com/hotovo/aider-desk/releases)
+1. **Download** the latest version for your operating system from our [Releases page](https://github.com/hyperspace/reactorpro/releases)
 2. **Install** the application:
    - **Windows**: Run the `.exe` installer
-   - **macOS**: Open the `.dmg` and drag AiderDesk to Applications
+   - **macOS**: Open the `.dmg` and drag ReactorPro to Applications
    - **Linux**: Extract the `.AppImage` and make it executable (`chmod +x`)
 
 ### First Launch Experience
 
-When you first open AiderDesk:
+When you first open ReactorPro:
 - The app will automatically:
   - Set up required Python dependencies
-  - Create default configuration files in `~/.aider-desk`
+  - Create default configuration files in `~/.reactorpro`
   - Open the main interface with a welcome screen
 - You'll see:
   - Left sidebar with project navigation
@@ -36,7 +36,7 @@ When you first open AiderDesk:
 #### 1. Open Your First Project
 - Click "Open Project" in the top toolbar
 - Navigate to and select your project directory
-- AiderDesk will index your project files
+- ReactorPro will index your project files
 
 #### 2. Add Files to Context
 **Manual Method:**
@@ -46,9 +46,9 @@ When you first open AiderDesk:
 
 **IDE Integration (Recommended):**
 - Install the plugin for your IDE:
-  - [VSCode Extension](https://marketplace.visualstudio.com/items?itemName=hotovo-sk.aider-desk-connector)
+  - [VSCode Extension](https://marketplace.visualstudio.com/items?itemName=hyperspace-sk.reactorpro-connector)
   - [IntelliJ Plugin](https://plugins.jetbrains.com/plugin/26313-aiderdesk-connector)
-- The plugin will automatically sync your active files to AiderDesk's context
+- The plugin will automatically sync your active files to ReactorPro's context
 
 #### 3. Send Your First Prompt
 - Type your request in the chat input at bottom
@@ -110,8 +110,8 @@ If you want to run from source, you can follow these steps:
 
 ```bash
 # Clone the repository
-$ git clone https://github.com/hotovo/aider-desk.git
-$ cd aider-desk
+$ git clone https://github.com/hyperspace/reactorpro.git
+$ cd reactorpro
 
 # Install dependencies
 $ npm install
@@ -132,7 +132,7 @@ $ npm run build:linux
 
 ## Contributing
 
-We welcome contributions from the community! Here's how you can help improve aider-desk:
+We welcome contributions from the community! Here's how you can help improve reactorpro:
 
 1. **Fork the repository** on GitHub
 2. **Create a new branch** for your feature or bugfix:

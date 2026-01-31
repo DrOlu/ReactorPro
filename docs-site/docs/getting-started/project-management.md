@@ -6,7 +6,7 @@ slug: "/getting-started/projects"
 
 # Project Management
 
-AiderDesk is designed to handle multiple projects simultaneously, allowing you to seamlessly switch between different codebases without losing context.
+ReactorPro is designed to handle multiple projects simultaneously, allowing you to seamlessly switch between different codebases without losing context.
 
 ## Opening a Project
 
@@ -20,7 +20,7 @@ To start working, you first need to open a project directory.
 
 ## Project Isolation
 
-Each project you open in AiderDesk runs in its own isolated `aider-chat` instance. This means:
+Each project you open in ReactorPro runs in its own isolated `aider-chat` instance. This means:
 - **Separate Contexts**: The chat history and context files for one project are completely separate from others.
 - **Independent Processes**: Each project has its own dedicated Python process, preventing interference between projects.
 - **Concurrent Work**: You can have an AI task running in one project while you work on another.

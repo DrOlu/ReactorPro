@@ -81,7 +81,7 @@ export const TaskItem = memo(
     handleCancelDelete,
   }: Props) => {
     const { t } = useTranslation();
-    const [isExpanded, setIsExpanded] = useLocalStorage(`aider-desk-expanded-task-${task.id}`, false);
+    const [isExpanded, setIsExpanded] = useLocalStorage(`reactorpro-expanded-task-${task.id}`, false);
     const [editTaskName, setEditTaskName] = useState(task.name);
     const isGeneratingName = task.name === '<<generating>>';
     const subtasks = tasks.filter((t) => t.parentId === task.id);

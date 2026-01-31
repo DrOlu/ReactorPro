@@ -206,7 +206,7 @@ class IndexedDBManager {
 
 // Create a singleton instance for UI preferences
 const uiPreferencesDB = new IndexedDBManager({
-  dbName: 'aider-desk-ui-preferences',
+  dbName: 'reactorpro-ui-preferences',
   version: 1,
   stores: STORES,
 });

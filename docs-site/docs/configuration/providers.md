@@ -5,7 +5,7 @@ sidebar_label: "Providers"
 
 # Providers Configuration
 
-AiderDesk supports multiple Large Language Model (LLM) providers to power your AI coding assistant. You can configure these providers in the **Model Library** (accessible via the top bar icon). Each provider has specific configuration requirements, and most support environment variables for secure credential management.
+ReactorPro supports multiple Large Language Model (LLM) providers to power your AI coding assistant. You can configure these providers in the **Model Library** (accessible via the top bar icon). Each provider has specific configuration requirements, and most support environment variables for secure credential management.
 
 ## Table of Contents
 
@@ -290,7 +290,7 @@ Claude Agent SDK is a specialized provider for users with Claude Code Pro or Max
 1. Ensure you have an active Claude Code Pro or Max subscription
 2. Install the Claude Code CLI from [https://claude.com/product/claude-code](https://claude.com/product/claude-code)
 3. Run `claude login` in your terminal to authenticate
-4. Add the Claude Agent SDK provider in AiderDesk's Model Library
+4. Add the Claude Agent SDK provider in ReactorPro's Model Library
 5. Select one of the available models (haiku, sonnet, or opus)
 
 ### Mode Support
@@ -315,7 +315,7 @@ This provider **only works in Agent mode**:
 - **CLI Required**: Claude Code CLI must be installed and authenticated before use
 - **Agent Mode Only**: This provider exclusively works in Agent mode
 - **Model Prefix**: Use `claude-agent-sdk/` prefix when specifying models
-- **Tool Usage**: This provider relies on tools from AiderDesk and does not use Claude Code's internal tools. Tools are executed within the AiderDesk environment.
+- **Tool Usage**: This provider relies on tools from ReactorPro and does not use Claude Code's internal tools. Tools are executed within the ReactorPro environment.
 - **Provider Switching**: 
   - ✅ Switching FROM Claude Agent SDK to another provider works fine
   - ⚠️ Switching FROM another provider TO Claude Agent SDK during an active conversation might not fully work as expected and is not a recommended workflow
@@ -489,7 +489,7 @@ For comprehensive provider and model management, see [Model Library](../features
 
 ## Unified Model Prefix System
 
-AiderDesk now uses a unified model prefix system across all modes (Agent, Code, Ask, Architect, Context):
+ReactorPro now uses a unified model prefix system across all modes (Agent, Code, Ask, Architect, Context):
 
 | Provider | Model Prefix |
 |----------|--------------|

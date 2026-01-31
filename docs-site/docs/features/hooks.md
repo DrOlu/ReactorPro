@@ -5,21 +5,21 @@ sidebar_label: "Hooks"
 
 # Hooks
 
-Hooks allow you to extend AiderDesk's behavior by executing custom JavaScript code in response to various system events. You can use hooks to automate workflows, enforce rules, integrate with external tools, or modify the behavior of tasks and prompts.
+Hooks allow you to extend ReactorPro's behavior by executing custom JavaScript code in response to various system events. You can use hooks to automate workflows, enforce rules, integrate with external tools, or modify the behavior of tasks and prompts.
 
 ## Where to Create Hooks
 
-Hook files are JavaScript files (`.js`) that AiderDesk loads and executes. You can create them in two locations:
+Hook files are JavaScript files (`.js`) that ReactorPro loads and executes. You can create them in two locations:
 
 1.  **Global Hooks:**
-    *   Location: `~/.aider-desk/hooks/` (your user home directory)
+    *   Location: `~/.reactorpro/hooks/` (your user home directory)
     *   Hooks placed here are active across all your projects.
 
 2.  **Project-Specific Hooks:**
-    *   Location: `.aider-desk/hooks/` (within your current project's root directory)
+    *   Location: `.reactorpro/hooks/` (within your current project's root directory)
     *   Hooks placed here are only active for that specific project.
 
-AiderDesk monitors these directories and reloads hooks automatically when files are added, modified, or removed.
+ReactorPro monitors these directories and reloads hooks automatically when files are added, modified, or removed.
 
 ## Hook File Format
 
@@ -43,7 +43,7 @@ module.exports = {
 
 ### The `context` Object
 
-Every hook function receives a `context` object as its second argument, providing access to AiderDesk utilities and state:
+Every hook function receives a `context` object as its second argument, providing access to ReactorPro utilities and state:
 
 *   `context.addInfoMessage(message)`: Displays an info message in the task log.
 *   `context.addWarningMessage(message)`: Displays a warning message.

@@ -6,15 +6,15 @@ slug: "/getting-started/onboarding"
 
 # Onboarding Process
 
-Welcome to AiderDesk! The first time you launch the application, you will be guided through a simple onboarding process to get everything set up for AI-powered development.
+Welcome to ReactorPro! The first time you launch the application, you will be guided through a simple onboarding process to get everything set up for AI-powered development.
 
 ## Step 1: Welcome & Language Selection
 
-The first screen welcomes you to AiderDesk and provides a brief overview of its key features. In the top-right corner, you can select your preferred language for the application interface.
+The first screen welcomes you to ReactorPro and provides a brief overview of its key features. In the top-right corner, you can select your preferred language for the application interface.
 
 ## Step 2: Connect Your AI Model
 
-AiderDesk supports a wide range of Large Language Model (LLM) providers. In this step, you need to configure at least one provider to proceed.
+ReactorPro supports a wide range of Large Language Model (LLM) providers. In this step, you need to configure at least one provider to proceed.
 
 1.  **Select a Provider**: Click on a provider card (e.g., Anthropic, OpenAI, Gemini).
 2.  **Enter API Key**: In the expanded view, enter your API key for the selected provider. Your keys are stored securely on your local machine and are never sent to any third-party servers other than the provider's own API endpoints.

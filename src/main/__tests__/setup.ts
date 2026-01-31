@@ -5,7 +5,7 @@ vi.mock('electron', () => ({
   app: {
     getPath: vi.fn(() => '/mock/path'),
     getVersion: vi.fn(() => '1.0.0'),
-    getName: vi.fn(() => 'AiderDesk'),
+    getName: vi.fn(() => 'ReactorPro'),
     getAppPath: vi.fn(() => '/mock/app/path'),
   },
   BrowserWindow: vi.fn().mockImplementation(() => ({

@@ -5,7 +5,7 @@ sidebar_label: "Overview"
 
 # Agent Mode Overview
 
-Agent Mode in AiderDesk transforms the application into a powerful, autonomous assistant capable of handling complex software engineering tasks. Powered by the Vercel AI SDK, the agent can plan, reason, and utilize a suite of tools to achieve its goals with minimal human intervention.
+Agent Mode in ReactorPro transforms the application into a powerful, autonomous assistant capable of handling complex software engineering tasks. Powered by the Vercel AI SDK, the agent can plan, reason, and utilize a suite of tools to achieve its goals with minimal human intervention.
 
 ## Key Capabilities
 

@@ -254,8 +254,8 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     return await eventsHandler.getVersions(forceRefresh);
   });
 
-  ipcMain.handle('download-latest-aiderdesk', async () => {
-    await eventsHandler.downloadLatestAiderDesk();
+  ipcMain.handle('download-latest-reactorpro', async () => {
+    await eventsHandler.downloadLatestReactorPro();
   });
 
   ipcMain.handle('get-release-notes', () => {

@@ -90,7 +90,7 @@ describe('TaskSidebar Hierarchy', () => {
       fireEvent.click(chevron);
     });
 
-    const stored = localStorage.getItem('aider-desk-expanded-task-parent-1');
+    const stored = localStorage.getItem('reactorpro-expanded-task-parent-1');
     expect(stored).toBe('true');
   });
 

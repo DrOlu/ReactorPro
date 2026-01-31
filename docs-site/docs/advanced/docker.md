@@ -1,14 +1,14 @@
 ---
-title: "Running AiderDesk with Docker"
+title: "Running ReactorPro with Docker"
 sidebar_label: "Docker"
 ---
 
-# Running AiderDesk with Docker
+# Running ReactorPro with Docker
 
-AiderDesk provides a Docker image that allows you to run the application in headless mode and interact with it through your web browser. This is particularly useful for:
-- Running AiderDesk on a remote server
+ReactorPro provides a Docker image that allows you to run the application in headless mode and interact with it through your web browser. This is particularly useful for:
+- Running ReactorPro on a remote server
 - Containerizing your development environment
-- Deploying AiderDesk in cloud environments
+- Deploying ReactorPro in cloud environments
 - Running multiple isolated instances
 
 ## Quick Start
@@ -18,7 +18,7 @@ AiderDesk provides a Docker image that allows you to run the application in head
 The Docker image is published to the GitHub Container Registry (ghcr.io):
 
 ```bash
-docker pull ghcr.io/hotovo/aider-desk:latest
+docker pull ghcr.io/hyperspace/reactorpro:latest
 ```
 
 Run the container with persistent data and configuration volumes:
@@ -28,11 +28,11 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v /path/to/your/data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
-  ghcr.io/hotovo/aider-desk:latest
+  -v ~/.reactorpro:/root/.reactorpro \
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
-After starting the container, access AiderDesk in your browser at:
+After starting the container, access ReactorPro in your browser at:
 ```
 http://localhost:24337
 ```
@@ -41,7 +41,7 @@ http://localhost:24337
 
 ### Persistent Data Volume
 
-AiderDesk stores all configuration, settings, and project data in the `/app/data` directory. To preserve your data across container restarts, you must mount this directory as a volume.
+ReactorPro stores all configuration, settings, and project data in the `/app/data` directory. To preserve your data across container restarts, you must mount this directory as a volume.
 
 **Example:**
 
@@ -50,7 +50,7 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 This will:
@@ -60,16 +60,16 @@ This will:
 
 ### Mounting Global Configuration Directory
 
-The `~/.aider-desk` directory on your host machine contains global configuration and custom files that you may want to persist:
+The `~/.reactorpro` directory on your host machine contains global configuration and custom files that you may want to persist:
 
-- **Agent profiles** (`.aider-desk/agents/`) - Custom agent configurations
-- **Skills** (`.aider-desk/agents/`) - Reusable skills for agent mode
-- **Custom commands** (`.aider-desk/commands/`) - User-defined commands
-- **Hooks** (`.aider-desk/hooks/`) - Custom hooks for automation
-- **Custom prompts** (`.aider-desk/prompts/`) - Custom prompt templates
-- **Rules** (`.aider-desk/rules/`) - Custom rules and guidelines
+- **Agent profiles** (`.reactorpro/agents/`) - Custom agent configurations
+- **Skills** (`.reactorpro/agents/`) - Reusable skills for agent mode
+- **Custom commands** (`.reactorpro/commands/`) - User-defined commands
+- **Hooks** (`.reactorpro/hooks/`) - Custom hooks for automation
+- **Custom prompts** (`.reactorpro/prompts/`) - Custom prompt templates
+- **Rules** (`.reactorpro/rules/`) - Custom rules and guidelines
 
-Since the Docker container runs as the `root` user, the home directory inside the container is `/root`. To persist these global configurations, mount `~/.aider-desk` to `/root/.aider-desk`.
+Since the Docker container runs as the `root` user, the home directory inside the container is `/root`. To persist these global configurations, mount `~/.reactorpro` to `/root/.reactorpro`.
 
 **Example:**
 
@@ -78,20 +78,20 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
-  ghcr.io/hotovo/aider-desk:latest
+  -v ~/.reactorpro:/root/.reactorpro \
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 This will:
-- Mount your `~/.aider-desk` directory from the host to `/root/.aider-desk` inside the container
+- Mount your `~/.reactorpro` directory from the host to `/root/.reactorpro` inside the container
 - Persist all your agent profiles, skills, custom commands, hooks, and prompts
 - Ensure your custom configurations are available across container restarts
 
-**Note:** The `~/.aider-desk` directory will be created on your host machine automatically the first time you run AiderDesk (outside of Docker), or you can create it manually before running the container.
+**Note:** The `~/.reactorpro` directory will be created on your host machine automatically the first time you run ReactorPro (outside of Docker), or you can create it manually before running the container.
 
 ### Opening Projects
 
-You can open projects in AiderDesk using two methods:
+You can open projects in ReactorPro using two methods:
 
 #### Method 1: Using the `AIDER_DESK_PROJECTS` Environment Variable
 
@@ -104,19 +104,19 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
+  -v ~/.reactorpro:/root/.reactorpro \
   -v ~/projects:/projects \
   -e AIDER_DESK_PROJECTS="/projects/my-app,/projects/other-app" \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 **Important:** The project paths specified in `AIDER_DESK_PROJECTS` must be accessible from within the container. This means each project directory must be mounted as a volume.
 
 #### Method 2: Opening Projects via the UI
 
-Alternatively, you can open projects directly from the AiderDesk interface after the container is running:
+Alternatively, you can open projects directly from the ReactorPro interface after the container is running:
 
-1. Access AiderDesk in your browser at `http://localhost:24337`
+1. Access ReactorPro in your browser at `http://localhost:24337`
 2. Click the "Open Project" button in the top toolbar
 3. Type the **full path** to your project as it exists inside the container
 4. Click "Open"
@@ -138,11 +138,11 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
+  -v ~/.reactorpro:/root/.reactorpro \
   -v ~/projects/my-app:/projects/my-app \
   -v ~/projects/other-app:/projects/other-app \
   -e AIDER_DESK_PROJECTS="/projects/my-app,/projects/other-app" \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 **Directory structure:**
@@ -150,13 +150,13 @@ docker run -d \
 Host machine:                     Inside container:
 ~/projects/my-app/    →         /projects/my-app/
 ~/projects/other-app/  →         /projects/other-app/
-~/.aider-desk/       →         /root/.aider-desk/
+~/.reactorpro/       →         /root/.reactorpro/
 ~/aiderdesk-data/     →         /app/data/
 ```
 
 ### Port Configuration
 
-By default, AiderDesk runs on port `24337`. You can change the exposed port mapping using Docker's `-p` flag.
+By default, ReactorPro runs on port `24337`. You can change the exposed port mapping using Docker's `-p` flag.
 
 **Example - Use a different host port:**
 
@@ -165,14 +165,14 @@ docker run -d \
   --name aiderdesk \
   -p 8080:24337 \
   -v ~/aiderdesk-data:/app/data \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
-Now access AiderDesk at `http://localhost:8080`.
+Now access ReactorPro at `http://localhost:8080`.
 
 ### Authentication
 
-For production environments, you may want to enable authentication. AiderDesk supports Basic Auth via environment variables.
+For production environments, you may want to enable authentication. ReactorPro supports Basic Auth via environment variables.
 
 **Example:**
 
@@ -183,7 +183,7 @@ docker run -d \
   -v ~/aiderdesk-data:/app/data \
   -e AIDER_DESK_USERNAME=admin \
   -e AIDER_DESK_PASSWORD=your-secure-password \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 When you access `http://localhost:24337`, you'll be prompted for username and password.
@@ -197,10 +197,10 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
+  -v ~/.reactorpro:/root/.reactorpro \
   -v ~/my-project:/workspace/project \
   -e AIDER_DESK_PROJECTS="/workspace/project" \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 ### Example 2: Multiple Projects with Authentication
@@ -210,12 +210,12 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
+  -v ~/.reactorpro:/root/.reactorpro \
   -v ~/projects:/projects \
   -e AIDER_DESK_PROJECTS="/projects/frontend,/projects/backend,/projects/api" \
   -e AIDER_DESK_USERNAME=myuser \
   -e AIDER_DESK_PASSWORD=mypassword \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 ### Example 3: Manual Project Opening (No Environment Variable)
@@ -225,9 +225,9 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
+  -v ~/.reactorpro:/root/.reactorpro \
   -v ~/projects:/projects \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 Then:
@@ -245,7 +245,7 @@ version: '3.8'
 
 services:
   aiderdesk:
-    image: ghcr.io/hotovo/aider-desk:latest
+    image: ghcr.io/hyperspace/reactorpro:latest
     container_name: aiderdesk
     ports:
       - "24337:24337"
@@ -253,7 +253,7 @@ services:
       # Persistent data directory
       - ./aiderdesk-data:/app/data
       # Global configuration (agent profiles, skills, custom commands, hooks, prompts)
-      - ~/.aider-desk:/root/.aider-desk
+      - ~/.reactorpro:/root/.reactorpro
       # Mount your projects
       - ./projects/frontend:/projects/frontend
       - ./projects/backend:/projects/backend
@@ -284,12 +284,12 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
+  -v ~/.reactorpro:/root/.reactorpro \
   -v ~/projects:/projects \
-  ghcr.io/hotovo/aider-desk:1.0.0
+  ghcr.io/hyperspace/reactorpro:1.0.0
 ```
 
-## Accessing AiderDesk
+## Accessing ReactorPro
 
 Once your container is running, access the web interface:
 
@@ -360,7 +360,7 @@ Check the logs for error messages:
 docker logs aiderdesk
 ```
 
-### Cannot Access AiderDesk in Browser
+### Cannot Access ReactorPro in Browser
 
 1. Verify the container is running:
    ```bash
@@ -406,22 +406,22 @@ Without this volume mount, all data will be lost when the container is removed.
 
 If your agent profiles, skills, custom commands, hooks, or prompts are not persisting:
 
-1. Ensure you're mounting the `~/.aider-desk` directory:
+1. Ensure you're mounting the `~/.reactorpro` directory:
    ```bash
-   -v ~/.aider-desk:/root/.aider-desk
+   -v ~/.reactorpro:/root/.reactorpro
    ```
 
 2. Verify the directory exists on your host:
    ```bash
-   ls -la ~/.aider-desk
+   ls -la ~/.reactorpro
    ```
 
 3. Check if it's mounted correctly inside the container:
    ```bash
-   docker exec aiderdesk ls -la /root/.aider-desk
+   docker exec aiderdesk ls -la /root/.reactorpro
    ```
 
-**Note:** The `~/.aider-desk` directory will be created automatically the first time you run AiderDesk outside of Docker, or you can create it manually before running the container.
+**Note:** The `~/.reactorpro` directory will be created automatically the first time you run ReactorPro outside of Docker, or you can create it manually before running the container.
 
 ### Permission Issues
 
@@ -435,7 +435,7 @@ If you encounter permission errors accessing mounted volumes:
      -p 24337:24337 \
      -v ~/aiderdesk-data:/app/data \
      -u $(id -u):$(id -g) \
-     ghcr.io/hotovo/aider-desk:latest
+     ghcr.io/hyperspace/reactorpro:latest
    ```
 
 ### Health Check Failing
@@ -457,9 +457,9 @@ docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
+  -v ~/.reactorpro:/root/.reactorpro \
   -e AIDER_DESK_AIDER_VERSION="0.36.1" \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 ### Extra Python Packages
@@ -468,7 +468,7 @@ To install additional Python packages, see [Extra Python Packages](./extra-pytho
 
 ### Using the REST API
 
-Once running, you can interact with AiderDesk via its REST API. See [REST API](../features/rest-api.md) for complete API documentation.
+Once running, you can interact with ReactorPro via its REST API. See [REST API](../features/rest-api.md) for complete API documentation.
 
 **Example API call:**
 
@@ -482,13 +482,13 @@ curl -X POST http://localhost:24337/api/get-context-files \
 
 1. **Authentication**: Always enable Basic Auth in production environments
 2. **HTTPS**: For remote access, use a reverse proxy with SSL/TLS termination
-3. **Network Isolation**: Consider using Docker networks to isolate AiderDesk
+3. **Network Isolation**: Consider using Docker networks to isolate ReactorPro
 4. **Volume Permissions**: Ensure sensitive data volumes have appropriate permissions
 5. **Regular Updates**: Keep the Docker image updated for security patches
 
 ## Support
 
 For issues, questions, or contributions:
-- GitHub Repository: https://github.com/hotovo/aider-desk
-- Documentation: https://aiderdesk.hotovo.com
-- Issues: https://github.com/hotovo/aider-desk/issues
+- GitHub Repository: https://github.com/hyperspace/reactorpro
+- Documentation: https://aiderdesk.hyperspace.com
+- Issues: https://github.com/hyperspace/reactorpro/issues

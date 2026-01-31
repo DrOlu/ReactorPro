@@ -3,13 +3,13 @@ import { homedir } from 'os';
 
 import { getDataDir, getResourceDir } from './paths';
 
-export const AIDER_DESK_TITLE = 'AiderDesk';
-export const AIDER_DESK_WEBSITE = 'https://aiderdesk.hotovo.com';
+export const AIDER_DESK_TITLE = 'ReactorPro';
+export const AIDER_DESK_WEBSITE = 'https://reactorpro.hyperspace.com';
 export const AIDER_DESK_DATA_DIR = getDataDir();
 export const AIDER_DESK_CACHE_DIR = path.join(AIDER_DESK_DATA_DIR, 'cache');
 export const RESOURCES_DIR = getResourceDir();
 export const LOGS_DIR = path.join(AIDER_DESK_DATA_DIR, 'logs');
-export const DB_FILE_PATH = path.join(AIDER_DESK_DATA_DIR, 'aider-desk.db');
+export const DB_FILE_PATH = path.join(AIDER_DESK_DATA_DIR, 'reactorpro.db');
 export const SETUP_COMPLETE_FILENAME = path.join(AIDER_DESK_DATA_DIR, 'setup-complete');
 export const PYTHON_VENV_DIR = path.join(AIDER_DESK_DATA_DIR, 'python-venv');
 export const PYTHON_COMMAND = process.platform === 'win32' ? path.join(PYTHON_VENV_DIR, 'Scripts', 'python.exe') : path.join(PYTHON_VENV_DIR, 'bin', 'python');
@@ -24,7 +24,7 @@ export const UV_EXECUTABLE =
 export const SERVER_PORT = process.env.AIDER_DESK_PORT ? parseInt(process.env.AIDER_DESK_PORT) : 24337;
 export const PID_FILES_DIR = path.join(AIDER_DESK_DATA_DIR, 'aider-processes');
 // constants for project directory files
-export const AIDER_DESK_DIR = '.aider-desk';
+export const AIDER_DESK_DIR = '.reactorpro';
 export const AIDER_DESK_TASKS_DIR = path.join(AIDER_DESK_DIR, 'tasks');
 export const AIDER_DESK_TODOS_FILE = 'todos.json';
 export const AIDER_DESK_RULES_DIR = 'rules';
@@ -39,7 +39,7 @@ export const AIDER_DESK_GLOBAL_PROMPTS_DIR = path.join(homedir(), AIDER_DESK_DIR
 export const AIDER_DESK_AGENTS_DIR = path.join(AIDER_DESK_DIR, 'agents');
 export const AIDER_DESK_TMP_DIR = path.join(AIDER_DESK_DIR, 'tmp');
 export const AIDER_DESK_WATCH_FILES_LOCK = path.join(AIDER_DESK_DIR, 'watch-files.lock');
-export const WORKTREE_BRANCH_PREFIX = 'aider-desk/task/';
+export const WORKTREE_BRANCH_PREFIX = 'reactorpro/task/';
 export const AIDER_DESK_MEMORY_FILE = path.join(AIDER_DESK_DATA_DIR, 'memory.db');
 
 export const POSTHOG_PUBLIC_API_KEY = 'phc_AF4zkjrcziXLh8PBFsRSvVr4VZ38p3ezsdX0KDYuElI';

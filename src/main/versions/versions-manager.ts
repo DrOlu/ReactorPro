@@ -35,7 +35,7 @@ export class VersionsManager {
     }
 
     logger.info('Checking for version updates...');
-    // Get AiderDesk version using app.getVersion()
+    // Get ReactorPro version using app.getVersion()
     const aiderDeskCurrentVersion = app.getVersion();
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -64,13 +64,13 @@ export class VersionsManager {
             aiderDeskAvailableVersion = null;
           }
         }
-        logger.error('Failed to check for AiderDesk updates', { error });
+        logger.error('Failed to check for ReactorPro updates', { error });
       }
 
       // Check if auto-update is enabled and a new version was found
       if (aiderDeskAvailableVersion && this.store.getSettings().aiderDeskAutoUpdate) {
         logger.info('Auto-update enabled and new version found. Starting download...');
-        void this.downloadLatestAiderDesk();
+        void this.downloadLatestReactorPro();
       }
     }
 
@@ -106,7 +106,7 @@ export class VersionsManager {
     autoUpdater.autoInstallOnAppQuit = true; // Install on quit after download
     if (isDev()) {
       autoUpdater.forceDevUpdateConfig = true;
-      process.env.APPIMAGE = path.join(__dirname, 'dist', `aider-desk-${app.getVersion()}.AppImage`);
+      process.env.APPIMAGE = path.join(__dirname, 'dist', `reactorpro-${app.getVersion()}.AppImage`);
     }
 
     autoUpdater.on('download-progress', (progressObj) => {
@@ -160,17 +160,17 @@ export class VersionsManager {
     }
   }
 
-  public async downloadLatestAiderDesk(): Promise<void> {
+  public async downloadLatestReactorPro(): Promise<void> {
     const app = getElectronApp();
     if (!app) {
-      logger.info('Electron app not available, skipping AiderDesk update download.');
+      logger.info('Electron app not available, skipping ReactorPro update download.');
       return;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const autoUpdater = require('electron-updater').autoUpdater;
 
-    logger.info('Starting AiderDesk update download...');
+    logger.info('Starting ReactorPro update download...');
     try {
       // Check for updates first to ensure we have the latest info
       const updateCheckResult = await autoUpdater.checkForUpdates();
@@ -186,7 +186,7 @@ export class VersionsManager {
         logger.info('No new update found or update check failed.');
       }
     } catch (error) {
-      logger.error('Failed to download AiderDesk update', { error });
+      logger.error('Failed to download ReactorPro update', { error });
       this.updateVersionsInfo({
         aiderDeskDownloadProgress: undefined,
       });

@@ -5,7 +5,7 @@ sidebar_label: "Git Worktrees"
 
 # Git Worktrees
 
-AiderDesk's Git Worktrees feature provides a powerful, isolated development environment that allows you to work on multiple features or experiments simultaneously without affecting your main project branch. This feature leverages Git's native worktree functionality to create separate working directories while sharing the same repository history.
+ReactorPro's Git Worktrees feature provides a powerful, isolated development environment that allows you to work on multiple features or experiments simultaneously without affecting your main project branch. This feature leverages Git's native worktree functionality to create separate working directories while sharing the same repository history.
 
 ## Overview
 
@@ -19,16 +19,16 @@ Git worktrees enable you to:
 
 ## How It Works
 
-When you create a task with worktree mode enabled, AiderDesk:
+When you create a task with worktree mode enabled, ReactorPro:
 
-1. **Creates a Worktree**: Generates a new working directory at `.aider-desk/tasks/{taskId}/worktree`
+1. **Creates a Worktree**: Generates a new working directory at `.reactorpro/tasks/{taskId}/worktree`
 2. **Isolates Changes**: All file modifications, commits, and AI interactions happen within this worktree
 3. **Maintains Connection**: The worktree shares the same Git repository history but has its own working state
 4. **Preserves Main**: Your main project directory remains untouched until you explicitly merge changes
 
 ## Working Modes
 
-Each task in AiderDesk can operate in one of two modes:
+Each task in ReactorPro can operate in one of two modes:
 
 ### Local Mode
 - Works directly in your main project directory
@@ -49,7 +49,7 @@ Each task in AiderDesk can operate in one of two modes:
 
 1. **Create New Task**: Click "New Task" in the project interface
 2. **Select Worktree Mode**: Choose the worktree icon (🌿) instead of local mode (📁)
-3. **Automatic Setup**: AiderDesk automatically creates the worktree and switches to it
+3. **Automatic Setup**: ReactorPro automatically creates the worktree and switches to it
 
 ### 2. Working in the Worktree
 
@@ -62,7 +62,7 @@ Once in worktree mode:
 
 ### 3. Integration Options
 
-When you're ready to integrate your worktree changes, AiderDesk provides enhanced integration options with flexible target branch selection:
+When you're ready to integrate your worktree changes, ReactorPro provides enhanced integration options with flexible target branch selection:
 
 ![Merge Options](../images/worktree-merge-options.png)
 
@@ -91,7 +91,7 @@ When you're ready to integrate your worktree changes, AiderDesk provides enhance
 
 ### Pre-Merge Safety Checks
 
-Before any merge operation, AiderDesk performs several safety checks:
+Before any merge operation, ReactorPro performs several safety checks:
 
 1. **Conflict Detection**: Analyzes potential merge conflicts using `git merge-tree`
 2. **Uncommitted Changes Handling**: Safely stashes changes from both worktree and main
@@ -111,14 +111,14 @@ Before any merge operation, AiderDesk performs several safety checks:
 
 If conflicts are detected:
 
-- **Pre-Merge Detection**: AiderDesk identifies potential conflicts before merging
+- **Pre-Merge Detection**: ReactorPro identifies potential conflicts before merging
 - **Detailed Reporting**: Shows which files conflict and why
 - **User Guidance**: Provides clear instructions for manual resolution
 - **Safe Abort**: Can abort the operation without losing work
 
 #### AI-Assisted Conflict Resolution
 
-When conflicts occur during merge or rebase operations, AiderDesk offers intelligent conflict resolution:
+When conflicts occur during merge or rebase operations, ReactorPro offers intelligent conflict resolution:
 
 - **Specialized Agent**: Uses a dedicated Conflict Resolution agent with focused tool permissions
 - **Automatic Resolution**: Automatically attempts to resolve conflicted files by analyzing the changes
@@ -130,12 +130,12 @@ When conflicts occur during merge or rebase operations, AiderDesk offers intelli
 
 ## Rebase Operations
 
-AiderDesk provides comprehensive rebase functionality for worktrees, enabling you to synchronize your worktree with any branch before merging:
+ReactorPro provides comprehensive rebase functionality for worktrees, enabling you to synchronize your worktree with any branch before merging:
 
 ### Rebase Workflow
 
 1. **Branch Selection**: Choose the source branch to rebase from (default: main branch)
-2. **Conflict Detection**: AiderDesk analyzes potential conflicts before rebasing
+2. **Conflict Detection**: ReactorPro analyzes potential conflicts before rebasing
 3. **Rebase Execution**: Performs the rebase operation with detailed progress tracking
 4. **Conflict Resolution**: If conflicts arise, use AI-assisted resolution or manual intervention
 5. **Completion**: Continue or abort the rebase as needed
@@ -163,7 +163,7 @@ AiderDesk provides comprehensive rebase functionality for worktrees, enabling yo
 
 ## Revert Operations
 
-AiderDesk provides a safety net with merge revert functionality:
+ReactorPro provides a safety net with merge revert functionality:
 
 ![Revert Button](../images/worktree-revert-button.png)
 
@@ -187,7 +187,7 @@ AiderDesk provides a safety net with merge revert functionality:
 
 ### Visual Status Indicators
 
-AiderDesk provides real-time status indicators for worktrees, giving you immediate insight into worktree state:
+ReactorPro provides real-time status indicators for worktrees, giving you immediate insight into worktree state:
 
 - **Ahead Commits**: Shows number of commits ahead of target branch (↑ N commits)
 - **Uncommitted Files**: Displays count of modified but uncommitted files (N files)
@@ -267,7 +267,7 @@ The AI system works seamlessly with worktrees:
 
 ### Conflict Resolution Workflow
 
-1. **Detection**: AiderDesk predicts and identifies conflicts early
+1. **Detection**: ReactorPro predicts and identifies conflicts early
 2. **Assessment**: Review conflicting files and understand the nature of conflicts
 3. **Resolution Options**:
    - **AI-Assisted**: Let the Conflict Resolution agent handle automatic resolution
@@ -282,7 +282,7 @@ The AI system works seamlessly with worktrees:
 
 #### Worktree Creation Fails
 - **Cause**: Repository not initialized or no initial commit
-- **Solution**: AiderDesk automatically initializes repository and creates initial commit
+- **Solution**: ReactorPro automatically initializes repository and creates initial commit
 
 #### Merge Conflicts
 - **Cause**: Divergent changes in same files
@@ -310,7 +310,7 @@ The AI system works seamlessly with worktrees:
 ```
 project/
 ├── .git/
-├── .aider-desk/
+├── .reactorpro/
 │   └── tasks/
 │       └── {taskId}/
 │           ├── settings.json
@@ -322,7 +322,7 @@ project/
 
 ### State Management
 
-- **Task Settings**: Stored in `.aider-desk/tasks/{taskId}/settings.json`
+- **Task Settings**: Stored in `.reactorpro/tasks/{taskId}/settings.json`
 - **Merge State**: Preserved for revert operations
 - **Worktree Metadata**: Tracked in main Git repository
 - **Stash Management**: Temporary stashes with unique identifiers
@@ -368,6 +368,6 @@ The IDE integration plugins work seamlessly with worktrees:
 
 ## Conclusion
 
-Git worktrees in AiderDesk provide a robust, professional-grade development environment that enables safe, isolated development while maintaining seamless integration with your main project. Whether you're working on complex features, experimenting with AI assistance, or managing parallel development streams, worktrees offer the flexibility and safety needed for modern software development.
+Git worktrees in ReactorPro provide a robust, professional-grade development environment that enables safe, isolated development while maintaining seamless integration with your main project. Whether you're working on complex features, experimenting with AI assistance, or managing parallel development streams, worktrees offer the flexibility and safety needed for modern software development.
 
-The combination of isolation, flexible integration options, AI-assisted conflict resolution, visual status indicators, and comprehensive safety features like revert operations makes worktrees an essential tool for serious development workflows in AiderDesk. The enhanced capabilities for rebase operations, target branch selection, and automated conflict resolution elevate the worktree experience to enterprise-grade development standards.
+The combination of isolation, flexible integration options, AI-assisted conflict resolution, visual status indicators, and comprehensive safety features like revert operations makes worktrees an essential tool for serious development workflows in ReactorPro. The enhanced capabilities for rebase operations, target branch selection, and automated conflict resolution elevate the worktree experience to enterprise-grade development standards.

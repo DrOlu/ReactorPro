@@ -5,7 +5,7 @@ sidebar_label: "Task Tools"
 
 # Task Tools
 
-Task tools are a set of powerful tools that enable AI agents to interact with the AiderDesk task management system. These tools allow agents to create, read, search, and manage tasks programmatically, enabling sophisticated workflows like breaking down complex projects into subtasks, tracking progress across multiple tasks, and searching for information within task histories.
+Task tools are a set of powerful tools that enable AI agents to interact with the ReactorPro task management system. These tools allow agents to create, read, search, and manage tasks programmatically, enabling sophisticated workflows like breaking down complex projects into subtasks, tracking progress across multiple tasks, and searching for information within task histories.
 
 ## What Are Task Tools For?
 
@@ -21,7 +21,7 @@ Task tools enable agents to:
 
 Task tools are part of the agent's toolset. To use them:
 
-1. Open AiderDesk Settings
+1. Open ReactorPro Settings
 2. Navigate to the **Agent** section
 3. Ensure **"Use Task Tools"** is enabled in your agent profile
 4. Configure individual tool approval settings as needed
@@ -338,7 +338,7 @@ Task tools complement the todo system:
 **Task tools not available:**
 - Check that "Use Task Tools" is enabled in agent profile settings
 - Verify your agent profile has task tools configured
-- Restart AiderDesk if settings don't take effect
+- Restart ReactorPro if settings don't take effect
 
 **Cannot create subtask:**
 - Ensure the current task is not itself a subtask

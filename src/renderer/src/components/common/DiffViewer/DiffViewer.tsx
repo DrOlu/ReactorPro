@@ -75,7 +75,7 @@ export const DiffViewer = ({ oldValue, newValue, language, isComplete = false, v
           <div className="w-full px-4 py-2 bg-info text-error-lighter text-xs text-center">
             Error: {diffError.message}
             <br />
-            Please report an issue in https://github.com/hotovo/aider-desk/issues.
+            Please report an issue in https://github.com/hyperspace/reactorpro/issues.
           </div>
         )}
       </div>

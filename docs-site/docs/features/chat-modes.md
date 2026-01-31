@@ -5,7 +5,7 @@ sidebar_label: "Chat Modes"
 
 # Chat Modes
 
-AiderDesk offers several chat modes to tailor the AI's behavior to your specific needs. You can switch between modes at any time using the mode selector in the prompt area or by typing the corresponding command (e.g., `/code`).
+ReactorPro offers several chat modes to tailor the AI's behavior to your specific needs. You can switch between modes at any time using the mode selector in the prompt area or by typing the corresponding command (e.g., `/code`).
 
 ## Available Modes
 

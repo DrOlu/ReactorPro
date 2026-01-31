@@ -5,12 +5,12 @@ sidebar_label: "Usage Dashboard"
 
 # Usage Dashboard
 
-The Usage Dashboard provides a comprehensive analysis of your AiderDesk activity over time, giving you actionable insights to optimize both your workflow and your budget. Track your usage patterns, monitor costs, and make data-driven decisions about your AI-assisted development.
+The Usage Dashboard provides a comprehensive analysis of your ReactorPro activity over time, giving you actionable insights to optimize both your workflow and your budget. Track your usage patterns, monitor costs, and make data-driven decisions about your AI-assisted development.
 
 ## Key Features
 
 ### Comprehensive Activity Analysis
-Monitor your development activity with detailed metrics that help you understand how you're using AiderDesk across different projects and time periods.
+Monitor your development activity with detailed metrics that help you understand how you're using ReactorPro across different projects and time periods.
 
 ### Token Consumption Visualization
 Track your token usage with interactive charts that show consumption trends over time. This helps you understand your usage patterns and identify opportunities for optimization.
@@ -72,4 +72,4 @@ The Charts view transforms your usage data into interactive visualizations that 
 - **Resource Planning**: Make informed decisions about AI model usage and project allocation
 - **ROI Tracking**: Measure the value and impact of AI-assisted development on your projects
 
-The Usage Dashboard transforms raw usage data into actionable intelligence, helping you get the most value from your AiderDesk investment.
+The Usage Dashboard transforms raw usage data into actionable intelligence, helping you get the most value from your ReactorPro investment.

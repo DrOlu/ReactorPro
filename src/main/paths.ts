@@ -26,7 +26,7 @@ export const getDataDir = (): string => {
   }
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const envPaths = require('env-paths').default;
-  return envPaths(isDev() ? 'aider-desk-dev' : 'aider-desk').data;
+  return envPaths(isDev() ? 'reactorpro-dev' : 'reactorpro').data;
 };
 
 export const getResourceDir = (): string => {

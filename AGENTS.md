@@ -1,5 +1,5 @@
 # AGENTS.md
-This file provides guidance to AiderDesk when working with code in this repository.
+This file provides guidance to ReactorPro when working with code in this repository.
 
 ## Common Commands
 
@@ -43,7 +43,7 @@ This file provides guidance to AiderDesk when working with code in this reposito
 
 ## High-Level Architecture
 
-AiderDesk is an Electron-based desktop application that provides a GUI wrapper for the Aider AI coding assistant. The architecture follows Electron's multi-process model with clear separation of concerns:
+ReactorPro is an Electron-based desktop application that provides a GUI wrapper for the Aider AI coding assistant. The architecture follows Electron's multi-process model with clear separation of concerns:
 
 ### Core Directories
 
@@ -73,7 +73,7 @@ AiderDesk is an Electron-based desktop application that provides a GUI wrapper f
 
 **src/mcp-server/** - Model Context Protocol server
 - Standalone MCP server for external tool integration
-- Exposes AiderDesk functionality to MCP-compatible clients
+- Exposes ReactorPro functionality to MCP-compatible clients
 
 **resources/connector/** - Python integration layer
 - Python script (connector.py) that interfaces with Aider
@@ -102,7 +102,7 @@ AiderDesk is an Electron-based desktop application that provides a GUI wrapper f
 
 ## Testing Framework
 
-AiderDesk uses **Vitest** with a multi-configuration approach. For all testing guidance, including patterns, mocking, and organization, **always activate the `Writing Tests` skill**.
+ReactorPro uses **Vitest** with a multi-configuration approach. For all testing guidance, including patterns, mocking, and organization, **always activate the `Writing Tests` skill**.
 
 ### Key Commands
 - `npm run test` - Run all tests

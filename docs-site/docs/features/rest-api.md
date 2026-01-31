@@ -5,11 +5,11 @@ sidebar_label: "REST API"
 
 # REST API
 
-AiderDesk exposes a comprehensive REST API that allows external tools, such as IDE plugins, web applications, and automation scripts, to interact with the application programmatically. The API runs on the same port as the main application, which defaults to `24337` but can be configured with the `AIDER_DESK_PORT` environment variable.
+ReactorPro exposes a comprehensive REST API that allows external tools, such as IDE plugins, web applications, and automation scripts, to interact with the application programmatically. The API runs on the same port as the main application, which defaults to `24337` but can be configured with the `AIDER_DESK_PORT` environment variable.
 
 ## Overview
 
-The REST API is organized into logical modules covering different aspects of AiderDesk functionality:
+The REST API is organized into logical modules covering different aspects of ReactorPro functionality:
 
 - **Context Management**: File and context operations
 - **Prompt Execution**: AI interaction and response handling
@@ -171,7 +171,7 @@ Retrieves all open projects.
 - **Response**: `200 OK` (returns projects array)
 
 #### Start Project
-Starts a new AiderDesk project.
+Starts a new ReactorPro project.
 
 - **Endpoint**: `POST /api/project/start`
 - **Request Body**:
@@ -363,7 +363,7 @@ Updates application settings.
     ...
   }
   ```
-  For the complete `SettingsData` structure, see [src/common/types.ts](https://github.com/hotovo/aider-desk/blob/main/src/common/types.ts#L346).
+  For the complete `SettingsData` structure, see [src/common/types.ts](https://github.com/hyperspace/reactorpro/blob/main/src/common/types.ts#L346).
 - **Response**: `200 OK` (returns updated settings)
 
 #### Get Models Info

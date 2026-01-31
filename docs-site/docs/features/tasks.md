@@ -5,7 +5,7 @@ sidebar_label: "Tasks"
 
 # Task Management
 
-AiderDesk's task management system provides a comprehensive way to organize, track, and manage your AI-assisted development work. Tasks serve as the foundation for structuring complex projects, enabling you to break down work into manageable units, maintain context across sessions, and track progress from initial ideas through to completion.
+ReactorPro's task management system provides a comprehensive way to organize, track, and manage your AI-assisted development work. Tasks serve as the foundation for structuring complex projects, enabling you to break down work into manageable units, maintain context across sessions, and track progress from initial ideas through to completion.
 
 ## What Are Tasks For?
 
@@ -50,7 +50,7 @@ Months later, you can:
 
 Without tasks, each AI conversation is an isolated interaction. With tasks, you get:
 
-**Persistent Context**: Your conversation history, file context, and decisions are preserved across sessions. You can close AiderDesk, come back tomorrow, and pick up exactly where you left off.
+**Persistent Context**: Your conversation history, file context, and decisions are preserved across sessions. You can close ReactorPro, come back tomorrow, and pick up exactly where you left off.
 
 **Organized Work**: Multiple projects, features, and experiments can coexist without confusion. Each task has its own context and state.
 
@@ -64,10 +64,10 @@ Without tasks, each AI conversation is an isolated interaction. With tasks, you 
 
 ## Task Organization
 
-Tasks are organized per project in the `.aider-desk/tasks/` directory. Each task has its own folder with:
+Tasks are organized per project in the `.reactorpro/tasks/` directory. Each task has its own folder with:
 
 ```
-.aider-desk/tasks/{taskId}/
+.reactorpro/tasks/{taskId}/
 ├── settings.json    # Task metadata and configuration
 ├── context.json     # Messages and files context
 └── todos.json       # Todo items for the task
@@ -134,7 +134,7 @@ Each subtask can have its own:
 - Chevron icons allow expanding/collapsing task trees
 - Task state chips show each subtask's status
 
-**Safety Protections**: When you try to delete a parent task that has subtasks, AiderDesk shows a confirmation dialog: "This task has X subtask(s). Delete anyway?" This prevents accidental deletion of related work.
+**Safety Protections**: When you try to delete a parent task that has subtasks, ReactorPro shows a confirmation dialog: "This task has X subtask(s). Delete anyway?" This prevents accidental deletion of related work.
 
 **Independent Work**: Each subtask operates independently with its own context, messages, and state. However, subtasks can search the parent task's content to understand broader context.
 
@@ -191,7 +191,7 @@ User Dashboard
 
 ## Smart Task States
 
-Task states provide visibility into the status of your work and help guide your workflow. When enabled, AiderDesk intelligently analyzes the agent's responses to automatically categorize tasks into meaningful states.
+Task states provide visibility into the status of your work and help guide your workflow. When enabled, ReactorPro intelligently analyzes the agent's responses to automatically categorize tasks into meaningful states.
 
 ### Task State Types
 
@@ -211,7 +211,7 @@ Task states provide visibility into the status of your work and help guide your 
 
 ### Smart Task State Analysis
 
-When "Smart Task State" is enabled in task settings, AiderDesk uses AI to analyze the agent's responses and automatically determine the appropriate state:
+When "Smart Task State" is enabled in task settings, ReactorPro uses AI to analyze the agent's responses and automatically determine the appropriate state:
 
 1. After each prompt completes, the system examines the agent's final response
 2. It considers the content, reasoning, and tone of the response
@@ -224,7 +224,7 @@ This saves you time and provides clear, actionable feedback about the task's sta
 
 Smart task state can be enabled or disabled in the task settings:
 
-1. Open AiderDesk Settings
+1. Open ReactorPro Settings
 2. Navigate to the **Tasks** section
 3. Toggle **"Smart Task State"** to enable or disable
 

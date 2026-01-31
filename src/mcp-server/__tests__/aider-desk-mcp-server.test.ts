@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
 
-import { server } from '../aider-desk-mcp-server';
+import { server } from '../reactorpro-mcp-server';
 
 vi.mock('axios');
 
-describe('AiderDesk MCP Server', () => {
+describe('ReactorPro MCP Server', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -13,7 +13,7 @@ describe('AiderDesk MCP Server', () => {
   it('should be initialized with correct metadata', () => {
     // @ts-expect-error - accessing private/protected property for verification
     const serverInfo = server.server._serverInfo;
-    expect(serverInfo.name).toBe('aider-desk-mcp-server');
+    expect(serverInfo.name).toBe('reactorpro-mcp-server');
     expect(serverInfo.version).toBe('0.1.0');
   });
 
@@ -30,7 +30,7 @@ describe('AiderDesk MCP Server', () => {
     expect(toolNames).toContain('clear_context');
   });
 
-  it('should call AiderDesk API when add_context_file is executed', async () => {
+  it('should call ReactorPro API when add_context_file is executed', async () => {
     const mockResponse = { data: { success: true } };
     vi.mocked(axios.post).mockResolvedValueOnce(mockResponse);
 
@@ -45,7 +45,7 @@ describe('AiderDesk MCP Server', () => {
     expect(result.content[0].text).toBe(JSON.stringify(mockResponse.data));
   });
 
-  it('should call AiderDesk API when drop_context_file is executed', async () => {
+  it('should call ReactorPro API when drop_context_file is executed', async () => {
     const mockResponse = { data: { success: true } };
     vi.mocked(axios.post).mockResolvedValueOnce(mockResponse);
 
@@ -57,7 +57,7 @@ describe('AiderDesk MCP Server', () => {
     expect(result.content[0].text).toBe(JSON.stringify(mockResponse.data));
   });
 
-  it('should call AiderDesk API when get_context_files is executed', async () => {
+  it('should call ReactorPro API when get_context_files is executed', async () => {
     const mockResponse = { data: { files: ['test.txt'] } };
     vi.mocked(axios.post).mockResolvedValueOnce(mockResponse);
 
@@ -69,7 +69,7 @@ describe('AiderDesk MCP Server', () => {
     expect(result.content[0].text).toBe(JSON.stringify(mockResponse.data));
   });
 
-  it('should call AiderDesk API when get_addable_files is executed', async () => {
+  it('should call ReactorPro API when get_addable_files is executed', async () => {
     const mockResponse = { data: { files: ['other.txt'] } };
     vi.mocked(axios.post).mockResolvedValueOnce(mockResponse);
 
@@ -81,7 +81,7 @@ describe('AiderDesk MCP Server', () => {
     expect(result.content[0].text).toBe(JSON.stringify(mockResponse.data));
   });
 
-  it('should call AiderDesk API when run_prompt is executed', async () => {
+  it('should call ReactorPro API when run_prompt is executed', async () => {
     const mockResponse = { data: { output: 'done' } };
     vi.mocked(axios.post).mockResolvedValueOnce(mockResponse);
 
@@ -93,7 +93,7 @@ describe('AiderDesk MCP Server', () => {
     expect(result.content[0].text).toBe(JSON.stringify(mockResponse.data));
   });
 
-  it('should call AiderDesk API when clear_context is executed', async () => {
+  it('should call ReactorPro API when clear_context is executed', async () => {
     const mockResponse = { data: { success: true } };
     vi.mocked(axios.post).mockResolvedValueOnce(mockResponse);
 

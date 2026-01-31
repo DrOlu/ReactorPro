@@ -9,7 +9,7 @@ The `/handoff` command enables you to extract the relevant context from your cur
 
 ## What It Does
 
-When you run `/handoff`, AiderDesk:
+When you run `/handoff`, ReactorPro:
 
 -   **Analyzes your conversation context**: Examines the current thread to understand what's been discussed and accomplished
 -   **Extracts relevant information**: Identifies the key decisions, progress, and context that matter for your next task (rather than summarizing everything)
@@ -69,7 +69,7 @@ Provide a focus parameter to guide the context extraction:
 ## Workflow
 
 1.  **Initiate Handoff**: Type `/handoff [focus]` in the prompt field
-2.  **Context Analysis**: AiderDesk analyzes your conversation to understand what's been accomplished
+2.  **Context Analysis**: ReactorPro analyzes your conversation to understand what's been accomplished
 3.  **Extraction**: The system extracts the relevant context, decisions, and progress that matter for your focus goal
 4.  **Prompt Generation**: A focused prompt is generated based on your focus and the extracted context
     - In **Agent Mode**: Uses a specialized handoff agent profile optimized for this task
@@ -109,14 +109,14 @@ To customize the handoff template:
 
 **Project-specific:**
 ```bash
-mkdir -p .aider-desk/prompts
-# Create your custom template at .aider-desk/prompts/handoff.hbs
+mkdir -p .reactorpro/prompts
+# Create your custom template at .reactorpro/prompts/handoff.hbs
 ```
 
 **Global:**
 ```bash
-mkdir -p ~/.aider-desk/prompts
-# Create your custom template at ~/.aider-desk/prompts/handoff.hbs
+mkdir -p ~/.reactorpro/prompts
+# Create your custom template at ~/.reactorpro/prompts/handoff.hbs
 ```
 
 See [Custom Prompts](../advanced/custom-prompts.md) for more details on template customization.
@@ -139,7 +139,7 @@ User: I need to implement user authentication with email/password login and JWT 
 /handoff implement password reset functionality with email verification
 ```
 
-AiderDesk creates a new task with a focused prompt that extracts:
+ReactorPro creates a new task with a focused prompt that extracts:
 
 ```markdown
 #### Background Information
@@ -196,7 +196,7 @@ User: Fix the memory leak in the user data fetching component
 /handoff check the rest of the codebase and find other places that need this fix
 ```
 
-AiderDesk extracts the fix pattern and creates a focused task for applying it across the codebase.
+ReactorPro extracts the fix pattern and creates a focused task for applying it across the codebase.
 
 **Step 3:** Continue with systematic fixes in the new focused task.
 

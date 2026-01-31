@@ -5,7 +5,7 @@ sidebar_label: "SocketIO Events"
 
 # SocketIO Real-Time Events
 
-AiderDesk uses SocketIO to provide real-time event streaming, allowing external applications to receive live updates about project activities, AI responses, and system events.
+ReactorPro uses SocketIO to provide real-time event streaming, allowing external applications to receive live updates about project activities, AI responses, and system events.
 
 ## Overview
 
@@ -16,7 +16,7 @@ The SocketIO server runs on the same port as the REST API (default: `24337`, con
 ```javascript
 import io from 'socket.io-client';
 
-// Connect to AiderDesk
+// Connect to ReactorPro
 const socket = io('http://localhost:24337', {
   autoConnect: true,
   forceNew: true,
@@ -700,7 +700,7 @@ Emitted when token usage information is updated.
 ```javascript
 import io from 'socket.io-client';
 
-class AiderDeskClient {
+class ReactorProClient {
   constructor(port = 24337) {
     this.socket = io(`http://localhost:${port}`);
     this.setupEventHandlers();
@@ -708,7 +708,7 @@ class AiderDeskClient {
 
   connect() {
     this.socket.on('connect', () => {
-      console.log('Connected to AiderDesk');
+      console.log('Connected to ReactorPro');
       this.subscribeToEvents([
         'response-chunk',
         'response-completed',
@@ -771,7 +771,7 @@ class AiderDeskClient {
 }
 
 // Usage
-const client = new AiderDeskClient();
+const client = new ReactorProClient();
 client.connect();
 ```
 
@@ -781,7 +781,7 @@ client.connect();
 import { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 
-export function useAiderDeskEvents(projectDir, taskId = null, eventTypes = []) {
+export function useReactorProEvents(projectDir, taskId = null, eventTypes = []) {
   const [isConnected, setIsConnected] = useState(false);
   const [events, setEvents] = useState([]);
 
@@ -827,7 +827,7 @@ export function useAiderDeskEvents(projectDir, taskId = null, eventTypes = []) {
 
 // Usage example
 function TaskComponent({ projectDir, taskId }) {
-  const { isConnected, events } = useAiderDeskEvents(
+  const { isConnected, events } = useReactorProEvents(
     projectDir, 
     taskId, 
     ['response-chunk', 'response-completed', 'task-completed']

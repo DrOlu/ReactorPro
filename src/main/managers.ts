@@ -118,7 +118,7 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
 
   // Start listening
   httpServer.listen(SERVER_PORT);
-  logger.info(`AiderDesk headless server listening on http://localhost:${SERVER_PORT}`);
+  logger.info(`ReactorPro headless server listening on http://localhost:${SERVER_PORT}`);
 
   let cleanedUp = false;
   const cleanup = async (): Promise<void> => {

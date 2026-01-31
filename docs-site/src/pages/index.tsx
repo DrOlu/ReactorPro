@@ -63,8 +63,8 @@ const Home = () => {
           <div className={styles.heroMain}>
             <div className={styles.heroContentCentered}>
               <div className={styles.brandSection}>
-                <img src="img/icon.png" alt="AiderDesk Logo" className={styles.heroIcon} />
-                <h1 className={styles.brandTitle}>AiderDesk</h1>
+                <img src="img/icon.png" alt="ReactorPro Logo" className={styles.heroIcon} />
+                <h1 className={styles.brandTitle}>ReactorPro</h1>
               </div>
               <div className={styles.heroText}>
                 <h2 className={styles.heroTagline}>Supercharge Your Coding with AI</h2>
@@ -95,7 +95,7 @@ const Home = () => {
           <div className={styles.heroVisual}>
             <div className={styles.heroCTA}>
               <a
-                href="https://github.com/hotovo/aider-desk/releases"
+                href="https://github.com/hyperspace/reactorpro/releases"
                 className={`button button--primary button--lg ${styles.primaryButton}`}
                 onClick={(e) => {
                   e.currentTarget.style.transform = 'scale(0.95)';
@@ -127,7 +127,7 @@ const Home = () => {
         <div className={styles.container}>
           <h2 className={styles.sectionTitle}>Transform How You Code</h2>
           <p className={styles.sectionSubtitle}>
-            AiderDesk brings the power of AI directly into your development environment, making coding faster, smarter, and more enjoyable.
+            ReactorPro brings the power of AI directly into your development environment, making coding faster, smarter, and more enjoyable.
           </p>
         </div>
       </section>
@@ -135,7 +135,7 @@ const Home = () => {
       <section className={styles.screenshotSection}>
         <div className={styles.container}>
           <div className={styles.screenshotWrapper}>
-            <img src="img/screenshot.png" alt="AiderDesk Interface" className={styles.screenshot} />
+            <img src="img/screenshot.png" alt="ReactorPro Interface" className={styles.screenshot} />
           </div>
         </div>
       </section>
@@ -145,7 +145,7 @@ const Home = () => {
           <h2 className={styles.sectionTitle}>Get Started in Seconds</h2>
           <div className={styles.downloadButtons}>
             <a
-              href="https://github.com/hotovo/aider-desk/releases"
+              href="https://github.com/hyperspace/reactorpro/releases"
               className={`button button--primary button--lg ${styles.primaryButton}`}
               onClick={(e) => {
                 e.currentTarget.style.transform = 'scale(0.95)';
@@ -175,7 +175,7 @@ const Home = () => {
 
       <section className={styles.featuresSection}>
         <div className={styles.container}>
-          <h2 className={styles.sectionTitle}>Why Developers Love AiderDesk</h2>
+          <h2 className={styles.sectionTitle}>Why Developers Love ReactorPro</h2>
           <div className={styles.featuresGrid}>
             <div className={styles.featureCard}>
               <div className={styles.featureIcon}>🤖</div>
@@ -252,7 +252,7 @@ const Home = () => {
           <div className={styles.videoWrapper}>
             <a href="https://www.youtube.com/watch?v=KSWlhB-O2SE" className={styles.videoLink}>
               <div className={styles.videoThumbnail}>
-                <img src="https://img.youtube.com/vi/9oyIdntCh7g/0.jpg" alt="AiderDesk Demo" />
+                <img src="https://img.youtube.com/vi/9oyIdntCh7g/0.jpg" alt="ReactorPro Demo" />
                 <div className={styles.playButton}>
                   <div className={styles.playIcon}>▶</div>
                 </div>
@@ -270,7 +270,7 @@ const Home = () => {
             <a href="https://discord.com/invite/dyM3G9nTe4" className={styles.communityLink}>
               Discord Server
             </a>
-            <a href="https://github.com/hotovo/aider-desk/discussions" className={styles.communityLink}>
+            <a href="https://github.com/hyperspace/reactorpro/discussions" className={styles.communityLink}>
               GitHub Discussions
             </a>
           </div>

@@ -199,7 +199,7 @@ export class PromptsManager {
       return;
     }
 
-    const projectPromptsDir = path.join(projectDir, '.aider-desk', 'prompts');
+    const projectPromptsDir = path.join(projectDir, '.reactorpro', 'prompts');
     try {
       await fs.mkdir(projectPromptsDir, { recursive: true });
     } catch (error) {

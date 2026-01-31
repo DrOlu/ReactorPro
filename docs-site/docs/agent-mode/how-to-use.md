@@ -53,7 +53,7 @@ See [Model Library](../features/model-library.md) for comprehensive provider man
 
 ### 1. Choose from the List
 
-For some providers, AiderDesk will show a list of common models in a dropdown menu. Simply click the dropdown and select the model you want to use.
+For some providers, ReactorPro will show a list of common models in a dropdown menu. Simply click the dropdown and select the model you want to use.
 
 ![Choosing a model from the list](../images/model-selector-default.gif)
 

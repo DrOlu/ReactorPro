@@ -18,7 +18,7 @@ export const AboutSettings = ({ settings, setSettings }: Props) => {
   const { versions, checkForUpdates } = useVersions();
   const api = useApi();
 
-  const isAiderDeskUpdateAvailable =
+  const isReactorProUpdateAvailable =
     !versions?.aiderDeskDownloadProgress && versions?.aiderDeskAvailableVersion && versions.aiderDeskAvailableVersion !== versions.aiderDeskCurrentVersion;
   const isAiderUpdateAvailable = versions?.aiderAvailableVersion && versions.aiderAvailableVersion !== versions.aiderCurrentVersion;
   const isDownloading = typeof versions?.aiderDeskDownloadProgress === 'number';
@@ -34,7 +34,7 @@ export const AboutSettings = ({ settings, setSettings }: Props) => {
 
   const handleDownloadUpdate = async () => {
     try {
-      await api.downloadLatestAiderDesk();
+      await api.downloadLatestReactorPro();
     } catch (error) {
       toast.error(t('settings.about.downloadError'));
       // eslint-disable-next-line no-console
@@ -51,7 +51,7 @@ export const AboutSettings = ({ settings, setSettings }: Props) => {
 
   return (
     <div className="space-y-6">
-      <Section title="AiderDesk">
+      <Section title="ReactorPro">
         <div className="p-6 space-y-2">
           <div className="flex  text-sm text-text-primary gap-2">
             <span>{t('settings.about.version')}:</span>
@@ -75,10 +75,10 @@ export const AboutSettings = ({ settings, setSettings }: Props) => {
           )}
           {versions?.aiderDeskNewVersionReady ? (
             <div className="pt-2">
-              <p className="text-xs text-warning-light">{t('settings.about.newAiderDeskVersionReady')}</p>
+              <p className="text-xs text-warning-light">{t('settings.about.newReactorProVersionReady')}</p>
             </div>
           ) : (
-            isAiderDeskUpdateAvailable &&
+            isReactorProUpdateAvailable &&
             !isDownloading && (
               <div className="flex justify-between items-center pt-2">
                 <span className="text-xs text-warning-light">

@@ -199,7 +199,7 @@ export const createClaudeAgentSdkLlm = (
       // setting MAX_MCP_OUTPUT_TOKENS to a high number to avoid errors
       MAX_MCP_OUTPUT_TOKENS: '9999999',
     },
-    // for now only tools from AiderDesk are allowed
+    // for now only tools from ReactorPro are allowed
     disallowedTools: [
       'AskUserQuestion',
       'Bash',

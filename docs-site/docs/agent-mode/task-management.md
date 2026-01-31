@@ -5,7 +5,7 @@ sidebar_label: "Todo Management"
 
 # Todo Management in Agent Mode
 
-AiderDesk includes a todo management system designed to help the agent track and complete complex, multi-step tasks. This feature is integrated into the broader **Task Management** system and is primarily used in **Agent Mode**.
+ReactorPro includes a todo management system designed to help the agent track and complete complex, multi-step tasks. This feature is integrated into the broader **Task Management** system and is primarily used in **Agent Mode**.
 
 ## How It Works
 

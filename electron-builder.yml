@@ -1,5 +1,5 @@
-appId: com.hotovo.aider-desk
-productName: aider-desk
+appId: ng.hyperspace.reactorpro
+productName: ReactorPro
 directories:
   buildResources: build
 files:
@@ -31,7 +31,7 @@ asarUnpack:
   - '**/node_modules/@img/**/*'
 beforePack: scripts/before-pack.js
 win:
-  executableName: aider-desk
+  executableName: reactorpro
   icon: resources/icon.png
   extraResources:
     - from: ./resources/win
@@ -68,7 +68,7 @@ linux:
     - target: AppImage
     - target: deb
     - target: rpm
-  maintainer: Hotovo
+  maintainer: Hyperspace Technologies
   category: Utility
   extraResources:
     - from: ./resources/linux

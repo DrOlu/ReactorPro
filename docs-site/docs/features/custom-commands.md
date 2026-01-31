@@ -5,22 +5,22 @@ sidebar_label: "Custom Commands"
 
 # Custom Commands
 
-AiderDesk allows you to define and use custom commands to automate repetitive tasks or extend AiderDesk's functionality. These commands are defined in Markdown files with YAML front matter and can be executed directly from the prompt field.
+ReactorPro allows you to define and use custom commands to automate repetitive tasks or extend ReactorPro's functionality. These commands are defined in Markdown files with YAML front matter and can be executed directly from the prompt field.
 
 ## Where to Create Custom Commands
 
-Custom command files are Markdown files (`.md`) that AiderDesk monitors for changes. You can create them in two locations:
+Custom command files are Markdown files (`.md`) that ReactorPro monitors for changes. You can create them in two locations:
 
 1.  **Global Commands:**
-    *   Location: `~/.aider-desk/commands/` (your user home directory)
+    *   Location: `~/.reactorpro/commands/` (your user home directory)
     *   Commands placed here are available across all your projects.
 
 2.  **Project-Specific Commands:**
-    *   Location: `.aider-desk/commands/` (within your current project's root directory)
+    *   Location: `.reactorpro/commands/` (within your current project's root directory)
     *   Commands placed here are only available for that specific project.
     *   **Note:** If a command with the same name exists in both global and project-specific directories, the project-specific command will take precedence.
 
-If the `commands` directory does not exist in either location, AiderDesk will create it automatically when it starts up or when you first try to use custom commands.
+If the `commands` directory does not exist in either location, ReactorPro will create it automatically when it starts up or when you first try to use custom commands.
 
 ## Custom Command File Format
 
@@ -55,7 +55,7 @@ Any line starting with `!` will be treated as a shell command.
 
 ### Command Template:
 
-The content of the Markdown file below the YAML front matter is the command's template. This template will be sent to the AiderDesk agent as a prompt.
+The content of the Markdown file below the YAML front matter is the command's template. This template will be sent to the ReactorPro agent as a prompt.
 
 *   **Argument Substitution:** 
     *   Use `{{1}}`, `{{2}}`, `{{3}}`, and so on, to insert the values of the arguments passed to the command. `{{1}}` corresponds to the first argument, `{{2}}` to the second, and so forth.
@@ -64,16 +64,16 @@ The content of the Markdown file below the YAML front matter is the command's te
 
 ## How to Use Custom Commands
 
-Custom commands can be executed directly from the prompt field in AiderDesk.
+Custom commands can be executed directly from the prompt field in ReactorPro.
 
 2.  **Typing the Command:** Start typing `/` followed by the command's name (e.g., `/mycommand`).
-3.  **Autocompletion:** As you type, AiderDesk's prompt field will provide autocompletion suggestions for your custom commands, along with their descriptions.
+3.  **Autocompletion:** As you type, ReactorPro's prompt field will provide autocompletion suggestions for your custom commands, along with their descriptions.
 4.  **Passing Arguments:** If your command expects arguments, provide them after the command name, separated by spaces. For example:
     ```
     /mycommand arg1 "argument with spaces" arg3
     ```
     **Note:** Currently, arguments with spaces must be enclosed in double quotes.
-5.  **Execution:** Press Enter to execute the command. AiderDesk will substitute the arguments into your command's template, execute any embedded shell commands, and then send the fully assembled prompt to the appropriate handler (Aider or Agent) based on the active mode.
+5.  **Execution:** Press Enter to execute the command. ReactorPro will substitute the arguments into your command's template, execute any embedded shell commands, and then send the fully assembled prompt to the appropriate handler (Aider or Agent) based on the active mode.
     *   **Note on Mode Selection:** The effectiveness of a custom command depends on the active mode.
         *   Use **Code** mode for commands intended to modify files within the current context.
         *   Use **Ask** mode for general queries or information retrieval that do not involve file modifications.
@@ -84,7 +84,7 @@ Custom commands can be executed directly from the prompt field in AiderDesk.
 
 ### Example 1: Simple Git Status Command
 
-Create a file named `~/.aider-desk/commands/git-status.md` (or `.aider-desk/commands/git-status.md`):
+Create a file named `~/.reactorpro/commands/git-status.md` (or `.reactorpro/commands/git-status.md`):
 
 ```markdown
 ---
@@ -99,7 +99,7 @@ To use it, type `/git-status` in the prompt field and press Enter.
 
 This command is similar to the built-in `commit-message` but demonstrates argument usage.
 
-Create a file named `~/.aider-desk/commands/generate-commit.md`:
+Create a file named `~/.reactorpro/commands/generate-commit.md`:
 
 ```markdown
 ---
@@ -132,7 +132,7 @@ To use it, you could type:
 
 This command will list files in the root of the project, without including the current chat history or context files.
 
-Create a file named `~/.aider-desk/commands/list-root.md`:
+Create a file named `~/.reactorpro/commands/list-root.md`:
 
 ```markdown
 ---
@@ -148,7 +148,7 @@ To use it, type `/list-root` in the prompt field and press Enter. The agent will
 
 This command demonstrates how to use `{{ARGUMENTS}}` to handle a variable number of arguments, useful for commands that should accept any number of parameters.
 
-Create a file named `~/.aider-desk/commands/echo-all.md`:
+Create a file named `~/.reactorpro/commands/echo-all.md`:
 
 ```markdown
 ---

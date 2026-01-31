@@ -576,7 +576,7 @@ export class BrowserApi implements ApplicationAPI {
   getVersions(forceRefresh = false): Promise<VersionsInfo | null> {
     return this.get('/settings/versions', { forceRefresh });
   }
-  downloadLatestAiderDesk(): Promise<void> {
+  downloadLatestReactorPro(): Promise<void> {
     return this.post('/download-latest', {});
   }
   async getReleaseNotes(): Promise<string | null> {

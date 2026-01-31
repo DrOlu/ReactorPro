@@ -48,7 +48,7 @@ export class ServerController {
       next();
     } else {
       res.status(503).json({
-        error: 'Server is not started. Enable the server in your AiderDesk -> Settings -> Server.',
+        error: 'Server is not started. Enable the server in your ReactorPro -> Settings -> Server.',
       });
     }
   }
@@ -75,7 +75,7 @@ export class ServerController {
     if (useEnvAuth || settings.basicAuth.enabled) {
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Basic ')) {
-        res.setHeader('WWW-Authenticate', 'Basic realm="AiderDesk"');
+        res.setHeader('WWW-Authenticate', 'Basic realm="ReactorPro"');
         res.status(401).send('Authentication required');
         return;
       }

@@ -5,7 +5,7 @@ sidebar_label: "Commands"
 
 # Built-in Commands Reference
 
-AiderDesk provides a set of built-in commands that you can use in the prompt field to perform various actions quickly. To use a command, simply type `/` followed by the command name.
+ReactorPro provides a set of built-in commands that you can use in the prompt field to perform various actions quickly. To use a command, simply type `/` followed by the command name.
 
 ## Core Commands
 

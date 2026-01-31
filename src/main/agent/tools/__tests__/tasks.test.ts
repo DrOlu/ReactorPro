@@ -18,7 +18,7 @@ describe('Tasks Tools - search_task', () => {
   const TASKS_TOOL_GROUP_NAME = 'tasks';
   const TOOL_GROUP_NAME_SEPARATOR = '---';
   const TASKS_TOOL_SEARCH_TASK = 'search_task';
-  const AIDER_DESK_TASKS_DIR = '.aider-desk/tasks';
+  const AIDER_DESK_TASKS_DIR = '.reactorpro/tasks';
 
   beforeEach(async () => {
     vi.clearAllMocks();

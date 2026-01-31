@@ -11,10 +11,10 @@ Agent Profiles are the core of configuring the agent's behavior. You can create 
 Agent profiles are now stored as files, making them easy to share, backup, and version control. There are two levels of profile storage:
 
 ### Global Profiles
-Stored in `~/.aider-desk/agents/`, these profiles are available across all projects.
+Stored in `~/.reactorpro/agents/`, these profiles are available across all projects.
 
 ### Project-Level Profiles
-Stored in `$projectDir/.aider-desk/agents/`, these profiles are specific to individual projects and override global profiles when working within that project.
+Stored in `$projectDir/.reactorpro/agents/`, these profiles are specific to individual projects and override global profiles when working within that project.
 
 ### Profile Directory Structure
 
@@ -36,7 +36,7 @@ You can manage profiles in **Settings > Agent**, or directly edit the files for 
 
 ## Pre-defined Profiles
 
-AiderDesk comes with three pre-configured profiles that showcase different capabilities:
+ReactorPro comes with three pre-configured profiles that showcase different capabilities:
 
 ### Power Tools
 
@@ -93,7 +93,7 @@ Agent profiles can include custom rules and instructions from multiple sources:
 
 - **Custom Instructions**: A free-text area to provide specific, persistent instructions to the agent for this profile.
 - **Agent-Specific Rule Files**: Markdown files placed in the agent's `rules/` directory are automatically included as additional instructions. This allows you to create detailed, structured rules for specific agent behaviors.
-- **Project-Level Rules**: When using project-level profiles, rules from both the project's `.aider-desk/rules/` directory and the agent's own `rules/` directory are included.
+- **Project-Level Rules**: When using project-level profiles, rules from both the project's `.reactorpro/rules/` directory and the agent's own `rules/` directory are included.
 - **Global Rule Inheritance**: Project-level profiles automatically inherit rules from global profiles with the same ID, allowing you to extend base profiles with project-specific customizations.
 
 #### Rule File Best Practices
@@ -140,13 +140,13 @@ Learn more about creating, configuring, and using subagents in the [Subagents](.
 Since profiles are stored as files, you can easily:
 - **Share profiles** by copying the profile directory between machines or users
 - **Version control** profiles by committing them to your repository (especially project-level profiles)
-- **Backup profiles** by copying the `~/.aider-desk/agents/` directory
+- **Backup profiles** by copying the `~/.reactorpro/agents/` directory
 
 #### Profile Ordering
 Profile order is maintained via `order.json` files in both global and project agent directories. The Settings interface automatically updates these files when you reorder profiles.
 
 #### Real-time Updates
-AiderDesk automatically watches for changes to profile files and reloads them in real-time. You can:
+ReactorPro automatically watches for changes to profile files and reloads them in real-time. You can:
 - Edit `config.json` directly to modify profile settings
 - Add/remove rule files in the `rules/` directory
 - Changes are applied immediately without restarting the application

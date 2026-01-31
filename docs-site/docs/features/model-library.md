@@ -5,7 +5,7 @@ sidebar_label: "Model Library"
 
 # Model Library
 
-The Model Library is AiderDesk's advanced provider and model management system that gives you complete control over your AI model configuration. It allows you to manage multiple provider profiles, add custom models, configure costs, and organize your model collection efficiently.
+The Model Library is ReactorPro's advanced provider and model management system that gives you complete control over your AI model configuration. It allows you to manage multiple provider profiles, add custom models, configure costs, and organize your model collection efficiently.
 
 ![Model Library Interface](../images/model-library.png)
 

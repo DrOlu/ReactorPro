@@ -5,10 +5,10 @@ sidebar_label: "Aider Configuration"
 
 # Aider Configuration
 
-AiderDesk offers several ways to configure the underlying Aider engine, providing flexibility for advanced users. Configuration is loaded with the following priority (from highest to lowest):
+ReactorPro offers several ways to configure the underlying Aider engine, providing flexibility for advanced users. Configuration is loaded with the following priority (from highest to lowest):
 
-1.  Settings configured in the AiderDesk UI.
-2.  Command-line options specified in AiderDesk settings.
+1.  Settings configured in the ReactorPro UI.
+2.  Command-line options specified in ReactorPro settings.
 3.  Variables in a `.env` file in your project directory.
 4.  Settings in a `.aider.conf.yml` file in your project directory.
 5.  Variables in a `.env` file in your home directory.
@@ -34,7 +34,7 @@ You can set environment variables for the Aider process, which is useful for con
 
 ### `.aider.conf.yml`
 
-AiderDesk respects the standard `.aider.conf.yml` file. You can place this file in your project's root directory or your home directory to define project-specific or global settings for Aider.
+ReactorPro respects the standard `.aider.conf.yml` file. You can place this file in your project's root directory or your home directory to define project-specific or global settings for Aider.
 
 **Example `.aider.conf.yml`:**
 ```yaml

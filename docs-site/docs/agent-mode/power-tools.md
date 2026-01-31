@@ -7,7 +7,7 @@ sidebar_label: "Power Tools"
 
 ## What Are Power Tools?
 
-Power tools are a collection of specialized AI tools that provide direct file system interaction and development operations within AiderDesk. They give the AI agent granular control over your project files and environment, enabling more efficient and targeted operations. Power tools complement AiderDesk's existing Aider integration by providing:
+Power tools are a collection of specialized AI tools that provide direct file system interaction and development operations within ReactorPro. They give the AI agent granular control over your project files and environment, enabling more efficient and targeted operations. Power tools complement ReactorPro's existing Aider integration by providing:
 
 - **Direct file operations** - Read, write, and edit files without full Aider context management
 - **Advanced search capabilities** - Semantic search, pattern matching, and content discovery
@@ -20,7 +20,7 @@ Unlike Aider tools that manage the full codebase context, power tools offer imme
 
 ### Enabling Power Tools
 
-1. Open AiderDesk Settings
+1. Open ReactorPro Settings
 2. Navigate to the **Agent** section
 3. Toggle **"Use Power Tools"** to enable the feature
 4. Configure individual tool approval settings as needed
@@ -237,7 +237,7 @@ Power tools complement Aider tools:
 
 ### Understanding Approvals
 
-Power tools can perform potentially dangerous operations, so AiderDesk includes a robust approval system:
+Power tools can perform potentially dangerous operations, so ReactorPro includes a robust approval system:
 
 - **File operations** generally safe, minimal approval needed
 - **Bash commands** require careful review before approval
@@ -267,7 +267,7 @@ When prompted for approval, you can choose:
 **Power tools not available:**
 - Check that "Use Power Tools" is enabled in settings
 - Verify your agent profile has power tools configured
-- Restart AiderDesk if settings don't take effect
+- Restart ReactorPro if settings don't take effect
 
 **File operations failing:**
 - Ensure files exist and are readable/writable
@@ -303,11 +303,11 @@ If you encounter issues with power tools:
 1. Check the message history for error details
 2. Review your approval settings
 3. Try simpler operations to isolate the problem
-4. Restart AiderDesk if tools become unresponsive
-5. Check the AiderDesk logs for technical details
+4. Restart ReactorPro if tools become unresponsive
+5. Check the ReactorPro logs for technical details
 
 ## Conclusion
 
-Power tools significantly enhance AiderDesk's capabilities by providing direct, efficient access to file system operations and development tasks. By understanding their capabilities and configuring them appropriately, you can create powerful workflows that combine the best of both targeted operations and comprehensive code management.
+Power tools significantly enhance ReactorPro's capabilities by providing direct, efficient access to file system operations and development tasks. By understanding their capabilities and configuring them appropriately, you can create powerful workflows that combine the best of both targeted operations and comprehensive code management.
 
 Remember to balance convenience with security by thoughtfully configuring approval settings, and don't hesitate to experiment with different tools to find the workflows that work best for your development style.
