@@ -1118,7 +1118,8 @@
       "groupCompleted": "{{name}}: 子代理已完成任务。",
       "running": "正在运行子代理...",
       "completed": "子代理执行了以下查询:",
-      "prompt": "提示"
+      "prompt": "提示",
+      "error": "运行子代理"
     },
     "errors": {
       "noSuchTool": "尝试使用未知工具: {{toolName}}",

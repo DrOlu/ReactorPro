@@ -1142,7 +1142,8 @@
       "groupCompleted": "{{name}}: Subagent finished the task.",
       "running": "Subagent is working...",
       "completed": "Subagent finished the task.",
-      "prompt": "Prompt"
+      "prompt": "Prompt",
+      "error": "Error running the subagent"
     },
     "errors": {
       "noSuchTool": "Attempted to use unknown tool: {{toolName}}",

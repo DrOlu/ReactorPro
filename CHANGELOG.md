@@ -20,6 +20,10 @@
 - properly loading the pending text in prompt field when switching tasks
 - added delete up to here action to remove all messages up to some message
 - added support for pasting images from clipboard in the browser
+- showing the subagent tool error message in the tool message
+- showing project tabs as dropdown on mobile devices
+- properly positioning message menu over the top content
+- added support for unknown file type in diff viewer to show without highlighting
 
 ## [0.50.1]
 

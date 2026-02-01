@@ -64,7 +64,7 @@ const COMMANDS = [
   '/drop',
   '/redo',
   '/edit-last',
-  '/optimize',
+  '/compact',
   '/commit',
   '/handoff',
   '/init',

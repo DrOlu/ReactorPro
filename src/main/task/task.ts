@@ -2372,6 +2372,7 @@ export class Task {
     const newTaskData = await this.project.createNewTask({
       parentId: this.task.parentId || this.taskId,
       sendEvent: false,
+      autoApprove: execute ? this.task.autoApprove : undefined,
       activate: true,
     });
 

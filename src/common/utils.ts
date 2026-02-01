@@ -145,6 +145,7 @@ const extToLang: Record<string, string> = {
   htm: 'markup',
   xml: 'markup',
   svg: 'markup',
+  astro: 'markup',
   css: 'css',
   scss: 'scss',
   sass: 'sass',
@@ -252,7 +253,7 @@ const extToLang: Record<string, string> = {
 
 export const getLanguageFromPath = (path: string | undefined): string => {
   const extension = path?.split('.').pop()?.toLowerCase();
-  return extToLang[extension || ''] || extension || 'text';
+  return extToLang[extension || ''] || 'text';
 };
 
 export const isURL = (url: string): boolean => {
