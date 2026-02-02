@@ -231,7 +231,7 @@ src/
     progress-window.ts
     start-up.ts
   mcp-server/
-    aider-desk-mcp-server.ts
+    reactorpro-mcp-server.ts
   preload/
     index.d.ts
     index.ts
@@ -1377,8 +1377,8 @@ File: src/common/locales/en.json
     "nextResult": "Next result (F3)"
   },
   "onboarding": {
-    "title": "Welcome to AiderDesk",
-    "description": "AiderDesk is your desktop companion for AI-assisted coding. This application brings the power of Aider's AI coding assistant to a user-friendly interface, helping you:",
+    "title": "Welcome to ReactorPro",
+    "description": "ReactorPro is your AI platform for Professionals. This application brings the power of Aider's AI coding assistant to a user-friendly interface, helping you:",
     "skipForNow": "Skip for now",
     "finish": "Finish Setup",
     "features": {
@@ -1420,7 +1420,7 @@ File: src/common/locales/en.json
       "description": "Configure your LLM providers for use with both Aider and Agent modes. You can set up API keys and additional settings for various providers.",
       "configureLater": "You can configure these later in the Settings if you prefer.",
       "connectTitle": "Connect Your AI Model",
-      "connectDescription": "AiderDesk supports multiple AI providers including OpenAI, Anthropic, Google Gemini, and more. Your API keys are stored securely on your local machine and never shared.",
+      "connectDescription": "ReactorPro supports multiple AI providers including OpenAI, Anthropic, Google Gemini, and more. Your API keys are stored securely on your local machine and never shared.",
       "advancedUsersNote": "Advanced users: You can also configure providers using environment variables in the next step's Aider configuration section.",
       "advancedSettings": "Advanced settings",
       "order": "Order",
@@ -1443,7 +1443,7 @@ File: src/common/locales/en.json
     },
     "agent": {
       "title": "Meet Your AI Agent",
-      "description": "Discover the power of autonomous AI assistance with AiderDesk's Agent mode. Your AI agent can work independently to complete complex tasks.",
+      "description": "Discover the power of autonomous AI assistance with ReactorPro's Agent mode. Your AI agent can work independently to complete complex tasks.",
       "capabilities": "Agent Capabilities:",
       "autonomousPlanning": "Autonomous Task Planning:",
       "autonomousPlanningDesc": "Breaks down complex requests into manageable steps and executes them systematically.",
@@ -1458,9 +1458,9 @@ File: src/common/locales/en.json
     },
     "complete": {
       "title": "Setup Complete!",
-      "description": "Congratulations! You've successfully set up AiderDesk. You're now ready to start coding with AI assistance.",
+      "description": "Congratulations! You've successfully set up ReactorPro. You're now ready to start coding with AI assistance.",
       "ready": "Click 'Finish Setup' to begin your coding journey.",
-      "success": "Onboarding completed successfully! Welcome to AiderDesk."
+      "success": "Onboarding completed successfully! Welcome to ReactorPro."
     },
     "errors": {
       "navigationFailed": "Navigation failed. Please try again.",
@@ -2007,11 +2007,11 @@ File: src/common/locales/en.json
       "version": "Version",
       "notAvailable": "N/A",
       "checkForUpdates": "Check for updates",
-      "newAiderVersionAvailable": "New Aider version ({{version}}) is available - restart AiderDesk to install.",
+      "newAiderVersionAvailable": "New Aider version ({{version}}) is available - restart ReactorPro to install.",
       "updateAvailable": "Update is available",
       "downloadUpdate": "Download",
       "downloadingUpdate": "Downloading update",
-      "newAiderDeskVersionReady": "A new version is ready. Restart AiderDesk to apply the update.",
+      "newReactorProVersionReady": "A new version is ready. Restart ReactorPro to apply the update.",
       "downloadAutomatically": "Download update automatically",
       "releaseNotes": "Release notes",
       "openLogsDirectory": "Open logs directory",
@@ -2037,7 +2037,7 @@ File: src/common/locales/en.json
       "modeAtSign": "@ mention mode"
     },
     "server": {
-      "description": "Enable server on port 24337 to access AiderDesk from external applications",
+      "description": "Enable server on port 24337 to access ReactorPro from external applications",
       "status": "Status",
       "running": "Running",
       "enableBasicAuth": "Enable Basic Authentication",
@@ -2610,7 +2610,7 @@ File: src/common/locales/en.json
   },
   "telemetry": {
     "title": "Telemetry Information",
-    "message": "To help us improve AiderDesk, anonymous telemetry data is collected. This includes information like mode usage (agent, code, ask...) and some specifics when Agent mode is used. No personal data or prompts are ever collected.",
+    "message": "To help us improve ReactorPro, anonymous telemetry data is collected. This includes information like mode usage (agent, code, ask...) and some specifics when Agent mode is used. No personal data or prompts are ever collected.",
     "fullInfo": "Full information about what is collected can be found <a>here</a>.",
     "enabledLabel": "Enable anonymous telemetry"
   },
@@ -2788,7 +2788,7 @@ File: src/common/locales/en.json
     "noChanges": "No changes"
   },
   "welcomeMessage": {
-    "title": "AiderDesk",
+    "title": "ReactorPro",
     "subtitle": "Your AI-powered coding assistant",
     "features": {
       "title": "What you can do:",
@@ -2873,8 +2873,8 @@ File: src/common/locales/zh.json
     "nextResult": "下一个结果 (F3)"
   },
   "onboarding": {
-    "title": "欢迎使用 AiderDesk",
-    "description": "AiderDesk 是您的 AI 辅助编程桌面伴侣。本应用将 Aider 的 AI 编程助手功能带到用户友好的界面中，帮助您：",
+    "title": "欢迎使用 ReactorPro",
+    "description": "ReactorPro 是您的专业 AI 平台。本应用将 Aider 的 AI 编程助手功能带到用户友好的界面中，帮助您：",
     "skipForNow": "暂时跳过",
     "finish": "完成设置",
     "features": {
@@ -2916,7 +2916,7 @@ File: src/common/locales/zh.json
       "description": "配置您的 LLM 提供商以在 Aider 和 Agent 模式中使用。您可以为各种提供商设置 API 密钥和其他设置。",
       "configureLater": "如果您愿意，可以稍后在设置中配置这些。",
       "connectTitle": "连接您的AI模型",
-      "connectDescription": "AiderDesk 支持多个AI提供商，包括OpenAI、Anthropic、Google Gemini等。您的API密钥安全存储在本地机器上，绝不会被共享。",
+      "connectDescription": "ReactorPro 支持多个AI提供商，包括OpenAI、Anthropic、Google Gemini等。您的API密钥安全存储在本地机器上，绝不会被共享。",
       "advancedUsersNote": "高级用户：您也可以在下一步的Aider配置部分使用环境变量配置提供商。",
       "advancedSettings": "高级设置",
       "order": "排序",
@@ -2939,7 +2939,7 @@ File: src/common/locales/zh.json
     },
     "agent": {
       "title": "认识您的AI代理",
-      "description": "通过 AiderDesk 的代理模式发现自主AI辅助的强大功能。您的AI代理可以独立工作来完成复杂任务。",
+      "description": "通过 ReactorPro 的代理模式发现自主AI辅助的强大功能。您的AI代理可以独立工作来完成复杂任务。",
       "capabilities": "代理功能：",
       "autonomousPlanning": "自主任务规划：",
       "autonomousPlanningDesc": "将复杂请求分解为可管理的步骤并系统性地执行它们。",
@@ -2954,9 +2954,9 @@ File: src/common/locales/zh.json
     },
     "complete": {
       "title": "设置完成！",
-      "description": "恭喜！您已成功设置 AiderDesk。现在您可以开始使用 AI 辅助编程了。",
+      "description": "恭喜！您已成功设置 ReactorPro。现在您可以开始使用 AI 辅助编程了。",
       "ready": "点击'完成设置'开始您的编程之旅。",
-      "success": "引导完成成功！欢迎使用 AiderDesk。"
+      "success": "引导完成成功！欢迎使用 ReactorPro。"
     },
     "errors": {
       "navigationFailed": "导航失败。请重试。",
@@ -3499,11 +3499,11 @@ File: src/common/locales/zh.json
       "version": "版本",
       "notAvailable": "不可用",
       "checkForUpdates": "检查更新",
-      "newAiderVersionAvailable": "新的 Aider 版本可用 ({{version}}) - 重启 AiderDesk 以安装。",
+      "newAiderVersionAvailable": "新的 Aider 版本可用 ({{version}}) - 重启 ReactorPro 以安装。",
       "updateAvailable": "有可用更新",
       "downloadUpdate": "下载",
       "downloadingUpdate": "正在下载更新",
-      "newAiderDeskVersionReady": "新版本已准备好。重启 AiderDesk 以应用更新。",
+      "newReactorProVersionReady": "新版本已准备好。重启 ReactorPro 以应用更新。",
       "downloadAutomatically": "自动下载更新",
       "releaseNotes": "发行说明",
       "openLogsDirectory": "打开日志目录",
@@ -4080,7 +4080,7 @@ File: src/common/locales/zh.json
   },
   "telemetry": {
     "title": "遥测信息",
-    "message": "为了帮助我们改进 AiderDesk，我们会收集匿名遥测数据。这包括功能使用情况和性能指标等信息。绝不会收集个人数据或代码。",
+    "message": "为了帮助我们改进 ReactorPro，我们会收集匿名遥测数据。这包括功能使用情况和性能指标等信息。绝不会收集个人数据或代码。",
     "enabledLabel": "启用匿名遥测"
   },
   "promptBehavior": {
@@ -4097,7 +4097,7 @@ File: src/common/locales/zh.json
     "modeAtSign": "@ 提及模式"
   },
   "server": {
-    "description": "启用 服务器，允许您通过浏览器在端口 24337 访问 AiderDesk",
+    "description": "启用 服务器，允许您通过浏览器在端口 24337 访问 ReactorPro",
     "serverStatus": "服务器状态",
     "running": "运行中",
     "enableBasicAuth": "启用基本身份验证",
@@ -4295,7 +4295,7 @@ File: src/common/locales/zh.json
     "noChanges": "没有更改"
   },
   "welcomeMessage": {
-    "title": "AiderDesk",
+    "title": "ReactorPro",
     "subtitle": "您的 AI 驱动编程助手",
     "features": {
       "title": "您可以做什么：",
@@ -4770,7 +4770,7 @@ export interface ApplicationAPI {
   setZoomLevel: (level: number) => Promise<void>;
 
   getVersions: (forceRefresh?: boolean) => Promise<VersionsInfo | null>;
-  downloadLatestAiderDesk: () => Promise<void>;
+  downloadLatestReactorPro: () => Promise<void>;
 
   getReleaseNotes: () => Promise<string | null>;
   clearReleaseNotes: () => Promise<void>;
@@ -8024,7 +8024,7 @@ export const createClaudeAgentSdkLlm = (
 ⋮----
 // setting MAX_MCP_OUTPUT_TOKENS to a high number to avoid errors
 ⋮----
-// for now only tools from AiderDesk are allowed
+// for now only tools from ReactorPro are allowed
 ⋮----
 const getClaudeAgentSdkUsageReport = (
   task: Task,
@@ -10175,7 +10175,7 @@ registerRoutes(router: Router): void
 ⋮----
 // Get versions
 ⋮----
-// Download latest AiderDesk
+// Download latest ReactorPro
 ⋮----
 // Get release notes
 ⋮----
@@ -12576,7 +12576,7 @@ constructor(
 ⋮----
 async getVersions(forceRefresh = false): Promise<VersionsInfo>
 ⋮----
-// Get AiderDesk version using app.getVersion()
+// Get ReactorPro version using app.getVersion()
 ⋮----
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 ⋮----
@@ -12602,7 +12602,7 @@ autoUpdater.autoInstallOnAppQuit = true; // Install on quit after download
 ⋮----
 public destroy(): void
 ⋮----
-public async downloadLatestAiderDesk(): Promise<void>
+public async downloadLatestReactorPro(): Promise<void>
 ⋮----
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 ⋮----
@@ -13327,7 +13327,7 @@ setZoomLevel(zoomLevel: number): void
 ⋮----
 async getVersions(forceRefresh = false): Promise<VersionsInfo>
 ⋮----
-async downloadLatestAiderDesk(): Promise<void>
+async downloadLatestReactorPro(): Promise<void>
 ⋮----
 getReleaseNotes(): string | null
 ⋮----
@@ -13947,7 +13947,7 @@ export const performStartUp = async (updateProgress: UpdateProgressFunction): Pr
 // Clean up if setup fails
 
 ================
-File: src/mcp-server/aider-desk-mcp-server.ts
+File: src/mcp-server/reactorpro-mcp-server.ts
 ================
 /* eslint-disable func-style,@typescript-eslint/no-explicit-any */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -13957,7 +13957,7 @@ import { z } from 'zod/v3';
 ⋮----
 // Get project directory from command line arguments or use default
 ⋮----
-// AiderDesk API configuration
+// ReactorPro API configuration
 ⋮----
 // eslint-disable-next-line no-console
 ⋮----
@@ -14319,7 +14319,7 @@ setZoomLevel(level: number): Promise<void>
 // eslint-disable-next-line no-console
 ⋮----
 getVersions(forceRefresh = false): Promise<VersionsInfo | null>
-downloadLatestAiderDesk(): Promise<void>
+downloadLatestReactorPro(): Promise<void>
 async getReleaseNotes(): Promise<string | null>
 clearReleaseNotes(): Promise<void>
 async getOS(): Promise<OS>
@@ -14655,11 +14655,9 @@ type Props = {
   viewMode?: DiffViewMode;
 };
 ⋮----
-export const DiffViewer = (
-⋮----
 // eslint-disable-next-line no-console
 ⋮----
-Please report an issue in https://github.com/hotovo/aider-desk/issues.
+Please report an issue in https://github.com/hyperspace/reactorpro/issues.
 ⋮----
 // No error, but no diff file (e.g., identical content)
 
@@ -26031,7 +26029,7 @@ File: src/renderer/index.html
 <!--    ></script>-->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>AiderDesk</title>
+    <title>ReactorPro</title>
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
     <meta
       http-equiv="Content-Security-Policy"
@@ -26043,7 +26041,7 @@ File: src/renderer/index.html
     <meta name="theme-color" content="#3b82f6">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="AiderDesk">
+    <meta name="apple-mobile-web-app-title" content="ReactorPro">
     <link rel="apple-touch-icon" href="/icon-192.png">
   </head>
 
@@ -26071,7 +26069,7 @@ File: src/renderer/progress.html
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Starting AiderDesk...</title>
+  <title>Starting ReactorPro...</title>
   <style>
     body {
       margin: 0;
@@ -26138,7 +26136,7 @@ File: src/renderer/progress.html
   </style>
 </head>
 <body>
-  <div class="text" id="text">Starting AiderDesk...</div>
+  <div class="text" id="text">Starting ReactorPro...</div>
   <div class="detail" id="detail">
     <span id="detail-text">Initializing...</span>
     <div class="spinner" id="spinner"></div>
@@ -26184,8 +26182,8 @@ File: src/renderer/progress.html
 ================
 File: electron-builder.yml
 ================
-appId: com.hotovo.aider-desk
-productName: aider-desk
+appId: ng.hyperspace.reactorpro
+productName: ReactorPro
 directories:
   buildResources: build
 files:
@@ -26217,7 +26215,7 @@ asarUnpack:
   - '**/node_modules/@img/**/*'
 beforePack: scripts/before-pack.js
 win:
-  executableName: aider-desk
+  executableName: reactorpro
   icon: resources/icon.png
   extraResources:
     - from: ./resources/win
@@ -26241,7 +26239,7 @@ mac:
   extendInfo:
     - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
   gatekeeperAssess: false
-  notarize: true
+  notarize: false
   extraResources:
     - from: ./resources/macos
       to: macos
@@ -26254,7 +26252,7 @@ linux:
     - target: AppImage
     - target: deb
     - target: rpm
-  maintainer: Hotovo
+  maintainer: Hyperspace Technologies
   category: Utility
   extraResources:
     - from: ./resources/linux
@@ -26285,15 +26283,15 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "aider-desk",
+  "name": "reactorpro",
   "version": "0.51.0-dev",
-  "description": "Aider desktop application wrapper",
+  "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
-  "author": "Hotovo",
-  "homepage": "https://aiderdesk.hotovo.com",
+  "author": "Hyperspace Technologies <agent@reactorpro.ng>",
+  "homepage": "https://reactorpro.ng",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hotovo/aider-desk.git"
+    "url": "https://github.com/DrOlu/ReactorPro.git"
   },
   "scripts": {
     "format": "prettier --write .",
@@ -26306,7 +26304,7 @@ File: package.json
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:no-hmr": "NO_HMR=true electron-vite dev",
-    "build:mcp": "esbuild src/mcp-server/aider-desk-mcp-server.ts --bundle --platform=node --outdir=out/mcp-server",
+    "build:mcp": "esbuild src/mcp-server/reactorpro-mcp-server.ts --bundle --platform=node --outdir=out/mcp-server",
     "prebuild:server": "electron-vite build && npm run build:mcp",
     "build:server": "vite build --config vite.config.server.ts && mkdir -p out/resources && cp -r resources/* out/resources",
     "postbuild:server": "npm rebuild",
@@ -26370,7 +26368,7 @@ File: package.json
     "@smithy/signature-v4": "^2.0.0",
     "@smithy/util-utf8": "^2.0.0",
     "@tanstack/react-table": "^8.21.3",
-    "@tanstack/react-virtual": "^3.13.12",
+    "@tanstack/react-virtual": "3.13.12",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/hast": "^3.0.4",
@@ -26524,6 +26522,9 @@ File: package.json
   },
   "lint-staged": {
     "*.{ts,tsx}": "eslint --fix"
+  },
+  "overrides": {
+    "@tanstack/virtual-core": "3.13.12"
   }
 }
 
