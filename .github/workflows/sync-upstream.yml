@@ -118,6 +118,19 @@ jobs:
               pkg.author = 'Hyperspace Technologies <agent@reactorpro.ng>';
               pkg.homepage = 'https://reactorpro.ng';
               pkg.repository = { type: 'git', url: 'https://github.com/DrOlu/ReactorPro.git' };
+              
+              // Update scripts that reference old file names
+              if (pkg.scripts) {
+                for (const [key, value] of Object.entries(pkg.scripts)) {
+                  if (typeof value === 'string') {
+                    pkg.scripts[key] = value
+                      .replace(/aider-desk-mcp-server/g, 'reactorpro-mcp-server')
+                      .replace(/aider-desk/g, 'reactorpro')
+                      .replace(/aiderdesk/g, 'reactorpro');
+                  }
+                }
+              }
+              
               require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
             "
           fi
