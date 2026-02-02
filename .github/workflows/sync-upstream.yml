@@ -137,18 +137,26 @@ jobs:
         run: |
           echo "Pinning dependencies to match patch file versions..."
           
-          # Pin versions to exact versions that match the patch files in /patches directory
-          # This prevents npm from installing newer versions that break patch-package
+          # Pin versions and add overrides for transitive dependencies
+          # This ensures patch-package can apply patches correctly
           node -e "
             const fs = require('fs');
             const pkg = require('./package.json');
             
-            // Map of packages to pin based on patch files
+            // Direct dependencies to pin
             const pinsRequired = {
-              '@tanstack/react-virtual': '3.13.12'  // Patch: @tanstack+virtual-core+3.13.12.patch
+              '@tanstack/react-virtual': '3.13.12'
+            };
+            
+            // Overrides for transitive dependencies (npm 8.3+)
+            // This forces ALL installations of these packages to use specific versions
+            const overridesRequired = {
+              '@tanstack/virtual-core': '3.13.12'
             };
             
             let changed = false;
+            
+            // Pin direct dependencies
             for (const [pkgName, version] of Object.entries(pinsRequired)) {
               if (pkg.dependencies && pkg.dependencies[pkgName] && pkg.dependencies[pkgName] !== version) {
                 console.log('Pinning ' + pkgName + ' from ' + pkg.dependencies[pkgName] + ' to ' + version);
@@ -162,11 +170,24 @@ jobs:
               }
             }
             
+            // Add overrides for transitive dependencies
+            if (!pkg.overrides) {
+              pkg.overrides = {};
+              changed = true;
+            }
+            for (const [pkgName, version] of Object.entries(overridesRequired)) {
+              if (pkg.overrides[pkgName] !== version) {
+                console.log('Adding override for ' + pkgName + ' to ' + version);
+                pkg.overrides[pkgName] = version;
+                changed = true;
+              }
+            }
+            
             if (changed) {
               fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-              console.log('Dependencies pinned successfully');
+              console.log('Dependencies and overrides configured successfully');
             } else {
-              console.log('No dependencies needed pinning');
+              console.log('No changes needed');
             }
           "
 
@@ -278,7 +299,7 @@ jobs:
       - name: Regenerate package-lock.json
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          echo "Regenerating package-lock.json with updated package names..."
+          echo "Regenerating package-lock.json with updated package names and overrides..."
           npm install --package-lock-only --ignore-scripts || true
 
       - name: Commit and push changes
