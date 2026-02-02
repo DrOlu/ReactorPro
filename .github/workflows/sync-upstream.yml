@@ -191,6 +191,30 @@ jobs:
             }
           "
 
+      - name: Rename files for branding
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Renaming files that contain 'aider-desk' in their names..."
+          
+          # Rename files containing 'aider-desk' to 'reactorpro'
+          find . -type f -name "*aider-desk*" ! -path "./.git/*" | while read file; do
+            newname=$(echo "$file" | sed 's/aider-desk/reactorpro/g')
+            if [ "$file" != "$newname" ]; then
+              mkdir -p "$(dirname "$newname")"
+              git mv "$file" "$newname" 2>/dev/null || mv "$file" "$newname"
+              echo "Renamed: $file -> $newname"
+            fi
+          done
+          
+          # Rename directories containing 'aider-desk' (do deepest first)
+          find . -type d -name "*aider-desk*" ! -path "./.git/*" -depth | while read dir; do
+            newname=$(echo "$dir" | sed 's/aider-desk/reactorpro/g')
+            if [ "$dir" != "$newname" ]; then
+              git mv "$dir" "$newname" 2>/dev/null || mv "$dir" "$newname"
+              echo "Renamed dir: $dir -> $newname"
+            fi
+          done
+
       - name: Apply source code branding
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
