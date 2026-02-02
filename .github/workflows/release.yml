@@ -37,6 +37,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Upload backwards compatible x64 AppImage (no x64 suffix)
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
@@ -68,6 +69,7 @@ jobs:
           gh release upload "$RELEASE_TAG" "$APPIMAGE_COMPAT" --clobber
 
       - name: Add compat AppImage entry to latest-linux.yml and upload to release
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
