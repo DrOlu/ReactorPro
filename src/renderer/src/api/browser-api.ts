@@ -18,6 +18,7 @@ import {
   Mode,
   Model,
   ModelsData,
+  NotificationData,
   OS,
   ProjectData,
   ProjectSettings,
@@ -78,6 +79,7 @@ type EventDataMap = {
   'project-settings-updated': { baseDir: string; settings: ProjectSettings };
   'worktree-integration-status-updated': WorktreeIntegrationStatusUpdatedData;
   'agent-profiles-updated': AgentProfilesUpdatedData;
+  notification: NotificationData;
   'task-created': TaskCreatedData;
   'task-initialized': TaskData;
   'task-updated': TaskData;
@@ -151,6 +153,7 @@ export class BrowserApi implements ApplicationAPI {
       'task-completed': new Map(),
       'task-cancelled': new Map(),
       'agent-profiles-updated': new Map(),
+      notification: new Map(),
       'message-removed': new Map(),
       'terminal-data': new Map(),
       'terminal-exit': new Map(),
@@ -979,6 +982,14 @@ export class BrowserApi implements ApplicationAPI {
   updateAgentProfilesOrder(agentProfiles: AgentProfile[]): Promise<void> {
     return this.post('/agent-profiles/order', {
       agentProfiles,
+    });
+  }
+
+  addNotificationListener(baseDir: string, callback: (data: NotificationData) => void): () => void {
+    return this.addListener('notification', (data: NotificationData) => {
+      if (data.baseDir === baseDir) {
+        callback(data);
+      }
     });
   }
 }

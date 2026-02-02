@@ -599,6 +599,11 @@ const api: ApplicationAPI = {
     ipcRenderer.on('agent-profiles-updated', listener);
     return () => ipcRenderer.off('agent-profiles-updated', listener);
   },
+
+  addNotificationListener: () => {
+    // notifications in Electron app are handled by the main process
+    return () => {};
+  },
 };
 
 if (process.contextIsolated) {

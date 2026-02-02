@@ -29,6 +29,7 @@ import {
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
+  NotificationData,
 } from '@common/types';
 
 import type { BrowserWindow } from 'electron';
@@ -317,9 +318,22 @@ export class EventManager {
     this.broadcastToEventConnectors('message-removed', data);
   }
 
+  sendNotification(baseDir: string, title: string, body: string): void {
+    const data: NotificationData = {
+      title,
+      body,
+      baseDir,
+    };
+    this.sendToMainWindow('notification', data);
+    this.broadcastToEventConnectors('notification', data);
+  }
+
   subscribe(socket: Socket, config: EventsConnectorConfig): void {
     this.eventsConnectors = this.eventsConnectors.filter((connector) => connector.socket.id !== socket.id);
-    logger.info('Subscribing to events', { eventTypes: config.eventTypes, baseDirs: config.baseDirs });
+    logger.info('Subscribing to events', {
+      eventTypes: config.eventTypes,
+      baseDirs: config.baseDirs,
+    });
     this.eventsConnectors.push({
       socket,
       eventTypes: config.eventTypes,
@@ -330,7 +344,10 @@ export class EventManager {
   unsubscribe(socket: Socket): void {
     const before = this.eventsConnectors.length;
     this.eventsConnectors = this.eventsConnectors.filter((connector) => connector.socket.id !== socket.id);
-    logger.info('Unsubscribed from events', { before, after: this.eventsConnectors.length });
+    logger.info('Unsubscribed from events', {
+      before,
+      after: this.eventsConnectors.length,
+    });
   }
 
   private sendToMainWindow(eventType: string, data: unknown): void {
@@ -342,7 +359,10 @@ export class EventManager {
   }
 
   private broadcastToEventConnectors(eventType: string, data: unknown): void {
-    logger.debug('Broadcasting event to connectors:', { connectors: this.eventsConnectors.length, eventType });
+    logger.debug('Broadcasting event to connectors:', {
+      connectors: this.eventsConnectors.length,
+      eventType,
+    });
 
     this.eventsConnectors.forEach((connector) => {
       // Filter by event types if specified
@@ -359,7 +379,10 @@ export class EventManager {
       }
 
       try {
-        logger.debug('Broadcasting event to connector:', { eventType, baseDir });
+        logger.debug('Broadcasting event to connector:', {
+          eventType,
+          baseDir,
+        });
         connector.socket.emit('event', { type: eventType, data });
       } catch {
         // Remove disconnected sockets

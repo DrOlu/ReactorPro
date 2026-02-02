@@ -23,6 +23,7 @@ import {
   Mode,
   Model,
   ModelsData,
+  NotificationData,
   OS,
   ProjectData,
   ProjectSettings,
@@ -226,4 +227,6 @@ export interface ApplicationAPI {
   // Clipboard operations
   writeToClipboard: (text: string) => Promise<void>;
   openPath: (path: string) => Promise<boolean>;
+
+  addNotificationListener: (baseDir: string, callback: (data: NotificationData) => void) => () => void;
 }

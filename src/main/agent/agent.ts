@@ -552,6 +552,7 @@ export class Agent {
     initialContextMessages?: ContextMessage[],
     initialContextFiles?: ContextFile[],
     systemPrompt?: string,
+    includeInContext = true,
     abortSignal?: AbortSignal,
   ): Promise<ContextMessage[]> {
     const hookResult = await task.hookManager.trigger('onAgentStarted', { prompt }, task, task.project);
@@ -572,6 +573,10 @@ export class Agent {
           promptContext,
         }
       : null;
+
+    if (userRequestMessage && includeInContext) {
+      await task.addContextMessage(userRequestMessage);
+    }
 
     const settings = this.store.getSettings();
     const projectProfiles = this.agentProfileManager.getProjectProfiles(task.getProjectDir());
@@ -964,8 +969,23 @@ export class Agent {
           }
         }
 
+        const newMessages = this.filterResultMessages(responseMessages);
         messages.push(...responseMessages);
-        resultMessages.push(...this.filterResultMessages(responseMessages));
+        resultMessages.push(...newMessages);
+
+        if (includeInContext) {
+          // Persist new messages incrementally after each iteration
+          try {
+            for (const message of newMessages) {
+              await task.addContextMessage(message);
+            }
+          } catch (error) {
+            logger.error('Failed to persist messages incrementally:', {
+              taskId: task.taskId,
+              error,
+            });
+          }
+        }
 
         if (effectiveAbortSignal?.aborted) {
           logger.info('Prompt aborted by user (inside loop)');

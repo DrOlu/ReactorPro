@@ -43,7 +43,7 @@ export class HookContextImpl implements HookContext {
   }
 
   async addContextMessage(role: 'user' | 'assistant', content: string) {
-    await this.task.addContextMessage(role === 'user' ? MessageRole.User : MessageRole.Assistant, content);
+    await this.task.addRoleContextMessage(role === 'user' ? MessageRole.User : MessageRole.Assistant, content);
   }
 
   get taskData() {

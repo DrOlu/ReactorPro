@@ -1123,7 +1123,7 @@ export class WorktreeManager {
    * Stash uncommitted changes with a unique identifier
    * Returns the stash identifier or null if no changes to stash
    */
-  async stashUncommittedChanges(stashId: string, path: string, message: string): Promise<string | null> {
+  async stashUncommittedChanges(stashId: string, path: string, message: string, symlinkFolders: string[] = []): Promise<string | null> {
     try {
       const hasChanges = await this.hasUncommittedChanges(path);
       if (!hasChanges) {
@@ -1131,7 +1131,40 @@ export class WorktreeManager {
       }
 
       const fullMessage = `${stashId}: ${message}`;
-      await execWithShellPath(`git stash push -u -m "${fullMessage}"`, {
+
+      // Find which symlink folders have untracked files
+      const foldersToExclude: string[] = [];
+
+      if (symlinkFolders.length > 0) {
+        // Get untracked files to check which symlink folders have content
+        const { stdout: untrackedFiles } = await execWithShellPath('git ls-files --others --exclude-standard', { cwd: path });
+        const untrackedFilesList = untrackedFiles
+          .trim()
+          .split('\n')
+          .filter((file) => file.trim() !== '');
+
+        for (const folder of symlinkFolders) {
+          // Check if folder has untracked files
+          const hasUntrackedInFolder = untrackedFilesList.some((file) => {
+            const normalizedFile = file.replace(/\\/g, '/');
+            return normalizedFile.startsWith(`${folder}/`) || normalizedFile === folder;
+          });
+
+          if (hasUntrackedInFolder) {
+            foldersToExclude.push(folder);
+            logger.debug(`Excluding folder ${folder} from stash (has untracked files)`);
+          }
+        }
+      }
+
+      // Build stash command with exclude patterns for folders with untracked files
+      let command = `git stash push -u -m "${fullMessage}"`;
+      if (foldersToExclude.length > 0) {
+        const excludePatterns = foldersToExclude.map((folder) => `':(exclude)${folder}'`).join(' ');
+        command += ` -- ${excludePatterns}`;
+      }
+
+      await execWithShellPath(command, {
         cwd: path,
       });
       logger.info(`Stashed changes with ID: ${stashId}`);
@@ -1205,6 +1238,7 @@ export class WorktreeManager {
     squash: boolean,
     commitMessage?: string,
     targetBranch?: string,
+    symlinkFolders: string[] = [],
   ): Promise<MergeState> {
     return await withLock(`git-merge-worktree-${worktreePath}`, async () => {
       const timestamp = Date.now();
@@ -1232,10 +1266,10 @@ export class WorktreeManager {
         });
 
         // 2. Stash uncommitted changes in worktree
-        await this.stashUncommittedChanges(worktreeStashId, worktreePath, 'Worktree uncommitted changes before merge');
+        await this.stashUncommittedChanges(worktreeStashId, worktreePath, 'Worktree uncommitted changes before merge', symlinkFolders);
 
         // 3. Stash uncommitted changes in main branch if any
-        const mainStashResult = await this.stashUncommittedChanges(mainStashId, projectPath, 'Main branch uncommitted changes before merge');
+        const mainStashResult = await this.stashUncommittedChanges(mainStashId, projectPath, 'Main branch uncommitted changes before merge', []);
         if (mainStashResult) {
           mainOriginalStashId = mainStashResult;
         }
@@ -1541,7 +1575,13 @@ export class WorktreeManager {
    * Apply uncommitted changes from worktree to main branch without merging commits
    * This transfers work-in-progress changes while keeping them uncommitted in both branches
    */
-  async applyUncommittedChangesToMain(projectPath: string, taskId: string, worktreePath: string, targetBranch?: string): Promise<void> {
+  async applyUncommittedChangesToMain(
+    projectPath: string,
+    taskId: string,
+    worktreePath: string,
+    targetBranch?: string,
+    symlinkFolders: string[] = [],
+  ): Promise<void> {
     return await withLock(`git-apply-uncommitted-${worktreePath}`, async () => {
       const timestamp = Date.now();
       const worktreeStashId = `worktree-${taskId.length > 24 ? taskId.substring(24) : taskId}-uncommitted-${timestamp}`;
@@ -1557,7 +1597,7 @@ export class WorktreeManager {
         }
 
         // 2. Stash uncommitted changes from worktree
-        const stashResult = await this.stashUncommittedChanges(worktreeStashId, worktreePath, 'Uncommitted changes to apply to main');
+        const stashResult = await this.stashUncommittedChanges(worktreeStashId, worktreePath, 'Uncommitted changes to apply to main', symlinkFolders);
         if (!stashResult) {
           logger.info('No changes were stashed');
           return;
@@ -1604,7 +1644,7 @@ export class WorktreeManager {
    * Revert a merge operation using the stored MergeState
    * Restores the main branch to its pre-merge state while preserving uncommitted changes
    */
-  async revertMerge(projectPath: string, taskId: string, worktreePath: string, mergeState: MergeState): Promise<void> {
+  async revertMerge(projectPath: string, taskId: string, worktreePath: string, mergeState: MergeState, symlinkFolders: string[] = []): Promise<void> {
     return await withLock(`git-revert-merge-${worktreePath}`, async () => {
       const timestamp = Date.now();
       const currentWorktreeStashId = `worktree-${taskId.length > 24 ? taskId.substring(24) : taskId}-revert-${timestamp}`;
@@ -1617,11 +1657,16 @@ export class WorktreeManager {
         logger.info('Starting merge revert operation', { mergeState });
 
         // 1. Stash current uncommitted changes in worktree
-        worktreeRevertStashId = await this.stashUncommittedChanges(currentWorktreeStashId, worktreePath, 'Current uncommitted changes before revert');
+        worktreeRevertStashId = await this.stashUncommittedChanges(
+          currentWorktreeStashId,
+          worktreePath,
+          'Current uncommitted changes before revert',
+          symlinkFolders,
+        );
 
         // 2. Stash current uncommitted changes in main repo to clean the working directory
         // This is crucial to avoid conflicts with untracked files when applying the original stash
-        mainRevertStashId = await this.stashUncommittedChanges(currentMainStashId, projectPath, 'Current uncommitted changes before revert');
+        mainRevertStashId = await this.stashUncommittedChanges(currentMainStashId, projectPath, 'Current uncommitted changes before revert', []);
 
         // 3. Switch to the branch we merged into, then reset it to previous state
         const targetBranch = mergeState.targetBranch || (await this.getProjectMainBranch(projectPath));

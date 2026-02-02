@@ -806,8 +806,6 @@ export class Task {
     const agentMessages = await this.agent.runAgent(this, profile, prompt, promptContext, contextMessages, contextFiles, systemPrompt);
     this.resolveAgentRunPromises();
     if (agentMessages.length > 0) {
-      agentMessages.forEach((message) => this.contextManager.addContextMessage(message));
-
       // send messages to connectors
       this.contextManager.toConnectorMessages(agentMessages).forEach((message) => {
         this.sendAddMessage(message.role, message.content, false);
@@ -967,7 +965,7 @@ export class Task {
       return [];
     }
     prompt = hookResult.event.prompt;
-    const resultMessages = await this.agent.runAgent(this, profile, prompt, promptContext, contextMessages, contextFiles, systemPrompt, abortSignal);
+    const resultMessages = await this.agent.runAgent(this, profile, prompt, promptContext, contextMessages, contextFiles, systemPrompt, false, abortSignal);
     await this.hookManager.trigger('onSubagentFinished', { subagentId: profile.id, resultMessages }, this, this.project);
     return resultMessages;
   }
@@ -1152,12 +1150,17 @@ export class Task {
   }
 
   private notifyIfEnabled(title: string, text: string) {
-    const app = getElectronApp();
     const settings = this.store.getSettings();
-    if (!settings.notificationsEnabled || !app) {
+    if (!settings.notificationsEnabled) {
       return;
     }
 
+    this.eventManager.sendNotification(this.getProjectDir(), title, text);
+
+    const app = getElectronApp();
+    if (!app) {
+      return;
+    }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Notification } = require('electron');
     if (Notification.isSupported()) {
@@ -1858,8 +1861,8 @@ export class Task {
     return this.contextManager.getContextMessages();
   }
 
-  public async addContextMessage(role: MessageRole, content: string, usageReport?: UsageReportData) {
-    logger.debug('Adding context message to session:', {
+  public async addRoleContextMessage(role: MessageRole, content: string, usageReport?: UsageReportData) {
+    logger.debug('Adding role message to session:', {
       baseDir: this.project.baseDir,
       role,
       content: content.substring(0, 30),
@@ -1867,6 +1870,13 @@ export class Task {
 
     this.contextManager.addContextMessage(role, content, usageReport);
     await this.updateContextInfo();
+  }
+
+  public async addContextMessage(message: ContextMessage, updateContextInfo = false) {
+    this.contextManager.addContextMessage(message);
+    if (updateContextInfo) {
+      await this.updateContextInfo();
+    }
   }
 
   public sendAddMessage(role: MessageRole = MessageRole.User, content: string, acknowledge = true) {
@@ -2238,6 +2248,7 @@ export class Task {
           contextMessages,
           [],
           undefined,
+          false,
           abortSignal,
         );
         if (waitForAgentCompletion) {
@@ -2944,6 +2955,9 @@ ${error.stderr}`,
         }
       }
 
+      const settings = this.store.getSettings();
+      const symlinkFolders = settings.taskSettings.worktreeSymlinkFolders || [];
+
       const mergeState = await this.worktreeManager.mergeWorktreeToMainWithUncommitted(
         this.project.baseDir,
         this.task.id,
@@ -2951,6 +2965,7 @@ ${error.stderr}`,
         squash,
         effectiveCommitMessage || this.task.name || `Task ${this.taskId} changes`,
         targetBranch,
+        symlinkFolders,
       );
 
       // Store merge state for potential revert
@@ -3005,7 +3020,16 @@ ${error.stderr}`,
 
       this.addLogMessage('loading', `Applying uncommitted changes to ${effectiveTargetBranch} branch...`);
 
-      await this.worktreeManager.applyUncommittedChangesToMain(this.project.baseDir, this.task.id, this.task.worktree.path, effectiveTargetBranch);
+      const settings = this.store.getSettings();
+      const symlinkFolders = settings.taskSettings.worktreeSymlinkFolders || [];
+
+      await this.worktreeManager.applyUncommittedChangesToMain(
+        this.project.baseDir,
+        this.task.id,
+        this.task.worktree.path,
+        effectiveTargetBranch,
+        symlinkFolders,
+      );
 
       this.addLogMessage('info', `Successfully applied uncommitted changes to ${effectiveTargetBranch} branch`, true);
     } catch (error) {
@@ -3053,7 +3077,10 @@ ${error.stderr}`,
     try {
       this.addLogMessage('loading', 'Reverting last merge...');
 
-      await this.worktreeManager.revertMerge(this.project.baseDir, this.task.id, this.task.worktree.path, this.task.lastMergeState);
+      const settings = this.store.getSettings();
+      const symlinkFolders = settings.taskSettings.worktreeSymlinkFolders || [];
+
+      await this.worktreeManager.revertMerge(this.project.baseDir, this.task.id, this.task.worktree.path, this.task.lastMergeState, symlinkFolders);
 
       // Clear merge state after successful revert
       await this.saveTask({ lastMergeState: undefined });
@@ -3236,7 +3263,7 @@ ${error.stderr}`,
           });
           const systemPrompt = this.promptsManager.getConflictResolutionSystemPrompt(this);
 
-          await this.agent.runAgent(this, conflictProfile, prompt, promptContext, [], [{ path: filePath }], systemPrompt, abortController.signal);
+          await this.agent.runAgent(this, conflictProfile, prompt, promptContext, [], [{ path: filePath }], systemPrompt, false, abortController.signal);
 
           // Update context based on whether it was interrupted or resolved
           if (promptContext.group) {

@@ -24,6 +24,8 @@
 - showing project tabs as dropdown on mobile devices
 - properly positioning message menu over the top content
 - added support for unknown file type in diff viewer to show without highlighting
+- storing context messages during the agent run
+- added browser notifications
 
 ## [0.50.1]
 

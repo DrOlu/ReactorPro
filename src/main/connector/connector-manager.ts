@@ -242,7 +242,10 @@ export class ConnectorManager {
         if (!connector) {
           return;
         }
-        void this.projectManager.getProject(connector.baseDir).getTask(connector.taskId)?.addContextMessage(message.role, message.content, message.usageReport);
+        void this.projectManager
+          .getProject(connector.baseDir)
+          .getTask(connector.taskId)
+          ?.addRoleContextMessage(message.role, message.content, message.usageReport);
       } else if (isSubscribeEventsMessage(message)) {
         logger.info('Subscribing to events', { eventTypes: message.eventTypes, baseDirs: message.baseDirs });
         this.eventManager.subscribe(socket, {

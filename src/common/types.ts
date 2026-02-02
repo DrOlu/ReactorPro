@@ -945,3 +945,8 @@ export interface BranchInfo {
   isCurrent: boolean;
   hasWorktree: boolean;
 }
+export interface NotificationData {
+  baseDir: string;
+  title: string;
+  body: string;
+}

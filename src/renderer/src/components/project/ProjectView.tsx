@@ -18,6 +18,7 @@ import { useConfiguredHotkeys } from '@/hooks/useConfiguredHotkeys';
 import { getSortedVisibleTasks } from '@/utils/task-utils';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useBooleanState } from '@/hooks/useBooleanState';
+import { showNotification } from '@/utils/browser-notifications';
 
 type Props = {
   projectDir: string;
@@ -215,6 +216,10 @@ export const ProjectView = ({ projectDir, isProjectActive = false, showSettingsP
     const removeTaskCancelledListener = api.addTaskCancelledListener(projectDir, handleTaskCancelled);
     const removeTaskDeletedListener = api.addTaskDeletedListener(projectDir, handleTaskDeleted);
 
+    const removeNotificationListener = api.addNotificationListener(projectDir, (data) => {
+      void showNotification(data.title, data.body);
+    });
+
     const removeInputHistoryListener = api.addInputHistoryUpdatedListener(projectDir, handleInputHistoryUpdate);
 
     const initProject = async () => {
@@ -249,6 +254,7 @@ export const ProjectView = ({ projectDir, isProjectActive = false, showSettingsP
       removeTaskCompletedListener();
       removeTaskCancelledListener();
       removeTaskDeletedListener();
+      removeNotificationListener();
       removeInputHistoryListener();
       clearProjectTasks(projectDir);
     };

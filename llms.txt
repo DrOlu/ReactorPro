@@ -594,6 +594,7 @@ src/
         message.ts
       utils/
         agents.ts
+        browser-notifications.ts
         highlighter.tsx
         hotkeys.ts
         indexedDB.ts
@@ -4661,6 +4662,7 @@ import {
   Mode,
   Model,
   ModelsData,
+  NotificationData,
   OS,
   ProjectData,
   ProjectSettings,
@@ -4864,6 +4866,8 @@ export interface ApplicationAPI {
   // Clipboard operations
   writeToClipboard: (text: string) => Promise<void>;
   openPath: (path: string) => Promise<boolean>;
+
+  addNotificationListener: (baseDir: string, callback: (data: NotificationData) => void) => () => void;
 }
 ⋮----
 // Todo operations
@@ -5734,6 +5738,11 @@ export interface BranchInfo {
   name: string;
   isCurrent: boolean;
   hasWorktree: boolean;
+}
+export interface NotificationData {
+  baseDir: string;
+  title: string;
+  body: string;
 }
 
 ================
@@ -6690,6 +6699,7 @@ async runAgent(
     initialContextMessages?: ContextMessage[],
     initialContextFiles?: ContextFile[],
     systemPrompt?: string,
+    includeInContext = true,
     abortSignal?: AbortSignal,
 ): Promise<ContextMessage[]>
 ⋮----
@@ -6730,6 +6740,8 @@ const onStepFinish = async (stepResult: StepResult<typeof toolSet>) =>
 // try again
 ⋮----
 // stop
+⋮----
+// Persist new messages incrementally after each iteration
 ⋮----
 // Check for 'stop' with trailing tool message
 ⋮----
@@ -7349,6 +7361,7 @@ import {
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
+  NotificationData,
 } from '@common/types';
 ⋮----
 import type { BrowserWindow } from 'electron';
@@ -7455,6 +7468,8 @@ sendTaskCancelled(task: TaskData): void
 sendTaskDeleted(task: TaskData): void
 ⋮----
 sendTaskMessageRemoved(baseDir: string, taskId: string, messageIds: string[]): void
+⋮----
+sendNotification(baseDir: string, title: string, body: string): void
 ⋮----
 subscribe(socket: Socket, config: EventsConnectorConfig): void
 ⋮----
@@ -11541,7 +11556,9 @@ public addLogMessage(level: LogLevel, message?: string, finished = false, prompt
 ⋮----
 public getContextMessages()
 ⋮----
-public async addContextMessage(role: MessageRole, content: string, usageReport?: UsageReportData)
+public async addRoleContextMessage(role: MessageRole, content: string, usageReport?: UsageReportData)
+⋮----
+public async addContextMessage(message: ContextMessage, updateContextInfo = false)
 ⋮----
 public sendAddMessage(role: MessageRole = MessageRole.User, content: string, acknowledge = true)
 ⋮----
@@ -12892,7 +12909,15 @@ async hasUncommittedChanges(path: string): Promise<boolean>
    * Stash uncommitted changes with a unique identifier
    * Returns the stash identifier or null if no changes to stash
    */
-async stashUncommittedChanges(stashId: string, path: string, message: string): Promise<string | null>
+async stashUncommittedChanges(stashId: string, path: string, message: string, symlinkFolders: string[] = []): Promise<string | null>
+⋮----
+// Find which symlink folders have untracked files
+⋮----
+// Get untracked files to check which symlink folders have content
+⋮----
+// Check if folder has untracked files
+⋮----
+// Build stash command with exclude patterns for folders with untracked files
 ⋮----
 /**
    * Apply a stash by its identifier
@@ -12925,6 +12950,7 @@ async mergeWorktreeToMainWithUncommitted(
     squash: boolean,
     commitMessage?: string,
     targetBranch?: string,
+    symlinkFolders: string[] = [],
 ): Promise<MergeState>
 ⋮----
 // 1. Track initial state
@@ -13004,7 +13030,13 @@ async listConflictedFiles(worktreePath: string): Promise<string[]>
    * Apply uncommitted changes from worktree to main branch without merging commits
    * This transfers work-in-progress changes while keeping them uncommitted in both branches
    */
-async applyUncommittedChangesToMain(projectPath: string, taskId: string, worktreePath: string, targetBranch?: string): Promise<void>
+async applyUncommittedChangesToMain(
+    projectPath: string,
+    taskId: string,
+    worktreePath: string,
+    targetBranch?: string,
+    symlinkFolders: string[] = [],
+): Promise<void>
 ⋮----
 // 1. Check if there are uncommitted changes in worktree
 ⋮----
@@ -13024,7 +13056,7 @@ async applyUncommittedChangesToMain(projectPath: string, taskId: string, worktre
    * Revert a merge operation using the stored MergeState
    * Restores the main branch to its pre-merge state while preserving uncommitted changes
    */
-async revertMerge(projectPath: string, taskId: string, worktreePath: string, mergeState: MergeState): Promise<void>
+async revertMerge(projectPath: string, taskId: string, worktreePath: string, mergeState: MergeState, symlinkFolders: string[] = []): Promise<void>
 ⋮----
 // 1. Stash current uncommitted changes in worktree
 ⋮----
@@ -14013,6 +14045,8 @@ const listener = (_: Electron.IpcRendererEvent, data: SettingsData) =>
 ⋮----
 // Memory operations
 ⋮----
+// notifications in Electron app are handled by the main process
+⋮----
 // eslint-disable-next-line no-console
 
 ================
@@ -14093,6 +14127,7 @@ import {
   Mode,
   Model,
   ModelsData,
+  NotificationData,
   OS,
   ProjectData,
   ProjectSettings,
@@ -14153,6 +14188,7 @@ type EventDataMap = {
   'project-settings-updated': { baseDir: string; settings: ProjectSettings };
   'worktree-integration-status-updated': WorktreeIntegrationStatusUpdatedData;
   'agent-profiles-updated': AgentProfilesUpdatedData;
+  notification: NotificationData;
   'task-created': TaskCreatedData;
   'task-initialized': TaskData;
   'task-updated': TaskData;
@@ -14422,6 +14458,8 @@ updateAgentProfile(profile: AgentProfile, baseDir?: string): Promise<AgentProfil
 deleteAgentProfile(profileId: string, baseDir?: string): Promise<AgentProfile[]>
 ⋮----
 updateAgentProfilesOrder(agentProfiles: AgentProfile[]): Promise<void>
+⋮----
+addNotificationListener(baseDir: string, callback: (data: NotificationData) => void): () => void
 
 ================
 File: src/renderer/src/components/AgentSelector/AgentSelector.tsx
@@ -19389,6 +19427,7 @@ import { useConfiguredHotkeys } from '@/hooks/useConfiguredHotkeys';
 import { getSortedVisibleTasks } from '@/utils/task-utils';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useBooleanState } from '@/hooks/useBooleanState';
+import { showNotification } from '@/utils/browser-notifications';
 ⋮----
 type Props = {
   projectDir: string;
@@ -25509,6 +25548,15 @@ export const resolveAgentProfile = (task: TaskData | undefined, projectAgentProf
 // If no task-level profile, fall back to project-level
 ⋮----
 // Create a profile with task-level overrides
+
+================
+File: src/renderer/src/utils/browser-notifications.ts
+================
+export const requestNotificationPermission = async (): Promise<boolean> =>
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+export const showNotification = async (title: string, body: string): Promise<void> =>
 
 ================
 File: src/renderer/src/utils/highlighter.tsx
