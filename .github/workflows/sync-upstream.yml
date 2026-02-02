@@ -132,6 +132,44 @@ jobs:
             sed -i 's/maintainer: Hotovo/maintainer: Hyperspace Technologies/g' electron-builder.yml
           fi
 
+      - name: Pin dependencies for patch compatibility
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Pinning dependencies to match patch file versions..."
+          
+          # Pin versions to exact versions that match the patch files in /patches directory
+          # This prevents npm from installing newer versions that break patch-package
+          node -e "
+            const fs = require('fs');
+            const pkg = require('./package.json');
+            
+            // Map of packages to pin based on patch files
+            const pinsRequired = {
+              '@tanstack/react-virtual': '3.13.12'  // Patch: @tanstack+virtual-core+3.13.12.patch
+            };
+            
+            let changed = false;
+            for (const [pkgName, version] of Object.entries(pinsRequired)) {
+              if (pkg.dependencies && pkg.dependencies[pkgName] && pkg.dependencies[pkgName] !== version) {
+                console.log('Pinning ' + pkgName + ' from ' + pkg.dependencies[pkgName] + ' to ' + version);
+                pkg.dependencies[pkgName] = version;
+                changed = true;
+              }
+              if (pkg.devDependencies && pkg.devDependencies[pkgName] && pkg.devDependencies[pkgName] !== version) {
+                console.log('Pinning ' + pkgName + ' from ' + pkg.devDependencies[pkgName] + ' to ' + version);
+                pkg.devDependencies[pkgName] = version;
+                changed = true;
+              }
+            }
+            
+            if (changed) {
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+              console.log('Dependencies pinned successfully');
+            } else {
+              console.log('No dependencies needed pinning');
+            }
+          "
+
       - name: Apply source code branding
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
@@ -241,7 +279,6 @@ jobs:
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           echo "Regenerating package-lock.json with updated package names..."
-          rm -f package-lock.json
           npm install --package-lock-only --ignore-scripts || true
 
       - name: Commit and push changes
