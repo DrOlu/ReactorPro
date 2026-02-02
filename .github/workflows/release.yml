@@ -308,9 +308,17 @@ jobs:
         run: |
           # Get the draft release tag
           RELEASE_TAG=$(gh release list --limit 1 --json tagName,isDraft --jq '.[] | select(.isDraft == true) | .tagName')
-          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "No draft release found, will skip upload"
+            echo "has_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found draft release: $RELEASE_TAG"
+            echo "has_release=true" >> $GITHUB_OUTPUT
+            echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload combined yml to release
+        if: steps.find-release.outputs.has_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
