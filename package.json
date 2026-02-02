@@ -238,5 +238,8 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": "eslint --fix"
+  },
+  "overrides": {
+    "@tanstack/virtual-core": "3.13.12"
   }
 }
