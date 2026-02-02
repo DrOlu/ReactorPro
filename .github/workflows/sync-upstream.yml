@@ -296,11 +296,13 @@ jobs:
         run: |
           echo "${{ steps.check_changes.outputs.upstream_commit }}" > .upstream-commit
 
-      - name: Regenerate package-lock.json
+      - name: Update package-lock.json with overrides
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          echo "Regenerating package-lock.json with updated package names and overrides..."
-          npm install --package-lock-only --ignore-scripts || true
+          echo "Updating package-lock.json to apply overrides..."
+          # Use npm install with --package-lock-only to update the lock file
+          # Keep the upstream's lock file as base, only apply overrides
+          npm install --package-lock-only || true
 
       - name: Commit and push changes
         if: steps.check_changes.outputs.has_changes == 'true'
