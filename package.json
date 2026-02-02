@@ -1,7 +1,7 @@
 {
-  "name": "reactorpro",
-  "version": "0.51.0-dev",
-  "description": "ReactorPro - AI coding agent for software engineers",
+  "name": "aider-desk",
+  "version": "0.52.0-dev",
+  "description": "Aider desktop application wrapper",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",

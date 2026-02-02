@@ -737,7 +737,7 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
       allowTests: z.boolean().optional().default(false).describe('Allow test files in search results'),
       exact: z.boolean().optional().default(false).describe('Perform exact search without tokenization (case-insensitive)'),
       maxResults: z.number().optional().describe('Maximum number of results to return'),
-      maxTokens: z.number().optional().default(10000).describe('Maximum number of tokens to return'),
+      maxTokens: z.number().optional().default(5000).describe('Maximum number of tokens to return'),
       language: z.string().optional().describe('Limit search to files of a specific programming language'),
     }),
     execute: async ({ query: searchQuery, path: inputPath, allowTests, exact, maxTokens: paramMaxTokens, language }, { toolCallId }) => {
@@ -754,7 +754,7 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
       }
 
       // Use parameter maxTokens if provided, otherwise use the default
-      const effectiveMaxTokens = paramMaxTokens || 10000;
+      const effectiveMaxTokens = paramMaxTokens || 5000;
 
       let searchPath = inputPath || task.getTaskDir();
 
