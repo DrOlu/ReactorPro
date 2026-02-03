@@ -105,6 +105,7 @@ src/
       memory-manager.ts
     models/
       providers/
+        anthropic-compatible.ts
         anthropic.ts
         azure.ts
         bedrock.ts
@@ -115,6 +116,7 @@ src/
         gemini.ts
         gpustack.ts
         groq.ts
+        kimi-plan.ts
         litellm.ts
         lm-studio.ts
         minimax.ts
@@ -340,6 +342,7 @@ src/
           VirtualizedMessages.tsx
         ModelLibrary/
           providers/
+            AnthropicCompatibleParameters.tsx
             AnthropicParameters.tsx
             AzureAdvancedSettings.tsx
             AzureModelOverrides.tsx
@@ -356,6 +359,7 @@ src/
             GpustackParameters.tsx
             GroqParameters.tsx
             index.ts
+            KimiPlanParameters.tsx
             LitellmParameters.tsx
             LmStudioParameters.tsx
             MinimaxParameters.tsx
@@ -541,6 +545,7 @@ src/
       i18n/
         index.ts
       icons/
+        AnthropicCompatibleIcon.tsx
         AnthropicIcon.tsx
         AzureIcon.tsx
         BedrockIcon.tsx
@@ -552,6 +557,7 @@ src/
         GpustackIcon.tsx
         GroqIcon.tsx
         index.ts
+        KimiPlanIcon.tsx
         LitellmIcon.tsx
         LmStudioIcon.tsx
         MinimaxIcon.tsx
@@ -1602,7 +1608,9 @@ File: src/common/locales/en.json
     "baseUrlPlaceholder": "e.g. http://localhost:11434/api"
   },
   "anthropic": {
-    "apiKey": "API Key"
+    "apiKey": "API Key",
+    "baseUrl": "Base URL",
+    "baseUrlPlaceholder": "e.g. https://api.anthropic.com"
   },
   "minimax": {
     "apiKey": "API Key"
@@ -1619,6 +1627,9 @@ File: src/common/locales/en.json
   "groq": {
     "apiKey": "API Key",
     "modelPlaceholder": "e.g. moonshotai/kimi-k2-instruct"
+  },
+  "kimiPlan": {
+    "apiKey": "API Key"
   },
   "deepseek": {
     "apiKey": "API Key"
@@ -1699,12 +1710,14 @@ File: src/common/locales/en.json
   },
   "providers": {
     "anthropic": "Anthropic",
+    "anthropic-compatible": "Anthropic Compatible",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
     "claude-agent-sdk": "Claude Agent SDK",
     "deepseek": "Deepseek",
     "gemini": "Gemini",
     "groq": "Groq",
+    "kimi-plan": "Kimi Coding Plan",
     "gpustack": "GPUStack",
     "lmstudio": "LM Studio",
     "litellm": "LiteLLM",
@@ -3135,7 +3148,9 @@ File: src/common/locales/zh.json
     "thinkingEnabledTooltip": "启用时，模型将使用思考模式进行更深入的推理（默认）。对于简单任务，可以禁用以获得更快的响应速度。"
   },
   "anthropic": {
-    "apiKey": "API 密钥"
+    "apiKey": "API 密钥",
+    "baseUrl": "基础 URL",
+    "baseUrlPlaceholder": "例如 https://api.anthropic.com"
   },
   "minimax": {
     "apiKey": "API 密钥"
@@ -3155,6 +3170,9 @@ File: src/common/locales/zh.json
   "groq": {
     "apiKey": "API 密钥",
     "modelPlaceholder": "例如 moonshotai/kimi-k2-instruct"
+  },
+  "kimiPlan": {
+    "apiKey": "API 密钥"
   },
   "deepseek": {
     "apiKey": "API 密钥"
@@ -3192,12 +3210,14 @@ File: src/common/locales/zh.json
   },
   "providers": {
     "anthropic": "Anthropic",
+    "anthropic-compatible": "Anthropic 兼容",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
     "claude-agent-sdk": "Claude Agent SDK",
     "deepseek": "Deepseek",
     "gemini": "Gemini",
     "groq": "Groq",
+    "kimi-plan": "Kimi Coding Plan",
     "gpustack": "GPUStack",
     "lmstudio": "LM Studio",
     "litellm": "LiteLLM",
@@ -4365,6 +4385,7 @@ import {
 ⋮----
 export type LlmProviderName =
   | 'anthropic'
+  | 'anthropic-compatible'
   | 'azure'
   | 'bedrock'
   | 'cerebras'
@@ -4373,6 +4394,7 @@ export type LlmProviderName =
   | 'gemini'
   | 'gpustack'
   | 'groq'
+  | 'kimi-plan'
   | 'litellm'
   | 'lmstudio'
   | 'minimax'
@@ -4435,6 +4457,19 @@ export interface AnthropicProvider extends LlmProviderBase {
   apiKey: string;
 }
 export const isAnthropicProvider = (provider: LlmProviderBase): provider is AnthropicProvider
+⋮----
+export interface AnthropicCompatibleProvider extends LlmProviderBase {
+  name: 'anthropic-compatible';
+  apiKey: string;
+  baseUrl?: string;
+}
+export const isAnthropicCompatibleProvider = (provider: LlmProviderBase): provider is AnthropicCompatibleProvider
+⋮----
+export interface KimiPlanProvider extends LlmProviderBase {
+  name: 'kimi-plan';
+  apiKey: string;
+}
+export const isKimiPlanProvider = (provider: LlmProviderBase): provider is KimiPlanProvider
 ⋮----
 export enum GeminiVoiceModel {
   GeminiLive25FlashNativeAudio = 'gemini-2.5-flash-native-audio-preview-12-2025',
@@ -4586,6 +4621,7 @@ export const isSyntheticProvider = (provider: LlmProviderBase): provider is Synt
 export type LlmProvider =
   | OpenAiProvider
   | AnthropicProvider
+  | AnthropicCompatibleProvider
   | AzureProvider
   | GeminiProvider
   | VertexAiProvider
@@ -4596,6 +4632,7 @@ export type LlmProvider =
   | GroqProvider
   | GpustackProvider
   | CerebrasProvider
+  | KimiPlanProvider
   | OpenAiCompatibleProvider
   | LitellmProvider
   | OllamaProvider
@@ -7711,6 +7748,41 @@ async clearAllMemories(): Promise<boolean>
 isMemoryEnabled(): boolean
 
 ================
+File: src/main/models/providers/anthropic-compatible.ts
+================
+import { Model, ProviderProfile, SettingsData } from '@common/types';
+import { DEFAULT_MODEL_TEMPERATURE, isAnthropicCompatibleProvider, AnthropicCompatibleProvider } from '@common/agent';
+import { createAnthropic } from '@ai-sdk/anthropic';
+⋮----
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+⋮----
+import { AiderModelMapping, LlmProviderStrategy, LoadModelsResponse } from '@/models';
+import logger from '@/logger';
+import { getEffectiveEnvironmentVariable } from '@/utils';
+import { getAnthropicCacheControl, getAnthropicUsageReport } from '@/models/providers/anthropic';
+⋮----
+const loadAnthropicCompatibleModels = async (profile: ProviderProfile, settings: SettingsData): Promise<LoadModelsResponse> =>
+⋮----
+const hasAnthropicCompatibleEnvVars = (settings: SettingsData): boolean =>
+⋮----
+const getAnthropicCompatibleAiderMapping = (provider: ProviderProfile, modelId: string, settings: SettingsData, projectDir: string): AiderModelMapping =>
+⋮----
+// Use anthropic prefix for Anthropic-compatible providers
+⋮----
+// === LLM Creation Functions ===
+const createAnthropicCompatibleLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModelV2 =>
+⋮----
+// Use createAnthropic with custom baseURL to get a provider instance, then get the model
+⋮----
+// === Complete Strategy Implementation ===
+⋮----
+// Core LLM functions
+⋮----
+// Model discovery functions
+⋮----
+// Cache control
+
+================
 File: src/main/models/providers/anthropic.ts
 ================
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -8240,6 +8312,45 @@ export const createGroqLlm = (profile: ProviderProfile, model: Model, settings: 
 // Core LLM functions
 ⋮----
 // Model discovery functions
+
+================
+File: src/main/models/providers/kimi-plan.ts
+================
+import { Model, ProviderProfile, SettingsData } from '@common/types';
+import { isKimiPlanProvider, KimiPlanProvider } from '@common/agent';
+import { createAnthropic } from '@ai-sdk/anthropic';
+⋮----
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+⋮----
+import { AiderModelMapping, LlmProviderStrategy, LoadModelsResponse } from '@/models';
+import logger from '@/logger';
+import { getEffectiveEnvironmentVariable } from '@/utils';
+import { getAnthropicCacheControl, getAnthropicUsageReport } from '@/models/providers/anthropic';
+⋮----
+const loadKimiPlanModels = async (profile: ProviderProfile, settings: SettingsData): Promise<LoadModelsResponse> =>
+⋮----
+// Return hardcoded model instead of fetching from API
+⋮----
+const hasKimiPlanEnvVars = (settings: SettingsData): boolean =>
+⋮----
+const getKimiPlanAiderMapping = (provider: ProviderProfile, modelId: string, settings: SettingsData, projectDir: string): AiderModelMapping =>
+⋮----
+// remove /v1 from the end of the base url for LiteLLM compatibility
+⋮----
+// Use anthropic prefix for Kimi since it uses Anthropic-compatible API
+⋮----
+// === LLM Creation Functions ===
+const createKimiPlanLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModelV2 =>
+⋮----
+// Use createAnthropic with Kimi's base URL
+⋮----
+// === Complete Strategy Implementation ===
+⋮----
+// Core LLM functions
+⋮----
+// Model discovery functions
+⋮----
+// Cache control
 
 ================
 File: src/main/models/providers/litellm.ts
@@ -8996,6 +9107,7 @@ import {
 import { extractProviderModel } from '@common/utils';
 ⋮----
 import { anthropicProviderStrategy } from './providers/anthropic';
+import { anthropicCompatibleProviderStrategy } from './providers/anthropic-compatible';
 import { azureProviderStrategy } from './providers/azure';
 import { bedrockProviderStrategy } from './providers/bedrock';
 import { cerebrasProviderStrategy } from './providers/cerebras';
@@ -9004,6 +9116,7 @@ import { deepseekProviderStrategy } from './providers/deepseek';
 import { geminiProviderStrategy } from './providers/gemini';
 import { gpustackProviderStrategy } from './providers/gpustack';
 import { groqProviderStrategy } from './providers/groq';
+import { kimiPlanProviderStrategy } from './providers/kimi-plan';
 import { litellmProviderStrategy } from './providers/litellm';
 import { lmStudioProviderStrategy } from './providers/lm-studio';
 import { minimaxProviderStrategy } from './providers/minimax';
@@ -16987,6 +17100,7 @@ File: src/renderer/src/components/message/UserMessageBlock.tsx
 ================
 import { FaRegUser } from 'react-icons/fa';
 import { clsx } from 'clsx';
+import { AnimatePresence, motion } from 'framer-motion';
 ⋮----
 import { MessageBar } from './MessageBar';
 ⋮----
@@ -17010,7 +17124,7 @@ export const UserMessageBlock = (
 ⋮----
 const handleEdit = () =>
 ⋮----
-<div id=
+className=
 
 ================
 File: src/renderer/src/components/message/utils.tsx
@@ -17215,6 +17329,27 @@ const exportToImage = async () =>
 onFork=
 ⋮----
 aria-label=
+
+================
+File: src/renderer/src/components/ModelLibrary/providers/AnthropicCompatibleParameters.tsx
+================
+import { ChangeEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { AnthropicCompatibleProvider } from '@common/agent';
+⋮----
+import { Input } from '@/components/common/Input';
+import { useEffectiveEnvironmentVariable } from '@/hooks/useEffectiveEnvironmentVariable';
+⋮----
+type Props = {
+  provider: AnthropicCompatibleProvider;
+  onChange: (updated: AnthropicCompatibleProvider) => void;
+};
+⋮----
+const handleBaseUrlChange = (e: ChangeEvent<HTMLInputElement>) =>
+⋮----
+const handleApiKeyChange = (e: ChangeEvent<HTMLInputElement>) =>
+⋮----
+label=
 
 ================
 File: src/renderer/src/components/ModelLibrary/providers/AnthropicParameters.tsx
@@ -17558,6 +17693,27 @@ File: src/renderer/src/components/ModelLibrary/providers/index.ts
 // Model Overrides
 ⋮----
 // Utility Components
+
+================
+File: src/renderer/src/components/ModelLibrary/providers/KimiPlanParameters.tsx
+================
+import { ChangeEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { KimiPlanProvider } from '@common/agent';
+⋮----
+import { Input } from '@/components/common/Input';
+import { useEffectiveEnvironmentVariable } from '@/hooks/useEffectiveEnvironmentVariable';
+⋮----
+type Props = {
+  provider: KimiPlanProvider;
+  onChange: (updated: KimiPlanProvider) => void;
+};
+⋮----
+export const KimiPlanParameters = (
+⋮----
+const handleApiKeyChange = (e: ChangeEvent<HTMLInputElement>) =>
+⋮----
+label=
 
 ================
 File: src/renderer/src/components/ModelLibrary/providers/LitellmParameters.tsx
@@ -18512,6 +18668,7 @@ import { IconButton } from '@/components/common/IconButton';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import {
   AnthropicIcon,
+  AnthropicCompatibleIcon,
   AzureIcon,
   BedrockIcon,
   CerebrasIcon,
@@ -18535,6 +18692,7 @@ import {
 } from '@/icons';
 import { useResponsive } from '@/hooks/useResponsive';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { KimiPlanIcon } from '@/icons/KimiPlanIcon';
 ⋮----
 type Props = {
   provider: ProviderProfile;
@@ -18626,6 +18784,7 @@ import { DisableStreaming } from './DisableStreaming';
 ⋮----
 import {
   AnthropicParameters,
+  AnthropicCompatibleParameters,
   AzureParameters,
   BedrockParameters,
   ClaudeAgentSdkParameters,
@@ -18633,6 +18792,7 @@ import {
   GeminiParameters,
   GpustackParameters,
   GroqParameters,
+  KimiPlanParameters,
   LitellmParameters,
   LmStudioParameters,
   MinimaxParameters,
@@ -18711,6 +18871,7 @@ import { ProviderCard } from './ProviderCard';
 import { IconButton } from '@/components/common/IconButton';
 import {
   AnthropicIcon,
+  AnthropicCompatibleIcon,
   AzureIcon,
   BedrockIcon,
   CerebrasIcon,
@@ -18731,6 +18892,7 @@ import {
   SyntheticIcon,
   VertexAiIcon,
   ZaiPlanIcon,
+  KimiPlanIcon,
 } from '@/icons';
 ⋮----
 type Props = {
@@ -19577,7 +19739,7 @@ onSquash=
 File: src/renderer/src/components/project/TaskView.tsx
 ================
 import { DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
-import { forwardRef, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResizableBox, ResizeCallbackData } from 'react-resizable';
 import { clsx } from 'clsx';
@@ -22730,6 +22892,34 @@ import zh from '@common/locales/zh.json';
 // eslint-disable-next-line import/no-named-as-default-member
 
 ================
+File: src/renderer/src/icons/AnthropicCompatibleIcon.tsx
+================
+type Props = {
+  width?: number;
+  height?: number;
+  className?: string;
+};
+⋮----
+export const AnthropicCompatibleIcon = ({ width = 64, height = 64, className }: Props) => (
+  <div
+    aria-label="Anthropic Compatible"
+    className={`flex items-center justify-center rounded-full ${className || ''}`}
+    style={{
+      backgroundColor: 'rgb(100, 100, 125)',
+      boxShadow: 'rgba(255, 255, 255, 0.1) 0px 0px 0px 1px inset',
+      color: 'rgb(255, 255, 255)',
+      height: `${height}px`,
+      width: `${width}px`,
+    }}
+  >
+    <svg fill="currentColor" fillRule="evenodd" viewBox="0 0 24 24" width={width * 0.7} height={height * 0.7} xmlns="http://www.w3.org/2000/svg">
+      <title>Anthropic</title>
+      <path d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm4.132 9.959L8.453 7.687 6.205 13.48H10.7z"></path>
+    </svg>
+  </div>
+);
+
+================
 File: src/renderer/src/icons/AnthropicIcon.tsx
 ================
 type Props = {
@@ -22951,6 +23141,47 @@ export const GroqIcon = ({ width = 64, height = 64, className }: Props) => (
 File: src/renderer/src/icons/index.ts
 ================
 
+
+================
+File: src/renderer/src/icons/KimiPlanIcon.tsx
+================
+type Props = {
+  width?: number;
+  height?: number;
+  className?: string;
+};
+⋮----
+export const KimiPlanIcon = ({ width = 64, height = 64, className }: Props) => (
+  <div
+    aria-label="Kimi Plan"
+    className={`flex items-center justify-center rounded-md ${className || ''}`}
+    style={{
+      backgroundColor: '#000000',
+      height: `${height}px`,
+      width: `${width}px`,
+    }}
+  >
+    <svg
+      viewBox="0 0 512 512"
+      xmlns="http://www.w3.org/2000/svg"
+      fillRule="evenodd"
+      clipRule="evenodd"
+      strokeLinejoin="round"
+      strokeMiterlimit="2"
+      width={width}
+      height={height}
+    >
+      <path
+        d="M342.065 189.759c1.886-2.42 3.541-4.63 5.289-6.77.81-1.007.74-1.771-.046-2.824-7.58-9.965-8.298-21.028-3.935-32.254 3.275-8.448 10.52-12.406 19.373-13.25 5.52-.521 10.936.046 15.959 2.73 6.596 3.53 10.438 8.912 11.688 16.341.995 5.926.81 11.712-.868 17.452-2.974 10.161-10.277 15.427-20.287 16.758-8.31 1.11-16.734 1.25-25.113 1.817-.648.046-1.308 0-2.06 0z"
+        fill="#027aff"
+      />
+      <path
+        d="M321.512 144.254h-50.064l-39.637 90.384h-56.036v-89.99H131v232.868h44.787v-98.103h78.973c13.598 0 26.015-7.927 31.744-20.252v118.355h44.787v-98.103c0-23.342-18.239-42.97-41.523-44.671v-.116h-24.593a45.577 45.577 0 0026.884-24.534l29.453-65.838z"
+        fill="#fff"
+      />
+    </svg>
+  </div>
+);
 
 ================
 File: src/renderer/src/icons/LitellmIcon.tsx
@@ -26283,9 +26514,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "reactorpro",
-  "version": "0.51.0-dev",
-  "description": "ReactorPro - AI coding agent for software engineers",
+  "name": "aider-desk",
+  "version": "0.52.0-dev",
+  "description": "Aider desktop application wrapper",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",

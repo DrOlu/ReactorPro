@@ -1,5 +1,6 @@
 import { FaRegUser } from 'react-icons/fa';
 import { clsx } from 'clsx';
+import { AnimatePresence, motion } from 'framer-motion';
 
 import { MessageBar } from './MessageBar';
 
@@ -31,23 +32,31 @@ export const UserMessageBlock = ({ baseDir, message, allFiles, renderMarkdown, c
   };
 
   return (
-    <div id={`user-message-${message.id}`} className={clsx(baseClasses, 'relative flex flex-col group', !renderMarkdown && 'break-words whitespace-pre-wrap')}>
-      <div className="flex items-start gap-2">
-        <div className="mt-[3px]">
-          <FaRegUser className="text-text-tertiary w-3.5 h-3.5" />
+    <AnimatePresence>
+      <motion.div
+        id={`user-message-${message.id}`}
+        className={clsx(baseClasses, 'relative flex flex-col group', !renderMarkdown && 'break-words whitespace-pre-wrap')}
+        initial={message.isOptimistic ? { opacity: 0, transform: 'translateY(50px)' } : undefined}
+        animate={message.isOptimistic ? { opacity: 1, transform: 'translateY(0)' } : undefined}
+        transition={{ duration: 0.1 }}
+      >
+        <div className="flex items-start gap-2">
+          <div className="mt-[3px]">
+            <FaRegUser className="text-text-tertiary w-3.5 h-3.5" />
+          </div>
+          <div className="flex-grow-1 w-full overflow-hidden">{parsedContent}</div>
         </div>
-        <div className="flex-grow-1 w-full overflow-hidden">{parsedContent}</div>
-      </div>
-      {!compact && (
-        <MessageBar
-          content={message.content}
-          remove={onRemove}
-          redo={onRedo}
-          edit={onEdit ? handleEdit : undefined}
-          onFork={onFork}
-          onRemoveUpTo={onRemoveUpTo}
-        />
-      )}
-    </div>
+        {!compact && (
+          <MessageBar
+            content={message.content}
+            remove={onRemove}
+            redo={onRedo}
+            edit={onEdit ? handleEdit : undefined}
+            onFork={onFork}
+            onRemoveUpTo={onRemoveUpTo}
+          />
+        )}
+      </motion.div>
+    </AnimatePresence>
   );
 };

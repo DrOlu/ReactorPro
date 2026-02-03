@@ -1,5 +1,5 @@
 import { DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
-import { forwardRef, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResizableBox, ResizeCallbackData } from 'react-resizable';
 import { clsx } from 'clsx';
@@ -99,8 +99,9 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
     const { loading, loaded, allFiles, contextFiles, autocompletionWords, tokensInfo, question, todoItems, aiderModelsData } = taskState;
 
     const messages = useTaskMessages(task.id);
-    const displayedMessages = useDeferredValue(messages, []);
-    const messagesPending = messages.length !== displayedMessages.length;
+    const deferredMessages = useDeferredValue(messages);
+    const [displayedMessages, setDisplayedMessages] = useOptimistic(deferredMessages);
+    const messagesPending = task.updatedAt && messages.length !== displayedMessages.length;
 
     const currentMode = task.currentMode || 'agent';
 
@@ -291,20 +292,19 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
         } else {
           if (!question) {
             // OPTIMISTIC: Add user message immediately before backend response
-            setMessages(task.id, (prevMessages) => [
-              ...prevMessages,
-              {
-                id: uuidv4(),
-                type: 'user',
-                content: prompt,
-                isOptimistic: true,
-              } satisfies UserMessage,
-            ]);
+            const optimisticUserMessage = {
+              id: uuidv4(),
+              type: 'user',
+              content: prompt,
+              isOptimistic: true,
+            } satisfies UserMessage;
+            setMessages(task.id, (prevMessages) => [...prevMessages, optimisticUserMessage]);
+            setDisplayedMessages([...displayedMessages, optimisticUserMessage]);
           }
           api.runPrompt(projectDir, task.id, prompt, currentMode);
         }
       },
-      [updateOptimisticTaskState, task.id, editingMessageIndex, setMessages, api, projectDir, currentMode, question],
+      [updateOptimisticTaskState, task.id, editingMessageIndex, setMessages, api, projectDir, currentMode, question, setDisplayedMessages, displayedMessages],
     );
 
     const handleSavePrompt = useCallback(

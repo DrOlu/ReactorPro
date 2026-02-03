@@ -275,7 +275,9 @@
     "baseUrlPlaceholder": "e.g. http://localhost:11434/api"
   },
   "anthropic": {
-    "apiKey": "API Key"
+    "apiKey": "API Key",
+    "baseUrl": "Base URL",
+    "baseUrlPlaceholder": "e.g. https://api.anthropic.com"
   },
   "minimax": {
     "apiKey": "API Key"
@@ -292,6 +294,9 @@
   "groq": {
     "apiKey": "API Key",
     "modelPlaceholder": "e.g. moonshotai/kimi-k2-instruct"
+  },
+  "kimiPlan": {
+    "apiKey": "API Key"
   },
   "deepseek": {
     "apiKey": "API Key"
@@ -372,12 +377,14 @@
   },
   "providers": {
     "anthropic": "Anthropic",
+    "anthropic-compatible": "Anthropic Compatible",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
     "claude-agent-sdk": "Claude Agent SDK",
     "deepseek": "Deepseek",
     "gemini": "Gemini",
     "groq": "Groq",
+    "kimi-plan": "Kimi Coding Plan",
     "gpustack": "GPUStack",
     "lmstudio": "LM Studio",
     "litellm": "LiteLLM",

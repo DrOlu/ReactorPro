@@ -1,4 +1,5 @@
 export * from './AnthropicParameters';
+export * from './AnthropicCompatibleParameters';
 export * from './AzureParameters';
 export * from './BedrockParameters';
 export * from './CerebrasParameters';
@@ -7,6 +8,7 @@ export * from './DeepseekParameters';
 export * from './GeminiParameters';
 export * from './GpustackParameters';
 export * from './GroqParameters';
+export * from './KimiPlanParameters';
 export * from './LitellmParameters';
 export * from './MinimaxParameters';
 export * from './LmStudioParameters';

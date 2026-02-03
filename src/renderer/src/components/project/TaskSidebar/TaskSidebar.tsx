@@ -576,7 +576,7 @@ const TaskSidebarComponent = ({
             title={t('taskSidebar.deleteSelected')}
             onConfirm={handleBulkDelete}
             onCancel={() => setBulkDeleteConfirm(false)}
-            confirmButtonClass="bg-error hover:bg-error/90"
+            confirmButtonColor="danger"
           >
             <div className="text-sm text-text-primary">{t('taskSidebar.deleteSelectedConfirm', { count: selectedTasks.size })}</div>
           </ConfirmDialog>

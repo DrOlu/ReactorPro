@@ -35,6 +35,7 @@ import {
 
 export type LlmProviderName =
   | 'anthropic'
+  | 'anthropic-compatible'
   | 'azure'
   | 'bedrock'
   | 'cerebras'
@@ -43,6 +44,7 @@ export type LlmProviderName =
   | 'gemini'
   | 'gpustack'
   | 'groq'
+  | 'kimi-plan'
   | 'litellm'
   | 'lmstudio'
   | 'minimax'
@@ -76,6 +78,7 @@ export interface OllamaProvider extends LlmProviderBase {
 
 export const AVAILABLE_PROVIDERS: LlmProviderName[] = [
   'anthropic',
+  'anthropic-compatible',
   'azure',
   'bedrock',
   'cerebras',
@@ -84,6 +87,7 @@ export const AVAILABLE_PROVIDERS: LlmProviderName[] = [
   'gemini',
   'gpustack',
   'groq',
+  'kimi-plan',
   'litellm',
   'lmstudio',
   'minimax',
@@ -131,6 +135,19 @@ export interface AnthropicProvider extends LlmProviderBase {
   apiKey: string;
 }
 export const isAnthropicProvider = (provider: LlmProviderBase): provider is AnthropicProvider => provider.name === 'anthropic';
+
+export interface AnthropicCompatibleProvider extends LlmProviderBase {
+  name: 'anthropic-compatible';
+  apiKey: string;
+  baseUrl?: string;
+}
+export const isAnthropicCompatibleProvider = (provider: LlmProviderBase): provider is AnthropicCompatibleProvider => provider.name === 'anthropic-compatible';
+
+export interface KimiPlanProvider extends LlmProviderBase {
+  name: 'kimi-plan';
+  apiKey: string;
+}
+export const isKimiPlanProvider = (provider: LlmProviderBase): provider is KimiPlanProvider => provider.name === 'kimi-plan';
 
 export enum GeminiVoiceModel {
   GeminiLive25FlashNativeAudio = 'gemini-2.5-flash-native-audio-preview-12-2025',
@@ -279,6 +296,7 @@ export const isSyntheticProvider = (provider: LlmProviderBase): provider is Synt
 export type LlmProvider =
   | OpenAiProvider
   | AnthropicProvider
+  | AnthropicCompatibleProvider
   | AzureProvider
   | GeminiProvider
   | VertexAiProvider
@@ -289,6 +307,7 @@ export type LlmProvider =
   | GroqProvider
   | GpustackProvider
   | CerebrasProvider
+  | KimiPlanProvider
   | OpenAiCompatibleProvider
   | LitellmProvider
   | OllamaProvider
@@ -579,6 +598,13 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
         apiKey: '',
       } satisfies AnthropicProvider;
       break;
+    case 'anthropic-compatible':
+      provider = {
+        name: 'anthropic-compatible',
+        apiKey: '',
+        baseUrl: '',
+      } satisfies AnthropicCompatibleProvider;
+      break;
     case 'gemini':
       provider = {
         name: 'gemini',
@@ -610,6 +636,12 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
         name: 'groq',
         apiKey: '',
       } satisfies GroqProvider;
+      break;
+    case 'kimi-plan':
+      provider = {
+        name: 'kimi-plan',
+        apiKey: '',
+      } satisfies KimiPlanProvider;
       break;
     case 'gpustack':
       provider = {

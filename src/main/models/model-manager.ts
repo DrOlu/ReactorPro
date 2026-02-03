@@ -16,6 +16,7 @@ import {
 import { extractProviderModel } from '@common/utils';
 
 import { anthropicProviderStrategy } from './providers/anthropic';
+import { anthropicCompatibleProviderStrategy } from './providers/anthropic-compatible';
 import { azureProviderStrategy } from './providers/azure';
 import { bedrockProviderStrategy } from './providers/bedrock';
 import { cerebrasProviderStrategy } from './providers/cerebras';
@@ -24,6 +25,7 @@ import { deepseekProviderStrategy } from './providers/deepseek';
 import { geminiProviderStrategy } from './providers/gemini';
 import { gpustackProviderStrategy } from './providers/gpustack';
 import { groqProviderStrategy } from './providers/groq';
+import { kimiPlanProviderStrategy } from './providers/kimi-plan';
 import { litellmProviderStrategy } from './providers/litellm';
 import { lmStudioProviderStrategy } from './providers/lm-studio';
 import { minimaxProviderStrategy } from './providers/minimax';
@@ -83,6 +85,7 @@ export class ModelManager {
   // Provider registry for strategy pattern
   private providerRegistry: LlmProviderRegistry = {
     anthropic: anthropicProviderStrategy,
+    'anthropic-compatible': anthropicCompatibleProviderStrategy,
     azure: azureProviderStrategy,
     bedrock: bedrockProviderStrategy,
     cerebras: cerebrasProviderStrategy,
@@ -91,6 +94,7 @@ export class ModelManager {
     gemini: geminiProviderStrategy,
     gpustack: gpustackProviderStrategy,
     groq: groqProviderStrategy,
+    'kimi-plan': kimiPlanProviderStrategy,
     litellm: litellmProviderStrategy,
     lmstudio: lmStudioProviderStrategy,
     minimax: minimaxProviderStrategy,

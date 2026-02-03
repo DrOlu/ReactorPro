@@ -312,7 +312,9 @@
     "thinkingEnabledTooltip": "启用时，模型将使用思考模式进行更深入的推理（默认）。对于简单任务，可以禁用以获得更快的响应速度。"
   },
   "anthropic": {
-    "apiKey": "API 密钥"
+    "apiKey": "API 密钥",
+    "baseUrl": "基础 URL",
+    "baseUrlPlaceholder": "例如 https://api.anthropic.com"
   },
   "minimax": {
     "apiKey": "API 密钥"
@@ -332,6 +334,9 @@
   "groq": {
     "apiKey": "API 密钥",
     "modelPlaceholder": "例如 moonshotai/kimi-k2-instruct"
+  },
+  "kimiPlan": {
+    "apiKey": "API 密钥"
   },
   "deepseek": {
     "apiKey": "API 密钥"
@@ -369,12 +374,14 @@
   },
   "providers": {
     "anthropic": "Anthropic",
+    "anthropic-compatible": "Anthropic 兼容",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
     "claude-agent-sdk": "Claude Agent SDK",
     "deepseek": "Deepseek",
     "gemini": "Gemini",
     "groq": "Groq",
+    "kimi-plan": "Kimi Coding Plan",
     "gpustack": "GPUStack",
     "lmstudio": "LM Studio",
     "litellm": "LiteLLM",
