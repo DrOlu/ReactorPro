@@ -140,52 +140,52 @@ jobs:
           
           BODY="Dear Security Team,
 
-We are writing to request whitelisting for our legitimate software application, ReactorPro.
+          We are writing to request whitelisting for our legitimate software application, ReactorPro.
 
-**Product Information:**
-- Product Name: ReactorPro
-- Version: ${VERSION}
-- Publisher: Hyperspace Technologies
-- Website: https://reactorpro.ng
-- Contact: agent@reactorpro.ng
+          **Product Information:**
+          - Product Name: ReactorPro
+          - Version: ${VERSION}
+          - Publisher: Hyperspace Technologies
+          - Website: https://reactorpro.ng
+          - Contact: agent@reactorpro.ng
 
-**Download Location:**
-${DOWNLOAD_URL}
+          **Download Location:**
+          ${DOWNLOAD_URL}
 
-**Direct Windows Installer:**
-${EXE_URL}
+          **Direct Windows Installer:**
+          ${EXE_URL}
 
-**Description:**
-ReactorPro is a legitimate desktop application that provides an AI-powered coding assistant interface. It is built on the open-source AiderDesk project and is digitally signed with our Hyperspace Technologies code signing certificate.
+          **Description:**
+          ReactorPro is a legitimate desktop application that provides an AI-powered coding assistant interface. It is built on the open-source AiderDesk project and is digitally signed with our Hyperspace Technologies code signing certificate.
 
-**Code Signing:**
-All our binaries are signed with a valid code signing certificate issued to Hyperspace Technologies, valid until January 21, 2036.
+          **Code Signing:**
+          All our binaries are signed with a valid code signing certificate issued to Hyperspace Technologies, valid until January 21, 2036.
 
-**Technical Details:**
-- Built with Electron framework (TypeScript)
-- Open source codebase based on: https://github.com/hotovo/aider-desk
-- VirusTotal scan: 0 malicious detections (clean)
-- SHA256 hashes available in our GitHub releases
+          **Technical Details:**
+          - Built with Electron framework (TypeScript)
+          - Open source codebase based on: https://github.com/hotovo/aider-desk
+          - VirusTotal scan: 0 malicious detections (clean)
+          - SHA256 hashes available in our GitHub releases
 
-**Issue:**
-Windows SmartScreen is showing a red warning for our application despite:
-1. Valid code signing certificate
-2. Clean VirusTotal scan (0/94 detections)
-3. Open source codebase
+          **Issue:**
+          Windows SmartScreen is showing a red warning for our application despite:
+          1. Valid code signing certificate
+          2. Clean VirusTotal scan (0/94 detections)
+          3. Open source codebase
 
-**Request:**
-We kindly request that you:
-1. Review our application and add it to your whitelist
-2. Remove any false positive detections
-3. Update SmartScreen reputation for our signed executable
+          **Request:**
+          We kindly request that you:
+          1. Review our application and add it to your whitelist
+          2. Remove any false positive detections
+          3. Update SmartScreen reputation for our signed executable
 
-We are happy to provide additional information, source code access, or technical documentation upon request.
+          We are happy to provide additional information, source code access, or technical documentation upon request.
 
-Thank you for your assistance.
+          Thank you for your assistance.
 
-Best regards,
-Hyperspace Technologies Team
-agent@reactorpro.ng"
+          Best regards,
+          Hyperspace Technologies Team
+          agent@reactorpro.ng"
           
           SENDER="reactor@cyberagent.ng"
           
@@ -229,7 +229,7 @@ agent@reactorpro.ng"
           BODY="## VirusTotal Scan Results - ReactorPro ${VERSION}
 
           **Release:** [${{ inputs.tag }}](https://github.com/${{ github.repository }}/releases/tag/${{ inputs.tag }})
-          **Scan Date:** $(date -u +"%Y-%m-%d %H:%M UTC")
+          **Scan Date:** $(date -u +\"%Y-%m-%d %H:%M UTC\")
 
           ### Scan Summary
 
