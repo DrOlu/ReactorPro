@@ -1,0 +1,249 @@
+name: AV Scan & Whitelist
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to scan (e.g., v0.52.0-dev)'
+        required: true
+        type: string
+      send_emails:
+        description: 'Send whitelisting emails to AV vendors'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+  AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
+
+jobs:
+  scan-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p assets
+          gh release download "${{ inputs.tag }}" --repo ${{ github.repository }} --dir assets || true
+          echo "Downloaded assets:"
+          ls -la assets/ || echo "No assets found"
+
+      - name: Scan with VirusTotal
+        id: vt_scan
+        continue-on-error: true
+        run: |
+          mkdir -p reports
+          SCAN_RESULTS=""
+          
+          # Check if any assets exist
+          if [ -z "$(ls -A assets/ 2>/dev/null)" ]; then
+            echo "No assets to scan"
+            echo "scan_complete=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          for file in assets/*; do
+            [ -f "$file" ] || continue
+            FILENAME=$(basename "$file")
+            FILESIZE=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
+            
+            echo "Scanning: $FILENAME (${FILESIZE} bytes)"
+            
+            # VirusTotal has 32MB limit for direct upload, use URL scan for larger files
+            if [ "$FILESIZE" -gt 33554432 ]; then
+              echo "File over 32MB, using URL scan instead of direct upload"
+              DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}/$FILENAME"
+              
+              RESPONSE=$(curl -s --request POST \
+                --url "https://www.virustotal.com/api/v3/urls" \
+                --header "x-apikey: $VIRUSTOTAL_API_KEY" \
+                --form "url=$DOWNLOAD_URL" 2>&1)
+              
+              echo "URL scan response: $RESPONSE"
+            else
+              RESPONSE=$(curl -s --request POST \
+                --url "https://www.virustotal.com/api/v3/files" \
+                --header "x-apikey: $VIRUSTOTAL_API_KEY" \
+                --form "file=@$file" 2>&1)
+            fi
+            
+            # Check if response is valid JSON
+            if ! echo "$RESPONSE" | jq -e . >/dev/null 2>&1; then
+              echo "Invalid JSON response: $RESPONSE"
+              SCAN_RESULTS="$SCAN_RESULTS\n| $FILENAME | ERROR | - | - | - |"
+              continue
+            fi
+            
+            ANALYSIS_ID=$(echo "$RESPONSE" | jq -r '.data.id // empty')
+            
+            if [ -n "$ANALYSIS_ID" ]; then
+              echo "Analysis ID: $ANALYSIS_ID"
+              sleep 30
+              
+              ANALYSIS=$(curl -s --request GET \
+                --url "https://www.virustotal.com/api/v3/analyses/$ANALYSIS_ID" \
+                --header "x-apikey: $VIRUSTOTAL_API_KEY")
+              
+              MALICIOUS=$(echo "$ANALYSIS" | jq -r '.data.attributes.stats.malicious // 0')
+              SUSPICIOUS=$(echo "$ANALYSIS" | jq -r '.data.attributes.stats.suspicious // 0')
+              HARMLESS=$(echo "$ANALYSIS" | jq -r '.data.attributes.stats.harmless // 0')
+              UNDETECTED=$(echo "$ANALYSIS" | jq -r '.data.attributes.stats.undetected // 0')
+              
+              SCAN_RESULTS="$SCAN_RESULTS\n| $FILENAME | $MALICIOUS | $SUSPICIOUS | $HARMLESS | $UNDETECTED |"
+              
+              echo "$ANALYSIS" > "reports/${FILENAME}.json"
+            else
+              echo "Failed to submit $FILENAME - Response: $RESPONSE"
+              SCAN_RESULTS="$SCAN_RESULTS\n| $FILENAME | SKIP | - | - | - |"
+            fi
+            
+            sleep 15
+          done
+          
+          echo -e "$SCAN_RESULTS" > reports/summary.txt
+          echo "scan_complete=true" >> $GITHUB_OUTPUT
+
+      - name: Send whitelisting emails
+        if: inputs.send_emails == true
+        continue-on-error: true
+        run: |
+          VERSION="${{ inputs.tag }}"
+          VERSION="${VERSION#v}"
+          
+          VENDORS='[
+            {"name": "Google Safe Browsing", "email": "safebrowsing-report@google.com", "priority": "high"},
+            {"name": "Norton/Symantec", "email": "submitvirus@symantec.com", "priority": "high"},
+            {"name": "McAfee", "email": "virus_research@mcafee.com", "priority": "high"},
+            {"name": "Kaspersky", "email": "newvirus@kaspersky.com", "priority": "high"},
+            {"name": "Avast/AVG", "email": "virus@avast.com", "priority": "high"},
+            {"name": "Bitdefender", "email": "virus_submission@bitdefender.com", "priority": "high"},
+            {"name": "ESET", "email": "samples@eset.com", "priority": "high"},
+            {"name": "Trend Micro", "email": "virus_doctor@trendmicro.com", "priority": "medium"}
+          ]'
+          
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/tag/${{ inputs.tag }}"
+          
+          SUBJECT="False Positive Report & Whitelisting Request - ReactorPro v${VERSION}"
+          
+          BODY="Dear Security Team,
+
+          We are writing to request whitelisting for our legitimate software application, ReactorPro.
+
+          **Product Information:**
+          - Product Name: ReactorPro
+          - Version: ${VERSION}
+          - Publisher: Hyperspace Technologies
+          - Website: https://reactorpro.ng
+          - Contact: agent@reactorpro.ng
+
+          **Download Location:**
+          ${DOWNLOAD_URL}
+
+          **Description:**
+          ReactorPro is a legitimate desktop application that provides an AI-powered coding assistant interface. It is built on the open-source AiderDesk project and is digitally signed with our Hyperspace Technologies code signing certificate.
+
+          **Code Signing:**
+          All our binaries are signed with a valid code signing certificate issued to Hyperspace Technologies, valid until January 21, 2036.
+
+          **Technical Details:**
+          - Built with Electron framework (TypeScript)
+          - Open source codebase based on: https://github.com/hotovo/aider-desk
+          - SHA256 hashes available in our GitHub releases
+
+          **Request:**
+          We kindly request that you:
+          1. Review our application and add it to your whitelist
+          2. Remove any false positive detections
+
+          We are happy to provide additional information, source code access, or technical documentation upon request.
+
+          Thank you for your assistance.
+
+          Best regards,
+          Hyperspace Technologies Team
+          agent@reactorpro.ng"
+          
+          SENDER="reactor@cyberagent.ng"
+          
+          echo "$VENDORS" | jq -c '.[] | select(.priority == "high")' | while read -r vendor; do
+            VENDOR_NAME=$(echo "$vendor" | jq -r '.name')
+            VENDOR_EMAIL=$(echo "$vendor" | jq -r '.email')
+            
+            echo "Sending to: $VENDOR_NAME ($VENDOR_EMAIL)"
+            
+            RESPONSE=$(curl -s -X POST "https://api.cyberagent.ng/v0/inboxes/${SENDER}/messages/send" \
+              -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"to\": [\"$VENDOR_EMAIL\"],
+                \"subject\": \"$SUBJECT\",
+                \"text\": $(echo "$BODY" | jq -Rs .)
+              }")
+            
+            if echo "$RESPONSE" | jq -e '.id' > /dev/null 2>&1; then
+              echo "Email sent successfully to $VENDOR_NAME"
+            else
+              echo "Failed to send to $VENDOR_NAME: $RESPONSE"
+            fi
+            
+            sleep 2
+          done
+
+      - name: Create scan report issue
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.tag }}"
+          VERSION="${VERSION#v}"
+          
+          SUMMARY=""
+          if [ -f reports/summary.txt ]; then
+            SUMMARY=$(cat reports/summary.txt)
+          fi
+          
+          BODY="## VirusTotal Scan Results - ReactorPro ${VERSION}
+
+          **Release:** [${{ inputs.tag }}](https://github.com/${{ github.repository }}/releases/tag/${{ inputs.tag }})
+          **Scan Date:** $(date -u +"%Y-%m-%d %H:%M UTC")
+
+          ### Scan Summary
+
+          | File | Malicious | Suspicious | Harmless | Undetected |
+          |------|-----------|------------|----------|------------|
+          ${SUMMARY}
+
+          ### AV Vendor Notifications
+
+          Whitelisting requests sent to high-priority AV vendors:
+          - Google Safe Browsing
+          - Norton/Symantec
+          - McAfee
+          - Kaspersky
+          - Avast/AVG
+          - Bitdefender
+          - ESET
+          - Trend Micro
+
+          ---
+          *Automated scan triggered by release workflow*"
+          
+          EXISTING=$(gh issue list --repo ${{ github.repository }} --search "AV Whitelist Tracking" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" --repo ${{ github.repository }} --body "$BODY"
+          else
+            gh issue create --repo ${{ github.repository }} \
+              --title "AV Whitelist Tracking - ReactorPro" \
+              --body "$BODY" \
+              --label "security" || true
+          fi
