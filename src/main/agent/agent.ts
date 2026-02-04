@@ -41,9 +41,16 @@ import { Client as McpSdkClient } from '@modelcontextprotocol/sdk/client/index.j
 // @ts-expect-error istextorbinary is not typed properly
 import { isBinary } from 'istextorbinary';
 import { fileTypeFromBuffer } from 'file-type';
-import { HELPERS_TOOL_GROUP_NAME, TASKS_TOOL_GROUP_NAME, TASKS_TOOL_SEARCH_PARENT_TASK, TOOL_GROUP_NAME_SEPARATOR } from '@common/tools';
+import {
+  HELPERS_TOOL_GROUP_NAME,
+  POWER_TOOL_FILE_READ,
+  POWER_TOOL_GROUP_NAME,
+  TASKS_TOOL_GROUP_NAME,
+  TASKS_TOOL_SEARCH_PARENT_TASK,
+  TOOL_GROUP_NAME_SEPARATOR,
+} from '@common/tools';
 
-import { createPowerToolset } from './tools/power';
+import { createPowerToolset, readFileContent } from './tools/power';
 import { createTodoToolset } from './tools/todo';
 import { createSearchParentTaskTool, createTasksToolset } from './tools/tasks';
 import { createAiderToolset } from './tools/aider';
@@ -621,8 +628,11 @@ export class Agent {
     const providerOptions = this.modelManager.getProviderOptions(provider, profile.model);
     const providerParameters = this.modelManager.getProviderParameters(provider, profile.model);
 
+    const firstUserMessage = contextMessages.length > 0 ? contextMessages[0] : null;
     const messages = await this.prepareMessages(task, profile, contextMessages, contextFiles);
-    const initialUserRequestMessageIndex = messages.length - contextMessages.length;
+    const initialUserRequestMessageIndex = firstUserMessage
+      ? messages.findIndex((message) => message.role === 'user' && message.content === firstUserMessage.content)
+      : messages.length;
 
     // add user message
     messages.push(...resultMessages);
@@ -1070,6 +1080,178 @@ export class Agent {
     });
   }
 
+  private async getContextFilesAsToolCallMessages(task: Task, profile: AgentProfile, contextFiles: ContextFile[]): Promise<ModelMessage[]> {
+    const messages: ModelMessage[] = [];
+
+    // Check if power file_read tool is available (not 'Never')
+    const fileReadToolId = `${POWER_TOOL_GROUP_NAME}${TOOL_GROUP_NAME_SEPARATOR}${POWER_TOOL_FILE_READ}`;
+    const fileReadApprovalState = profile.toolApprovals[fileReadToolId];
+    const useToolCallFormat = fileReadApprovalState !== ToolApprovalState.Never;
+
+    // Filter out rule files as they are already included in the system prompt
+    const filteredContextFiles = contextFiles.filter((file) => {
+      const normalizedPath = path.normalize(file.path);
+      const normalizedRulesDir = path.normalize(AIDER_DESK_PROJECT_RULES_DIR);
+
+      return (
+        !normalizedPath.startsWith(normalizedRulesDir + path.sep) &&
+        !normalizedPath.startsWith(normalizedRulesDir + '/') &&
+        normalizedPath !== normalizedRulesDir
+      );
+    });
+
+    if (filteredContextFiles.length === 0) {
+      return messages;
+    }
+
+    // Separate readonly and editable files
+    const [readOnlyFiles, editableFiles] = filteredContextFiles.reduce(
+      ([readOnly, editable], file) => (file.readOnly ? [[...readOnly, file], editable] : [readOnly, [...editable, file]]),
+      [[], []] as [ContextFile[], ContextFile[]],
+    );
+
+    // If tool call format is not available, fall back to the old user message format
+    if (!useToolCallFormat) {
+      return await this.getContextFilesMessages(task, profile, contextFiles);
+    }
+
+    // Use tool call format
+    const createToolCallAndResult = async (files: ContextFile[], readOnlyFile: boolean): Promise<ModelMessage[]> => {
+      if (files.length === 0) {
+        return [];
+      }
+
+      const fileMessages: ModelMessage[] = [];
+      const nonBinaryFiles: Array<{ path: string; relativePath: string }> = [];
+      const imageFiles: Array<{ path: string; relativePath: string; mimeType: string; imageBase64: string }> = [];
+
+      // Read all files and categorize them
+      for (const file of files) {
+        try {
+          const filePath = path.resolve(task.getTaskDir(), file.path);
+          const fileContentBuffer = await fs.readFile(filePath);
+          const relativePath = path.isAbsolute(file.path) ? path.relative(task.getTaskDir(), file.path) : file.path;
+
+          // If binary, try to detect if it's an image
+          if (isBinary(filePath, fileContentBuffer)) {
+            try {
+              const detected = await fileTypeFromBuffer(fileContentBuffer);
+              if (detected?.mime.startsWith('image/')) {
+                imageFiles.push({
+                  path: filePath,
+                  relativePath,
+                  mimeType: detected.mime,
+                  imageBase64: fileContentBuffer.toString('base64'),
+                });
+                continue;
+              }
+            } catch (e) {
+              logger.warn(`image-type failed to detect image for ${file.path}`, { error: e instanceof Error ? e.message : String(e) });
+            }
+            continue;
+          }
+
+          nonBinaryFiles.push({
+            path: filePath,
+            relativePath,
+          });
+        } catch (error) {
+          logger.error('Error reading context file:', {
+            path: file.path,
+            error,
+          });
+        }
+      }
+
+      // Process non-binary files: each file gets its own assistant message with tool-call and tool-result
+      for (const { path: filePath, relativePath } of nonBinaryFiles) {
+        try {
+          const content = await readFileContent(filePath, true);
+          const toolCallId = uuidv4();
+
+          const assistantMessage: ModelMessage = {
+            role: 'assistant',
+            content: [
+              {
+                type: 'text',
+                text: readOnlyFile
+                  ? 'The following file is part of the working context as read-only reference material.'
+                  : 'The following file is part of the working context and can be edited.',
+              },
+              {
+                type: 'tool-call' as const,
+                toolCallId,
+                toolName: fileReadToolId,
+                input: {
+                  filePath: relativePath,
+                  withLines: true,
+                },
+              },
+            ],
+          };
+
+          const toolResultMessage: ModelMessage = {
+            role: 'tool' as const,
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId,
+                toolName: fileReadToolId,
+                output: {
+                  type: 'text',
+                  value: content,
+                },
+              },
+            ],
+          };
+
+          fileMessages.push(assistantMessage, toolResultMessage);
+        } catch (error) {
+          logger.error('Error processing context file with readFileContent:', {
+            path: relativePath,
+            error,
+          });
+        }
+      }
+
+      // Process image files: keep current behavior
+      for (const imageData of imageFiles) {
+        fileMessages.push({
+          role: 'assistant',
+          content: `Provide content of image file: ${imageData.relativePath}`,
+        });
+
+        const imageMessage: ModelMessage = {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              image: `data:${imageData.mimeType};base64,${imageData.imageBase64}`,
+              mediaType: imageData.mimeType,
+            },
+          ],
+        };
+        fileMessages.push(imageMessage);
+      }
+
+      return fileMessages;
+    };
+
+    // Process read-only files
+    if (readOnlyFiles.length > 0) {
+      const readOnlyMessages = await createToolCallAndResult(readOnlyFiles, true);
+      messages.push(...readOnlyMessages);
+    }
+
+    // Process editable files
+    if (editableFiles.length > 0) {
+      const editableMessages = await createToolCallAndResult(editableFiles, false);
+      messages.push(...editableMessages);
+    }
+
+    return messages;
+  }
+
   private async prepareMessages(task: Task, profile: AgentProfile, contextMessages: ModelMessage[], contextFiles: ContextFile[]): Promise<ModelMessage[]> {
     const messages: ModelMessage[] = [];
 
@@ -1090,15 +1272,16 @@ export class Agent {
 
     // Add context files with content or just list of working files
     if (profile.includeContextFiles) {
-      const contextFilesMessages = await this.getContextFilesMessages(task, profile, contextFiles);
+      const contextFilesMessages = await this.getContextFilesAsToolCallMessages(task, profile, contextFiles);
+      // Add message history before context files
+      messages.push(...contextMessages);
       messages.push(...contextFilesMessages);
     } else {
       const workingFilesMessages = await this.getWorkingFilesMessages(contextFiles);
       messages.push(...workingFilesMessages);
+      // Add message history after working files
+      messages.push(...contextMessages);
     }
-
-    // Add message history
-    messages.push(...contextMessages);
 
     return messages;
   }

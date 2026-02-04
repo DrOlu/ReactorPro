@@ -45,6 +45,42 @@ const expandTilde = (filePath: string): string => {
   return filePath;
 };
 
+/**
+ * Reads a file and returns its content with optional line numbering and line range.
+ * @param absolutePath - The absolute path to the file
+ * @param withLines - Whether to return the file content with line numbers in format "lineNumber|content"
+ * @param lineOffset - The starting line number (0-based) to begin reading from
+ * @param lineLimit - The maximum number of lines to read
+ * @returns The file content as a string, formatted according to the parameters
+ * @throws Error if the file is binary or cannot be read
+ */
+export const readFileContent = async (absolutePath: string, withLines = false, lineOffset = 0, lineLimit = 1000): Promise<string> => {
+  const fileContentBuffer = await fs.readFile(absolutePath);
+
+  if (isBinary(absolutePath, fileContentBuffer)) {
+    throw new Error('Binary files cannot be read.');
+  }
+
+  const fileContent = fileContentBuffer.toString('utf8');
+  const lines = fileContent.split('\n');
+  const totalLines = lines.length;
+
+  const startIndex = Math.max(0, lineOffset);
+  const endIndex = Math.min(totalLines, startIndex + lineLimit);
+  let limitedLines = lines.slice(startIndex, endIndex);
+
+  if (withLines) {
+    limitedLines = limitedLines.map((line, index) => `${startIndex + index + 1}|${line}`);
+  }
+
+  if (endIndex < totalLines) {
+    limitedLines.push('...');
+    limitedLines.push(`Total lines in the file: ${totalLines}`);
+  }
+
+  return limitedLines.join('\n');
+};
+
 export const createPowerToolset = (task: Task, profile: AgentProfile, promptContext?: PromptContext, abortSignal?: AbortSignal): ToolSet => {
   const approvalManager = new ApprovalManager(task, profile);
 
@@ -202,38 +238,14 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
 
       const absolutePath = path.resolve(task.getTaskDir(), expandedPath);
       try {
-        const fileContentBuffer = await fs.readFile(absolutePath, { signal: abortSignal });
-        if (isBinary(absolutePath, fileContentBuffer)) {
-          return 'Error: Binary files cannot be read.';
-        }
-        const fileContent = fileContentBuffer.toString('utf8');
-        const lines = fileContent.split('\n');
-        const totalLines = lines.length;
-
-        // Apply line offset and limit
-        const startIndex = Math.max(0, lineOffset);
-        const endIndex = Math.min(totalLines, startIndex + lineLimit);
-        let limitedLines = lines.slice(startIndex, endIndex);
-
-        if (withLines) {
-          // Format with line numbers
-          limitedLines = limitedLines.map((line, index) => `${startIndex + index + 1}|${line}`);
-        }
-
-        // Add truncation indicator if file was limited
-        if (endIndex < totalLines) {
-          limitedLines.push('...');
-          limitedLines.push(`Total lines in the file: ${totalLines}`);
-        }
-
-        return limitedLines.join('\n');
+        return await readFileContent(absolutePath, withLines, lineOffset, lineLimit);
       } catch (error) {
         if (isAbortError(error)) {
           return 'Operation was cancelled by user.';
         }
         const errorMessage = error instanceof Error ? error.message : String(error);
-        if (isFileNotFoundError(error)) {
-          return `Error: File '${filePath}' not found.`;
+        if (errorMessage === 'Binary files cannot be read.' || isFileNotFoundError(error)) {
+          return `Error: ${errorMessage}`;
         }
         return `Error: Could not read file '${filePath}'. ${errorMessage}`;
       }

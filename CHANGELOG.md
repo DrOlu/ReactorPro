@@ -6,6 +6,7 @@
 - added support for Anthropic compatible provider
 - added direct support for Kimi Coding Plan provider
 - improved UX for initial user message
+- improved handling files within the context of the agent
 
 ## [0.51.0]
 
