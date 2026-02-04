@@ -173,6 +173,8 @@ jobs:
   release-win:
     name: Release Windows packages
     runs-on: windows-latest
+    outputs:
+      release_tag: ${{ steps.get_tag.outputs.release_tag }}
 
     steps:
       - name: Preserve $HOME set in the container
@@ -192,6 +194,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: npm run build && npx electron-builder --win -p always
+
+      - name: Get release tag
+        id: get_tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          # Get the draft release tag for AV scan trigger
+          RELEASE_TAG=$(gh release list --limit 10 --json tagName,isDraft --jq '.[] | select(.isDraft == true) | .tagName' | head -n 1)
+          if [ -z "$RELEASE_TAG" ]; then
+            # If no draft, get latest release
+            RELEASE_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          fi
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "Release tag for AV scan: $RELEASE_TAG"
 
   release-macos-x64:
     name: Release macOS x64 packages
@@ -324,3 +341,27 @@ jobs:
         run: |
           # Upload the combined latest-mac.yml to the GitHub release
           gh release upload ${{ steps.find-release.outputs.release_tag }} latest-mac.yml --clobber
+
+  trigger-av-scan:
+    name: Trigger AV Scan
+    needs: [release-win, combine-macos-yml]
+    runs-on: ubuntu-latest
+    # This step requires a PAT with workflow permission, GITHUB_TOKEN doesn't have it
+    continue-on-error: true
+    steps:
+      - name: Trigger AV Scan workflow
+        env:
+          GH_TOKEN: ${{ secrets.REPO_PAT || secrets.GH_TOKEN }}
+        run: |
+          RELEASE_TAG="${{ needs.release-win.outputs.release_tag }}"
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "No release tag found, cannot trigger AV scan"
+            exit 0
+          fi
+          
+          echo "Attempting to trigger AV scan workflow for tag: $RELEASE_TAG"
+          gh workflow run av-scan.yml \
+            --repo ${{ github.repository }} \
+            --ref main \
+            -f tag="$RELEASE_TAG" || \
+          echo "Note: AV scan trigger requires REPO_PAT secret with workflow scope. Run manually if needed."
