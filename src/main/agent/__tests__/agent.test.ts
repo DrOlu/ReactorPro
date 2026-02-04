@@ -751,7 +751,7 @@ describe('Agent - getContextFilesAsToolCallMessages', () => {
 
     it('should normalize paths when filtering', async () => {
       // Path with '..' segments that resolves to the rules directory
-      // Create a path like .aider-desk/rules/../aider-desk/rules/rule.md which normalizes to .aider-desk/rules/rule.md
+      // Create a path like .reactorpro/rules/../reactorpro/rules/rule.md which normalizes to .reactorpro/rules/rule.md
       const rulePath = `${AIDER_DESK_PROJECT_RULES_DIR}${path.sep}..${path.sep}${path.basename(AIDER_DESK_PROJECT_RULES_DIR)}${path.sep}rule.md`;
       const contextFiles: ContextFile[] = [{ path: rulePath, readOnly: true }];
 
