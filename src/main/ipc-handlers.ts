@@ -476,6 +476,28 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     return eventsHandler.getMemoryEmbeddingProgress();
   });
 
+  // BMAD handlers
+  ipcMain.handle('bmad-install', async () => {
+    return await eventsHandler.installBmad();
+  });
+
+  ipcMain.handle('bmad-get-status', async () => {
+    return await eventsHandler.getBmadStatus();
+  });
+
+  ipcMain.handle('bmad-get-workflows', async () => {
+    // Placeholder for Story 2.1 - Workflow Registry
+    throw new Error('Not implemented: getBmadWorkflows will be implemented in Story 2.1');
+  });
+
+  ipcMain.handle('bmad-execute-workflow', async (_, projectDir: string, taskId: string, workflowId: string, asSubtask?: boolean) => {
+    return await eventsHandler.executeWorkflow(projectDir, taskId, workflowId, asSubtask);
+  });
+
+  ipcMain.handle('bmad-reset-workflow', async () => {
+    return await eventsHandler.resetBmadWorkflow();
+  });
+
   ipcMain.handle('clipboard-write-text', async (_, text: string) => {
     clipboard.writeText(text);
   });

@@ -591,6 +591,14 @@ const api: ApplicationAPI = {
   deleteProjectMemories: (projectId) => ipcRenderer.invoke('delete-project-memories', projectId),
   getMemoryEmbeddingProgress: () => ipcRenderer.invoke('get-memory-embedding-progress'),
 
+  // BMAD operations
+  installBmad: () => ipcRenderer.invoke('bmad-install'),
+  getBmadStatus: () => ipcRenderer.invoke('bmad-get-status'),
+  getBmadWorkflows: () => ipcRenderer.invoke('bmad-get-workflows'),
+  executeWorkflow: (projectDir: string, taskId: string, workflowId: string, asSubtask?: boolean) =>
+    ipcRenderer.invoke('bmad-execute-workflow', projectDir, taskId, workflowId, asSubtask),
+  resetBmadWorkflow: () => ipcRenderer.invoke('bmad-reset-workflow'),
+
   writeToClipboard: (text: string) => ipcRenderer.invoke('clipboard-write-text', text),
   openPath: (path: string) => ipcRenderer.invoke('open-path', path),
 

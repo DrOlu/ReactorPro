@@ -1,0 +1,224 @@
+[
+  {
+    "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+    "role": "user",
+    "content": "Execute the code-review workflow by following these steps:\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL _bmad/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config _bmad/bmm/workflows/4-implementation/code-review/workflow.yaml\n3. Pass the yaml path _bmad/bmm/workflows/4-implementation/code-review/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>",
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8"
+      }
+    }
+  },
+  {
+    "id": "4b780c0c-755c-48bd-9bfc-cc497e41fcf1",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I'll execute the code-review workflow by following the steps exactly as specified. Let me start by loading the core workflow XML file."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_829ff7d160e1452d88564f83",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/core/tasks/workflow.xml",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8"
+      }
+    }
+  },
+  {
+    "id": "817a084c-dd0e-4ab7-9b2a-9fabf9b90898",
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_829ff7d160e1452d88564f83",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "<task id=\"_bmad/core/tasks/workflow.xml\" name=\"Execute Workflow\" standalone=\"false\">\n  <objective>Execute given workflow by loading its configuration, following instructions, and producing output</objective>\n\n  <llm critical=\"true\">\n    <mandate>Always read COMPLETE files - NEVER use offset/limit when reading any workflow related files</mandate>\n    <mandate>Instructions are MANDATORY - either as file path, steps or embedded list in YAML, XML or markdown</mandate>\n    <mandate>Execute ALL steps in instructions IN EXACT ORDER</mandate>\n    <mandate>Save to template output file after EVERY \"template-output\" tag</mandate>\n    <mandate>NEVER skip a step - YOU are responsible for every steps execution without fail or excuse</mandate>\n  </llm>\n\n  <WORKFLOW-RULES critical=\"true\">\n    <rule n=\"1\">Steps execute in exact numerical order (1, 2, 3...)</rule>\n    <rule n=\"2\">Optional steps: Ask user unless #yolo mode active</rule>\n    <rule n=\"3\">Template-output tags: Save content, discuss with the user the section completed, and NEVER proceed until the users indicates\n      to proceed (unless YOLO mode has been activated)</rule>\n  </WORKFLOW-RULES>\n\n  <flow>\n    <step n=\"1\" title=\"Load and Initialize Workflow\">\n      <substep n=\"1a\" title=\"Load Configuration and Resolve Variables\">\n        <action>Read workflow.yaml from provided path</action>\n        <mandate>Load config_source (REQUIRED for all modules)</mandate>\n        <phase n=\"1\">Load external config from config_source path</phase>\n        <phase n=\"2\">Resolve all {config_source}: references with values from config</phase>\n        <phase n=\"3\">Resolve system variables (date:system-generated) and paths ({project-root}, {installed_path})</phase>\n        <phase n=\"4\">Ask user for input of any variables that are still unknown</phase>\n      </substep>\n\n      <substep n=\"1b\" title=\"Load Required Components\">\n        <mandate>Instructions: Read COMPLETE file from path OR embedded list (REQUIRED)</mandate>\n        <check>If template path → Read COMPLETE template file</check>\n        <check>If validation path → Note path for later loading when needed</check>\n        <check>If template: false → Mark as action-workflow (else template-workflow)</check>\n        <note>Data files (csv, json) → Store paths only, load on-demand when instructions reference them</note>\n      </substep>\n\n      <substep n=\"1c\" title=\"Initialize Output\" if=\"template-workflow\">\n        <action>Resolve default_output_file path with all variables and {{date}}</action>\n        <action>Create output directory if doesn't exist</action>\n        <action>If template-workflow → Write template to output file with placeholders</action>\n        <action>If action-workflow → Skip file creation</action>\n      </substep>\n    </step>\n\n    <step n=\"2\" title=\"Process Each Instruction Step in Order\">\n      <iterate>For each step in instructions:</iterate>\n\n      <substep n=\"2a\" title=\"Handle Step Attributes\">\n        <check>If optional=\"true\" and NOT #yolo → Ask user to include</check>\n        <check>If if=\"condition\" → Evaluate condition</check>\n        <check>If for-each=\"item\" → Repeat step for each item</check>\n        <check>If repeat=\"n\" → Repeat step n times</check>\n      </substep>\n\n      <substep n=\"2b\" title=\"Execute Step Content\">\n        <action>Process step instructions (markdown or XML tags)</action>\n        <action>Replace {{variables}} with values (ask user if unknown)</action>\n        <execute-tags>\n          <tag>action xml tag → Perform the action</tag>\n          <tag>check if=\"condition\" xml tag → Conditional block wrapping actions (requires closing &lt;/check&gt;)</tag>\n          <tag>ask xml tag → Prompt user and WAIT for response</tag>\n          <tag>invoke-workflow xml tag → Execute another workflow with given inputs and the workflow.xml runner</tag>\n          <tag>invoke-task xml tag → Execute specified task</tag>\n          <tag>invoke-protocol name=\"protocol_name\" xml tag → Execute reusable protocol from protocols section</tag>\n          <tag>goto step=\"x\" → Jump to specified step</tag>\n        </execute-tags>\n      </substep>\n\n      <substep n=\"2c\" title=\"Handle template-output Tags\">\n        <if tag=\"template-output\">\n          <mandate>Generate content for this section</mandate>\n          <mandate>Save to file (Write first time, Edit subsequent)</mandate>\n          <action>Display generated content</action>\n          <ask> [a] Advanced Elicitation, [c] Continue, [p] Party-Mode, [y] YOLO the rest of this document only. WAIT for response. <if\n              response=\"a\">\n              <action>Start the advanced elicitation workflow {project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml</action>\n            </if>\n            <if\n              response=\"c\">\n              <action>Continue to next step</action>\n            </if>\n            <if response=\"p\">\n              <action>Start the party-mode workflow {project-root}/_bmad/core/workflows/party-mode/workflow.md</action>\n            </if>\n            <if\n              response=\"y\">\n              <action>Enter #yolo mode for the rest of the workflow</action>\n            </if>\n          </ask>\n        </if>\n      </substep>\n\n      <substep n=\"2d\" title=\"Step Completion\">\n        <check>If no special tags and NOT #yolo:</check>\n        <ask>Continue to next step? (y/n/edit)</ask>\n      </substep>\n    </step>\n\n    <step n=\"3\" title=\"Completion\">\n      <check>Confirm document saved to output path</check>\n      <action>Report workflow completion</action>\n    </step>\n  </flow>\n\n  <execution-modes>\n    <mode name=\"normal\">Full user interaction and confirmation of EVERY step at EVERY template output - NO EXCEPTIONS except yolo MODE</mode>\n    <mode name=\"yolo\">Skip all confirmations and elicitation, minimize prompts and try to produce all of the workflow automatically by\n      simulating the remaining discussions with an simulated expert user</mode>\n  </execution-modes>\n\n  <supported-tags desc=\"Instructions can use these tags\">\n    <structural>\n      <tag>step n=\"X\" goal=\"...\" - Define step with number and goal</tag>\n      <tag>optional=\"true\" - Step can be skipped</tag>\n      <tag>if=\"condition\" - Conditional execution</tag>\n      <tag>for-each=\"collection\" - Iterate over items</tag>\n      <tag>repeat=\"n\" - Repeat n times</tag>\n    </structural>\n    <execution>\n      <tag>action - Required action to perform</tag>\n      <tag>action if=\"condition\" - Single conditional action (inline, no closing tag needed)</tag>\n      <tag>check if=\"condition\"&gt;...&lt;/check&gt; - Conditional block wrapping multiple items (closing tag required)</tag>\n      <tag>ask - Get user input (ALWAYS wait for response before continuing)</tag>\n      <tag>goto - Jump to another step</tag>\n      <tag>invoke-workflow - Call another workflow</tag>\n      <tag>invoke-task - Call a task</tag>\n      <tag>invoke-protocol - Execute a reusable protocol (e.g., discover_inputs)</tag>\n    </execution>\n    <output>\n      <tag>template-output - Save content checkpoint</tag>\n      <tag>critical - Cannot be skipped</tag>\n      <tag>example - Show example output</tag>\n    </output>\n  </supported-tags>\n\n  <protocols desc=\"Reusable workflow protocols that can be invoked via invoke-protocol tag\">\n    <protocol name=\"discover_inputs\" desc=\"Smart file discovery and loading based on input_file_patterns\">\n      <objective>Intelligently load project files (whole or sharded) based on workflow's input_file_patterns configuration</objective>\n\n      <critical>Only execute if workflow.yaml contains input_file_patterns section</critical>\n\n      <flow>\n        <step n=\"1\" title=\"Parse Input File Patterns\">\n          <action>Read input_file_patterns from loaded workflow.yaml</action>\n          <action>For each pattern group (prd, architecture, epics, etc.), note the load_strategy if present</action>\n        </step>\n\n        <step n=\"2\" title=\"Load Files Using Smart Strategies\">\n          <iterate>For each pattern in input_file_patterns:</iterate>\n\n          <substep n=\"2a\" title=\"Try Sharded Documents First\">\n            <check if=\"sharded pattern exists\">\n              <action>Determine load_strategy from pattern config (defaults to FULL_LOAD if not specified)</action>\n\n              <strategy name=\"FULL_LOAD\">\n                <desc>Load ALL files in sharded directory - used for PRD, Architecture, UX, brownfield docs</desc>\n                <action>Use glob pattern to find ALL .md files (e.g., \"{output_folder}/*architecture*/*.md\")</action>\n                <action>Load EVERY matching file completely</action>\n                <action>Concatenate content in logical order (index.md first if exists, then alphabetical)</action>\n                <action>Store in variable: {pattern_name_content}</action>\n              </strategy>\n\n              <strategy name=\"SELECTIVE_LOAD\">\n                <desc>Load specific shard using template variable - example: used for epics with {{epic_num}}</desc>\n                <action>Check for template variables in sharded_single pattern (e.g., {{epic_num}})</action>\n                <action>If variable undefined, ask user for value OR infer from context</action>\n                <action>Resolve template to specific file path</action>\n                <action>Load that specific file</action>\n                <action>Store in variable: {pattern_name_content}</action>\n              </strategy>\n\n              <strategy name=\"INDEX_GUIDED\">\n                <desc>Load index.md, analyze structure and description of each doc in the index, then intelligently load relevant docs</desc>\n                <mandate>DO NOT BE LAZY - use best judgment to load documents that might have relevant information, even if only a 5% chance</mandate>\n                <action>Load index.md from sharded directory</action>\n                <action>Parse table of contents, links, section headers</action>\n                <action>Analyze workflow's purpose and objective</action>\n                <action>Identify which linked/referenced documents are likely relevant</action>\n                <example>If workflow is about authentication and index shows \"Auth Overview\", \"Payment Setup\", \"Deployment\" → Load auth\n                  docs, consider deployment docs, skip payment</example>\n                <action>Load all identified relevant documents</action>\n                <action>Store combined content in variable: {pattern_name_content}</action>\n                <note>When in doubt, LOAD IT - context is valuable, being thorough is better than missing critical info</note>\n              </strategy>\n              <action>Mark pattern as RESOLVED, skip to next pattern</action>\n            </check>\n          </substep>\n\n          <substep n=\"2b\" title=\"Try Whole Document if No Sharded Found\">\n            <check if=\"no sharded matches found OR no sharded pattern exists\">\n              <action>Attempt glob match on 'whole' pattern (e.g., \"{output_folder}/*prd*.md\")</action>\n              <check if=\"matches found\">\n                <action>Load ALL matching files completely (no offset/limit)</action>\n                <action>Store content in variable: {pattern_name_content} (e.g., {prd_content})</action>\n                <action>Mark pattern as RESOLVED, skip to next pattern</action>\n              </check>\n            </check>\n          </substep>\n\n          <substep n=\"2c\" title=\"Handle Not Found\">\n            <check if=\"no matches for sharded OR whole\">\n              <action>Set {pattern_name_content} to empty string</action>\n              <action>Note in session: \"No {pattern_name} files found\" (not an error, just unavailable, offer use change to provide)</action>\n            </check>\n          </substep>\n        </step>\n\n        <step n=\"3\" title=\"Report Discovery Results\">\n          <action>List all loaded content variables with file counts</action>\n          <example>\n            ✓ Loaded {prd_content} from 5 sharded files: prd/index.md, prd/requirements.md, ...\n            ✓ Loaded {architecture_content} from 1 file: Architecture.md\n            ✓ Loaded {epics_content} from selective load: epics/epic-3.md\n            ○ No ux_design files found\n          </example>\n          <note>This gives workflow transparency into what context is available</note>\n        </step>\n      </flow>\n\n    </protocol>\n  </protocols>\n\n  <llm final=\"true\">\n    <critical-rules>\n      • This is the complete workflow execution engine\n      • You MUST Follow instructions exactly as written\n      • The workflow execution engine is governed by: {project-root}/_bmad/core/tasks/workflow.xml\n      • You MUST have already loaded and processed: {installed_path}/workflow.yaml\n      • This workflow uses INTENT-DRIVEN PLANNING - adapt organically to product type and context\n      • YOU ARE FACILITATING A CONVERSATION With a user to produce a final document step by step. The whole process is meant to be\n      collaborative helping the user flesh out their ideas. Do not rush or optimize and skip any section.\n    </critical-rules>\n  </llm>\n</task> "
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8"
+      }
+    }
+  },
+  {
+    "id": "4fd86cf5-c6ef-472a-ae2f-ed8619bc8cb6",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Now I need to load the specific workflow configuration file."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_252abf7c68f64e2dafe7dd6f",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/workflows/4-implementation/code-review/workflow.yaml",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8"
+      }
+    }
+  },
+  {
+    "id": "629e7b1b-5e0b-4f8c-b97d-7408f736e785",
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_252abf7c68f64e2dafe7dd6f",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "# Review Story Workflow\nname: code-review\ndescription: \"Perform an ADVERSARIAL Senior Developer code review that finds 3-10 specific problems in every story. Challenges everything: code quality, test coverage, architecture compliance, security, performance. NEVER accepts `looks good` - must find minimum issues and can auto-fix with user approval.\"\nauthor: \"BMad\"\n\n# Critical variables from config\nconfig_source: \"{project-root}/_bmad/bmm/config.yaml\"\nuser_name: \"{config_source}:user_name\"\ncommunication_language: \"{config_source}:communication_language\"\nuser_skill_level: \"{config_source}:user_skill_level\"\ndocument_output_language: \"{config_source}:document_output_language\"\ndate: system-generated\nplanning_artifacts: \"{config_source}:planning_artifacts\"\nimplementation_artifacts: \"{config_source}:implementation_artifacts\"\noutput_folder: \"{implementation_artifacts}\"\nsprint_status: \"{implementation_artifacts}/sprint-status.yaml\"\n\n# Workflow components\ninstalled_path: \"{project-root}/_bmad/bmm/workflows/4-implementation/code-review\"\ninstructions: \"{installed_path}/instructions.xml\"\nvalidation: \"{installed_path}/checklist.md\"\ntemplate: false\n\nvariables:\n  # Project context\n  project_context: \"**/project-context.md\"\n  story_dir: \"{implementation_artifacts}\"\n\n# Smart input file references - handles both whole docs and sharded docs\n# Priority: Whole document first, then sharded version\n# Strategy: SELECTIVE LOAD - only load the specific epic needed for this story review\ninput_file_patterns:\n  architecture:\n    description: \"System architecture for review context\"\n    whole: \"{planning_artifacts}/*architecture*.md\"\n    sharded: \"{planning_artifacts}/*architecture*/*.md\"\n    load_strategy: \"FULL_LOAD\"\n  ux_design:\n    description: \"UX design specification (if UI review)\"\n    whole: \"{planning_artifacts}/*ux*.md\"\n    sharded: \"{planning_artifacts}/*ux*/*.md\"\n    load_strategy: \"FULL_LOAD\"\n  epics:\n    description: \"Epic containing story being reviewed\"\n    whole: \"{planning_artifacts}/*epic*.md\"\n    sharded_index: \"{planning_artifacts}/*epic*/index.md\"\n    sharded_single: \"{planning_artifacts}/*epic*/epic-{{epic_num}}.md\"\n    load_strategy: \"SELECTIVE_LOAD\"\n\nstandalone: true"
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8"
+      }
+    }
+  },
+  {
+    "id": "a2516c2b-65be-4720-b5b4-244816ec7e69",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Now I need to load the instructions.xml file to understand the specific steps for the code review workflow."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_72c9df046fa44138ae5a2069",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/workflows/4-implementation/code-review/instructions.xml",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8"
+      }
+    }
+  },
+  {
+    "id": "b7531d9b-2b50-4a3e-8aa4-ea27026ea627",
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_72c9df046fa44138ae5a2069",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "<workflow>\n  <critical>The workflow execution engine is governed by: {project-root}/_bmad/core/tasks/workflow.xml</critical>\n  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>\n  <critical>Communicate all responses in {communication_language} and language MUST be tailored to {user_skill_level}</critical>\n  <critical>Generate all documents in {document_output_language}</critical>\n\n  <critical>🔥 YOU ARE AN ADVERSARIAL CODE REVIEWER - Find what's wrong or missing! 🔥</critical>\n  <critical>Your purpose: Validate story file claims against actual implementation</critical>\n  <critical>Challenge everything: Are tasks marked [x] actually done? Are ACs really implemented?</critical>\n  <critical>Find 3-10 specific issues in every review minimum - no lazy \"looks good\" reviews - YOU are so much better than the dev agent\n    that wrote this slop</critical>\n  <critical>Read EVERY file in the File List - verify implementation against story requirements</critical>\n  <critical>Tasks marked complete but not done = CRITICAL finding</critical>\n  <critical>Acceptance Criteria not implemented = HIGH severity finding</critical>\n  <critical>Do not review files that are not part of the application's source code. Always exclude the _bmad/ and _bmad-output/ folders from the review. Always exclude IDE and CLI configuration folders like .cursor/ and .windsurf/ and .claude/</critical>\n\n\n  <step n=\"1\" goal=\"Load story and discover changes\">\n    <action>Use provided {{story_path}} or ask user which story file to review</action>\n    <action>Read COMPLETE story file</action>\n    <action>Set {{story_key}} = extracted key from filename (e.g., \"1-2-user-authentication.md\" → \"1-2-user-authentication\") or story\n      metadata</action>\n    <action>Parse sections: Story, Acceptance Criteria, Tasks/Subtasks, Dev Agent Record → File List, Change Log</action>\n\n    <!-- Discover actual changes via git -->\n    <action>Check if git repository detected in current directory</action>\n    <check if=\"git repository exists\">\n      <action>Run `git status --porcelain` to find uncommitted changes</action>\n      <action>Run `git diff --name-only` to see modified files</action>\n      <action>Run `git diff --cached --name-only` to see staged files</action>\n      <action>Compile list of actually changed files from git output</action>\n    </check>\n\n    <!-- Cross-reference story File List vs git reality -->\n    <action>Compare story's Dev Agent Record → File List with actual git changes</action>\n    <action>Note discrepancies:\n      - Files in git but not in story File List\n      - Files in story File List but no git changes\n      - Missing documentation of what was actually changed\n    </action>\n\n    <invoke-protocol name=\"discover_inputs\" />\n    <action>Load {project_context} for coding standards (if exists)</action>\n  </step>\n\n  <step n=\"2\" goal=\"Build review attack plan\">\n    <action>Extract ALL Acceptance Criteria from story</action>\n    <action>Extract ALL Tasks/Subtasks with completion status ([x] vs [ ])</action>\n    <action>From Dev Agent Record → File List, compile list of claimed changes</action>\n\n    <action>Create review plan:\n      1. **AC Validation**: Verify each AC is actually implemented\n      2. **Task Audit**: Verify each [x] task is really done\n      3. **Code Quality**: Security, performance, maintainability\n      4. **Test Quality**: Real tests vs placeholder bullshit\n    </action>\n  </step>\n\n  <step n=\"3\" goal=\"Execute adversarial review\">\n    <critical>VALIDATE EVERY CLAIM - Check git reality vs story claims</critical>\n\n    <!-- Git vs Story Discrepancies -->\n    <action>Review git vs story File List discrepancies:\n      1. **Files changed but not in story File List** → MEDIUM finding (incomplete documentation)\n      2. **Story lists files but no git changes** → HIGH finding (false claims)\n      3. **Uncommitted changes not documented** → MEDIUM finding (transparency issue)\n    </action>\n\n    <!-- Use combined file list: story File List + git discovered files -->\n    <action>Create comprehensive review file list from story File List and git changes</action>\n\n    <!-- AC Validation -->\n    <action>For EACH Acceptance Criterion:\n      1. Read the AC requirement\n      2. Search implementation files for evidence\n      3. Determine: IMPLEMENTED, PARTIAL, or MISSING\n      4. If MISSING/PARTIAL → HIGH SEVERITY finding\n    </action>\n\n    <!-- Task Completion Audit -->\n    <action>For EACH task marked [x]:\n      1. Read the task description\n      2. Search files for evidence it was actually done\n      3. **CRITICAL**: If marked [x] but NOT DONE → CRITICAL finding\n      4. Record specific proof (file:line)\n    </action>\n\n    <!-- Code Quality Deep Dive -->\n    <action>For EACH file in comprehensive review list:\n      1. **Security**: Look for injection risks, missing validation, auth issues\n      2. **Performance**: N+1 queries, inefficient loops, missing caching\n      3. **Error Handling**: Missing try/catch, poor error messages\n      4. **Code Quality**: Complex functions, magic numbers, poor naming\n      5. **Test Quality**: Are tests real assertions or placeholders?\n    </action>\n\n    <check if=\"total_issues_found lt 3\">\n      <critical>NOT LOOKING HARD ENOUGH - Find more problems!</critical>\n      <action>Re-examine code for:\n        - Edge cases and null handling\n        - Architecture violations\n        - Documentation gaps\n        - Integration issues\n        - Dependency problems\n        - Git commit message quality (if applicable)\n      </action>\n      <action>Find at least 3 more specific, actionable issues</action>\n    </check>\n  </step>\n\n  <step n=\"4\" goal=\"Present findings and fix them\">\n    <action>Categorize findings: HIGH (must fix), MEDIUM (should fix), LOW (nice to fix)</action>\n    <action>Set {{fixed_count}} = 0</action>\n    <action>Set {{action_count}} = 0</action>\n\n    <output>**🔥 CODE REVIEW FINDINGS, {user_name}!**\n\n      **Story:** {{story_file}}\n      **Git vs Story Discrepancies:** {{git_discrepancy_count}} found\n      **Issues Found:** {{high_count}} High, {{medium_count}} Medium, {{low_count}} Low\n\n      ## 🔴 CRITICAL ISSUES\n      - Tasks marked [x] but not actually implemented\n      - Acceptance Criteria not implemented\n      - Story claims files changed but no git evidence\n      - Security vulnerabilities\n\n      ## 🟡 MEDIUM ISSUES\n      - Files changed but not documented in story File List\n      - Uncommitted changes not tracked\n      - Performance problems\n      - Poor test coverage/quality\n      - Code maintainability issues\n\n      ## 🟢 LOW ISSUES\n      - Code style improvements\n      - Documentation gaps\n      - Git commit message quality\n    </output>\n\n    <ask>What should I do with these issues?\n\n      1. **Fix them automatically** - I'll update the code and tests\n      2. **Create action items** - Add to story Tasks/Subtasks for later\n      3. **Show me details** - Deep dive into specific issues\n\n      Choose [1], [2], or specify which issue to examine:</ask>\n\n    <check if=\"user chooses 1\">\n      <action>Fix all HIGH and MEDIUM issues in the code</action>\n      <action>Add/update tests as needed</action>\n      <action>Update File List in story if files changed</action>\n      <action>Update story Dev Agent Record with fixes applied</action>\n      <action>Set {{fixed_count}} = number of HIGH and MEDIUM issues fixed</action>\n      <action>Set {{action_count}} = 0</action>\n    </check>\n\n    <check if=\"user chooses 2\">\n      <action>Add \"Review Follow-ups (AI)\" subsection to Tasks/Subtasks</action>\n      <action>For each issue: `- [ ] [AI-Review][Severity] Description [file:line]`</action>\n      <action>Set {{action_count}} = number of action items created</action>\n      <action>Set {{fixed_count}} = 0</action>\n    </check>\n\n    <check if=\"user chooses 3\">\n      <action>Show detailed explanation with code examples</action>\n      <action>Return to fix decision</action>\n    </check>\n  </step>\n\n  <step n=\"5\" goal=\"Update story status and sync sprint tracking\">\n    <!-- Determine new status based on review outcome -->\n    <check if=\"all HIGH and MEDIUM issues fixed AND all ACs implemented\">\n      <action>Set {{new_status}} = \"done\"</action>\n      <action>Update story Status field to \"done\"</action>\n    </check>\n    <check if=\"HIGH or MEDIUM issues remain OR ACs not fully implemented\">\n      <action>Set {{new_status}} = \"in-progress\"</action>\n      <action>Update story Status field to \"in-progress\"</action>\n    </check>\n    <action>Save story file</action>\n\n    <!-- Determine sprint tracking status -->\n    <check if=\"{sprint_status} file exists\">\n      <action>Set {{current_sprint_status}} = \"enabled\"</action>\n    </check>\n    <check if=\"{sprint_status} file does NOT exist\">\n      <action>Set {{current_sprint_status}} = \"no-sprint-tracking\"</action>\n    </check>\n\n    <!-- Sync sprint-status.yaml when story status changes (only if sprint tracking enabled) -->\n    <check if=\"{{current_sprint_status}} != 'no-sprint-tracking'\">\n      <action>Load the FULL file: {sprint_status}</action>\n      <action>Find development_status key matching {{story_key}}</action>\n\n      <check if=\"{{new_status}} == 'done'\">\n        <action>Update development_status[{{story_key}}] = \"done\"</action>\n        <action>Save file, preserving ALL comments and structure</action>\n        <output>✅ Sprint status synced: {{story_key}} → done</output>\n      </check>\n\n      <check if=\"{{new_status}} == 'in-progress'\">\n        <action>Update development_status[{{story_key}}] = \"in-progress\"</action>\n        <action>Save file, preserving ALL comments and structure</action>\n        <output>🔄 Sprint status synced: {{story_key}} → in-progress</output>\n      </check>\n\n      <check if=\"story key not found in sprint status\">\n        <output>⚠️ Story file updated, but sprint-status sync failed: {{story_key}} not found in sprint-status.yaml</output>\n      </check>\n    </check>\n\n    <check if=\"{{current_sprint_status}} == 'no-sprint-tracking'\">\n      <output>ℹ️ Story status updated (no sprint tracking configured)</output>\n    </check>\n\n    <output>**✅ Review Complete!**\n\n      **Story Status:** {{new_status}}\n      **Issues Fixed:** {{fixed_count}}\n      **Action Items Created:** {{action_count}}\n\n      {{#if new_status == \"done\"}}Code review complete!{{else}}Address the action items and continue development.{{/if}}\n    </output>\n  </step>\n\n</workflow>"
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8"
+      }
+    }
+  },
+  {
+    "id": "462a52d7-eccd-4dbe-917b-aa32bd8addbc",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I'll execute the code-review workflow. Let me start by following Step 1 of the workflow instructions.\n\n## Step 1: Load Configuration and Discover Changes\n\nFirst, let me load the configuration file to resolve variables:"
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_00b31c026ec348da8415bd5d",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/config.yaml",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8"
+      }
+    }
+  },
+  {
+    "id": "00245163-1aa9-4a08-8099-35a2cca5872e",
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_00b31c026ec348da8415bd5d",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "# BMM Module Configuration\n# Generated by BMAD installer\n# Version: 6.0.0-Beta.5\n# Date: 2026-02-03T14:30:35.442Z\n\nproject_name: aider-desk\nuser_skill_level: intermediate\nplanning_artifacts: \"{project-root}/_bmad-output/planning-artifacts\"\nimplementation_artifacts: \"{project-root}/_bmad-output/implementation-artifacts\"\nproject_knowledge: \"{project-root}/docs\"\n\n# Core Configuration Values\nuser_name: Wlad\ncommunication_language: English\ndocument_output_language: English\noutput_folder: \"{project-root}/_bmad-output\"\n"
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8"
+      }
+    }
+  },
+  {
+    "id": "321b2573-60c6-410c-99ca-c25579085de8",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Good! Now I have the config. Let me first check if there's a project context file:"
+      }
+    ],
+    "promptContext": {
+      "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+      "group": {
+        "id": "e9019b26-4a71-4ed8-88f4-04848cd2bfd8",
+        "name": "Code Review",
+        "color": "#ef4444",
+        "finished": true
+      }
+    }
+  }
+]

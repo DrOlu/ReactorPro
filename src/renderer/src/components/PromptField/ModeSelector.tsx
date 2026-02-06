@@ -4,11 +4,18 @@ import { FaRegQuestionCircle } from 'react-icons/fa';
 import { AiOutlineFileSearch } from 'react-icons/ai';
 import { RiRobot2Line } from 'react-icons/ri';
 import { GoProjectRoadmap } from 'react-icons/go';
+import { FiLayers } from 'react-icons/fi';
 import { Mode } from '@common/types';
 
 import { ItemSelector, ItemConfig } from '@/components/common/ItemSelector';
 
 const MODE_ITEMS: ItemConfig<Mode>[] = [
+  {
+    value: 'agent',
+    icon: RiRobot2Line,
+    labelKey: 'mode.agent',
+    tooltipKey: 'modeTooltip.agent',
+  },
   {
     value: 'code',
     icon: CgTerminal,
@@ -16,10 +23,10 @@ const MODE_ITEMS: ItemConfig<Mode>[] = [
     tooltipKey: 'modeTooltip.code',
   },
   {
-    value: 'agent',
-    icon: RiRobot2Line,
-    labelKey: 'mode.agent',
-    tooltipKey: 'modeTooltip.agent',
+    value: 'bmad',
+    icon: FiLayers,
+    labelKey: 'mode.bmad',
+    tooltipKey: 'modeTooltip.bmad',
   },
   {
     value: 'ask',

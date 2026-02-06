@@ -1,9 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { CustomCommand, ProjectSettings, SettingsData, TaskData, CreateTaskParams } from '@common/types';
+import { CustomCommand, DefaultTaskState, ProjectSettings, SettingsData, TaskData, CreateTaskParams } from '@common/types';
 import { fileExists } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
+
+import type { BmadStatus, InstallResult, WorkflowExecutionResult } from '@common/bmad-types';
 
 import { AgentProfileManager, McpManager } from '@/agent';
 import { Connector } from '@/connector';
@@ -22,9 +24,11 @@ import { HookManager } from '@/hooks/hook-manager';
 import { PromptsManager } from '@/prompts';
 import { AIDER_DESK_WATCH_FILES_LOCK } from '@/constants';
 import { determineMainModel, determineWeakModel } from '@/utils';
+import { BmadManager } from '@/bmad/bmad-manager';
 
 export class Project {
   private readonly customCommandManager: CustomCommandManager;
+  private readonly bmadManager: BmadManager;
   private readonly tasksLoadingPromise: Promise<void> | null = null;
   private readonly tasks = new Map<string, Task>();
 
@@ -46,6 +50,7 @@ export class Project {
     private readonly promptsManager: PromptsManager,
   ) {
     this.customCommandManager = new CustomCommandManager(this);
+    this.bmadManager = new BmadManager(this.baseDir);
     // initialize global task
     this.prepareTask(INTERNAL_TASK_ID);
     this.tasksLoadingPromise = this.loadTasks();
@@ -383,7 +388,10 @@ export class Project {
       throw new Error(`Task with id ${taskId} not found`);
     }
 
-    const newTask = this.prepareTask(undefined, sourceTask.task);
+    const newTask = this.prepareTask(undefined, {
+      ...sourceTask.task,
+      state: sourceTask.task.state === DefaultTaskState.InProgress ? DefaultTaskState.Todo : sourceTask.task.state,
+    });
     await newTask.init();
     await newTask.duplicateFrom(sourceTask);
     this.eventManager.sendTaskCreated(newTask.task);
@@ -400,6 +408,7 @@ export class Project {
     const newTask = this.prepareTask(undefined, {
       ...sourceTask.task,
       parentId: sourceTask.task.parentId || sourceTask.task.id,
+      state: sourceTask.task.state === DefaultTaskState.InProgress ? DefaultTaskState.Todo : sourceTask.task.state,
     });
     await newTask.init();
     await newTask.forkFrom(sourceTask, messageId);
@@ -433,6 +442,27 @@ export class Project {
     this.forEachTask((task) => {
       void task.projectSettingsChanged(oldSettings, newSettings);
     });
+  }
+
+  async getBmadStatus(): Promise<BmadStatus> {
+    return await this.bmadManager.getBmadStatus();
+  }
+
+  async installBmad(): Promise<InstallResult> {
+    const result = await this.bmadManager.install();
+
+    // Emit Socket.IO event for browser clients
+    this.eventManager.sendBmadInstallationCompleted(result);
+
+    return result;
+  }
+
+  async executeBmadWorkflow(workflowId: string, task: Task): Promise<WorkflowExecutionResult> {
+    return await this.bmadManager.executeWorkflow(workflowId, task);
+  }
+
+  async resetBmadWorkflow(): Promise<{ success: boolean; message?: string }> {
+    return await this.bmadManager.resetWorkflow();
   }
 
   async close() {

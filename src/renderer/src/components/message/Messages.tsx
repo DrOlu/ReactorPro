@@ -137,7 +137,7 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
           className="flex flex-col flex-grow overflow-y-auto max-h-full p-4 scrollbar-thin scrollbar-track-bg-primary-light scrollbar-thumb-bg-tertiary hover:scrollbar-thumb-bg-fourth"
           {...eventHandlers}
         >
-          <div className="absolute left-1/2 -translate-x-1/2 w-[50%] bottom-0 z-10 flex justify-center gap-1 pt-10 pb-2 group">
+          <div className="absolute left-1/2 -translate-x-1/2 w-[150px] bottom-0 z-10 flex justify-center gap-1 pt-10 pb-2 group">
             {(hasPreviousUserMessage || hasNextUserMessage) && renderGoToPrevious()}
             {scrollingPaused && (
               <IconButton
@@ -190,7 +190,10 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
         {settings?.taskSettings?.showTaskStateActions && !inProgress && !isLastLoadingMessage && (
           <TaskStateActions
             state={task.state}
+            mode={task.currentMode}
             isArchived={task.archived}
+            projectDir={baseDir}
+            taskId={taskId}
             onResumeTask={resumeTask}
             onMarkAsDone={onMarkAsDone}
             onProceed={onProceed}

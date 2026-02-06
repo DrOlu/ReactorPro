@@ -43,6 +43,7 @@ import debounce from 'lodash/debounce';
 import { isEqual } from 'lodash';
 
 import type { SimpleGit } from 'simple-git';
+import type { WorkflowExecutionResult } from '@common/bmad-types';
 
 import { getAllFiles, isValidProjectFile } from '@/utils/file-system';
 import {
@@ -166,7 +167,7 @@ export class Task {
     void this.loadTaskData();
   }
 
-  private async getTaskAgentProfile(): Promise<AgentProfile | null> {
+  public async getTaskAgentProfile(): Promise<AgentProfile | null> {
     // Check task-level agent profile first
     let agentProfileId = this.task.agentProfileId;
 
@@ -667,7 +668,7 @@ export class Task {
     this.telemetryManager.captureRunPrompt(mode);
     // Generate promptContext for this run
 
-    if (mode === 'agent') {
+    if (mode === 'agent' || mode === 'bmad') {
       const profile = await this.getTaskAgentProfile();
       logger.debug('AgentProfile:', profile);
 
@@ -834,6 +835,25 @@ export class Task {
     this.notifyIfEnabled('Task finished', getTaskFinishedNotificationText(this.task));
 
     return [];
+  }
+
+  public async executeBmadWorkflow(workflowId: string, asSubtask?: boolean): Promise<WorkflowExecutionResult> {
+    if (asSubtask) {
+      // Create a new subtask. If the current task already has a parentId (is a subtask),
+      // use that parentId to maintain only 1 level of subtasks
+      const parentId = this.task.parentId || this.taskId;
+      const subtaskData = await this.project.createNewTask({
+        parentId,
+        activate: true,
+      });
+      const subtask = this.project.getTask(subtaskData.id);
+      if (!subtask) {
+        throw new Error('Failed to create subtask');
+      }
+      return await subtask.executeBmadWorkflow(workflowId);
+    }
+
+    return await this.project.executeBmadWorkflow(workflowId, this);
   }
 
   private getTaskNameFromPrompt(prompt: string): string {
@@ -1928,6 +1948,20 @@ export class Task {
     if (updateContextInfo) {
       await this.updateContextInfo();
     }
+  }
+
+  /**
+   * Load context messages into the task context and send them to the UI.
+   * This is used for loading pre-authored context (e.g., BMAD workflow context).
+   */
+  public async loadContextMessages(messages: ContextMessage[]) {
+    logger.info('Loading context messages:', {
+      baseDir: this.project.baseDir,
+      taskId: this.taskId,
+      messagesCount: messages.length,
+    });
+
+    await this.contextManager.loadMessages(messages);
   }
 
   public interruptResponse(interruptId?: string) {

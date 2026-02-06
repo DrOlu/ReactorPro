@@ -636,7 +636,13 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
             )}
             <div className="overflow-hidden flex-grow relative">
               {displayedMessages.length === 0 && !loading && !messagesPending && !inProgress ? (
-                <WelcomeMessage onModeChange={handleModeChange} />
+                <WelcomeMessage
+                  onModeChange={handleModeChange}
+                  mode={currentMode}
+                  projectDir={projectDir}
+                  taskId={task.id}
+                  onOpenTerminal={() => setTerminalVisible(true)}
+                />
               ) : (
                 <>
                   {settings.virtualizedRendering ? (

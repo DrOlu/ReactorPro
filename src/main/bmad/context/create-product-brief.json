@@ -1,0 +1,160 @@
+[
+  {
+    "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04",
+    "role": "user",
+    "content": "IT IS CRITICAL THAT YOU FOLLOW THIS COMMAND: LOAD the FULL _bmad/bmm/workflows/1-analysis/create-product-brief/workflow.md, READ its entire contents and follow its directions exactly!",
+    "promptContext": {
+      "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04",
+      "group": {
+        "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04"
+      }
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I'll load the workflow file and read its contents to understand what needs to be done."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_dc58c5d11ff7463a9371d444",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/workflows/1-analysis/create-product-brief/workflow.md",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "id": "c59ccf91-7e25-4452-938d-b62f37020aad",
+    "promptContext": {
+      "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04",
+      "group": {
+        "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04"
+      }
+    }
+  },
+  {
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_dc58c5d11ff7463a9371d444",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "---\nname: create-product-brief\ndescription: Create comprehensive product briefs through collaborative step-by-step discovery as creative Business Analyst working with the user as peers.\nweb_bundle: true\n---\n\n# Product Brief Workflow\n\n**Goal:** Create comprehensive product briefs through collaborative step-by-step discovery as creative Business Analyst working with the user as peers.\n\n**Your Role:** In addition to your name, communication_style, and persona, you are also a product-focused Business Analyst collaborating with an expert peer. This is a partnership, not a client-vendor relationship. You bring structured thinking and facilitation skills, while the user brings domain expertise and product vision. Work together as equals.\n\n---\n\n## WORKFLOW ARCHITECTURE\n\nThis uses **step-file architecture** for disciplined execution:\n\n### Core Principles\n\n- **Micro-file Design**: Each step is a self contained instruction file that is a part of an overall workflow that must be followed exactly\n- **Just-In-Time Loading**: Only the current step file is in memory - never load future step files until told to do so\n- **Sequential Enforcement**: Sequence within the step files must be completed in order, no skipping or optimization allowed\n- **State Tracking**: Document progress in output file frontmatter using `stepsCompleted` array when a workflow produces a document\n- **Append-Only Building**: Build documents by appending content as directed to the output file\n\n### Step Processing Rules\n\n1. **READ COMPLETELY**: Always read the entire step file before taking any action\n2. **FOLLOW SEQUENCE**: Execute all numbered sections in order, never deviate\n3. **WAIT FOR INPUT**: If a menu is presented, halt and wait for user selection\n4. **CHECK CONTINUATION**: If the step has a menu with Continue as an option, only proceed to next step when user selects 'C' (Continue)\n5. **SAVE STATE**: Update `stepsCompleted` in frontmatter before loading next step\n6. **LOAD NEXT**: When directed, read fully and follow the next step file\n\n### Critical Rules (NO EXCEPTIONS)\n\n- 🛑 **NEVER** load multiple step files simultaneously\n- 📖 **ALWAYS** read entire step file before execution\n- 🚫 **NEVER** skip steps or optimize the sequence\n- 💾 **ALWAYS** update frontmatter of output files when writing the final output for a specific step\n- 🎯 **ALWAYS** follow the exact instructions in the step file\n- ⏸️ **ALWAYS** halt at menus and wait for user input\n- 📋 **NEVER** create mental todo lists from future steps\n\n---\n\n## INITIALIZATION SEQUENCE\n\n### 1. Configuration Loading\n\nLoad and read full config from {project-root}/_bmad/bmm/config.yaml and resolve:\n\n- `project_name`, `output_folder`, `planning_artifacts`, `user_name`, `communication_language`, `document_output_language`, `user_skill_level`\n\n### 2. First Step EXECUTION\n\nRead fully and follow: `{project-root}/_bmad/bmm/workflows/1-analysis/create-product-brief/steps/step-01-init.md` to begin the workflow.\n"
+        }
+      }
+    ],
+    "id": "0920dd00-1c2a-4c53-b846-f428d78794e5",
+    "promptContext": {
+      "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04",
+      "group": {
+        "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04"
+      }
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I'll load the configuration file and then read the first step."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_606166eb19774ef7884180e0",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/config.yaml",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "id": "8b5aaecc-b244-450f-b836-1483557ecc56",
+    "promptContext": {
+      "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04",
+      "group": {
+        "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04"
+      }
+    }
+  },
+  {
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_606166eb19774ef7884180e0",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "# BMM Module Configuration\n# Generated by BMAD installer\n# Version: 6.0.0-Beta.4\n# Date: 2026-01-30T20:44:02.827Z\n\nproject_name: aider-desk\nuser_skill_level: intermediate\nplanning_artifacts: \"{project-root}/_bmad-output/planning-artifacts\"\nimplementation_artifacts: \"{project-root}/_bmad-output/implementation-artifacts\"\nproject_knowledge: \"{project-root}/docs\"\n\n# Core Configuration Values\nuser_name: Wlad\ncommunication_language: English\ndocument_output_language: English\noutput_folder: \"{project-root}/_bmad-output\"\n"
+        }
+      }
+    ],
+    "id": "807a662e-bdc1-4e2e-9a2c-dab192f168a0",
+    "promptContext": {
+      "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04",
+      "group": {
+        "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04"
+      }
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Good, I have the configuration. Now I need to read the first step file: step-01-init.md"
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_8ddcb389cfb441e684ccbca2",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/workflows/1-analysis/create-product-brief/steps/step-01-init.md",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "id": "bfba2eb4-3372-425b-b5fa-27b4ae225f18",
+    "promptContext": {
+      "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04",
+      "group": {
+        "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04"
+      }
+    }
+  },
+  {
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_8ddcb389cfb441e684ccbca2",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "---\nname: 'step-01-init'\ndescription: 'Initialize the product brief workflow by detecting continuation state and setting up the document'\n\n# File References\nnextStepFile: './step-02-vision.md'\noutputFile: '{planning_artifacts}/product-brief-{{project_name}}-{{date}}.md'\n\n# Template References\nproductBriefTemplate: '../product-brief.template.md'\n---\n\n# Step 1: Product Brief Initialization\n\n## STEP GOAL:\n\nInitialize the product brief workflow by detecting continuation state and setting up the document structure for collaborative product discovery.\n\n## MANDATORY EXECUTION RULES (READ FIRST):\n\n### Universal Rules:\n\n- 🛑 NEVER generate content without user input\n- 📖 CRITICAL: Read the complete step file before taking any action\n- 🔄 CRITICAL: When loading next step with 'C', ensure entire file is read\n- 📋 YOU ARE A FACILITATOR, not a content generator\n- ✅ YOU MUST ALWAYS SPEAK OUTPUT In your Agent communication style with the config `{communication_language}`\n\n### Role Reinforcement:\n\n- ✅ You are a product-focused Business Analyst facilitator\n- ✅ If you already have been given a name, communication_style and persona, continue to use those while playing this new role\n- ✅ We engage in collaborative dialogue, not command-response\n- ✅ You bring structured thinking and facilitation skills, while the user brings domain expertise and product vision\n- ✅ Maintain collaborative discovery tone throughout\n\n### Step-Specific Rules:\n\n- 🎯 Focus only on initialization and setup - no content generation yet\n- 🚫 FORBIDDEN to look ahead to future steps or assume knowledge from them\n- 💬 Approach: Systematic setup with clear reporting to user\n- 📋 Detect existing workflow state and handle continuation properly\n\n## EXECUTION PROTOCOLS:\n\n- 🎯 Show your analysis of current state before taking any action\n- 💾 Initialize document structure and update frontmatter appropriately\n- 📖 Set up frontmatter `stepsCompleted: [1]` before loading next step\n- 🚫 FORBIDDEN to load next step until user selects 'C' (Continue)\n\n## CONTEXT BOUNDARIES:\n\n- Available context: Variables from workflow.md are available in memory\n- Focus: Workflow initialization and document setup only\n- Limits: Don't assume knowledge from other steps or create content yet\n- Dependencies: Configuration loaded from workflow.md initialization\n\n## Sequence of Instructions (Do not deviate, skip, or optimize)\n\n### 1. Check for Existing Workflow State\n\nFirst, check if the output document already exists:\n\n**Workflow State Detection:**\n\n- Look for file `{outputFile}`\n- If exists, read the complete file including frontmatter\n- If not exists, this is a fresh workflow\n\n### 2. Handle Continuation (If Document Exists)\n\nIf the document exists and has frontmatter with `stepsCompleted`:\n\n**Continuation Protocol:**\n\n- **STOP immediately** and load `./step-01b-continue.md`\n- Do not proceed with any initialization tasks\n- Let step-01b handle all continuation logic\n- This is an auto-proceed situation - no user choice needed\n\n### 3. Fresh Workflow Setup (If No Document)\n\nIf no document exists or no `stepsCompleted` in frontmatter:\n\n#### A. Input Document Discovery\n\nload context documents using smart discovery. Documents can be in the following locations:\n- {planning_artifacts}/**\n- {output_folder}/**\n- {product_knowledge}/**\n- docs/**\n\nAlso - when searching - documents can be a single markdown file, or a folder with an index and multiple files. For Example, if searching for `*foo*.md` and not found, also search for a folder called *foo*/index.md (which indicates sharded content)\n\nTry to discover the following:\n- Brainstorming Reports (`*brainstorming*.md`)\n- Research Documents (`*research*.md`)\n- Project Documentation (generally multiple documents might be found for this in the `{product_knowledge}` or `docs` folder.)\n- Project Context (`**/project-context.md`)\n\n<critical>Confirm what you have found with the user, along with asking if the user wants to provide anything else. Only after this confirmation will you proceed to follow the loading rules</critical>\n\n**Loading Rules:**\n\n- Load ALL discovered files completely that the user confirmed or provided (no offset/limit)\n- If there is a project context, whatever is relevant should try to be biased in the remainder of this whole workflow process\n- For sharded folders, load ALL files to get complete picture, using the index first to potentially know the potential of each document\n- index.md is a guide to what's relevant whenever available\n- Track all successfully loaded files in frontmatter `inputDocuments` array\n\n#### B. Create Initial Document\n\n**Document Setup:**\n\n- Copy the template from `{productBriefTemplate}` to `{outputFile}`, and update the frontmatter fields\n\n#### C. Present Initialization Results\n\n**Setup Report to User:**\n\"Welcome {{user_name}}! I've set up your product brief workspace for {{project_name}}.\n\n**Document Setup:**\n\n- Created: `{outputFile}` from template\n- Initialized frontmatter with workflow state\n\n**Input Documents Discovered:**\n\n- Research: {number of research files loaded or \"None found\"}\n- Brainstorming: {number of brainstorming files loaded or \"None found\"}\n- Project docs: {number of project files loaded or \"None found\"}\n- Project Context: {number of project context files loaded or \"None found\"}\n\n**Files loaded:** {list of specific file names or \"No additional documents found\"}\n\nDo you have any other documents you'd like me to include, or shall we continue to the next step?\"\n\n### 4. Present MENU OPTIONS\n\nDisplay: \"**Proceeding to product vision discovery...**\"\n\n#### Menu Handling Logic:\n\n- After setup report is presented, without delay, read fully and follow: {nextStepFile}\n\n#### EXECUTION RULES:\n\n- This is an initialization step with auto-proceed after setup completion\n- Proceed directly to next step after document setup and reporting\n\n## CRITICAL STEP COMPLETION NOTE\n\nONLY WHEN [setup completion is achieved and frontmatter properly updated], will you then read fully and follow: `{nextStepFile}` to begin product vision discovery.\n\n---\n\n## 🚨 SYSTEM SUCCESS/FAILURE METRICS\n\n### ✅ SUCCESS:\n\n- Existing workflow detected and properly handed off to step-01b\n- Fresh workflow initialized with template and proper frontmatter\n- Input documents discovered and loaded using sharded-first logic\n- All discovered files tracked in frontmatter `inputDocuments`\n- Menu presented and user input handled correctly\n- Frontmatter updated with `stepsCompleted: [1]` before proceeding\n\n### ❌ SYSTEM FAILURE:\n\n- Proceeding with fresh initialization when existing workflow exists\n- Not updating frontmatter with discovered input documents\n- Creating document without proper template structure\n- Not checking sharded folders first before whole files\n- Not reporting discovered documents to user clearly\n- Proceeding without user selecting 'C' (Continue)\n\n**Master Rule:** Skipping steps, optimizing sequences, or not following exact instructions is FORBIDDEN and constitutes SYSTEM FAILURE.\n"
+        }
+      }
+    ],
+    "id": "db15a641-d8d6-472d-b973-7802d1932690",
+    "promptContext": {
+      "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04",
+      "group": {
+        "id": "7d9c0e52-d7c7-44ca-bb3b-aba76fc85a04",
+        "name": "Create Product Brief",
+        "color": "#0ea5e9",
+        "finished": true
+      }
+    }
+  }
+]

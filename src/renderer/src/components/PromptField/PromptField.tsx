@@ -1097,7 +1097,9 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
             <div className={clsx('flex gap-1.5', isMobile && mode === 'agent' ? 'flex-col items-start' : 'items-center')}>
               <ModeSelector mode={mode} onModeChange={onModeChanged} />
               <div className="flex gap-2">
-                {mode === 'agent' && <AgentSelector projectDir={baseDir} task={task} isActive={isActive} showSettingsPage={showSettingsPage} />}
+                {(mode === 'agent' || mode === 'bmad') && (
+                  <AgentSelector projectDir={baseDir} task={task} isActive={isActive} showSettingsPage={showSettingsPage} />
+                )}
                 <AutoApprove
                   enabled={!!task?.autoApprove}
                   locked={projectSettings?.autoApproveLocked ?? false}

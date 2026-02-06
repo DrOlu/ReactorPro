@@ -783,7 +783,7 @@ export class ContextManager {
     for (const message of contextMessages) {
       const processToolResult = (part: ToolResultPart) => {
         const [serverName, toolName] = extractServerNameToolName(part.toolName);
-        const promptContext = extractPromptContextFromToolResult(part.output.value);
+        const promptContext = extractPromptContextFromToolResult(part.output.value) || message.promptContext;
         const toolMessage = messagesData.find((message) => message.type === 'tool' && message.id === part.toolCallId) as ToolData | undefined;
 
         if (toolMessage) {
@@ -1243,12 +1243,12 @@ export class ContextManager {
         const hasReasoning = clonedMsg.content.some((part) => part.type === 'reasoning');
 
         if (isTargetAssistant && clonedMsg.id === targetMessage.id) {
-          // For target assistant message, get original content and keep only tool calls (remove both reasoning and text)
+          // For target assistant message, get original content and keep text/reasoning (remove tool calls)
           const originalMsg = this.messages.find((m) => m.id === clonedMsg.id);
           if (originalMsg && Array.isArray(originalMsg.content)) {
             const originalHasToolCalls = originalMsg.content.some((part) => part.type === 'tool-call');
             if (originalHasToolCalls) {
-              clonedMsg.content = originalMsg.content.filter((part) => part.type === 'tool-call').map((part) => ({ ...part }));
+              clonedMsg.content = originalMsg.content.filter((part) => part.type === 'text' || part.type === 'reasoning').map((part) => ({ ...part }));
             }
           }
         } else if (hasToolCalls && hasReasoning) {

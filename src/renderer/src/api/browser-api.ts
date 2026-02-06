@@ -49,12 +49,15 @@ import {
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
+  WorkflowExecutionResult,
 } from '@common/types';
 import { ApplicationAPI } from '@common/api';
 import axios, { type AxiosInstance } from 'axios';
 import { io, Socket } from 'socket.io-client';
 import { compareBaseDirs } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
+
+import type { BmadStatus, WorkflowMetadata } from '@common/bmad-types';
 
 type EventDataMap = {
   'settings-updated': SettingsData;
@@ -90,6 +93,8 @@ type EventDataMap = {
   'message-removed': MessageRemovedData;
   'terminal-data': TerminalData;
   'terminal-exit': TerminalExitData;
+  'bmad-installation-completed': { projectDir: string; installed: boolean; version?: string };
+  'bmad-status-changed': BmadStatus;
 };
 
 type EventCallback<T> = (data: T) => void;
@@ -157,6 +162,8 @@ export class BrowserApi implements ApplicationAPI {
       'message-removed': new Map(),
       'terminal-data': new Map(),
       'terminal-exit': new Map(),
+      'bmad-installation-completed': new Map(),
+      'bmad-status-changed': new Map(),
     };
     this.apiClient = axios.create({
       baseURL: `${baseUrl}/api`,
@@ -926,6 +933,32 @@ export class BrowserApi implements ApplicationAPI {
     return data.deletedCount;
   }
 
+  // BMAD operations
+  async installBmad(): Promise<{ success: boolean; version?: string; message?: string }> {
+    return this.post<Record<string, never>, { success: boolean; version?: string; message?: string }>('/bmad/install', {});
+  }
+
+  getBmadStatus(): Promise<BmadStatus> {
+    return this.get<BmadStatus>('/bmad/status');
+  }
+
+  getBmadWorkflows(): Promise<WorkflowMetadata[]> {
+    return this.get<WorkflowMetadata[]>('/bmad/workflows');
+  }
+
+  async executeWorkflow(projectDir: string, taskId: string, workflowId: string, asSubtask?: boolean): Promise<WorkflowExecutionResult> {
+    return await this.post('/bmad/execute-workflow', {
+      projectDir,
+      taskId,
+      workflowId,
+      asSubtask,
+    });
+  }
+
+  async resetBmadWorkflow(): Promise<{ success: boolean; message?: string }> {
+    return await this.post<Record<string, never>, { success: boolean; message?: string }>('/bmad/reset-workflow', {});
+  }
+
   async writeToClipboard(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
@@ -991,5 +1024,13 @@ export class BrowserApi implements ApplicationAPI {
         callback(data);
       }
     });
+  }
+
+  addBmadInstallationCompletedListener(callback: (data: { projectDir: string; installed: boolean; version?: string }) => void): () => void {
+    return this.addListener('bmad-installation-completed', callback);
+  }
+
+  addBmadStatusChangedListener(callback: (status: BmadStatus) => void): () => void {
+    return this.addListener('bmad-status-changed', callback);
   }
 }

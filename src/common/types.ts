@@ -93,7 +93,9 @@ export interface LocalizedString {
   params?: Record<string, unknown>;
 }
 
-export type Mode = 'code' | 'ask' | 'architect' | 'context' | 'agent';
+export type Mode = 'code' | 'ask' | 'architect' | 'context' | 'agent' | 'bmad';
+
+export const AIDER_MODES: Mode[] = ['code', 'ask', 'architect', 'context'];
 
 export interface AiderRunOptions {
   autoApprove?: boolean;
@@ -306,7 +308,7 @@ export const ProjectSettingsSchema = z.object({
   modelEditFormats: z.record(z.string(), z.enum(['diff', 'diff-fenced', 'whole', 'udiff', 'udiff-simple', 'patch'])),
   reasoningEffort: z.string().optional(),
   thinkingTokens: z.string().optional(),
-  currentMode: z.enum(['code', 'ask', 'architect', 'context', 'agent']),
+  currentMode: z.enum(['code', 'ask', 'architect', 'context', 'agent', 'bmad']),
   contextCompactingThreshold: z.number().optional(),
   weakModelLocked: z.boolean().optional(),
   autoApproveLocked: z.boolean().optional(),
@@ -806,7 +808,7 @@ export const TaskDataSchema = z.object({
   architectModel: z.string().nullable().optional(),
   reasoningEffort: z.string().optional(),
   thinkingTokens: z.string().optional(),
-  currentMode: z.enum(['code', 'ask', 'architect', 'context', 'agent']).optional(),
+  currentMode: z.enum(['code', 'ask', 'architect', 'context', 'agent', 'bmad']).optional(),
   contextCompactingThreshold: z.number().optional(),
   weakModelLocked: z.boolean().optional(),
   handoff: z.boolean().optional(),
@@ -950,3 +952,5 @@ export interface NotificationData {
   title: string;
   body: string;
 }
+
+export * from './bmad-types';

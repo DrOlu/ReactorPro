@@ -504,6 +504,8 @@ class ConnectorInputOutput(InputOutput):
       return True
     if message.endswith("is already in the chat as an editable file"):
       return True
+    if message.strip().endswith("file not found error"):
+      return True
 
     return False
 

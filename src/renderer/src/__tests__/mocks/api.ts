@@ -24,6 +24,8 @@ import {
   MemoryEmbeddingProgress,
 } from '@common/types';
 
+import type { BmadStatus } from '@common/bmad-types';
+
 /**
  * Creates a comprehensive mock for ApplicationAPI
  * Provides default implementations for all methods and allows overrides
@@ -233,6 +235,23 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     writeToClipboard: vi.fn((): Promise<void> => Promise.resolve()),
     openPath: vi.fn((): Promise<boolean> => Promise.resolve(true)),
     handoffConversation: vi.fn((): Promise<void> => Promise.resolve()),
+
+    // BMAD operations
+    installBmad: vi.fn((): Promise<{ success: boolean; message?: string }> => Promise.resolve({ success: false })),
+    getBmadStatus: vi.fn(
+      (): Promise<BmadStatus> =>
+        Promise.resolve({
+          installed: false,
+          availableWorkflows: [],
+          completedWorkflows: [],
+          inProgressWorkflows: [],
+          suggestedWorkflows: [],
+          detectedArtifacts: { completedWorkflows: [], inProgressWorkflows: [], detectedArtifacts: {} },
+        }),
+    ),
+    getBmadWorkflows: vi.fn(() => Promise.resolve([])),
+    executeWorkflow: vi.fn(() => Promise.resolve({ success: true, artifactPath: '/path/to/artifact.md' })),
+    resetBmadWorkflow: vi.fn((): Promise<{ success: boolean; message?: string }> => Promise.resolve({ success: true })),
   };
 
   return vi.mocked<ApplicationAPI>({ ...defaultMock, ...overrides });

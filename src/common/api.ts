@@ -2,6 +2,7 @@ import {
   AgentProfile,
   AgentProfilesUpdatedData,
   AutocompletionData,
+  BmadStatus,
   BranchInfo,
   ClearTaskData,
   CloudflareTunnelStatus,
@@ -48,6 +49,8 @@ import {
   UserMessageData,
   VersionsInfo,
   VoiceSession,
+  WorkflowExecutionResult,
+  WorkflowMetadata,
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
 } from '@common/types';
@@ -229,4 +232,11 @@ export interface ApplicationAPI {
   openPath: (path: string) => Promise<boolean>;
 
   addNotificationListener: (baseDir: string, callback: (data: NotificationData) => void) => () => void;
+
+  // BMAD operations
+  installBmad: () => Promise<{ success: boolean; message?: string }>;
+  getBmadStatus: () => Promise<BmadStatus>;
+  getBmadWorkflows: () => Promise<WorkflowMetadata[]>;
+  executeWorkflow: (projectDir: string, taskId: string, workflowId: string, asSubtask?: boolean) => Promise<WorkflowExecutionResult>;
+  resetBmadWorkflow: () => Promise<{ success: boolean; message?: string }>;
 }

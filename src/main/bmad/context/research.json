@@ -1,0 +1,125 @@
+[
+  {
+    "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438",
+    "role": "user",
+    "content": "IT IS CRITICAL THAT YOU FOLLOW THIS COMMAND: LOAD the FULL _bmad/bmm/workflows/1-analysis/research/workflow.md, READ its entire contents and follow its directions exactly!",
+    "promptContext": {
+      "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438",
+      "group": {
+        "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438"
+      }
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I'll load and read the workflow file you specified."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_e0310bde7e0945fd91fe05f9",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/workflows/1-analysis/research/workflow.md",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "id": "05b3477d-146d-4e10-8cd5-aa6c9ccc4947",
+    "promptContext": {
+      "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438",
+      "group": {
+        "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438"
+      }
+    }
+  },
+  {
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_e0310bde7e0945fd91fe05f9",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "---\nname: research\ndescription: Conduct comprehensive research across multiple domains using current web data and verified sources - Market, Technical, Domain and other research types.\nweb_bundle: true\n---\n\n# Research Workflow\n\n**Goal:** Conduct comprehensive, exhaustive research across multiple domains using current web data and verified sources to produce complete research documents with compelling narratives and proper citations.\n\n**Document Standards:**\n\n- **Comprehensive Coverage**: Exhaustive research with no critical gaps\n- **Source Verification**: Every factual claim backed by web sources with URL citations\n- **Document Length**: As long as needed to fully cover the research topic\n- **Professional Structure**: Compelling narrative introduction, detailed TOC, and comprehensive summary\n- **Authoritative Sources**: Multiple independent sources for all critical claims\n\n**Your Role:** You are a research facilitator and web data analyst working with an expert partner. This is a collaboration where you bring research methodology and web search capabilities, while your partner brings domain knowledge and research direction.\n\n**Final Deliverable**: A complete research document that serves as an authoritative reference on the research topic with:\n\n- Compelling narrative introduction\n- Comprehensive table of contents\n- Detailed research sections with proper citations\n- Executive summary and conclusions\n\n## WORKFLOW ARCHITECTURE\n\nThis uses **micro-file architecture** with **routing-based discovery**:\n\n- Each research type has its own step folder\n- Step 01 discovers research type and routes to appropriate sub-workflow\n- Sequential progression within each research type\n- Document state tracked in output frontmatter\n\n## INITIALIZATION\n\n### Configuration Loading\n\nLoad config from `{project-root}/_bmad/bmm/config.yaml` and resolve:\n\n- `project_name`, `output_folder`, , `planning_artifacts`, `user_name`\n- `communication_language`, `document_output_language`, `user_skill_level`\n- `date` as a system-generated value\n\n### Paths\n\n- `installed_path` = `{project-root}/_bmad/bmm/workflows/1-analysis/research`\n- `template_path` = `{installed_path}/research.template.md`\n- `default_output_file` = `{planning_artifacts}/research/{{research_type}}-{{topic}}-research-{{date}}.md` (dynamic based on research type)\n\n## PREREQUISITE\n\n**⛔ Web search required.** If unavailable, abort and tell the user.\n\n## RESEARCH BEHAVIOR\n\n### Web Research Standards\n\n- **Current Data Only**: Search the web to verify and supplement your knowledge with current facts\n- **Source Verification**: Require citations for all factual claims\n- **Anti-Hallucination Protocol**: Never present information without verified sources\n- **Multiple Sources**: Require at least 2 independent sources for critical claims\n- **Conflict Resolution**: Present conflicting views and note discrepancies\n- **Confidence Levels**: Flag uncertain data with [High/Medium/Low Confidence]\n\n### Source Quality Standards\n\n- **Distinguish Clearly**: Facts (from sources) vs Analysis (interpretation) vs Speculation\n- **URL Citation**: Always include source URLs when presenting web search data\n- **Critical Claims**: Market size, growth rates, competitive data need verification\n- **Fact Checking**: Apply fact-checking to critical data points\n\n## Implementation Instructions\n\nExecute research type discovery and routing:\n\n### Research Type Discovery\n\n**Your Role:** You are a research facilitator and web data analyst working with an expert partner. This is a collaboration where you bring research methodology and web search capabilities, while your partner brings domain knowledge and research direction.\n\n**Research Standards:**\n\n- **Anti-Hallucination Protocol**: Never present information without verified sources\n- **Current Data Only**: Search the web to verify and supplement your knowledge with current facts\n- **Source Citation**: Always include URLs for factual claims from web searches\n- **Multiple Sources**: Require 2+ independent sources for critical claims\n- **Conflict Resolution**: Present conflicting views and note discrepancies\n- **Confidence Levels**: Flag uncertain data with [High/Medium/Low Confidence]\n\n### Collaborative Research Discovery\n\n\"Welcome {{user_name}}! I'm excited to work with you as your research partner. I bring web research capabilities with rigorous source verification, while you bring the domain expertise and research direction.\n\n**Let me help you clarify what you'd like to research.**\n\n**First, tell me: What specific topic, problem, or area do you want to research?**\n\nFor example:\n\n- 'The electric vehicle market in Europe'\n- 'Cloud migration strategies for healthcare'\n- 'AI implementation in financial services'\n- 'Sustainable packaging regulations'\n- 'Or anything else you have in mind...'\n\n### Topic Exploration and Clarification\n\nBased on the user's initial topic, explore and refine the research scope:\n\n#### Topic Clarification Questions:\n\n1. **Core Topic**: \"What exactly about [topic] are you most interested in?\"\n2. **Research Goals**: \"What do you hope to achieve with this research?\"\n3. **Scope**: \"Should we focus broadly or dive deep into specific aspects?\"\n4. **Timeline**: \"Are you looking at current state, historical context, or future trends?\"\n5. **Application**: \"How will you use this research? (product development, strategy, academic, etc.)\"\n\n#### Context Building:\n\n- **Initial Input**: User provides topic or research interest\n- **Collaborative Refinement**: Work together to clarify scope and objectives\n- **Goal Alignment**: Ensure research direction matches user needs\n- **Research Boundaries**: Establish clear focus areas and deliverables\n\n### Research Type Identification\n\nAfter understanding the research topic and goals, identify the most appropriate research approach:\n\n**Research Type Options:**\n\n1. **Market Research** - Market size, growth, competition, customer insights\n   _Best for: Understanding market dynamics, customer behavior, competitive landscape_\n\n2. **Domain Research** - Industry analysis, regulations, technology trends in specific domain\n   _Best for: Understanding industry context, regulatory environment, ecosystem_\n\n3. **Technical Research** - Technology evaluation, architecture decisions, implementation approaches\n   _Best for: Technical feasibility, technology selection, implementation strategies_\n\n**Recommendation**: Based on [topic] and [goals], I recommend [suggested research type] because [specific rationale].\n\n**What type of research would work best for your needs?**\n\n### Research Type Routing\n\n<critical>Based on user selection, route to appropriate sub-workflow with the discovered topic using the following IF block sets of instructions. YOU MUST ALWAYS SPEAK OUTPUT In your Agent communication style with the config `{communication_language}`</critical>\n\n#### If Market Research:\n\n- Set `research_type = \"market\"`\n- Set `research_topic = [discovered topic from discussion]`\n- Create the starter output file: `{planning_artifacts}/research/market-{{research_topic}}-research-{{date}}.md` with exact copy of the ./research.template.md contents\n- Load: `./market-steps/step-01-init.md` with topic context\n\n#### If Domain Research:\n\n- Set `research_type = \"domain\"`\n- Set `research_topic = [discovered topic from discussion]`\n- Create the starter output file: `{planning_artifacts}/research/domain-{{research_topic}}-research-{{date}}.md` with exact copy of the ./research.template.md contents\n- Load: `./domain-steps/step-01-init.md` with topic context\n\n#### If Technical Research:\n\n- Set `research_type = \"technical\"`\n- Set `research_topic = [discovered topic from discussion]`\n- Create the starter output file: `{planning_artifacts}/research/technical-{{research_topic}}-research-{{date}}.md` with exact copy of the ./research.template.md contents\n- Load: `./technical-steps/step-01-init.md` with topic context\n\n**Important**: The discovered topic from the collaborative discussion should be passed to the research initialization steps, so they don't need to ask \"What do you want to research?\" again - they can focus on refining the scope for their specific research type.\n\n**Note:** All research workflows require web search for current data and source verification.\n"
+        }
+      }
+    ],
+    "id": "9b81ab90-6d41-4672-ac75-e6fdee8816db",
+    "promptContext": {
+      "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438",
+      "group": {
+        "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438"
+      }
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I've loaded the research workflow. Let me now initialize the workflow by loading the configuration file."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_d0798312c69d493c8565bd92",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/config.yaml",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "id": "63cd3f8b-7d72-4b40-a834-a6ca5126f6bd",
+    "promptContext": {
+      "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438",
+      "group": {
+        "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438"
+      }
+    }
+  },
+  {
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_d0798312c69d493c8565bd92",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "# BMM Module Configuration\n# Generated by BMAD installer\n# Version: 6.0.0-Beta.4\n# Date: 2026-01-30T20:44:02.827Z\n\nproject_name: aider-desk\nuser_skill_level: intermediate\nplanning_artifacts: \"{project-root}/_bmad-output/planning-artifacts\"\nimplementation_artifacts: \"{project-root}/_bmad-output/implementation-artifacts\"\nproject_knowledge: \"{project-root}/docs\"\n\n# Core Configuration Values\nuser_name: Wlad\ncommunication_language: English\ndocument_output_language: English\noutput_folder: \"{project-root}/_bmad-output\"\n"
+        }
+      }
+    ],
+    "id": "de419579-792c-4339-92de-26c97aef1705",
+    "promptContext": {
+      "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438",
+      "group": {
+        "id": "6c97db1e-297f-491b-b65c-eaac1bbb6438",
+        "name": "BMAD Method: Research",
+        "color": "#0ea5e9",
+        "finished": true
+      }
+    }
+  },
+  {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Welcome! I'm excited to work with you as your research partner. I bring web research capabilities with rigorous source verification, while you bring the domain expertise and research direction.\n\n**Let me help you clarify what you'd like to research.**\n\n**First, tell me: What specific topic, problem, or area do you want to research?**\n\nFor example:\n- 'The electric vehicle market in Europe'\n- 'Cloud migration strategies for healthcare'\n- 'AI implementation in financial services'\n- 'Sustainable packaging regulations'\n- 'Or anything else you have in mind...'"
+      }
+    ],
+    "id": "45b4980f-c7da-4c03-95de-18d4ee695171",
+    "promptContext": {
+      "id": "45b4980f-c7da-4c03-95de-18d4ee695171"
+    }
+  }
+]

@@ -262,7 +262,7 @@ describe('ContextManager - removeMessagesAfter', () => {
   });
 
   describe('Assistant Message with Mixed Content', () => {
-    it('should filter out reasoning and text when removing after assistant with tool calls', async () => {
+    it('should keep text and reasoning and remove tool calls when removing after assistant message', async () => {
       const toolCallId = 'call-123';
       const initialMessages = [
         { id: 'msg-1', role: 'user', content: 'Execute tool' },
@@ -289,10 +289,11 @@ describe('ContextManager - removeMessagesAfter', () => {
       const messages = await manager.getContextMessages();
       expect(messages).toHaveLength(2);
 
-      // Assistant message should have text and reasoning filtered out
+      // Assistant message should have tool calls filtered out, keeping text and reasoning
       const assistantMessage = messages.find((m: ContextMessage) => m.id === 'msg-2');
-      expect(assistantMessage?.content).toHaveLength(1);
-      expect(assistantMessage?.content[0].type).toBe('tool-call');
+      expect(assistantMessage?.content).toHaveLength(2);
+      expect(assistantMessage?.content[0].type).toBe('reasoning');
+      expect(assistantMessage?.content[1].type).toBe('text');
 
       expect(removedIds).toHaveLength(2);
     });

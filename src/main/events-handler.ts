@@ -27,9 +27,13 @@ import {
   VoiceSession,
   AgentProfile,
   MemoryEntry,
+  WorkflowMetadata,
+  WorkflowExecutionResult,
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
+import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
 
+import type { BmadStatus, InstallResult } from '@common/bmad-types';
 import type { BrowserWindow } from 'electron';
 
 import { McpManager, AgentProfileManager } from '@/agent';
@@ -942,5 +946,59 @@ export class EventsHandler {
 
   getMemoryEmbeddingProgress() {
     return this.memoryManager.getProgress();
+  }
+
+  async getBmadStatus(): Promise<BmadStatus> {
+    const activeProjectData = this.store.getOpenProjects().find((p) => p.active);
+    if (!activeProjectData) {
+      throw new Error('No active project found');
+    }
+    const project = this.projectManager.getProject(activeProjectData.baseDir);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+    return await project.getBmadStatus();
+  }
+
+  async installBmad(): Promise<InstallResult> {
+    const activeProjectData = this.store.getOpenProjects().find((p) => p.active);
+    if (!activeProjectData) {
+      throw new Error('No active project found');
+    }
+    const project = this.projectManager.getProject(activeProjectData.baseDir);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+    return await project.installBmad();
+  }
+
+  async getBmadWorkflows(): Promise<WorkflowMetadata[]> {
+    return BMAD_WORKFLOWS;
+  }
+
+  async executeWorkflow(projectDir: string, taskId: string, workflowId: string, asSubtask?: boolean): Promise<WorkflowExecutionResult> {
+    const project = this.projectManager.getProject(projectDir);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    const task = project.getTask(taskId);
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    return await task.executeBmadWorkflow(workflowId, asSubtask);
+  }
+
+  async resetBmadWorkflow(): Promise<{ success: boolean; message?: string }> {
+    const activeProjectData = this.store.getOpenProjects().find((p) => p.active);
+    if (!activeProjectData) {
+      throw new Error('No active project found');
+    }
+    const project = this.projectManager.getProject(activeProjectData.baseDir);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+    return await project.resetBmadWorkflow();
   }
 }

@@ -1,4 +1,4 @@
-import { AgentProfile, EditFormat, Mode, Model, ModelsData, RawModelInfo, TaskData } from '@common/types';
+import { AgentProfile, AIDER_MODES, EditFormat, Mode, Model, ModelsData, RawModelInfo, TaskData } from '@common/types';
 import React, { ReactNode, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { BsCodeSlash, BsFilter, BsLayoutSidebar } from 'react-icons/bs';
 import { CgTerminal } from 'react-icons/cg';
@@ -77,7 +77,7 @@ export const TaskBar = React.forwardRef<TaskBarRef, Props>(
     const mainModelSelectorRef = useRef<ModelSelectorRef>(null);
     const architectModelSelectorRef = useRef<ModelSelectorRef>(null);
 
-    const showAiderInfo = mode !== 'agent' || activeAgentProfile?.useAiderTools;
+    const showAiderInfo = AIDER_MODES.includes(mode) || activeAgentProfile?.useAiderTools || false;
 
     // Use task provider/model first, fallback to active agent profile
     const effectiveAgentProvider = task.provider || activeAgentProfile?.provider;
@@ -378,7 +378,7 @@ export const TaskBar = React.forwardRef<TaskBarRef, Props>(
       }
     }, [api, baseDir, task.id]);
 
-    const isTwoRowLayout = mode === 'agent' && showAiderInfo;
+    const isTwoRowLayout = !AIDER_MODES.includes(mode) && showAiderInfo;
     const renderAiderInfo = (showLabel = false) => {
       return (
         <div className={clsx('flex flex-wrap gap-x-2 flex-shrink-0', isMobile ? 'flex-col items-start gap-y-1' : 'flex-row items-center gap-y-0.5')}>
@@ -492,7 +492,7 @@ export const TaskBar = React.forwardRef<TaskBarRef, Props>(
             ) : (
               // Original horizontal layout for other modes
               <div className="flex items-center space-x-3 flex-wrap">
-                {mode === 'agent' ? (
+                {!AIDER_MODES.includes(mode) ? (
                   <>
                     <div className="flex items-center space-x-2 flex-shrink-0">
                       <Tooltip content={t('modelSelector.agentModel')}>

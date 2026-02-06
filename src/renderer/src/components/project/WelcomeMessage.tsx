@@ -8,11 +8,17 @@ import icon from '../../../../../resources/icon.png?asset';
 
 import type { Mode } from '@common/types';
 
+import { BmadWorkflowPage } from '@/components/bmad/BmadWorkflowPage';
+
 type Props = {
   onModeChange?: (mode: Mode) => void;
+  mode?: Mode;
+  projectDir?: string;
+  taskId?: string;
+  onOpenTerminal?: () => void;
 };
 
-export const WelcomeMessage = ({ onModeChange }: Props) => {
+export const WelcomeMessage = ({ onModeChange, mode, projectDir, taskId, onOpenTerminal }: Props) => {
   const { t } = useTranslation();
 
   const features = [
@@ -32,6 +38,10 @@ export const WelcomeMessage = ({ onModeChange }: Props) => {
   const handleModeClick = (mode: Mode) => {
     onModeChange?.(mode);
   };
+
+  if (mode === 'bmad') {
+    return <BmadWorkflowPage projectDir={projectDir} taskId={taskId} onOpenTerminal={() => onOpenTerminal?.()} />;
+  }
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted-light overflow-auto scrollbar-thin scrollbar-track-bg-primary-light scrollbar-thumb-bg-tertiary">

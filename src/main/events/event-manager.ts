@@ -33,6 +33,7 @@ import {
 } from '@common/types';
 
 import type { BrowserWindow } from 'electron';
+import type { InstallResult } from '@common/bmad-types';
 
 import logger from '@/logger';
 
@@ -389,5 +390,16 @@ export class EventManager {
         this.unsubscribe(connector.socket);
       }
     });
+  }
+
+  // BMAD events
+  sendBmadInstallationCompleted(data: InstallResult): void {
+    this.sendToMainWindow('bmad-installation-completed', data);
+    this.broadcastToEventConnectors('bmad-installation-completed', data);
+  }
+
+  sendBmadArtifactsUpdated(data: { projectDir: string; artifactPath: string; workflowId: string }): void {
+    this.sendToMainWindow('bmad-artifacts-updated', data);
+    this.broadcastToEventConnectors('bmad-artifacts-updated', data);
   }
 }

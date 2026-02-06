@@ -3,12 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
 import { DefaultTaskState, TaskData } from '@common/types';
 import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react';
-import { TaskStateActions } from 'src/renderer/src/components/message/TaskStateActions';
 import { clsx } from 'clsx';
 
 import { MessageBlock } from './MessageBlock';
 import { GroupMessageBlock } from './GroupMessageBlock';
 
+import { TaskStateActions } from '@/components/message/TaskStateActions';
 import { isGroupMessage, isLoadingMessage, isUserMessage, Message } from '@/types/message';
 import { IconButton } from '@/components/common/IconButton';
 import { groupMessagesByPromptContext } from '@/components/message/utils';
@@ -229,7 +229,10 @@ export const VirtualizedMessages = forwardRef<VirtualizedMessagesRef, Props>(
         {settings?.taskSettings?.showTaskStateActions && !inProgress && !isLastLoadingMessage && (
           <TaskStateActions
             state={task.state}
+            mode={task.currentMode}
             isArchived={task.archived}
+            projectDir={baseDir}
+            taskId={taskId}
             onResumeTask={resumeTask}
             onMarkAsDone={onMarkAsDone}
             onProceed={onProceed}

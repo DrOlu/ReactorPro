@@ -7,6 +7,8 @@
 - added direct support for Kimi Coding Plan provider
 - improved UX for initial user message
 - improved handling files within the context of the agent
+- properly removing the tool calls from assistant message when using remove messages up to here action
+- added BMAD Method mode
 
 ## [0.51.0]
 

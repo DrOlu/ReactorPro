@@ -1,0 +1,176 @@
+[
+  {
+    "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+    "role": "user",
+    "content": "IT IS CRITICAL THAT YOU FOLLOW THIS COMMAND: LOAD the FULL _bmad/bmm/workflows/bmad-quick-flow/quick-spec/workflow.md, READ its entire contents and follow its directions exactly!",
+    "promptContext": {
+      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "group": {
+        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+      }
+    }
+  },
+  {
+    "id": "98b720cb-0f65-49d9-adf9-a0f57bba79e1",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I will load the workflow.md file."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_286662d2eff1474fbe8b36d3",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/workflows/bmad-quick-flow/quick-spec/workflow.md",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "group": {
+        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+      }
+    }
+  },
+  {
+    "id": "e74cb529-2642-43fd-822e-59673ebe36f5",
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_286662d2eff1474fbe8b36d3",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "---\nname: quick-spec\ndescription: Conversational spec engineering - ask questions, investigate code, produce implementation-ready tech-spec.\nmain_config: '{project-root}/_bmad/bmm/config.yaml'\nweb_bundle: true\n\n# Checkpoint handler paths\nadvanced_elicitation: '{project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml'\nparty_mode_exec: '{project-root}/_bmad/core/workflows/party-mode/workflow.md'\nquick_dev_workflow: '{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-dev/workflow.md'\n---\n\n# Quick-Spec Workflow\n\n**Goal:** Create implementation-ready technical specifications through conversational discovery, code investigation, and structured documentation.\n\n**READY FOR DEVELOPMENT STANDARD:**\n\nA specification is considered \"Ready for Development\" ONLY if it meets the following:\n\n- **Actionable**: Every task has a clear file path and specific action.\n- **Logical**: Tasks are ordered by dependency (lowest level first).\n- **Testable**: All ACs follow Given/When/Then and cover happy path and edge cases.\n- **Complete**: All investigation results from Step 2 are inlined; no placeholders or \"TBD\".\n- **Self-Contained**: A fresh agent can implement the feature without reading the workflow history.\n\n---\n\n**Your Role:** You are an elite developer and spec engineer. You ask sharp questions, investigate existing code thoroughly, and produce specs that contain ALL context a fresh dev agent needs to implement the feature. No handoffs, no missing context - just complete, actionable specs.\n\n---\n\n## WORKFLOW ARCHITECTURE\n\nThis uses **step-file architecture** for disciplined execution:\n\n### Core Principles\n\n- **Micro-file Design**: Each step is a self-contained instruction file that must be followed exactly\n- **Just-In-Time Loading**: Only the current step file is in memory - never load future step files until directed\n- **Sequential Enforcement**: Sequence within step files must be completed in order, no skipping or optimization\n- **State Tracking**: Document progress in output file frontmatter using `stepsCompleted` array\n- **Append-Only Building**: Build the tech-spec by updating content as directed\n\n### Step Processing Rules\n\n1. **READ COMPLETELY**: Always read the entire step file before taking any action\n2. **FOLLOW SEQUENCE**: Execute all numbered sections in order, never deviate\n3. **WAIT FOR INPUT**: If a menu is presented, halt and wait for user selection\n4. **CHECK CONTINUATION**: Only proceed to next step when user selects [C] (Continue)\n5. **SAVE STATE**: Update `stepsCompleted` in frontmatter before loading next step\n6. **LOAD NEXT**: When directed, read fully and follow the next step file\n\n### Critical Rules (NO EXCEPTIONS)\n\n- **NEVER** load multiple step files simultaneously\n- **ALWAYS** read entire step file before execution\n- **NEVER** skip steps or optimize the sequence\n- **ALWAYS** update frontmatter of output file when completing a step\n- **ALWAYS** follow the exact instructions in the step file\n- **ALWAYS** halt at menus and wait for user input\n- **NEVER** create mental todo lists from future steps\n\n---\n\n## INITIALIZATION SEQUENCE\n\n### 1. Configuration Loading\n\nLoad and read full config from `{main_config}` and resolve:\n\n- `project_name`, `output_folder`, `planning_artifacts`, `implementation_artifacts`, `user_name`\n- `communication_language`, `document_output_language`, `user_skill_level`\n- `date` as system-generated current datetime\n- ✅ YOU MUST ALWAYS SPEAK OUTPUT In your Agent communication style with the config `{communication_language}`\n\n### 2. First Step Execution\n\nRead fully and follow: `steps/step-01-understand.md` to begin the workflow.\n"
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "group": {
+        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+      }
+    }
+  },
+  {
+    "id": "eb5469cb-7eef-4835-b94a-fe76e76981a3",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "The workflow.md file is loaded. Let me load the config file next."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_8b9c6667ffd944bfb428818e",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/config.yaml",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "group": {
+        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+      }
+    }
+  },
+  {
+    "id": "a0e58df1-26c1-4919-9503-b929dc373465",
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_8b9c6667ffd944bfb428818e",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "# BMM Module Configuration\n# Generated by BMAD installer\n# Version: 6.0.0-Beta.5\n# Date: 2026-02-03T14:30:35.442Z\n\nproject_name: aider-desk\nuser_skill_level: intermediate\nplanning_artifacts: \"{project-root}/_bmad-output/planning-artifacts\"\nimplementation_artifacts: \"{project-root}/_bmad-output/implementation-artifacts\"\nproject_knowledge: \"{project-root}/docs\"\n\n# Core Configuration Values\nuser_name: Wlad\ncommunication_language: English\ndocument_output_language: English\noutput_folder: \"{project-root}/_bmad-output\"\n"
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "group": {
+        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+      }
+    }
+  },
+  {
+    "id": "a4f90420-1757-4548-985a-f87f6aba7b6f",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Good, I have the config. Now I need to read step-01-understand.md and follow its instructions exactly."
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "call_3c9bc115b16b4788a7efe618",
+        "toolName": "power---file_read",
+        "input": {
+          "filePath": "_bmad/bmm/workflows/bmad-quick-flow/quick-spec/steps/step-01-understand.md",
+          "withLines": false,
+          "lineOffset": 0,
+          "lineLimit": 1000
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "group": {
+        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+      }
+    }
+  },
+  {
+    "id": "c71e8e2e-4212-4b0a-9c4a-a277ddd07387",
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool-result",
+        "toolCallId": "call_3c9bc115b16b4788a7efe618",
+        "toolName": "power---file_read",
+        "output": {
+          "type": "text",
+          "value": "---\nname: 'step-01-understand'\ndescription: 'Analyze the requirement delta between current state and what user wants to build'\n\nworkflow_path: '{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-spec'\nnextStepFile: './step-02-investigate.md'\nskipToStepFile: './step-03-generate.md'\ntemplateFile: '{workflow_path}/tech-spec-template.md'\nwipFile: '{implementation_artifacts}/tech-spec-wip.md'\n---\n\n# Step 1: Analyze Requirement Delta\n\n**Progress: Step 1 of 4** - Next: Deep Investigation\n\n## RULES:\n\n- MUST NOT skip steps.\n- MUST NOT optimize sequence.\n- MUST follow exact instructions.\n- MUST NOT look ahead to future steps.\n- ✅ YOU MUST ALWAYS SPEAK OUTPUT In your Agent communication style with the config `{communication_language}`\n\n## CONTEXT:\n\n- Variables from `workflow.md` are available in memory.\n- Focus: Define the technical requirement delta and scope.\n- Investigation: Perform surface-level code scans ONLY to verify the delta. Reserve deep dives into implementation consequences for Step 2.\n- Objective: Establish a verifiable delta between current state and target state.\n\n## SEQUENCE OF INSTRUCTIONS\n\n### 0. Check for Work in Progress\n\na) **Before anything else, check if `{wipFile}` exists:**\n\nb) **IF WIP FILE EXISTS:**\n\n1. Read the frontmatter and extract: `title`, `slug`, `stepsCompleted`\n2. Calculate progress: `lastStep = max(stepsCompleted)`\n3. Present to user:\n\n```\nHey {user_name}! Found a tech-spec in progress:\n\n**{title}** - Step {lastStep} of 4 complete\n\nIs this what you're here to continue?\n\n[Y] Yes, pick up where I left off\n[N] No, archive it and start something new\n```\n\n4. **HALT and wait for user selection.**\n\na) **Menu Handling:**\n\n- **[Y] Continue existing:**\n  - Jump directly to the appropriate step based on `stepsCompleted`:\n    - `[1]` → Load `{nextStepFile}` (Step 2)\n    - `[1, 2]` → Load `{skipToStepFile}` (Step 3)\n    - `[1, 2, 3]` → Load `./step-04-review.md` (Step 4)\n- **[N] Archive and start fresh:**\n  - Rename `{wipFile}` to `{implementation_artifacts}/tech-spec-{slug}-archived-{date}.md`\n\n### 1. Greet and Ask for Initial Request\n\na) **Greet the user briefly:**\n\n\"Hey {user_name}! What are we building today?\"\n\nb) **Get their initial description.** Don't ask detailed questions yet - just understand enough to know where to look.\n\n### 2. Quick Orient Scan\n\na) **Before asking detailed questions, do a rapid scan to understand the landscape:**\n\nb) **Check for existing context docs:**\n\n- Check `{output_folder}` and `{planning_artifacts}`for planning documents (PRD, architecture, epics, research)\n- Check for `**/project-context.md` - if it exists, skim for patterns and conventions\n- Check for any existing stories or specs related to user's request\n\nc) **If user mentioned specific code/features, do a quick scan:**\n\n- Search for relevant files/classes/functions they mentioned\n- Skim the structure (don't deep-dive yet - that's Step 2)\n- Note: tech stack, obvious patterns, file locations\n\nd) **Build mental model:**\n\n- What's the likely landscape for this feature?\n- What's the likely scope based on what you found?\n- What questions do you NOW have, informed by the code?\n\n**This scan should take < 30 seconds. Just enough to ask smart questions.**\n\n### 3. Ask Informed Questions\n\na) **Now ask clarifying questions - but make them INFORMED by what you found:**\n\nInstead of generic questions like \"What's the scope?\", ask specific ones like:\n- \"`AuthService` handles validation in the controller — should the new field follow that pattern or move it to a dedicated validator?\"\n- \"`NavigationSidebar` component uses local state for the 'collapsed' toggle — should we stick with that or move it to the global store?\"\n- \"The epics doc mentions X - is this related?\"\n\n**Adapt to {user_skill_level}.** Technical users want technical questions. Non-technical users need translation.\n\nb) **If no existing code is found:**\n\n- Ask about intended architecture, patterns, constraints\n- Ask what similar systems they'd like to emulate\n\n### 4. Capture Core Understanding\n\na) **From the conversation, extract and confirm:**\n\n- **Title**: A clear, concise name for this work\n- **Slug**: URL-safe version of title (lowercase, hyphens, no spaces)\n- **Problem Statement**: What problem are we solving?\n- **Solution**: High-level approach (1-2 sentences)\n- **In Scope**: What's included\n- **Out of Scope**: What's explicitly NOT included\n\nb) **Ask the user to confirm the captured understanding before proceeding.**\n\n### 5. Initialize WIP File\n\na) **Create the tech-spec WIP file:**\n\n1. Copy template from `{templateFile}`\n2. Write to `{wipFile}`\n3. Update frontmatter with captured values:\n   ```yaml\n   ---\n   title: '{title}'\n   slug: '{slug}'\n   created: '{date}'\n   status: 'in-progress'\n   stepsCompleted: [1]\n   tech_stack: []\n   files_to_modify: []\n   code_patterns: []\n   test_patterns: []\n   ---\n   ```\n4. Fill in Overview section with Problem Statement, Solution, and Scope\n5. Fill in Context for Development section with any technical preferences or constraints gathered during informed discovery.\n6. Write the file\n\nb) **Report to user:**\n\n\"Created: `{wipFile}`\n\n**Captured:**\n\n- Title: {title}\n- Problem: {problem_statement_summary}\n- Scope: {scope_summary}\"\n\n### 6. Present Checkpoint Menu\n\na) **Display menu:**\n\nDisplay: \"**Select:** [A] Advanced Elicitation [P] Party Mode [C] Continue to Deep Investigation (Step 2 of 4)\"\n\nb) **HALT and wait for user selection.**\n\n#### Menu Handling Logic:\n\n- IF A: Read fully and follow: `{advanced_elicitation}` with current tech-spec content, process enhanced insights, ask user \"Accept improvements? (y/n)\", if yes update WIP file then redisplay menu, if no keep original then redisplay menu\n- IF P: Read fully and follow: `{party_mode_exec}` with current tech-spec content, process collaborative insights, ask user \"Accept changes? (y/n)\", if yes update WIP file then redisplay menu, if no keep original then redisplay menu\n- IF C: Verify `{wipFile}` has `stepsCompleted: [1]`, then read fully and follow: `{nextStepFile}`\n- IF Any other comments or queries: respond helpfully then redisplay menu\n\n#### EXECUTION RULES:\n\n- ALWAYS halt and wait for user input after presenting menu\n- ONLY proceed to next step when user selects 'C'\n- After A or P execution, return to this menu\n\n---\n\n## REQUIRED OUTPUTS:\n\n- MUST initialize WIP file with captured metadata.\n\n## VERIFICATION CHECKLIST:\n\n- [ ] WIP check performed FIRST before any greeting.\n- [ ] `{wipFile}` created with correct frontmatter, Overview, Context for Development, and `stepsCompleted: [1]`.\n- [ ] User selected [C] to continue.\n"
+        }
+      }
+    ],
+    "promptContext": {
+      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "group": {
+        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+      }
+    }
+  },
+  {
+    "id": "12f2051f-4e97-4cd7-adba-6b504ecfa0fe",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Let me follow the step-01-understand.md instructions exactly.\n\nFirst, I need to check if there's a WIP file. Let me check the path.\n\nFrom the config:\n- implementation_artifacts: \"{project-root}/_bmad-output/implementation-artifacts\"\n- output_folder: \"{project-root}/_bmad-output\"\n\nSo the wipFile should be: `{project-root}/_bmad-output/implementation-artifacts/tech-spec-wip.md`\n\nLet me check if this file exists."
+      }
+    ],
+    "promptContext": {
+      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "group": {
+        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+        "name": "Quick Spec",
+        "color": "#f59e0b",
+        "finished": true
+      }
+    }
+  }
+]
