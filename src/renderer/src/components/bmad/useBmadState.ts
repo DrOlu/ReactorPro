@@ -1,10 +1,10 @@
-import { createContext, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { BmadStatus } from '@common/bmad-types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useApi } from '@/contexts/ApiContext';
 import { generateSuggestions } from '@/utils/bmad-suggestions';
 
-type BmadStateContextType = {
+type BmadStateType = {
   status: BmadStatus | null;
   suggestedWorkflows: string[];
   isLoading: boolean;
@@ -12,13 +12,7 @@ type BmadStateContextType = {
   refresh: () => Promise<void>;
 };
 
-const BmadStateContext = createContext<BmadStateContextType | null>(null);
-
-type Props = {
-  children: ReactNode;
-};
-
-export const BmadStateProvider = ({ children }: Props) => {
+export const useBmadState = (): BmadStateType => {
   const [status, setStatus] = useState<BmadStatus | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +26,6 @@ export const BmadStateProvider = ({ children }: Props) => {
   }, [status]);
 
   const loadBmadStatus = useCallback(async () => {
-    setStatus(null);
     setError(null);
 
     try {
@@ -55,16 +48,6 @@ export const BmadStateProvider = ({ children }: Props) => {
     void loadBmadStatus();
   }, [loadBmadStatus]);
 
-  const value = useMemo(
-    () => ({
-      status,
-      suggestedWorkflows,
-      isLoading,
-      error,
-      refresh,
-    }),
-    [status, suggestedWorkflows, isLoading, error, refresh],
-  );
-
-  return <BmadStateContext.Provider value={value}>{children}</BmadStateContext.Provider>;
+  // Otherwise, use standalone state (for components outside BmadWorkflowPage)
+  return { status, suggestedWorkflows, isLoading, error, refresh };
 };

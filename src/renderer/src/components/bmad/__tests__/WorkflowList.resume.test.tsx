@@ -6,11 +6,11 @@ import { WorkflowList } from '../WorkflowList';
 
 import { createMockApi } from '@/__tests__/mocks/api';
 import * as ApiContext from '@/contexts/ApiContext';
-import * as useBmadStateModule from '@/hooks/useBmadState';
+import * as useBmadStateModule from '@/components/bmad/useBmadState';
 import * as useIncompleteWorkflowsModule from '@/hooks/useIncompleteWorkflows';
 
 vi.mock('@/contexts/ApiContext');
-vi.mock('@/hooks/useBmadState');
+vi.mock('@/components/bmad/useBmadState');
 vi.mock('@/hooks/useIncompleteWorkflows');
 
 describe('WorkflowList - Resume Functionality', () => {

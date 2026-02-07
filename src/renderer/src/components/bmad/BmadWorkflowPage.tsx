@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef, MouseEvent } from 'react';
+import { MouseEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FiLayers, FiZap, FiAlertTriangle } from 'react-icons/fi';
+import { FiAlertTriangle, FiLayers, FiZap } from 'react-icons/fi';
 import { clsx } from 'clsx';
+
+import { useBmadState } from './useBmadState';
 
 import { useApi } from '@/contexts/ApiContext';
 import { BmadInstallPrompt } from '@/components/bmad/BmadInstallPrompt';
@@ -9,8 +11,7 @@ import { WorkflowList } from '@/components/bmad/WorkflowList';
 import { PathInfoCard } from '@/components/bmad/PathInfoCard';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Button } from '@/components/common/Button';
-import { showSuccessNotification, showErrorNotification } from '@/utils/notifications';
-import { BmadStateProvider, useBmadState } from '@/contexts/BmadStateContext';
+import { showErrorNotification, showSuccessNotification } from '@/utils/notifications';
 
 type PathType = 'full' | 'quick';
 
@@ -20,7 +21,7 @@ type Props = {
   onOpenTerminal: () => void;
 };
 
-const BmadWorkflowPageContent = ({ projectDir, taskId, onOpenTerminal }: Props) => {
+export const BmadWorkflowPage = ({ projectDir, taskId, onOpenTerminal }: Props) => {
   const { t } = useTranslation();
   const api = useApi();
   const { status: bmadStatus, isLoading, error, refresh } = useBmadState();
@@ -178,7 +179,11 @@ const BmadWorkflowPageContent = ({ projectDir, taskId, onOpenTerminal }: Props) 
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="text-xs text-text-tertiary">{t('bmad.workflows.installedVersion', { version: bmadStatus.version })}</div>
+        <div className="text-xs text-text-tertiary">
+          {t('bmad.workflows.installedVersion', {
+            version: bmadStatus.version,
+          })}
+        </div>
 
         {renderTabs()}
 
@@ -208,13 +213,5 @@ const BmadWorkflowPageContent = ({ projectDir, taskId, onOpenTerminal }: Props) 
         </ConfirmDialog>
       )}
     </div>
-  );
-};
-
-export const BmadWorkflowPage = (props: Props) => {
-  return (
-    <BmadStateProvider>
-      <BmadWorkflowPageContent {...props} />
-    </BmadStateProvider>
   );
 };

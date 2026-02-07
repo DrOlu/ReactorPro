@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useApi } from '@/contexts/ApiContext';
 import { showErrorNotification } from '@/utils/notifications';
-import { useBmadState } from '@/hooks/useBmadState';
+import { useBmadState } from '@/components/bmad/useBmadState';
 import { Button } from '@/components/common/Button';
 
 type Props = {

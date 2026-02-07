@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { WorkflowItem } from './WorkflowItem';
 import { WorkflowPhaseSection } from './WorkflowPhaseSection';
 
-import { useBmadState } from '@/hooks/useBmadState';
+import { useBmadState } from '@/components/bmad/useBmadState';
 import { useIncompleteWorkflows } from '@/hooks/useIncompleteWorkflows';
 
 const FULL_WORKFLOW_PHASES = [WorkflowPhase.Analysis, WorkflowPhase.Planning, WorkflowPhase.Solutioning, WorkflowPhase.Implementation];

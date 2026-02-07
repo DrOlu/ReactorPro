@@ -8,11 +8,11 @@ import { BmadTaskActions } from '@/components/bmad/BmadTaskActions';
 import { Button } from '@/components/common/Button';
 
 type Props = {
+  projectDir: string;
+  taskId: string;
   state: string | undefined;
   mode?: Mode;
   isArchived: boolean | undefined;
-  projectDir?: string;
-  taskId?: string;
   onResumeTask: () => void;
   onMarkAsDone: () => void;
   onProceed?: () => void;
@@ -22,11 +22,11 @@ type Props = {
 };
 
 export const TaskStateActions = ({
+  projectDir,
+  taskId,
   state,
   mode,
   isArchived,
-  projectDir,
-  taskId,
   onResumeTask,
   onMarkAsDone,
   onProceed,
@@ -75,8 +75,8 @@ export const TaskStateActions = ({
   };
 
   // BMAD mode rendering
-  if (mode === 'bmad') {
-    return <BmadTaskActions projectDir={projectDir || ''} taskId={taskId || ''} />;
+  if (mode === 'bmad' && [DefaultTaskState.ReadyForReview, DefaultTaskState.Done].includes(state as DefaultTaskState)) {
+    return <BmadTaskActions projectDir={projectDir} taskId={taskId} />;
   }
 
   if (state === DefaultTaskState.Todo) {
@@ -105,18 +105,6 @@ export const TaskStateActions = ({
     );
   }
 
-  if (state === DefaultTaskState.ReadyForReview) {
-    return renderSection(
-      <RiCheckLine className="h-4 w-4 flex-shrink-0 text-tertiary" />,
-      t('messages.taskReadyForReview'),
-      <>
-        <Button key="markAsDone" variant="outline" color="primary" size="xs" onClick={onMarkAsDone}>
-          {t('messages.markAsDone')}
-        </Button>
-      </>,
-    );
-  }
-
   if (state === DefaultTaskState.ReadyForImplementation) {
     return renderSection(
       <RiCheckLine className="h-4 w-4 flex-shrink-0 text-tertiary" />,
@@ -125,6 +113,18 @@ export const TaskStateActions = ({
         <Button key="proceed" variant="outline" color="primary" size="xs" onClick={handleProceedClick}>
           <IoPlayOutline className="mr-1 w-3 h-3" />
           {t('messages.proceed')}
+        </Button>
+      </>,
+    );
+  }
+
+  if (state === DefaultTaskState.ReadyForReview) {
+    return renderSection(
+      <RiCheckLine className="h-4 w-4 flex-shrink-0 text-tertiary" />,
+      t('messages.taskReadyForReview'),
+      <>
+        <Button key="markAsDone" variant="outline" color="primary" size="xs" onClick={onMarkAsDone}>
+          {t('messages.markAsDone')}
         </Button>
       </>,
     );

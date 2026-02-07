@@ -4,9 +4,7 @@ import { BmadStatus, WorkflowPhase } from '@common/bmad-types';
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
 
 // Mock useBmadState hook
-vi.mock('@/hooks/useBmadState', () => ({
-  useBmadState: vi.fn(),
-}));
+vi.mock('@/components/bmad/useBmadState');
 
 // Mock useIncompleteWorkflows hook
 vi.mock('@/hooks/useIncompleteWorkflows', () => ({
@@ -25,11 +23,7 @@ vi.mock('@/contexts/ApiContext', () => ({
 
 import { WorkflowList } from '../WorkflowList';
 
-import type { MockedFunction } from 'vitest';
-
-import { useBmadState } from '@/hooks/useBmadState';
-
-const mockUseBmadState = useBmadState as MockedFunction<typeof useBmadState>;
+import * as useBmadStateModule from '@/components/bmad/useBmadState';
 
 describe('WorkflowList', () => {
   const mockBmadStatus: BmadStatus = {
@@ -46,7 +40,7 @@ describe('WorkflowList', () => {
   };
 
   beforeEach(() => {
-    mockUseBmadState.mockReturnValue({
+    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
       status: mockBmadStatus,
       suggestedWorkflows: ['prd'],
       isLoading: false,
@@ -96,7 +90,7 @@ describe('WorkflowList', () => {
   });
 
   it('should show loading state', () => {
-    mockUseBmadState.mockReturnValue({
+    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
       status: null,
       suggestedWorkflows: [],
       isLoading: true,
@@ -110,7 +104,7 @@ describe('WorkflowList', () => {
   });
 
   it('should show error state', () => {
-    mockUseBmadState.mockReturnValue({
+    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
       status: null,
       suggestedWorkflows: [],
       isLoading: false,
@@ -124,7 +118,7 @@ describe('WorkflowList', () => {
   });
 
   it('should handle empty workflow list', () => {
-    mockUseBmadState.mockReturnValue({
+    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
       status: {
         ...mockBmadStatus,
         availableWorkflows: [],
@@ -141,7 +135,7 @@ describe('WorkflowList', () => {
   });
 
   it('should show no workflows message for quick tab when no quick workflows exist', () => {
-    mockUseBmadState.mockReturnValue({
+    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
       status: {
         ...mockBmadStatus,
         availableWorkflows: BMAD_WORKFLOWS.filter((w) => w.phase !== WorkflowPhase.QuickFlow),

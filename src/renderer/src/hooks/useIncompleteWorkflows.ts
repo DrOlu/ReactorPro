@@ -1,7 +1,7 @@
 import { IncompleteWorkflowMetadata } from '@common/bmad-types';
 import { useMemo } from 'react';
 
-import { useBmadState } from './useBmadState';
+import { useBmadState } from '@/components/bmad/useBmadState';
 
 /**
  * Hook to access incomplete workflows from BMAD status

@@ -10,7 +10,7 @@ import { formatDistanceToNow } from 'date-fns';
 
 import { useApi } from '@/contexts/ApiContext';
 import { showErrorNotification } from '@/utils/notifications';
-import { useBmadState } from '@/hooks/useBmadState';
+import { useBmadState } from '@/components/bmad/useBmadState';
 
 const getFileName = (path: string): string => {
   const parts = path.split('/');
