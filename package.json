@@ -100,6 +100,7 @@
     "axios": "^1.8.3",
     "babel-plugin-react-compiler": "^19.1.0-rc.3",
     "better-sqlite3": "^12.0.0",
+    "bmad-method": "^6.0.0-Beta.7",
     "cheerio": "^1.0.0",
     "chokidar": "^4.0.3",
     "cloudflared": "^0.7.1",

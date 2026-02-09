@@ -21,11 +21,7 @@ vi.mock('@/contexts/ApiContext', () => ({
 
 // Mock child components
 vi.mock('@/components/bmad/BmadInstallPrompt', () => ({
-  BmadInstallPrompt: ({ onOpenTerminal }: { projectDir: string; taskId: string; onOpenTerminal: () => void }) => (
-    <div data-testid="bmad-install-prompt">
-      <button onClick={onOpenTerminal}>Open Terminal</button>
-    </div>
-  ),
+  BmadInstallPrompt: () => <div data-testid="bmad-install-prompt">BmadInstallPrompt</div>,
 }));
 
 vi.mock('@/components/bmad/WorkflowList', () => ({
@@ -85,7 +81,7 @@ describe('WelcomeMessage', () => {
     };
     mockGetBmadStatus.mockResolvedValue(mockStatus);
 
-    render(<WelcomeMessage onModeChange={mockOnModeChange} mode="bmad" projectDir="/test/project" taskId="test-task-id" onOpenTerminal={vi.fn()} />);
+    render(<WelcomeMessage onModeChange={mockOnModeChange} mode="bmad" projectDir="/test/project" taskId="test-task-id" />);
 
     await waitFor(() => {
       expect(screen.getByTestId('bmad-install-prompt')).toBeInTheDocument();

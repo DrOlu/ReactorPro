@@ -1,17 +1,18 @@
 import { MdKeyboardDoubleArrowDown } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
-import { DefaultTaskState, TaskData } from '@common/types';
+import { DefaultTaskState, MessageViewMode, TaskData } from '@common/types';
 import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react';
 import { clsx } from 'clsx';
 
 import { MessageBlock } from './MessageBlock';
 import { GroupMessageBlock } from './GroupMessageBlock';
+import { AssistantMessageBlock } from './AssistantMessageBlock';
 
 import { TaskStateActions } from '@/components/message/TaskStateActions';
-import { isGroupMessage, isLoadingMessage, isUserMessage, Message } from '@/types/message';
+import { isAssistantGroupMessage, isGroupMessage, isLoadingMessage, isUserMessage, Message } from '@/types/message';
 import { IconButton } from '@/components/common/IconButton';
-import { groupMessagesByPromptContext } from '@/components/message/utils';
+import { groupAssistantMessages, groupMessagesByPromptContext } from '@/components/message/utils';
 import { showInfoNotification } from '@/utils/notifications';
 import { useScrollingPaused } from '@/hooks/useScrollingPaused';
 import { useUserMessageNavigation } from '@/hooks/useUserMessageNavigation';
@@ -69,9 +70,13 @@ export const VirtualizedMessages = forwardRef<VirtualizedMessagesRef, Props>(
     const { t } = useTranslation();
     const { settings } = useSettings();
     const messagesContainerRef = useRef<HTMLDivElement>(null);
+    const isCompactMode = settings?.messageViewMode === MessageViewMode.Compact;
 
-    // Group messages by promptContext.group.id
-    const processedMessages = useMemo(() => groupMessagesByPromptContext(messages), [messages]);
+    // Group messages by promptContext.group.id, then optionally group assistant messages for compact mode
+    const processedMessages = useMemo(() => {
+      const grouped = groupMessagesByPromptContext(messages);
+      return isCompactMode ? groupAssistantMessages(grouped) : grouped;
+    }, [messages, isCompactMode]);
     const lastUserMessageIndex = processedMessages.findLastIndex(isUserMessage);
     const isLastLoadingMessage = processedMessages.length > 0 && isLoadingMessage(processedMessages[processedMessages.length - 1]);
     const inProgress = task.state === DefaultTaskState.InProgress;
@@ -192,6 +197,16 @@ export const VirtualizedMessages = forwardRef<VirtualizedMessagesRef, Props>(
                       redo={inProgress ? undefined : redoLastUserPrompt}
                       edit={editLastUserMessage}
                       onInterrupt={onInterrupt}
+                    />
+                  ) : isAssistantGroupMessage(message) ? (
+                    <AssistantMessageBlock
+                      baseDir={baseDir}
+                      taskId={taskId}
+                      message={message}
+                      allFiles={allFiles}
+                      renderMarkdown={renderMarkdown}
+                      remove={inProgress ? undefined : () => removeMessage(message)}
+                      onFork={onForkFromMessage ? () => onForkFromMessage(message) : undefined}
                     />
                   ) : (
                     <MessageBlock

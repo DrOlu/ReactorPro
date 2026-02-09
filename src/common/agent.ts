@@ -385,7 +385,7 @@ export const DEFAULT_AGENT_PROFILE: AgentProfile = {
       deniedPattern: 'rm .*;del .*;chown .*;chgrp .*;chmod .*',
     },
   },
-  includeContextFiles: true,
+  includeContextFiles: false,
   includeRepoMap: false,
   usePowerTools: true,
   useAiderTools: false,

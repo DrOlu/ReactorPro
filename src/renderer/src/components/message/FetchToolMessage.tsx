@@ -15,9 +15,10 @@ type Props = {
   compact?: boolean;
   onFork?: () => void;
   onRemoveUpTo?: () => void;
+  hideMessageBar?: boolean;
 };
 
-export const FetchToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo }: Props) => {
+export const FetchToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo, hideMessageBar }: Props) => {
   const { t } = useTranslation();
 
   const url = message.args.url as string;
@@ -113,6 +114,7 @@ export const FetchToolMessage = ({ message, onRemove, compact = false, onFork, o
       onRemove={onRemove}
       onFork={onFork}
       onRemoveUpTo={onRemoveUpTo}
+      hideMessageBar={hideMessageBar}
     />
   );
 };

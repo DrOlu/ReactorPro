@@ -16,9 +16,10 @@ type Props = {
   compact?: boolean;
   onFork?: () => void;
   onRemoveUpTo?: () => void;
+  hideMessageBar?: boolean;
 };
 
-export const ActivateSkillToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo }: Props) => {
+export const ActivateSkillToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo, hideMessageBar }: Props) => {
   const { t } = useTranslation();
   const skillName = (message.args.skill as string) || '';
   const isExecuting = message.content === '';
@@ -90,6 +91,7 @@ export const ActivateSkillToolMessage = ({ message, onRemove, compact = false, o
       onRemove={onRemove}
       onFork={onFork}
       onRemoveUpTo={onRemoveUpTo}
+      hideMessageBar={hideMessageBar}
     />
   );
 };

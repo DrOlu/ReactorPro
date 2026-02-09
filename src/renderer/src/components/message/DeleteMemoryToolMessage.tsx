@@ -12,9 +12,10 @@ type Props = {
   compact?: boolean;
   onFork?: () => void;
   onRemoveUpTo?: () => void;
+  hideMessageBar?: boolean;
 };
 
-export const DeleteMemoryToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo }: Props) => {
+export const DeleteMemoryToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo, hideMessageBar }: Props) => {
   const { t } = useTranslation();
 
   const id = message.args.id as string;
@@ -104,6 +105,7 @@ export const DeleteMemoryToolMessage = ({ message, onRemove, compact = false, on
       onRemove={onRemove}
       onFork={onFork}
       onRemoveUpTo={onRemoveUpTo}
+      hideMessageBar={hideMessageBar}
     />
   );
 };

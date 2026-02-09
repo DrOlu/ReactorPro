@@ -18,6 +18,154 @@ describe('generateSuggestions', () => {
     });
   });
 
+  describe('Quick Flow path suggestions', () => {
+    it('suggests next Quick Flow workflow when quick-spec is completed', () => {
+      const completedWorkflows = ['quick-spec'];
+      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+        'quick-spec': {
+          path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
+
+      // Should suggest quick-dev (next in Quick Flow path)
+      expect(suggestions).toContain('quick-dev');
+    });
+
+    it('also suggests Full Workflow entry point when on Quick Flow path', () => {
+      const completedWorkflows = ['quick-spec'];
+      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+        'quick-spec': {
+          path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
+
+      // Should also suggest create-product-brief (Full Workflow entry point)
+      expect(suggestions).toContain('create-product-brief');
+    });
+
+    it('does not suggest completed Full Workflow entry point when on Quick Flow path', () => {
+      const completedWorkflows = ['quick-spec', 'create-product-brief'];
+      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+        'quick-spec': {
+          path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
+        },
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
+
+      // Should NOT suggest create-product-brief (already completed)
+      expect(suggestions).not.toContain('create-product-brief');
+      // Should still suggest quick-dev
+      expect(suggestions).toContain('quick-dev');
+    });
+  });
+
+  describe('Full Workflow path suggestions', () => {
+    it('suggests next Full Workflow workflow when create-product-brief is completed', () => {
+      const completedWorkflows = ['create-product-brief'];
+      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
+
+      // Should suggest create-prd (next in Full Workflow path)
+      expect(suggestions).toContain('create-prd');
+    });
+
+    it('also suggests Quick Flow entry point when on Full Workflow path', () => {
+      const completedWorkflows = ['create-product-brief'];
+      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
+
+      // Should also suggest quick-spec (Quick Flow entry point)
+      expect(suggestions).toContain('quick-spec');
+    });
+
+    it('does not suggest completed Quick Flow entry point when on Full Workflow path', () => {
+      const completedWorkflows = ['create-product-brief', 'quick-spec'];
+      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+        'quick-spec': {
+          path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
+
+      // Should NOT suggest quick-spec (already completed)
+      expect(suggestions).not.toContain('quick-spec');
+      // Should still suggest create-prd
+      expect(suggestions).toContain('create-prd');
+    });
+
+    it('suggests next steps from both paths when both paths are active', () => {
+      const completedWorkflows = ['quick-spec', 'create-product-brief'];
+      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+        'quick-spec': {
+          path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
+        },
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
+
+      // Should suggest quick-dev (next in Quick Flow)
+      expect(suggestions).toContain('quick-dev');
+      // Should suggest create-prd (next in Full Workflow)
+      expect(suggestions).toContain('create-prd');
+    });
+
+    it('suggests next steps from both paths when multiple workflows completed on each path', () => {
+      const completedWorkflows = ['quick-spec', 'quick-dev', 'create-product-brief', 'create-prd'];
+      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+        'quick-spec': {
+          path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
+        },
+        'quick-dev': {
+          path: 'N/A',
+        },
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+        'create-prd': {
+          path: '_bmad-output/planning-artifacts/prd.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
+
+      // Should NOT suggest quick-spec or quick-dev (already completed)
+      expect(suggestions).not.toContain('quick-spec');
+      expect(suggestions).not.toContain('quick-dev');
+      // Should NOT suggest create-product-brief or create-prd (already completed)
+      expect(suggestions).not.toContain('create-product-brief');
+      expect(suggestions).not.toContain('create-prd');
+      // Should suggest next steps from Full Workflow followUps
+      expect(suggestions).toContain('create-architecture');
+      expect(suggestions).toContain('create-ux-design');
+      expect(suggestions).toContain('create-epics-and-stories');
+    });
+  });
+
   describe('brownfield projects (some workflows completed)', () => {
     it('collects followUps from completed workflows', () => {
       const completedWorkflows = ['create-product-brief'];

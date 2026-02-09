@@ -15,10 +15,9 @@ type Props = {
   mode?: Mode;
   projectDir?: string;
   taskId?: string;
-  onOpenTerminal?: () => void;
 };
 
-export const WelcomeMessage = ({ onModeChange, mode, projectDir, taskId, onOpenTerminal }: Props) => {
+export const WelcomeMessage = ({ onModeChange, mode, projectDir, taskId }: Props) => {
   const { t } = useTranslation();
 
   const features = [
@@ -40,7 +39,7 @@ export const WelcomeMessage = ({ onModeChange, mode, projectDir, taskId, onOpenT
   };
 
   if (mode === 'bmad') {
-    return <BmadWorkflowPage projectDir={projectDir} taskId={taskId} onOpenTerminal={() => onOpenTerminal?.()} />;
+    return <BmadWorkflowPage projectDir={projectDir} taskId={taskId} />;
   }
 
   return (

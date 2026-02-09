@@ -29,6 +29,7 @@ extraResources:
 asarUnpack:
   - '**/node_modules/sharp/**/*'
   - '**/node_modules/@img/**/*'
+  - '**/node_modules/bmad-method/**/*'
 beforePack: scripts/before-pack.js
 win:
   executableName: reactorpro

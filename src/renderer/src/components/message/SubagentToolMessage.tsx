@@ -13,9 +13,10 @@ type Props = {
   onRemove?: () => void;
   compact?: boolean;
   onRemoveUpTo?: () => void;
+  hideMessageBar?: boolean;
 };
 
-export const SubagentToolMessage = ({ message, onRemove, compact = false, onRemoveUpTo }: Props) => {
+export const SubagentToolMessage = ({ message, onRemove, compact = false, onRemoveUpTo, hideMessageBar }: Props) => {
   const { t } = useTranslation();
 
   const isExecuting = message.content === '';
@@ -73,7 +74,7 @@ export const SubagentToolMessage = ({ message, onRemove, compact = false, onRemo
         </div>
       </div>
 
-      <MessageBar content={copyContent} usageReport={message.usageReport} remove={onRemove} onRemoveUpTo={onRemoveUpTo} />
+      {!hideMessageBar && <MessageBar content={copyContent} usageReport={message.usageReport} remove={onRemove} onRemoveUpTo={onRemoveUpTo} />}
     </div>
   );
 };

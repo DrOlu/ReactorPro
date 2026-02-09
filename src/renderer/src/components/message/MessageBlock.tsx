@@ -86,6 +86,7 @@ type Props = {
   allFiles: string[];
   renderMarkdown: boolean;
   compact?: boolean;
+  hideMessageBar?: boolean;
   remove?: () => void;
   redo?: () => void;
   edit?: (content: string) => void;
@@ -101,6 +102,7 @@ const MessageBlockComponent = ({
   allFiles,
   renderMarkdown,
   compact = false,
+  hideMessageBar = false,
   remove,
   redo,
   edit,
@@ -169,21 +171,93 @@ const MessageBlockComponent = ({
       case POWER_TOOL_GROUP_NAME:
         switch (toolMessage.toolName) {
           case POWER_TOOL_FILE_WRITE:
-            return <FileWriteToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <FileWriteToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case POWER_TOOL_FILE_EDIT:
-            return <FileEditToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <FileEditToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case POWER_TOOL_FILE_READ:
-            return <FileReadToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <FileReadToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case POWER_TOOL_GLOB:
-            return <GlobToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <GlobToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case POWER_TOOL_GREP:
-            return <GrepToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <GrepToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case POWER_TOOL_BASH:
-            return <BashToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <BashToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case POWER_TOOL_FETCH:
-            return <FetchToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <FetchToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case POWER_TOOL_SEMANTIC_SEARCH:
-            return <SemanticSearchToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <SemanticSearchToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           default:
             break;
         }
@@ -191,7 +265,9 @@ const MessageBlockComponent = ({
       case SUBAGENTS_TOOL_GROUP_NAME:
         switch (toolMessage.toolName) {
           case SUBAGENTS_TOOL_RUN_TASK:
-            return <SubagentToolMessage message={toolMessage} onRemove={remove} compact={compact} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <SubagentToolMessage message={toolMessage} onRemove={remove} compact={compact} hideMessageBar={hideMessageBar} onRemoveUpTo={onRemoveUpTo} />
+            );
           default:
             break;
         }
@@ -199,19 +275,82 @@ const MessageBlockComponent = ({
       case TASKS_TOOL_GROUP_NAME:
         switch (toolMessage.toolName) {
           case TASKS_TOOL_LIST_TASKS:
-            return <ListTasksToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <ListTasksToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case TASKS_TOOL_GET_TASK:
-            return <GetTaskToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <GetTaskToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case TASKS_TOOL_GET_TASK_MESSAGE:
-            return <GetTaskMessageToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <GetTaskMessageToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case TASKS_TOOL_CREATE_TASK:
-            return <CreateTaskToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <CreateTaskToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case TASKS_TOOL_DELETE_TASK:
-            return <DeleteTaskToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <DeleteTaskToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case TASKS_TOOL_SEARCH_TASK:
-            return <SearchTaskToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <SearchTaskToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case TASKS_TOOL_SEARCH_PARENT_TASK:
-            return <SearchParentTaskToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <SearchParentTaskToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           default:
             break;
         }
@@ -219,15 +358,60 @@ const MessageBlockComponent = ({
       case MEMORY_TOOL_GROUP_NAME:
         switch (toolMessage.toolName) {
           case MEMORY_TOOL_STORE:
-            return <StoreMemoryToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <StoreMemoryToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case MEMORY_TOOL_RETRIEVE:
-            return <RetrieveMemoryToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <RetrieveMemoryToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case MEMORY_TOOL_DELETE:
-            return <DeleteMemoryToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <DeleteMemoryToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case MEMORY_TOOL_LIST:
-            return <ListMemoriesToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <ListMemoriesToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           case MEMORY_TOOL_UPDATE:
-            return <UpdateMemoryToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <UpdateMemoryToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           default:
             break;
         }
@@ -235,7 +419,16 @@ const MessageBlockComponent = ({
       case SKILLS_TOOL_GROUP_NAME:
         switch (toolMessage.toolName) {
           case SKILLS_TOOL_ACTIVATE_SKILL:
-            return <ActivateSkillToolMessage message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+            return (
+              <ActivateSkillToolMessage
+                message={toolMessage}
+                onRemove={remove}
+                compact={compact}
+                hideMessageBar={hideMessageBar}
+                onFork={onFork}
+                onRemoveUpTo={onRemoveUpTo}
+              />
+            );
           default:
             break;
         }
@@ -265,7 +458,9 @@ const MessageBlockComponent = ({
         break;
     }
 
-    return <ToolMessageBlock message={toolMessage} onRemove={remove} compact={compact} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />;
+    return (
+      <ToolMessageBlock message={toolMessage} onRemove={remove} compact={compact} hideMessageBar={hideMessageBar} onFork={onFork} onRemoveUpTo={onRemoveUpTo} />
+    );
   }
 
   return null;
@@ -278,6 +473,7 @@ const arePropsEqual = (prevProps: Props, nextProps: Props): boolean => {
     prevProps.allFiles.length !== nextProps.allFiles.length ||
     prevProps.renderMarkdown !== nextProps.renderMarkdown ||
     prevProps.compact !== nextProps.compact ||
+    prevProps.hideMessageBar !== nextProps.hideMessageBar ||
     (prevProps.remove !== nextProps.remove && (prevProps.remove === undefined) !== (nextProps.remove === undefined)) ||
     (prevProps.redo !== nextProps.redo && (prevProps.redo === undefined) !== (nextProps.redo === undefined)) ||
     (prevProps.edit !== nextProps.edit && (prevProps.edit === undefined) !== (nextProps.edit === undefined))

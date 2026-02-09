@@ -7,6 +7,7 @@ import { useBmadState } from './useBmadState';
 
 import { useApi } from '@/contexts/ApiContext';
 import { BmadInstallPrompt } from '@/components/bmad/BmadInstallPrompt';
+import { BmadWelcomeSection } from '@/components/bmad/BmadWelcomeSection';
 import { WorkflowList } from '@/components/bmad/WorkflowList';
 import { PathInfoCard } from '@/components/bmad/PathInfoCard';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -18,10 +19,9 @@ type PathType = 'full' | 'quick';
 type Props = {
   projectDir?: string;
   taskId?: string;
-  onOpenTerminal: () => void;
 };
 
-export const BmadWorkflowPage = ({ projectDir, taskId, onOpenTerminal }: Props) => {
+export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
   const { t } = useTranslation();
   const api = useApi();
   const { status: bmadStatus, isLoading, error, refresh } = useBmadState();
@@ -85,6 +85,8 @@ export const BmadWorkflowPage = ({ projectDir, taskId, onOpenTerminal }: Props) 
   };
 
   const hasWorkflowProgress = bmadStatus?.completedWorkflows && bmadStatus.completedWorkflows.length > 0;
+
+  const renderWelcomeSection = () => <BmadWelcomeSection />;
 
   const renderResetBanner = () => {
     if (!bmadStatus?.installed || !hasWorkflowProgress) {
@@ -166,7 +168,7 @@ export const BmadWorkflowPage = ({ projectDir, taskId, onOpenTerminal }: Props) 
           </div>
         );
       }
-      return <BmadInstallPrompt projectDir={projectDir} taskId={taskId} onOpenTerminal={onOpenTerminal} />;
+      return <BmadInstallPrompt refreshState={refresh} />;
     }
 
     if (!projectDir || !taskId) {
@@ -179,6 +181,8 @@ export const BmadWorkflowPage = ({ projectDir, taskId, onOpenTerminal }: Props) 
 
     return (
       <div className="flex flex-col gap-4">
+        {renderWelcomeSection()}
+
         <div className="text-xs text-text-tertiary">
           {t('bmad.workflows.installedVersion', {
             version: bmadStatus.version,

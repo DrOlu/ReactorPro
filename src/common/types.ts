@@ -110,6 +110,11 @@ export enum DiffViewMode {
   Compact = 'compact',
 }
 
+export enum MessageViewMode {
+  Full = 'full',
+  Compact = 'compact',
+}
+
 export enum ReasoningEffort {
   High = 'high',
   Medium = 'medium',
@@ -565,6 +570,7 @@ export interface SettingsData {
   virtualizedRendering: boolean;
   aiderDeskAutoUpdate: boolean;
   diffViewMode?: DiffViewMode;
+  messageViewMode?: MessageViewMode;
   aider: {
     options: string;
     environmentVariables: string;

@@ -16,9 +16,10 @@ type Props = {
   compact?: boolean;
   onFork?: () => void;
   onRemoveUpTo?: () => void;
+  hideMessageBar?: boolean;
 };
 
-export const FileEditToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo }: Props) => {
+export const FileEditToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo, hideMessageBar }: Props) => {
   const { t } = useTranslation();
   const expandableRef = useRef<ExpandableMessageBlockRef>(null);
 
@@ -118,6 +119,7 @@ export const FileEditToolMessage = ({ message, onRemove, compact = false, onFork
       initialExpanded={true}
       onFork={onFork}
       onRemoveUpTo={onRemoveUpTo}
+      hideMessageBar={hideMessageBar}
     />
   );
 };

@@ -2,15 +2,16 @@ import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef } fro
 import { toPng } from 'html-to-image';
 import { MdKeyboardDoubleArrowDown } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
-import { DefaultTaskState, TaskData } from '@common/types';
+import { DefaultTaskState, MessageViewMode, TaskData } from '@common/types';
 import { TaskStateActions } from 'src/renderer/src/components/message/TaskStateActions';
 
 import { MessageBlock } from './MessageBlock';
 import { GroupMessageBlock } from './GroupMessageBlock';
+import { AssistantMessageBlock } from './AssistantMessageBlock';
 
-import { isGroupMessage, isLoadingMessage, isUserMessage, Message } from '@/types/message';
+import { isAssistantGroupMessage, isGroupMessage, isLoadingMessage, isUserMessage, Message } from '@/types/message';
 import { IconButton } from '@/components/common/IconButton';
-import { groupMessagesByPromptContext } from '@/components/message/utils';
+import { groupAssistantMessages, groupMessagesByPromptContext } from '@/components/message/utils';
 import { useScrollingPaused } from '@/hooks/useScrollingPaused';
 import { useUserMessageNavigation } from '@/hooks/useUserMessageNavigation';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -70,9 +71,13 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
     const { t } = useTranslation();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
+    const isCompactMode = settings?.messageViewMode === MessageViewMode.Compact;
 
-    // Group messages by promptContext.group.id
-    const processedMessages = groupMessagesByPromptContext(messages);
+    // Group messages by promptContext.group.id, then optionally group assistant messages for compact mode
+    const processedMessages = useMemo(() => {
+      const grouped = groupMessagesByPromptContext(messages);
+      return isCompactMode ? groupAssistantMessages(grouped) : grouped;
+    }, [messages, isCompactMode]);
     const lastUserMessageIndex = processedMessages.findLastIndex(isUserMessage);
     const isLastLoadingMessage = processedMessages.length > 0 && isLoadingMessage(processedMessages[processedMessages.length - 1]);
     const inProgress = task.state === DefaultTaskState.InProgress;
@@ -165,6 +170,21 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
                   redo={inProgress ? undefined : redoLastUserPrompt}
                   edit={editLastUserMessage}
                   onInterrupt={onInterrupt}
+                />
+              );
+            }
+            if (isAssistantGroupMessage(message)) {
+              return (
+                <AssistantMessageBlock
+                  key={message.id}
+                  baseDir={baseDir}
+                  taskId={taskId}
+                  message={message}
+                  allFiles={allFiles}
+                  renderMarkdown={renderMarkdown}
+                  remove={inProgress ? undefined : () => removeMessage(message)}
+                  onFork={onForkFromMessage ? () => onForkFromMessage(message) : undefined}
+                  onRemoveUpTo={onRemoveUpToMessage ? () => onRemoveUpToMessage(message) : undefined}
                 />
               );
             }

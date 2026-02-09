@@ -3,6 +3,7 @@ import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { BmadInstallPrompt } from '../BmadInstallPrompt';
+import { useBmadState } from '../useBmadState';
 
 import { useApi } from '@/contexts/ApiContext';
 import * as notifications from '@/utils/notifications';
@@ -29,6 +30,11 @@ vi.mock('@/contexts/ApiContext', () => ({
   useApi: vi.fn(),
 }));
 
+// Mock useBmadState
+vi.mock('../useBmadState', () => ({
+  useBmadState: vi.fn(),
+}));
+
 // Mock notifications
 vi.mock('@/utils/notifications', () => ({
   showSuccessNotification: vi.fn(),
@@ -36,15 +42,13 @@ vi.mock('@/utils/notifications', () => ({
 }));
 
 describe('BmadInstallPrompt', () => {
-  const mockOnOpenTerminal = vi.fn();
-  const mockCreateTerminal = vi.fn();
-  const mockGetAllTerminalsForTask = vi.fn();
-  const mockWriteToTerminal = vi.fn();
+  const mockInstallBmad = vi.fn();
+  const mockRefresh = vi.fn();
 
   const renderComponent = () => {
     return render(
       <TooltipProvider>
-        <BmadInstallPrompt projectDir="/test/project" taskId="task-123" onOpenTerminal={mockOnOpenTerminal} />
+        <BmadInstallPrompt refreshState={mockRefresh} />
       </TooltipProvider>,
     );
   };
@@ -52,10 +56,15 @@ describe('BmadInstallPrompt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useApi).mockReturnValue({
-      createTerminal: mockCreateTerminal,
-      getAllTerminalsForTask: mockGetAllTerminalsForTask,
-      writeToTerminal: mockWriteToTerminal,
+      installBmad: mockInstallBmad,
     } as unknown as ReturnType<typeof useApi>);
+    vi.mocked(useBmadState).mockReturnValue({
+      status: null,
+      suggestedWorkflows: [],
+      isLoading: false,
+      error: null,
+      refresh: mockRefresh,
+    });
   });
 
   it('renders install button and welcome content', () => {
@@ -63,7 +72,7 @@ describe('BmadInstallPrompt', () => {
 
     expect(screen.getByText('bmad.welcome.title')).toBeInTheDocument();
     expect(screen.getByText('bmad.welcome.subtitle')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /bmad.install.openTerminal/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /bmad.install.button/ })).toBeInTheDocument();
   });
 
   it('renders benefits list', () => {
@@ -73,57 +82,48 @@ describe('BmadInstallPrompt', () => {
     expect(screen.getByText(/Automatic context preparation/)).toBeInTheDocument();
   });
 
-  it('creates terminal and writes command on button click', async () => {
-    mockCreateTerminal.mockResolvedValue('terminal-123');
-    mockGetAllTerminalsForTask.mockResolvedValue([{ id: 'terminal-123', taskId: 'task-123', cols: 160, rows: 40 }]);
-    mockWriteToTerminal.mockResolvedValue(true);
+  it('calls installBmad API on button click', async () => {
+    mockInstallBmad.mockResolvedValue({
+      success: true,
+      version: '6.0.0-Beta.7',
+      message: 'BMAD installed successfully',
+    });
 
     renderComponent();
 
-    const button = screen.getByRole('button', { name: /bmad.install.openTerminal/ });
+    const button = screen.getByRole('button', { name: /bmad.install.button/ });
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(mockCreateTerminal).toHaveBeenCalledWith('/test/project', 'task-123', 160, 40);
-      expect(mockOnOpenTerminal).toHaveBeenCalled();
+      expect(mockInstallBmad).toHaveBeenCalled();
     });
 
-    // Wait for the setTimeout callback to execute
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await waitFor(() => {
+      expect(notifications.showSuccessNotification).toHaveBeenCalledWith(expect.stringContaining('BMAD installed successfully'));
+    });
 
-    expect(mockGetAllTerminalsForTask).toHaveBeenCalledWith('task-123');
-    expect(mockWriteToTerminal).toHaveBeenCalledWith('terminal-123', 'npx -y bmad-method install\r');
+    await waitFor(() => {
+      expect(mockRefresh).toHaveBeenCalled();
+    });
   });
 
-  it('shows loading state during terminal opening', async () => {
-    mockCreateTerminal.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve('terminal-123'), 100)));
+  it('shows loading state during installation', async () => {
+    mockInstallBmad.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({ success: true }), 100)));
 
     renderComponent();
 
-    const button = screen.getByRole('button', { name: /bmad.install.openTerminal/ });
+    const button = screen.getByRole('button', { name: /bmad.install.button/ });
     fireEvent.click(button);
 
-    expect(screen.getByText('bmad.install.opening')).toBeInTheDocument();
+    expect(screen.getByText('bmad.install.installing')).toBeInTheDocument();
     expect(button).toBeDisabled();
   });
 
-  it('calls onOpenTerminal callback on successful terminal creation', async () => {
-    mockCreateTerminal.mockResolvedValue('terminal-123');
-    mockGetAllTerminalsForTask.mockResolvedValue([{ id: 'terminal-123', taskId: 'task-123', cols: 160, rows: 40 }]);
-    mockWriteToTerminal.mockResolvedValue(true);
-
-    renderComponent();
-
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
-
-    await waitFor(() => {
-      expect(mockOnOpenTerminal).toHaveBeenCalled();
+  it('shows error toast on failed installation', async () => {
+    mockInstallBmad.mockResolvedValue({
+      success: false,
+      message: 'Installation failed',
     });
-  });
-
-  it('shows error toast on failed terminal creation', async () => {
-    mockCreateTerminal.mockRejectedValue(new Error('Terminal creation failed'));
 
     renderComponent();
 
@@ -132,15 +132,14 @@ describe('BmadInstallPrompt', () => {
 
     await waitFor(
       () => {
-        expect(notifications.showErrorNotification).toHaveBeenCalledWith(expect.stringContaining('Terminal creation failed'));
+        expect(notifications.showErrorNotification).toHaveBeenCalledWith(expect.stringContaining('Installation failed'));
       },
       { timeout: 1000 },
     );
-    expect(mockOnOpenTerminal).not.toHaveBeenCalled();
   });
 
-  it('handles exception during terminal operations', async () => {
-    mockCreateTerminal.mockRejectedValue(new Error('Network error'));
+  it('shows error toast when installation throws', async () => {
+    mockInstallBmad.mockRejectedValue(new Error('Network error'));
 
     renderComponent();
 
@@ -149,23 +148,24 @@ describe('BmadInstallPrompt', () => {
 
     await waitFor(
       () => {
-        expect(notifications.showErrorNotification).toHaveBeenCalledWith(expect.stringContaining('Network error'));
+        expect(notifications.showErrorNotification).toHaveBeenCalledWith('bmad.install.error: Network error');
       },
       { timeout: 1000 },
     );
-    expect(mockOnOpenTerminal).not.toHaveBeenCalled();
   });
 
-  it('renders command that will be executed', () => {
+  it('renders manual install section with copiable command', () => {
     renderComponent();
 
     expect(screen.getByText('npx -y bmad-method install')).toBeInTheDocument();
     expect(screen.getByText('bmad.install.commandLabel')).toBeInTheDocument();
+    expect(screen.getByText('bmad.install.manualInstallTitle')).toBeInTheDocument();
+    expect(screen.getByText('bmad.install.manualInstallNote')).toBeInTheDocument();
   });
 
-  it('renders auto-check note', () => {
+  it('renders auto install note', () => {
     renderComponent();
 
-    expect(screen.getByText('bmad.install.autoCheckNote')).toBeInTheDocument();
+    expect(screen.getByText('bmad.install.autoInstallNote')).toBeInTheDocument();
   });
 });

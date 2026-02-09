@@ -22,7 +22,6 @@ vi.mock('@/prompts');
 vi.mock('@/constants');
 vi.mock('@/utils');
 vi.mock('fs/promises');
-vi.mock('path');
 vi.mock('uuid', () => ({
   v4: vi.fn(() => 'test-uuid-' + Math.random()),
 }));
@@ -42,6 +41,7 @@ import { MemoryManager } from '@/memory/memory-manager';
 import { ModelManager } from '@/models';
 import { PromptsManager } from '@/prompts';
 import { Store } from '@/store';
+import { Task } from '@/task';
 import { TelemetryManager } from '@/telemetry';
 import { determineMainModel, determineWeakModel } from '@/utils';
 import { WorktreeManager } from '@/worktrees';
@@ -183,10 +183,21 @@ describe('Project - createNewTask', () => {
     vi.mocked(fs.rm).mockResolvedValue(undefined);
     vi.mocked(fs.stat).mockRejectedValue(new Error('File not found'));
     vi.mocked(fs.readFile).mockResolvedValue('');
+    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined);
 
     // Mock utils functions
-    vi.mocked(determineMainModel).mockReturnValue('default-model');
+    vi.mocked(determineMainModel).mockImplementation((settings: any) => {
+      // Handle case when options might be undefined
+      if (!settings || !settings.aider || !settings.aider.options) {
+        return 'default-model';
+      }
+      return 'default-model';
+    });
     vi.mocked(determineWeakModel).mockReturnValue(null as any);
+
+    // Mock Task methods to avoid complex initialization
+    Task.prototype['resetContext'] = vi.fn().mockResolvedValue(undefined);
 
     // Mock migrations
     vi.mocked(migrateSessionsToTasks).mockResolvedValue(undefined);

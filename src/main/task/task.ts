@@ -1950,6 +1950,16 @@ export class Task {
     }
   }
 
+  public async resetContext() {
+    logger.debug('Reset task context', {
+      baseDir: this.project.baseDir,
+      taskId: this.taskId,
+    });
+    this.contextManager.clearContextFiles();
+    this.contextManager.clearMessages();
+    await this.contextManager.save();
+  }
+
   /**
    * Load context messages into the task context and send them to the UI.
    * This is used for loading pre-authored context (e.g., BMAD workflow context).

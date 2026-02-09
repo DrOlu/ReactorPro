@@ -1,4 +1,4 @@
-import { ContextFile, OS, TokensInfoData } from '@common/types';
+import { AIDER_MODES, ContextFile, Mode, OS, TokensInfoData } from '@common/types';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import objectHash from 'object-hash';
 import { ControlledTreeEnvironment, Tree } from 'react-complex-tree';
@@ -100,11 +100,41 @@ type Props = {
   showFileDialog: () => void;
   tokensInfo?: TokensInfoData | null;
   refreshAllFiles: (useGit?: boolean) => Promise<void>;
+  mode: Mode;
+};
+
+type EmptyContextInfoProps = {
+  mode: Mode;
+};
+
+const EmptyContextInfo = ({ mode }: EmptyContextInfoProps) => {
+  const { t } = useTranslation();
+  const isAiderMode = AIDER_MODES.includes(mode);
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-4">
+      <div className="text-center text-text-muted text-2xs max-w-[280px] space-y-2">
+        <p className="font-medium text-text-secondary">{t('contextFiles.empty.title')}</p>
+        {isAiderMode ? (
+          <>
+            <p>{t('contextFiles.empty.aiderMode.description')}</p>
+            <p className="text-text-tertiary italic">{t('contextFiles.empty.aiderMode.hint')}</p>
+          </>
+        ) : (
+          <>
+            <p>{t('contextFiles.empty.agentMode.description')}</p>
+            <p className="mt-1">{t('contextFiles.empty.agentMode.includeContextFiles')}</p>
+            <p className="text-text-tertiary italic">{t('contextFiles.empty.agentMode.hint')}</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
 };
 
 type SectionType = 'project' | 'context' | 'rules';
 
-export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFileDialog, tokensInfo, refreshAllFiles }: Props) => {
+export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFileDialog, tokensInfo, refreshAllFiles, mode }: Props) => {
   const { t } = useTranslation();
   const os = useOS();
   const api = useApi();
@@ -440,6 +470,7 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
     isFirst?: boolean,
     _isLast?: boolean,
     searchField?: React.ReactNode,
+    emptyContent?: React.ReactNode,
   ) => {
     const isOpen = activeSection === section;
     const treeId = `tree-${section}`;
@@ -517,6 +548,8 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
                 >
                   <Tree treeId={treeId} rootItem="root" />
                 </ControlledTreeEnvironment>
+              ) : emptyContent ? (
+                emptyContent
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-center text-text-muted text-2xs">{t('common.noFiles')}</div>
               )}
@@ -560,6 +593,8 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
         </>,
         true,
         false,
+        undefined,
+        <EmptyContextInfo mode={mode} />,
       )}
 
       {/* Project Files Section */}

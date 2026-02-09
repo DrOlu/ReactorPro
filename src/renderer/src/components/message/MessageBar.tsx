@@ -13,6 +13,13 @@ import { UsageInfo } from './UsageInfo';
 
 import { useClickOutside } from '@/hooks/useClickOutside';
 
+type MenuPosition = {
+  top?: number;
+  bottom?: number;
+  right?: number;
+  left?: number;
+};
+
 type Props = {
   className?: string;
   content?: string;
@@ -22,13 +29,6 @@ type Props = {
   edit?: () => void;
   onFork?: () => void;
   onRemoveUpTo?: () => void;
-};
-
-type MenuPosition = {
-  top?: number;
-  bottom?: number;
-  right?: number;
-  left?: number;
 };
 
 export const MessageBar = ({ className, content, usageReport, remove, redo, edit, onFork, onRemoveUpTo }: Props) => {

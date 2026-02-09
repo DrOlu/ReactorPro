@@ -1,5 +1,5 @@
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
-import { ArtifactDetectionResult, SprintStatusData, StoryStatus, WorkflowMetadata } from '@common/bmad-types';
+import { ArtifactDetectionResult, SprintStatusData, StoryStatus, WorkflowMetadata, WorkflowPhase } from '@common/bmad-types';
 
 /**
  * Simple glob pattern matching for artifact paths
@@ -69,15 +69,33 @@ const getSprintStatusSuggestions = (sprintStatus: SprintStatusData | undefined):
 };
 
 /**
+ * Determine if the user is on the Quick Flow path based on completed workflows
+ */
+const isOnQuickPath = (completedWorkflows: string[]): boolean => {
+  const quickWorkflowIds = BMAD_WORKFLOWS.filter((w) => w.phase === WorkflowPhase.QuickFlow).map((w) => w.id);
+  return completedWorkflows.some((id) => quickWorkflowIds.includes(id));
+};
+
+/**
+ * Determine if the user is on the Full Workflow path based on completed workflows
+ */
+const isOnFullPath = (completedWorkflows: string[]): boolean => {
+  const fullPathPhases = [WorkflowPhase.Analysis, WorkflowPhase.Planning, WorkflowPhase.Solutioning, WorkflowPhase.Implementation];
+  const fullWorkflowIds = BMAD_WORKFLOWS.filter((w) => fullPathPhases.includes(w.phase)).map((w) => w.id);
+  return completedWorkflows.some((id) => fullWorkflowIds.includes(id));
+};
+
+/**
  * Generate smart workflow suggestions based on completed workflows and detected artifacts
  * Implements greenfield/brownfield detection and prerequisite checking
+ * Ensures suggestions include next steps from both Full and Quick paths
  */
 export const generateSuggestions = (
   completedWorkflows: string[],
   detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'],
   sprintStatus?: SprintStatusData,
 ): string[] => {
-  // No workflows completed - suggest entry points
+  // No workflows completed - suggest entry points for both paths
   if (completedWorkflows.length === 0) {
     return ['create-product-brief', 'quick-spec'];
   }
@@ -94,6 +112,20 @@ export const generateSuggestions = (
   // Add suggestions based on story statuses in sprint-status.yaml
   const sprintSuggestions = getSprintStatusSuggestions(sprintStatus);
   sprintSuggestions.forEach((suggestion) => followUpSet.add(suggestion));
+
+  // Ensure both paths are represented in suggestions
+  const onQuickPath = isOnQuickPath(completedWorkflows);
+  const onFullPath = isOnFullPath(completedWorkflows);
+
+  // If on Quick path, also suggest Full path entry point if not already suggested/completed
+  if (onQuickPath && !completedWorkflows.includes('create-product-brief') && !followUpSet.has('create-product-brief')) {
+    followUpSet.add('create-product-brief');
+  }
+
+  // If on Full path, also suggest Quick path entry point if not already suggested/completed
+  if (onFullPath && !completedWorkflows.includes('quick-spec') && !followUpSet.has('quick-spec')) {
+    followUpSet.add('quick-spec');
+  }
 
   // Filter out already completed workflows
   const suggestions = Array.from(followUpSet).filter((workflowId) => !completedWorkflows.includes(workflowId));

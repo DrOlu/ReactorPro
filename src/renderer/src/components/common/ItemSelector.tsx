@@ -90,7 +90,7 @@ export const ItemSelector = <T extends string = string>({
 
     if (tooltipContent) {
       return (
-        <Tooltip key={item.value} content={tooltipContent}>
+        <Tooltip key={item.value} content={tooltipContent} side="right">
           {itemElement}
         </Tooltip>
       );

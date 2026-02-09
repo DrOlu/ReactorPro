@@ -506,6 +506,8 @@ class ConnectorInputOutput(InputOutput):
       return True
     if message.strip().endswith("file not found error"):
       return True
+    if ": unable to read:" in message and "No such file or directory" in message:
+      return True
 
     return False
 

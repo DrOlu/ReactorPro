@@ -9,6 +9,13 @@
 - improved handling files within the context of the agent
 - properly removing the tool calls from assistant message when using remove messages up to here action
 - added BMAD Method mode
+- files are now clearing properly on new tasks when IDE plugin is not connected
+- moved mode tooltips to right alignment for better usability
+- added option to use compact view mode for messages
+- fixed issue with Merge actions from worktrees
+- default agent profiles now do not include the context files
+- rules directory is correctly handled when using Aider modes and Worktree
+- added detaled information about the context files
 
 ## [0.51.0]
 

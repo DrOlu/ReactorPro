@@ -1161,7 +1161,7 @@ export class WorktreeManager {
       let command = `git stash push -u -m "${fullMessage}"`;
       if (foldersToExclude.length > 0) {
         const excludePatterns = foldersToExclude.map((folder) => `':(exclude)${folder}'`).join(' ');
-        command += ` -- ${excludePatterns}`;
+        command += ` -- . ${excludePatterns}`;
       }
 
       await execWithShellPath(command, {

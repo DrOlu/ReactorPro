@@ -1,9 +1,12 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
+import * as os from 'os';
 
 import { v4 as uuidv4 } from 'uuid';
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
+import { Installer } from 'bmad-method/tools/cli/installers/lib/core/installer';
+import { setProjectRoot } from 'bmad-method/tools/cli/lib/project-root';
 
 import { ArtifactDetector } from './artifact-detector';
 import { ContextPreparer } from './context-preparer';
@@ -12,8 +15,8 @@ import type { BmadError, BmadStatus, InstallResult, WorkflowExecutionResult } fr
 import type { Task } from '@/task';
 import type { ContextFile } from '@common/types';
 
+import { RESOURCES_DIR } from '@/constants';
 import logger from '@/logger';
-import { getResourceDir } from '@/paths';
 
 export class BmadManager {
   private readonly artifactDetector: ArtifactDetector;
@@ -71,30 +74,73 @@ export class BmadManager {
 
   async install(): Promise<InstallResult> {
     try {
-      // Check if already installed
-      if (this.checkInstallation()) {
-        const version = this.getVersion();
-        logger.info('BMAD already installed', { version });
-        return {
-          success: true,
-          version,
-          message: 'BMAD already installed',
+      // Check for legacy BMAD v4 folder (.bmad-method)
+      // This prevents process.exit() in Installer.handleLegacyV4Migration()
+      const legacyV4Path = path.join(this.projectDir, '.bmad-method');
+      if (fs.existsSync(legacyV4Path)) {
+        const bmadError: BmadError = {
+          errorCode: 'BMAD_INSTALL_FAILED',
+          message: 'Legacy BMAD v4 installation detected. Please remove the .bmad-method folder and try again.',
+          recoveryAction: 'Remove the .bmad-method folder from your project directory, then retry installation.',
         };
+        throw bmadError;
       }
 
-      // Get bundled BMAD path
-      const sourcePath = path.join(getResourceDir(), '_bmad');
-      const targetPath = path.join(this.projectDir, '_bmad');
+      // Get safe username for config
+      let safeUsername = 'User';
+      try {
+        const username = os.userInfo().username;
+        safeUsername = username.charAt(0).toUpperCase() + username.slice(1);
+      } catch {
+        safeUsername = process.env.USER || process.env.USERNAME || 'User';
+      }
 
-      logger.info('Installing BMAD', { sourcePath, targetPath });
+      // Determine if this is a reinstall/update
+      const isReinstall = this.checkInstallation();
+      const actionType = isReinstall ? 'update' : 'install';
 
-      // Copy bundled BMAD to project directory
-      await fsPromises.cp(sourcePath, targetPath, {
-        recursive: true,
-        force: false,
+      // Construct non-interactive config
+      const config = {
+        actionType,
+        directory: this.projectDir,
+        installCore: true,
+        modules: ['bmm'], // Install bmm module by default
+        ides: [],
+        skipIde: true, // Skip IDE configuration
+        coreConfig: {
+          user_name: safeUsername,
+          communication_language: 'English',
+          document_output_language: 'English',
+          output_folder: '_bmad-output',
+        },
+        customContent: { hasCustomContent: false },
+        skipPrompts: true, // Non-interactive mode
+        ...(isReinstall && {
+          backupFirst: true,
+          preserveCustomizations: true,
+        }),
+      };
+
+      logger.info('Installing BMAD using Installer class', {
+        actionType,
+        directory: this.projectDir,
       });
 
-      logger.info('BMAD files copied successfully');
+      // Set the bmad-method project root to the unpacked location for packaged apps
+      // This ensures module sources (bmm, core) can be found when running from ASAR
+      const bmadMethodRoot = path.join(RESOURCES_DIR, 'app.asar.unpacked', 'node_modules', 'bmad-method');
+      if (fs.existsSync(bmadMethodRoot)) {
+        setProjectRoot(bmadMethodRoot);
+        logger.info('Set BMAD project root to unpacked location', { bmadMethodRoot });
+      }
+
+      // Create installer instance and install
+      const installer = new Installer();
+      const result = await installer.install(config);
+
+      if (!result || !result.success) {
+        throw new Error(result?.error || 'Installation failed');
+      }
 
       // Verify installation
       const installed = this.checkInstallation();
@@ -103,12 +149,16 @@ export class BmadManager {
       }
 
       const version = this.getVersion();
-      logger.info('BMAD installation completed', { version });
+      logger.info('BMAD installation completed', {
+        version,
+        actionType: isReinstall ? 'update' : 'install',
+        modules: result.modules,
+      });
 
       return {
         success: true,
         version,
-        message: 'BMAD installed successfully',
+        message: isReinstall ? 'BMAD updated successfully' : 'BMAD installed successfully',
       };
     } catch (error: unknown) {
       logger.error('BMAD installation failed', { error });

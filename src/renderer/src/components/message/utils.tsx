@@ -9,7 +9,7 @@ import { ThinkingAnswerBlock } from './ThinkingAnswerBlock';
 
 import { CodeBlock } from '@/components/common/CodeBlock';
 import { CodeInline } from '@/components/common/CodeInline';
-import { GroupMessage, isResponseMessage, isToolMessage, Message, ToolMessage } from '@/types/message';
+import { AssistantGroupMessage, GroupMessage, isResponseMessage, isToolMessage, Message, ResponseMessage, ToolMessage } from '@/types/message';
 
 const ALL_FENCES = [
   ['````', '````'],
@@ -431,6 +431,68 @@ export const parseToolContent = (rawContent: string): ToolContentResult => {
     // eslint-disable-next-line no-console
     console.debug('Raw tool content is not valid JSON:', outerError);
   }
+
+  return result;
+};
+
+/**
+ * Groups ResponseMessage with their following ToolMessages into AssistantGroupMessage.
+ * This is used for the compact view mode where assistant turns are displayed as a single unit.
+ *
+ * Rules:
+ * - A ResponseMessage followed by ToolMessages forms a single group
+ * - A new ResponseMessage starts a new group
+ * - Orphan ToolMessages (without preceding ResponseMessage) remain standalone
+ * - Other message types remain standalone
+ */
+export const groupAssistantMessages = (messages: Message[]): Message[] => {
+  const result: Message[] = [];
+  let currentResponse: ResponseMessage | null = null;
+  let currentToolMessages: ToolMessage[] = [];
+
+  const flushCurrentGroup = () => {
+    if (currentResponse) {
+      if (currentToolMessages.length > 0) {
+        // Create an AssistantGroupMessage
+        const assistantGroup: AssistantGroupMessage = {
+          id: currentResponse.id,
+          type: 'assistant-group',
+          content: '',
+          responseMessage: currentResponse,
+          toolMessages: currentToolMessages,
+        };
+        result.push(assistantGroup);
+      } else {
+        // No tool messages, just push the response as-is
+        result.push(currentResponse);
+      }
+      currentResponse = null;
+      currentToolMessages = [];
+    }
+  };
+
+  for (const message of messages) {
+    if (isResponseMessage(message)) {
+      // Flush any previous group before starting a new one
+      flushCurrentGroup();
+      currentResponse = message;
+    } else if (isToolMessage(message)) {
+      if (currentResponse) {
+        // Add to current group
+        currentToolMessages.push(message);
+      } else {
+        // Orphan tool message - push as-is
+        result.push(message);
+      }
+    } else {
+      // Other message types - flush current group and push as-is
+      flushCurrentGroup();
+      result.push(message);
+    }
+  }
+
+  // Flush any remaining group
+  flushCurrentGroup();
 
   return result;
 };

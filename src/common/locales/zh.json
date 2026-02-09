@@ -699,6 +699,9 @@
       "display": "显示选项",
       "markdownRendering": "启用 Markdown 渲染",
       "diffViewMode": "差异视图模式",
+      "viewMode": "消息视图模式",
+      "viewModeFull": "完整",
+      "viewModeCompact": "紧凑",
       "virtualizedRendering": "使用虚拟化渲染（实验性）",
       "virtualizedRenderingTooltip": "实验性功能，当您在对话历史中有大量消息时可以通过仅渲染可见消息来提高性能。"
     },
@@ -859,7 +862,19 @@
     "refresh": "刷新",
     "useGit": "使用 Git",
     "useGitEnabled": "Git 已启用 - 点击使用文件系统",
-    "useGitDisabled": "文件系统已启用 - 点击使用 Git"
+    "useGitDisabled": "文件系统已启用 - 点击使用 Git",
+    "empty": {
+      "title": "没有上下文文件",
+      "aiderMode": {
+        "description": "在此处添加您想要读取或修改的文件。Aider 只能访问上下文中的文件。",
+        "hint": "提示：添加相关文件（导入、类型）以获得更好的理解。"
+      },
+      "agentMode": {
+        "description": "代理可以使用工具访问项目中的任何文件。在此处添加文件是可选的，但可以通过提供即时上下文来加快任务速度。",
+        "hint": "提示：使用 Aider 工具时或希望将文件内容包含在提示中时，在此处添加文件。",
+        "includeContextFiles": "当在代理设置中启用'包含上下文文件'时，文件内容会直接嵌入到提示中以便立即访问。"
+      }
+    }
   },
   "modelSelector": {
     "mainModel": "主模型",
@@ -1512,7 +1527,7 @@
   },
   "bmad": {
     "welcome": {
-      "title": "欢迎使用 BMAD 模式",
+      "title": "欢迎使用 BMAD 模式 (预览)",
       "subtitle": "用于规划、规范和实现功能的引导式工作流"
     },
     "workflows": {
@@ -1605,7 +1620,14 @@
       "percentage": "完成 {{percentage}}%"
     },
     "install": {
-      "terminalPrompt": "点击下面的按钮打开一个带有 BMAD 安装命令的终端。安装将自动开始。",
+      "button": "安装 BMAD",
+      "installing": "安装中...",
+      "success": "BMAD 安装成功",
+      "error": "BMAD 安装失败",
+      "autoInstallNote": "点击上方按钮为当前项目自动安装 BMAD。",
+      "manualInstallTitle": "手动安装",
+      "manualInstallNote": "对于高级自定义，您也可以在终端中运行以下命令手动安装 BMAD。",
+      "terminalPrompt": "安装 BMAD 以访问用于规划、规范和实现功能的引导式工作流程。",
       "commandLabel": "将要执行的命令：",
       "openTerminal": "打开终端并安装",
       "opening": "正在打开终端...",

@@ -74,7 +74,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       expect(execWithShellPath).toHaveBeenCalledWith('git ls-files --others --exclude-standard', {
         cwd: testPath,
       });
-      expect(stashCommand).toBe('git stash push -u -m "test-stash-id: Test stash message" -- \':(exclude)_bmad\'');
+      expect(stashCommand).toBe('git stash push -u -m "test-stash-id: Test stash message" -- . \':(exclude)_bmad\'');
       expect(stashCommand).not.toContain(':(exclude)node_modules');
     });
 
@@ -96,7 +96,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       const calls = (execWithShellPath as Mock).mock.calls;
       const stashCommand = calls[calls.length - 1][0];
 
-      expect(stashCommand).toBe('git stash push -u -m "test-stash-id: Test stash message" -- \':(exclude)_bmad\'');
+      expect(stashCommand).toBe('git stash push -u -m "test-stash-id: Test stash message" -- . \':(exclude)_bmad\'');
       expect(stashCommand).not.toContain(':(exclude)node_modules');
       expect(stashCommand).not.toContain(':(exclude).next');
       expect(stashCommand).not.toContain(':(exclude)dist');
@@ -144,7 +144,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       const calls = (execWithShellPath as Mock).mock.calls;
       const stashCommand = calls[calls.length - 1][0];
 
-      expect(stashCommand).toBe('git stash push -u -m "test-stash-id: Test stash message" -- \':(exclude)_bmad\'');
+      expect(stashCommand).toBe('git stash push -u -m "test-stash-id: Test stash message" -- . \':(exclude)_bmad\'');
     });
   });
 
@@ -167,7 +167,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       const calls = (execWithShellPath as Mock).mock.calls;
       const stashCommand = calls[calls.length - 1][0];
 
-      expect(stashCommand).toBe("git stash push -u -m \"test-stash-id: Test stash message\" -- ':(exclude)_bmad' ':(exclude)_custom'");
+      expect(stashCommand).toBe("git stash push -u -m \"test-stash-id: Test stash message\" -- . ':(exclude)_bmad' ':(exclude)_custom'");
       expect(stashCommand).toContain(':(exclude)_bmad');
       expect(stashCommand).toContain(':(exclude)_custom');
       expect(stashCommand).not.toContain(':(exclude)node_modules');
@@ -192,7 +192,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       const calls = (execWithShellPath as Mock).mock.calls;
       const stashCommand = calls[calls.length - 1][0];
 
-      expect(stashCommand).toBe('git stash push -u -m "test-stash-id: Test stash message" -- \':(exclude)_bmad\'');
+      expect(stashCommand).toBe('git stash push -u -m "test-stash-id: Test stash message" -- . \':(exclude)_bmad\'');
       expect(stashCommand).not.toContain(':(exclude)node_modules');
       expect(stashCommand).not.toContain(':(exclude)_custom');
       expect(stashCommand).not.toContain(':(exclude).next');

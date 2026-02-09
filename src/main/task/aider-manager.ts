@@ -122,8 +122,9 @@ export class AiderManager {
       args.push('--thinking-tokens', thinkingTokens);
     }
 
-    if (settings.aider.addRuleFiles && (await fileExists(path.join(this.task.getProjectDir(), AIDER_DESK_PROJECT_RULES_DIR)))) {
-      args.push('--read', AIDER_DESK_PROJECT_RULES_DIR);
+    const rulesDir = path.join(this.task.getProjectDir(), AIDER_DESK_PROJECT_RULES_DIR);
+    if (settings.aider.addRuleFiles && (await fileExists(rulesDir))) {
+      args.push('--read', rulesDir);
     }
 
     if (!optionsArgsSet.has('--auto-commits') && !optionsArgsSet.has('--no-auto-commits')) {

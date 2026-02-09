@@ -1,15 +1,16 @@
 import { v4 as uuidv4 } from 'uuid';
 import {
-  ProviderProfile,
+  ContextCompactionType,
+  DiffViewMode,
+  MemoryEmbeddingProvider,
+  MessageViewMode,
   ProjectData,
   ProjectSettings,
-  SettingsData,
   ProjectStartMode,
+  ProviderProfile,
+  SettingsData,
   SuggestionMode,
   WindowState,
-  MemoryEmbeddingProvider,
-  DiffViewMode,
-  ContextCompactionType,
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
 
@@ -44,6 +45,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   renderMarkdown: true,
   virtualizedRendering: false,
   aiderDeskAutoUpdate: true,
+  messageViewMode: MessageViewMode.Full,
   diffViewMode: DiffViewMode.SideBySide,
   aider: {
     options: '',
