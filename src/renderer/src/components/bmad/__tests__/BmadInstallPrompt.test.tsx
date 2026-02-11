@@ -48,7 +48,7 @@ describe('BmadInstallPrompt', () => {
   const renderComponent = () => {
     return render(
       <TooltipProvider>
-        <BmadInstallPrompt refreshState={mockRefresh} />
+        <BmadInstallPrompt refreshState={mockRefresh} projectDir="/test/project" />
       </TooltipProvider>,
     );
   };

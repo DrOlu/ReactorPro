@@ -902,6 +902,7 @@
   },
   "mcp": {
     "noDescription": "无描述",
+    "initializingServers": "正在初始化 MCP 服务器...",
     "serverToolStatus": "已启用{{enabledCount}}个工具，共{{count}}个",
     "loading": "加载中...",
     "toolsCount_one": "{{count}}个工具",

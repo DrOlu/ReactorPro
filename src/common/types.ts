@@ -95,6 +95,8 @@ export interface LocalizedString {
 
 export type Mode = 'code' | 'ask' | 'architect' | 'context' | 'agent' | 'bmad';
 
+export const AGENT_MODES: Mode[] = ['agent', 'bmad'];
+
 export const AIDER_MODES: Mode[] = ['code', 'ask', 'architect', 'context'];
 
 export interface AiderRunOptions {

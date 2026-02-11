@@ -106,6 +106,7 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     // MCP operations
     loadMcpServerTools: vi.fn((): Promise<McpTool[] | null> => Promise.resolve([])),
     reloadMcpServers: vi.fn((): Promise<void> => Promise.resolve()),
+    reloadMcpServer: vi.fn((): Promise<McpTool[]> => Promise.resolve([])),
 
     // Task operations
     createNewTask: vi.fn((): Promise<TaskData> => Promise.resolve({ id: 'mock-task-id' } as TaskData)),
@@ -241,15 +242,15 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     getBmadStatus: vi.fn(
       (): Promise<BmadStatus> =>
         Promise.resolve({
+          projectDir: '/path/to/project',
           installed: false,
           availableWorkflows: [],
           completedWorkflows: [],
           inProgressWorkflows: [],
-          suggestedWorkflows: [],
           detectedArtifacts: { completedWorkflows: [], inProgressWorkflows: [], detectedArtifacts: {} },
         }),
     ),
-    getBmadWorkflows: vi.fn(() => Promise.resolve([])),
+    addBmadStatusChangedListener: vi.fn(() => vi.fn()),
     executeWorkflow: vi.fn(() => Promise.resolve({ success: true, artifactPath: '/path/to/artifact.md' })),
     resetBmadWorkflow: vi.fn((): Promise<{ success: boolean; message?: string }> => Promise.resolve({ success: true })),
   };

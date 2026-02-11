@@ -6,6 +6,7 @@ import {
   ProviderProfile,
   LogData,
   ModelsData,
+  NotificationData,
   QuestionData,
   QuestionAnsweredData,
   ResponseChunkData,
@@ -29,11 +30,10 @@ import {
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
-  NotificationData,
 } from '@common/types';
 
+import type { BmadStatus } from '@common/bmad-types';
 import type { BrowserWindow } from 'electron';
-import type { InstallResult } from '@common/bmad-types';
 
 import logger from '@/logger';
 
@@ -393,13 +393,8 @@ export class EventManager {
   }
 
   // BMAD events
-  sendBmadInstallationCompleted(data: InstallResult): void {
-    this.sendToMainWindow('bmad-installation-completed', data);
-    this.broadcastToEventConnectors('bmad-installation-completed', data);
-  }
-
-  sendBmadArtifactsUpdated(data: { projectDir: string; artifactPath: string; workflowId: string }): void {
-    this.sendToMainWindow('bmad-artifacts-updated', data);
-    this.broadcastToEventConnectors('bmad-artifacts-updated', data);
+  sendBmadStatusChanged(status: BmadStatus): void {
+    this.sendToMainWindow('bmad-status-changed', status);
+    this.broadcastToEventConnectors('bmad-status-changed', status);
   }
 }

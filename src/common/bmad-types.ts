@@ -66,6 +66,7 @@ export interface ArtifactDetectionResult {
     [workflowId: string]: {
       path: string;
       stepsCompleted?: string[];
+      status?: string;
       error?: string;
     };
   };
@@ -77,6 +78,7 @@ export interface ArtifactDetectionResult {
  * BMAD Mode status
  */
 export interface BmadStatus {
+  projectDir: string;
   installed: boolean;
   version?: string;
   availableWorkflows: WorkflowMetadata[];

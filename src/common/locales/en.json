@@ -946,6 +946,7 @@
     "outputCostPerMillion": "Output Cost / 1M Tokens"
   },
   "mcp": {
+    "initializingServers": "Initializing MCP servers...",
     "serverToolStatus": "{{enabledCount}} of {{count}} tools enabled",
     "toolsCount_one": "{{count}} tool",
     "toolsCount_other": "{{count}} tools",

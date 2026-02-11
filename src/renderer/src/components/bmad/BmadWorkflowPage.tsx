@@ -1,10 +1,9 @@
-import { MouseEvent, useEffect, useRef, useState } from 'react';
+import { MouseEvent, useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FiAlertTriangle, FiLayers, FiZap } from 'react-icons/fi';
 import { clsx } from 'clsx';
 
-import { useBmadState } from './useBmadState';
-
+import { useBmadState } from '@/contexts/BmadStateContext';
 import { useApi } from '@/contexts/ApiContext';
 import { BmadInstallPrompt } from '@/components/bmad/BmadInstallPrompt';
 import { BmadWelcomeSection } from '@/components/bmad/BmadWelcomeSection';
@@ -13,6 +12,7 @@ import { PathInfoCard } from '@/components/bmad/PathInfoCard';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Button } from '@/components/common/Button';
 import { showErrorNotification, showSuccessNotification } from '@/utils/notifications';
+import { LoadingOverlay } from '@/components/common/LoadingOverlay';
 
 type PathType = 'full' | 'quick';
 
@@ -34,7 +34,7 @@ export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
   useEffect(() => {
     if (bmadStatus && !bmadStatus.installed) {
       intervalRef.current = setInterval(() => {
-        void refresh();
+        void refresh(false);
       }, 3000);
     }
 
@@ -51,6 +51,11 @@ export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
     };
   }, [bmadStatus, refresh]);
 
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleTabChange = (tab: PathType) => {
     setActiveTab(tab);
   };
@@ -65,12 +70,16 @@ export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
   };
 
   const handleResetConfirm = async () => {
+    if (!projectDir) {
+      return;
+    }
+
     setResetting(true);
     try {
-      const result = await api.resetBmadWorkflow();
+      const result = await api.resetBmadWorkflow(projectDir);
       if (result.success) {
         showSuccessNotification(t('bmad.reset.success'));
-        await refresh();
+        void refresh();
       } else {
         showErrorNotification(result.message || t('bmad.reset.error'));
       }
@@ -84,7 +93,9 @@ export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
     }
   };
 
-  const hasWorkflowProgress = bmadStatus?.completedWorkflows && bmadStatus.completedWorkflows.length > 0;
+  const hasWorkflowProgress =
+    (bmadStatus?.completedWorkflows && bmadStatus.completedWorkflows.length > 0) ||
+    (bmadStatus?.inProgressWorkflows && bmadStatus.inProgressWorkflows.length > 0);
 
   const renderWelcomeSection = () => <BmadWelcomeSection />;
 
@@ -138,7 +149,7 @@ export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
     if (isLoading) {
       return (
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-text-secondary text-center">{t('common.loading')}</div>
+          <LoadingOverlay message={t('common.loading')} />
         </div>
       );
     }
@@ -168,7 +179,7 @@ export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
           </div>
         );
       }
-      return <BmadInstallPrompt refreshState={refresh} />;
+      return <BmadInstallPrompt refreshState={refresh} projectDir={projectDir} />;
     }
 
     if (!projectDir || !taskId) {

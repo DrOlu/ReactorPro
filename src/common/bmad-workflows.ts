@@ -140,7 +140,7 @@ export const BMAD_WORKFLOWS: WorkflowMetadata[] = [
     description: 'Rapid spec-to-implementation for small features',
     workflowPath: '_bmad/bmm/workflows/bmad-quick-flow/quick-dev/workflow.md',
     requiredArtifacts: ['_bmad-output/implementation-artifacts/tech-spec-*.md'],
-    outputArtifact: 'NA',
+    outputArtifact: '_bmad-output/implementation-artifacts/tech-spec-*.md',
     totalSteps: 6,
     followUps: [],
   },

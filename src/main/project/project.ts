@@ -1,11 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { CustomCommand, DefaultTaskState, ProjectSettings, SettingsData, TaskData, CreateTaskParams } from '@common/types';
+import { CustomCommand, DefaultTaskState, ProjectSettings, SettingsData, TaskData, CreateTaskParams, WorkflowExecutionResult } from '@common/types';
 import { fileExists } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { BmadStatus, InstallResult, WorkflowExecutionResult } from '@common/bmad-types';
+import type { BmadStatus, InstallResult } from '@common/bmad-types';
 
 import { AgentProfileManager, McpManager } from '@/agent';
 import { Connector } from '@/connector';
@@ -188,7 +188,6 @@ export class Project {
       logger.info(`Loading ${taskDirs.length} tasks from directory`, {
         baseDir: this.baseDir,
         tasksDir,
-        taskIds: taskDirs,
       });
 
       for (const taskId of taskDirs) {
@@ -456,8 +455,9 @@ export class Project {
   async installBmad(): Promise<InstallResult> {
     const result = await this.bmadManager.install();
 
-    // Emit Socket.IO event for browser clients
-    this.eventManager.sendBmadInstallationCompleted(result);
+    // Emit events for browser clients
+    const status = await this.bmadManager.getBmadStatus();
+    this.eventManager.sendBmadStatusChanged(status);
 
     return result;
   }
@@ -467,7 +467,13 @@ export class Project {
   }
 
   async resetBmadWorkflow(): Promise<{ success: boolean; message?: string }> {
-    return await this.bmadManager.resetWorkflow();
+    const result = await this.bmadManager.resetWorkflow();
+
+    // Emit status change event for browser clients
+    const status = await this.bmadManager.getBmadStatus();
+    this.eventManager.sendBmadStatusChanged(status);
+
+    return result;
   }
 
   async close() {

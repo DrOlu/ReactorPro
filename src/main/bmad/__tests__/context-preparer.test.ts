@@ -8,6 +8,7 @@ describe('ContextPreparer', () => {
   let contextPreparer: ContextPreparer;
 
   const createMockStatus = (): BmadStatus => ({
+    projectDir: '/test/project',
     installed: true,
     version: '1.0.0',
     availableWorkflows: [],

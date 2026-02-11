@@ -12,7 +12,7 @@ export const registerFileHelpers = (): void => {
 
     const absolutePath = path.resolve(projectDir, filePath);
     try {
-      return fs.readFileSync(absolutePath, 'utf8');
+      return JSON.stringify(fs.readFileSync(absolutePath, 'utf8'));
     } catch (error) {
       throw new Error(`Failed to read file ${absolutePath}: ${error instanceof Error ? error.message : String(error)}`);
     }

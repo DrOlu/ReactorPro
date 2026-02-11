@@ -139,8 +139,9 @@ export class ArtifactDetector {
         if (matches.length > 0) {
           const artifactPath = matches[0];
 
-          // Try to parse YAML frontmatter for stepsCompleted
+          // Try to parse YAML frontmatter for stepsCompleted and status
           let stepsCompleted: string[] | undefined;
+          let status: string | undefined;
           let frontmatterError: string | undefined;
 
           try {
@@ -149,6 +150,10 @@ export class ArtifactDetector {
 
             if (parsed.stepsCompleted) {
               stepsCompleted = parsed.stepsCompleted;
+            }
+
+            if (parsed.status) {
+              status = parsed.status;
             }
           } catch (parseError) {
             // File read or YAML parse error - track corruption
@@ -160,6 +165,7 @@ export class ArtifactDetector {
           detectedArtifacts[id] = {
             path: artifactPath,
             ...(stepsCompleted && { stepsCompleted }),
+            ...(status && { status }),
             ...(frontmatterError && { error: frontmatterError }),
           };
 
@@ -171,11 +177,18 @@ export class ArtifactDetector {
           // Workflow is complete if:
           // 1. No stepsCompleted in frontmatter (legacy/simple artifact) - assume complete
           // 2. stepsCompleted exists and max step >= totalSteps from registry
-          const isFullyCompleted = !stepsCompleted || maxCompletedStep >= workflowTotalSteps;
+          // 3. For quick-spec workflow: status is 'ready-for-dev'
+          const isReadyForDevStatus = id === 'quick-spec' && status === 'ready-for-dev';
+          const isFullyCompleted = !stepsCompleted || maxCompletedStep >= workflowTotalSteps || isReadyForDevStatus;
 
           if (isFullyCompleted) {
             completedWorkflows.push(id);
           } else {
+            if (id === 'quick-dev' && detectedArtifacts['quick-spec']?.status === 'ready-for-dev') {
+              // quick-dev is not in progress if quick-spec is ready-for-dev
+              continue;
+            }
+
             // Workflow is in progress
             inProgressWorkflows.push(id);
 

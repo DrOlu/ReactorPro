@@ -93,6 +93,7 @@ const api: ApplicationAPI = {
 
   loadMcpServerTools: (serverName, config?: McpServerConfig) => ipcRenderer.invoke('load-mcp-server-tools', serverName, config),
   reloadMcpServers: (mcpServers, force = false) => ipcRenderer.invoke('reload-mcp-servers', mcpServers, force),
+  reloadMcpServer: (serverName: string, config: McpServerConfig) => ipcRenderer.invoke('reload-mcp-server', serverName, config),
 
   createNewTask: (baseDir, params?: CreateTaskParams) => ipcRenderer.invoke('create-new-task', baseDir, params),
   updateTask: (baseDir, id, updates) => ipcRenderer.invoke('update-task', baseDir, id, updates),
@@ -592,12 +593,11 @@ const api: ApplicationAPI = {
   getMemoryEmbeddingProgress: () => ipcRenderer.invoke('get-memory-embedding-progress'),
 
   // BMAD operations
-  installBmad: () => ipcRenderer.invoke('bmad-install'),
-  getBmadStatus: () => ipcRenderer.invoke('bmad-get-status'),
-  getBmadWorkflows: () => ipcRenderer.invoke('bmad-get-workflows'),
+  installBmad: (projectDir: string) => ipcRenderer.invoke('bmad-install', projectDir),
+  getBmadStatus: (projectDir: string) => ipcRenderer.invoke('bmad-get-status', projectDir),
   executeWorkflow: (projectDir: string, taskId: string, workflowId: string, asSubtask?: boolean) =>
     ipcRenderer.invoke('bmad-execute-workflow', projectDir, taskId, workflowId, asSubtask),
-  resetBmadWorkflow: () => ipcRenderer.invoke('bmad-reset-workflow'),
+  resetBmadWorkflow: (projectDir: string) => ipcRenderer.invoke('bmad-reset-workflow', projectDir),
 
   writeToClipboard: (text: string) => ipcRenderer.invoke('clipboard-write-text', text),
   openPath: (path: string) => ipcRenderer.invoke('open-path', path),
@@ -611,6 +611,16 @@ const api: ApplicationAPI = {
   addNotificationListener: () => {
     // notifications in Electron app are handled by the main process
     return () => {};
+  },
+
+  addBmadStatusChangedListener: (baseDir: string, callback) => {
+    const listener = (_, data) => {
+      if (data.projectDir === baseDir) {
+        callback(data);
+      }
+    };
+    ipcRenderer.on('bmad-status-changed', listener);
+    return () => ipcRenderer.off('bmad-status-changed', listener);
   },
 };
 

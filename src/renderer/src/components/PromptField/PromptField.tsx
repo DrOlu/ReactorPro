@@ -9,7 +9,7 @@ import {
 } from '@codemirror/autocomplete';
 import { EditorView, keymap } from '@codemirror/view';
 import { vim } from '@replit/codemirror-vim';
-import { Mode, PromptBehavior, QuestionData, SuggestionMode, TaskData } from '@common/types';
+import { AGENT_MODES, Mode, PromptBehavior, QuestionData, SuggestionMode, TaskData } from '@common/types';
 import { githubDarkInit } from '@uiw/codemirror-theme-github';
 import CodeMirror, { Annotation, Prec, type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
@@ -410,7 +410,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
             break;
           case '/model':
             prepareForNextPrompt();
-            if (mode === 'agent') {
+            if (AGENT_MODES.includes(mode)) {
               openAgentModelSelector?.(args);
             } else {
               openModelSelector?.(args);
@@ -469,7 +469,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
             break;
           }
           case '/init': {
-            if (mode !== 'agent') {
+            if (!AGENT_MODES.includes(mode)) {
               showErrorNotification(t('promptField.agentModeOnly'));
               return;
             }
@@ -673,7 +673,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
           return [customCommand.description, false];
         }
 
-        if (item === '/init' && mode !== 'agent') {
+        if (item === '/init' && !AGENT_MODES.includes(mode)) {
           return [t('commands.agentModeOnly'), true];
         }
 

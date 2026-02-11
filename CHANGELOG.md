@@ -1,5 +1,14 @@
 # ReactorPro Changelog
 
+## [UNRELEASED]
+
+- optimized MCP server initialization
+- optimized Aider connector start-up management
+- better detection of state for Quick Flow BMAD workflows
+- added support for Mermaid diagrams in messages
+- updated BMAD library installation to use the command approach
+- correctly reading the BMAD workflow files when preparing context
+
 ## [0.52.0]
 
 - decreased default max tokens of semantic search for better context management

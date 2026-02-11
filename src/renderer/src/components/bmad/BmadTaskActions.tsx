@@ -1,7 +1,7 @@
 import { RiAlertLine } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
 
-import { useBmadState } from '@/components/bmad/useBmadState';
+import { useBmadState } from '@/contexts/BmadStateContext';
 import { SuggestedWorkflowCard } from '@/components/bmad/SuggestedWorkflowCard';
 
 type Props = {

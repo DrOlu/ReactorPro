@@ -6,6 +6,8 @@ import { simpleGit } from 'simple-git';
 import YAML from 'yaml';
 import {
   AiderRunOptions,
+  AIDER_MODES,
+  AGENT_MODES,
   AgentProfile,
   ContextAssistantMessage,
   ContextFile,
@@ -120,6 +122,7 @@ export class Task {
   private responseChunkMap: Map<string, { buffer: string; interval: NodeJS.Timeout }> = new Map();
   private isDeterminingTaskState = false;
   private resolutionAbortControllers: Record<string, AbortController> = {};
+  private tokensInfo: TokensInfoData;
 
   private readonly taskDataPath: string;
   private readonly contextManager: ContextManager;
@@ -162,6 +165,15 @@ export class Task {
       this.memoryManager,
       this.promptsManager,
     );
+    this.tokensInfo = {
+      baseDir: this.getProjectDir(),
+      taskId: this.taskId,
+      chatHistory: { cost: 0, tokens: 0 },
+      files: {},
+      repoMap: { cost: 0, tokens: 0 },
+      systemMessages: { cost: 0, tokens: 0 },
+      agent: { cost: 0, tokens: 0 },
+    };
     this.aiderManager = new AiderManager(this, this.store, this.modelManager, this.eventManager, () => this.connectors);
 
     void this.loadTaskData();
@@ -209,7 +221,7 @@ export class Task {
       const content = await fs.readFile(this.taskDataPath, 'utf8');
       const data = JSON.parse(content) as TaskData;
 
-      logger.info('Loaded task data', {
+      logger.debug('Loaded task data', {
         baseDir: this.project.baseDir,
         taskId: this.taskId,
         data,
@@ -441,7 +453,10 @@ export class Task {
     }
 
     await this.loadContext();
-    await Promise.all([this.aiderManager.start(), this.updateContextInfo()]);
+    if (this.shouldStartAider()) {
+      await this.aiderManager.start();
+    }
+    await this.updateContextInfo();
     await this.updateAutocompletionData();
 
     this.eventManager.sendTaskInitialized(this.task);
@@ -461,7 +476,7 @@ export class Task {
     const mode = this.getCurrentMode();
     return {
       messages: this.contextManager.getContextMessagesData(),
-      files: await this.getContextFiles(mode === 'agent'),
+      files: await this.getContextFiles(AGENT_MODES.includes(mode)),
       todoItems: await this.getTodos(),
       question: this.currentQuestion,
       workingMode: this.task.workingMode || 'local',
@@ -668,7 +683,7 @@ export class Task {
     this.telemetryManager.captureRunPrompt(mode);
     // Generate promptContext for this run
 
-    if (mode === 'agent' || mode === 'bmad') {
+    if (AGENT_MODES.includes(mode)) {
       const profile = await this.getTaskAgentProfile();
       logger.debug('AgentProfile:', profile);
 
@@ -1335,7 +1350,7 @@ export class Task {
 
   private async sendContextFilesUpdated() {
     const mode = this.getCurrentMode();
-    const allFiles = await this.getContextFiles(mode === 'agent');
+    const allFiles = await this.getContextFiles(AGENT_MODES.includes(mode));
 
     this.eventManager.sendContextFilesUpdated(this.project.baseDir, this.taskId, allFiles);
   }
@@ -2190,7 +2205,7 @@ export class Task {
 
     const mode = this.getCurrentMode();
 
-    if (mode === 'agent') {
+    if (AGENT_MODES.includes(mode)) {
       const profile = await this.getTaskAgentProfile();
       if (!profile) {
         logger.error('No active Agent profile found for resume');
@@ -2222,6 +2237,10 @@ export class Task {
 
   private getCurrentMode() {
     return this.task.currentMode || this.store.getProjectSettings(this.project.baseDir).currentMode || 'agent';
+  }
+
+  private shouldStartAider(): boolean {
+    return AIDER_MODES.includes(this.getCurrentMode());
   }
 
   private async reloadConnectorMessages() {
@@ -2269,7 +2288,7 @@ export class Task {
     };
 
     try {
-      if (mode === 'agent') {
+      if (AGENT_MODES.includes(mode)) {
         // Agent mode logic
         if (!profile) {
           throw new Error('No active Agent profile found');
@@ -2348,9 +2367,9 @@ export class Task {
       });
       this.addLogMessage('error', 'Failed to compact conversation. Original conversation preserved.');
       // Prevent memory leaks by cleaning up pending prompt resources
-      if (mode === 'agent' && waitForAgentCompletion) {
+      if (AGENT_MODES.includes(mode) && waitForAgentCompletion) {
         this.resolveAgentRunPromises();
-      } else if (mode !== 'agent') {
+      } else if (!AGENT_MODES.includes(mode)) {
         this.promptFinished();
       }
     }
@@ -2383,7 +2402,7 @@ export class Task {
     const handoffPrompt = await this.promptsManager.getHandoffPrompt(this, focus.trim().length ? focus.trim() : undefined);
     let generatedPrompt: string | undefined;
 
-    if (mode === 'agent') {
+    if (AGENT_MODES.includes(mode)) {
       // Agent mode logic
       const profile = await this.getTaskAgentProfile();
       if (!profile) {
@@ -2461,7 +2480,12 @@ export class Task {
   }
 
   updateTokensInfo(data: Partial<TokensInfoData>) {
-    this.aiderManager.updateTokensInfo(data);
+    this.tokensInfo = {
+      ...this.tokensInfo,
+      ...data,
+    };
+
+    this.eventManager.sendUpdateTokensInfo(this.tokensInfo);
   }
 
   async updateContextInfo(checkContextFilesIncluded = false, checkRepoMapIncluded = false) {
@@ -2561,9 +2585,12 @@ export class Task {
     const aiderCachingEnabledChanged = oldSettings.aider.cachingEnabled !== newSettings?.aider.cachingEnabled;
     const aiderConfirmBeforeEditChanged = oldSettings.aider.confirmBeforeEdit !== newSettings?.aider.confirmBeforeEdit;
 
-    if (aiderOptionsChanged || aiderAutoCommitsChanged || aiderWatchFilesChanged || aiderCachingEnabledChanged || aiderConfirmBeforeEditChanged) {
+    if (
+      (aiderOptionsChanged || aiderAutoCommitsChanged || aiderWatchFilesChanged || aiderCachingEnabledChanged || aiderConfirmBeforeEditChanged) &&
+      this.shouldStartAider()
+    ) {
       logger.debug('Aider options changed, restarting Aider.');
-      void this.aiderManager.start();
+      void this.aiderManager.start(true);
     } else if (aiderEnvVarsChanged) {
       logger.debug('Aider environment variables changed, updating connectors.');
       const updatedEnvironmentVariables = getEnvironmentVariablesForAider(newSettings, this.project.baseDir);
@@ -2837,7 +2864,7 @@ ${error.stderr}`,
     this.addLogMessage('loading', 'Executing custom command...');
 
     try {
-      if (mode === 'agent') {
+      if (AGENT_MODES.includes(mode)) {
         // Agent mode logic
         const profile = await this.getTaskAgentProfile();
         if (!profile) {
@@ -2884,6 +2911,18 @@ ${error.stderr}`,
       if (!(await this.applyWorkingMode(updates.workingMode))) {
         return this.task;
       }
+    }
+
+    // Check if currentMode changed and start aider if new mode requires it
+    const oldMode = this.getCurrentMode();
+    if (updates.currentMode !== undefined && updates.currentMode !== oldMode && AIDER_MODES.includes(updates.currentMode)) {
+      logger.debug('Task currentMode changed to aider-requiring mode, starting Aider.', {
+        oldMode,
+        newMode: updates.currentMode,
+        baseDir: this.project.baseDir,
+        taskId: this.taskId,
+      });
+      void this.aiderManager.start();
     }
 
     this.task.updatedAt = new Date().toISOString();
@@ -2940,7 +2979,9 @@ ${error.stderr}`,
     }
 
     this.git = simpleGit(this.getTaskDir());
-    await this.aiderManager.start();
+    if (this.shouldStartAider()) {
+      await this.aiderManager.start(true);
+    }
 
     return true;
   }

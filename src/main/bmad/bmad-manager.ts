@@ -2,11 +2,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as os from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
 import { v4 as uuidv4 } from 'uuid';
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
-import { Installer } from 'bmad-method/tools/cli/installers/lib/core/installer';
-import { setProjectRoot } from 'bmad-method/tools/cli/lib/project-root';
 
 import { ArtifactDetector } from './artifact-detector';
 import { ContextPreparer } from './context-preparer';
@@ -15,7 +15,6 @@ import type { BmadError, BmadStatus, InstallResult, WorkflowExecutionResult } fr
 import type { Task } from '@/task';
 import type { ContextFile } from '@common/types';
 
-import { RESOURCES_DIR } from '@/constants';
 import logger from '@/logger';
 
 export class BmadManager {
@@ -63,6 +62,7 @@ export class BmadManager {
     const detectionResult = await this.artifactDetector.detect(this.projectDir);
 
     return {
+      projectDir: this.projectDir,
       installed,
       version,
       availableWorkflows: BMAD_WORKFLOWS,
@@ -75,7 +75,6 @@ export class BmadManager {
   async install(): Promise<InstallResult> {
     try {
       // Check for legacy BMAD v4 folder (.bmad-method)
-      // This prevents process.exit() in Installer.handleLegacyV4Migration()
       const legacyV4Path = path.join(this.projectDir, '.bmad-method');
       if (fs.existsSync(legacyV4Path)) {
         const bmadError: BmadError = {
@@ -87,7 +86,7 @@ export class BmadManager {
       }
 
       // Get safe username for config
-      let safeUsername = 'User';
+      let safeUsername: string;
       try {
         const username = os.userInfo().username;
         safeUsername = username.charAt(0).toUpperCase() + username.slice(1);
@@ -97,50 +96,49 @@ export class BmadManager {
 
       // Determine if this is a reinstall/update
       const isReinstall = this.checkInstallation();
-      const actionType = isReinstall ? 'update' : 'install';
 
-      // Construct non-interactive config
-      const config = {
-        actionType,
-        directory: this.projectDir,
-        installCore: true,
-        modules: ['bmm'], // Install bmm module by default
-        ides: [],
-        skipIde: true, // Skip IDE configuration
-        coreConfig: {
-          user_name: safeUsername,
-          communication_language: 'English',
-          document_output_language: 'English',
-          output_folder: '_bmad-output',
-        },
-        customContent: { hasCustomContent: false },
-        skipPrompts: true, // Non-interactive mode
-        ...(isReinstall && {
-          backupFirst: true,
-          preserveCustomizations: true,
-        }),
-      };
+      // Build npx command with non-interactive flags
+      const commandParts = [
+        'npx',
+        '-y', // Auto-confirm npx
+        'bmad-method@latest',
+        'install',
+        `--directory ${this.projectDir}`,
+        '--modules bmm',
+        '--tools none',
+        `--user-name "${safeUsername}"`,
+        '--communication-language English',
+        '--document-output-language English',
+        '--output-folder _bmad-output',
+      ];
 
-      logger.info('Installing BMAD using Installer class', {
-        actionType,
+      // Add action flag if updating
+      if (isReinstall) {
+        commandParts.push('--action update');
+      }
+
+      commandParts.push('--yes'); // Accept all defaults and skip prompts
+
+      const command = commandParts.join(' ');
+
+      logger.info('Installing BMAD using npx', {
+        command,
+        isReinstall,
         directory: this.projectDir,
       });
 
-      // Set the bmad-method project root to the unpacked location for packaged apps
-      // This ensures module sources (bmm, core) can be found when running from ASAR
-      const bmadMethodRoot = path.join(RESOURCES_DIR, 'app.asar.unpacked', 'node_modules', 'bmad-method');
-      if (fs.existsSync(bmadMethodRoot)) {
-        setProjectRoot(bmadMethodRoot);
-        logger.info('Set BMAD project root to unpacked location', { bmadMethodRoot });
+      // Execute the npx command
+      const execAsync = promisify(exec);
+      const { stdout, stderr } = await execAsync(command, {
+        cwd: this.projectDir,
+        env: { ...process.env, FORCE_COLOR: '0' },
+      });
+
+      if (stderr) {
+        logger.warn('BMAD installation stderr output', { stderr });
       }
 
-      // Create installer instance and install
-      const installer = new Installer();
-      const result = await installer.install(config);
-
-      if (!result || !result.success) {
-        throw new Error(result?.error || 'Installation failed');
-      }
+      logger.debug('BMAD installation stdout', { stdout });
 
       // Verify installation
       const installed = this.checkInstallation();
@@ -152,7 +150,6 @@ export class BmadManager {
       logger.info('BMAD installation completed', {
         version,
         actionType: isReinstall ? 'update' : 'install',
-        modules: result.modules,
       });
 
       return {

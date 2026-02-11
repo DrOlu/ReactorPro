@@ -1,7 +1,7 @@
 import { MouseEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FiCheck, FiDownload } from 'react-icons/fi';
-import { clsx } from 'clsx';
+import { CgSpinner } from 'react-icons/cg';
 
 import { BmadWelcomeSection } from './BmadWelcomeSection';
 
@@ -12,9 +12,10 @@ import { CopyMessageButton } from '@/components/message/CopyMessageButton';
 
 type Props = {
   refreshState: () => void;
+  projectDir: string;
 };
 
-export const BmadInstallPrompt = ({ refreshState }: Props) => {
+export const BmadInstallPrompt = ({ refreshState, projectDir }: Props) => {
   const { t } = useTranslation();
   const api = useApi();
   const [installing, setInstalling] = useState(false);
@@ -26,7 +27,7 @@ export const BmadInstallPrompt = ({ refreshState }: Props) => {
     setInstalling(true);
 
     try {
-      const result = await api.installBmad();
+      const result = await api.installBmad(projectDir);
 
       if (result.success) {
         showSuccessNotification(result.message || t('bmad.install.success') || 'BMAD installed successfully');
@@ -65,8 +66,17 @@ export const BmadInstallPrompt = ({ refreshState }: Props) => {
         <div className="flex flex-col gap-4">
           <div className="flex justify-center">
             <Button onClick={handleInstall} disabled={installing} size="sm">
-              <FiDownload className={clsx('w-4 h-4 mr-2', installing && 'animate-pulse')} />
-              {installing ? t('bmad.install.installing') : t('bmad.install.button')}
+              {installing ? (
+                <>
+                  <CgSpinner className="w-4 h-4 mr-2 animate-spin" />
+                  {t('bmad.install.installing')}
+                </>
+              ) : (
+                <>
+                  <FiDownload className="w-4 h-4 mr-2" />
+                  {t('bmad.install.button')}
+                </>
+              )}
             </Button>
           </div>
 

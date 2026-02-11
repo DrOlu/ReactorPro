@@ -4,7 +4,7 @@ import { BmadStatus, WorkflowPhase } from '@common/bmad-types';
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
 
 // Mock useBmadState hook
-vi.mock('@/components/bmad/useBmadState');
+vi.mock('@/contexts/BmadStateContext');
 
 // Mock useIncompleteWorkflows hook
 vi.mock('@/hooks/useIncompleteWorkflows', () => ({
@@ -23,10 +23,11 @@ vi.mock('@/contexts/ApiContext', () => ({
 
 import { WorkflowList } from '../WorkflowList';
 
-import * as useBmadStateModule from '@/components/bmad/useBmadState';
+import * as useBmadStateModule from '@/contexts/BmadStateContext';
 
 describe('WorkflowList', () => {
   const mockBmadStatus: BmadStatus = {
+    projectDir: '/test/project',
     installed: true,
     version: '6.0.0',
     availableWorkflows: BMAD_WORKFLOWS,

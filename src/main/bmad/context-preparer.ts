@@ -1,10 +1,9 @@
-import fs from 'fs';
-import path from 'path';
-
 import Handlebars from 'handlebars';
 import { ContextMessage } from '@common/types';
 
 import type { BmadStatus } from '@common/bmad-types';
+
+import logger from '@/logger';
 
 export interface PreparedContext {
   contextMessages: ContextMessage[];
@@ -41,33 +40,26 @@ export class ContextPreparer {
   }
 
   private async injectContextMessages(workflowId: string, context: PreparedContext) {
-    // Try to load .hbs.json template first, fall back to .json
+    // Try to load .json.hbs template first, fall back to .json
     const templateLoaded = await this.tryLoadTemplate(workflowId, context);
     if (templateLoaded) {
-      return;
-    }
-
-    // Fall back to static JSON file
-    try {
-      const module = await import(`./context/${workflowId}.json`);
-      const messages = (module.default ?? module) as ContextMessage[];
-      context.contextMessages = messages.map((msg) => ({ ...msg }));
-
-      // Special case: research workflow doesn't auto-execute
-      if (workflowId === 'research') {
-        context.execute = false;
-      }
-    } catch {
-      // No context file for this workflow - leave defaults
+      logger.debug('Context template loaded.', { workflowId });
+    } else {
+      logger.warn('Context template not found.', { workflowId });
     }
   }
 
   private async tryLoadTemplate(workflowId: string, context: PreparedContext): Promise<boolean> {
     try {
-      const templatePath = path.join(__dirname, 'context', `${workflowId}.hbs.json`);
-      const templateSource = fs.readFileSync(templatePath, 'utf8');
+      const module = await import(`./context/${workflowId}.json.hbs?raw`);
+      const templateSource = module.default ?? module;
 
-      const template = Handlebars.compile(templateSource, { noEscape: true });
+      logger.debug('Context template found', { workflowId });
+
+      const template = Handlebars.compile(templateSource, {
+        noEscape: true,
+      });
+
       const rendered = template({ projectDir: this.projectDir });
       const messages = JSON.parse(rendered) as ContextMessage[];
 
@@ -79,7 +71,8 @@ export class ContextPreparer {
       }
 
       return true;
-    } catch {
+    } catch (error) {
+      logger.error('Failed to load context template', { error: error instanceof Error ? error.message : String(error) });
       return false;
     }
   }

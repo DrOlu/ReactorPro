@@ -264,6 +264,7 @@ export class ConnectorManager {
   };
 
   private processLogMessage = (socket: Socket, message: LogMessage) => {
+    logger.debug('Received log message from connector', { message });
     const connector = this.findConnectorBySocket(socket);
     if (!connector) {
       return;

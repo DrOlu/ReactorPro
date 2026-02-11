@@ -4,7 +4,7 @@ import { unlinkSync } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
-import { EditFormat, ModelsData, TokensInfoData } from '@common/types';
+import { EditFormat, ModelsData } from '@common/types';
 import { fileExists } from '@common/utils';
 import treeKill from 'tree-kill';
 import { DEFAULT_AIDER_MAIN_MODEL } from '@common/agent';
@@ -24,7 +24,6 @@ export class AiderManager {
   private aiderStartPromise: Promise<void> | null = null;
   private aiderStartResolve: (() => void) | null = null;
   private aiderModelsData: ModelsData | null = null;
-  private aiderTokensInfo: TokensInfoData;
   private currentCommand: string | null = null;
   private commandOutputs: Map<string, string> = new Map();
   private repoMap: string = '';
@@ -35,20 +34,13 @@ export class AiderManager {
     private readonly modelManager: ModelManager,
     private readonly eventManager: EventManager,
     private readonly getConnectors: () => Connector[],
-  ) {
-    this.aiderTokensInfo = {
-      baseDir: this.task.getProjectDir(),
-      taskId: this.task.taskId,
-      chatHistory: { cost: 0, tokens: 0 },
-      files: {},
-      repoMap: { cost: 0, tokens: 0 },
-      systemMessages: { cost: 0, tokens: 0 },
-      agent: { cost: 0, tokens: 0 },
-    };
-  }
+  ) {}
 
-  public async start(): Promise<void> {
+  public async start(forceRestart = false): Promise<void> {
     if (this.aiderProcess) {
+      if (!forceRestart) {
+        return;
+      }
       await this.kill();
     }
 
@@ -450,19 +442,6 @@ export class AiderManager {
 
   public getAiderModelsData(): ModelsData | null {
     return this.aiderModelsData;
-  }
-
-  public getAiderTokensInfo(): TokensInfoData {
-    return this.aiderTokensInfo;
-  }
-
-  public updateTokensInfo(data: Partial<TokensInfoData>): void {
-    this.aiderTokensInfo = {
-      ...this.aiderTokensInfo,
-      ...data,
-    };
-
-    this.eventManager.sendUpdateTokensInfo(this.aiderTokensInfo);
   }
 
   public getRepoMap(): string {

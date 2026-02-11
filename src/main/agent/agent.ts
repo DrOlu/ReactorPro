@@ -57,7 +57,7 @@ import { createAiderToolset } from './tools/aider';
 import { createHelpersToolset } from './tools/helpers';
 import { createMemoryToolset } from './tools/memory';
 import { createSkillsToolset } from './tools/skills';
-import { MCP_CLIENT_TIMEOUT, McpManager } from './mcp-manager';
+import { MCP_CLIENT_TIMEOUT, McpConnector, McpManager } from './mcp-manager';
 import { ApprovalManager } from './tools/approval-manager';
 import { ANSWER_RESPONSE_START_TAG, extractPromptContextFromToolResult, findLastUserMessage, THINKING_RESPONSE_STAR_TAG } from './utils';
 import { extractReasoningMiddleware } from './middlewares/extract-reasoning-middleware';
@@ -282,6 +282,7 @@ export class Agent {
     task: Task,
     profile: AgentProfile,
     provider: ProviderProfile,
+    mcpConnectors: McpConnector[] = [],
     messages?: ContextMessage[],
     resultMessages?: ContextMessage[],
     abortSignal?: AbortSignal,
@@ -292,7 +293,6 @@ export class Agent {
       promptContext,
     });
 
-    const mcpConnectors = await this.mcpManager.getConnectors();
     const approvalManager = new ApprovalManager(task, profile);
 
     // Build the toolSet directly from enabled clients and tools
@@ -637,12 +637,31 @@ export class Agent {
     // add user message
     messages.push(...resultMessages);
 
+    let mcpConnectors: McpConnector[] = [];
     try {
-      // reinitialize MCP clients for the current task and wait for them to be ready
-      await this.mcpManager.initMcpConnectors(settings.mcpServers, task.getProjectDir(), task.getTaskDir(), false, profile.enabledServers);
+      // Lazily initialize MCP clients for the current task
+      const initStartTime = Date.now();
+      let loadingMessageShown = false;
+
+      const loadingTimeout = setTimeout(() => {
+        loadingMessageShown = true;
+        task.addLogMessage('loading', 'Initializing MCP servers...', false, promptContext);
+      }, 3000);
+
+      try {
+        mcpConnectors = await this.mcpManager.initMcpConnectors(settings.mcpServers, task.getProjectDir(), task.getTaskDir(), false, profile.enabledServers);
+      } finally {
+        clearTimeout(loadingTimeout);
+        if (loadingMessageShown) {
+          task.addLogMessage('loading', undefined, false, promptContext);
+        }
+      }
+
+      const initTime = Date.now() - initStartTime;
+      logger.debug(`MCP servers initialized in ${initTime}ms`);
     } catch (error) {
-      logger.error('Error reinitializing MCP clients:', error);
-      task.addLogMessage('error', `Error reinitializing MCP clients: ${error}`, false, promptContext);
+      logger.error('Error initializing MCP clients:', error);
+      task.addLogMessage('error', `Error initializing MCP clients: ${error}`, false, promptContext);
     }
 
     if (effectiveAbortSignal?.aborted) {
@@ -654,7 +673,7 @@ export class Agent {
       systemPrompt = await this.promptsManager.getSystemPrompt(this.store.getSettings(), task, profile);
     }
 
-    const toolSet = await this.getAvailableTools(task, profile, provider, contextMessages, resultMessages, effectiveAbortSignal, promptContext);
+    const toolSet = await this.getAvailableTools(task, profile, provider, mcpConnectors, contextMessages, resultMessages, effectiveAbortSignal, promptContext);
 
     logger.info(`Running prompt with ${Object.keys(toolSet).length} tools.`);
     logger.debug('Tools:', {

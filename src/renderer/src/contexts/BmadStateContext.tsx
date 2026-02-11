@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { BmadStatus } from '@common/bmad-types';
 
 import { useApi } from '@/contexts/ApiContext';
@@ -9,16 +9,17 @@ type BmadStateContextType = {
   suggestedWorkflows: string[];
   isLoading: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: (loading?: boolean) => Promise<void>;
 };
 
 const BmadStateContext = createContext<BmadStateContextType | null>(null);
 
 type Props = {
   children: ReactNode;
+  projectDir?: string;
 };
 
-export const BmadStateProvider = ({ children }: Props) => {
+export const BmadStateProvider = ({ children, projectDir }: Props) => {
   const [status, setStatus] = useState<BmadStatus | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,29 +32,61 @@ export const BmadStateProvider = ({ children }: Props) => {
     return generateSuggestions(status.completedWorkflows, status.detectedArtifacts.detectedArtifacts, status.detectedArtifacts.sprintStatus);
   }, [status]);
 
-  const loadBmadStatus = useCallback(async () => {
-    setStatus(null);
-    setError(null);
+  const loadBmadStatus = useCallback(
+    async (loading = true) => {
+      if (!projectDir) {
+        setStatus(null);
+        setIsLoading(false);
+        return;
+      }
 
-    try {
-      const bmadStatus = await api.getBmadStatus();
-      setStatus(bmadStatus);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to fetch BMAD status:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [api]);
+      if (loading) {
+        setStatus(null);
+        setError(null);
+        setIsLoading(true);
+      }
 
-  const refresh = useCallback(async () => {
-    await loadBmadStatus();
-  }, [loadBmadStatus]);
+      try {
+        const bmadStatus = await api.getBmadStatus(projectDir);
+        setStatus(bmadStatus);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch BMAD status:', err);
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [api, projectDir],
+  );
+
+  const refresh = useCallback(
+    async (loading = true) => {
+      await loadBmadStatus(loading);
+    },
+    [loadBmadStatus],
+  );
 
   useEffect(() => {
     void loadBmadStatus();
-  }, [loadBmadStatus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectDir]);
+
+  useEffect(() => {
+    if (!projectDir) {
+      return;
+    }
+
+    const unsubscribe = api.addBmadStatusChangedListener(projectDir, (newStatus) => {
+      setStatus(newStatus);
+      setError(null);
+      setIsLoading(false);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [api, projectDir]);
 
   const value = useMemo(
     () => ({
@@ -67,4 +100,14 @@ export const BmadStateProvider = ({ children }: Props) => {
   );
 
   return <BmadStateContext.Provider value={value}>{children}</BmadStateContext.Provider>;
+};
+
+export const useBmadState = (): BmadStateContextType => {
+  const context = useContext(BmadStateContext);
+
+  if (!context) {
+    throw new Error('useBmadState must be used within a BmadStateProvider');
+  }
+
+  return context;
 };

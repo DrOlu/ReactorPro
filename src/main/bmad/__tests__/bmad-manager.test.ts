@@ -149,6 +149,7 @@ describe('BmadManager', () => {
       const result = await bmadManager.getBmadStatus();
 
       expect(result).toEqual({
+        projectDir: '/fake/project/path',
         installed: true,
         version: '2.5.3',
         availableWorkflows: BMAD_WORKFLOWS,
@@ -169,6 +170,7 @@ describe('BmadManager', () => {
       const result = await bmadManager.getBmadStatus();
 
       expect(result).toEqual({
+        projectDir: '/fake/project/path',
         installed: false,
         version: undefined,
         availableWorkflows: BMAD_WORKFLOWS,

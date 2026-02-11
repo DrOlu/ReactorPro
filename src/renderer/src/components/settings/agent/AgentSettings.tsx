@@ -720,20 +720,23 @@ export const AgentSettings = ({
   };
 
   const handleMcpServerRemove = (serverName: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { [serverName]: removedServer, ...remainingServers } = settings.mcpServers;
     setSettings({ ...settings, mcpServers: remainingServers });
+    if (removedServer) {
+      void api.reloadMcpServer(serverName, removedServer);
+    }
   };
 
   const handleServersConfigSave = (servers: Record<string, McpServerConfig>) => {
     let updatedMcpServers = { ...settings.mcpServers };
+    const serversToReload: Record<string, McpServerConfig> = {};
 
     if (isAddingMcpServer) {
       // Add new servers to the existing ones
-      updatedMcpServers = {
-        ...updatedMcpServers,
-        ...servers,
-      };
+      Object.entries(servers).forEach(([name, config]) => {
+        updatedMcpServers[name] = config;
+        serversToReload[name] = config;
+      });
     } else if (editingMcpServer) {
       // If editing and the server name did not change, preserve the order
       const oldName = editingMcpServer.name;
@@ -753,6 +756,7 @@ export const AgentSettings = ({
             ...servers,
           };
         }
+        serversToReload[oldName] = servers[oldName];
       } else {
         // Remove the old server and add the updated one(s)
         const { [oldName]: _removed, ...rest } = updatedMcpServers;
@@ -760,16 +764,26 @@ export const AgentSettings = ({
           ...rest,
           ...servers,
         };
+        Object.entries(servers).forEach(([name, config]) => {
+          serversToReload[name] = config;
+        });
       }
     } else if (isEditingMcpServersConfig) {
       // Replace all servers with the new set
       updatedMcpServers = { ...servers };
+      Object.entries(servers).forEach(([name, config]) => {
+        serversToReload[name] = config;
+      });
     }
 
     setSettings({ ...settings, mcpServers: updatedMcpServers });
     setIsAddingMcpServer(false);
     setEditingMcpServer(null);
     setIsEditingMcpServersConfig(false);
+
+    Object.entries(serversToReload).forEach(([serverName, config]) => {
+      void api.reloadMcpServer(serverName, config);
+    });
   };
 
   const handleToolApprovalChange = (toolId: string, approval: ToolApprovalState) => {
@@ -916,7 +930,7 @@ export const AgentSettings = ({
       {/* Right Details Pane */}
       <div className="flex-1 flex flex-col h-full min-w-0">
         <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-bg-tertiary">
-          <div className="max-w-3xl mx-auto h-full">
+          <div className="max-w-3xl mx-auto">
             {selectedProfile ? (
               <div className="space-y-4">
                 <Input

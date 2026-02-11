@@ -7,15 +7,15 @@ import { EventsHandler } from '@/events-handler';
 
 // Request schemas
 const GetStatusSchema = z.object({
-  projectDir: z.string().min(1, 'Project directory is required').optional(),
-});
-
-const GetWorkflowsSchema = z.object({
-  projectDir: z.string().min(1, 'Project directory is required').optional(),
+  projectDir: z.string().min(1, 'Project directory is required'),
 });
 
 const InstallSchema = z.object({
-  projectDir: z.string().min(1, 'Project directory is required').optional(),
+  projectDir: z.string().min(1, 'Project directory is required'),
+});
+
+const ResetWorkflowSchema = z.object({
+  projectDir: z.string().min(1, 'Project directory is required'),
 });
 
 const ExecuteWorkflowSchema = z.object({
@@ -45,7 +45,8 @@ export class BmadApi extends BaseApi {
           return;
         }
 
-        const status = await this.eventsHandler.getBmadStatus();
+        const { projectDir } = parsed;
+        const status = await this.eventsHandler.getBmadStatus(projectDir);
         res.status(200).json(status);
       }),
     );
@@ -59,22 +60,9 @@ export class BmadApi extends BaseApi {
           return;
         }
 
-        const result = await this.eventsHandler.installBmad();
+        const { projectDir } = parsed;
+        const result = await this.eventsHandler.installBmad(projectDir);
         res.status(200).json(result);
-      }),
-    );
-
-    // Get BMAD workflows
-    router.get(
-      '/bmad/workflows',
-      this.handleRequest(async (req, res) => {
-        const parsed = this.validateRequest(GetWorkflowsSchema, req.query, res);
-        if (!parsed) {
-          return;
-        }
-
-        const workflows = await this.eventsHandler.getBmadWorkflows();
-        res.status(200).json(workflows);
       }),
     );
 
@@ -101,8 +89,14 @@ export class BmadApi extends BaseApi {
     // Reset BMAD workflow (clear _bmad-output folder)
     router.post(
       '/bmad/reset-workflow',
-      this.handleRequest(async (_, res) => {
-        const result = await this.eventsHandler.resetBmadWorkflow();
+      this.handleRequest(async (req, res) => {
+        const parsed = this.validateRequest(ResetWorkflowSchema, req.body, res);
+        if (!parsed) {
+          return;
+        }
+
+        const { projectDir } = parsed;
+        const result = await this.eventsHandler.resetBmadWorkflow(projectDir);
 
         if (result.success) {
           res.status(200).json(result);
