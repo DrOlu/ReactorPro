@@ -119,9 +119,10 @@ jobs:
           VERSION="${{ inputs.tag }}"
           VERSION="${VERSION#v}"
           
+          # Note: Microsoft email addresses (windefend@, report@, wdsi@) have been removed
+          # as they all bounce. Microsoft requires manual web form submission instead.
+          # See docs/SMARTSCREEN-GUIDE.md for the manual submission process.
           VENDORS='[
-            {"name": "Microsoft Windows Defender", "email": "windefend@microsoft.com", "priority": "high"},
-            {"name": "Microsoft SmartScreen", "email": "report@microsoft.com", "priority": "high"},
             {"name": "Google Safe Browsing", "email": "safebrowsing-report@google.com", "priority": "high"},
             {"name": "Norton/Symantec", "email": "submitvirus@symantec.com", "priority": "high"},
             {"name": "McAfee", "email": "virus_research@mcafee.com", "priority": "high"},
@@ -129,8 +130,7 @@ jobs:
             {"name": "Avast/AVG", "email": "virus@avast.com", "priority": "high"},
             {"name": "Bitdefender", "email": "virus_submission@bitdefender.com", "priority": "high"},
             {"name": "ESET", "email": "samples@eset.com", "priority": "high"},
-            {"name": "Trend Micro", "email": "virus_doctor@trendmicro.com", "priority": "medium"},
-            {"name": "Windows Defender Security Intelligence", "email": "wdsi@microsoft.com", "priority": "high"}
+            {"name": "Trend Micro", "email": "virus_doctor@trendmicro.com", "priority": "medium"}
           ]'
           
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/tag/${{ inputs.tag }}"
@@ -168,7 +168,7 @@ jobs:
           - SHA256 hashes available in our GitHub releases
 
           **Issue:**
-          Windows SmartScreen is showing a red warning for our application despite:
+          Windows SmartScreen is showing a warning for our application despite:
           1. Valid code signing certificate
           2. Clean VirusTotal scan (0/94 detections)
           3. Open source codebase
@@ -177,7 +177,6 @@ jobs:
           We kindly request that you:
           1. Review our application and add it to your whitelist
           2. Remove any false positive detections
-          3. Update SmartScreen reputation for our signed executable
 
           We are happy to provide additional information, source code access, or technical documentation upon request.
 
@@ -239,10 +238,7 @@ jobs:
 
           ### AV Vendor Notifications
 
-          Whitelisting requests sent to high-priority AV vendors:
-          - Microsoft Windows Defender
-          - Microsoft SmartScreen
-          - Windows Defender Security Intelligence
+          Whitelisting requests sent to AV vendors via email:
           - Google Safe Browsing
           - Norton/Symantec
           - McAfee
@@ -251,6 +247,20 @@ jobs:
           - Bitdefender
           - ESET
           - Trend Micro
+
+          ### Microsoft Submissions (Manual Required)
+
+          ⚠️ **Microsoft does not accept email submissions.** Manual web form submission required:
+
+          1. **Microsoft Security Intelligence (WDSI)**: https://www.microsoft.com/en-us/wdsi/filesubmission
+             - Submit the .exe file directly
+             - Select \"Software developer\" as submission type
+             - Include VirusTotal clean scan results
+
+          2. **SmartScreen URL Submission**: https://www.microsoft.com/en-us/wdsi/AppRepSubmission
+             - Submit the download URL for reputation building
+
+          See [SMARTSCREEN-GUIDE.md](../docs/SMARTSCREEN-GUIDE.md) for detailed instructions.
 
           ---
           *Automated scan triggered by release workflow*"
