@@ -168,7 +168,7 @@ export class Project {
     // Migrate sessions to tasks before starting
     await migrateSessionsToTasks(this);
 
-    const tasksDir = path.join(this.baseDir, '.aider-desk', 'tasks');
+    const tasksDir = path.join(this.baseDir, '.reactorpro', 'tasks');
 
     try {
       if (!(await fileExists(tasksDir))) {
