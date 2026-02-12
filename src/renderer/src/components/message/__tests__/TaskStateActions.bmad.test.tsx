@@ -6,7 +6,7 @@ import { DefaultTaskState } from '@common/types';
 import { TaskStateActions } from '../TaskStateActions';
 
 // Mock useBmadState hook
-vi.mock('@/contexts/BmadStateContext');
+vi.mock('@/components/bmad/useBmadState');
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -29,7 +29,7 @@ vi.mock('@/components/bmad/SuggestedWorkflowCard', () => ({
   ),
 }));
 
-import * as useBmadStateModule from '@/contexts/BmadStateContext';
+import * as useBmadStateModule from '@/components/bmad/useBmadState';
 
 // Helper to create mock BmadStatus with required fields
 const createMockBmadStatus = (overrides: Partial<BmadStatus> = {}): BmadStatus => ({

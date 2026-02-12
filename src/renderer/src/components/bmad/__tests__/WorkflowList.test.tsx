@@ -1,10 +1,10 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BmadStatus, WorkflowPhase } from '@common/bmad-types';
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
 
 // Mock useBmadState hook
-vi.mock('@/contexts/BmadStateContext');
+vi.mock('../useBmadState');
 
 // Mock useIncompleteWorkflows hook
 vi.mock('@/hooks/useIncompleteWorkflows', () => ({
@@ -23,8 +23,6 @@ vi.mock('@/contexts/ApiContext', () => ({
 
 import { WorkflowList } from '../WorkflowList';
 
-import * as useBmadStateModule from '@/contexts/BmadStateContext';
-
 describe('WorkflowList', () => {
   const mockBmadStatus: BmadStatus = {
     projectDir: '/test/project',
@@ -40,18 +38,16 @@ describe('WorkflowList', () => {
     },
   };
 
-  beforeEach(() => {
-    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
-      status: mockBmadStatus,
-      suggestedWorkflows: ['prd'],
-      isLoading: false,
-      error: null,
-      refresh: vi.fn(),
-    });
-  });
+  const defaultProps = {
+    status: mockBmadStatus,
+    suggestedWorkflows: ['prd'],
+    isLoading: false,
+    error: null,
+    onRefresh: vi.fn(),
+  };
 
   it('should render phase sections for full workflow tab', () => {
-    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="full" />);
+    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="full" {...defaultProps} />);
 
     // Check phase section headers are rendered
     expect(screen.getByText('bmad.phase.analysis')).toBeInTheDocument();
@@ -61,7 +57,7 @@ describe('WorkflowList', () => {
   });
 
   it('should render workflows grouped by phase for full workflow tab', () => {
-    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="full" />);
+    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="full" {...defaultProps} />);
 
     // Check that workflows from different phases are rendered
     expect(screen.getByRole('button', { name: /research/i })).toBeInTheDocument();
@@ -69,7 +65,7 @@ describe('WorkflowList', () => {
   });
 
   it('should render quick flow workflows for quick tab', () => {
-    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="quick" />);
+    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="quick" {...defaultProps} />);
 
     // Quick flow workflows should be visible
     expect(screen.getByRole('button', { name: /quick spec/i })).toBeInTheDocument();
@@ -81,7 +77,7 @@ describe('WorkflowList', () => {
   });
 
   it('should render correct number of workflows for full tab', () => {
-    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="full" />);
+    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="full" {...defaultProps} />);
 
     // Count full workflow phases (Analysis, Planning, Solutioning, Implementation)
     const fullWorkflows = BMAD_WORKFLOWS.filter((w) => w.phase !== WorkflowPhase.QuickFlow);
@@ -91,63 +87,57 @@ describe('WorkflowList', () => {
   });
 
   it('should show loading state', () => {
-    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
-      status: null,
-      suggestedWorkflows: [],
-      isLoading: true,
-      error: null,
-      refresh: vi.fn(),
-    });
-
-    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="full" />);
+    render(
+      <WorkflowList
+        projectDir="/test/project"
+        taskId="task-123"
+        activeTab="full"
+        {...{ ...defaultProps, status: null, suggestedWorkflows: [], isLoading: true, error: null }}
+      />,
+    );
 
     expect(screen.getByText('bmad.workflows.loading')).toBeInTheDocument();
   });
 
   it('should show error state', () => {
-    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
-      status: null,
-      suggestedWorkflows: [],
-      isLoading: false,
-      error: 'Failed to load BMAD status',
-      refresh: vi.fn(),
-    });
-
-    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="full" />);
+    render(
+      <WorkflowList
+        projectDir="/test/project"
+        taskId="task-123"
+        activeTab="full"
+        {...{ ...defaultProps, status: null, suggestedWorkflows: [], isLoading: false, error: 'Failed to load BMAD status' }}
+      />,
+    );
 
     expect(screen.getByText(/bmad.workflows.errorLoading/i)).toBeInTheDocument();
   });
 
   it('should handle empty workflow list', () => {
-    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
-      status: {
-        ...mockBmadStatus,
-        availableWorkflows: [],
-      },
-      suggestedWorkflows: [],
-      isLoading: false,
-      error: null,
-      refresh: vi.fn(),
-    });
-
-    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="full" />);
+    render(
+      <WorkflowList
+        projectDir="/test/project"
+        taskId="task-123"
+        activeTab="full"
+        {...{ ...defaultProps, status: { ...mockBmadStatus, availableWorkflows: [] }, suggestedWorkflows: [] }}
+      />,
+    );
 
     expect(screen.getByText('bmad.workflows.noWorkflows')).toBeInTheDocument();
   });
 
   it('should show no workflows message for quick tab when no quick workflows exist', () => {
-    vi.spyOn(useBmadStateModule, 'useBmadState').mockReturnValue({
-      status: {
-        ...mockBmadStatus,
-        availableWorkflows: BMAD_WORKFLOWS.filter((w) => w.phase !== WorkflowPhase.QuickFlow),
-      },
-      suggestedWorkflows: [],
-      isLoading: false,
-      error: null,
-      refresh: vi.fn(),
-    });
-
-    render(<WorkflowList projectDir="/test/project" taskId="task-123" activeTab="quick" />);
+    render(
+      <WorkflowList
+        projectDir="/test/project"
+        taskId="task-123"
+        activeTab="quick"
+        {...{
+          ...defaultProps,
+          status: { ...mockBmadStatus, availableWorkflows: BMAD_WORKFLOWS.filter((w) => w.phase !== WorkflowPhase.QuickFlow) },
+          suggestedWorkflows: [],
+        }}
+      />,
+    );
 
     expect(screen.getByText('bmad.workflows.noWorkflows')).toBeInTheDocument();
   });

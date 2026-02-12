@@ -17,6 +17,7 @@ import { useDebounce } from '@reactuses/core';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 import { BiSend } from 'react-icons/bi';
+import { FaInfoCircle } from 'react-icons/fa';
 import { MdPlaylistRemove, MdSave, MdStop, MdMic, MdMicOff } from 'react-icons/md';
 import { VscTerminal } from 'react-icons/vsc';
 import { clsx } from 'clsx';
@@ -1112,27 +1113,24 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
 
             <div className="flex-grow" />
             {toggleTerminal && (
-              <Button
-                variant="text"
-                onClick={toggleTerminal}
-                className={`hover:!bg-bg-secondary-light !border-border-light hover:!text-text-primary ${
-                  terminalVisible ? '!text-text-primary !bg-bg-secondary-light' : '!text-text-secondary'
-                }`}
-                size="xs"
-              >
+              <Button variant="text" color="tertiary" onClick={toggleTerminal} className={terminalVisible ? 'bg-bg-secondary-light' : ''} size="xs">
                 <VscTerminal className="w-4 h-4 mr-1" />
                 <span className="hidden sm:inline">Terminal</span>
               </Button>
             )}
-            <Button
-              variant="text"
-              onClick={() => clearMessages()}
-              className="hover:!bg-bg-secondary-light !border-border-light !text-text-secondary hover:!text-text-primary"
-              size="xs"
-            >
+            <Button variant="text" color="tertiary" onClick={() => clearMessages()} size="xs">
               <MdPlaylistRemove className="w-4 h-4" />
               <span className="hidden sm:inline ml-1">{t('promptField.clearChat')}</span>
             </Button>
+            {showTaskInfo && (
+              <Tooltip content={t('promptField.taskInfo')}>
+                <div>
+                  <Button variant="text" onClick={showTaskInfo} className="py-1.5" size="xs" color="tertiary">
+                    <FaInfoCircle className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </Tooltip>
+            )}
           </div>
         </div>
         {historyMenuVisible && historyItems.length > 0 && (

@@ -9,6 +9,8 @@ import { StoryStatus } from '@common/bmad-types';
 
 import type { ArtifactDetectionResult, IncompleteWorkflowMetadata, SprintStatusData } from '@common/bmad-types';
 
+import logger from '@/logger';
+
 /**
  * Parses a step identifier to extract the step number.
  * Handles formats:
@@ -146,14 +148,16 @@ export class ArtifactDetector {
 
           try {
             const content = await fs.readFile(artifactPath, 'utf-8');
-            const parsed = yamlFront.loadFront(content);
+            const { __content, ...properties } = yamlFront.loadFront(content);
 
-            if (parsed.stepsCompleted) {
-              stepsCompleted = parsed.stepsCompleted;
+            logger.debug('Parsed frontmatter', { parsed: properties });
+
+            if (properties.stepsCompleted) {
+              stepsCompleted = properties.stepsCompleted;
             }
 
-            if (parsed.status) {
-              status = parsed.status;
+            if (properties.status) {
+              status = properties.status;
             }
           } catch (parseError) {
             // File read or YAML parse error - track corruption
@@ -178,8 +182,26 @@ export class ArtifactDetector {
           // 1. No stepsCompleted in frontmatter (legacy/simple artifact) - assume complete
           // 2. stepsCompleted exists and max step >= totalSteps from registry
           // 3. For quick-spec workflow: status is 'ready-for-dev'
-          const isReadyForDevStatus = id === 'quick-spec' && status === 'ready-for-dev';
-          const isFullyCompleted = !stepsCompleted || maxCompletedStep >= workflowTotalSteps || isReadyForDevStatus;
+          const isQuickSpecReadyForDevStatus = id === 'quick-spec' && status === 'ready-for-dev';
+          const isQuickDevWithReadyStatus = id === 'quick-dev' && status === 'ready-for-dev';
+
+          // quick-dev with ready-for-dev status is NOT complete (that status comes from quick-spec)
+          const isLegacyComplete = !stepsCompleted && !isQuickDevWithReadyStatus;
+          const isStepsComplete = maxCompletedStep >= workflowTotalSteps && !isQuickDevWithReadyStatus;
+          const isFullyCompleted = isLegacyComplete || isStepsComplete || isQuickSpecReadyForDevStatus;
+
+          logger.debug('Workflow completion status', {
+            workflowId: id,
+            stepsCompleted,
+            maxCompletedStep,
+            workflowTotalSteps,
+            status,
+            isLegacyComplete,
+            isStepsComplete,
+            isQuickSpecReadyForDevStatus,
+            isQuickDevWithReadyStatus,
+            isFullyCompleted,
+          });
 
           if (isFullyCompleted) {
             completedWorkflows.push(id);

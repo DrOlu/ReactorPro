@@ -1,12 +1,9 @@
-import { WorkflowPhase } from '@common/bmad-types';
+import { WorkflowPhase, BmadStatus } from '@common/bmad-types';
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
 
 import { WorkflowItem } from './WorkflowItem';
 import { WorkflowPhaseSection } from './WorkflowPhaseSection';
-
-import { useBmadState } from '@/contexts/BmadStateContext';
-import { useIncompleteWorkflows } from '@/hooks/useIncompleteWorkflows';
 
 const FULL_WORKFLOW_PHASES = [WorkflowPhase.Analysis, WorkflowPhase.Planning, WorkflowPhase.Solutioning, WorkflowPhase.Implementation];
 
@@ -16,12 +13,16 @@ type Props = {
   projectDir: string;
   taskId: string;
   activeTab: PathType;
+  status: BmadStatus | null;
+  suggestedWorkflows: string[];
+  isLoading: boolean;
+  error: string | null;
+  onRefresh: () => Promise<void>;
 };
 
-export const WorkflowList = ({ projectDir, taskId, activeTab }: Props) => {
+export const WorkflowList = ({ projectDir, taskId, activeTab, status, suggestedWorkflows, isLoading, error, onRefresh }: Props) => {
   const { t } = useTranslation();
-  const { status, suggestedWorkflows, isLoading, error } = useBmadState();
-  const { incompleteWorkflows } = useIncompleteWorkflows();
+  const incompleteWorkflows = status?.detectedArtifacts?.incompleteWorkflows || [];
 
   const groupedWorkflows = useMemo(() => {
     if (!status?.availableWorkflows) {
@@ -116,6 +117,7 @@ export const WorkflowList = ({ projectDir, taskId, activeTab }: Props) => {
                     projectDir={projectDir}
                     taskId={taskId}
                     incompleteWorkflow={incompleteWorkflow}
+                    onRefresh={onRefresh}
                   />
                 );
               })}
@@ -156,6 +158,7 @@ export const WorkflowList = ({ projectDir, taskId, activeTab }: Props) => {
               projectDir={projectDir}
               taskId={taskId}
               incompleteWorkflow={incompleteWorkflow}
+              onRefresh={onRefresh}
             />
           );
         })}

@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/common/Button';
 import { useApi } from '@/contexts/ApiContext';
 import { showErrorNotification } from '@/utils/notifications';
-import { useBmadState } from '@/contexts/BmadStateContext';
 
 type Props = {
   workflow: WorkflowMetadata;
@@ -17,12 +16,12 @@ type Props = {
   isSuggested: boolean;
   projectDir: string;
   taskId: string;
+  onRefresh: () => Promise<void>;
 };
 
-export const WorkflowActionButton = ({ workflow, isCompleted, isInProgress, isSuggested, projectDir, taskId }: Props) => {
+export const WorkflowActionButton = ({ workflow, isCompleted, isInProgress, isSuggested, projectDir, taskId, onRefresh }: Props) => {
   const { t } = useTranslation();
   const api = useApi();
-  const { refresh } = useBmadState();
   const [loading, setLoading] = useState(false);
 
   const handleExecuteWorkflow = async (e: MouseEvent<HTMLButtonElement>) => {
@@ -39,7 +38,7 @@ export const WorkflowActionButton = ({ workflow, isCompleted, isInProgress, isSu
 
       if (result.success) {
         // Refresh BMAD state to update UI
-        await refresh();
+        await onRefresh();
       } else {
         // Show error notification with recovery action
         const errorMessage = result.error?.message || t('bmad.workflows.workflowError');

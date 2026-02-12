@@ -1,7 +1,8 @@
 import { RiAlertLine } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
 
-import { useBmadState } from '@/contexts/BmadStateContext';
+import { useBmadState } from './useBmadState';
+
 import { SuggestedWorkflowCard } from '@/components/bmad/SuggestedWorkflowCard';
 
 type Props = {
@@ -11,7 +12,7 @@ type Props = {
 
 export const BmadTaskActions = ({ projectDir, taskId }: Props) => {
   const { t } = useTranslation();
-  const { status, suggestedWorkflows, error } = useBmadState();
+  const { status, suggestedWorkflows, error, refresh } = useBmadState(projectDir);
 
   if (error) {
     return (
@@ -46,7 +47,7 @@ export const BmadTaskActions = ({ projectDir, taskId }: Props) => {
         <h4 className="text-2xs font-semibold text-text-secondary">{t('bmad.taskActions.workflowsSection')}</h4>
         <div className="flex flex-wrap gap-2">
           {suggestedWorkflowMetadata.map((workflow) => (
-            <SuggestedWorkflowCard key={workflow.id} workflow={workflow} projectDir={projectDir} taskId={taskId} />
+            <SuggestedWorkflowCard key={workflow.id} workflow={workflow} projectDir={projectDir} taskId={taskId} onRefresh={refresh} />
           ))}
         </div>
       </div>

@@ -17,9 +17,10 @@ type Props = {
   projectDir: string;
   taskId: string;
   incompleteWorkflow?: IncompleteWorkflowMetadata;
+  onRefresh: () => Promise<void>;
 };
 
-export const WorkflowItem = ({ workflow, isCompleted, isInProgress, isSuggested, artifactPath, projectDir, taskId, incompleteWorkflow }: Props) => {
+export const WorkflowItem = ({ workflow, isCompleted, isInProgress, isSuggested, artifactPath, projectDir, taskId, incompleteWorkflow, onRefresh }: Props) => {
   const { t } = useTranslation();
   const api = useApi();
 
@@ -71,6 +72,7 @@ export const WorkflowItem = ({ workflow, isCompleted, isInProgress, isSuggested,
               isSuggested={isSuggested}
               projectDir={projectDir}
               taskId={taskId}
+              onRefresh={onRefresh}
             />
             {stepInfo && (
               <span className="text-2xs bg-bg-primary-light px-2 py-0.5 rounded">

@@ -6,19 +6,18 @@ import { useTranslation } from 'react-i18next';
 
 import { useApi } from '@/contexts/ApiContext';
 import { showErrorNotification } from '@/utils/notifications';
-import { useBmadState } from '@/contexts/BmadStateContext';
 import { Button } from '@/components/common/Button';
 
 type Props = {
   workflow: WorkflowMetadata;
   projectDir: string;
   taskId: string;
+  onRefresh: () => Promise<void>;
 };
 
-export const SuggestedWorkflowCard = ({ workflow, projectDir, taskId }: Props) => {
+export const SuggestedWorkflowCard = ({ workflow, projectDir, taskId, onRefresh }: Props) => {
   const { t } = useTranslation();
   const api = useApi();
-  const { refresh } = useBmadState();
   const [loading, setLoading] = useState(false);
 
   const handleExecuteWorkflow = async (e: MouseEvent<HTMLButtonElement>) => {
@@ -34,7 +33,7 @@ export const SuggestedWorkflowCard = ({ workflow, projectDir, taskId }: Props) =
       const result = await api.executeWorkflow(projectDir, taskId, workflow.id, true);
 
       if (result.success) {
-        await refresh();
+        await onRefresh();
       } else {
         const errorMessage = result.error?.message || t('bmad.workflows.workflowError');
         const fullMessage = result.error?.recoveryAction ? `${errorMessage}\n${result.error.recoveryAction}` : errorMessage;

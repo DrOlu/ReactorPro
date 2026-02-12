@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { FiAlertTriangle, FiLayers, FiZap } from 'react-icons/fi';
 import { clsx } from 'clsx';
 
-import { useBmadState } from '@/contexts/BmadStateContext';
+import { useBmadState } from './useBmadState';
+
 import { useApi } from '@/contexts/ApiContext';
 import { BmadInstallPrompt } from '@/components/bmad/BmadInstallPrompt';
 import { BmadWelcomeSection } from '@/components/bmad/BmadWelcomeSection';
@@ -24,7 +25,7 @@ type Props = {
 export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
   const { t } = useTranslation();
   const api = useApi();
-  const { status: bmadStatus, isLoading, error, refresh } = useBmadState();
+  const { status: bmadStatus, suggestedWorkflows, isLoading, error, refresh } = useBmadState(projectDir);
 
   const [activeTab, setActiveTab] = useState<PathType>('full');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -204,7 +205,16 @@ export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
 
         <PathInfoCard pathType={activeTab} />
 
-        <WorkflowList projectDir={projectDir} taskId={taskId} activeTab={activeTab} />
+        <WorkflowList
+          projectDir={projectDir}
+          taskId={taskId}
+          activeTab={activeTab}
+          status={bmadStatus}
+          suggestedWorkflows={suggestedWorkflows}
+          isLoading={isLoading}
+          error={error}
+          onRefresh={refresh}
+        />
 
         {renderResetBanner()}
       </div>

@@ -1228,7 +1228,8 @@
     "sendMessage": "Send message (Enter)",
     "clearChat": "Clear chat",
     "agentModeOnly": "Available in Agent mode only",
-    "handoffError": "Handoff failed: {{error}}"
+    "handoffError": "Handoff failed: {{error}}",
+    "taskInfo": "Show task information"
   },
   "agentProfiles": {
     "title": "Agents",

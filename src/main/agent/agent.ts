@@ -255,24 +255,80 @@ export class Agent {
     return messages;
   }
 
-  private async getWorkingFilesMessages(contextFiles: ContextFile[]): Promise<ModelMessage[]> {
+  private async getWorkingFilesMessages(task: Task, contextFiles: ContextFile[]): Promise<ModelMessage[]> {
     const messages: ModelMessage[] = [];
 
     if (contextFiles.length > 0) {
-      const fileList = contextFiles
-        .map((file) => {
-          return `- ${file.path}`;
-        })
-        .join('\n');
+      const imageParts: ImagePart[] = [];
+      const nonImageFiles: ContextFile[] = [];
 
-      messages.push({
-        role: 'user',
-        content: `The following files are currently in the working context:\n\n${fileList}`,
-      });
-      messages.push({
-        role: 'assistant',
-        content: 'OK, I have noted the files in the context.',
-      });
+      // Separate image files from non-image files
+      for (const file of contextFiles) {
+        try {
+          const filePath = path.resolve(task.getTaskDir(), file.path);
+          const fileContentBuffer = await fs.readFile(filePath);
+
+          if (isBinary(filePath, fileContentBuffer)) {
+            try {
+              const detected = await fileTypeFromBuffer(fileContentBuffer);
+              if (detected?.mime.startsWith('image/')) {
+                const imageBase64 = fileContentBuffer.toString('base64');
+                imageParts.push({
+                  type: 'image',
+                  image: `data:${detected.mime};base64,${imageBase64}`,
+                  mediaType: detected.mime,
+                });
+                continue;
+              }
+            } catch (e) {
+              logger.warn(`image-type failed to detect image for ${file.path}`, { error: e instanceof Error ? e.message : String(e) });
+            }
+          }
+          nonImageFiles.push(file);
+        } catch (error) {
+          logger.error('Error reading context file:', {
+            path: file.path,
+            error,
+          });
+          nonImageFiles.push(file);
+        }
+      }
+
+      // Add file list for non-image files
+      if (nonImageFiles.length > 0) {
+        logger.debug('Adding file list for non-image files', {
+          files: nonImageFiles.map((f) => f.path),
+        });
+        const fileList = nonImageFiles
+          .map((file) => {
+            return `- ${file.path}`;
+          })
+          .join('\n');
+
+        messages.push({
+          role: 'user',
+          content: `The following files are currently in the working context:\n\n${fileList}`,
+        });
+        messages.push({
+          role: 'assistant',
+          content: 'OK, I have noted the files in the context.',
+        });
+      }
+
+      // Add images as separate messages
+      if (imageParts.length > 0) {
+        logger.debug('Adding images as separate messages', {
+          count: imageParts.length,
+        });
+        messages.push({
+          role: 'user',
+          content: imageParts,
+        });
+        messages.push({
+          role: 'assistant',
+          content: 'I can see the provided images and will use them for reference.',
+        });
+      }
     }
 
     return messages;
@@ -1296,7 +1352,7 @@ export class Agent {
       messages.push(...contextMessages);
       messages.push(...contextFilesMessages);
     } else {
-      const workingFilesMessages = await this.getWorkingFilesMessages(contextFiles);
+      const workingFilesMessages = await this.getWorkingFilesMessages(task, contextFiles);
       messages.push(...workingFilesMessages);
       // Add message history after working files
       messages.push(...contextMessages);

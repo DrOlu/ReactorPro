@@ -276,7 +276,6 @@ src/
           BmadWelcomeSection.tsx
           BmadWorkflowPage.tsx
           PathInfoCard.tsx
-          ResumeWorkflowButton.tsx
           SuggestedWorkflowCard.tsx
           useBmadState.ts
           WorkflowActionButton.tsx
@@ -525,7 +524,6 @@ src/
       contexts/
         AgentsContext.tsx
         ApiContext.tsx
-        BmadStateContext.tsx
         ContextMenuContext.tsx
         ModelProviderContext.tsx
         ProjectSettingsContext.tsx
@@ -559,7 +557,6 @@ src/
         useCustomCommands.ts
         useDropdownState.ts
         useEffectiveEnvironmentVariable.ts
-        useIncompleteWorkflows.ts
         useIndexedDB.ts
         useLmStudioModels.ts
         useOllamaModels.ts
@@ -2614,7 +2611,8 @@ File: src/common/locales/en.json
     "sendMessage": "Send message (Enter)",
     "clearChat": "Clear chat",
     "agentModeOnly": "Available in Agent mode only",
-    "handoffError": "Handoff failed: {{error}}"
+    "handoffError": "Handoff failed: {{error}}",
+    "taskInfo": "Show task information"
   },
   "agentProfiles": {
     "title": "Agents",
@@ -4279,7 +4277,8 @@ File: src/common/locales/zh.json
     "sendMessage": "发送消息(Enter)",
     "clearChat": "清除聊天",
     "agentModeOnly": "仅在代理模式下可用",
-    "handoffError": "交接失败：{{error}}"
+    "handoffError": "交接失败：{{error}}",
+    "taskInfo": "任务信息"
   },
   "agentProfiles": {
     "title": "代理配置",
@@ -7285,7 +7284,13 @@ private async getContextFilesMessages(task: Task, profile: AgentProfile, context
 ⋮----
 // Process editable files
 ⋮----
-private async getWorkingFilesMessages(contextFiles: ContextFile[]): Promise<ModelMessage[]>
+private async getWorkingFilesMessages(task: Task, contextFiles: ContextFile[]): Promise<ModelMessage[]>
+⋮----
+// Separate image files from non-image files
+⋮----
+// Add file list for non-image files
+⋮----
+// Add images as separate messages
 ⋮----
 private async getAvailableTools(
     task: Task,
@@ -10081,6 +10086,8 @@ import { StoryStatus } from '@common/bmad-types';
 ⋮----
 import type { ArtifactDetectionResult, IncompleteWorkflowMetadata, SprintStatusData } from '@common/bmad-types';
 ⋮----
+import logger from '@/logger';
+⋮----
 /**
  * Parses a step identifier to extract the step number.
  * Handles formats:
@@ -10151,6 +10158,8 @@ async detect(projectRoot: string): Promise<ArtifactDetectionResult>
 // 1. No stepsCompleted in frontmatter (legacy/simple artifact) - assume complete
 // 2. stepsCompleted exists and max step >= totalSteps from registry
 // 3. For quick-spec workflow: status is 'ready-for-dev'
+⋮----
+// quick-dev with ready-for-dev status is NOT complete (that status comes from quick-spec)
 ⋮----
 // quick-dev is not in progress if quick-spec is ready-for-dev
 ⋮----
@@ -18003,7 +18012,8 @@ File: src/renderer/src/components/bmad/BmadTaskActions.tsx
 import { RiAlertLine } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
 ⋮----
-import { useBmadState } from '@/contexts/BmadStateContext';
+import { useBmadState } from './useBmadState';
+⋮----
 import { SuggestedWorkflowCard } from '@/components/bmad/SuggestedWorkflowCard';
 ⋮----
 type Props = {
@@ -18025,7 +18035,8 @@ import { useTranslation } from 'react-i18next';
 import { FiAlertTriangle, FiLayers, FiZap } from 'react-icons/fi';
 import { clsx } from 'clsx';
 ⋮----
-import { useBmadState } from '@/contexts/BmadStateContext';
+import { useBmadState } from './useBmadState';
+⋮----
 import { useApi } from '@/contexts/ApiContext';
 import { BmadInstallPrompt } from '@/components/bmad/BmadInstallPrompt';
 import { BmadWelcomeSection } from '@/components/bmad/BmadWelcomeSection';
@@ -18081,61 +18092,6 @@ export const PathInfoCard = (
 <div className=
 
 ================
-File: src/renderer/src/components/bmad/ResumeWorkflowButton.tsx
-================
-import { IncompleteWorkflowMetadata } from '@common/bmad-types';
-import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
-import { MouseEvent, useState } from 'react';
-import { CgSpinner } from 'react-icons/cg';
-import { FaPlayCircle, FaRedo, FaExclamationTriangle } from 'react-icons/fa';
-import { FiFile, FiExternalLink } from 'react-icons/fi';
-import { clsx } from 'clsx';
-import { useTranslation } from 'react-i18next';
-import { formatDistanceToNow } from 'date-fns';
-⋮----
-import { useApi } from '@/contexts/ApiContext';
-import { showErrorNotification } from '@/utils/notifications';
-import { useBmadState } from '@/contexts/BmadStateContext';
-⋮----
-const getFileName = (path: string): string =>
-⋮----
-type Props = {
-  incompleteWorkflow: IncompleteWorkflowMetadata;
-  projectDir: string;
-  taskId: string;
-};
-⋮----
-// Find workflow metadata
-⋮----
-// Check if corrupted
-⋮----
-// Calculate progress
-⋮----
-// Format last modified time
-⋮----
-const handleResumeWorkflow = async (e: MouseEvent<HTMLButtonElement>) =>
-⋮----
-// eslint-disable-next-line no-console
-⋮----
-const handleRestartFromBeginning = async (e: MouseEvent<HTMLButtonElement>) =>
-⋮----
-// Execute workflow from beginning (no resume options) - backend will backup corrupted artifact
-⋮----
-// eslint-disable-next-line no-console
-⋮----
-const handleOpenArtifact = async (e: MouseEvent<HTMLButtonElement>) =>
-⋮----
-// Corrupted workflow UI
-⋮----
-aria-label=
-⋮----
-// Normal resume workflow UI
-⋮----
-{/* Header with workflow name and description */}
-⋮----
-{/* File and last modified info */}
-
-================
 File: src/renderer/src/components/bmad/SuggestedWorkflowCard.tsx
 ================
 import { WorkflowMetadata } from '@common/bmad-types';
@@ -18146,13 +18102,13 @@ import { useTranslation } from 'react-i18next';
 ⋮----
 import { useApi } from '@/contexts/ApiContext';
 import { showErrorNotification } from '@/utils/notifications';
-import { useBmadState } from '@/contexts/BmadStateContext';
 import { Button } from '@/components/common/Button';
 ⋮----
 type Props = {
   workflow: WorkflowMetadata;
   projectDir: string;
   taskId: string;
+  onRefresh: () => Promise<void>;
 };
 ⋮----
 export const SuggestedWorkflowCard = (
@@ -18162,7 +18118,25 @@ const handleExecuteWorkflow = async (e: MouseEvent<HTMLButtonElement>) =>
 ================
 File: src/renderer/src/components/bmad/useBmadState.ts
 ================
-// Re-export from BmadStateContext for backward compatibility during migration
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { BmadStatus } from '@common/bmad-types';
+⋮----
+import { useApi } from '@/contexts/ApiContext';
+import { generateSuggestions } from '@/utils/bmad-suggestions';
+⋮----
+type Result = {
+  status: BmadStatus | null;
+  suggestedWorkflows: string[];
+  isLoading: boolean;
+  error: string | null;
+  refresh: (loading?: boolean) => Promise<void>;
+};
+⋮----
+export const useBmadState = (projectDir?: string): Result =>
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+// eslint-disable-next-line react-hooks/exhaustive-deps
 
 ================
 File: src/renderer/src/components/bmad/WorkflowActionButton.tsx
@@ -18177,7 +18151,6 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/common/Button';
 import { useApi } from '@/contexts/ApiContext';
 import { showErrorNotification } from '@/utils/notifications';
-import { useBmadState } from '@/contexts/BmadStateContext';
 ⋮----
 type Props = {
   workflow: WorkflowMetadata;
@@ -18186,6 +18159,7 @@ type Props = {
   isSuggested: boolean;
   projectDir: string;
   taskId: string;
+  onRefresh: () => Promise<void>;
 };
 ⋮----
 export const WorkflowActionButton = (
@@ -18224,6 +18198,7 @@ type Props = {
   projectDir: string;
   taskId: string;
   incompleteWorkflow?: IncompleteWorkflowMetadata;
+  onRefresh: () => Promise<void>;
 };
 ⋮----
 const handleOpenArtifact = async (e: MouseEvent<HTMLButtonElement>) =>
@@ -18235,15 +18210,12 @@ const getStepInfo = () =>
 ================
 File: src/renderer/src/components/bmad/WorkflowList.tsx
 ================
-import { WorkflowPhase } from '@common/bmad-types';
+import { WorkflowPhase, BmadStatus } from '@common/bmad-types';
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
 ⋮----
 import { WorkflowItem } from './WorkflowItem';
 import { WorkflowPhaseSection } from './WorkflowPhaseSection';
-⋮----
-import { useBmadState } from '@/contexts/BmadStateContext';
-import { useIncompleteWorkflows } from '@/hooks/useIncompleteWorkflows';
 ⋮----
 type PathType = 'full' | 'quick';
 ⋮----
@@ -18251,6 +18223,11 @@ type Props = {
   projectDir: string;
   taskId: string;
   activeTab: PathType;
+  status: BmadStatus | null;
+  suggestedWorkflows: string[];
+  isLoading: boolean;
+  error: string | null;
+  onRefresh: () => Promise<void>;
 };
 ⋮----
 const getArtifactPath = (workflowId: string): string | undefined =>
@@ -23394,7 +23371,6 @@ import { getSortedVisibleTasks } from '@/utils/task-utils';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useBooleanState } from '@/hooks/useBooleanState';
 import { showNotification } from '@/utils/browser-notifications';
-import { BmadStateProvider } from '@/contexts/BmadStateContext';
 ⋮----
 type Props = {
   projectDir: string;
@@ -24119,6 +24095,7 @@ import { useDebounce } from '@reactuses/core';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTranslation } from 'react-i18next';
 import { BiSend } from 'react-icons/bi';
+import { FaInfoCircle } from 'react-icons/fa';
 import { MdPlaylistRemove, MdSave, MdStop, MdMic, MdMicOff } from 'react-icons/md';
 import { VscTerminal } from 'react-icons/vsc';
 import { clsx } from 'clsx';
@@ -25970,34 +25947,6 @@ import { BrowserApi } from '@/api/browser-api';
 export const useApi = (): ApplicationAPI =>
 
 ================
-File: src/renderer/src/contexts/BmadStateContext.tsx
-================
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { BmadStatus } from '@common/bmad-types';
-⋮----
-import { useApi } from '@/contexts/ApiContext';
-import { generateSuggestions } from '@/utils/bmad-suggestions';
-⋮----
-type BmadStateContextType = {
-  status: BmadStatus | null;
-  suggestedWorkflows: string[];
-  isLoading: boolean;
-  error: string | null;
-  refresh: (loading?: boolean) => Promise<void>;
-};
-⋮----
-type Props = {
-  children: ReactNode;
-  projectDir?: string;
-};
-⋮----
-// eslint-disable-next-line no-console
-⋮----
-// eslint-disable-next-line react-hooks/exhaustive-deps
-⋮----
-export const useBmadState = (): BmadStateContextType =>
-
-================
 File: src/renderer/src/contexts/ContextMenuContext.tsx
 ================
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -26296,20 +26245,6 @@ type UseEffectiveEnvironmentVariableResult = {
 export const useEffectiveEnvironmentVariable = (key: string, baseDir?: string): UseEffectiveEnvironmentVariableResult =>
 ⋮----
 const fetchEnvironmentVariable = async () =>
-
-================
-File: src/renderer/src/hooks/useIncompleteWorkflows.ts
-================
-import { IncompleteWorkflowMetadata } from '@common/bmad-types';
-import { useMemo } from 'react';
-⋮----
-import { useBmadState } from '@/components/bmad/useBmadState';
-⋮----
-/**
- * Hook to access incomplete workflows from BMAD status
- * Returns array of incomplete workflows that can be resumed
- */
-export const useIncompleteWorkflows = () =>
 
 ================
 File: src/renderer/src/hooks/useIndexedDB.ts
