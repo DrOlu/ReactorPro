@@ -30322,6 +30322,11 @@ beforePack: scripts/before-pack.js
 win:
   executableName: reactorpro
   icon: resources/icon.png
+  # Publisher name for SmartScreen reputation
+  publisherName: "Hyperspace Technologies"
+  # Timestamping servers for signature longevity
+  timeStampServer: "http://timestamp.digicert.com"
+  rfc3161TimeStampServer: "http://timestamp.digicert.com"
   extraResources:
     - from: ./resources/win
       to: win
@@ -30332,6 +30337,11 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # Provide user choice for installation (better user experience)
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  # Per-user install by default (doesn't require admin, smoother experience)
+  perMachine: false
 mac:
   category: public.app-category.developer-tools
   target:
