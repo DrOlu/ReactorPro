@@ -6,14 +6,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
 
 import { BmadManager } from '../bmad-manager';
-import { ArtifactDetector } from '../artifact-detector';
 import { ContextPreparer } from '../context-preparer';
 
 import type { PreparedContext } from '../context-preparer';
 
 vi.mock('fs');
 vi.mock('fs/promises');
-vi.mock('../artifact-detector');
 vi.mock('../context-preparer');
 vi.mock('@/paths', () => ({
   getResourceDir: vi.fn(() => '/fake/resources'),
@@ -27,19 +25,6 @@ vi.mock('@/logger', () => ({
     debug: vi.fn(),
   },
 }));
-
-// Setup default mock for ArtifactDetector
-const mockDetect = vi.fn().mockResolvedValue({
-  completedWorkflows: [],
-  incompleteWorkflows: [],
-  detectedArtifacts: {},
-});
-
-// Mock as a constructor
-vi.mocked(ArtifactDetector).mockImplementation(function (this: ArtifactDetector) {
-  (this as unknown as { detect: typeof mockDetect }).detect = mockDetect;
-  return this as ArtifactDetector;
-});
 
 // Setup default mock for ContextPreparer
 const mockPrepare = vi.fn().mockResolvedValue({
@@ -60,13 +45,6 @@ describe('BmadManager', () => {
   beforeEach(() => {
     bmadManager = new BmadManager(mockProjectPath);
     vi.clearAllMocks();
-    // Reset mock to default empty response
-    mockDetect.mockResolvedValue({
-      completedWorkflows: [],
-      incompleteWorkflows: [],
-      inProgressWorkflows: [],
-      detectedArtifacts: {},
-    });
   });
 
   afterEach(() => {
@@ -155,12 +133,9 @@ describe('BmadManager', () => {
         availableWorkflows: BMAD_WORKFLOWS,
         completedWorkflows: [],
         inProgressWorkflows: [],
-        detectedArtifacts: {
-          completedWorkflows: [],
-          inProgressWorkflows: [],
-          incompleteWorkflows: [],
-          detectedArtifacts: {},
-        },
+        incompleteWorkflows: [],
+        detectedArtifacts: {},
+        sprintStatus: undefined,
       });
     });
 
@@ -176,12 +151,9 @@ describe('BmadManager', () => {
         availableWorkflows: BMAD_WORKFLOWS,
         completedWorkflows: [],
         inProgressWorkflows: [],
-        detectedArtifacts: {
-          completedWorkflows: [],
-          inProgressWorkflows: [],
-          incompleteWorkflows: [],
-          detectedArtifacts: {},
-        },
+        incompleteWorkflows: [],
+        detectedArtifacts: {},
+        sprintStatus: undefined,
       });
     });
 
@@ -189,21 +161,24 @@ describe('BmadManager', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'readFileSync').mockReturnValue('# Version: 1.0.0\nproject_name: test');
 
-      mockDetect.mockResolvedValue({
+      // Mock the private scanWorkflows method
+      const mockScanWorkflows = vi.spyOn(bmadManager as any, 'scanWorkflows').mockResolvedValue({
         completedWorkflows: ['create-prd', 'create-architecture'],
+        inProgressWorkflows: [],
         incompleteWorkflows: [],
         detectedArtifacts: {
           'create-prd': { path: 'planning-artifacts/prd.md', stepsCompleted: ['1', '2'] },
           'create-architecture': { path: 'planning-artifacts/architecture.md' },
         },
+        sprintStatus: undefined,
       });
 
       const result = await bmadManager.getBmadStatus();
 
+      expect(mockScanWorkflows).toHaveBeenCalledWith(mockProjectPath);
       expect(result.availableWorkflows).toEqual(BMAD_WORKFLOWS);
       expect(result.completedWorkflows).toEqual(['create-prd', 'create-architecture']);
-      expect(result.detectedArtifacts.completedWorkflows).toEqual(['create-prd', 'create-architecture']);
-      expect(result.detectedArtifacts.detectedArtifacts['create-prd']).toBeDefined();
+      expect(result.detectedArtifacts['create-prd']).toBeDefined();
     });
 
     it('handles version detection failure gracefully', async () => {

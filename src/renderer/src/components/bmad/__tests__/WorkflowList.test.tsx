@@ -31,11 +31,9 @@ describe('WorkflowList', () => {
     availableWorkflows: BMAD_WORKFLOWS,
     completedWorkflows: ['product-brief'],
     inProgressWorkflows: [],
-    detectedArtifacts: {
-      completedWorkflows: ['product-brief'],
-      inProgressWorkflows: [],
-      detectedArtifacts: {},
-    },
+    incompleteWorkflows: [],
+    detectedArtifacts: {},
+    sprintStatus: undefined,
   };
 
   const defaultProps = {

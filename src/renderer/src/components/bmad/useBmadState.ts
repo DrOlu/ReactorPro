@@ -22,7 +22,7 @@ export const useBmadState = (projectDir?: string): Result => {
     if (!status) {
       return [];
     }
-    return generateSuggestions(status.completedWorkflows, status.detectedArtifacts.detectedArtifacts, status.detectedArtifacts.sprintStatus);
+    return generateSuggestions(status.completedWorkflows, status.detectedArtifacts, status.sprintStatus);
   }, [status]);
 
   const loadBmadStatus = useCallback(

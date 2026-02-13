@@ -2,13 +2,16 @@ import path from 'path';
 import fs from 'fs/promises';
 
 import {
+  AgentProfile,
   CloudflareTunnelStatus,
+  CreateTaskParams,
   CustomCommand,
   EditFormat,
   EnvironmentVariable,
   FileEdit,
   McpServerConfig,
   McpTool,
+  MemoryEntry,
   Mode,
   Model,
   OS,
@@ -19,14 +22,12 @@ import {
   ResponseCompletedData,
   SettingsData,
   TaskData,
-  CreateTaskParams,
   TaskStateData,
   TodoItem,
+  UpdatedFile,
   UsageDataRow,
   VersionsInfo,
   VoiceSession,
-  AgentProfile,
-  MemoryEntry,
   WorkflowExecutionResult,
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
@@ -266,6 +267,14 @@ export class EventsHandler {
       return [];
     }
     return task.getAllFiles(useGit);
+  }
+
+  async getUpdatedFiles(baseDir: string, taskId: string): Promise<UpdatedFile[]> {
+    const task = this.projectManager.getProject(baseDir).getTask(taskId);
+    if (!task) {
+      return [];
+    }
+    return await task.getUpdatedFiles();
   }
 
   async addFile(baseDir: string, taskId: string, filePath: string, readOnly = false): Promise<void> {

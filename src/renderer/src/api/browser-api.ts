@@ -49,6 +49,7 @@ import {
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
+  UpdatedFilesUpdatedData,
   WorkflowExecutionResult,
 } from '@common/types';
 import { ApplicationAPI } from '@common/api';
@@ -82,6 +83,7 @@ type EventDataMap = {
   'project-settings-updated': { baseDir: string; settings: ProjectSettings };
   'worktree-integration-status-updated': WorktreeIntegrationStatusUpdatedData;
   'agent-profiles-updated': AgentProfilesUpdatedData;
+  'updated-files-updated': UpdatedFilesUpdatedData;
   notification: NotificationData;
   'task-created': TaskCreatedData;
   'task-initialized': TaskData;
@@ -148,6 +150,7 @@ export class BrowserApi implements ApplicationAPI {
       'worktree-integration-status-updated': new Map(),
       'provider-models-updated': new Map(),
       'providers-updated': new Map(),
+      'updated-files-updated': new Map(),
       'project-settings-updated': new Map(),
       'task-created': new Map(),
       'task-initialized': new Map(),
@@ -397,6 +400,9 @@ export class BrowserApi implements ApplicationAPI {
   getAllFiles(baseDir: string, taskId: string, useGit?: boolean): Promise<string[]> {
     return this.post('/get-all-files', { projectDir: baseDir, taskId, useGit });
   }
+  getUpdatedFiles(baseDir: string, taskId: string): Promise<{ path: string; additions: number; deletions: number }[]> {
+    return this.post('/get-updated-files', { projectDir: baseDir, taskId });
+  }
   addFile(baseDir: string, taskId: string, filePath: string, readOnly?: boolean): void {
     this.post('/add-context-file', {
       projectDir: baseDir,
@@ -645,6 +651,9 @@ export class BrowserApi implements ApplicationAPI {
   }
   addContextFilesUpdatedListener(baseDir: string, taskId: string, callback: (data: ContextFilesUpdatedData) => void): () => void {
     return this.addListener('context-files-updated', callback, baseDir, taskId);
+  }
+  addUpdatedFilesUpdatedListener(baseDir: string, taskId: string, callback: (data: UpdatedFilesUpdatedData) => void): () => void {
+    return this.addListener('updated-files-updated', callback, baseDir, taskId);
   }
   addCustomCommandsUpdatedListener(baseDir: string, callback: (data: CustomCommandsUpdatedData) => void): () => void {
     return this.addListener('custom-commands-updated', callback, baseDir);

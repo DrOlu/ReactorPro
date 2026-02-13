@@ -2,7 +2,7 @@ import path, { join } from 'path';
 import fs, { mkdir, rm, lstat, symlink } from 'fs/promises';
 import { existsSync } from 'fs';
 
-import { ConflictResolutionFileContext, MergeState, RebaseState, Worktree, WorktreeAheadCommits, WorktreeUncommittedFiles } from '@common/types';
+import { ConflictResolutionFileContext, MergeState, RebaseState, UpdatedFile, Worktree, WorktreeAheadCommits, WorktreeUncommittedFiles } from '@common/types';
 
 import { execWithShellPath, withLock } from '@/utils';
 import { AIDER_DESK_TASKS_DIR } from '@/constants';
@@ -1436,6 +1436,56 @@ export class WorktreeManager {
       count: files.length,
       files: Array.from(new Set(files)),
     };
+  }
+
+  /**
+   * Get updated files with line diff stats from git
+   * Uses `git diff --numstat HEAD` to get additions and deletions per file
+   * Format: "additions\tdeletions\tfilepath"
+   * Also fetches the full git diff for each file
+   */
+  async getUpdatedFiles(worktreePath: string): Promise<UpdatedFile[]> {
+    try {
+      const { stdout } = await execWithShellPath('git diff --numstat HEAD', {
+        cwd: worktreePath,
+      });
+
+      const lines = stdout.trim().split('\n');
+      const files: UpdatedFile[] = [];
+
+      for (const line of lines) {
+        if (!line.trim()) {
+          continue;
+        }
+        const parts = line.split('\t');
+        if (parts.length >= 3) {
+          const additions = parts[0] === '-' ? 0 : parseInt(parts[0], 10);
+          const deletions = parts[1] === '-' ? 0 : parseInt(parts[1], 10);
+          const filePath = parts.slice(2).join('\t'); // Handle paths with tabs
+
+          // Fetch git diff for this file
+          let diff = '';
+          try {
+            const { stdout: diffOutput } = await execWithShellPath(`git diff --unified=3 HEAD ${filePath}`, {
+              cwd: worktreePath,
+            });
+            diff = diffOutput;
+          } catch (diffError) {
+            // If diff fetch fails, continue with empty diff
+            logger.warn(`Failed to get diff for file ${filePath}:`, diffError);
+            diff = '';
+          }
+
+          files.push({ path: filePath, additions, deletions, diff });
+        }
+      }
+
+      return files;
+    } catch (error) {
+      // If git diff fails (e.g., no HEAD commit), return empty array
+      logger.warn('Failed to get updated files:', error);
+      return [];
+    }
   }
 
   async getRebaseState(worktreePath: string): Promise<RebaseState> {

@@ -56,21 +56,25 @@ export interface SprintStatusData {
   completedWorkflows: string[];
 }
 
+export type DetectedArtifact = {
+  path: string;
+  stepsCompleted?: string[];
+  status?: string;
+  error?: string;
+};
+
+export type DetectedArtifacts = {
+  [workflowId: string]: DetectedArtifact;
+};
+
 /**
- * Artifact detection result
+ * Workflow artifacts detection result
  */
-export interface ArtifactDetectionResult {
+export interface WorkflowArtifacts {
   completedWorkflows: string[];
   inProgressWorkflows: string[];
-  detectedArtifacts: {
-    [workflowId: string]: {
-      path: string;
-      stepsCompleted?: string[];
-      status?: string;
-      error?: string;
-    };
-  };
   incompleteWorkflows?: IncompleteWorkflowMetadata[];
+  detectedArtifacts: DetectedArtifacts;
   sprintStatus?: SprintStatusData;
 }
 
@@ -84,7 +88,9 @@ export interface BmadStatus {
   availableWorkflows: WorkflowMetadata[];
   completedWorkflows: string[];
   inProgressWorkflows: string[];
-  detectedArtifacts: ArtifactDetectionResult;
+  incompleteWorkflows?: IncompleteWorkflowMetadata[];
+  detectedArtifacts: DetectedArtifacts;
+  sprintStatus?: SprintStatusData;
 }
 
 /**

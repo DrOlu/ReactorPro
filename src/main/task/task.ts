@@ -19,6 +19,7 @@ import {
   LogLevel,
   MessageRole,
   Mode,
+  ModelInfo,
   ModelsData,
   ProjectSettings,
   PromptContext,
@@ -27,16 +28,16 @@ import {
   ResponseCompletedData,
   SettingsData,
   TaskContext,
-  TaskStateData,
   TaskData,
+  TaskStateData,
+  TaskStateEmoji,
   TodoItem,
   TokensInfoData,
   ToolData,
+  UpdatedFile,
   UsageReportData,
   UserMessageData,
   WorkingMode,
-  ModelInfo,
-  TaskStateEmoji,
 } from '@common/types';
 import { extractProviderModel, extractTextContent, fileExists, parseUsageReport } from '@common/utils';
 import { COMPACT_CONVERSATION_AGENT_PROFILE, CONFLICT_RESOLUTION_PROFILE, HANDOFF_AGENT_PROFILE, INIT_PROJECT_AGENTS_PROFILE } from '@common/agent';
@@ -230,6 +231,8 @@ export class Task {
       for (const key of Object.keys(data)) {
         this.task[key] = data[key];
       }
+      // make sure we always have the most recent project baseDir, in case the task was migrated from another path
+      this.task.baseDir = this.project.baseDir;
     }
 
     // Migrate missing task-level settings from project settings
@@ -783,6 +786,7 @@ export class Task {
 
     void this.sendRequestContextInfo();
     void this.sendWorktreeIntegrationStatusUpdated();
+    void this.sendUpdatedFilesUpdated();
     this.notifyIfEnabled('Task finished', getTaskFinishedNotificationText(this.task));
 
     await this.hookManager.trigger('onAiderPromptFinished', { responses }, this, this.project);
@@ -847,6 +851,7 @@ export class Task {
 
     void this.sendRequestContextInfo();
     void this.sendWorktreeIntegrationStatusUpdated();
+    void this.sendUpdatedFilesUpdated();
     this.notifyIfEnabled('Task finished', getTaskFinishedNotificationText(this.task));
 
     return [];
@@ -1754,6 +1759,10 @@ export class Task {
 
   public async getAllFiles(useGit = true): Promise<string[]> {
     return getAllFiles(this.getTaskDir(), useGit);
+  }
+
+  public async getUpdatedFiles(): Promise<UpdatedFile[]> {
+    return await this.worktreeManager.getUpdatedFiles(this.getTaskDir());
   }
 
   public async getContextFiles(includeRuleFiles = false): Promise<ContextFile[]> {
@@ -2946,6 +2955,11 @@ ${error.stderr}`,
 
   private async sendWorktreeIntegrationStatusUpdated() {
     this.eventManager.sendWorktreeIntegrationStatusUpdated(this.project.baseDir, this.taskId, await this.getWorktreeIntegrationStatus());
+  }
+
+  private async sendUpdatedFilesUpdated() {
+    const updatedFiles = await this.getUpdatedFiles();
+    this.eventManager.sendUpdatedFilesUpdated(this.project.baseDir, this.taskId, updatedFiles);
   }
 
   private async applyWorkingMode(mode: WorkingMode) {

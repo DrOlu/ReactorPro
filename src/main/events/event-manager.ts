@@ -30,6 +30,8 @@ import {
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
+  UpdatedFile,
+  UpdatedFilesUpdatedData,
 } from '@common/types';
 
 import type { BmadStatus } from '@common/bmad-types';
@@ -88,6 +90,16 @@ export class EventManager {
     };
     this.sendToMainWindow('context-files-updated', data);
     this.broadcastToEventConnectors('context-files-updated', data);
+  }
+
+  sendUpdatedFilesUpdated(baseDir: string, taskId: string, files: UpdatedFile[]): void {
+    const data: UpdatedFilesUpdatedData = {
+      baseDir,
+      taskId,
+      files,
+    };
+    this.sendToMainWindow('updated-files-updated', data);
+    this.broadcastToEventConnectors('updated-files-updated', data);
   }
 
   // Response events

@@ -195,6 +195,19 @@ export interface ContextFilesUpdatedData {
   files: ContextFile[];
 }
 
+export interface UpdatedFile {
+  path: string;
+  additions: number;
+  deletions: number;
+  diff?: string;
+}
+
+export interface UpdatedFilesUpdatedData {
+  baseDir: string;
+  taskId: string;
+  files: UpdatedFile[];
+}
+
 export interface CustomCommandsUpdatedData {
   baseDir: string;
   taskId: string;
@@ -206,13 +219,6 @@ export interface AutocompletionData {
   taskId: string;
   words?: string[];
   allFiles?: string[];
-}
-
-export interface SessionData {
-  id: string;
-  name: string;
-  messages?: number;
-  files?: number;
 }
 
 export interface Answer {

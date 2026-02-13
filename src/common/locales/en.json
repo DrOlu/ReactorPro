@@ -15,6 +15,8 @@
     "confirm": "Confirm",
     "back": "Back",
     "next": "Next",
+    "previous": "Previous",
+    "of": "of",
     "finish": "Finish",
     "loading": "Loading...",
     "startingUp": "Starting up...",
@@ -885,6 +887,8 @@
   },
   "contextFiles": {
     "title": "Context Files",
+    "updatedFiles": "Updated Files",
+    "updated": "Updated",
     "add": "Add context files",
     "addFileTooltip": "Add file (use Ctrl/Cmd to add as Read-only)",
     "addFileTooltip.ctrl": "Add file (use Ctrl to add as Read-only)",
@@ -900,6 +904,9 @@
     "agentRule": "Agent rule file",
     "projectFiles": "Project Files",
     "rules": "Rule Files",
+    "diffViewer": {
+      "file": "File"
+    },
     "search": "Search files",
     "searchPlaceholder": "Search files...",
     "refresh": "Refresh",

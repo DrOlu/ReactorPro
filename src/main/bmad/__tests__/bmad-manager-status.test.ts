@@ -1,13 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { BmadManager } from '../bmad-manager';
-import { ArtifactDetector } from '../artifact-detector';
 import { BMAD_WORKFLOWS } from '../../../common/bmad-workflows';
 
-import type { ArtifactDetectionResult } from '../../../common/bmad-types';
-
-// Mock ArtifactDetector
-vi.mock('../artifact-detector');
+import type { WorkflowArtifacts } from '../../../common/bmad-types';
 
 // Mock file system operations
 vi.mock('fs', () => ({
@@ -32,7 +28,7 @@ describe('BmadManager - Status', () => {
 
   describe('getBmadStatus - Response Structure', () => {
     it('populates all BmadStatus fields correctly', async () => {
-      const mockDetectionResult: ArtifactDetectionResult = {
+      const mockWorkflowArtifacts: WorkflowArtifacts = {
         completedWorkflows: ['create-product-brief'],
         inProgressWorkflows: [],
         detectedArtifacts: {
@@ -40,52 +36,60 @@ describe('BmadManager - Status', () => {
             path: 'planning-artifacts/product-brief-example.md',
           },
         },
+        sprintStatus: undefined,
       };
 
-      vi.mocked(ArtifactDetector.prototype.detect).mockResolvedValue(mockDetectionResult);
+      vi.spyOn(bmadManager as any, 'scanWorkflows').mockResolvedValue(mockWorkflowArtifacts);
 
       const status = await bmadManager.getBmadStatus();
 
-      // Verify all required fields are present (suggestedWorkflows moved to renderer)
+      // Verify all required fields are present
       expect(status).toHaveProperty('installed');
       expect(status).toHaveProperty('version');
       expect(status).toHaveProperty('availableWorkflows');
       expect(status).toHaveProperty('completedWorkflows');
+      expect(status).toHaveProperty('inProgressWorkflows');
+      expect(status).toHaveProperty('incompleteWorkflows');
       expect(status).toHaveProperty('detectedArtifacts');
+      expect(status).toHaveProperty('sprintStatus');
 
       // Verify field types and values
       expect(typeof status.installed).toBe('boolean');
       expect(Array.isArray(status.availableWorkflows)).toBe(true);
       expect(Array.isArray(status.completedWorkflows)).toBe(true);
+      expect(Array.isArray(status.inProgressWorkflows)).toBe(true);
       expect(typeof status.detectedArtifacts).toBe('object');
 
       // Verify availableWorkflows equals BMAD_WORKFLOWS
       expect(status.availableWorkflows).toEqual(BMAD_WORKFLOWS);
 
-      // Verify completedWorkflows from detection result
-      expect(status.completedWorkflows).toEqual(mockDetectionResult.completedWorkflows);
+      // Verify completedWorkflows from scanWorkflows result
+      expect(status.completedWorkflows).toEqual(mockWorkflowArtifacts.completedWorkflows);
+      expect(status.inProgressWorkflows).toEqual(mockWorkflowArtifacts.inProgressWorkflows);
 
-      // Verify detectedArtifacts from detection result
-      expect(status.detectedArtifacts).toEqual(mockDetectionResult);
+      // Verify detectedArtifacts from scanWorkflows result
+      expect(status.detectedArtifacts).toEqual(mockWorkflowArtifacts.detectedArtifacts);
+      expect(status.sprintStatus).toBeUndefined();
     });
 
     it('returns empty completed workflows for greenfield projects', async () => {
-      const mockDetectionResult: ArtifactDetectionResult = {
+      const mockWorkflowArtifacts: WorkflowArtifacts = {
         completedWorkflows: [],
         inProgressWorkflows: [],
         detectedArtifacts: {},
+        sprintStatus: undefined,
       };
 
-      vi.mocked(ArtifactDetector.prototype.detect).mockResolvedValue(mockDetectionResult);
+      vi.spyOn(bmadManager as any, 'scanWorkflows').mockResolvedValue(mockWorkflowArtifacts);
 
       const status = await bmadManager.getBmadStatus();
 
       expect(status.completedWorkflows).toEqual([]);
-      expect(status.detectedArtifacts.completedWorkflows).toEqual([]);
+      expect(status.inProgressWorkflows).toEqual([]);
     });
 
-    it('returns detected artifacts from artifact detector', async () => {
-      const mockDetectionResult: ArtifactDetectionResult = {
+    it('returns detected artifacts from scanWorkflows', async () => {
+      const mockWorkflowArtifacts: WorkflowArtifacts = {
         completedWorkflows: ['create-product-brief', 'create-prd'],
         inProgressWorkflows: ['create-architecture'],
         detectedArtifacts: {
@@ -96,15 +100,16 @@ describe('BmadManager - Status', () => {
             path: 'planning-artifacts/prd.md',
           },
         },
+        sprintStatus: undefined,
       };
 
-      vi.mocked(ArtifactDetector.prototype.detect).mockResolvedValue(mockDetectionResult);
+      vi.spyOn(bmadManager as any, 'scanWorkflows').mockResolvedValue(mockWorkflowArtifacts);
 
       const status = await bmadManager.getBmadStatus();
 
       expect(status.completedWorkflows).toEqual(['create-product-brief', 'create-prd']);
       expect(status.inProgressWorkflows).toEqual(['create-architecture']);
-      expect(status.detectedArtifacts).toEqual(mockDetectionResult);
+      expect(status.detectedArtifacts).toEqual(mockWorkflowArtifacts.detectedArtifacts);
     });
   });
 });

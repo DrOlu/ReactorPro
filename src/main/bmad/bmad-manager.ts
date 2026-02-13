@@ -7,22 +7,29 @@ import { promisify } from 'util';
 
 import { v4 as uuidv4 } from 'uuid';
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
+import { StoryStatus } from '@common/bmad-types';
+import { glob } from 'glob';
+import * as yaml from 'yaml';
+import * as yamlFront from 'yaml-front-matter';
 
-import { ArtifactDetector } from './artifact-detector';
 import { ContextPreparer } from './context-preparer';
 
-import type { BmadError, BmadStatus, InstallResult, WorkflowExecutionResult } from '@common/bmad-types';
+import type {
+  BmadError,
+  BmadStatus,
+  InstallResult,
+  WorkflowExecutionResult,
+  IncompleteWorkflowMetadata,
+  SprintStatusData,
+  WorkflowArtifacts,
+} from '@common/bmad-types';
 import type { Task } from '@/task';
 import type { ContextFile } from '@common/types';
 
 import logger from '@/logger';
 
 export class BmadManager {
-  private readonly artifactDetector: ArtifactDetector;
-
-  constructor(private readonly projectDir: string) {
-    this.artifactDetector = new ArtifactDetector();
-  }
+  constructor(private readonly projectDir: string) {}
 
   checkInstallation(): boolean {
     try {
@@ -54,21 +61,286 @@ export class BmadManager {
     }
   }
 
+  /**
+   * Parses a step identifier to extract the step number.
+   * Handles formats:
+   * - Pure numbers: '1', '5', '12'
+   * - Prefixed step IDs: 'step-01-document-discovery', 'step-5-analysis'
+   * - Falls back to index + 1 for unrecognized formats
+   *
+   * @param stepId - The step identifier string
+   * @param index - The index of the step in the array (used as fallback)
+   * @returns The extracted step number
+   */
+  private parseStepNumber = (stepId: string, index: number): number => {
+    // Try pure number first
+    const pureNumber = parseInt(stepId, 10);
+    if (!isNaN(pureNumber)) {
+      return pureNumber;
+    }
+
+    // Try to extract number from patterns like 'step-01-...' or 'step-1-...'
+    const stepPattern = /^step-(\d+)/i;
+    const match = stepId.match(stepPattern);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+
+    // Fallback to index + 1
+    return index + 1;
+  };
+
+  private VALID_STORY_STATUSES: StoryStatus[] = [StoryStatus.Backlog, StoryStatus.ReadyForDev, StoryStatus.InProgress, StoryStatus.Review, StoryStatus.Done];
+
+  private isValidStoryStatus = (status: string): status is StoryStatus => {
+    return this.VALID_STORY_STATUSES.includes(status as StoryStatus);
+  };
+
+  /**
+   * Parses sprint-status.yaml and extracts story statuses (excluding epics and retrospectives)
+   * Also determines which workflows are completed based on story statuses:
+   * - 'dev-story' and 'code-review' are completed if all stories are 'done' (non-empty)
+   * - 'create-story' is completed if there are no 'backlog' stories
+   * @param projectRoot - Absolute path to the project root directory
+   * @returns SprintStatusData with array of story statuses and completed workflows, or undefined if file doesn't exist
+   */
+  private async parseSprintStatus(projectRoot: string): Promise<SprintStatusData | undefined> {
+    const sprintStatusPath = path.join(projectRoot, '_bmad-output/implementation-artifacts/sprint-status.yaml');
+
+    try {
+      const content = await fsPromises.readFile(sprintStatusPath, 'utf-8');
+      const parsed = yaml.parse(content) as { development_status?: Record<string, string> };
+
+      if (!parsed?.development_status) {
+        return undefined;
+      }
+
+      const storyStatuses: StoryStatus[] = [];
+
+      for (const [key, status] of Object.entries(parsed.development_status)) {
+        if (key.startsWith('epic') || key.endsWith('-retrospective')) {
+          continue;
+        }
+
+        if (this.isValidStoryStatus(status)) {
+          storyStatuses.push(status as StoryStatus);
+        }
+      }
+
+      const completedWorkflows: string[] = [];
+
+      if (storyStatuses.length > 0 && storyStatuses.every((status) => status === StoryStatus.Done)) {
+        completedWorkflows.push('dev-story', 'code-review');
+      }
+
+      if (storyStatuses.length > 0 && !storyStatuses.includes(StoryStatus.Backlog)) {
+        completedWorkflows.push('create-story');
+      }
+
+      return { storyStatuses, completedWorkflows };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Scans for completed workflow artifacts in the project
+   * Uses a hybrid two-tier detection strategy:
+   * - Tier 1: Fast file existence check using glob patterns
+   * - Tier 2: Detailed state parsing via YAML frontmatter for resume capability
+   * @param projectRoot - Absolute path to the project root directory
+   * @returns Workflow artifacts with completed workflows and artifact details
+   */
+  private async scanWorkflows(projectRoot: string): Promise<WorkflowArtifacts> {
+    // Check if _bmad-output directory exists
+    const outputDir = path.join(projectRoot, '_bmad-output');
+
+    try {
+      await fsPromises.access(outputDir);
+    } catch {
+      // Directory doesn't exist or permission denied - return greenfield state
+      return {
+        completedWorkflows: [],
+        inProgressWorkflows: [],
+        detectedArtifacts: {},
+      };
+    }
+
+    // Scan for artifacts using glob patterns from workflow registry
+    const completedWorkflows: string[] = [];
+    const inProgressWorkflows: string[] = [];
+    const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {};
+    const incompleteWorkflows: IncompleteWorkflowMetadata[] = [];
+    // Track workflows with non-completing status for quick-dev (same artifact pattern as quick-spec)
+    const workflowsWithNonCompletingStatus = new Set<string>();
+
+    for (const workflow of BMAD_WORKFLOWS) {
+      const { id, outputArtifact } = workflow;
+
+      try {
+        // Resolve glob pattern relative to project root
+        const fullPattern = path.join(projectRoot, outputArtifact);
+
+        // Use glob to find matching files
+        const matches = await glob(fullPattern, {
+          windowsPathsNoEscape: true,
+        });
+
+        if (matches.length > 0) {
+          const artifactPath = matches[0];
+
+          // Try to parse YAML frontmatter for stepsCompleted and status
+          let stepsCompleted: string[] | undefined;
+          let status: string | undefined;
+          let frontmatterError: string | undefined;
+
+          try {
+            const content = await fsPromises.readFile(artifactPath, 'utf-8');
+            const { __content, ...properties } = yamlFront.loadFront(content);
+
+            logger.debug('Parsed frontmatter', { parsed: properties });
+
+            if (properties.stepsCompleted) {
+              stepsCompleted = properties.stepsCompleted;
+            }
+
+            if (properties.status) {
+              status = properties.status;
+            }
+          } catch (parseError) {
+            // File read or YAML parse error - track corruption
+            frontmatterError = parseError instanceof Error ? parseError.message : 'Unknown error parsing frontmatter';
+            // Artifact is still detected (file existence), just no detailed state
+          }
+
+          // Store artifact details
+          detectedArtifacts[id] = {
+            path: artifactPath,
+            ...(stepsCompleted && { stepsCompleted }),
+            ...(status && { status }),
+            ...(frontmatterError && { error: frontmatterError }),
+          };
+
+          // Track quick-dev workflows with non-completing status
+          if (id === 'quick-dev' && status) {
+            const statusLower = status.toLowerCase();
+            const hasCompletingStatus = statusLower.includes('complete') || statusLower.includes('done');
+            if (!hasCompletingStatus) {
+              workflowsWithNonCompletingStatus.add(id);
+            }
+          }
+
+          // Determine completion status using workflow.totalSteps from registry
+          const workflowTotalSteps = workflow.totalSteps;
+          const stepsCompletedNumbers = stepsCompleted?.map((s, i) => this.parseStepNumber(s, i)) || [];
+          const maxCompletedStep = stepsCompletedNumbers.length > 0 ? Math.max(...stepsCompletedNumbers) : 0;
+
+          // Workflow is complete if:
+          // 1. No stepsCompleted in frontmatter (legacy/simple artifact) - assume complete
+          // 2. stepsCompleted exists and max step >= totalSteps from registry
+          // 3. For quick-spec workflow: status is 'ready-for-dev'
+          // 4. For quick-dev workflow: status (lowercase) contains 'complete' or 'done'
+          const isQuickSpecReadyForDevStatus = id === 'quick-spec' && status === 'ready-for-dev';
+          const statusLower = status?.toLowerCase() || '';
+          const isQuickDevCompletedByStatus = id === 'quick-dev' && (statusLower.includes('complete') || statusLower.includes('done'));
+
+          // quick-dev uses status field only for completion, ignores stepsCompleted
+          const isLegacyComplete = !stepsCompleted && id !== 'quick-dev';
+          const isStepsComplete = id === 'quick-dev' ? false : maxCompletedStep >= workflowTotalSteps;
+          const isFullyCompleted = isLegacyComplete || isStepsComplete || isQuickSpecReadyForDevStatus || isQuickDevCompletedByStatus;
+
+          logger.debug('Workflow completion status', {
+            workflowId: id,
+            stepsCompleted,
+            maxCompletedStep,
+            workflowTotalSteps,
+            status,
+            isLegacyComplete,
+            isStepsComplete,
+            isQuickSpecReadyForDevStatus,
+            isQuickDevCompletedByStatus,
+            isFullyCompleted,
+          });
+
+          if (isFullyCompleted) {
+            completedWorkflows.push(id);
+          } else {
+            if (id === 'quick-dev' && detectedArtifacts['quick-spec']?.status === 'ready-for-dev') {
+              // quick-dev is not in progress if quick-spec is ready-for-dev
+              continue;
+            }
+
+            // Workflow is in progress
+            inProgressWorkflows.push(id);
+
+            // Also add to incompleteWorkflows for resume functionality
+            try {
+              const stats = await fsPromises.stat(artifactPath);
+              const nextStep = stepsCompletedNumbers.length === 0 ? 1 : maxCompletedStep + 1;
+
+              incompleteWorkflows.push({
+                workflowId: id,
+                artifactPath,
+                stepsCompleted: stepsCompletedNumbers,
+                nextStep,
+                lastModified: stats.mtime,
+                ...(frontmatterError && { corrupted: true, corruptionError: frontmatterError }),
+              });
+            } catch {
+              // Failed to get file stats - still mark as in progress but skip incompleteWorkflows entry
+            }
+          }
+        }
+      } catch {
+        // Glob error - continue scanning other workflows
+      }
+    }
+
+    const sprintStatus = await this.parseSprintStatus(projectRoot);
+
+    if (sprintStatus) {
+      for (const workflowId of sprintStatus.completedWorkflows) {
+        if (!completedWorkflows.includes(workflowId)) {
+          completedWorkflows.push(workflowId);
+        }
+      }
+    }
+
+    // Remove workflows with non-completing status from completedWorkflows
+    // This ensures quick-dev with status like 'ready-for-dev' is not marked as completed
+    for (const workflowId of workflowsWithNonCompletingStatus) {
+      const index = completedWorkflows.indexOf(workflowId);
+      if (index !== -1) {
+        completedWorkflows.splice(index, 1);
+      }
+    }
+
+    return {
+      completedWorkflows,
+      inProgressWorkflows,
+      detectedArtifacts,
+      incompleteWorkflows,
+      sprintStatus,
+    };
+  }
+
   async getBmadStatus(): Promise<BmadStatus> {
     const installed = this.checkInstallation();
     const version = installed ? this.getVersion() : undefined;
 
-    // Detect completed workflow artifacts
-    const detectionResult = await this.artifactDetector.detect(this.projectDir);
+    // Scan for workflow artifacts
+    const workflowArtifacts = await this.scanWorkflows(this.projectDir);
 
     return {
       projectDir: this.projectDir,
       installed,
       version,
       availableWorkflows: BMAD_WORKFLOWS,
-      completedWorkflows: detectionResult.completedWorkflows,
-      inProgressWorkflows: detectionResult.inProgressWorkflows,
-      detectedArtifacts: detectionResult,
+      completedWorkflows: workflowArtifacts.completedWorkflows,
+      inProgressWorkflows: workflowArtifacts.inProgressWorkflows,
+      incompleteWorkflows: workflowArtifacts.incompleteWorkflows,
+      detectedArtifacts: workflowArtifacts.detectedArtifacts,
+      sprintStatus: workflowArtifacts.sprintStatus,
     };
   }
 

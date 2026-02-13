@@ -101,7 +101,6 @@ src/
         quick-spec.json.hbs
         research.json.hbs
         sprint-planning.json.hbs
-      artifact-detector.ts
       bmad-manager.ts
       context-preparer.ts
     connector/
@@ -329,6 +328,7 @@ src/
           ContextFiles.css
           ContextFiles.tsx
           index.ts
+          UpdatedFilesDiffModal.tsx
         message/
           ActivateSkillToolMessage.tsx
           AssistantMessageBlock.tsx
@@ -1398,6 +1398,8 @@ File: src/common/locales/en.json
     "confirm": "Confirm",
     "back": "Back",
     "next": "Next",
+    "previous": "Previous",
+    "of": "of",
     "finish": "Finish",
     "loading": "Loading...",
     "startingUp": "Starting up...",
@@ -2268,6 +2270,8 @@ File: src/common/locales/en.json
   },
   "contextFiles": {
     "title": "Context Files",
+    "updatedFiles": "Updated Files",
+    "updated": "Updated",
     "add": "Add context files",
     "addFileTooltip": "Add file (use Ctrl/Cmd to add as Read-only)",
     "addFileTooltip.ctrl": "Add file (use Ctrl to add as Read-only)",
@@ -2283,6 +2287,9 @@ File: src/common/locales/en.json
     "agentRule": "Agent rule file",
     "projectFiles": "Project Files",
     "rules": "Rule Files",
+    "diffViewer": {
+      "file": "File"
+    },
     "search": "Search files",
     "searchPlaceholder": "Search files...",
     "refresh": "Refresh",
@@ -3090,6 +3097,8 @@ File: src/common/locales/zh.json
     "confirm": "确认",
     "back": "返回",
     "next": "下一步",
+    "previous": "上一个",
+    "of": "共",
     "finish": "完成",
     "loading": "加载中...",
     "startingUp": "正在启动...",
@@ -3917,6 +3926,8 @@ File: src/common/locales/zh.json
   },
   "contextFiles": {
     "title": "上下文文件",
+    "updatedFiles": "已更新文件",
+    "updated": "已更新",
     "add": "添加上下文文件",
     "addFileTooltip": "添加文件 (按 Ctrl/Cmd 键添加为只读)",
     "addFileTooltip.ctrl": "添加文件 (按 Ctrl 键添加为只读)",
@@ -3932,6 +3943,9 @@ File: src/common/locales/zh.json
     "agentRule": "代理规则文件",
     "projectFiles": "项目文件",
     "rules": "规则文件",
+    "diffViewer": {
+      "file": "文件"
+    },
     "search": "搜索文件",
     "searchPlaceholder": "搜索文件...",
     "refresh": "刷新",
@@ -5156,6 +5170,8 @@ import {
   WorkflowExecutionResult,
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
+  UpdatedFile,
+  UpdatedFilesUpdatedData,
 } from '@common/types';
 ⋮----
 export interface ApplicationAPI {
@@ -5196,6 +5212,7 @@ export interface ApplicationAPI {
   getFilePathSuggestions: (currentPath: string, directoriesOnly?: boolean) => Promise<string[]>;
   getAddableFiles: (baseDir: string, taskId: string) => Promise<string[]>;
   getAllFiles: (baseDir: string, taskId: string, useGit?: boolean) => Promise<string[]>;
+  getUpdatedFiles: (baseDir: string, taskId: string) => Promise<UpdatedFile[]>;
   addFile: (baseDir: string, taskId: string, filePath: string, readOnly?: boolean) => void;
   isValidPath: (baseDir: string, path: string) => Promise<boolean>;
   isProjectPath: (path: string) => Promise<boolean>;
@@ -5261,6 +5278,7 @@ export interface ApplicationAPI {
   addResponseCompletedListener: (baseDir: string, taskId: string, callback: (data: ResponseCompletedData) => void) => () => void;
   addLogListener: (baseDir: string, taskId: string, callback: (data: LogData) => void) => () => void;
   addContextFilesUpdatedListener: (baseDir: string, taskId: string, callback: (data: ContextFilesUpdatedData) => void) => () => void;
+  addUpdatedFilesUpdatedListener: (baseDir: string, taskId: string, callback: (data: UpdatedFilesUpdatedData) => void) => () => void;
   addCustomCommandsUpdatedListener: (baseDir: string, callback: (data: CustomCommandsUpdatedData) => void) => () => void;
   addUpdateAutocompletionListener: (baseDir: string, taskId: string, callback: (data: AutocompletionData) => void) => () => void;
   addAskQuestionListener: (baseDir: string, taskId: string, callback: (data: QuestionData) => void) => () => void;
@@ -5427,21 +5445,25 @@ export interface SprintStatusData {
   completedWorkflows: string[];
 }
 ⋮----
+export type DetectedArtifact = {
+  path: string;
+  stepsCompleted?: string[];
+  status?: string;
+  error?: string;
+};
+⋮----
+export type DetectedArtifacts = {
+  [workflowId: string]: DetectedArtifact;
+};
+⋮----
 /**
- * Artifact detection result
+ * Workflow artifacts detection result
  */
-export interface ArtifactDetectionResult {
+export interface WorkflowArtifacts {
   completedWorkflows: string[];
   inProgressWorkflows: string[];
-  detectedArtifacts: {
-    [workflowId: string]: {
-      path: string;
-      stepsCompleted?: string[];
-      status?: string;
-      error?: string;
-    };
-  };
   incompleteWorkflows?: IncompleteWorkflowMetadata[];
+  detectedArtifacts: DetectedArtifacts;
   sprintStatus?: SprintStatusData;
 }
 ⋮----
@@ -5455,7 +5477,9 @@ export interface BmadStatus {
   availableWorkflows: WorkflowMetadata[];
   completedWorkflows: string[];
   inProgressWorkflows: string[];
-  detectedArtifacts: ArtifactDetectionResult;
+  incompleteWorkflows?: IncompleteWorkflowMetadata[];
+  detectedArtifacts: DetectedArtifacts;
+  sprintStatus?: SprintStatusData;
 }
 ⋮----
 /**
@@ -5699,6 +5723,19 @@ export interface ContextFilesUpdatedData {
   files: ContextFile[];
 }
 ⋮----
+export interface UpdatedFile {
+  path: string;
+  additions: number;
+  deletions: number;
+  diff?: string;
+}
+⋮----
+export interface UpdatedFilesUpdatedData {
+  baseDir: string;
+  taskId: string;
+  files: UpdatedFile[];
+}
+⋮----
 export interface CustomCommandsUpdatedData {
   baseDir: string;
   taskId: string;
@@ -5710,13 +5747,6 @@ export interface AutocompletionData {
   taskId: string;
   words?: string[];
   allFiles?: string[];
-}
-⋮----
-export interface SessionData {
-  id: string;
-  name: string;
-  messages?: number;
-  files?: number;
 }
 ⋮----
 export interface Answer {
@@ -9368,9 +9398,12 @@ File: src/main/bmad/context/quick-dev.json.hbs
     "role": "user",
     "content": "IT IS CRITICAL THAT YOU FOLLOW THIS COMMAND: LOAD the FULL _bmad/bmm/workflows/bmad-quick-flow/quick-dev/workflow.md, READ its entire contents and follow its directions exactly!",
     "promptContext": {
-      "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48",
+      "id": "quick-dev",
       "group": {
-        "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48"
+        "id": "quick-dev",
+        "name": "Quick Dev",
+        "color": "#f59e0b",
+        "finished": true
       }
     }
   },
@@ -9395,9 +9428,9 @@ File: src/main/bmad/context/quick-dev.json.hbs
       }
     ],
     "promptContext": {
-      "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48",
+      "id": "quick-dev",
       "group": {
-        "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48"
+        "id": "quick-dev"
       }
     }
   },
@@ -9416,9 +9449,9 @@ File: src/main/bmad/context/quick-dev.json.hbs
       }
     ],
     "promptContext": {
-      "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48",
+      "id": "quick-dev",
       "group": {
-        "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48"
+        "id": "quick-dev"
       }
     }
   },
@@ -9443,9 +9476,9 @@ File: src/main/bmad/context/quick-dev.json.hbs
       }
     ],
     "promptContext": {
-      "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48",
+      "id": "quick-dev",
       "group": {
-        "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48"
+        "id": "quick-dev"
       }
     }
   },
@@ -9464,9 +9497,9 @@ File: src/main/bmad/context/quick-dev.json.hbs
       }
     ],
     "promptContext": {
-      "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48",
+      "id": "quick-dev",
       "group": {
-        "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48"
+        "id": "quick-dev"
       }
     }
   },
@@ -9476,16 +9509,13 @@ File: src/main/bmad/context/quick-dev.json.hbs
     "content": [
       {
         "type": "text",
-        "text": "Now I need to execute Step 1: Mode Detection. Let me follow the workflow:\n\n1. First, capture baseline - check if Git repo exists\n2. Load project context if exists\n3. Parse user input to determine mode\n4. Evaluate escalation threshold if Mode B\n\nLet me start:"
+        "text": "Now I need to execute Step 1: Mode Detection. Let me follow the workflow:\n\n1. First, capture baseline - check if Git repo exists\n2. Load project context if exists\n3. Parse user input to determine mode\n4. Evaluate escalation threshold if Mode B"
       }
     ],
     "promptContext": {
-      "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48",
+      "id": "quick-dev",
       "group": {
-        "id": "32d0288c-1e8e-482d-9de2-7c5ee6c9bd48",
-        "name": "Quick Dev",
-        "color": "#f59e0b",
-        "finished": true
+        "id": "quick-dev"
       }
     }
   }
@@ -9500,9 +9530,12 @@ File: src/main/bmad/context/quick-spec.json.hbs
     "role": "user",
     "content": "IT IS CRITICAL THAT YOU FOLLOW THIS COMMAND: LOAD the FULL _bmad/bmm/workflows/bmad-quick-flow/quick-spec/workflow.md, READ its entire contents and follow its directions exactly!",
     "promptContext": {
-      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "id": "quick-spec",
       "group": {
-        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+        "id": "quick-spec",
+        "name": "Quick Spec",
+        "color": "#f59e0b",
+        "finished": true
       }
     }
   },
@@ -9527,9 +9560,9 @@ File: src/main/bmad/context/quick-spec.json.hbs
       }
     ],
     "promptContext": {
-      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "id": "quick-spec",
       "group": {
-        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+        "id": "quick-spec"
       }
     }
   },
@@ -9548,9 +9581,9 @@ File: src/main/bmad/context/quick-spec.json.hbs
       }
     ],
     "promptContext": {
-      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "id": "quick-spec",
       "group": {
-        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+        "id": "quick-spec"
       }
     }
   },
@@ -9575,9 +9608,9 @@ File: src/main/bmad/context/quick-spec.json.hbs
       }
     ],
     "promptContext": {
-      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "id": "quick-spec",
       "group": {
-        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+        "id": "quick-spec"
       }
     }
   },
@@ -9596,9 +9629,9 @@ File: src/main/bmad/context/quick-spec.json.hbs
       }
     ],
     "promptContext": {
-      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "id": "quick-spec",
       "group": {
-        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+        "id": "quick-spec"
       }
     }
   },
@@ -9623,9 +9656,9 @@ File: src/main/bmad/context/quick-spec.json.hbs
       }
     ],
     "promptContext": {
-      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "id": "quick-spec",
       "group": {
-        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+        "id": "quick-spec"
       }
     }
   },
@@ -9644,9 +9677,9 @@ File: src/main/bmad/context/quick-spec.json.hbs
       }
     ],
     "promptContext": {
-      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "id": "quick-spec",
       "group": {
-        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f"
+        "id": "quick-spec"
       }
     }
   },
@@ -9660,12 +9693,9 @@ File: src/main/bmad/context/quick-spec.json.hbs
       }
     ],
     "promptContext": {
-      "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
+      "id": "quick-spec",
       "group": {
-        "id": "6e4d6097-e57c-47cb-ba30-3543a53d0c1f",
-        "name": "Quick Spec",
-        "color": "#f59e0b",
-        "finished": true
+        "id": "quick-spec"
       }
     }
   }
@@ -10077,101 +10107,6 @@ File: src/main/bmad/context/sprint-planning.json.hbs
 ]
 
 ================
-File: src/main/bmad/artifact-detector.ts
-================
-import { glob } from 'glob';
-⋮----
-import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
-import { StoryStatus } from '@common/bmad-types';
-⋮----
-import type { ArtifactDetectionResult, IncompleteWorkflowMetadata, SprintStatusData } from '@common/bmad-types';
-⋮----
-import logger from '@/logger';
-⋮----
-/**
- * Parses a step identifier to extract the step number.
- * Handles formats:
- * - Pure numbers: '1', '5', '12'
- * - Prefixed step IDs: 'step-01-document-discovery', 'step-5-analysis'
- * - Falls back to index + 1 for unrecognized formats
- *
- * @param stepId - The step identifier string
- * @param index - The index of the step in the array (used as fallback)
- * @returns The extracted step number
- */
-const parseStepNumber = (stepId: string, index: number): number =>
-⋮----
-// Try pure number first
-⋮----
-// Try to extract number from patterns like 'step-01-...' or 'step-1-...'
-⋮----
-// Fallback to index + 1
-⋮----
-const isValidStoryStatus = (status: string): status is StoryStatus =>
-⋮----
-/**
- * ArtifactDetector scans the project directory for completed BMAD workflow artifacts
- * Uses a hybrid two-tier detection strategy:
- * - Tier 1: Fast file existence check using glob patterns
- * - Tier 2: Detailed state parsing via YAML frontmatter for resume capability
- */
-export class ArtifactDetector
-⋮----
-/**
-   * Parses sprint-status.yaml and extracts story statuses (excluding epics and retrospectives)
-   * Also determines which workflows are completed based on story statuses:
-   * - 'dev-story' and 'code-review' are completed if all stories are 'done' (non-empty)
-   * - 'create-story' is completed if there are no 'backlog' stories
-   * @param projectRoot - Absolute path to the project root directory
-   * @returns SprintStatusData with array of story statuses and completed workflows, or undefined if file doesn't exist
-   */
-private async parseSprintStatus(projectRoot: string): Promise<SprintStatusData | undefined>
-⋮----
-/**
-   * Detects completed workflow artifacts in the project
-   * @param projectRoot - Absolute path to the project root directory
-   * @returns Detection result with completed workflows and artifact details
-   */
-async detect(projectRoot: string): Promise<ArtifactDetectionResult>
-⋮----
-// Check if _bmad-output directory exists
-⋮----
-// Directory doesn't exist or permission denied - return greenfield state
-⋮----
-// Scan for artifacts using glob patterns from workflow registry
-⋮----
-// Resolve glob pattern relative to project root
-⋮----
-// Use glob to find matching files
-⋮----
-// Try to parse YAML frontmatter for stepsCompleted and status
-⋮----
-// File read or YAML parse error - track corruption
-⋮----
-// Artifact is still detected (file existence), just no detailed state
-⋮----
-// Store artifact details
-⋮----
-// Determine completion status using workflow.totalSteps from registry
-⋮----
-// Workflow is complete if:
-// 1. No stepsCompleted in frontmatter (legacy/simple artifact) - assume complete
-// 2. stepsCompleted exists and max step >= totalSteps from registry
-// 3. For quick-spec workflow: status is 'ready-for-dev'
-⋮----
-// quick-dev with ready-for-dev status is NOT complete (that status comes from quick-spec)
-⋮----
-// quick-dev is not in progress if quick-spec is ready-for-dev
-⋮----
-// Workflow is in progress
-⋮----
-// Also add to incompleteWorkflows for resume functionality
-⋮----
-// Failed to get file stats - still mark as in progress but skip incompleteWorkflows entry
-⋮----
-// Glob error - continue scanning other workflows
-
-================
 File: src/main/bmad/bmad-manager.ts
 ================
 import { exec } from 'child_process';
@@ -10179,11 +10114,20 @@ import { promisify } from 'util';
 ⋮----
 import { v4 as uuidv4 } from 'uuid';
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
+import { StoryStatus } from '@common/bmad-types';
+import { glob } from 'glob';
 ⋮----
-import { ArtifactDetector } from './artifact-detector';
 import { ContextPreparer } from './context-preparer';
 ⋮----
-import type { BmadError, BmadStatus, InstallResult, WorkflowExecutionResult } from '@common/bmad-types';
+import type {
+  BmadError,
+  BmadStatus,
+  InstallResult,
+  WorkflowExecutionResult,
+  IncompleteWorkflowMetadata,
+  SprintStatusData,
+  WorkflowArtifacts,
+} from '@common/bmad-types';
 import type { Task } from '@/task';
 import type { ContextFile } from '@common/types';
 ⋮----
@@ -10197,9 +10141,92 @@ checkInstallation(): boolean
 ⋮----
 getVersion(): string | undefined
 ⋮----
+/**
+   * Parses a step identifier to extract the step number.
+   * Handles formats:
+   * - Pure numbers: '1', '5', '12'
+   * - Prefixed step IDs: 'step-01-document-discovery', 'step-5-analysis'
+   * - Falls back to index + 1 for unrecognized formats
+   *
+   * @param stepId - The step identifier string
+   * @param index - The index of the step in the array (used as fallback)
+   * @returns The extracted step number
+   */
+⋮----
+// Try pure number first
+⋮----
+// Try to extract number from patterns like 'step-01-...' or 'step-1-...'
+⋮----
+// Fallback to index + 1
+⋮----
+/**
+   * Parses sprint-status.yaml and extracts story statuses (excluding epics and retrospectives)
+   * Also determines which workflows are completed based on story statuses:
+   * - 'dev-story' and 'code-review' are completed if all stories are 'done' (non-empty)
+   * - 'create-story' is completed if there are no 'backlog' stories
+   * @param projectRoot - Absolute path to the project root directory
+   * @returns SprintStatusData with array of story statuses and completed workflows, or undefined if file doesn't exist
+   */
+private async parseSprintStatus(projectRoot: string): Promise<SprintStatusData | undefined>
+⋮----
+/**
+   * Scans for completed workflow artifacts in the project
+   * Uses a hybrid two-tier detection strategy:
+   * - Tier 1: Fast file existence check using glob patterns
+   * - Tier 2: Detailed state parsing via YAML frontmatter for resume capability
+   * @param projectRoot - Absolute path to the project root directory
+   * @returns Workflow artifacts with completed workflows and artifact details
+   */
+private async scanWorkflows(projectRoot: string): Promise<WorkflowArtifacts>
+⋮----
+// Check if _bmad-output directory exists
+⋮----
+// Directory doesn't exist or permission denied - return greenfield state
+⋮----
+// Scan for artifacts using glob patterns from workflow registry
+⋮----
+// Track workflows with non-completing status for quick-dev (same artifact pattern as quick-spec)
+⋮----
+// Resolve glob pattern relative to project root
+⋮----
+// Use glob to find matching files
+⋮----
+// Try to parse YAML frontmatter for stepsCompleted and status
+⋮----
+// File read or YAML parse error - track corruption
+⋮----
+// Artifact is still detected (file existence), just no detailed state
+⋮----
+// Store artifact details
+⋮----
+// Track quick-dev workflows with non-completing status
+⋮----
+// Determine completion status using workflow.totalSteps from registry
+⋮----
+// Workflow is complete if:
+// 1. No stepsCompleted in frontmatter (legacy/simple artifact) - assume complete
+// 2. stepsCompleted exists and max step >= totalSteps from registry
+// 3. For quick-spec workflow: status is 'ready-for-dev'
+// 4. For quick-dev workflow: status (lowercase) contains 'complete' or 'done'
+⋮----
+// quick-dev uses status field only for completion, ignores stepsCompleted
+⋮----
+// quick-dev is not in progress if quick-spec is ready-for-dev
+⋮----
+// Workflow is in progress
+⋮----
+// Also add to incompleteWorkflows for resume functionality
+⋮----
+// Failed to get file stats - still mark as in progress but skip incompleteWorkflows entry
+⋮----
+// Glob error - continue scanning other workflows
+⋮----
+// Remove workflows with non-completing status from completedWorkflows
+// This ensures quick-dev with status like 'ready-for-dev' is not marked as completed
+⋮----
 async getBmadStatus(): Promise<BmadStatus>
 ⋮----
-// Detect completed workflow artifacts
+// Scan for workflow artifacts
 ⋮----
 async install(): Promise<InstallResult>
 ⋮----
@@ -10258,12 +10285,18 @@ null, // No user prompt - workflow is system-driven
 ================
 File: src/main/bmad/context-preparer.ts
 ================
+import path from 'path';
+⋮----
 import Handlebars from 'handlebars';
-import { ContextMessage } from '@common/types';
+import { v4 as uuidv4 } from 'uuid';
+import { glob } from 'glob';
+import { ContextMessage, ContextUserMessage } from '@common/types';
+import { fileExists } from '@common/utils';
 ⋮----
 import type { BmadStatus } from '@common/bmad-types';
 ⋮----
 import logger from '@/logger';
+import { execWithShellPath } from '@/utils';
 ⋮----
 export interface PreparedContext {
   contextMessages: ContextMessage[];
@@ -10286,17 +10319,37 @@ constructor(private readonly projectDir: string)
    */
 async prepare(workflowId: string, status: BmadStatus): Promise<PreparedContext>
 ⋮----
-// will be used in the future
-⋮----
 // Inject context messages based on workflow ID
 ⋮----
-private async injectContextMessages(workflowId: string, context: PreparedContext)
+private async injectContextMessages(workflowId: string, context: PreparedContext, status: BmadStatus)
 ⋮----
-// Try to load .json.hbs template first, fall back to .json
-⋮----
-private async tryLoadTemplate(workflowId: string, context: PreparedContext): Promise<boolean>
+private async injectTemplate(workflowId: string, context: PreparedContext): Promise<boolean>
 ⋮----
 // Special case: research workflow doesn't auto-execute
+⋮----
+private async injectQuickDevContext(context: PreparedContext, status: BmadStatus): Promise<void>
+⋮----
+// 1. Get git baseline
+⋮----
+// 2. Find project-context.md
+⋮----
+// 3. Check for ready-for-dev tech-spec from quick-spec workflow
+⋮----
+// 4. Build user message content
+⋮----
+// Git baseline info
+⋮----
+// Project context info
+⋮----
+// Mode determination
+⋮----
+// Mode A: Tech-spec provided
+⋮----
+// Mode B: No tech-spec, ask user for instructions
+⋮----
+// Create and add user message
+⋮----
+private async injectQuickSpecContext(context: PreparedContext, status: BmadStatus): Promise<void>
 
 ================
 File: src/main/connector/connector-manager.ts
@@ -10616,6 +10669,8 @@ import {
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
+  UpdatedFile,
+  UpdatedFilesUpdatedData,
 } from '@common/types';
 ⋮----
 import type { BmadStatus } from '@common/bmad-types';
@@ -10645,6 +10700,8 @@ sendClearTask(baseDir: string, taskId: string, clearMessages: boolean, clearFile
 sendFileAdded(baseDir: string, taskId: string, file: ContextFile): void
 ⋮----
 sendContextFilesUpdated(baseDir: string, taskId: string, files: ContextFile[]): void
+⋮----
+sendUpdatedFilesUpdated(baseDir: string, taskId: string, files: UpdatedFile[]): void
 ⋮----
 // Response events
 sendResponseChunk(data: ResponseChunkData): void
@@ -14539,6 +14596,7 @@ import {
   LogLevel,
   MessageRole,
   Mode,
+  ModelInfo,
   ModelsData,
   ProjectSettings,
   PromptContext,
@@ -14547,16 +14605,16 @@ import {
   ResponseCompletedData,
   SettingsData,
   TaskContext,
-  TaskStateData,
   TaskData,
+  TaskStateData,
+  TaskStateEmoji,
   TodoItem,
   TokensInfoData,
   ToolData,
+  UpdatedFile,
   UsageReportData,
   UserMessageData,
   WorkingMode,
-  ModelInfo,
-  TaskStateEmoji,
 } from '@common/types';
 import { extractProviderModel, extractTextContent, fileExists, parseUsageReport } from '@common/utils';
 import { COMPACT_CONVERSATION_AGENT_PROFILE, CONFLICT_RESOLUTION_PROFILE, HANDOFF_AGENT_PROFILE, INIT_PROJECT_AGENTS_PROFILE } from '@common/agent';
@@ -14629,6 +14687,8 @@ public async getTaskAgentProfile(): Promise<AgentProfile | null>
 // Create a temporary profile with task-level overrides
 ⋮----
 private async loadTaskData()
+⋮----
+// make sure we always have the most recent project baseDir, in case the task was migrated from another path
 ⋮----
 // Migrate missing task-level settings from project settings
 ⋮----
@@ -14908,6 +14968,8 @@ public async getAddableFiles(searchRegex?: string): Promise<string[]>
 ⋮----
 public async getAllFiles(useGit = true): Promise<string[]>
 ⋮----
+public async getUpdatedFiles(): Promise<UpdatedFile[]>
+⋮----
 public async getContextFiles(includeRuleFiles = false): Promise<ContextFile[]>
 ⋮----
 public async getRuleFilesAsContextFiles(profile?: AgentProfile): Promise<ContextFile[]>
@@ -15171,6 +15233,8 @@ public async updateTask(updates: Partial<TaskData>): Promise<TaskData>
 // if this task is new empty task update should not trigger save
 ⋮----
 private async sendWorktreeIntegrationStatusUpdated()
+⋮----
+private async sendUpdatedFilesUpdated()
 ⋮----
 private async applyWorkingMode(mode: WorkingMode)
 ⋮----
@@ -16038,7 +16102,7 @@ import path, { join } from 'path';
 import fs, { mkdir, rm, lstat, symlink } from 'fs/promises';
 import { existsSync } from 'fs';
 ⋮----
-import { ConflictResolutionFileContext, MergeState, RebaseState, Worktree, WorktreeAheadCommits, WorktreeUncommittedFiles } from '@common/types';
+import { ConflictResolutionFileContext, MergeState, RebaseState, UpdatedFile, Worktree, WorktreeAheadCommits, WorktreeUncommittedFiles } from '@common/types';
 ⋮----
 import { execWithShellPath, withLock } from '@/utils';
 import { AIDER_DESK_TASKS_DIR } from '@/constants';
@@ -16398,6 +16462,22 @@ async getAheadCommits(worktreePath: string, targetBranch: string): Promise<Workt
 ⋮----
 async getUncommittedFiles(worktreePath: string): Promise<WorktreeUncommittedFiles>
 ⋮----
+/**
+   * Get updated files with line diff stats from git
+   * Uses `git diff --numstat HEAD` to get additions and deletions per file
+   * Format: "additions\tdeletions\tfilepath"
+   * Also fetches the full git diff for each file
+   */
+async getUpdatedFiles(worktreePath: string): Promise<UpdatedFile[]>
+⋮----
+const filePath = parts.slice(2).join('\t'); // Handle paths with tabs
+⋮----
+// Fetch git diff for this file
+⋮----
+// If diff fetch fails, continue with empty diff
+⋮----
+// If git diff fails (e.g., no HEAD commit), return empty array
+⋮----
 async getRebaseState(worktreePath: string): Promise<RebaseState>
 ⋮----
 // ignore
@@ -16519,13 +16599,16 @@ import path from 'path';
 import fs from 'fs/promises';
 ⋮----
 import {
+  AgentProfile,
   CloudflareTunnelStatus,
+  CreateTaskParams,
   CustomCommand,
   EditFormat,
   EnvironmentVariable,
   FileEdit,
   McpServerConfig,
   McpTool,
+  MemoryEntry,
   Mode,
   Model,
   OS,
@@ -16536,14 +16619,12 @@ import {
   ResponseCompletedData,
   SettingsData,
   TaskData,
-  CreateTaskParams,
   TaskStateData,
   TodoItem,
+  UpdatedFile,
   UsageDataRow,
   VersionsInfo,
   VoiceSession,
-  AgentProfile,
-  MemoryEntry,
   WorkflowExecutionResult,
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
@@ -16630,6 +16711,8 @@ async loadInputHistory(baseDir: string): Promise<string[]>
 async getAddableFiles(baseDir: string, taskId: string, searchRegex?: string): Promise<string[]>
 ⋮----
 async getAllFiles(baseDir: string, taskId: string, useGit = true): Promise<string[]>
+⋮----
+async getUpdatedFiles(baseDir: string, taskId: string): Promise<UpdatedFile[]>
 ⋮----
 async addFile(baseDir: string, taskId: string, filePath: string, readOnly = false): Promise<void>
 ⋮----
@@ -17437,6 +17520,7 @@ import {
   VersionsInfo,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
+  UpdatedFilesUpdatedData,
 } from '@common/types';
 import { electronAPI } from '@electron-toolkit/preload';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
@@ -17572,6 +17656,7 @@ import {
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
+  UpdatedFilesUpdatedData,
   WorkflowExecutionResult,
 } from '@common/types';
 import { ApplicationAPI } from '@common/api';
@@ -17605,6 +17690,7 @@ type EventDataMap = {
   'project-settings-updated': { baseDir: string; settings: ProjectSettings };
   'worktree-integration-status-updated': WorktreeIntegrationStatusUpdatedData;
   'agent-profiles-updated': AgentProfilesUpdatedData;
+  'updated-files-updated': UpdatedFilesUpdatedData;
   notification: NotificationData;
   'task-created': TaskCreatedData;
   'task-initialized': TaskData;
@@ -17691,6 +17777,7 @@ patchProjectSettings(baseDir: string, settings: Partial<ProjectSettings>): Promi
 getFilePathSuggestions(currentPath: string, directoriesOnly?: boolean): Promise<string[]>
 getAddableFiles(baseDir: string, taskId: string): Promise<string[]>
 getAllFiles(baseDir: string, taskId: string, useGit?: boolean): Promise<string[]>
+getUpdatedFiles(baseDir: string, taskId: string): Promise<
 addFile(baseDir: string, taskId: string, filePath: string, readOnly?: boolean): void
 async isValidPath(baseDir: string, path: string): Promise<boolean>
 async isProjectPath(path: string): Promise<boolean>
@@ -17759,6 +17846,7 @@ addResponseChunkListener(baseDir: string, taskId: string, callback: (data: Respo
 addResponseCompletedListener(baseDir: string, taskId: string, callback: (data: ResponseCompletedData) => void): () => void
 addLogListener(baseDir: string, taskId: string, callback: (data: LogData) => void): () => void
 addContextFilesUpdatedListener(baseDir: string, taskId: string, callback: (data: ContextFilesUpdatedData) => void): () => void
+addUpdatedFilesUpdatedListener(baseDir: string, taskId: string, callback: (data: UpdatedFilesUpdatedData) => void): () => void
 addCustomCommandsUpdatedListener(baseDir: string, callback: (data: CustomCommandsUpdatedData) => void): () => void
 addUpdateAutocompletionListener(baseDir: string, taskId: string, callback: (data: AutocompletionData) => void): () => void
 addAskQuestionListener(baseDir: string, taskId: string, callback: (data: QuestionData) => void): () => void
@@ -18388,6 +18476,7 @@ type Props = {
   udiff: string;
   language: string;
   viewMode?: DiffViewMode;
+  showFilename?: boolean;
 };
 ⋮----
 // eslint-disable-next-line no-console
@@ -18992,13 +19081,15 @@ File: src/renderer/src/components/common/ModalOverlayLayout.tsx
 import { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IoMdClose } from 'react-icons/io';
+import { useHotkeys } from 'react-hotkeys-hook';
 ⋮----
 import { IconButton } from './IconButton';
 ⋮----
 type Props = {
   title: string;
-  onClose?: () => void;
   children: ReactNode;
+  onClose?: () => void;
+  closeOnEscape?: boolean;
 };
 
 ================
@@ -19370,7 +19461,7 @@ body.theme-light .context-dimmed {
 ================
 File: src/renderer/src/components/ContextFiles/ContextFiles.tsx
 ================
-import { AIDER_MODES, ContextFile, Mode, OS, TokensInfoData } from '@common/types';
+import { AIDER_MODES, ContextFile, Mode, OS, TokensInfoData, UpdatedFile } from '@common/types';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import objectHash from 'object-hash';
 import { ControlledTreeEnvironment, Tree } from 'react-complex-tree';
@@ -19386,6 +19477,8 @@ import { useDebounce, useLocalStorage } from '@reactuses/core';
 import { AnimatePresence, motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+⋮----
+import { UpdatedFilesDiffModal } from './UpdatedFilesDiffModal';
 ⋮----
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Input } from '@/components/common/Input';
@@ -19425,6 +19518,18 @@ type EmptyContextInfoProps = {
 ⋮----
 // Separate expanded items for each tree
 ⋮----
+// Updated files state
+⋮----
+// Calculate total additions and deletions for updated files
+⋮----
+// Fetch updated files on mount and when baseDir/taskId changes
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+// Listen for updated files updates
+⋮----
+// eslint-disable-next-line no-console
+⋮----
 // Tree Data Generators
 ⋮----
 // Check if readOnly in context files
@@ -19436,6 +19541,10 @@ const expandFolders = (treeData: Record<string, TreeItem>, files: ContextFile[],
 const checkChild = (childKey: string | number) =>
 ⋮----
 // Only auto-expand context and rules trees
+⋮----
+// eslint-disable-next-line react-hooks/exhaustive-deps
+⋮----
+// Expand all folders in updated tree by default
 ⋮----
 // eslint-disable-next-line react-hooks/exhaustive-deps
 ⋮----
@@ -19461,12 +19570,16 @@ const addFile = (item: TreeItem) => (event: React.MouseEvent<HTMLButtonElement>)
 ⋮----
 // Actions logic
 ⋮----
+// Get line stats for updated files section
+⋮----
 // Helper functions
 const toggleFolder = () =>
 ⋮----
 const renderChevron = () =>
 ⋮----
 const renderTitle = () =>
+⋮----
+// Show line stats for updated files with click handler
 ⋮----
 
 ⋮----
@@ -19484,6 +19597,8 @@ onExpandItem=
 ⋮----
 <Tooltip content=
 ⋮----
+{/* Updated Files Section */}
+⋮----
 {/* Project Files Section */}
 ⋮----
 <FaGitSquare className=
@@ -19496,6 +19611,32 @@ onClick=
 File: src/renderer/src/components/ContextFiles/index.ts
 ================
 
+
+================
+File: src/renderer/src/components/ContextFiles/UpdatedFilesDiffModal.tsx
+================
+import { useCallback, useMemo, useState, startTransition, useOptimistic } from 'react';
+import { HiChevronLeft, HiChevronRight } from 'react-icons/hi';
+import { useTranslation } from 'react-i18next';
+import { useHotkeys } from 'react-hotkeys-hook';
+import { DiffViewMode, UpdatedFile } from '@common/types';
+import { getLanguageFromPath } from '@common/utils';
+import { clsx } from 'clsx';
+⋮----
+import { IconButton } from '../common/IconButton';
+import { ModalOverlayLayout } from '../common/ModalOverlayLayout';
+import { UDiffViewer, CompactDiffViewer } from '../common/DiffViewer';
+import { CompactSelect } from '../common/CompactSelect';
+⋮----
+import { useSettings } from '@/contexts/SettingsContext';
+⋮----
+type Props = {
+  files: UpdatedFile[];
+  initialFileIndex: number;
+  onClose: () => void;
+};
+⋮----
+<ModalOverlayLayout title=
 
 ================
 File: src/renderer/src/components/message/ActivateSkillToolMessage.tsx
@@ -29582,7 +29723,7 @@ export const resolveAgentProfile = (task: TaskData | undefined, projectAgentProf
 File: src/renderer/src/utils/bmad-suggestions.ts
 ================
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
-import { ArtifactDetectionResult, SprintStatusData, StoryStatus, WorkflowMetadata, WorkflowPhase } from '@common/bmad-types';
+import { WorkflowArtifacts, SprintStatusData, StoryStatus, WorkflowMetadata, WorkflowPhase } from '@common/bmad-types';
 ⋮----
 /**
  * Simple glob pattern matching for artifact paths
@@ -29598,7 +29739,7 @@ const matchesPattern = (pathToMatch: string, pattern: string): boolean =>
  * Calculate prerequisite satisfaction score for a workflow
  * Higher score = more prerequisites satisfied
  */
-const getPrerequisiteScore = (workflow: WorkflowMetadata | undefined, detectedArtifacts: ArtifactDetectionResult['detectedArtifacts']): number =>
+const getPrerequisiteScore = (workflow: WorkflowMetadata | undefined, detectedArtifacts: WorkflowArtifacts['detectedArtifacts']): number =>
 ⋮----
 // No prerequisites = high priority
 ⋮----
@@ -29630,7 +29771,7 @@ const isOnFullPath = (completedWorkflows: string[]): boolean =>
  */
 export const generateSuggestions = (
   completedWorkflows: string[],
-  detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'],
+  detectedArtifacts: WorkflowArtifacts['detectedArtifacts'],
   sprintStatus?: SprintStatusData,
 ): string[] =>
 ⋮----

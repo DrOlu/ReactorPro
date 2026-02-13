@@ -1,5 +1,5 @@
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
-import { ArtifactDetectionResult, SprintStatusData, StoryStatus, WorkflowMetadata, WorkflowPhase } from '@common/bmad-types';
+import { WorkflowArtifacts, SprintStatusData, StoryStatus, WorkflowMetadata, WorkflowPhase } from '@common/bmad-types';
 
 /**
  * Simple glob pattern matching for artifact paths
@@ -18,7 +18,7 @@ const matchesPattern = (pathToMatch: string, pattern: string): boolean => {
  * Calculate prerequisite satisfaction score for a workflow
  * Higher score = more prerequisites satisfied
  */
-const getPrerequisiteScore = (workflow: WorkflowMetadata | undefined, detectedArtifacts: ArtifactDetectionResult['detectedArtifacts']): number => {
+const getPrerequisiteScore = (workflow: WorkflowMetadata | undefined, detectedArtifacts: WorkflowArtifacts['detectedArtifacts']): number => {
   if (!workflow?.requiredArtifacts || workflow.requiredArtifacts.length === 0) {
     // No prerequisites = high priority
     return 100;
@@ -92,7 +92,7 @@ const isOnFullPath = (completedWorkflows: string[]): boolean => {
  */
 export const generateSuggestions = (
   completedWorkflows: string[],
-  detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'],
+  detectedArtifacts: WorkflowArtifacts['detectedArtifacts'],
   sprintStatus?: SprintStatusData,
 ): string[] => {
   // No workflows completed - suggest entry points for both paths

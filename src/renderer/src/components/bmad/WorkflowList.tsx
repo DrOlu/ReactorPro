@@ -22,7 +22,7 @@ type Props = {
 
 export const WorkflowList = ({ projectDir, taskId, activeTab, status, suggestedWorkflows, isLoading, error, onRefresh }: Props) => {
   const { t } = useTranslation();
-  const incompleteWorkflows = status?.detectedArtifacts?.incompleteWorkflows || [];
+  const incompleteWorkflows = status?.incompleteWorkflows || [];
 
   const groupedWorkflows = useMemo(() => {
     if (!status?.availableWorkflows) {
@@ -43,7 +43,7 @@ export const WorkflowList = ({ projectDir, taskId, activeTab, status, suggestedW
   }, [status]);
 
   const getArtifactPath = (workflowId: string): string | undefined => {
-    return status?.detectedArtifacts?.detectedArtifacts?.[workflowId]?.path;
+    return status?.detectedArtifacts?.[workflowId]?.path;
   };
 
   const getIncompleteWorkflow = (workflowId: string) => {

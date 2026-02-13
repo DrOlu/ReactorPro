@@ -30,6 +30,7 @@ import {
   VersionsInfo,
   WorktreeIntegrationStatusUpdatedData,
   TaskCreatedData,
+  UpdatedFilesUpdatedData,
 } from '@common/types';
 import { electronAPI } from '@electron-toolkit/preload';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
@@ -76,6 +77,7 @@ const api: ApplicationAPI = {
   getFilePathSuggestions: (currentPath, directoriesOnly = false) => ipcRenderer.invoke('get-file-path-suggestions', currentPath, directoriesOnly),
   getAddableFiles: (baseDir, taskId) => ipcRenderer.invoke('get-addable-files', baseDir, taskId),
   getAllFiles: (baseDir, taskId, useGit = true) => ipcRenderer.invoke('get-all-files', baseDir, taskId, useGit),
+  getUpdatedFiles: (baseDir, taskId) => ipcRenderer.invoke('get-updated-files', baseDir, taskId),
   addFile: (baseDir, taskId, filePath, readOnly = false) => ipcRenderer.send('add-file', baseDir, taskId, filePath, readOnly),
   isValidPath: (baseDir, path) => ipcRenderer.invoke('is-valid-path', baseDir, path),
   isProjectPath: (path) => ipcRenderer.invoke('is-project-path', path),
@@ -180,6 +182,19 @@ const api: ApplicationAPI = {
     ipcRenderer.on('context-files-updated', listener);
     return () => {
       ipcRenderer.removeListener('context-files-updated', listener);
+    };
+  },
+
+  addUpdatedFilesUpdatedListener: (baseDir, taskId, callback) => {
+    const listener = (_: Electron.IpcRendererEvent, data: UpdatedFilesUpdatedData) => {
+      if (!compareBaseDirs(data.baseDir, baseDir) || data.taskId !== taskId) {
+        return;
+      }
+      callback(data);
+    };
+    ipcRenderer.on('updated-files-updated', listener);
+    return () => {
+      ipcRenderer.removeListener('updated-files-updated', listener);
     };
   },
 

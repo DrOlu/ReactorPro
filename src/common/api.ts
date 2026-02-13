@@ -52,6 +52,8 @@ import {
   WorkflowExecutionResult,
   WorktreeIntegrationStatus,
   WorktreeIntegrationStatusUpdatedData,
+  UpdatedFile,
+  UpdatedFilesUpdatedData,
 } from '@common/types';
 
 export interface ApplicationAPI {
@@ -92,6 +94,7 @@ export interface ApplicationAPI {
   getFilePathSuggestions: (currentPath: string, directoriesOnly?: boolean) => Promise<string[]>;
   getAddableFiles: (baseDir: string, taskId: string) => Promise<string[]>;
   getAllFiles: (baseDir: string, taskId: string, useGit?: boolean) => Promise<string[]>;
+  getUpdatedFiles: (baseDir: string, taskId: string) => Promise<UpdatedFile[]>;
   addFile: (baseDir: string, taskId: string, filePath: string, readOnly?: boolean) => void;
   isValidPath: (baseDir: string, path: string) => Promise<boolean>;
   isProjectPath: (path: string) => Promise<boolean>;
@@ -157,6 +160,7 @@ export interface ApplicationAPI {
   addResponseCompletedListener: (baseDir: string, taskId: string, callback: (data: ResponseCompletedData) => void) => () => void;
   addLogListener: (baseDir: string, taskId: string, callback: (data: LogData) => void) => () => void;
   addContextFilesUpdatedListener: (baseDir: string, taskId: string, callback: (data: ContextFilesUpdatedData) => void) => () => void;
+  addUpdatedFilesUpdatedListener: (baseDir: string, taskId: string, callback: (data: UpdatedFilesUpdatedData) => void) => () => void;
   addCustomCommandsUpdatedListener: (baseDir: string, callback: (data: CustomCommandsUpdatedData) => void) => () => void;
   addUpdateAutocompletionListener: (baseDir: string, taskId: string, callback: (data: AutocompletionData) => void) => () => void;
   addAskQuestionListener: (baseDir: string, taskId: string, callback: (data: QuestionData) => void) => () => void;

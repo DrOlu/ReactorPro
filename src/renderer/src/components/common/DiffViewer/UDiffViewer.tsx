@@ -13,9 +13,10 @@ type Props = {
   udiff: string;
   language: string;
   viewMode?: DiffViewMode;
+  showFilename?: boolean;
 };
 
-export const UDiffViewer = ({ udiff, language, viewMode = DiffViewMode.SideBySide }: Props) => {
+export const UDiffViewer = ({ udiff, language, viewMode = DiffViewMode.SideBySide, showFilename = true }: Props) => {
   const { isMobile } = useResponsive();
   const parsedFiles = useMemo(() => {
     try {
@@ -38,15 +39,17 @@ export const UDiffViewer = ({ udiff, language, viewMode = DiffViewMode.SideBySid
 
         return (
           <div key={index} className="diff-viewer-container">
-            <div className="text-xs font-semibold text-text-secondary mb-2">
-              {file.oldPath !== file.newPath ? (
-                <span>
-                  {file.oldPath} → {file.newPath}
-                </span>
-              ) : (
-                <span>{file.newPath}</span>
-              )}
-            </div>
+            {showFilename && (
+              <div className="text-xs font-semibold text-text-secondary mb-2">
+                {file.oldPath !== file.newPath ? (
+                  <span>
+                    {file.oldPath} → {file.newPath}
+                  </span>
+                ) : (
+                  <span>{file.newPath}</span>
+                )}
+              </div>
+            )}
             <Diff
               viewType={isMobile || viewMode === DiffViewMode.Unified ? 'unified' : 'split'}
               diffType={file.type}

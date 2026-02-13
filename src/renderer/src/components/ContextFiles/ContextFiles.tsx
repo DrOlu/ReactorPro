@@ -1,4 +1,4 @@
-import { AIDER_MODES, ContextFile, Mode, OS, TokensInfoData } from '@common/types';
+import { AIDER_MODES, ContextFile, Mode, OS, TokensInfoData, UpdatedFile } from '@common/types';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import objectHash from 'object-hash';
 import { ControlledTreeEnvironment, Tree } from 'react-complex-tree';
@@ -14,6 +14,8 @@ import { useDebounce, useLocalStorage } from '@reactuses/core';
 import { AnimatePresence, motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+
+import { UpdatedFilesDiffModal } from './UpdatedFilesDiffModal';
 
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Input } from '@/components/common/Input';
@@ -132,7 +134,7 @@ const EmptyContextInfo = ({ mode }: EmptyContextInfoProps) => {
   );
 };
 
-type SectionType = 'project' | 'context' | 'rules';
+type SectionType = 'updated' | 'project' | 'context' | 'rules';
 
 export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFileDialog, tokensInfo, refreshAllFiles, mode }: Props) => {
   const { t } = useTranslation();
@@ -152,6 +154,76 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
   const debouncedSearchQuery = useDebounce(searchQuery, 50);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [useGit, setUseGit] = useLocalStorage(`context-files-use-git-${baseDir}`, true);
+
+  // Updated files state
+  const [updatedFiles, setUpdatedFiles] = useState<UpdatedFile[]>([]);
+  const [updatedExpandedItems, setUpdatedExpandedItems] = useState<string[]>([]);
+  const [isRefreshingUpdated, setIsRefreshingUpdated] = useState(false);
+  const [diffModalOpen, setDiffModalOpen] = useState(false);
+  const [diffModalFileIndex, setDiffModalFileIndex] = useState(0);
+
+  const sortedUpdatedFiles = useMemo(() => {
+    return [...updatedFiles].sort((a, b) => a.path.localeCompare(b.path));
+  }, [updatedFiles]);
+
+  // Calculate total additions and deletions for updated files
+  const totalStats = useMemo(() => {
+    return updatedFiles.reduce(
+      (acc, file) => ({
+        additions: acc.additions + file.additions,
+        deletions: acc.deletions + file.deletions,
+      }),
+      { additions: 0, deletions: 0 },
+    );
+  }, [updatedFiles]);
+
+  // Fetch updated files on mount and when baseDir/taskId changes
+  const fetchUpdatedFiles = useCallback(async () => {
+    try {
+      const files = await api.getUpdatedFiles(baseDir, taskId);
+      setUpdatedFiles(files);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to fetch updated files:', error);
+    }
+  }, [api, baseDir, taskId]);
+
+  useEffect(() => {
+    void fetchUpdatedFiles();
+  }, [fetchUpdatedFiles]);
+
+  // Listen for updated files updates
+  useEffect(() => {
+    const unsubscribe = api.addUpdatedFilesUpdatedListener(baseDir, taskId, (data) => {
+      setUpdatedFiles(data.files);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [api, baseDir, taskId]);
+
+  const handleRefreshUpdatedFiles = useCallback(async () => {
+    setIsRefreshingUpdated(true);
+    try {
+      await fetchUpdatedFiles();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to refresh updated files:', error);
+    } finally {
+      setIsRefreshingUpdated(false);
+    }
+  }, [fetchUpdatedFiles]);
+
+  const handleFileDiffClick = useCallback(
+    (file: UpdatedFile) => {
+      const index = sortedUpdatedFiles.findIndex((f) => f.path === file.path);
+      if (index !== -1) {
+        setDiffModalFileIndex(index);
+        setDiffModalOpen(true);
+      }
+    },
+    [sortedUpdatedFiles],
+  );
 
   const handleFileDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
@@ -230,6 +302,13 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
     return createFileTree(sortedRulesFiles, 'root');
   }, [sortedRulesFiles]);
 
+  const updatedTreeData = useMemo(() => {
+    const allFileObjects: ContextFile[] = updatedFiles.map((f) => ({
+      path: f.path,
+    }));
+    return createFileTree(allFileObjects, 'root');
+  }, [updatedFiles]);
+
   // Expand logic for Context Tree (auto-expand folders with files)
   useEffect(() => {
     const expandFolders = (treeData: Record<string, TreeItem>, files: ContextFile[], currentExpanded: string[], setExpanded: (items: string[]) => void) => {
@@ -260,6 +339,15 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
     expandFolders(rulesTreeData, rulesFiles, rulesExpandedItems, setRulesExpandedItems);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextTreeData, rulesTreeData, userContextFiles, rulesFiles]);
+
+  // Expand all folders in updated tree by default
+  useEffect(() => {
+    if (Object.keys(updatedTreeData).length > 1) {
+      const allFolders = Object.keys(updatedTreeData).filter((key) => updatedTreeData[key].isFolder);
+      setUpdatedExpandedItems(Array.from(new Set([...updatedExpandedItems, ...allFolders])));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updatedTreeData]);
 
   const handleDropAllFiles = () => {
     api.runCommand(baseDir, taskId, 'drop');
@@ -363,6 +451,9 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
 
     const fileTokenTooltip = getFileTokenTooltip(treeItem);
 
+    // Get line stats for updated files section
+    const updatedFile = type === 'updated' ? updatedFiles.find((f) => normalizePath(f.path) === normalizePath(treeItem.file?.path || '')) : undefined;
+
     // Helper functions
     const toggleFolder = () => {
       const isExpanded = expandedItems.includes(String(treeItem.index));
@@ -390,8 +481,9 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
 
     const renderTitle = () => {
       const className = twMerge(
-        'select-none text-2xs overflow-hidden',
+        'select-none text-2xs overflow-hidden whitespace-nowrap overflow-ellipsis',
         treeItem.isFolder ? 'context-dimmed' : type === 'project' && !isContextFile ? 'context-dimmed' : 'text-text-primary',
+        type === 'updated' && !treeItem.isFolder && 'cursor-pointer hover:text-text-tertiary',
       );
 
       if (fileTokenTooltip) {
@@ -401,6 +493,20 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
           </Tooltip>
         );
       }
+
+      // Show line stats for updated files with click handler
+      if (updatedFile && !treeItem.isFolder) {
+        return (
+          <div className="flex items-center gap-2 min-w-0 cursor-pointer hover:text-text-tertiary" onClick={() => handleFileDiffClick(updatedFile)}>
+            <span className={className}>{title}</span>
+            <span className="text-4xs text-text-muted-dark flex-shrink-0 flex items-center gap-0.5 mt-0.5">
+              {updatedFile.additions > 0 && <span className="text-success">+{updatedFile.additions}</span>}
+              {updatedFile.deletions > 0 && <span className="text-error">-{updatedFile.deletions}</span>}
+            </span>
+          </div>
+        );
+      }
+
       return <span className={className}>{title}</span>;
     };
 
@@ -503,7 +609,14 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
 
           <span className="text-xs font-semibold uppercase flex-grow text-text-secondary">{title}</span>
 
-          {!isOpen && <span className="text-2xs text-text-tertiary mr-2 bg-bg-secondary-light px-1.5 rounded-full">{count}</span>}
+          {section === 'updated' ? (
+            <span className="text-2xs mr-2 bg-bg-secondary-light px-1.5 rounded-full">
+              <span className="text-success">+{totalStats.additions}</span>
+              <span className="ml-0.5 text-error">-{totalStats.deletions}</span>
+            </span>
+          ) : (
+            !isOpen && <span className="text-2xs text-text-tertiary mr-2 bg-bg-secondary-light px-1.5 rounded-full">{count}</span>
+          )}
 
           {isOpen && (
             <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
@@ -597,6 +710,25 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
         <EmptyContextInfo mode={mode} />,
       )}
 
+      {/* Updated Files Section */}
+      {renderSection(
+        'updated',
+        t('contextFiles.updatedFiles'),
+        updatedFiles.length,
+        updatedTreeData,
+        updatedExpandedItems,
+        setUpdatedExpandedItems,
+        <>
+          <Tooltip content={t('contextFiles.refresh')}>
+            <button className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors" onClick={handleRefreshUpdatedFiles} disabled={isRefreshingUpdated}>
+              <MdOutlineRefresh className={`w-4 h-4 ${isRefreshingUpdated ? 'animate-spin' : ''}`} />
+            </button>
+          </Tooltip>
+        </>,
+        false,
+        false,
+      )}
+
       {/* Project Files Section */}
       {renderSection(
         'project',
@@ -670,6 +802,9 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
 
       {/* Rules Section */}
       {renderSection('rules', t('contextFiles.rules'), rulesFiles.length, rulesTreeData, rulesExpandedItems, setRulesExpandedItems, undefined, false, true)}
+
+      {/* Diff Modal */}
+      {diffModalOpen && <UpdatedFilesDiffModal files={sortedUpdatedFiles} initialFileIndex={diffModalFileIndex} onClose={() => setDiffModalOpen(false)} />}
     </div>
   );
 };

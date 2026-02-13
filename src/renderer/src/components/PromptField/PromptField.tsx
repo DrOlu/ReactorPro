@@ -1094,7 +1094,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
               </div>
             )}
           </div>
-          <div className={clsx('relative w-full flex flex-wrap', isMobile ? 'items-start gap-0.5' : 'items-center gap-1.5')}>
+          <div className={clsx('relative w-full flex flex-wrap', isMobile ? 'items-start gap-0.5' : 'items-center')}>
             <div className={clsx('flex gap-1.5', isMobile && mode === 'agent' ? 'flex-col items-start' : 'items-center')}>
               <ModeSelector mode={mode} onModeChange={onModeChanged} />
               <div className="flex gap-2">

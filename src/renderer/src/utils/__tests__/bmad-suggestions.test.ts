@@ -3,13 +3,13 @@ import { StoryStatus } from '@common/bmad-types';
 
 import { generateSuggestions } from '../bmad-suggestions';
 
-import type { ArtifactDetectionResult } from '@common/bmad-types';
+import type { WorkflowArtifacts } from '@common/bmad-types';
 
 describe('generateSuggestions', () => {
   describe('greenfield projects (no completed workflows)', () => {
     it('suggests entry-point workflows when no workflows completed', () => {
       const completedWorkflows: string[] = [];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {};
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {};
 
       const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
 
@@ -21,7 +21,7 @@ describe('generateSuggestions', () => {
   describe('Quick Flow path suggestions', () => {
     it('suggests next Quick Flow workflow when quick-spec is completed', () => {
       const completedWorkflows = ['quick-spec'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'quick-spec': {
           path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
         },
@@ -35,7 +35,7 @@ describe('generateSuggestions', () => {
 
     it('also suggests Full Workflow entry point when on Quick Flow path', () => {
       const completedWorkflows = ['quick-spec'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'quick-spec': {
           path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
         },
@@ -49,7 +49,7 @@ describe('generateSuggestions', () => {
 
     it('does not suggest completed Full Workflow entry point when on Quick Flow path', () => {
       const completedWorkflows = ['quick-spec', 'create-product-brief'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'quick-spec': {
           path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
         },
@@ -70,7 +70,7 @@ describe('generateSuggestions', () => {
   describe('Full Workflow path suggestions', () => {
     it('suggests next Full Workflow workflow when create-product-brief is completed', () => {
       const completedWorkflows = ['create-product-brief'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'create-product-brief': {
           path: '_bmad-output/planning-artifacts/product-brief-example.md',
         },
@@ -84,7 +84,7 @@ describe('generateSuggestions', () => {
 
     it('also suggests Quick Flow entry point when on Full Workflow path', () => {
       const completedWorkflows = ['create-product-brief'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'create-product-brief': {
           path: '_bmad-output/planning-artifacts/product-brief-example.md',
         },
@@ -98,7 +98,7 @@ describe('generateSuggestions', () => {
 
     it('does not suggest completed Quick Flow entry point when on Full Workflow path', () => {
       const completedWorkflows = ['create-product-brief', 'quick-spec'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'create-product-brief': {
           path: '_bmad-output/planning-artifacts/product-brief-example.md',
         },
@@ -117,7 +117,7 @@ describe('generateSuggestions', () => {
 
     it('suggests next steps from both paths when both paths are active', () => {
       const completedWorkflows = ['quick-spec', 'create-product-brief'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'quick-spec': {
           path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
         },
@@ -136,7 +136,7 @@ describe('generateSuggestions', () => {
 
     it('suggests next steps from both paths when multiple workflows completed on each path', () => {
       const completedWorkflows = ['quick-spec', 'quick-dev', 'create-product-brief', 'create-prd'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'quick-spec': {
           path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
         },
@@ -169,7 +169,7 @@ describe('generateSuggestions', () => {
   describe('brownfield projects (some workflows completed)', () => {
     it('collects followUps from completed workflows', () => {
       const completedWorkflows = ['create-product-brief'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'create-product-brief': {
           path: '_bmad-output/planning-artifacts/product-brief-example.md',
         },
@@ -183,7 +183,7 @@ describe('generateSuggestions', () => {
 
     it('filters out already completed workflows from suggestions', () => {
       const completedWorkflows = ['create-product-brief', 'create-prd'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'create-product-brief': {
           path: '_bmad-output/planning-artifacts/product-brief-example.md',
         },
@@ -203,7 +203,7 @@ describe('generateSuggestions', () => {
 
     it('deprioritizes workflows with unsatisfied prerequisites', () => {
       const completedWorkflows = ['research'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         research: {
           path: '_bmad-output/planning-artifacts/research-session.md',
         },
@@ -217,7 +217,7 @@ describe('generateSuggestions', () => {
 
     it('prioritizes workflows with satisfied prerequisites over those without', () => {
       const completedWorkflows = ['create-product-brief', 'create-prd'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'create-product-brief': {
           path: '_bmad-output/planning-artifacts/product-brief-example.md',
         },
@@ -244,7 +244,7 @@ describe('generateSuggestions', () => {
     it('returns empty array when all followUps are already completed', () => {
       // Simulate scenario where only workflows with completed followUps exist
       const completedWorkflows = ['create-product-brief', 'create-prd'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'create-product-brief': {
           path: '_bmad-output/planning-artifacts/product-brief-example.md',
         },
@@ -264,7 +264,7 @@ describe('generateSuggestions', () => {
     it('handles workflows without followUps', () => {
       // code-review has followUps: ['create-story', 'dev-story']
       const completedWorkflows = ['code-review'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'code-review': {
           path: '_bmad-output/implementation-artifacts/code-review-example.md',
         },
@@ -278,7 +278,7 @@ describe('generateSuggestions', () => {
     it('deduplicates followUps from multiple completed workflows', () => {
       // Both create-prd and create-ux-design have 'create-architecture' in followUps
       const completedWorkflows = ['create-prd', 'create-ux-design'];
-      const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
         'create-prd': {
           path: '_bmad-output/planning-artifacts/prd.md',
         },
@@ -296,7 +296,7 @@ describe('generateSuggestions', () => {
   });
 
   describe('sprint status suggestions', () => {
-    const detectedArtifacts: ArtifactDetectionResult['detectedArtifacts'] = {
+    const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
       'create-product-brief': {
         path: '_bmad-output/planning-artifacts/product-brief-example.md',
       },

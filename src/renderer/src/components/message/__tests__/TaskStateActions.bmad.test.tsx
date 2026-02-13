@@ -39,12 +39,9 @@ const createMockBmadStatus = (overrides: Partial<BmadStatus> = {}): BmadStatus =
   availableWorkflows: [],
   completedWorkflows: [],
   inProgressWorkflows: [],
-  detectedArtifacts: {
-    completedWorkflows: [],
-    inProgressWorkflows: [],
-    detectedArtifacts: {},
-    incompleteWorkflows: [],
-  },
+  incompleteWorkflows: [],
+  detectedArtifacts: {},
+  sprintStatus: undefined,
   ...overrides,
 });
 

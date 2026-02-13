@@ -14,11 +14,9 @@ describe('ContextPreparer', () => {
     availableWorkflows: [],
     completedWorkflows: [],
     inProgressWorkflows: [],
-    detectedArtifacts: {
-      completedWorkflows: [],
-      inProgressWorkflows: [],
-      detectedArtifacts: {},
-    },
+    incompleteWorkflows: [],
+    detectedArtifacts: {},
+    sprintStatus: undefined,
   });
 
   beforeEach(() => {
