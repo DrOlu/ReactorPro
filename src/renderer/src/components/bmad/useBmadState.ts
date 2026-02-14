@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BmadStatus } from '@common/bmad-types';
+import { TaskData } from '@common/types';
 
 import { useApi } from '@/contexts/ApiContext';
 import { generateSuggestions } from '@/utils/bmad-suggestions';
@@ -12,7 +13,13 @@ type Result = {
   refresh: (loading?: boolean) => Promise<void>;
 };
 
-export const useBmadState = (projectDir?: string): Result => {
+type UseBmadStateParams = {
+  projectDir?: string;
+  task?: TaskData | null;
+};
+
+export const useBmadState = (params: UseBmadStateParams): Result => {
+  const { projectDir, task } = params;
   const [status, setStatus] = useState<BmadStatus | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,8 +29,8 @@ export const useBmadState = (projectDir?: string): Result => {
     if (!status) {
       return [];
     }
-    return generateSuggestions(status.completedWorkflows, status.detectedArtifacts, status.sprintStatus);
-  }, [status]);
+    return generateSuggestions(status.completedWorkflows, status.detectedArtifacts, status.sprintStatus, task?.metadata);
+  }, [status, task?.metadata]);
 
   const loadBmadStatus = useCallback(
     async (loading = true) => {

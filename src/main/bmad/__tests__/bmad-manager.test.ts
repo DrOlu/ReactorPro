@@ -228,6 +228,7 @@ describe('BmadManager', () => {
         task: {
           autoApprove: true,
           name: undefined,
+          metadata: undefined,
         },
         getTaskAgentProfile: vi.fn().mockResolvedValue({
           name: 'Test Agent',
@@ -238,6 +239,7 @@ describe('BmadManager', () => {
         addLogMessage: vi.fn(),
         loadContextMessages: vi.fn().mockResolvedValue(undefined),
         saveTask: vi.fn().mockResolvedValue(undefined),
+        updateTask: vi.fn().mockResolvedValue(undefined),
         getProject: vi.fn().mockReturnValue({
           createNewTask: vi.fn().mockResolvedValue({
             id: 'subtask-123',
@@ -276,6 +278,123 @@ describe('BmadManager', () => {
       it('should call ContextPreparer.prepare() with correct parameters', async () => {
         await bmadManager.executeWorkflow(workflowId, mockTask);
         expect(mockPrepare).toHaveBeenCalledWith(workflowId, expect.any(Object));
+      });
+    });
+
+    describe('task metadata integration', () => {
+      it('should store bmadWorkflowId in task metadata when executing workflow', async () => {
+        await bmadManager.executeWorkflow(workflowId, mockTask);
+
+        expect(mockTask.updateTask).toHaveBeenCalledWith({
+          metadata: {
+            ...mockTask.task.metadata,
+            bmadWorkflowId: workflowId,
+          },
+        });
+      });
+
+      it('should merge new metadata with existing task metadata', async () => {
+        mockTask.task.metadata = {
+          existingKey: 'existingValue',
+          anotherKey: 123,
+        };
+
+        await bmadManager.executeWorkflow(workflowId, mockTask);
+
+        expect(mockTask.updateTask).toHaveBeenCalledWith({
+          metadata: {
+            existingKey: 'existingValue',
+            anotherKey: 123,
+            bmadWorkflowId: workflowId,
+          },
+        });
+      });
+
+      it('should handle workflow execution with empty existing metadata', async () => {
+        mockTask.task.metadata = undefined;
+
+        await bmadManager.executeWorkflow(workflowId, mockTask);
+
+        expect(mockTask.updateTask).toHaveBeenCalledWith({
+          metadata: {
+            bmadWorkflowId: workflowId,
+          },
+        });
+      });
+
+      it('should update bmadWorkflowId when executing a different workflow', async () => {
+        mockTask.task.metadata = {
+          bmadWorkflowId: 'previous-workflow',
+        };
+
+        const newWorkflowId = 'create-architecture';
+        await bmadManager.executeWorkflow(newWorkflowId, mockTask);
+
+        expect(mockTask.updateTask).toHaveBeenCalledWith({
+          metadata: {
+            bmadWorkflowId: newWorkflowId,
+          },
+        });
+      });
+
+      it('should preserve other metadata fields while updating bmadWorkflowId', async () => {
+        const customMetadata = {
+          customField: 'customValue',
+          numericField: 42,
+          arrayField: ['item1', 'item2'],
+          objectField: { nested: 'value' },
+          bmadWorkflowId: 'old-workflow-id',
+        };
+
+        mockTask.task.metadata = customMetadata;
+
+        await bmadManager.executeWorkflow(workflowId, mockTask);
+
+        expect(mockTask.updateTask).toHaveBeenCalledWith({
+          metadata: {
+            ...customMetadata,
+            bmadWorkflowId: workflowId,
+          },
+        });
+      });
+
+      it('should still store metadata even when workflow execution fails', async () => {
+        mockTask.runPromptInAgent.mockRejectedValue(new Error('Execution failed'));
+
+        await bmadManager.executeWorkflow(workflowId, mockTask);
+
+        // Metadata should still be stored even if execution fails
+        expect(mockTask.updateTask).toHaveBeenCalledWith({
+          metadata: expect.objectContaining({
+            bmadWorkflowId: workflowId,
+          }),
+        });
+      });
+
+      it('should store metadata for Quick Spec workflow', async () => {
+        const quickSpecWorkflowId = 'quick-spec';
+
+        await bmadManager.executeWorkflow(quickSpecWorkflowId, mockTask);
+
+        expect(mockTask.updateTask).toHaveBeenCalledWith({
+          metadata: {
+            ...mockTask.task.metadata,
+            bmadWorkflowId: quickSpecWorkflowId,
+          },
+        });
+      });
+
+      it('should store metadata for Quick Dev workflow', async () => {
+        const quickDevWorkflowId = 'quick-dev';
+
+        await bmadManager.executeWorkflow(quickDevWorkflowId, mockTask);
+
+        expect(mockTask.updateTask).toHaveBeenCalledWith({
+          metadata: {
+            ...mockTask.task.metadata,
+            bmadWorkflowId: quickDevWorkflowId,
+          },
+        });
       });
     });
 

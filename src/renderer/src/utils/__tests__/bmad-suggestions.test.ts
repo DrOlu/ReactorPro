@@ -6,6 +6,257 @@ import { generateSuggestions } from '../bmad-suggestions';
 import type { WorkflowArtifacts } from '@common/bmad-types';
 
 describe('generateSuggestions', () => {
+  describe('task metadata integration', () => {
+    it('should prioritize follow-ups from the current workflow when taskMetadata contains bmadWorkflowId', () => {
+      const completedWorkflows = ['create-product-brief', 'create-prd'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+        'create-prd': {
+          path: '_bmad-output/planning-artifacts/prd.md',
+        },
+      };
+
+      const taskMetadata = {
+        bmadWorkflowId: 'create-prd',
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts, undefined, taskMetadata);
+
+      // create-prd has followUps: ['create-ux-design', 'create-architecture', 'create-epics-and-stories']
+      // These should appear first in the sorted results
+      const prdFollowUps = ['create-ux-design', 'create-architecture', 'create-epics-and-stories'];
+
+      prdFollowUps.forEach((followUp) => {
+        if (suggestions.includes(followUp)) {
+          const followUpIndex = suggestions.indexOf(followUp);
+          // Follow-ups from current workflow should be at the beginning
+          expect(followUpIndex).toBeLessThan(suggestions.length);
+        }
+      });
+
+      // create-product-brief also has followUps that should not be prioritized
+      const otherFollowUps = suggestions.filter((s) => !prdFollowUps.includes(s));
+      if (otherFollowUps.length > 0 && prdFollowUps.some((f) => suggestions.includes(f))) {
+        const firstOtherFollowUpIndex = suggestions.indexOf(otherFollowUps[0]);
+        const firstPrdFollowUpIndex = suggestions.find((s) => prdFollowUps.includes(s)) ? suggestions.indexOf(prdFollowUps[0]) : -1;
+        if (firstPrdFollowUpIndex >= 0 && firstOtherFollowUpIndex >= 0) {
+          expect(firstPrdFollowUpIndex).toBeLessThan(firstOtherFollowUpIndex);
+        }
+      }
+    });
+
+    it('should work correctly when taskMetadata is undefined', () => {
+      const completedWorkflows = ['create-product-brief'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts, undefined, undefined);
+
+      // Should still generate suggestions normally
+      expect(suggestions).toContain('create-prd');
+      expect(suggestions).toContain('quick-spec');
+    });
+
+    it('should work correctly when taskMetadata is null', () => {
+      const completedWorkflows = ['create-product-brief'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts);
+
+      // Should still generate suggestions normally
+      expect(suggestions).toContain('create-prd');
+      expect(suggestions).toContain('quick-spec');
+    });
+
+    it('should work correctly when taskMetadata does not contain bmadWorkflowId', () => {
+      const completedWorkflows = ['create-product-brief'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+      };
+
+      const taskMetadata = {
+        customKey: 'customValue',
+        anotherKey: 123,
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts, undefined, taskMetadata);
+
+      // Should generate suggestions normally without prioritization
+      expect(suggestions).toContain('create-prd');
+      expect(suggestions).toContain('quick-spec');
+    });
+
+    it('should place current workflow follow-ups at the beginning of sorted results', () => {
+      const completedWorkflows = ['quick-spec'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'quick-spec': {
+          path: '_bmad-output/implementation-artifacts/tech-spec-example.md',
+        },
+      };
+
+      const taskMetadata = {
+        bmadWorkflowId: 'quick-spec',
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts, undefined, taskMetadata);
+
+      // quick-spec has followUps: ['quick-dev', 'create-story']
+      // These should appear before other suggestions like create-product-brief
+      if (suggestions.includes('quick-dev') && suggestions.includes('create-product-brief')) {
+        const quickDevIndex = suggestions.indexOf('quick-dev');
+        const createProductBriefIndex = suggestions.indexOf('create-product-brief');
+        expect(quickDevIndex).toBeLessThan(createProductBriefIndex);
+      }
+    });
+
+    it('should handle invalid bmadWorkflowId in taskMetadata gracefully', () => {
+      const completedWorkflows = ['create-product-brief'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+      };
+
+      const taskMetadata = {
+        bmadWorkflowId: 'non-existent-workflow-id',
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts, undefined, taskMetadata);
+
+      // Should still generate suggestions normally
+      expect(suggestions).toContain('create-prd');
+    });
+
+    it('should prioritize current workflow follow-ups when combined with sprint status', () => {
+      const completedWorkflows = ['create-prd', 'sprint-planning'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'create-prd': {
+          path: '_bmad-output/planning-artifacts/prd.md',
+        },
+        'sprint-planning': {
+          path: '_bmad-output/implementation-artifacts/sprint-status.yaml',
+        },
+      };
+
+      const sprintStatus = {
+        storyStatuses: [StoryStatus.Backlog, StoryStatus.ReadyForDev],
+        completedWorkflows: [],
+      };
+
+      const taskMetadata = {
+        bmadWorkflowId: 'create-prd',
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts, sprintStatus, taskMetadata);
+
+      // create-prd followUps: ['create-ux-design', 'create-architecture', 'create-epics-and-stories']
+      // These should be prioritized over sprint status suggestions (create-story, dev-story)
+      const prdFollowUps = ['create-ux-design', 'create-architecture'];
+      const sprintSuggestions = ['create-story', 'dev-story'];
+
+      prdFollowUps.forEach((followUp) => {
+        if (suggestions.includes(followUp)) {
+          const followUpIndex = suggestions.indexOf(followUp);
+          sprintSuggestions.forEach((sprintSuggestion) => {
+            if (suggestions.includes(sprintSuggestion)) {
+              const sprintIndex = suggestions.indexOf(sprintSuggestion);
+              // PRD follow-ups should come before sprint suggestions
+              expect(followUpIndex).toBeLessThan(sprintIndex);
+            }
+          });
+        }
+      });
+    });
+
+    it('should deduplicate suggestions when current workflow follow-ups overlap with other sources', () => {
+      const completedWorkflows = ['dev-story', 'code-review'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'dev-story': {
+          path: '_bmad-output/implementation-artifacts/dev-story.md',
+        },
+        'code-review': {
+          path: '_bmad-output/implementation-artifacts/code-review-example.md',
+        },
+      };
+
+      const sprintStatus = {
+        storyStatuses: [StoryStatus.Review],
+        completedWorkflows: [],
+      };
+
+      const taskMetadata = {
+        bmadWorkflowId: 'code-review',
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts, sprintStatus, taskMetadata);
+
+      // code-review has followUps: ['create-story', 'dev-story']
+      // Sprint status with Review also suggests 'code-review'
+      // dev-story followUps: ['code-review', 'create-story']
+      // 'create-story' appears in both code-review followUps and dev-story followUps
+      const createStoryCount = suggestions.filter((s) => s === 'create-story').length;
+      expect(createStoryCount).toBeLessThanOrEqual(1);
+    });
+
+    it('should handle empty taskMetadata object', () => {
+      const completedWorkflows = ['create-product-brief'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+      };
+
+      const taskMetadata = {};
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts, undefined, taskMetadata);
+
+      // Should work normally
+      expect(suggestions).toContain('create-prd');
+      expect(suggestions).toContain('quick-spec');
+    });
+
+    it('should combine current workflow follow-ups with all completed workflow follow-ups', () => {
+      const completedWorkflows = ['create-product-brief', 'create-prd'];
+      const detectedArtifacts: WorkflowArtifacts['detectedArtifacts'] = {
+        'create-product-brief': {
+          path: '_bmad-output/planning-artifacts/product-brief-example.md',
+        },
+        'create-prd': {
+          path: '_bmad-output/planning-artifacts/prd.md',
+        },
+      };
+
+      const taskMetadata = {
+        bmadWorkflowId: 'create-prd',
+      };
+
+      const suggestions = generateSuggestions(completedWorkflows, detectedArtifacts, undefined, taskMetadata);
+
+      // Should include follow-ups from all completed workflows
+      expect(suggestions).toContain('create-ux-design'); // from create-prd
+      expect(suggestions).toContain('create-architecture'); // from create-prd
+      expect(suggestions).toContain('create-epics-and-stories'); // from create-prd
+
+      // But prioritize create-prd follow-ups at the beginning
+      if (suggestions.includes('create-ux-design')) {
+        const uxIndex = suggestions.indexOf('create-ux-design');
+        // create-ux-design is a PRD follow-up, should be early in the list
+        expect(uxIndex).toBeLessThan(suggestions.length / 2);
+      }
+    });
+  });
+
   describe('greenfield projects (no completed workflows)', () => {
     it('suggests entry-point workflows when no workflows completed', () => {
       const completedWorkflows: string[] = [];

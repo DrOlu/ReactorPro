@@ -555,6 +555,14 @@ export class BmadManager {
         await task.saveTask({ name: workflow.name });
       }
 
+      // Store workflow ID in task metadata
+      await task.updateTask({
+        metadata: {
+          ...task.task.metadata,
+          bmadWorkflowId: workflowId,
+        },
+      });
+
       if (preparedContext.execute) {
         task.addLogMessage('loading');
         await task.runPromptInAgent(

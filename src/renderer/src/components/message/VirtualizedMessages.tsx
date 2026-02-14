@@ -246,6 +246,7 @@ export const VirtualizedMessages = forwardRef<VirtualizedMessagesRef, Props>(
             state={task.state}
             mode={task.currentMode}
             isArchived={task.archived}
+            task={task}
             projectDir={baseDir}
             taskId={taskId}
             onResumeTask={resumeTask}

@@ -2,7 +2,7 @@ import { IoPlayOutline } from 'react-icons/io5';
 import { RiAlertLine, RiCheckLine, RiPlayLine } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
 import { ReactNode, useState } from 'react';
-import { DefaultTaskState, Mode } from '@common/types';
+import { DefaultTaskState, Mode, TaskData } from '@common/types';
 
 import { BmadTaskActions } from '@/components/bmad/BmadTaskActions';
 import { Button } from '@/components/common/Button';
@@ -13,6 +13,7 @@ type Props = {
   state: string | undefined;
   mode?: Mode;
   isArchived: boolean | undefined;
+  task?: TaskData | null;
   onResumeTask: () => void;
   onMarkAsDone: () => void;
   onProceed?: () => void;
@@ -27,6 +28,7 @@ export const TaskStateActions = ({
   state,
   mode,
   isArchived,
+  task,
   onResumeTask,
   onMarkAsDone,
   onProceed,
@@ -75,8 +77,8 @@ export const TaskStateActions = ({
   };
 
   // BMAD mode rendering
-  if (mode === 'bmad' && [DefaultTaskState.ReadyForReview, DefaultTaskState.Done].includes(state as DefaultTaskState)) {
-    return <BmadTaskActions projectDir={projectDir} taskId={taskId} />;
+  if (mode === 'bmad' && [DefaultTaskState.ReadyForReview, DefaultTaskState.Done, DefaultTaskState.MoreInfoNeeded].includes(state as DefaultTaskState)) {
+    return <BmadTaskActions projectDir={projectDir} taskId={taskId} task={task} />;
   }
 
   if (state === DefaultTaskState.Todo) {

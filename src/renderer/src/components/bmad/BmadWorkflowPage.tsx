@@ -25,7 +25,7 @@ type Props = {
 export const BmadWorkflowPage = ({ projectDir, taskId }: Props) => {
   const { t } = useTranslation();
   const api = useApi();
-  const { status: bmadStatus, suggestedWorkflows, isLoading, error, refresh } = useBmadState(projectDir);
+  const { status: bmadStatus, suggestedWorkflows, isLoading, error, refresh } = useBmadState({ projectDir });
 
   const [activeTab, setActiveTab] = useState<PathType>('full');
   const [showResetConfirm, setShowResetConfirm] = useState(false);

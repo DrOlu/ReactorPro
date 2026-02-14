@@ -10276,6 +10276,8 @@ async executeWorkflow(workflowId: string, task: Task): Promise<WorkflowExecution
 ⋮----
 // Store prepared context messages in task context and send to UI
 ⋮----
+// Store workflow ID in task metadata
+⋮----
 null, // No user prompt - workflow is system-driven
 ⋮----
 // 4. Return success
@@ -18099,6 +18101,7 @@ File: src/renderer/src/components/bmad/BmadTaskActions.tsx
 ================
 import { RiAlertLine } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
+import { TaskData } from '@common/types';
 ⋮----
 import { useBmadState } from './useBmadState';
 ⋮----
@@ -18107,6 +18110,7 @@ import { SuggestedWorkflowCard } from '@/components/bmad/SuggestedWorkflowCard';
 type Props = {
   projectDir: string;
   taskId: string;
+  task?: TaskData | null;
 };
 
 ================
@@ -18208,6 +18212,7 @@ File: src/renderer/src/components/bmad/useBmadState.ts
 ================
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BmadStatus } from '@common/bmad-types';
+import { TaskData } from '@common/types';
 ⋮----
 import { useApi } from '@/contexts/ApiContext';
 import { generateSuggestions } from '@/utils/bmad-suggestions';
@@ -18220,7 +18225,12 @@ type Result = {
   refresh: (loading?: boolean) => Promise<void>;
 };
 ⋮----
-export const useBmadState = (projectDir?: string): Result =>
+type UseBmadStateParams = {
+  projectDir?: string;
+  task?: TaskData | null;
+};
+⋮----
+export const useBmadState = (params: UseBmadStateParams): Result =>
 ⋮----
 // eslint-disable-next-line no-console
 ⋮----
@@ -20812,7 +20822,7 @@ import { IoPlayOutline } from 'react-icons/io5';
 import { RiAlertLine, RiCheckLine, RiPlayLine } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
 import { ReactNode, useState } from 'react';
-import { DefaultTaskState, Mode } from '@common/types';
+import { DefaultTaskState, Mode, TaskData } from '@common/types';
 ⋮----
 import { BmadTaskActions } from '@/components/bmad/BmadTaskActions';
 import { Button } from '@/components/common/Button';
@@ -20823,6 +20833,7 @@ type Props = {
   state: string | undefined;
   mode?: Mode;
   isArchived: boolean | undefined;
+  task?: TaskData | null;
   onResumeTask: () => void;
   onMarkAsDone: () => void;
   onProceed?: () => void;
@@ -29765,19 +29776,25 @@ const isOnQuickPath = (completedWorkflows: string[]): boolean =>
 const isOnFullPath = (completedWorkflows: string[]): boolean =>
 ⋮----
 /**
- * Generate smart workflow suggestions based on completed workflows and detected artifacts
+ * Generate smart workflow suggestions based on completed workflows, detected artifacts, and task metadata
  * Implements greenfield/brownfield detection and prerequisite checking
  * Ensures suggestions include next steps from both Full and Quick paths
+ * Prioritizes follow-ups from the currently executing workflow
  */
 export const generateSuggestions = (
   completedWorkflows: string[],
   detectedArtifacts: WorkflowArtifacts['detectedArtifacts'],
   sprintStatus?: SprintStatusData,
+  taskMetadata?: Record<string, unknown>,
 ): string[] =>
 ⋮----
 // No workflows completed - suggest entry points for both paths
 ⋮----
+// Get the currently executing workflow ID from metadata (if available)
+⋮----
 // Collect followUps from completed workflows
+⋮----
+// Collect follow-ups from all completed workflows
 ⋮----
 // Add suggestions based on story statuses in sprint-status.yaml
 ⋮----
@@ -29787,9 +29804,13 @@ export const generateSuggestions = (
 ⋮----
 // If on Full path, also suggest Quick path entry point if not already suggested/completed
 ⋮----
+// If we have a current workflow, filter to only include its follow-ups
+⋮----
 // Filter out already completed workflows
 ⋮----
-// Sort suggestions: workflows with satisfied prerequisites first
+// Sort suggestions: prioritize follow-ups from current workflow, then by satisfied prerequisites
+⋮----
+// If current workflow has follow-ups, prioritize them
 ⋮----
 // Higher score first (more prerequisites satisfied)
 

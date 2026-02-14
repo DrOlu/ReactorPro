@@ -1,5 +1,6 @@
 import { RiAlertLine } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
+import { TaskData } from '@common/types';
 
 import { useBmadState } from './useBmadState';
 
@@ -8,11 +9,12 @@ import { SuggestedWorkflowCard } from '@/components/bmad/SuggestedWorkflowCard';
 type Props = {
   projectDir: string;
   taskId: string;
+  task?: TaskData | null;
 };
 
-export const BmadTaskActions = ({ projectDir, taskId }: Props) => {
+export const BmadTaskActions = ({ projectDir, taskId, task }: Props) => {
   const { t } = useTranslation();
-  const { status, suggestedWorkflows, error, refresh } = useBmadState(projectDir);
+  const { status, suggestedWorkflows, error, refresh } = useBmadState({ projectDir, task });
 
   if (error) {
     return (

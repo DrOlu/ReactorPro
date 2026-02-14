@@ -86,22 +86,30 @@ const isOnFullPath = (completedWorkflows: string[]): boolean => {
 };
 
 /**
- * Generate smart workflow suggestions based on completed workflows and detected artifacts
+ * Generate smart workflow suggestions based on completed workflows, detected artifacts, and task metadata
  * Implements greenfield/brownfield detection and prerequisite checking
  * Ensures suggestions include next steps from both Full and Quick paths
+ * Prioritizes follow-ups from the currently executing workflow
  */
 export const generateSuggestions = (
   completedWorkflows: string[],
   detectedArtifacts: WorkflowArtifacts['detectedArtifacts'],
   sprintStatus?: SprintStatusData,
+  taskMetadata?: Record<string, unknown>,
 ): string[] => {
+  console.log('generateSuggestions', { completedWorkflows, detectedArtifacts, sprintStatus, taskMetadata });
   // No workflows completed - suggest entry points for both paths
   if (completedWorkflows.length === 0) {
     return ['create-product-brief', 'quick-spec'];
   }
 
+  // Get the currently executing workflow ID from metadata (if available)
+  const currentWorkflowId = taskMetadata?.bmadWorkflowId as string | undefined;
+
   // Collect followUps from completed workflows
   const followUpSet = new Set<string>();
+
+  // Collect follow-ups from all completed workflows
   completedWorkflows.forEach((workflowId) => {
     const workflow = BMAD_WORKFLOWS.find((w) => w.id === workflowId);
     if (workflow?.followUps) {
@@ -127,13 +135,40 @@ export const generateSuggestions = (
     followUpSet.add('quick-spec');
   }
 
+  // If we have a current workflow, filter to only include its follow-ups
+  if (currentWorkflowId) {
+    const currentWorkflow = BMAD_WORKFLOWS.find((w) => w.id === currentWorkflowId);
+    if (currentWorkflow?.followUps) {
+      const currentFollowUps = new Set(currentWorkflow.followUps);
+      followUpSet.forEach((item) => {
+        if (!currentFollowUps.has(item)) {
+          followUpSet.delete(item);
+        }
+      });
+    }
+  }
+
   // Filter out already completed workflows
   const suggestions = Array.from(followUpSet).filter((workflowId) => !completedWorkflows.includes(workflowId));
 
-  // Sort suggestions: workflows with satisfied prerequisites first
+  // Sort suggestions: prioritize follow-ups from current workflow, then by satisfied prerequisites
   return suggestions.sort((a, b) => {
     const workflowA = BMAD_WORKFLOWS.find((w) => w.id === a);
     const workflowB = BMAD_WORKFLOWS.find((w) => w.id === b);
+
+    // If current workflow has follow-ups, prioritize them
+    if (currentWorkflowId) {
+      const currentWorkflow = BMAD_WORKFLOWS.find((w) => w.id === currentWorkflowId);
+      const aIsFromCurrent = currentWorkflow?.followUps?.includes(a) ?? false;
+      const bIsFromCurrent = currentWorkflow?.followUps?.includes(b) ?? false;
+
+      if (aIsFromCurrent && !bIsFromCurrent) {
+        return -1;
+      }
+      if (!aIsFromCurrent && bIsFromCurrent) {
+        return 1;
+      }
+    }
 
     const scoreA = getPrerequisiteScore(workflowA, detectedArtifacts);
     const scoreB = getPrerequisiteScore(workflowB, detectedArtifacts);
