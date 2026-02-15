@@ -4,7 +4,7 @@ sidebar_label: "Updated Files"
 
 # Updated Files
 
-When the AI modifies files in your project, AiderDesk tracks these changes in the **Updated Files** section. This feature provides a centralized view of all files that have been changed during the current task, making it easy to review, navigate, and refine the AI's work.
+When the AI modifies files in your project, ReactorPro tracks these changes in the **Updated Files** section. This feature provides a centralized view of all files that have been changed during the current task, making it easy to review, navigate, and refine the AI's work.
 
 ## What Are Updated Files?
 
@@ -36,7 +36,7 @@ The most powerful feature of the Updated Files diff view is the ability to make 
 1. **Open the diff view** by clicking on a file in the Updated Files section
 2. **Click on any line** in the modified code where you want to request a change
 3. **Enter your feedback** in the comment dialog that appears
-4. **Submit the request** - AiderDesk creates a focused task to implement your change
+4. **Submit the request** - ReactorPro creates a focused task to implement your change
 
 ### What Happens Next
 
