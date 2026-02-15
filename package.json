@@ -238,9 +238,6 @@
     "vitest": "^4.0.16"
   },
   "lint-staged": {
-    "*.{ts,tsx}": "eslint --fix"
-  },
-  "overrides": {
-    "@tanstack/virtual-core": "3.13.12"
+    "*.{ts,tsx}": "npm run lint"
   }
 }

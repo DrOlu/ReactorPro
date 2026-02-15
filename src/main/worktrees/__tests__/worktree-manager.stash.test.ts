@@ -29,19 +29,18 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
 
   describe('Basic stash with no symlink folders', () => {
     it('should stash changes when symlinkFolders is empty', async () => {
-      (execWithShellPath as Mock).mockResolvedValueOnce({ stdout: 'M modified.txt\n', stderr: '' }).mockResolvedValueOnce({ stdout: '', stderr: '' });
+      (execWithShellPath as Mock).mockResolvedValueOnce({ stdout: 'M modified.txt\0', stderr: '' }).mockResolvedValueOnce({ stdout: '', stderr: '' });
 
       const result = await worktreeManager.stashUncommittedChanges('test-stash-id', testPath, 'Test stash message', []);
 
       expect(result).toBe('test-stash-id');
-      expect(execWithShellPath).toHaveBeenCalledWith('git status --porcelain=v1', { cwd: testPath });
       expect(execWithShellPath).toHaveBeenCalledWith('git stash push -u -m "test-stash-id: Test stash message"', {
         cwd: testPath,
       });
     });
 
     it('should stash changes with default empty symlinkFolders parameter', async () => {
-      (execWithShellPath as Mock).mockResolvedValueOnce({ stdout: 'M modified.txt\n', stderr: '' }).mockResolvedValueOnce({ stdout: '', stderr: '' });
+      (execWithShellPath as Mock).mockResolvedValueOnce({ stdout: 'M modified.txt\0', stderr: '' }).mockResolvedValueOnce({ stdout: '', stderr: '' });
 
       const result = await worktreeManager.stashUncommittedChanges('test-stash-id', testPath, 'Test stash message');
 
@@ -59,7 +58,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       (execWithShellPath as Mock)
         .mockResolvedValueOnce({ stdout: 'M modified.txt\n', stderr: '' })
         .mockResolvedValueOnce({
-          stdout: '_bmad/file.txt\n',
+          stdout: '_bmad/file.txt\0',
           stderr: '',
         })
         .mockResolvedValueOnce({ stdout: '', stderr: '' });
@@ -71,7 +70,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       const calls = (execWithShellPath as Mock).mock.calls;
       const stashCommand = calls[calls.length - 1][0];
 
-      expect(execWithShellPath).toHaveBeenCalledWith('git ls-files --others --exclude-standard', {
+      expect(execWithShellPath).toHaveBeenCalledWith('git ls-files --others --exclude-standard -z', {
         cwd: testPath,
       });
       expect(stashCommand).toBe('git stash push -u -m "test-stash-id: Test stash message" -- . \':(exclude)_bmad\'');
@@ -84,7 +83,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       (execWithShellPath as Mock)
         .mockResolvedValueOnce({ stdout: 'M modified.txt\n', stderr: '' })
         .mockResolvedValueOnce({
-          stdout: '_bmad/file.txt\n',
+          stdout: '_bmad/file.txt\0',
           stderr: '',
         })
         .mockResolvedValueOnce({ stdout: '', stderr: '' });
@@ -110,7 +109,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       (execWithShellPath as Mock)
         .mockResolvedValueOnce({ stdout: 'M modified.txt\n', stderr: '' })
         .mockResolvedValueOnce({
-          stdout: '_bmad/file.txt\n_custom/data.json\n',
+          stdout: '_bmad/file.txt\0_custom/data.json\0',
           stderr: '',
         })
         .mockResolvedValueOnce({ stdout: '', stderr: '' });
@@ -132,7 +131,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       (execWithShellPath as Mock)
         .mockResolvedValueOnce({ stdout: 'M modified.txt\n', stderr: '' })
         .mockResolvedValueOnce({
-          stdout: '_bmad/file.txt\n_bmad/subdir/other.txt\n',
+          stdout: '_bmad/file.txt\0_bmad/subdir/other.txt\0',
           stderr: '',
         })
         .mockResolvedValueOnce({ stdout: '', stderr: '' });
@@ -155,7 +154,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       (execWithShellPath as Mock)
         .mockResolvedValueOnce({ stdout: 'M modified.txt\n', stderr: '' })
         .mockResolvedValueOnce({
-          stdout: '_bmad/file.txt\n_custom/data.json\n',
+          stdout: '_bmad/file.txt\0_custom/data.json\0',
           stderr: '',
         })
         .mockResolvedValueOnce({ stdout: '', stderr: '' });
@@ -180,7 +179,7 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       (execWithShellPath as Mock)
         .mockResolvedValueOnce({ stdout: 'M modified.txt\n', stderr: '' })
         .mockResolvedValueOnce({
-          stdout: '_bmad/file.txt\n',
+          stdout: '_bmad/file.txt\0',
           stderr: '',
         })
         .mockResolvedValueOnce({ stdout: '', stderr: '' });
@@ -306,8 +305,8 @@ describe('WorktreeManager - stashUncommittedChanges', () => {
       const symlinkFolders = ['_bmad'];
 
       (execWithShellPath as Mock)
-        .mockResolvedValueOnce({ stdout: 'M modified.txt\n', stderr: '' })
-        .mockResolvedValueOnce({ stdout: '_bmad\n', stderr: '' })
+        .mockResolvedValueOnce({ stdout: 'M modified.txt\0', stderr: '' })
+        .mockResolvedValueOnce({ stdout: '_bmad\0', stderr: '' })
         .mockResolvedValueOnce({ stdout: '', stderr: '' });
 
       const result = await worktreeManager.stashUncommittedChanges('test-stash-id', testPath, 'Test stash message', symlinkFolders);

@@ -45,7 +45,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   renderMarkdown: true,
   virtualizedRendering: false,
   aiderDeskAutoUpdate: true,
-  messageViewMode: MessageViewMode.Full,
+  messageViewMode: MessageViewMode.Compact,
   diffViewMode: DiffViewMode.SideBySide,
   aider: {
     options: '',

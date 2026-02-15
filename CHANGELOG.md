@@ -11,9 +11,11 @@
 - added Show task info button for quick access to task information
 - image messages are sent also when Include Context Files is disabled
 - properly initializing internal task in project
-- added Updated Files section with information about the changes
+- added Updated Files section with information about the changes and ability to request changes on specific line
 - BMAD mode consecutive prompts are now properly sending when working via browser
 - sync task baseDir with project baseDir to handle migrated tasks
+- correcly showing the project files with special characters
+- increased timeout of semantic search tool to avoid errors when the tool is running multiple times in parallel
 
 ## [0.52.0]
 
@@ -31,6 +33,7 @@
 - default agent profiles now do not include the context files
 - rules directory is correctly handled when using Aider modes and Worktree
 - added detaled information about the context files
+- setting Compact as default messages view mode
 
 ## [0.51.0]
 

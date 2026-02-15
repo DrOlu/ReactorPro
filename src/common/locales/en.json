@@ -45,7 +45,8 @@
     "noFiles": "No files",
     "clickToRefresh": "Click to refresh",
     "closeTasks": "Close Tasks",
-    "toggleTasks": "Toggle Tasks"
+    "toggleTasks": "Toggle Tasks",
+    "submit": "Submit"
   },
   "search": {
     "placeholder": "Search...",
@@ -913,6 +914,10 @@
     "useGit": "Use Git",
     "useGitEnabled": "Git enabled - Click to use filesystem",
     "useGitDisabled": "Filesystem enabled - Click to use Git",
+    "revertFile": "Revert changes",
+    "confirmRevertTitle": "Revert file changes?",
+    "confirmRevertMessage": "This will discard all changes to this file. This action cannot be undone.",
+    "revert": "Revert",
     "empty": {
       "title": "No Context Files",
       "aiderMode": {
@@ -1190,7 +1195,11 @@
     "sideBySide": "Side by Side",
     "unified": "Unified",
     "compact": "Compact",
-    "noChanges": "No changes have been made. Content is identical."
+    "noChanges": "No changes have been made. Content is identical.",
+    "lineComment": {
+      "placeholder": "Describe the changes you want to make to this code...",
+      "taskName": "Update {{filename}}"
+    }
   },
   "promptField": {
     "startRecording": "Start listening",

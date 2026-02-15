@@ -819,6 +819,7 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
           path: searchPath,
           allowTests,
           exact,
+          timeout: 5 * 60, // 5 minutes
           json: false,
           maxTokens: effectiveMaxTokens,
           language: effectiveLanguage,

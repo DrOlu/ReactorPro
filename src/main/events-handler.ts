@@ -253,6 +253,20 @@ export class EventsHandler {
     await task.handoffConversation(mode, focus);
   }
 
+  async runCodeInlineRequest(baseDir: string, taskId: string, filename: string, lineNumber: number, userComment: string): Promise<void> {
+    const project = this.projectManager.getProject(baseDir);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    const task = project.getTask(taskId);
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    await task.runCodeInlineRequest(filename, lineNumber, userComment);
+  }
+
   async loadInputHistory(baseDir: string): Promise<string[]> {
     return await this.projectManager.getProject(baseDir).loadInputHistory();
   }
@@ -506,6 +520,15 @@ export class EventsHandler {
     }
 
     await task.revertLastMerge();
+  }
+
+  async restoreFile(baseDir: string, taskId: string, filePath: string): Promise<void> {
+    const task = this.projectManager.getProject(baseDir).getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    await task.restoreFile(filePath);
   }
 
   async listBranches(projectDir: string): Promise<Array<{ name: string; isCurrent: boolean; hasWorktree: boolean }>> {

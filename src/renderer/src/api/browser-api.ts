@@ -584,6 +584,16 @@ export class BrowserApi implements ApplicationAPI {
     });
   }
 
+  runCodeInlineRequest(baseDir: string, taskId: string, filename: string, lineNumber: number, userComment: string): void {
+    this.post('/project/run-code-inline-request', {
+      projectDir: baseDir,
+      taskId,
+      filename,
+      lineNumber,
+      userComment,
+    });
+  }
+
   setZoomLevel(level: number): Promise<void> {
     void level;
     // eslint-disable-next-line no-console
@@ -867,6 +877,14 @@ export class BrowserApi implements ApplicationAPI {
     return this.post('/project/worktree/revert-last-merge', {
       projectDir: baseDir,
       taskId,
+    });
+  }
+
+  restoreFile(baseDir: string, taskId: string, filePath: string): Promise<void> {
+    return this.post('/project/worktree/restore-file', {
+      projectDir: baseDir,
+      taskId,
+      filePath,
     });
   }
 

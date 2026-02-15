@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import objectHash from 'object-hash';
 import { ControlledTreeEnvironment, Tree } from 'react-complex-tree';
 import { HiChevronDown, HiChevronRight, HiOutlineTrash, HiPlus, HiX } from 'react-icons/hi';
-import { MdOutlinePublic, MdOutlineRefresh, MdOutlineSearch } from 'react-icons/md';
+import { MdOutlinePublic, MdOutlineRefresh, MdOutlineSearch, MdUndo } from 'react-icons/md';
 import { BiCollapseVertical, BiExpandVertical } from 'react-icons/bi';
 import { TbPencilOff } from 'react-icons/tb';
 import { RiRobot2Line } from 'react-icons/ri';
@@ -19,6 +19,7 @@ import { UpdatedFilesDiffModal } from './UpdatedFilesDiffModal';
 
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Input } from '@/components/common/Input';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useOS } from '@/hooks/useOS';
 import { useApi } from '@/contexts/ApiContext';
 
@@ -224,6 +225,35 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
     },
     [sortedUpdatedFiles],
   );
+
+  const [fileToRevert, setFileToRevert] = useState<string | null>(null);
+  const [isRevertingFile, setIsRevertingFile] = useState(false);
+
+  const handleRevertFile = useCallback((filePath: string) => {
+    setFileToRevert(filePath);
+  }, []);
+
+  const handleRevertConfirm = useCallback(async () => {
+    if (!fileToRevert) {
+      return;
+    }
+
+    setIsRevertingFile(true);
+    try {
+      await api.restoreFile(baseDir, taskId, fileToRevert);
+      await fetchUpdatedFiles();
+      setFileToRevert(null);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to revert file:', error);
+    } finally {
+      setIsRevertingFile(false);
+    }
+  }, [api, baseDir, taskId, fileToRevert, fetchUpdatedFiles]);
+
+  const handleRevertCancel = useCallback(() => {
+    setFileToRevert(null);
+  }, []);
 
   const handleFileDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
@@ -445,14 +475,15 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
     const filePath = treeItem.file?.path;
     const isContextFile = filePath ? contextFiles.some((f) => normalizePath(f.path) === normalizePath(filePath)) : false;
 
+    // Get line stats for updated files section
+    const updatedFile = type === 'updated' ? updatedFiles.find((f) => normalizePath(f.path) === normalizePath(treeItem.file?.path || '')) : undefined;
+
     // Actions logic
     const showAdd = type === 'project' && !isContextFile && !isRuleFile;
     const showRemove = (type === 'context' || (type === 'project' && isContextFile)) && !isRuleFile;
+    const showRevert = type === 'updated' && updatedFile && !treeItem.isFolder;
 
     const fileTokenTooltip = getFileTokenTooltip(treeItem);
-
-    // Get line stats for updated files section
-    const updatedFile = type === 'updated' ? updatedFiles.find((f) => normalizePath(f.path) === normalizePath(treeItem.file?.path || '')) : undefined;
 
     // Helper functions
     const toggleFolder = () => {
@@ -555,6 +586,20 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
               <Tooltip content={os === OS.MacOS ? t('contextFiles.addFileTooltip.cmd') : t('contextFiles.addFileTooltip.ctrl')}>
                 <button onClick={addFile(treeItem)} className="px-1 py-1 rounded hover:bg-bg-primary-light text-text-muted hover:text-text-primary">
                   <HiPlus className="w-4 h-4" />
+                </button>
+              </Tooltip>
+            )}
+
+            {showRevert && (
+              <Tooltip content={t('contextFiles.revertFile')}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRevertFile(updatedFile.path);
+                  }}
+                  className="px-1 py-1 rounded hover:bg-bg-primary-light text-text-muted hover:text-text-primary"
+                >
+                  <MdUndo className="w-4 h-4" />
                 </button>
               </Tooltip>
             )}
@@ -804,7 +849,30 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
       {renderSection('rules', t('contextFiles.rules'), rulesFiles.length, rulesTreeData, rulesExpandedItems, setRulesExpandedItems, undefined, false, true)}
 
       {/* Diff Modal */}
-      {diffModalOpen && <UpdatedFilesDiffModal files={sortedUpdatedFiles} initialFileIndex={diffModalFileIndex} onClose={() => setDiffModalOpen(false)} />}
+      {diffModalOpen && (
+        <UpdatedFilesDiffModal
+          files={sortedUpdatedFiles}
+          initialFileIndex={diffModalFileIndex}
+          onClose={() => setDiffModalOpen(false)}
+          baseDir={baseDir}
+          taskId={taskId}
+        />
+      )}
+
+      {/* Revert Confirmation Dialog */}
+      {fileToRevert && (
+        <ConfirmDialog
+          title={t('contextFiles.confirmRevertTitle')}
+          onConfirm={handleRevertConfirm}
+          onCancel={handleRevertCancel}
+          confirmButtonText={t('contextFiles.revert')}
+          disabled={isRevertingFile}
+          closeOnEscape
+        >
+          <p className="text-sm mb-3">{t('contextFiles.confirmRevertMessage')}</p>
+          <p className="text-xs text-text-muted font-mono">{fileToRevert}</p>
+        </ConfirmDialog>
+      )}
     </div>
   );
 };

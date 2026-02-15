@@ -95,6 +95,7 @@ export interface ApplicationAPI {
   getAddableFiles: (baseDir: string, taskId: string) => Promise<string[]>;
   getAllFiles: (baseDir: string, taskId: string, useGit?: boolean) => Promise<string[]>;
   getUpdatedFiles: (baseDir: string, taskId: string) => Promise<UpdatedFile[]>;
+  restoreFile: (baseDir: string, taskId: string, filePath: string) => Promise<void>;
   addFile: (baseDir: string, taskId: string, filePath: string, readOnly?: boolean) => void;
   isValidPath: (baseDir: string, path: string) => Promise<boolean>;
   isProjectPath: (path: string) => Promise<boolean>;
@@ -134,6 +135,7 @@ export interface ApplicationAPI {
   removeMessagesUpTo: (baseDir: string, taskId: string, messageId: string) => Promise<void>;
   compactConversation: (baseDir: string, taskId: string, mode: Mode, customInstructions?: string) => void;
   handoffConversation: (baseDir: string, taskId: string, focus?: string) => Promise<void>;
+  runCodeInlineRequest: (baseDir: string, taskId: string, filename: string, lineNumber: number, userComment: string) => void;
   setZoomLevel: (level: number) => Promise<void>;
 
   getVersions: (forceRefresh?: boolean) => Promise<VersionsInfo | null>;

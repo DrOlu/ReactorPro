@@ -97,7 +97,6 @@ export const generateSuggestions = (
   sprintStatus?: SprintStatusData,
   taskMetadata?: Record<string, unknown>,
 ): string[] => {
-  console.log('generateSuggestions', { completedWorkflows, detectedArtifacts, sprintStatus, taskMetadata });
   // No workflows completed - suggest entry points for both paths
   if (completedWorkflows.length === 0) {
     return ['create-product-brief', 'quick-spec'];

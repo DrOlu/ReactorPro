@@ -88,6 +88,7 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     getAddableFiles: vi.fn((): Promise<string[]> => Promise.resolve([])),
     getAllFiles: vi.fn((): Promise<string[]> => Promise.resolve([])),
     getUpdatedFiles: vi.fn((): Promise<Array<{ path: string; additions: number; deletions: number }>> => Promise.resolve([])),
+    restoreFile: vi.fn((): Promise<void> => Promise.resolve()),
     addFile: vi.fn((): void => undefined),
     isValidPath: vi.fn((): Promise<boolean> => Promise.resolve(true)),
     isProjectPath: vi.fn((): Promise<boolean> => Promise.resolve(true)),
@@ -132,6 +133,8 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     removeMessage: vi.fn((): Promise<void> => Promise.resolve()),
     removeMessagesUpTo: vi.fn((): Promise<void> => Promise.resolve()),
     compactConversation: vi.fn((): void => undefined),
+    handoffConversation: vi.fn((): Promise<void> => Promise.resolve()),
+    runCodeInlineRequest: vi.fn((): void => undefined),
 
     // UI operations
     setZoomLevel: vi.fn((): Promise<void> => Promise.resolve()),
@@ -237,7 +240,6 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     deleteProjectMemories: vi.fn((): Promise<number> => Promise.resolve(0)),
     writeToClipboard: vi.fn((): Promise<void> => Promise.resolve()),
     openPath: vi.fn((): Promise<boolean> => Promise.resolve(true)),
-    handoffConversation: vi.fn((): Promise<void> => Promise.resolve()),
 
     // BMAD operations
     installBmad: vi.fn((): Promise<{ success: boolean; message?: string }> => Promise.resolve({ success: false })),

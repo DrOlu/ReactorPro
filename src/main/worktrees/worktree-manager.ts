@@ -3,6 +3,8 @@ import fs, { mkdir, rm, lstat, symlink } from 'fs/promises';
 import { existsSync } from 'fs';
 
 import { ConflictResolutionFileContext, MergeState, RebaseState, UpdatedFile, Worktree, WorktreeAheadCommits, WorktreeUncommittedFiles } from '@common/types';
+// @ts-expect-error istextorbinary library does not provide TypeScript definitions
+import { isBinary } from 'istextorbinary';
 
 import { execWithShellPath, withLock } from '@/utils';
 import { AIDER_DESK_TASKS_DIR } from '@/constants';
@@ -1137,11 +1139,8 @@ export class WorktreeManager {
 
       if (symlinkFolders.length > 0) {
         // Get untracked files to check which symlink folders have content
-        const { stdout: untrackedFiles } = await execWithShellPath('git ls-files --others --exclude-standard', { cwd: path });
-        const untrackedFilesList = untrackedFiles
-          .trim()
-          .split('\n')
-          .filter((file) => file.trim() !== '');
+        const { stdout: untrackedFiles } = await execWithShellPath('git ls-files --others --exclude-standard -z', { cwd: path });
+        const untrackedFilesList = untrackedFiles.split('\0').filter((file) => file.trim() !== '');
 
         for (const folder of symlinkFolders) {
           // Check if folder has untracked files
@@ -1424,11 +1423,11 @@ export class WorktreeManager {
   }
 
   async getUncommittedFiles(worktreePath: string): Promise<WorktreeUncommittedFiles> {
-    const { stdout } = await execWithShellPath('git status --porcelain=v1', {
+    const { stdout } = await execWithShellPath('git status --porcelain=v1 -z', {
       cwd: worktreePath,
     });
     const files = stdout
-      .split('\n')
+      .split('\0')
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
 
@@ -1440,38 +1439,47 @@ export class WorktreeManager {
 
   /**
    * Get updated files with line diff stats from git
-   * Uses `git diff --numstat HEAD` to get additions and deletions per file
-   * Format: "additions\tdeletions\tfilepath"
+   * Uses `git diff --numstat -z HEAD` to get additions and deletions per file
+   * Format: "additions\0deletions\0filepath\0"
+   * The -z flag uses NUL-separated output to handle filenames with special characters correctly
    * Also fetches the full git diff for each file
    */
   async getUpdatedFiles(worktreePath: string): Promise<UpdatedFile[]> {
     try {
-      const { stdout } = await execWithShellPath('git diff --numstat HEAD', {
+      const { stdout } = await execWithShellPath('git diff --numstat -z HEAD', {
         cwd: worktreePath,
       });
 
-      const lines = stdout.trim().split('\n');
+      const entries = stdout.split('\0').filter((entry) => entry.trim() !== '');
       const files: UpdatedFile[] = [];
 
-      for (const line of lines) {
-        if (!line.trim()) {
-          continue;
-        }
-        const parts = line.split('\t');
+      for (const entry of entries) {
+        // Parse NUL-separated format: additions\tdeletions\tfilename
+        const parts = entry.split('\t');
         if (parts.length >= 3) {
           const additions = parts[0] === '-' ? 0 : parseInt(parts[0], 10);
           const deletions = parts[1] === '-' ? 0 : parseInt(parts[1], 10);
           const filePath = parts.slice(2).join('\t'); // Handle paths with tabs
+          const absoluteFilePath = join(worktreePath, filePath);
 
-          // Fetch git diff for this file
+          // Check if file is binary and skip diff generation
           let diff = '';
           try {
-            const { stdout: diffOutput } = await execWithShellPath(`git diff --unified=3 HEAD ${filePath}`, {
+            const fileContentBuffer = await fs.readFile(absoluteFilePath);
+            if (isBinary(filePath, fileContentBuffer)) {
+              // Binary file - skip diff
+              files.push({ path: filePath, additions, deletions, diff });
+              continue;
+            }
+
+            // Escape file path for git command - use quotes and -- separator
+            const escapedPath = filePath.replace(/"/g, '\\"');
+            const { stdout: diffOutput } = await execWithShellPath(`git diff --unified=3 HEAD -- "${escapedPath}"`, {
               cwd: worktreePath,
             });
             diff = diffOutput;
           } catch (diffError) {
-            // If diff fetch fails, continue with empty diff
+            // If diff fetch fails (e.g., file not readable, git error), continue with empty diff
             logger.warn(`Failed to get diff for file ${filePath}:`, diffError);
             diff = '';
           }
@@ -1485,6 +1493,22 @@ export class WorktreeManager {
       // If git diff fails (e.g., no HEAD commit), return empty array
       logger.warn('Failed to get updated files:', error);
       return [];
+    }
+  }
+
+  async restoreFile(worktreePath: string, filePath: string): Promise<void> {
+    try {
+      logger.info(`Restoring file: ${filePath}`, { worktreePath });
+
+      const escapedPath = filePath.replace(/"/g, '\\"');
+      await execWithShellPath(`git restore -- "${escapedPath}"`, {
+        cwd: worktreePath,
+      });
+
+      logger.info(`Successfully restored file: ${filePath}`);
+    } catch (error) {
+      logger.error(`Failed to restore file ${filePath}:`, error);
+      throw error;
     }
   }
 

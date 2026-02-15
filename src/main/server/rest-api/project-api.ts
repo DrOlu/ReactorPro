@@ -224,6 +224,14 @@ const HandoffConversationSchema = z.object({
   focus: z.string().optional(),
 });
 
+const RunCodeInlineRequestSchema = z.object({
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
+  filename: z.string().min(1, 'Filename is required'),
+  lineNumber: z.number().int().min(1, 'Line number is required'),
+  userComment: z.string().min(1, 'User comment is required'),
+});
+
 const ScrapeWebSchema = z.object({
   projectDir: z.string().min(1, 'Project directory is required'),
   taskId: z.string().min(1, 'Task id is required'),
@@ -248,6 +256,12 @@ const ApplyUncommittedChangesSchema = z.object({
 const RevertLastMergeSchema = z.object({
   projectDir: z.string().min(1, 'Project directory is required'),
   taskId: z.string().min(1, 'Task id is required'),
+});
+
+const RestoreFileSchema = z.object({
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
+  filePath: z.string().min(1, 'File path is required'),
 });
 
 const ListBranchesSchema = z.object({
@@ -688,6 +702,21 @@ export class ProjectApi extends BaseApi {
       }),
     );
 
+    // Run code inline request
+    router.post(
+      '/project/run-code-inline-request',
+      this.handleRequest(async (req, res) => {
+        const parsed = this.validateRequest(RunCodeInlineRequestSchema, req.body, res);
+        if (!parsed) {
+          return;
+        }
+
+        const { projectDir, taskId, filename, lineNumber, userComment } = parsed;
+        await this.eventsHandler.runCodeInlineRequest(projectDir, taskId, filename, lineNumber, userComment);
+        res.status(200).json({ message: 'Code inline request initiated' });
+      }),
+    );
+
     // Scrape web
     router.post(
       '/project/scrape-web',
@@ -745,6 +774,21 @@ export class ProjectApi extends BaseApi {
         const { projectDir, taskId } = parsed;
         await this.eventsHandler.revertLastMerge(projectDir, taskId);
         res.status(200).json({ message: 'Last merge reverted' });
+      }),
+    );
+
+    // Restore file
+    router.post(
+      '/project/worktree/restore-file',
+      this.handleRequest(async (req, res) => {
+        const parsed = this.validateRequest(RestoreFileSchema, req.body, res);
+        if (!parsed) {
+          return;
+        }
+
+        const { projectDir, taskId, filePath } = parsed;
+        await this.eventsHandler.restoreFile(projectDir, taskId, filePath);
+        res.status(200).json({ message: 'File restored' });
       }),
     );
 

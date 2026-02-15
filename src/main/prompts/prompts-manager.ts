@@ -39,6 +39,7 @@ import {
 
 import { registerAllHelpers } from './helpers';
 import {
+  CodeInlineRequestPromptData,
   CommitMessagePromptData,
   CompactConversationPromptData,
   ConflictResolutionPromptData,
@@ -118,6 +119,7 @@ export class PromptsManager {
       'conflict-resolution-system',
       'update-task-state',
       'handoff',
+      'code-inline-request',
     ];
   }
 
@@ -450,5 +452,9 @@ export class PromptsManager {
       contextFiles,
     };
     return this.render('handoff', data, task.getProjectDir());
+  };
+
+  public getCodeInlineRequestPrompt = (task: Task, data: CodeInlineRequestPromptData) => {
+    return this.render('code-inline-request', data, task.getProjectDir());
   };
 }

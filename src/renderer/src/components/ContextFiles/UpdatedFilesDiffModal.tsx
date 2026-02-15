@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState, startTransition, useOptimistic } from 'react';
+import { useCallback, useMemo, useState, startTransition, useOptimistic, MouseEvent, useEffect } from 'react';
 import { HiChevronLeft, HiChevronRight } from 'react-icons/hi';
+import { MdUndo } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { DiffViewMode, UpdatedFile } from '@common/types';
@@ -8,22 +9,31 @@ import { clsx } from 'clsx';
 
 import { IconButton } from '../common/IconButton';
 import { ModalOverlayLayout } from '../common/ModalOverlayLayout';
-import { UDiffViewer, CompactDiffViewer } from '../common/DiffViewer';
+import { ConfirmDialog } from '../common/ConfirmDialog';
+import { UDiffViewer, CompactDiffViewer, DiffLineCommentPanel, LineClickInfo } from '../common/DiffViewer';
 import { CompactSelect } from '../common/CompactSelect';
 
 import { useSettings } from '@/contexts/SettingsContext';
+import { useApi } from '@/contexts/ApiContext';
 
 type Props = {
   files: UpdatedFile[];
   initialFileIndex: number;
   onClose: () => void;
+  baseDir: string;
+  taskId: string;
 };
 
-export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose }: Props) => {
+export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDir, taskId }: Props) => {
   const { t } = useTranslation();
+  const api = useApi();
   const { settings, saveSettings } = useSettings();
   const [currentIndex, setCurrentIndex] = useState(initialFileIndex);
   const [diffViewMode, setDiffViewMode] = useOptimistic(settings?.diffViewMode || DiffViewMode.SideBySide);
+  const [activeLineInfo, setActiveLineInfo] = useState<{ lineKey: string; lineInfo: LineClickInfo; position: { top: number; left: number } } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showRevertConfirm, setShowRevertConfirm] = useState(false);
+  const [isReverting, setIsReverting] = useState(false);
 
   const currentFile = files[currentIndex];
 
@@ -31,13 +41,19 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose }: Prop
     return currentFile?.path ? getLanguageFromPath(currentFile.path) : 'text';
   }, [currentFile]);
 
+  const resetLineState = useCallback(() => {
+    setActiveLineInfo(null);
+  }, []);
+
   const handlePrevious = useCallback(() => {
     setCurrentIndex((prev) => Math.max(0, prev - 1));
-  }, []);
+    resetLineState();
+  }, [resetLineState]);
 
   const handleNext = useCallback(() => {
     setCurrentIndex((prev) => Math.min(files.length - 1, prev + 1));
-  }, [files.length]);
+    resetLineState();
+  }, [files.length, resetLineState]);
 
   const handleDiffViewModeChange = useCallback(
     (value: string) => {
@@ -54,6 +70,88 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose }: Prop
     [settings, saveSettings, setDiffViewMode],
   );
 
+  const handleLineClick = useCallback(
+    (lineInfo: LineClickInfo, event: MouseEvent) => {
+      event.stopPropagation();
+
+      if (!currentFile?.diff) {
+        return;
+      }
+
+      const target = event.target as HTMLElement;
+      const row = target.closest('tr');
+      if (!row) {
+        return;
+      }
+
+      const rect = row.getBoundingClientRect();
+      const containerRect = row.closest('.diff-viewer-container')?.getBoundingClientRect() || rect;
+
+      setActiveLineInfo({
+        lineKey: lineInfo.lineKey,
+        lineInfo,
+        position: {
+          top: rect.bottom - containerRect.top + 24,
+          left: Math.min(rect.left - containerRect.left + 20, containerRect.width - 320),
+        },
+      });
+    },
+    [currentFile],
+  );
+
+  const handleCommentCancel = useCallback(() => {
+    resetLineState();
+  }, [resetLineState]);
+
+  const handleCommentSubmit = useCallback(
+    async (comment: string) => {
+      if (!currentFile || !activeLineInfo || isSubmitting) {
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      try {
+        api.runCodeInlineRequest(baseDir, taskId, currentFile.path, activeLineInfo.lineInfo.lineNumber, comment);
+
+        resetLineState();
+        onClose();
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to create task from line comment:', error);
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [api, baseDir, taskId, currentFile, activeLineInfo, isSubmitting, resetLineState, onClose],
+  );
+
+  const handleRevertClick = useCallback(() => {
+    setShowRevertConfirm(true);
+  }, []);
+
+  const handleRevertCancel = useCallback(() => {
+    setShowRevertConfirm(false);
+  }, []);
+
+  const handleRevertConfirm = useCallback(async () => {
+    if (!currentFile) {
+      return;
+    }
+
+    setIsReverting(true);
+    try {
+      await api.restoreFile(baseDir, taskId, currentFile.path);
+      setShowRevertConfirm(false);
+      onClose();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to revert file:', error);
+    } finally {
+      setIsReverting(false);
+    }
+  }, [api, baseDir, taskId, currentFile, onClose]);
+
   const diffViewOptions = useMemo(
     () => [
       { label: t('diffViewer.sideBySide'), value: DiffViewMode.SideBySide },
@@ -68,6 +166,12 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose }: Prop
 
   useHotkeys('left', handlePrevious, { enabled: canGoPrevious });
   useHotkeys('right', handleNext, { enabled: canGoNext });
+
+  useHotkeys('escape', resetLineState, { enabled: !!activeLineInfo });
+
+  useEffect(() => {
+    resetLineState();
+  }, [resetLineState, currentIndex]);
 
   if (!currentFile) {
     return null;
@@ -115,18 +219,46 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose }: Prop
                 />
               </div>
             )}
+            <IconButton
+              icon={<MdUndo className="h-5 w-5" />}
+              onClick={handleRevertClick}
+              tooltip={t('contextFiles.revertFile')}
+              className="p-1.5 rounded-md transition-colors hover:bg-bg-tertiary text-text-secondary"
+            />
           </div>
         </div>
       </div>
       <div className="flex-1 overflow-auto p-4 bg-bg-primary-light scrollbar scrollbar-thumb-bg-tertiary scrollbar-track-transparent">
-        <div className="max-w-6xl mx-auto select-text bg-bg-code-block rounded-lg p-4 text-xs">
+        <div className="max-w-6xl mx-auto select-text bg-bg-code-block rounded-lg p-4 text-xs relative">
           {diffViewMode === DiffViewMode.Compact ? (
             <CompactDiffViewer udiff={currentFile.diff || ''} language={language} showFilename={false} />
           ) : (
-            <UDiffViewer udiff={currentFile.diff || ''} language={language} viewMode={diffViewMode} showFilename={false} />
+            <UDiffViewer
+              udiff={currentFile.diff || ''}
+              language={language}
+              viewMode={diffViewMode}
+              showFilename={false}
+              onLineClick={handleLineClick}
+              activeLineKey={activeLineInfo?.lineKey}
+            />
           )}
+          {activeLineInfo && <DiffLineCommentPanel onSubmit={handleCommentSubmit} onCancel={handleCommentCancel} position={activeLineInfo.position} />}
         </div>
       </div>
+
+      {showRevertConfirm && (
+        <ConfirmDialog
+          title={t('contextFiles.confirmRevertTitle')}
+          onConfirm={handleRevertConfirm}
+          onCancel={handleRevertCancel}
+          confirmButtonText={t('contextFiles.revert')}
+          disabled={isReverting}
+          closeOnEscape
+        >
+          <p className="text-sm mb-3">{t('contextFiles.confirmRevertMessage')}</p>
+          <p className="text-xs text-text-muted font-mono">{currentFile.path}</p>
+        </ConfirmDialog>
+      )}
     </ModalOverlayLayout>
   );
 };
