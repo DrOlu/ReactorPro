@@ -30927,6 +30927,9 @@ File: package.json
   },
   "lint-staged": {
     "*.{ts,tsx}": "npm run lint"
+  },
+  "overrides": {
+    "@tanstack/virtual-core": "3.13.12"
   }
 }
 
