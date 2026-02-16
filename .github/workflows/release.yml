@@ -229,6 +229,7 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          NODE_OPTIONS: "--max-old-space-size=8192"
         run: npm run build:mac -- --x64 -p always
 
       - name: Upload latest-mac.yml artifact
@@ -256,6 +257,7 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          NODE_OPTIONS: "--max-old-space-size=8192"
         run: npm run build:mac -- --arm64 -p always
 
       - name: Upload latest-mac.yml artifact
