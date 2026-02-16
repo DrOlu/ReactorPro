@@ -259,11 +259,26 @@ jobs:
 
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-      - name: Release macOS x64
+      - name: Build macOS x64 (unpacked)
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
           NODE_OPTIONS: "--max-old-space-size=8192"
-        run: npm run build:mac -- --x64 -p always
+        run: npm run build && npx electron-builder --mac --x64 --dir
+
+      - name: Re-sign macOS x64 app bundle
+        run: |
+          APP_PATH=$(find dist/mac* -name "*.app" -maxdepth 1 -type d | head -1)
+          echo "Re-signing: $APP_PATH"
+          codesign --deep --force --sign - "$APP_PATH"
+          codesign --verify --deep --strict "$APP_PATH" && echo "Signature OK" || echo "Warning: verification issue"
+
+      - name: Package and publish macOS x64
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          APP_PATH=$(find dist/mac* -name "*.app" -maxdepth 1 -type d | head -1)
+          npx electron-builder --mac --x64 -p always --prepackaged "$APP_PATH"
 
       - name: Upload latest-mac.yml artifact
         uses: actions/upload-artifact@v4
@@ -320,11 +335,26 @@ jobs:
 
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-      - name: Release macOS arm64
+      - name: Build macOS arm64 (unpacked)
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
           NODE_OPTIONS: "--max-old-space-size=8192"
-        run: npm run build:mac -- --arm64 -p always
+        run: npm run build && npx electron-builder --mac --arm64 --dir
+
+      - name: Re-sign macOS arm64 app bundle
+        run: |
+          APP_PATH=$(find dist/mac* -name "*.app" -maxdepth 1 -type d | head -1)
+          echo "Re-signing: $APP_PATH"
+          codesign --deep --force --sign - "$APP_PATH"
+          codesign --verify --deep --strict "$APP_PATH" && echo "Signature OK" || echo "Warning: verification issue"
+
+      - name: Package and publish macOS arm64
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          APP_PATH=$(find dist/mac* -name "*.app" -maxdepth 1 -type d | head -1)
+          npx electron-builder --mac --arm64 -p always --prepackaged "$APP_PATH"
 
       - name: Upload latest-mac.yml artifact
         uses: actions/upload-artifact@v4
