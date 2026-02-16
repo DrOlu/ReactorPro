@@ -2,6 +2,8 @@
 
 ## [UNRELEASED]
 
+- fixed mobile project dropdown to truncate long project names with ellipsis instead of pushing icons off-screen
+- optimized mobile layout for bmad mode - agent selector now stacks under mode selector and action buttons are absolutely positioned at top right
 - optimized MCP server initialization
 - optimized Aider connector start-up management
 - better detection of state for Quick Flow BMAD workflows
@@ -16,6 +18,7 @@
 - sync task baseDir with project baseDir to handle migrated tasks
 - correcly showing the project files with special characters
 - increased timeout of semantic search tool to avoid errors when the tool is running multiple times in parallel
+- added Brainstorming as another BMAD workflow option
 
 ## [0.52.0]
 
@@ -34,6 +37,7 @@
 - rules directory is correctly handled when using Aider modes and Worktree
 - added detaled information about the context files
 - setting Compact as default messages view mode
+- added quick actions for BMAD mode workflows
 
 ## [0.51.0]
 
