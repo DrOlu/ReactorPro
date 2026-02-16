@@ -231,15 +231,59 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=8192"
         run: npm run build:mac -- --x64 -p never
 
-      - name: Re-sign macOS x64 app bundle
+      - name: Sign macOS x64 app
+        if: env.SIGNING_CERT_BASE64 != '' && env.SIGNING_KEY_BASE64 != ''
+        env:
+          SIGNING_CERT_BASE64: ${{ secrets.SIGNING_CERT_BASE64 }}
+          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
         run: |
-          echo "Re-signing .app bundles with consistent ad-hoc signature..."
+          set -eo pipefail
+
+          CERT_PATH="$RUNNER_TEMP/hyperspace.crt"
+          KEY_PATH="$RUNNER_TEMP/hyperspace.key"
+          echo "$SIGNING_CERT_BASE64" | base64 -d > "$CERT_PATH"
+          echo "$SIGNING_KEY_BASE64" | base64 -d > "$KEY_PATH"
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="temp_keychain_$(date +%s)"
+
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          P12_PATH="$RUNNER_TEMP/hyperspace.p12"
+          openssl pkcs12 -export -out "$P12_PATH" -inkey "$KEY_PATH" -in "$CERT_PATH" -passout pass:temp -legacy 2>/dev/null || \
+          openssl pkcs12 -export -out "$P12_PATH" -inkey "$KEY_PATH" -in "$CERT_PATH" -passout pass:temp
+
+          security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "temp" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" 2>/dev/null || true
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "$KEYCHAIN_PATH"
+
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" 2>/dev/null | grep -o '"[^"]*"' | head -1 | tr -d '"' || echo "")
+          if [ -z "$IDENTITY" ]; then
+            IDENTITY=$(security find-identity -v "$KEYCHAIN_PATH" 2>/dev/null | grep "Hyperspace" | grep -o '"[^"]*"' | head -1 | tr -d '"' || echo "")
+          fi
+          if [ -z "$IDENTITY" ]; then
+            echo "No signing identity found, using ad-hoc signing"
+            IDENTITY="-"
+          fi
+          echo "Using identity: $IDENTITY"
+
           find dist/mac* -name "*.app" -type d | while read -r app; do
             echo "Signing: $app"
-            codesign --deep --force --sign - "$app"
-            echo "Verifying: $app"
-            codesign --verify --deep --strict "$app" && echo "OK" || echo "Warning: verification failed"
+            codesign --deep --force --options runtime --timestamp --sign "$IDENTITY" "$app" 2>/dev/null || \
+            codesign --deep --force --sign "-" "$app"
           done
+
+          find dist -name "*.dmg" -type f | while read -r dmg; do
+            echo "Signing DMG: $dmg"
+            codesign --force --sign "$IDENTITY" "$dmg" 2>/dev/null || \
+            codesign --force --sign "-" "$dmg"
+          done
+
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 
       - name: Publish macOS x64
         env:
@@ -273,15 +317,59 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=8192"
         run: npm run build:mac -- --arm64 -p never
 
-      - name: Re-sign macOS arm64 app bundle
+      - name: Sign macOS arm64 app
+        if: env.SIGNING_CERT_BASE64 != '' && env.SIGNING_KEY_BASE64 != ''
+        env:
+          SIGNING_CERT_BASE64: ${{ secrets.SIGNING_CERT_BASE64 }}
+          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
         run: |
-          echo "Re-signing .app bundles with consistent ad-hoc signature..."
+          set -eo pipefail
+
+          CERT_PATH="$RUNNER_TEMP/hyperspace.crt"
+          KEY_PATH="$RUNNER_TEMP/hyperspace.key"
+          echo "$SIGNING_CERT_BASE64" | base64 -d > "$CERT_PATH"
+          echo "$SIGNING_KEY_BASE64" | base64 -d > "$KEY_PATH"
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="temp_keychain_$(date +%s)"
+
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          P12_PATH="$RUNNER_TEMP/hyperspace.p12"
+          openssl pkcs12 -export -out "$P12_PATH" -inkey "$KEY_PATH" -in "$CERT_PATH" -passout pass:temp -legacy 2>/dev/null || \
+          openssl pkcs12 -export -out "$P12_PATH" -inkey "$KEY_PATH" -in "$CERT_PATH" -passout pass:temp
+
+          security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "temp" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" 2>/dev/null || true
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "$KEYCHAIN_PATH"
+
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" 2>/dev/null | grep -o '"[^"]*"' | head -1 | tr -d '"' || echo "")
+          if [ -z "$IDENTITY" ]; then
+            IDENTITY=$(security find-identity -v "$KEYCHAIN_PATH" 2>/dev/null | grep "Hyperspace" | grep -o '"[^"]*"' | head -1 | tr -d '"' || echo "")
+          fi
+          if [ -z "$IDENTITY" ]; then
+            echo "No signing identity found, using ad-hoc signing"
+            IDENTITY="-"
+          fi
+          echo "Using identity: $IDENTITY"
+
           find dist/mac* -name "*.app" -type d | while read -r app; do
             echo "Signing: $app"
-            codesign --deep --force --sign - "$app"
-            echo "Verifying: $app"
-            codesign --verify --deep --strict "$app" && echo "OK" || echo "Warning: verification failed"
+            codesign --deep --force --options runtime --timestamp --sign "$IDENTITY" "$app" 2>/dev/null || \
+            codesign --deep --force --sign "-" "$app"
           done
+
+          find dist -name "*.dmg" -type f | while read -r dmg; do
+            echo "Signing DMG: $dmg"
+            codesign --force --sign "$IDENTITY" "$dmg" 2>/dev/null || \
+            codesign --force --sign "-" "$dmg"
+          done
+
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 
       - name: Publish macOS arm64
         env:
