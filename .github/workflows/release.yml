@@ -225,12 +225,26 @@ jobs:
 
       - run: npm install --arch=x64
 
-      - name: Release macOS x64 (unsigned)
+      - name: Build macOS x64
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           NODE_OPTIONS: "--max-old-space-size=8192"
-        run: npm run build:mac -- --x64 -p always
+        run: npm run build:mac -- --x64 -p never
+
+      - name: Re-sign macOS x64 app bundle
+        run: |
+          echo "Re-signing .app bundles with consistent ad-hoc signature..."
+          find dist/mac* -name "*.app" -type d | while read -r app; do
+            echo "Signing: $app"
+            codesign --deep --force --sign - "$app"
+            echo "Verifying: $app"
+            codesign --verify --deep --strict "$app" && echo "OK" || echo "Warning: verification failed"
+          done
+
+      - name: Publish macOS x64
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: npx electron-builder --mac --x64 -p always --pd dist
 
       - name: Upload latest-mac.yml artifact
         uses: actions/upload-artifact@v4
@@ -253,12 +267,26 @@ jobs:
 
       - run: npm install --arch=arm64
 
-      - name: Release macOS arm64 (unsigned)
+      - name: Build macOS arm64
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           NODE_OPTIONS: "--max-old-space-size=8192"
-        run: npm run build:mac -- --arm64 -p always
+        run: npm run build:mac -- --arm64 -p never
+
+      - name: Re-sign macOS arm64 app bundle
+        run: |
+          echo "Re-signing .app bundles with consistent ad-hoc signature..."
+          find dist/mac* -name "*.app" -type d | while read -r app; do
+            echo "Signing: $app"
+            codesign --deep --force --sign - "$app"
+            echo "Verifying: $app"
+            codesign --verify --deep --strict "$app" && echo "OK" || echo "Warning: verification failed"
+          done
+
+      - name: Publish macOS arm64
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: npx electron-builder --mac --arm64 -p always --pd dist
 
       - name: Upload latest-mac.yml artifact
         uses: actions/upload-artifact@v4
