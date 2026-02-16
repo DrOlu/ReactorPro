@@ -225,20 +225,16 @@ jobs:
 
       - run: npm install --arch=x64
 
-      - name: Build macOS x64
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          NODE_OPTIONS: "--max-old-space-size=8192"
-        run: npm run build:mac -- --x64 -p never
-
-      - name: Sign macOS x64 app
-        if: env.SIGNING_CERT_BASE64 != '' && env.SIGNING_KEY_BASE64 != ''
+      - name: Setup macOS signing keychain
         env:
           SIGNING_CERT_BASE64: ${{ secrets.SIGNING_CERT_BASE64 }}
           SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
         run: |
+          if [ -z "$SIGNING_CERT_BASE64" ] || [ -z "$SIGNING_KEY_BASE64" ]; then
+            echo "No signing secrets, will build unsigned"
+            exit 0
+          fi
           set -eo pipefail
-
           CERT_PATH="$RUNNER_TEMP/hyperspace.crt"
           KEY_PATH="$RUNNER_TEMP/hyperspace.key"
           echo "$SIGNING_CERT_BASE64" | base64 -d > "$CERT_PATH"
@@ -261,34 +257,13 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security default-keychain -s "$KEYCHAIN_PATH"
 
-          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" 2>/dev/null | grep -o '"[^"]*"' | head -1 | tr -d '"' || echo "")
-          if [ -z "$IDENTITY" ]; then
-            IDENTITY=$(security find-identity -v "$KEYCHAIN_PATH" 2>/dev/null | grep "Hyperspace" | grep -o '"[^"]*"' | head -1 | tr -d '"' || echo "")
-          fi
-          if [ -z "$IDENTITY" ]; then
-            echo "No signing identity found, using ad-hoc signing"
-            IDENTITY="-"
-          fi
-          echo "Using identity: $IDENTITY"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-          find dist/mac* -name "*.app" -type d | while read -r app; do
-            echo "Signing: $app"
-            codesign --deep --force --options runtime --timestamp --sign "$IDENTITY" "$app" 2>/dev/null || \
-            codesign --deep --force --sign "-" "$app"
-          done
-
-          find dist -name "*.dmg" -type f | while read -r dmg; do
-            echo "Signing DMG: $dmg"
-            codesign --force --sign "$IDENTITY" "$dmg" 2>/dev/null || \
-            codesign --force --sign "-" "$dmg"
-          done
-
-          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
-
-      - name: Publish macOS x64
+      - name: Release macOS x64
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: npx electron-builder --mac --x64 -p always --pd dist
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: npm run build:mac -- --x64 -p always
 
       - name: Upload latest-mac.yml artifact
         uses: actions/upload-artifact@v4
@@ -311,20 +286,16 @@ jobs:
 
       - run: npm install --arch=arm64
 
-      - name: Build macOS arm64
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          NODE_OPTIONS: "--max-old-space-size=8192"
-        run: npm run build:mac -- --arm64 -p never
-
-      - name: Sign macOS arm64 app
-        if: env.SIGNING_CERT_BASE64 != '' && env.SIGNING_KEY_BASE64 != ''
+      - name: Setup macOS signing keychain
         env:
           SIGNING_CERT_BASE64: ${{ secrets.SIGNING_CERT_BASE64 }}
           SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
         run: |
+          if [ -z "$SIGNING_CERT_BASE64" ] || [ -z "$SIGNING_KEY_BASE64" ]; then
+            echo "No signing secrets, will build unsigned"
+            exit 0
+          fi
           set -eo pipefail
-
           CERT_PATH="$RUNNER_TEMP/hyperspace.crt"
           KEY_PATH="$RUNNER_TEMP/hyperspace.key"
           echo "$SIGNING_CERT_BASE64" | base64 -d > "$CERT_PATH"
@@ -347,34 +318,13 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security default-keychain -s "$KEYCHAIN_PATH"
 
-          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" 2>/dev/null | grep -o '"[^"]*"' | head -1 | tr -d '"' || echo "")
-          if [ -z "$IDENTITY" ]; then
-            IDENTITY=$(security find-identity -v "$KEYCHAIN_PATH" 2>/dev/null | grep "Hyperspace" | grep -o '"[^"]*"' | head -1 | tr -d '"' || echo "")
-          fi
-          if [ -z "$IDENTITY" ]; then
-            echo "No signing identity found, using ad-hoc signing"
-            IDENTITY="-"
-          fi
-          echo "Using identity: $IDENTITY"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-          find dist/mac* -name "*.app" -type d | while read -r app; do
-            echo "Signing: $app"
-            codesign --deep --force --options runtime --timestamp --sign "$IDENTITY" "$app" 2>/dev/null || \
-            codesign --deep --force --sign "-" "$app"
-          done
-
-          find dist -name "*.dmg" -type f | while read -r dmg; do
-            echo "Signing DMG: $dmg"
-            codesign --force --sign "$IDENTITY" "$dmg" 2>/dev/null || \
-            codesign --force --sign "-" "$dmg"
-          done
-
-          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
-
-      - name: Publish macOS arm64
+      - name: Release macOS arm64
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: npx electron-builder --mac --arm64 -p always --pd dist
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: npm run build:mac -- --arm64 -p always
 
       - name: Upload latest-mac.yml artifact
         uses: actions/upload-artifact@v4
