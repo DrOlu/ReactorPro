@@ -685,13 +685,16 @@ export class Agent {
     const providerParameters = this.modelManager.getProviderParameters(provider, profile.model);
 
     const firstUserMessage = contextMessages.length > 0 ? contextMessages[0] : null;
-    const messages = await this.prepareMessages(task, profile, contextMessages, contextFiles);
+    let messages = await this.prepareMessages(task, profile, contextMessages, contextFiles);
     const initialUserRequestMessageIndex = firstUserMessage
       ? messages.findIndex((message) => message.role === 'user' && message.content === firstUserMessage.content)
       : messages.length;
 
     // add user message
     messages.push(...resultMessages);
+
+    // Normalize messages for provider-specific requirements
+    messages = this.modelManager.normalizeMessages(provider, profile.model, messages);
 
     let mcpConnectors: McpConnector[] = [];
     try {
@@ -1625,7 +1628,9 @@ export class Agent {
   ) {
     const contextCompactingThreshold =
       task.task.contextCompactingThreshold ?? this.store.getProjectSettings(task.getProjectDir())?.contextCompactingThreshold ?? 0;
-    const contextCompactionType = this.store.getSettings().taskSettings.contextCompactionType ?? ContextCompactionType.Compact;
+    const contextCompactionType = profile.isSubagent
+      ? ContextCompactionType.Compact
+      : (this.store.getSettings().taskSettings.contextCompactionType ?? ContextCompactionType.Compact);
     const usageReport = resultMessages[resultMessages.length - 1]?.usageReport;
     const maxTokens = this.modelManager.getModelSettings(profile.provider, profile.model)?.maxInputTokens;
 
