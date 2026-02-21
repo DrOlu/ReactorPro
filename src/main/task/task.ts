@@ -38,6 +38,7 @@ import {
   UsageReportData,
   UserMessageData,
   WorkingMode,
+  AIDER_COMMANDS,
 } from '@common/types';
 import { extractProviderModel, extractTextContent, fileExists, parseUsageReport } from '@common/utils';
 import { COMPACT_CONVERSATION_AGENT_PROFILE, CONFLICT_RESOLUTION_PROFILE, HANDOFF_AGENT_PROFILE, INIT_PROJECT_AGENTS_PROFILE } from '@common/agent';
@@ -46,7 +47,7 @@ import debounce from 'lodash/debounce';
 import { isEqual } from 'lodash';
 
 import type { SimpleGit } from 'simple-git';
-import type { WorkflowExecutionResult } from '@common/bmad-types';
+import type { WorkflowExecutionOptions, WorkflowExecutionResult } from '@common/bmad-types';
 
 import { getAllFiles, isValidProjectFile } from '@/utils/file-system';
 import {
@@ -377,7 +378,7 @@ export class Task {
     }
 
     await this.loadContext();
-    if (this.shouldStartAider()) {
+    if (await this.shouldStartAider()) {
       await this.aiderManager.start();
     }
     await this.updateContextInfo();
@@ -819,14 +820,16 @@ export class Task {
     return [];
   }
 
-  public async executeBmadWorkflow(workflowId: string, asSubtask?: boolean): Promise<WorkflowExecutionResult> {
-    if (asSubtask) {
+  public async executeBmadWorkflow(workflowId: string, options?: WorkflowExecutionOptions): Promise<WorkflowExecutionResult> {
+    if (options?.asSubtask) {
       // Create a new subtask. If the current task already has a parentId (is a subtask),
       // use that parentId to maintain only 1 level of subtasks
       const parentId = this.task.parentId || this.taskId;
       const subtaskData = await this.project.createNewTask({
         parentId,
         activate: true,
+        provider: options?.provider,
+        model: options?.model,
       });
       const subtask = this.project.getTask(subtaskData.id);
       if (!subtask) {
@@ -1405,6 +1408,13 @@ export class Task {
     }
 
     if (sendToConnectors) {
+      if (AIDER_COMMANDS.includes(command.trim()) && !this.aiderManager.isStarted()) {
+        logger.info('Starting Aider for command:', { command });
+        this.addLogMessage('loading', 'Starting Aider...');
+        await this.aiderManager.waitForStart();
+        this.addLogMessage('loading', undefined, true);
+      }
+
       this.findMessageConnectors('run-command').forEach((connector) =>
         connector.sendRunCommandMessage(command, this.contextManager.toConnectorMessages(), this.contextManager.getContextFiles()),
       );
@@ -2245,8 +2255,9 @@ export class Task {
     return this.task.currentMode || this.store.getProjectSettings(this.project.baseDir).currentMode || 'agent';
   }
 
-  private shouldStartAider(): boolean {
-    return AIDER_MODES.includes(this.getCurrentMode());
+  private async shouldStartAider(): Promise<boolean> {
+    const agentProfile = await this.getTaskAgentProfile();
+    return AIDER_MODES.includes(this.getCurrentMode()) || (agentProfile?.useAiderTools ?? false);
   }
 
   private async reloadConnectorMessages() {
@@ -2641,7 +2652,7 @@ export class Task {
 
     if (
       (aiderOptionsChanged || aiderAutoCommitsChanged || aiderWatchFilesChanged || aiderCachingEnabledChanged || aiderConfirmBeforeEditChanged) &&
-      this.shouldStartAider()
+      (await this.shouldStartAider())
     ) {
       logger.debug('Aider options changed, restarting Aider.');
       void this.aiderManager.start(true);
@@ -2984,6 +2995,13 @@ ${error.stderr}`,
       this.task[key] = updates[key];
     }
 
+    if (updates.agentProfileId !== undefined) {
+      void this.updateAgentEstimatedTokens();
+      if (await this.shouldStartAider()) {
+        void this.aiderManager.start();
+      }
+    }
+
     // setting a name will also save the task
     if (!this.task.createdAt && 'name' in updates) {
       this.task.createdAt = new Date().toISOString();
@@ -3038,7 +3056,7 @@ ${error.stderr}`,
     }
 
     this.git = simpleGit(this.getTaskDir());
-    if (this.shouldStartAider()) {
+    if (await this.shouldStartAider()) {
       await this.aiderManager.start(true);
     }
 
@@ -3602,6 +3620,9 @@ ${error.stderr}`,
     if (taskAgentProfile?.id === newProfile.id) {
       if (oldProfile.includeContextFiles !== newProfile.includeContextFiles || oldProfile.includeRepoMap !== newProfile.includeRepoMap) {
         void this.updateContextInfo();
+      }
+      if (await this.shouldStartAider()) {
+        void this.aiderManager.start();
       }
     }
   }
