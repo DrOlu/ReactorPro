@@ -26,7 +26,7 @@ This file provides guidance to AiderDesk when working with code in this reposito
 - `npm run test:coverage` - Generate coverage reports
 - `npm run test:ui` - Open interactive test UI
 
-**Note for Agents**: When running 'npm run test...' scripts via `power---bash`, always append `-- --no-color` to the command (e.g., `npm run test:node -- --no-color`) to ensure clean, parseable output without ANSI escape codes.
+**Note for Agents**: When running 'npm run test' script via `power---bash`, always append `-- --no-color` to the command (e.g., `npm run test:node -- --no-color`) to ensure clean, parseable output without ANSI escape codes. Other scripts can be run without this.
 
 ### Building
 - `npm run build` - Full build (includes type checking and MCP server build)

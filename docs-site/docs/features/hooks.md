@@ -30,12 +30,12 @@ module.exports = {
   onTaskCreated: async (event, context) => {
     context.addInfoMessage(`Task "${event.task.name}" was created!`);
   },
-  
+
   onPromptStarted: async (event, context) => {
     if (event.prompt.includes('secret')) {
       context.addWarningMessage('Prompt contains sensitive keywords.');
       // Returning false blocks the action (where applicable)
-      return false; 
+      return false;
     }
   }
 };
@@ -126,9 +126,197 @@ onToolFinished: (event) => {
 
 Here are some practical hook examples you can use as starting points:
 
-| Example | Description |
-| :--- | :--- |
-| [lint-check-on-tool-finished.js](./hooks-examples/lint-check-on-tool-finished.js) | Runs eslint --fix after file modifications and updates the result if linting fails |
-| [lint-check-on-agent-finished.js](./hooks-examples/lint-check-on-agent-finished.js) | Runs project-wide linting after the agent finishes and can auto-prompt fixes |
+### Lint Check on Tool Finished
 
-To use these examples, copy them to your project's `.aider-desk/hooks/` directory or to `~/.aider-desk/hooks/` for global use.
+Runs eslint --fix on files that were modified by file_edit or file_write tools. If linting fails after a successful file operation, the result is updated with the error.
+
+<details>
+<summary>lint-check-on-tool-finished.js</summary>
+
+```javascript
+const { spawn } = require('child_process');
+const path = require('path');
+
+/**
+ * Lint Checker Hook for AiderDesk
+ *
+ * This hook runs eslint --fix on files that were modified by file_edit or file_write tools.
+ * If linting fails after a successful file operation, the result is updated with the error.
+ *
+ * Usage: Copy this file to your project's `.aider-desk/hooks/` directory or to `~/.aider-desk/hooks/` for global use.
+ */
+
+const CHECKED_TOOL_NAMES = ['power---file_edit', 'power---file_write'];
+
+/**
+ * Runs eslint --fix on a specific file and returns the result
+ */
+const runEslint = (projectDir, filePath) => {
+    return new Promise((resolve) => {
+        let stdout = '';
+        let stderr = '';
+
+        const proc = spawn('npx', ['eslint', '--fix', filePath], {
+            cwd: projectDir,
+            shell: true,
+            timeout: 60000 // 1 minute timeout
+        });
+
+        proc.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        proc.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        proc.on('close', (code) => {
+            resolve({
+                success: code === 0,
+                output: stdout + stderr
+            });
+        });
+
+        proc.on('error', (error) => {
+            resolve({
+                success: false,
+                output: `Failed to run eslint: ${error.message}`
+            });
+        });
+    });
+};
+
+/**
+ * Checks if the result indicates a successful file operation
+ */
+const isSuccessfulResult = (result) => {
+    if (typeof result !== 'string') {
+        return false;
+    }
+    return result.startsWith('Successfully');
+};
+
+/**
+ * Checks if the file should be linted (TypeScript or JavaScript files only)
+ */
+const shouldLintFile = (filePath) => {
+    const ext = path.extname(filePath).toLowerCase();
+    return ext === '.ts' || ext === '.tsx' || ext === '.js' || ext === '.jsx' || ext === '.mjs' || ext === '.cjs';
+};
+
+module.exports = {
+    onToolFinished: async (event, context) => {
+        const { toolName, args, result } = event;
+
+        if (!CHECKED_TOOL_NAMES.includes(toolName)) {
+            return;
+        }
+
+        if (!isSuccessfulResult(result)) {
+            return;
+        }
+
+        const filePath = args?.filePath;
+        if (!filePath || !shouldLintFile(filePath)) {
+            return;
+        }
+
+        context.addLoadingMessage('Running eslint...');
+        const eslintResult = await runEslint(context.projectDir, filePath);
+        context.addLoadingMessage('Running eslint...', true);
+
+        if (!eslintResult.success) {
+            // Return a string to modify the tool's result
+            return `Error: file has been updated but linting failed:
+
+\`\`\`${eslintResult.output}\`\`\``;
+        }
+    }
+};
+```
+
+</details>
+
+### Lint Check on Agent Finished
+
+Runs project-wide linting after the agent finishes and can automatically prompt the agent to fix any linting issues found.
+
+<details>
+<summary>lint-check-on-agent-finished.js</summary>
+
+```javascript
+const { spawn } = require('child_process');
+
+/**
+ * Lint Checker Hook for AiderDesk
+ *
+ * This hook runs linting after an agent finishes and can automatically
+ * prompt the agent to fix any linting issues found.
+ *
+ * Usage: Copy this file to your project's `.aider-desk/hooks/` directory or to `~/.aider-desk/hooks/` for global use.
+ */
+
+/**
+ * Runs npm lint command and returns the result
+ */
+const runLint = (projectDir) => {
+    return new Promise((resolve) => {
+        let stdout = '';
+        let stderr = '';
+
+        const proc = spawn('npm', ['run', 'lint'], {
+            cwd: projectDir,
+            shell: true,
+            timeout: 120000 // 2 minutes timeout
+        });
+
+        proc.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        proc.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        proc.on('close', (code) => {
+            resolve({
+                success: code === 0,
+                output: stdout + stderr
+            });
+        });
+
+        proc.on('error', (error) => {
+            resolve({
+                success: false,
+                output: `Failed to run lint: ${error.message}`
+            });
+        });
+    });
+};
+
+module.exports = {
+    onAgentFinished: async (event, context) => {
+        // Skip if the agent was aborted
+        if (event.aborted) {
+            return;
+        }
+
+        context.addLoadingMessage('Running linting...');
+        const result = await runLint(context.projectDir);
+        context.addLoadingMessage('Running linting...', true);
+
+        if (!result.success) {
+            context.addWarningMessage(`Linting issues found`);
+
+            // Automatically prompt the agent to fix the issues
+            await context.task.runPrompt(`Fix the linting issues:
+
+\`\`\`${result.output}\`\`\``, 'agent', false);
+        }
+    }
+};
+```
+
+</details>
+
+To use these examples, copy the code to a `.js` file in your project's `.aider-desk/hooks/` directory or to `~/.aider-desk/hooks/` for global use.
