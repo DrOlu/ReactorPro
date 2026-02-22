@@ -38,7 +38,7 @@ export const FileWriteToolMessage = ({ message, onRemove, compact = false, onFor
   const content = message.content && JSON.parse(message.content);
   const isError = typeof content === 'string' && content.startsWith('Error:');
   const isDenied = typeof content === 'string' && content.startsWith('File write to');
-  const shouldCloseOnError = typeof content === 'string' && !content.startsWith('Successfully');
+  const shouldCloseOnError = typeof content === 'string' && content && !content.startsWith('Successfully');
 
   useLayoutEffect(() => {
     if (shouldCloseOnError && expandableRef.current) {
