@@ -62,6 +62,8 @@ import { ApprovalManager } from './tools/approval-manager';
 import { ANSWER_RESPONSE_START_TAG, extractPromptContextFromToolResult, findLastUserMessage, THINKING_RESPONSE_STAR_TAG } from './utils';
 import { extractReasoningMiddleware } from './middlewares/extract-reasoning-middleware';
 
+import type { JSONSchema7Definition } from '@ai-sdk/provider';
+
 import { MemoryManager } from '@/memory/memory-manager';
 import { PromptsManager } from '@/prompts';
 import { AIDER_DESK_PROJECT_RULES_DIR } from '@/constants';
@@ -461,10 +463,13 @@ export class Agent {
           const effectiveArgs = hookResult.event.args as Record<string, unknown> | undefined;
 
           const result = await toolDef.execute!(effectiveArgs, options);
+          const toolFinishedHookResult = await task.hookManager.trigger('onToolFinished', { toolName, args: effectiveArgs, result }, task, task.project);
 
-          void task.hookManager.trigger('onToolFinished', { toolName, args: effectiveArgs, result }, task, task.project);
-
-          return result;
+          if (toolFinishedHookResult.event.result) {
+            return toolFinishedHookResult.event.result;
+          } else {
+            return result;
+          }
         },
       };
     }
@@ -552,47 +557,98 @@ export class Agent {
   }
 
   /**
-   * Fixes the input schema for various providers.
+   * Recursively strips unsupported JSON Schema 2019-09 keywords that are not
+   * recognized by some MCP servers (like gemini-cli).
    */
+  private stripUnsupportedSchemaKeywords(schema: Record<string, unknown>): Record<string, unknown> {
+    // JSON Schema 2019-09 keywords to remove
+    const unsupportedKeywords = [
+      'propertyNames',
+      'unevaluatedProperties',
+      'dependentSchemas',
+      'dependentRequired',
+      'contains',
+      'contentMediaType',
+      'contentEncoding',
+      'examples',
+      '$defs',
+      '$anchor',
+      '$recursiveRef',
+      '$recursiveAnchor',
+    ];
+
+    // Recursive helper to process schema objects
+    const processObject = (obj: Record<string, unknown>): Record<string, unknown> => {
+      const result: Record<string, unknown> = {};
+
+      for (const [key, value] of Object.entries(obj)) {
+        // Skip unsupported keywords
+        if (unsupportedKeywords.includes(key)) {
+          continue;
+        }
+
+        // Recursively process objects
+        if (value !== null && typeof value === 'object') {
+          if (Array.isArray(value)) {
+            // Process arrays (e.g., anyOf, oneOf, allOf, enum items)
+            result[key] = value.map((item) => (item !== null && typeof item === 'object' ? processObject(item as Record<string, unknown>) : item));
+          } else {
+            // Process nested objects (e.g., properties, items, additionalProperties)
+            result[key] = processObject(value as Record<string, unknown>);
+          }
+        } else {
+          result[key] = value;
+        }
+      }
+
+      return result;
+    };
+
+    return processObject(schema);
+  }
+
   private fixInputSchema(provider: LlmProviderName, inputSchema: McpToolInputSchema): McpToolInputSchema {
-    if (provider === 'gemini') {
+    if (provider === 'gemini' || provider === 'gemini-cli') {
       // Deep clone to avoid modifying the original schema
       const fixedSchema = JSON.parse(JSON.stringify(inputSchema));
 
-      if (fixedSchema.properties) {
-        for (const key of Object.keys(fixedSchema.properties)) {
-          const property = fixedSchema.properties[key];
+      // First, strip JSON Schema 2019-09 keywords that are not supported
+      const strippedSchema = this.stripUnsupportedSchemaKeywords(fixedSchema) as unknown as McpToolInputSchema;
 
+      if (strippedSchema.properties) {
+        for (const key of Object.keys(strippedSchema.properties)) {
+          let property = strippedSchema.properties[key] as Record<string, unknown>;
+
+          // Gemini requires that when any_of/one_of/all_of is present,
+          // it must be the ONLY field in the property
           if (property.anyOf) {
-            property.any_of = property.anyOf;
-            delete property.anyOf;
-          }
-          if (property.oneOf) {
-            property.one_of = property.oneOf;
-            delete property.oneOf;
-          }
-          if (property.allOf) {
-            property.all_of = property.allOf;
-            delete property.allOf;
-          }
+            property = { any_of: property.anyOf };
+            strippedSchema.properties[key] = property as JSONSchema7Definition;
+          } else if (property.oneOf) {
+            property = { one_of: property.oneOf };
+            strippedSchema.properties[key] = property as JSONSchema7Definition;
+          } else if (property.allOf) {
+            property = { all_of: property.allOf };
+            strippedSchema.properties[key] = property as JSONSchema7Definition;
+          } else {
+            // gemini does not like "default" in the schema
+            if (property.default !== undefined) {
+              delete property.default;
+            }
 
-          // gemini does not like "default" in the schema
-          if (property.default !== undefined) {
-            delete property.default;
-          }
+            if (property.type === 'string' && property.format && !['enum', 'date-time'].includes(property.format as string)) {
+              logger.debug(`Removing unsupported format '${property.format}' for property '${key}' in Gemini schema`);
+              delete property.format;
+            }
 
-          if (property.type === 'string' && property.format && !['enum', 'date-time'].includes(property.format)) {
-            logger.debug(`Removing unsupported format '${property.format}' for property '${key}' in Gemini schema`);
-            delete property.format;
-          }
-
-          if (!property.type || property.type === 'null') {
-            property.type = 'string';
+            if (!property.type || property.type === 'null') {
+              property.type = 'string';
+            }
           }
         }
-        if (Object.keys(fixedSchema.properties).length === 0) {
+        if (Object.keys(strippedSchema.properties).length === 0) {
           // gemini requires at least one property in the schema
-          fixedSchema.properties = {
+          strippedSchema.properties = {
             placeholder: {
               type: 'string',
               description: 'Placeholder property to satisfy Gemini schema requirements',
@@ -601,7 +657,7 @@ export class Agent {
         }
       }
 
-      return fixedSchema;
+      return strippedSchema;
     }
 
     return inputSchema;
@@ -618,15 +674,21 @@ export class Agent {
     includeInContext = true,
     abortSignal?: AbortSignal,
   ): Promise<ContextMessage[]> {
-    const hookResult = await task.hookManager.trigger('onAgentStarted', { prompt }, task, task.project);
+    let contextMessages = initialContextMessages ?? (await task.getContextMessages());
+    let contextFiles = initialContextFiles ?? (await task.getContextFiles());
+
+    const hookResult = await task.hookManager.trigger('onAgentStarted', { prompt, contextMessages, contextFiles }, task, task.project);
     if (hookResult.blocked) {
       logger.info('Agent execution blocked by hook');
       return [];
     }
     prompt = hookResult.event.prompt;
-    // Set default values inside function body since await can't be used in parameter initializers
-    const contextMessages = initialContextMessages ?? (await task.getContextMessages());
-    const contextFiles = initialContextFiles ?? (await task.getContextFiles());
+    if (hookResult.event.contextMessages) {
+      contextMessages = hookResult.event.contextMessages;
+    }
+    if (hookResult.event.contextFiles) {
+      contextFiles = hookResult.event.contextFiles;
+    }
 
     const userRequestMessage: ContextUserMessage | null = prompt
       ? {
@@ -643,7 +705,7 @@ export class Agent {
 
     const settings = this.store.getSettings();
     const projectProfiles = this.agentProfileManager.getProjectProfiles(task.getProjectDir());
-    const resultMessages: ContextMessage[] = userRequestMessage ? [userRequestMessage] : [];
+    let resultMessages: ContextMessage[] = userRequestMessage ? [userRequestMessage] : [];
 
     const providers = this.store.getProviders();
     const provider = providers.find((p) => p.id === profile.provider);
@@ -652,6 +714,9 @@ export class Agent {
       task.addLogMessage('error', 'Selected model is not configured. Select another model and try again.', true, promptContext);
       return resultMessages;
     }
+
+    // Store resolved provider for use in retry logic
+    const resolvedProvider = provider;
 
     this.telemetryManager.captureAgentRun(profile, task.task);
 
@@ -748,7 +813,7 @@ export class Agent {
         modelName: profile.model,
       });
 
-      const model = this.modelManager.createLlm(
+      const model = await this.modelManager.createLlm(
         provider,
         profile.model,
         settings,
@@ -926,7 +991,13 @@ export class Agent {
           }
 
           responseMessages = await this.processStep(currentResponseId, stepResult, task, profile, provider, promptContext, abortSignal);
-          void task.hookManager.trigger('onAgentStepFinished', { stepResult }, task, task.project);
+          const hookResult = await task.hookManager.trigger('onAgentStepFinished', { stepResult, finishReason, responseMessages }, task, task.project);
+          if (hookResult?.event?.finishReason) {
+            finishReason = hookResult.event.finishReason;
+          }
+          if (hookResult?.event?.responseMessages) {
+            responseMessages = hookResult.event.responseMessages;
+          }
           currentResponseId = uuidv4();
           responseMessageIndex = 0;
           hasReasoning = false;
@@ -1048,7 +1119,11 @@ export class Agent {
 
         if (iterationError) {
           logger.error('Error during prompt:', iterationError);
-          if (iterationError instanceof APICallError && iterationError.isRetryable) {
+          if (
+            iterationError instanceof APICallError &&
+            iterationError.isRetryable &&
+            this.modelManager.isRetryable(resolvedProvider, profile.model, iterationError)
+          ) {
             // try again
             continue;
           } else {
@@ -1096,6 +1171,12 @@ export class Agent {
 
         retryCount = 0;
 
+        if (lastMessage?.role === 'user') {
+          // if response messages have been modified by other means (e.g. hooks), we need to continue when the last message is a user message
+          logger.debug('Last message is a user message. Continuing...');
+          continue;
+        }
+
         if (finishReason === 'length') {
           task.addLogMessage(
             'warning',
@@ -1110,13 +1191,25 @@ export class Agent {
           break;
         }
       }
+
+      const hookResult = await task.hookManager.trigger('onAgentFinished', { aborted: false, contextMessages, resultMessages }, task, task.project);
+      if (hookResult?.event?.resultMessages) {
+        resultMessages = hookResult.event.resultMessages;
+      }
     } catch (error) {
       if (effectiveAbortSignal?.aborted) {
         logger.info('Prompt aborted by user');
+
+        const hookResult = await task.hookManager.trigger('onAgentFinished', { aborted: true, contextMessages, resultMessages }, task, task.project);
+        if (hookResult?.event?.resultMessages) {
+          resultMessages = hookResult.event.resultMessages;
+        }
+
         return resultMessages;
       }
 
       logger.error('Error running prompt:', error);
+
       if (error instanceof Error && (error.message.includes('API key') || error.message.includes('credentials'))) {
         task.addLogMessage('error', `${error.message}. Configure credentials in the Model Library.`, false, promptContext);
       } else {
@@ -1131,8 +1224,6 @@ export class Agent {
           controllerId: controllerId,
         });
       }
-
-      void task.hookManager.trigger('onAgentFinished', { resultMessages }, task, task.project);
     }
 
     return resultMessages;
@@ -1380,7 +1471,7 @@ export class Agent {
     }
 
     const settings = this.store.getSettings();
-    const model = this.modelManager.createLlm(provider, agentProfile.model, settings, projectDir, undefined, systemPrompt, undefined);
+    const model = await this.modelManager.createLlm(provider, agentProfile.model, settings, projectDir, undefined, systemPrompt, undefined);
     const providerOptions = this.modelManager.getProviderOptions(provider, agentProfile.model);
     const providerParameters = this.modelManager.getProviderParameters(provider, agentProfile.model);
 

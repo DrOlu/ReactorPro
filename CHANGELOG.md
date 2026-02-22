@@ -12,6 +12,10 @@
 - agent with Aider tools and aider specific commands now properly start the aider connector
 - task name is now based on user story name when using BMAD create-story, dev-story and code-review workflows
 - added support for selecting a specific model when executing BMAD workflows
+- moved message navigation controls outside the scrollable container
+- added Gemini CLI as supported provider
+- enhanced hook system to allow modification of event data
+- added some example hooks
 
 ## [0.53.0]
 
