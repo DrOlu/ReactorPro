@@ -895,6 +895,7 @@
     "title": "Context Files",
     "updatedFiles": "Updated Files",
     "updated": "Updated",
+    "viewChanges": "View changes",
     "add": "Add context files",
     "addFileTooltip": "Add file (use Ctrl/Cmd to add as Read-only)",
     "addFileTooltip.ctrl": "Add file (use Ctrl to add as Read-only)",
