@@ -1,12 +1,12 @@
 const { spawn } = require('child_process');
 
 /**
- * Lint Checker Hook for AiderDesk
+ * Lint Checker Hook for ReactorPro
  *
  * This hook runs linting after an agent finishes and can automatically
  * prompt the agent to fix any linting issues found.
  *
- * Usage: Copy this file to your project's `.aider-desk/hooks/` directory or to `~/.aider-desk/hooks/` for global use.
+ * Usage: Copy this file to your project's `.reactorpro/hooks/` directory or to `~/.reactorpro/hooks/` for global use.
  */
 
 /**

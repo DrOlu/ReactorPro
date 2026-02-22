@@ -131,4 +131,4 @@ Here are some practical hook examples you can use as starting points:
 | [lint-check-on-tool-finished.js](./hooks-examples/lint-check-on-tool-finished.js) | Runs eslint --fix after file modifications and updates the result if linting fails |
 | [lint-check-on-agent-finished.js](./hooks-examples/lint-check-on-agent-finished.js) | Runs project-wide linting after the agent finishes and can auto-prompt fixes |
 
-To use these examples, copy them to your project's `.aider-desk/hooks/` directory or to `~/.aider-desk/hooks/` for global use.
+To use these examples, copy them to your project's `.reactorpro/hooks/` directory or to `~/.reactorpro/hooks/` for global use.

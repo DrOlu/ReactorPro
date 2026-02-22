@@ -2,12 +2,12 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 /**
- * Lint Checker Hook for AiderDesk
+ * Lint Checker Hook for ReactorPro
  *
  * This hook runs eslint --fix on files that were modified by file_edit or file_write tools.
  * If linting fails after a successful file operation, the result is updated with the error.
  *
- * Usage: Copy this file to your project's `.aider-desk/hooks/` directory or to `~/.aider-desk/hooks/` for global use.
+ * Usage: Copy this file to your project's `.reactorpro/hooks/` directory or to `~/.reactorpro/hooks/` for global use.
  */
 
 const CHECKED_TOOL_NAMES = ['power---file_edit', 'power---file_write'];
