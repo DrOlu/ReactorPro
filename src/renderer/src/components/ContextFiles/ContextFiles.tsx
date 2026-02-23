@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import objectHash from 'object-hash';
 import { ControlledTreeEnvironment, Tree } from 'react-complex-tree';
 import { HiChevronDown, HiChevronRight, HiOutlineTrash, HiPlus, HiX } from 'react-icons/hi';
-import { MdOutlinePublic, MdOutlineRefresh, MdOutlineSearch, MdUndo } from 'react-icons/md';
+import { MdOutlineDifference, MdOutlinePublic, MdOutlineRefresh, MdOutlineSearch, MdUndo } from 'react-icons/md';
 import { BiCollapseVertical, BiExpandVertical } from 'react-icons/bi';
 import { TbPencilOff } from 'react-icons/tb';
 import { RiRobot2Line } from 'react-icons/ri';
@@ -764,6 +764,18 @@ export const ContextFiles = ({ baseDir, taskId, allFiles, contextFiles, showFile
         updatedExpandedItems,
         setUpdatedExpandedItems,
         <>
+          <Tooltip content={t('contextFiles.viewChanges')}>
+            <button
+              className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors disabled:opacity-50"
+              onClick={() => {
+                setDiffModalFileIndex(0);
+                setDiffModalOpen(true);
+              }}
+              disabled={updatedFiles.length === 0}
+            >
+              <MdOutlineDifference className="w-4 h-4" />
+            </button>
+          </Tooltip>
           <Tooltip content={t('contextFiles.refresh')}>
             <button className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors" onClick={handleRefreshUpdatedFiles} disabled={isRefreshingUpdated}>
               <MdOutlineRefresh className={`w-4 h-4 ${isRefreshingUpdated ? 'animate-spin' : ''}`} />

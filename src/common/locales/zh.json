@@ -852,6 +852,7 @@
     "title": "上下文文件",
     "updatedFiles": "已更新文件",
     "updated": "已更新",
+    "viewChanges": "查看更改",
     "add": "添加上下文文件",
     "addFileTooltip": "添加文件 (按 Ctrl/Cmd 键添加为只读)",
     "addFileTooltip.ctrl": "添加文件 (按 Ctrl 键添加为只读)",

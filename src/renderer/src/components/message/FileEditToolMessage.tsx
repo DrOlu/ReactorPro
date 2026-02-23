@@ -32,9 +32,7 @@ export const FileEditToolMessage = ({ message, onRemove, compact = false, onFork
   const language = getLanguageFromPath(filePath);
 
   const isDenied = typeof content === 'string' && content.startsWith('File edit to');
-  const shouldCloseOnError = typeof content === 'string' && !content.startsWith('Successfully');
-
-  console.log('FileEditToolMessage', typeof content, content);
+  const shouldCloseOnError = typeof content === 'string' && content && !content.startsWith('Successfully');
 
   useLayoutEffect(() => {
     if (shouldCloseOnError && expandableRef.current) {

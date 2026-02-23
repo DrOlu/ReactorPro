@@ -16,6 +16,7 @@
 - added Gemini CLI as supported provider
 - enhanced hook system to allow modification of event data
 - added some example hooks
+- added button to view changes for updated context files
 
 ## [0.53.0]
 
