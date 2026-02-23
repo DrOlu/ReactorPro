@@ -2295,6 +2295,7 @@ File: src/common/locales/en.json
     "title": "Context Files",
     "updatedFiles": "Updated Files",
     "updated": "Updated",
+    "viewChanges": "View changes",
     "add": "Add context files",
     "addFileTooltip": "Add file (use Ctrl/Cmd to add as Read-only)",
     "addFileTooltip.ctrl": "Add file (use Ctrl to add as Read-only)",
@@ -3975,6 +3976,7 @@ File: src/common/locales/zh.json
     "title": "上下文文件",
     "updatedFiles": "已更新文件",
     "updated": "已更新",
+    "viewChanges": "查看更改",
     "add": "添加上下文文件",
     "addFileTooltip": "添加文件 (按 Ctrl/Cmd 键添加为只读)",
     "addFileTooltip.ctrl": "添加文件 (按 Ctrl 键添加为只读)",
@@ -20365,7 +20367,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import objectHash from 'object-hash';
 import { ControlledTreeEnvironment, Tree } from 'react-complex-tree';
 import { HiChevronDown, HiChevronRight, HiOutlineTrash, HiPlus, HiX } from 'react-icons/hi';
-import { MdOutlinePublic, MdOutlineRefresh, MdOutlineSearch, MdUndo } from 'react-icons/md';
+import { MdOutlineDifference, MdOutlinePublic, MdOutlineRefresh, MdOutlineSearch, MdUndo } from 'react-icons/md';
 import { BiCollapseVertical, BiExpandVertical } from 'react-icons/bi';
 import { TbPencilOff } from 'react-icons/tb';
 import { RiRobot2Line } from 'react-icons/ri';
@@ -20503,6 +20505,9 @@ onExpandItem=
 <Tooltip content=
 ⋮----
 {/* Updated Files Section */}
+⋮----
+setDiffModalFileIndex(0);
+setDiffModalOpen(true);
 ⋮----
 {/* Project Files Section */}
 ⋮----
