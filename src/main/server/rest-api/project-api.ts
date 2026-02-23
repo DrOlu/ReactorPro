@@ -276,6 +276,18 @@ const RestoreFileSchema = z.object({
   filePath: z.string().min(1, 'File path is required'),
 });
 
+const GenerateCommitMessageSchema = z.object({
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
+});
+
+const CommitChangesSchema = z.object({
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
+  message: z.string().min(1, 'Commit message is required'),
+  amend: z.boolean(),
+});
+
 const ListBranchesSchema = z.object({
   projectDir: z.string().min(1, 'Project directory is required'),
 });
@@ -801,6 +813,36 @@ export class ProjectApi extends BaseApi {
         const { projectDir, taskId, filePath } = parsed;
         await this.eventsHandler.restoreFile(projectDir, taskId, filePath);
         res.status(200).json({ message: 'File restored' });
+      }),
+    );
+
+    // Generate commit message
+    router.post(
+      '/project/worktree/generate-commit-message',
+      this.handleRequest(async (req, res) => {
+        const parsed = this.validateRequest(GenerateCommitMessageSchema, req.body, res);
+        if (!parsed) {
+          return;
+        }
+
+        const { projectDir, taskId } = parsed;
+        const message = await this.eventsHandler.generateCommitMessage(projectDir, taskId);
+        res.status(200).json({ message });
+      }),
+    );
+
+    // Commit changes
+    router.post(
+      '/project/worktree/commit-changes',
+      this.handleRequest(async (req, res) => {
+        const parsed = this.validateRequest(CommitChangesSchema, req.body, res);
+        if (!parsed) {
+          return;
+        }
+
+        const { projectDir, taskId, message, amend } = parsed;
+        await this.eventsHandler.commitChanges(projectDir, taskId, message, amend);
+        res.status(200).json({ message: 'Changes committed' });
       }),
     );
 

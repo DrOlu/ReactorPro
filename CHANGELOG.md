@@ -1,5 +1,9 @@
 # Changelog
 
+## [UNRELEASED]
+
+- added support for commiting changes via the Updated Files page
+
 ## [0.54.0]
 
 - added support for message queue while task is processing

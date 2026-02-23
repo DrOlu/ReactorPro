@@ -380,6 +380,14 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     await eventsHandler.restoreFile(baseDir, taskId, filePath);
   });
 
+  ipcMain.handle('generate-commit-message', async (_, baseDir: string, taskId: string) => {
+    return await eventsHandler.generateCommitMessage(baseDir, taskId);
+  });
+
+  ipcMain.handle('commit-changes', async (_, baseDir: string, taskId: string, message: string, amend: boolean) => {
+    await eventsHandler.commitChanges(baseDir, taskId, message, amend);
+  });
+
   ipcMain.handle('list-branches', async (_, baseDir: string) => {
     return await eventsHandler.listBranches(baseDir);
   });
