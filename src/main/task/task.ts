@@ -3102,7 +3102,7 @@ ${error.stderr}`,
             try {
               effectiveCommitMessage = await this.agent.generateText(
                 agentProfile,
-                this.promptsManager.getGenerateCommitMessagePrompt(this),
+                this.promptsManager.getGenerateCommitMessageSystemPrompt(this),
                 `Generate a concise conventional commit message for these changes:\n\n${changesDiff}\n\nOnly answer with the commit message, nothing else.`,
                 this.getProjectDir(),
                 undefined,
@@ -3273,6 +3273,66 @@ ${error.stderr}`,
     });
 
     await this.worktreeManager.restoreFile(this.getTaskDir(), filePath);
+  }
+
+  public async generateCommitMessage(): Promise<string> {
+    logger.info('Generating commit message', {
+      baseDir: this.project.baseDir,
+      taskId: this.taskId,
+    });
+
+    const taskDir = this.getTaskDir();
+    const diff = await this.worktreeManager.getUncommittedDiff(taskDir);
+
+    if (!diff) {
+      throw new Error('No uncommitted changes to commit');
+    }
+
+    const agentProfile = await this.getTaskAgentProfile();
+    if (!agentProfile) {
+      throw new Error('No agent profile configured');
+    }
+
+    // Get last 10 commit messages for context
+    let commitHistoryText = '';
+    try {
+      const commits = await this.worktreeManager.getLastCommits(taskDir, 10, false);
+      if (commits.length > 0) {
+        const commitMessages = commits.map((commit) => commit.message);
+        commitHistoryText = `\n\nHere are the last ${commits.length} commit messages for reference:\n\n${commitMessages.map((msg, i) => `${i + 1}. ${msg}`).join('\n')}`;
+      }
+    } catch (error) {
+      logger.warn('Failed to get commit history:', error);
+      // Continue without commit history
+    }
+
+    const commitMessage = await this.agent.generateText(
+      agentProfile,
+      this.promptsManager.getGenerateCommitMessageSystemPrompt(this),
+      `Here is the git diff of uncommitted changes:\n\n\`\`\`diff\n${diff}\n\`\`\`${commitHistoryText}`,
+      this.getProjectDir(),
+      undefined,
+      false,
+    );
+
+    if (!commitMessage) {
+      throw new Error('Failed to generate commit message');
+    }
+
+    return commitMessage.trim();
+  }
+
+  public async commitChanges(message: string, amend: boolean): Promise<void> {
+    logger.info('Committing changes', {
+      baseDir: this.project.baseDir,
+      taskId: this.taskId,
+      amend,
+    });
+
+    const taskDir = this.getTaskDir();
+    await this.worktreeManager.commitChanges(taskDir, message, amend);
+    await this.sendUpdatedFilesUpdated();
+    await this.sendWorktreeIntegrationStatusUpdated();
   }
 
   public async getWorktreeIntegrationStatus(targetBranch?: string) {

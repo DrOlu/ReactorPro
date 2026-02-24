@@ -543,6 +543,24 @@ export class EventsHandler {
     await task.restoreFile(filePath);
   }
 
+  async generateCommitMessage(baseDir: string, taskId: string): Promise<string> {
+    const task = this.projectManager.getProject(baseDir).getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    return await task.generateCommitMessage();
+  }
+
+  async commitChanges(baseDir: string, taskId: string, message: string, amend: boolean): Promise<void> {
+    const task = this.projectManager.getProject(baseDir).getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    await task.commitChanges(message, amend);
+  }
+
   async listBranches(projectDir: string): Promise<Array<{ name: string; isCurrent: boolean; hasWorktree: boolean }>> {
     return await this.projectManager.worktreeManager.listBranches(projectDir);
   }

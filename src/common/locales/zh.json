@@ -881,6 +881,17 @@
     "confirmRevertTitle": "恢复文件更改？",
     "confirmRevertMessage": "这将丢弃此文件的所有更改。此操作无法撤销。",
     "revert": "恢复",
+    "commitSection": "提交更改",
+    "commitMessage": "提交信息",
+    "commitMessagePlaceholder": "输入提交信息...",
+    "commitMessagePlaceholderAmend": "保持空白以使用上一次提交信息，或输入新的信息",
+    "generateMessage": "生成信息",
+    "amend": "修改",
+    "amendTooltip": "修改上一次提交而不是创建新提交",
+    "commit": "提交",
+    "generatingMessage": "生成中...",
+    "committing": "提交中...",
+    "commitError": "提交错误",
     "empty": {
       "title": "没有上下文文件",
       "aiderMode": {

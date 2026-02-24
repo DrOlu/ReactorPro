@@ -421,6 +421,21 @@ export class BrowserApi implements ApplicationAPI {
   getUpdatedFiles(baseDir: string, taskId: string): Promise<{ path: string; additions: number; deletions: number }[]> {
     return this.post('/get-updated-files', { projectDir: baseDir, taskId });
   }
+  async generateCommitMessage(baseDir: string, taskId: string): Promise<string> {
+    const res = await this.post<{ projectDir: string; taskId: string }, { message: string }>('/project/worktree/generate-commit-message', {
+      projectDir: baseDir,
+      taskId,
+    });
+    return res.message;
+  }
+  async commitChanges(baseDir: string, taskId: string, message: string, amend: boolean): Promise<void> {
+    await this.post('/project/worktree/commit-changes', {
+      projectDir: baseDir,
+      taskId,
+      message,
+      amend,
+    });
+  }
   addFile(baseDir: string, taskId: string, filePath: string, readOnly?: boolean): void {
     this.post('/add-context-file', {
       projectDir: baseDir,

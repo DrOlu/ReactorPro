@@ -403,7 +403,7 @@ export class PromptsManager {
     return this.render('compact-conversation', data, task.getProjectDir());
   };
 
-  public getGenerateCommitMessagePrompt = (task: Task) => {
+  public getGenerateCommitMessageSystemPrompt = (task: Task) => {
     const data: CommitMessagePromptData = {};
     return this.render('commit-message', data, task.getProjectDir());
   };

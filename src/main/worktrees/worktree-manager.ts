@@ -995,9 +995,10 @@ export class WorktreeManager {
     }
   }
 
-  async getLastCommits(worktreePath: string, count: number = 20): Promise<RawCommitData[]> {
+  async getLastCommits(worktreePath: string, count: number = 20, includeStats: boolean = true): Promise<RawCommitData[]> {
     try {
-      const { stdout } = await execWithShellPath(`git log -${count} --pretty=format:'%H|%s|%ai|%an' --shortstat`, { cwd: worktreePath });
+      const statFlag = includeStats ? ' --shortstat' : '';
+      const { stdout } = await execWithShellPath(`git log -${count} --pretty=format:'%H|%s|%ai|%an'${statFlag}`, { cwd: worktreePath });
 
       const commits: RawCommitData[] = [];
       const lines = stdout.split('\n');
@@ -1023,7 +1024,7 @@ export class WorktreeManager {
           author: author || 'Unknown',
         };
 
-        if (i + 1 < lines.length && lines[i + 1].trim()) {
+        if (includeStats && i + 1 < lines.length && lines[i + 1].trim()) {
           const statsLine = lines[i + 1].trim();
           const statsMatch = statsLine.match(/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/);
 
@@ -1512,6 +1513,55 @@ export class WorktreeManager {
       logger.info(`Successfully restored file: ${filePath}`);
     } catch (error) {
       logger.error(`Failed to restore file ${filePath}:`, error);
+      throw error;
+    }
+  }
+
+  async getUncommittedDiff(worktreePath: string): Promise<string | null> {
+    try {
+      const { stdout } = await execWithShellPath('git diff HEAD', { cwd: worktreePath });
+      return stdout || null;
+    } catch (error) {
+      logger.error('Failed to get uncommitted diff:', error);
+      return null;
+    }
+  }
+
+  async commitChanges(worktreePath: string, message: string, amend: boolean): Promise<void> {
+    try {
+      logger.info(`Committing changes${amend ? ' (amend)' : ''}`, { worktreePath });
+
+      // Get the list of updated files (unstaged changes that are shown in the UI)
+      const updatedFiles = await this.getUpdatedFiles(worktreePath);
+
+      if (updatedFiles.length === 0 && !amend) {
+        logger.info('No updated files to commit');
+        return;
+      }
+
+      // Stage all updated files before committing
+      if (updatedFiles.length > 0) {
+        for (const file of updatedFiles) {
+          const escapedPath = file.path.replace(/"/g, '\\"');
+          await execWithShellPath(`git add -- "${escapedPath}"`, {
+            cwd: worktreePath,
+          });
+        }
+        logger.info(`Staged ${updatedFiles.length} file(s) for commit`);
+      }
+
+      // Escape the commit message for shell
+      const escapedMessage = message.replace(/"/g, '\\"');
+      const amendFlag = amend ? ' --amend' : '';
+      // If amending and message is empty, use --no-edit to keep previous message
+      const commitCommand = amend && !message.trim() ? 'git commit --amend --no-edit' : `git commit${amendFlag} -m "${escapedMessage}"`;
+      await execWithShellPath(commitCommand, {
+        cwd: worktreePath,
+      });
+
+      logger.info(`Successfully committed changes${amend ? ' (amended)' : ''}`);
+    } catch (error) {
+      logger.debug('Failed to commit changes:', error);
       throw error;
     }
   }

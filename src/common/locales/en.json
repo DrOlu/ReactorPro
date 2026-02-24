@@ -924,6 +924,17 @@
     "confirmRevertTitle": "Revert file changes?",
     "confirmRevertMessage": "This will discard all changes to this file. This action cannot be undone.",
     "revert": "Revert",
+    "commitSection": "Commit Changes",
+    "commitMessage": "Commit message",
+    "commitMessagePlaceholder": "Enter commit message...",
+    "commitMessagePlaceholderAmend": "Keep empty to use previous commit message, or enter a new one",
+    "generateMessage": "Generate Message",
+    "amend": "Amend",
+    "amendTooltip": "Amend the last commit instead of creating a new one",
+    "commit": "Commit",
+    "generatingMessage": "Generating...",
+    "committing": "Committing...",
+    "commitError": "Commit Error",
     "empty": {
       "title": "No Context Files",
       "aiderMode": {

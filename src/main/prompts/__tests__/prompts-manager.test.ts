@@ -86,7 +86,7 @@ describe('Prompts with Handlebars', () => {
 
   describe('getGenerateCommitMessagePrompt', () => {
     it('should render commit-message generation prompt', () => {
-      const prompt = promptsManager.getGenerateCommitMessagePrompt(mockTask);
+      const prompt = promptsManager.getGenerateCommitMessageSystemPrompt(mockTask);
 
       expect(prompt).toContain('Default commit message prompt');
     });
@@ -246,7 +246,7 @@ describe('Prompts with Handlebars', () => {
     });
 
     it('should use global commit-message template', () => {
-      const prompt = promptsManagerWithGlobal.getGenerateCommitMessagePrompt(mockTask);
+      const prompt = promptsManagerWithGlobal.getGenerateCommitMessageSystemPrompt(mockTask);
 
       expect(prompt).toContain('Global commit message prompt');
       expect(prompt).toContain('should override default');
@@ -314,7 +314,7 @@ describe('Prompts with Handlebars', () => {
     });
 
     it('should use default commit-message template when global is not present', () => {
-      const prompt = promptsManagerNoGlobal.getGenerateCommitMessagePrompt(mockTask);
+      const prompt = promptsManagerNoGlobal.getGenerateCommitMessageSystemPrompt(mockTask);
 
       expect(prompt).toContain('Default commit message prompt');
       expect(prompt).not.toContain('Global commit message prompt');
