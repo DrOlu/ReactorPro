@@ -2324,6 +2324,17 @@ File: src/common/locales/en.json
     "confirmRevertTitle": "Revert file changes?",
     "confirmRevertMessage": "This will discard all changes to this file. This action cannot be undone.",
     "revert": "Revert",
+    "commitSection": "Commit Changes",
+    "commitMessage": "Commit message",
+    "commitMessagePlaceholder": "Enter commit message...",
+    "commitMessagePlaceholderAmend": "Keep empty to use previous commit message, or enter a new one",
+    "generateMessage": "Generate Message",
+    "amend": "Amend",
+    "amendTooltip": "Amend the last commit instead of creating a new one",
+    "commit": "Commit",
+    "generatingMessage": "Generating...",
+    "committing": "Committing...",
+    "commitError": "Commit Error",
     "empty": {
       "title": "No Context Files",
       "aiderMode": {
@@ -4005,6 +4016,17 @@ File: src/common/locales/zh.json
     "confirmRevertTitle": "恢复文件更改？",
     "confirmRevertMessage": "这将丢弃此文件的所有更改。此操作无法撤销。",
     "revert": "恢复",
+    "commitSection": "提交更改",
+    "commitMessage": "提交信息",
+    "commitMessagePlaceholder": "输入提交信息...",
+    "commitMessagePlaceholderAmend": "保持空白以使用上一次提交信息，或输入新的信息",
+    "generateMessage": "生成信息",
+    "amend": "修改",
+    "amendTooltip": "修改上一次提交而不是创建新提交",
+    "commit": "提交",
+    "generatingMessage": "生成中...",
+    "committing": "提交中...",
+    "commitError": "提交错误",
     "empty": {
       "title": "没有上下文文件",
       "aiderMode": {
@@ -5293,6 +5315,8 @@ export interface ApplicationAPI {
   getAllFiles: (baseDir: string, taskId: string, useGit?: boolean) => Promise<string[]>;
   getUpdatedFiles: (baseDir: string, taskId: string) => Promise<UpdatedFile[]>;
   restoreFile: (baseDir: string, taskId: string, filePath: string) => Promise<void>;
+  generateCommitMessage: (baseDir: string, taskId: string) => Promise<string>;
+  commitChanges: (baseDir: string, taskId: string, message: string, amend: boolean) => Promise<void>;
   addFile: (baseDir: string, taskId: string, filePath: string, readOnly?: boolean) => void;
   isValidPath: (baseDir: string, path: string) => Promise<boolean>;
   isProjectPath: (path: string) => Promise<boolean>;
@@ -14171,6 +14195,10 @@ registerRoutes(router: Router): void
 ⋮----
 // Restore file
 ⋮----
+// Generate commit message
+⋮----
+// Commit changes
+⋮----
 // List branches
 ⋮----
 // Worktree status
@@ -15934,6 +15962,14 @@ public async revertLastMerge(): Promise<void>
 ⋮----
 public async restoreFile(filePath: string): Promise<void>
 ⋮----
+public async generateCommitMessage(): Promise<string>
+⋮----
+// Get last 10 commit messages for context
+⋮----
+// Continue without commit history
+⋮----
+public async commitChanges(message: string, amend: boolean): Promise<void>
+⋮----
 public async getWorktreeIntegrationStatus(targetBranch?: string)
 ⋮----
 public async rebaseWorktreeFromBranch(fromBranch?: string): Promise<void>
@@ -17029,7 +17065,7 @@ async gitPull(worktreePath: string): Promise<
 ⋮----
 async gitPush(worktreePath: string): Promise<
 ⋮----
-async getLastCommits(worktreePath: string, count: number = 20): Promise<RawCommitData[]>
+async getLastCommits(worktreePath: string, count: number = 20, includeStats: boolean = true): Promise<RawCommitData[]>
 ⋮----
 async getChangesDiff(projectPath: string, worktreePath: string, targetBranch?: string): Promise<string>
 ⋮----
@@ -17171,6 +17207,18 @@ maxBuffer: 10 * 1024 * 1024, // 10 MB
 // If git diff fails (e.g., no HEAD commit), return empty array
 ⋮----
 async restoreFile(worktreePath: string, filePath: string): Promise<void>
+⋮----
+async getUncommittedDiff(worktreePath: string): Promise<string | null>
+⋮----
+async commitChanges(worktreePath: string, message: string, amend: boolean): Promise<void>
+⋮----
+// Get the list of updated files (unstaged changes that are shown in the UI)
+⋮----
+// Stage all updated files before committing
+⋮----
+// Escape the commit message for shell
+⋮----
+// If amending and message is empty, use --no-edit to keep previous message
 ⋮----
 async getRebaseState(worktreePath: string): Promise<RebaseState>
 ⋮----
@@ -17470,6 +17518,10 @@ async applyUncommittedChanges(baseDir: string, taskId: string, targetBranch?: st
 async revertLastMerge(baseDir: string, taskId: string): Promise<void>
 ⋮----
 async restoreFile(baseDir: string, taskId: string, filePath: string): Promise<void>
+⋮----
+async generateCommitMessage(baseDir: string, taskId: string): Promise<string>
+⋮----
+async commitChanges(baseDir: string, taskId: string, message: string, amend: boolean): Promise<void>
 ⋮----
 async listBranches(projectDir: string): Promise<Array<
 ⋮----
@@ -18487,6 +18539,8 @@ getFilePathSuggestions(currentPath: string, directoriesOnly?: boolean): Promise<
 getAddableFiles(baseDir: string, taskId: string): Promise<string[]>
 getAllFiles(baseDir: string, taskId: string, useGit?: boolean): Promise<string[]>
 getUpdatedFiles(baseDir: string, taskId: string): Promise<
+async generateCommitMessage(baseDir: string, taskId: string): Promise<string>
+async commitChanges(baseDir: string, taskId: string, message: string, amend: boolean): Promise<void>
 addFile(baseDir: string, taskId: string, filePath: string, readOnly?: boolean): void
 async isValidPath(baseDir: string, path: string): Promise<boolean>
 async isProjectPath(path: string): Promise<boolean>
@@ -20528,8 +20582,8 @@ File: src/renderer/src/components/ContextFiles/index.ts
 File: src/renderer/src/components/ContextFiles/UpdatedFilesDiffModal.tsx
 ================
 import { useCallback, useMemo, useState, startTransition, useOptimistic, MouseEvent, useEffect } from 'react';
-import { HiChevronLeft, HiChevronRight } from 'react-icons/hi';
-import { MdUndo } from 'react-icons/md';
+import { HiChevronLeft, HiChevronRight, HiSparkles } from 'react-icons/hi';
+import { MdOutlineCommit, MdUndo } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { DiffViewMode, UpdatedFile } from '@common/types';
@@ -20541,6 +20595,9 @@ import { ModalOverlayLayout } from '../common/ModalOverlayLayout';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { UDiffViewer, CompactDiffViewer, DiffLineCommentPanel, LineClickInfo } from '../common/DiffViewer';
 import { CompactSelect } from '../common/CompactSelect';
+import { TextArea } from '../common/TextArea';
+import { Checkbox } from '../common/Checkbox';
+import { Button } from '../common/Button';
 ⋮----
 import { useSettings } from '@/contexts/SettingsContext';
 import { useApi } from '@/contexts/ApiContext';
@@ -20557,7 +20614,19 @@ type Props = {
 ⋮----
 // eslint-disable-next-line no-console
 ⋮----
+// eslint-disable-next-line no-console
+⋮----
+// Allow empty message only when amending
+⋮----
+// eslint-disable-next-line no-console
+⋮----
 <ModalOverlayLayout title=
+⋮----
+{/* Footer with Commit Section */}
+⋮----
+{/* Error Display */}
+⋮----
+isGeneratingMessage
 ⋮----
 title=
 
@@ -31501,7 +31570,7 @@ File: package.json
 ================
 {
   "name": "aider-desk",
-  "version": "0.54.0-dev",
+  "version": "0.55.0-dev",
   "description": "Aider desktop application wrapper",
   "main": "./out/main/index.js",
   "author": "Hotovo",
