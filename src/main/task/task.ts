@@ -208,7 +208,7 @@ export class Task {
       return null;
     }
 
-    // If profile not found, try to create a temporary one from task-level provider/model
+    // Apply task-level provider/model overrides if present
     if (this.task.provider && this.task.model) {
       // Create a temporary profile with task-level overrides
       profile = {

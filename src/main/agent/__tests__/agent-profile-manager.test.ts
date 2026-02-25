@@ -23,12 +23,15 @@ import { AgentProfile } from '@common/types';
 
 import { AgentProfileManager } from '../agent-profile-manager';
 
+import type { ExtensionRegistry } from '@/extensions/extension-registry';
+
 import { AIDER_DESK_AGENTS_DIR } from '@/constants';
 import { createMockAgentProfile } from '@/__tests__/mocks';
 
 describe('AgentProfileManager', () => {
   let agentProfileManager: AgentProfileManager;
   let mockEventManager: any;
+  let mockExtensionRegistry: ExtensionRegistry;
 
   const globalAgentsDir = path.join(homedir(), AIDER_DESK_AGENTS_DIR);
 
@@ -40,6 +43,12 @@ describe('AgentProfileManager', () => {
       sendAgentProfilesUpdated: vi.fn(),
     };
 
+    // Mock ExtensionRegistry
+    mockExtensionRegistry = {
+      getAgents: vi.fn().mockReturnValue([]),
+      getAgentById: vi.fn().mockReturnValue(undefined),
+    } as unknown as ExtensionRegistry;
+
     // Mock fs methods
     (fs.writeFile as any).mockResolvedValue(undefined);
     (fs.mkdir as any).mockResolvedValue(undefined);
@@ -49,7 +58,7 @@ describe('AgentProfileManager', () => {
     (fs.readFile as any).mockResolvedValue('{}');
 
     // Create manager instance
-    agentProfileManager = new AgentProfileManager(mockEventManager);
+    agentProfileManager = new AgentProfileManager(mockEventManager, mockExtensionRegistry);
   });
 
   describe('Core Bug - updateProfile does not call notifyListeners', () => {
@@ -281,7 +290,7 @@ describe('AgentProfileManager', () => {
       (agentProfileManager as any).profiles.set('profile-1', { dirName: 'p1', order: 0, agentProfile: profile1 });
       (agentProfileManager as any).profiles.set('profile-2', { dirName: 'p2', order: 1, agentProfile: profile2 });
 
-      (agentProfileManager as any).notifyListeners();
+      (agentProfileManager as any).sendAgentProfilesUpdated();
 
       expect(mockEventManager.sendAgentProfilesUpdated).toHaveBeenCalledTimes(1);
       const calledWith = mockEventManager.sendAgentProfilesUpdated.mock.calls[0][0];

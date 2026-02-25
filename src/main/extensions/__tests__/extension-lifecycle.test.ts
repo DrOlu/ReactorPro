@@ -54,6 +54,7 @@ const createMockDeps = () => ({
   store: {} as any,
   agentProfileManager: {
     getAllProfiles: vi.fn().mockReturnValue([]),
+    sendAgentProfilesUpdated: vi.fn(),
   } as any,
   modelManager: {
     getAllModels: vi.fn().mockResolvedValue([]),
@@ -61,6 +62,7 @@ const createMockDeps = () => ({
   projectManager: {
     getProjects: vi.fn().mockReturnValue([]),
   } as any,
+  registry: new ExtensionRegistry(),
 });
 
 describe('Extension Lifecycle', () => {
@@ -70,7 +72,7 @@ describe('Extension Lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeps = createMockDeps();
-    manager = new ExtensionManager(mockDeps.store, mockDeps.agentProfileManager, mockDeps.modelManager, mockDeps.projectManager);
+    manager = new ExtensionManager(mockDeps.store, mockDeps.agentProfileManager, mockDeps.modelManager, mockDeps.projectManager, mockDeps.registry);
   });
 
   afterEach(() => {
@@ -230,26 +232,6 @@ describe('Extension Lifecycle', () => {
       await manager.dispose();
 
       expect(logger.default.error).toHaveBeenCalledWith(expect.stringContaining("Failed to unload extension 'test-extension'"), error);
-    });
-
-    it('should call onUnload during extension reload', async () => {
-      const extension = createMockExtension();
-      const metadata = createMockMetadata();
-      const registry = (manager as any).registry as ExtensionRegistry;
-
-      registry.register(extension, metadata, '/test/extension.ts');
-      registry.setInitialized('test-extension', true);
-
-      const loader = (manager as any).loader;
-      loader.loadExtension = vi.fn().mockResolvedValue({
-        extension: createMockExtension({ onLoad: vi.fn() }),
-        metadata: createMockMetadata(),
-      });
-
-      (manager as any).initialized = true;
-      await manager.reloadExtension('/test/extension.ts');
-
-      expect(extension.onUnload).toHaveBeenCalledTimes(1);
     });
 
     it('should allow extension to release resources in onUnload', async () => {

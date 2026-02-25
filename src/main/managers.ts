@@ -15,6 +15,7 @@ import { TelemetryManager } from '@/telemetry';
 import { WorktreeManager } from '@/worktrees';
 import { MemoryManager } from '@/memory/memory-manager';
 import { ExtensionManager } from '@/extensions/extension-manager';
+import { ExtensionRegistry } from '@/extensions/extension-registry';
 import { Store } from '@/store';
 import { SERVER_PORT } from '@/constants';
 import logger from '@/logger';
@@ -62,9 +63,12 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
 
   const worktreeManager = new WorktreeManager();
 
-  // Initialize agent profile manager
-  const agentProfileManager = new AgentProfileManager(eventManager);
-  await agentProfileManager.start();
+  // Initialize extension registry (shared between ExtensionManager and AgentProfileManager)
+  const extensionRegistry = new ExtensionRegistry();
+
+  // Initialize agent profile manager with extension registry for unified profile access
+  const agentProfileManager = new AgentProfileManager(eventManager, extensionRegistry);
+  await agentProfileManager.init();
 
   // Create a temporary project manager reference for circular dependency resolution
   // eslint-disable-next-line prefer-const
@@ -79,6 +83,7 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
     {
       getProjects: () => projectManager.getProjects(),
     } as ProjectManager,
+    extensionRegistry,
   );
 
   // Initialize project manager
@@ -128,6 +133,7 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
     eventManager,
     agentProfileManager,
     memoryManager,
+    extensionManager,
   );
 
   // Create and initialize REST API controller with the server

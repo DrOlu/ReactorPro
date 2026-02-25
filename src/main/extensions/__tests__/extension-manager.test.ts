@@ -3,13 +3,13 @@ import fs from 'fs/promises';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 import { ExtensionManager } from '../extension-manager';
+import { ExtensionRegistry } from '../extension-registry';
 
 import type { PathLike } from 'fs';
 import type { Store } from '@/store';
 import type { AgentProfileManager } from '@/agent';
 import type { ModelManager } from '@/models';
 import type { FSWatcher } from 'chokidar';
-import type { ExtensionRegistry } from '../extension-registry';
 
 // Import fs to get the mocked module
 
@@ -53,7 +53,7 @@ describe('ExtensionManager', () => {
   let mockLoader: unknown;
   let mockRegistry: unknown;
   let store: { getSettings: ReturnType<typeof vi.fn>; saveSettings: ReturnType<typeof vi.fn> };
-  let agentProfileManager: { getAllProfiles: ReturnType<typeof vi.fn> };
+  let agentProfileManager: { getAllProfiles: ReturnType<typeof vi.fn>; sendAgentProfilesUpdated: ReturnType<typeof vi.fn> };
   let modelManager: { getProviderModels: ReturnType<typeof vi.fn> };
 
   // Get references to mocked fs functions
@@ -75,12 +75,16 @@ describe('ExtensionManager', () => {
       setInitialized: vi.fn(),
       clearTools: vi.fn(),
       clearCommands: vi.fn(),
+      clearAgents: vi.fn(),
       registerTool: vi.fn(),
       getTools: vi.fn().mockReturnValue([]),
       getToolsByExtension: vi.fn().mockReturnValue([]),
       registerCommand: vi.fn(),
       getCommands: vi.fn().mockReturnValue([]),
       getCommandsByExtension: vi.fn().mockReturnValue([]),
+      registerAgent: vi.fn(),
+      getAgents: vi.fn().mockReturnValue([]),
+      getAgentsByExtension: vi.fn().mockReturnValue([]),
     };
 
     store = {
@@ -89,6 +93,7 @@ describe('ExtensionManager', () => {
     };
     agentProfileManager = {
       getAllProfiles: vi.fn().mockReturnValue([]),
+      sendAgentProfilesUpdated: vi.fn(),
     };
     modelManager = {
       getProviderModels: vi.fn().mockResolvedValue({ models: [] }),
@@ -101,9 +106,9 @@ describe('ExtensionManager', () => {
       agentProfileManager as unknown as AgentProfileManager,
       modelManager as unknown as ModelManager,
       projectManager as any,
+      mockRegistry as any,
     );
     (manager as unknown as Record<string, unknown>).loader = mockLoader;
-    (manager as unknown as Record<string, unknown>).registry = mockRegistry;
   });
 
   afterEach(() => {
@@ -499,74 +504,6 @@ describe('ExtensionManager', () => {
 
       expect(onUnloadMock).not.toHaveBeenCalled();
       expect((mockRegistry as ExtensionRegistry).unregister).toHaveBeenCalledWith('test-ext');
-    });
-  });
-
-  describe('reloadExtension', () => {
-    it('should unload and reload an extension', async () => {
-      const oldOnUnload = vi.fn();
-      const newOnLoad = vi.fn();
-
-      const oldExtension = {
-        instance: { onUnload: oldOnUnload },
-        metadata: { name: 'test-ext', version: '1.0.0', description: 'Test', author: 'Test' },
-        filePath: '/path/test-ext.ts',
-        initialized: true,
-      };
-
-      const newExtension = {
-        instance: { onLoad: newOnLoad },
-        metadata: { name: 'test-ext', version: '1.0.1', description: 'Updated', author: 'Test' },
-        filePath: '/path/test-ext.ts',
-        initialized: false,
-      };
-
-      (mockRegistry as ExtensionRegistry).getExtensions = vi
-        .fn()
-        .mockReturnValueOnce([oldExtension])
-        .mockReturnValueOnce([oldExtension])
-        .mockReturnValueOnce([])
-        .mockReturnValueOnce([]);
-      (mockRegistry as ExtensionRegistry).getExtension = vi.fn().mockReturnValue(newExtension);
-
-      (mockRegistry as ExtensionRegistry).unregister = vi.fn();
-      (mockRegistry as ExtensionRegistry).register = vi.fn();
-      (mockRegistry as ExtensionRegistry).setInitialized = vi.fn();
-
-      (mockLoader as { loadExtension: ReturnType<typeof vi.fn> }).loadExtension = vi.fn().mockResolvedValue({
-        extension: { onLoad: newOnLoad },
-        metadata: { name: 'test-ext', version: '1.0.1', description: 'Updated', author: 'Test' },
-      });
-
-      const result = await manager.reloadExtension('/path/test-ext.ts');
-
-      expect(result).toBe(true);
-      expect(oldOnUnload).toHaveBeenCalled();
-      expect((mockRegistry as ExtensionRegistry).unregister).toHaveBeenCalledWith('test-ext');
-      expect((mockLoader as { loadExtension: ReturnType<typeof vi.fn> }).loadExtension).toHaveBeenCalledWith('/path/test-ext.ts');
-      expect((mockRegistry as ExtensionRegistry).register).toHaveBeenCalled();
-      expect(newOnLoad).toHaveBeenCalled();
-    });
-
-    it('should return false if loading fails', async () => {
-      (mockRegistry as ExtensionRegistry).getExtensions = vi.fn().mockReturnValue([]);
-      (mockRegistry as ExtensionRegistry).unregister = vi.fn();
-
-      (mockLoader as { loadExtension: ReturnType<typeof vi.fn> }).loadExtension = vi.fn().mockRejectedValue(new Error('Load failed'));
-
-      const result = await manager.reloadExtension('/path/error.ts');
-
-      expect(result).toBe(false);
-    });
-
-    it('should handle reload errors gracefully without throwing', async () => {
-      (mockRegistry as ExtensionRegistry).getExtensions = vi.fn().mockImplementation(() => {
-        throw new Error('Registry error');
-      });
-
-      const result = await manager.reloadExtension('/path/test-ext.ts');
-
-      expect(result).toBe(false);
     });
   });
 

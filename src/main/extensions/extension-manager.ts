@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { ToolApprovalState } from '@common/types';
 
 import { ExtensionLoader } from './extension-loader';
-import { ExtensionRegistry, LoadedExtension, RegisteredTool, RegisteredCommand } from './extension-registry';
+import { ExtensionRegistry, LoadedExtension, RegisteredTool, RegisteredCommand, RegisteredAgent } from './extension-registry';
 import { ExtensionContextImpl } from './extension-context';
 
 import type { AgentProfile } from '@common/types';
@@ -53,13 +53,6 @@ import { AIDER_DESK_EXTENSIONS_DIR, AIDER_DESK_GLOBAL_EXTENSIONS_DIR } from '@/c
 import { Project } from '@/project';
 import { Task } from '@/task';
 
-export interface ExtensionManagerDeps {
-  store: Store;
-  agentProfileManager: AgentProfileManager;
-  modelManager: ModelManager;
-  projectManager: ProjectManager;
-}
-
 /**
  * Mapping of extension event names to their event payload types
  */
@@ -93,7 +86,6 @@ export type ExtensionEventMap = {
 
 export class ExtensionManager {
   private loader: ExtensionLoader;
-  private registry: ExtensionRegistry;
   private globalWatcher: FSWatcher | null = null;
   private projectWatchers: Map<string, FSWatcher> = new Map();
   private initialized = false;
@@ -103,13 +95,9 @@ export class ExtensionManager {
     private readonly agentProfileManager: AgentProfileManager,
     private readonly modelManager: ModelManager,
     private readonly projectManager: ProjectManager,
+    private readonly registry: ExtensionRegistry = new ExtensionRegistry(),
   ) {
     this.loader = new ExtensionLoader();
-    this.registry = new ExtensionRegistry();
-    this.store = store;
-    this.agentProfileManager = agentProfileManager;
-    this.modelManager = modelManager;
-    this.projectManager = projectManager;
   }
 
   async init(): Promise<void> {
@@ -213,8 +201,13 @@ export class ExtensionManager {
 
     this.registry.clearTools();
     this.registry.clearCommands();
+    this.registry.clearAgents();
     this.collectTools();
     this.collectCommands();
+    this.collectAgents();
+
+    // Notify about agent profile updates (extension agents may have changed)
+    this.agentProfileManager.sendAgentProfilesUpdated();
 
     if (project) {
       project.sendCommandsUpdated();
@@ -296,47 +289,9 @@ export class ExtensionManager {
     logger.info(`[Extensions] Unloaded extension: ${metadata.name}`);
   }
 
-  async reloadExtension(filePath: string, project?: Project): Promise<boolean> {
-    const extensionName = this.getExtensionNameFromPath(filePath);
-    logger.info(`[Extensions] Hot reloading: ${extensionName}`);
-
-    try {
-      await this.unloadExtension(filePath);
-
-      const success = await this.loadAndInitializeExtension(filePath, project);
-      if (!success) {
-        return false;
-      }
-
-      this.registry.clearTools();
-      this.registry.clearCommands();
-      this.collectTools();
-      this.collectCommands();
-
-      // Notify frontend about updated commands
-      if (project) {
-        project.sendCommandsUpdated();
-      } else {
-        // Global extension reloaded - notify all projects
-        this.sendCommandsUpdatedToAllProjects();
-      }
-
-      logger.info(`[Extensions] Hot reload complete: ${extensionName}`);
-      return true;
-    } catch (error) {
-      logger.error(`[Extensions] Hot reload failed for ${extensionName}:`, error);
-      return false;
-    }
-  }
-
   private findExtensionByPath(filePath: string): LoadedExtension | undefined {
     const extensions = this.registry.getExtensions();
     return extensions.find((ext) => ext.filePath === filePath);
-  }
-
-  private getExtensionNameFromPath(filePath: string): string {
-    const filename = path.basename(filePath, '.ts');
-    return filename;
   }
 
   private async discoverExtensionsFromDir(extensionsDir: string): Promise<string[]> {
@@ -738,6 +693,101 @@ export class ExtensionManager {
 
   getCommandsByExtension(extensionName: string): RegisteredCommand[] {
     return this.registry.getCommandsByExtension(extensionName);
+  }
+
+  collectAgents(project?: Project, task?: Task): RegisteredAgent[] {
+    const collectedAgents: RegisteredAgent[] = [];
+    const extensions = this.registry.getExtensions();
+
+    logger.info(`[Extensions] Collecting agents from ${extensions.length} extension(s)`);
+    for (const loaded of extensions) {
+      const { instance, metadata } = loaded;
+
+      if (!instance.getAgents) {
+        logger.debug(`[Extensions] Extension '${metadata.name}' has no getAgents method`);
+        continue;
+      }
+
+      try {
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project, task);
+        const agents = instance.getAgents(context);
+
+        if (!Array.isArray(agents)) {
+          logger.error(`[Extensions] Extension '${metadata.name}' getAgents() did not return an array`);
+          continue;
+        }
+
+        if (agents.length === 0) {
+          logger.debug(`[Extensions] Extension '${metadata.name}' returned empty agents array`);
+          continue;
+        }
+
+        for (const agent of agents) {
+          if (!agent.id || !agent.name) {
+            logger.error(`[Extensions] Invalid agent from extension '${metadata.name}': missing id or name`);
+            continue;
+          }
+
+          this.registry.registerAgent(metadata.name, agent);
+          collectedAgents.push({ extensionName: metadata.name, agent });
+          logger.debug(`[Extensions] Collected agent '${agent.name}' from extension '${metadata.name}'`);
+        }
+      } catch (error) {
+        logger.error(`[Extensions] Failed to collect agents from extension '${metadata.name}':`, error);
+      }
+    }
+
+    const agentCount = collectedAgents.length;
+    if (agentCount > 0) {
+      logger.info(`[Extensions] Collected ${agentCount} agent(s) from extensions`);
+    }
+
+    return collectedAgents;
+  }
+
+  getAgents(): RegisteredAgent[] {
+    return this.registry.getAgents();
+  }
+
+  getAgentsByExtension(extensionName: string): RegisteredAgent[] {
+    return this.registry.getAgentsByExtension(extensionName);
+  }
+
+  /**
+   * Attempts to update an extension-provided agent profile.
+   * @param profile - The updated profile
+   * @returns The updated profile if handled by extension, null if not an extension agent
+   */
+  async updateAgentProfile(profile: AgentProfile): Promise<AgentProfile | null> {
+    const registered = this.registry.getAgentById(profile.id);
+    if (!registered) {
+      return null;
+    }
+
+    const extension = this.registry.getExtension(registered.extensionName);
+    if (!extension) {
+      return null;
+    }
+
+    if (!extension.instance.onAgentProfileUpdated) {
+      throw new Error(`Extension '${registered.extensionName}' does not support profile updates`);
+    }
+
+    const context = new ExtensionContextImpl(registered.extensionName, this.store, this.agentProfileManager, this.modelManager);
+
+    logger.info(`[Extensions] Updating agent profile '${profile.id}' via extension '${registered.extensionName}'`);
+    const updatedProfile = await extension.instance.onAgentProfileUpdated(context, profile.id, profile);
+
+    if (!updatedProfile) {
+      throw new Error(`Extension '${registered.extensionName}' did not return an updated profile`);
+    }
+
+    // Update the agent in registry with the returned profile
+    registered.agent = updatedProfile;
+    this.agentProfileManager.sendAgentProfilesUpdated();
+
+    logger.info(`[Extensions] Agent profile '${profile.id}' updated successfully`);
+    return updatedProfile;
   }
 
   async executeCommand(commandName: string, args: string[], project: Project, task?: Task): Promise<void> {

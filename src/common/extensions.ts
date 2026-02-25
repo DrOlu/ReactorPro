@@ -633,6 +633,25 @@ export interface Extension {
    */
   getCommands?(context: ExtensionContext): CommandDefinition[];
 
+  // Agent registration
+
+  /**
+   * Return array of agent profiles this extension provides
+   * Called when extension is loaded and when agents need to be refreshed
+   * Extension-provided agents will be included in the list of all agents
+   */
+  getAgents?(context: ExtensionContext): AgentProfile[];
+
+  /**
+   * Called when a user updates an extension-provided agent profile
+   * Extension should persist the updated profile and return it from future getAgents() calls
+   * @param context - Extension context (no project available for global operations)
+   * @param agentId - The ID of the agent being updated
+   * @param updatedProfile - The complete updated profile
+   * @returns The updated agent profile
+   */
+  onAgentProfileUpdated?(context: ExtensionContext, agentId: string, updatedProfile: AgentProfile): Promise<AgentProfile>;
+
   // Task Events
 
   /**

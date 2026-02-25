@@ -1,5 +1,7 @@
 import { Extension, ExtensionMetadata, ToolDefinition, CommandDefinition } from '@common/extensions';
 
+import type { AgentProfile } from '@common/types';
+
 import logger from '@/logger';
 
 export interface LoadedExtension {
@@ -20,10 +22,16 @@ export interface RegisteredCommand {
   command: CommandDefinition;
 }
 
+export interface RegisteredAgent {
+  extensionName: string;
+  agent: AgentProfile;
+}
+
 export class ExtensionRegistry {
   private extensions = new Map<string, LoadedExtension>();
   private tools = new Map<string, RegisteredTool>();
   private commands = new Map<string, RegisteredCommand>();
+  private agents = new Map<string, RegisteredAgent>();
 
   register(extension: Extension, metadata: ExtensionMetadata, filePath: string, projectDir?: string) {
     logger.info(`[Extensions] Registering extension: ${metadata.name}`);
@@ -63,6 +71,11 @@ export class ExtensionRegistry {
         this.commands.delete(commandKey);
       }
     }
+    for (const [agentKey, registered] of this.agents) {
+      if (registered.extensionName === name) {
+        this.agents.delete(agentKey);
+      }
+    }
     return this.extensions.delete(name);
   }
 
@@ -70,6 +83,7 @@ export class ExtensionRegistry {
     this.extensions.clear();
     this.tools.clear();
     this.commands.clear();
+    this.agents.clear();
   }
 
   registerTool(extensionName: string, tool: ToolDefinition): void {
@@ -117,5 +131,33 @@ export class ExtensionRegistry {
   clearCommands(): void {
     logger.info('[Extensions] Cleared all commands');
     this.commands.clear();
+  }
+
+  registerAgent(extensionName: string, agent: AgentProfile): void {
+    logger.info(`[Extensions] Registered agent '${agent.name}' from extension '${extensionName}'`);
+    const agentKey = `${extensionName}:${agent.id}`;
+    this.agents.set(agentKey, { extensionName, agent });
+  }
+
+  getAgents(): RegisteredAgent[] {
+    return Array.from(this.agents.values());
+  }
+
+  getAgentsByExtension(extensionName: string): RegisteredAgent[] {
+    return Array.from(this.agents.values()).filter((registered) => registered.extensionName === extensionName);
+  }
+
+  getAgentById(agentId: string): RegisteredAgent | undefined {
+    for (const registered of this.agents.values()) {
+      if (registered.agent.id === agentId) {
+        return registered;
+      }
+    }
+    return undefined;
+  }
+
+  clearAgents(): void {
+    logger.info('[Extensions] Cleared all agents');
+    this.agents.clear();
   }
 }

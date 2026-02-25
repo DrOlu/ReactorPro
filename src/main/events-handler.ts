@@ -46,6 +46,7 @@ import { TelemetryManager } from '@/telemetry';
 import { VersionsManager } from '@/versions';
 import { DataManager } from '@/data-manager';
 import { TerminalManager } from '@/terminal/terminal-manager';
+import { ExtensionManager } from '@/extensions';
 import logger from '@/logger';
 import { getDefaultProjectSettings, getEffectiveEnvironmentVariable, getFilePathSuggestions, isProjectPath, isValidPath, scrapeWeb } from '@/utils';
 import { AIDER_DESK_TMP_DIR, LOGS_DIR } from '@/constants';
@@ -67,6 +68,7 @@ export class EventsHandler {
     private eventManager: EventManager,
     private readonly agentProfileManager: AgentProfileManager,
     private readonly memoryManager: MemoryManager,
+    private readonly extensionManager: ExtensionManager,
   ) {}
 
   loadSettings(): SettingsData {
@@ -968,6 +970,7 @@ export class EventsHandler {
   }
 
   async getAllAgentProfiles() {
+    // Extension agents are now included in getAllProfiles()
     return this.agentProfileManager.getAllProfiles();
   }
 
@@ -977,12 +980,24 @@ export class EventsHandler {
   }
 
   async updateAgentProfile(profile: AgentProfile) {
+    // First, check if this is an extension-provided agent
+    const extensionProfile = await this.extensionManager.updateAgentProfile(profile);
+
+    if (extensionProfile) {
+      // Extension handled it - notify projects of the change
+      this.projectManager.agentProfileUpdated(profile, extensionProfile);
+      return;
+    }
+
+    // Not an extension agent - use file-based storage
     const oldProfile = this.agentProfileManager.getProfile(profile.id);
+    if (!oldProfile) {
+      logger.warn('Agent profile not found when updating:', profile.id);
+      return;
+    }
     await this.agentProfileManager.updateProfile(profile);
 
-    if (oldProfile) {
-      this.projectManager.agentProfileUpdated(oldProfile, profile);
-    }
+    this.projectManager.agentProfileUpdated(oldProfile, profile);
   }
 
   async deleteAgentProfile(profileId: string) {
