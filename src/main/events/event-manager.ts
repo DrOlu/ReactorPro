@@ -1,7 +1,6 @@
 import { Socket } from 'socket.io';
 import {
   ContextFile,
-  CustomCommand,
   InputHistoryData,
   ProviderProfile,
   LogData,
@@ -34,9 +33,10 @@ import {
   UpdatedFilesUpdatedData,
   QueuedPromptData,
   QueuedPromptsUpdatedData,
+  BmadStatus,
+  CommandsData,
 } from '@common/types';
 
-import type { BmadStatus } from '@common/bmad-types';
 import type { BrowserWindow } from 'electron';
 
 import logger from '@/logger';
@@ -210,15 +210,10 @@ export class EventManager {
     this.broadcastToEventConnectors('input-history-updated', data);
   }
 
-  // Custom commands events
-  sendCustomCommandsUpdated(baseDir: string, taskId: string, commands: CustomCommand[]): void {
-    const data = {
-      baseDir,
-      taskId,
-      commands,
-    };
-    this.sendToMainWindow('custom-commands-updated', data);
-    this.broadcastToEventConnectors('custom-commands-updated', data);
+  // Commands events
+  sendCommandsUpdated(data: CommandsData): void {
+    this.sendToMainWindow('commands-updated', data);
+    this.broadcastToEventConnectors('commands-updated', data);
   }
 
   sendCustomCommandError(baseDir: string, taskId: string, error: string): void {

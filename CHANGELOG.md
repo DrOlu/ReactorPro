@@ -3,6 +3,7 @@
 ## [UNRELEASED]
 
 - added support for commiting changes via the Updated Files page
+- added comprehensive Extention system
 
 ## [0.54.0]
 

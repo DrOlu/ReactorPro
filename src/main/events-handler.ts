@@ -4,8 +4,8 @@ import fs from 'fs/promises';
 import {
   AgentProfile,
   CloudflareTunnelStatus,
+  CommandsData,
   CreateTaskParams,
-  CustomCommand,
   EditFormat,
   EnvironmentVariable,
   FileEdit,
@@ -33,7 +33,7 @@ import {
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
 
-import type { BmadStatus, InstallResult } from '@common/bmad-types';
+import type { BmadStatus, InstallResult } from '@common/types';
 import type { BrowserWindow } from 'electron';
 
 import { McpManager, AgentProfileManager } from '@/agent';
@@ -208,8 +208,8 @@ export class EventsHandler {
     this.store.removeRecentProject(baseDir);
   }
 
-  interruptResponse(baseDir: string, taskId: string, interruptId?: string): void {
-    this.projectManager.getProject(baseDir).getTask(taskId)?.interruptResponse(interruptId);
+  async interruptResponse(baseDir: string, taskId: string, interruptId?: string): Promise<void> {
+    await this.projectManager.getProject(baseDir).getTask(taskId)?.interruptResponse(interruptId);
   }
 
   clearContext(baseDir: string, taskId: string, includeLastMessage = true): void {
@@ -363,8 +363,8 @@ export class EventsHandler {
     return this.projectManager.getProject(baseDir).getTask(taskId)?.savePromptOnly(prompt);
   }
 
-  answerQuestion(baseDir: string, taskId: string, answer: string): void {
-    this.projectManager.getProject(baseDir).getTask(taskId)?.answerQuestion(answer);
+  async answerQuestion(baseDir: string, taskId: string, answer: string): Promise<void> {
+    await this.projectManager.getProject(baseDir).getTask(taskId)?.answerQuestion(answer);
   }
 
   removeQueuedPrompt(baseDir: string, taskId: string, promptId: string): void {
@@ -382,8 +382,8 @@ export class EventsHandler {
     void this.projectManager.getProject(baseDir).getTask(taskId)?.runCommand(command);
   }
 
-  async getCustomCommands(baseDir: string): Promise<CustomCommand[]> {
-    return this.projectManager.getCustomCommands(baseDir);
+  async getCommands(baseDir: string): Promise<CommandsData> {
+    return this.projectManager.getCommands(baseDir);
   }
 
   async runCustomCommand(baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode): Promise<void> {
