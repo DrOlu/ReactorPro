@@ -453,10 +453,10 @@ export class Agent {
       Object.assign(toolSet, extensionTools);
     }
 
-    return this.wrapToolsWithHooks(task, toolSet, abortSignal);
+    return this.wrapToolsWithHooks(task, toolSet, abortSignal, promptContext);
   }
 
-  private wrapToolsWithHooks(task: Task, toolSet: ToolSet, abortSignal?: AbortSignal): ToolSet {
+  private wrapToolsWithHooks(task: Task, toolSet: ToolSet, abortSignal?: AbortSignal, promptContext?: PromptContext): ToolSet {
     const wrappedToolSet: ToolSet = {};
 
     for (const [toolName, toolDef] of Object.entries(toolSet)) {
@@ -469,6 +469,9 @@ export class Agent {
             return 'Tool execution blocked by hook.';
           }
           const effectiveArgs = hookResult.event.args as Record<string, unknown> | undefined;
+          const [serverName, messageToolName] = extractServerNameToolName(toolName);
+
+          task.addToolMessage(options.toolCallId, serverName, messageToolName, effectiveArgs, undefined, undefined, promptContext);
 
           const toolCalledExtensionResult = await this.extensionManager.dispatchEvent('onToolCalled', { toolName, input: effectiveArgs }, task.project, task);
           if (toolCalledExtensionResult.output) {

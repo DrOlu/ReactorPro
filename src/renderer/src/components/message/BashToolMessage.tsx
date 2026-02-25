@@ -21,13 +21,32 @@ type Props = {
   hideMessageBar?: boolean;
 };
 
+const isStandardBashOutput = (obj: unknown): obj is { stdout?: string; stderr?: string; exitCode?: number } => {
+  return typeof obj === 'object' && obj !== null && ('stdout' in obj || 'stderr' in obj || 'exitCode' in obj);
+};
+
+const hasErrorProperty = (obj: unknown): obj is { error: string } => {
+  return typeof obj === 'object' && obj !== null && 'error' in obj;
+};
+
+const hasDeniedProperty = (obj: unknown): obj is { denied: string } => {
+  return typeof obj === 'object' && obj !== null && 'denied' in obj;
+};
+
 export const BashToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo, hideMessageBar }: Props) => {
   const { t } = useTranslation();
 
   const command = message.args.command as string;
   const content = message.content && JSON.parse(message.content);
-  const isError = content && typeof content === 'object' && 'exitCode' in content && content.exitCode !== 0;
-  const isDenied = content && typeof content === 'string' && content.startsWith('Bash command execution denied by ');
+  const isStandardOutput = isStandardBashOutput(content);
+  const hasError = hasErrorProperty(content);
+  const hasDenied = hasDeniedProperty(content);
+  const isError = (isStandardOutput && content.exitCode !== 0) || hasError;
+  const isDenied =
+    (typeof content === 'string' && content.startsWith('Bash command execution denied by ')) ||
+    hasDenied ||
+    (typeof content === 'string' && content.startsWith('Bash command execution denied by user'));
+  const isCustomOutput = content && typeof content === 'object' && !isStandardOutput && !hasError && !hasDenied;
   const isFinished = message.finished !== false;
 
   const stdoutRef = useRef<HTMLDivElement>(null);
@@ -77,11 +96,11 @@ export const BashToolMessage = ({ message, onRemove, compact = false, onFork, on
       {isFinished &&
         content &&
         (isError ? (
-          <Tooltip content={typeof content === 'string' ? content : content.stderr || t('toolMessage.power.bash.commandFailed')}>
+          <Tooltip content={typeof content === 'string' ? content : hasError ? content.error : content.stderr || t('toolMessage.power.bash.commandFailed')}>
             <RiErrorWarningFill className="w-3 h-3 text-error" />
           </Tooltip>
         ) : isDenied ? (
-          <Tooltip content={content}>
+          <Tooltip content={typeof content === 'string' ? content : hasDenied ? content.denied : ''}>
             <RiCloseCircleFill className="w-3 h-3 text-warning" />
           </Tooltip>
         ) : (
@@ -100,9 +119,25 @@ export const BashToolMessage = ({ message, onRemove, compact = false, onFork, on
                 {content}
               </div>
             </div>
+          ) : hasError ? (
+            <div className="text-error">
+              <div className="whitespace-pre-wrap bg-bg-primary-light p-3 rounded text-2xs max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-track-bg-primary-light scrollbar-thumb-bg-secondary-light hover:scrollbar-thumb-bg-fourth font-mono">
+                {content.error}
+              </div>
+            </div>
+          ) : hasDenied ? (
+            <div className="text-warning">
+              <div className="whitespace-pre-wrap bg-bg-primary-light p-3 rounded text-2xs max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-track-bg-primary-light scrollbar-thumb-bg-secondary-light hover:scrollbar-thumb-bg-fourth font-mono">
+                {content.denied}
+              </div>
+            </div>
+          ) : isCustomOutput ? (
+            <div className="whitespace-pre-wrap bg-bg-primary-light p-3 rounded text-2xs text-text-secondary max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-track-bg-primary-light scrollbar-thumb-bg-secondary-light hover:scrollbar-thumb-bg-fourth font-mono">
+              <pre className="whitespace-pre-wrap">{JSON.stringify(content, null, 2)}</pre>
+            </div>
           ) : (
             <>
-              {!content.stderr && (
+              {isStandardOutput && !content.stderr && (
                 <div className="relative">
                   <div
                     ref={stdoutRef}
@@ -124,7 +159,7 @@ export const BashToolMessage = ({ message, onRemove, compact = false, onFork, on
                   )}
                 </div>
               )}
-              {content && content.stderr && (
+              {isStandardOutput && content.stderr && (
                 <div className="relative">
                   <div
                     ref={stderrRef}
@@ -146,7 +181,7 @@ export const BashToolMessage = ({ message, onRemove, compact = false, onFork, on
                   )}
                 </div>
               )}
-              {isFinished && content && content.exitCode !== null && content.exitCode !== undefined && (
+              {isFinished && isStandardOutput && content.exitCode !== null && content.exitCode !== undefined && (
                 <div className="flex items-center gap-2">
                   <div className="font-semibold text-text-secondary">{t('toolMessage.power.bash.exitCode')}:</div>
                   <div>{content.exitCode}</div>

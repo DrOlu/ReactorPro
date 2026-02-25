@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 
-import { TOOL_GROUP_NAME_SEPARATOR } from '@common/tools';
+import { EXTENSION_TOOL_GROUP_NAME, TOOL_GROUP_NAME_SEPARATOR } from '@common/tools';
 
 import { OS, UsageReportData } from './types';
 
@@ -132,9 +132,15 @@ export const fileExists = async (fileName: string): Promise<boolean> => {
 
 export const extractServerNameToolName = (toolCallName: string): [string, string] => {
   const [serverName, ...toolNameParts] = toolCallName.split(TOOL_GROUP_NAME_SEPARATOR);
-  const toolName = toolNameParts.join(TOOL_GROUP_NAME_SEPARATOR);
+  let toolName = toolNameParts.join(TOOL_GROUP_NAME_SEPARATOR);
+  let effectiveServerName = serverName;
 
-  return [serverName.startsWith('mcp__local__') ? serverName.slice('mcp__local__'.length) : serverName, toolName];
+  if (!toolName) {
+    toolName = serverName;
+    effectiveServerName = EXTENSION_TOOL_GROUP_NAME;
+  }
+
+  return [effectiveServerName.startsWith('mcp__local__') ? effectiveServerName.slice('mcp__local__'.length) : effectiveServerName, toolName];
 };
 
 export const isMessageEmpty = (content: unknown): boolean => {
