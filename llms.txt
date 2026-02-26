@@ -7230,7 +7230,7 @@ getProjectSettings(): ProjectSettings;
 getInputHistory(): Promise<string[]>;
 ⋮----
 /**
- * Context object passed to extension methods providing access to AiderDesk APIs
+ * Context object passed to extension methods providing access to ReactorPro APIs
  *
  * @example
  * ```typescript
@@ -7244,7 +7244,7 @@ getInputHistory(): Promise<string[]>;
  */
 export interface ExtensionContext {
   /**
-   * Log a message to the AiderDesk console
+   * Log a message to the ReactorPro console
    * @param message - Message to log
    * @param type - Log level (info, error, warn, debug)
    */
@@ -7338,7 +7338,7 @@ export interface ExtensionContext {
 }
 ⋮----
 /**
-   * Log a message to the AiderDesk console
+   * Log a message to the ReactorPro console
    * @param message - Message to log
    * @param type - Log level (info, error, warn, debug)
    */
@@ -33723,7 +33723,7 @@ File: package.json
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:no-hmr": "NO_HMR=true electron-vite dev",
-    "build:mcp": "esbuild src/mcp-server/aider-desk-mcp-server.ts --bundle --platform=node --outdir=out/mcp-server",
+    "build:mcp": "esbuild src/mcp-server/reactorpro-mcp-server.ts --bundle --platform=node --outdir=out/mcp-server",
     "build:extension-types": "dts-bundle-generator --external-imports zod node --project tsconfig.node.json --no-check --no-banner -o build/types/extension-types.d.ts src/common/extensions.ts",
     "prebuild:server": "electron-vite build && npm run build:mcp",
     "build:server": "vite build --config vite.config.server.ts && mkdir -p out/resources && cp -r resources/* out/resources",
