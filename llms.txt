@@ -60,12 +60,16 @@ src/
     locales/
       en.json
       zh.json
+    types/
+      bmad.ts
+      common.ts
+      context.ts
+      index.ts
     agent.ts
     api.ts
-    bmad-types.ts
     bmad-workflows.ts
+    extensions.ts
     tools.ts
-    types.ts
     utils.ts
   main/
     agent/
@@ -117,6 +121,18 @@ src/
     events/
       event-manager.ts
       index.ts
+    extensions/
+      __fixtures__/
+        invalid-syntax.ts
+        prohibited-import.ts
+        valid-extension.ts
+      extension-context.ts
+      extension-loader.ts
+      extension-manager.ts
+      extension-registry.ts
+      index.ts
+      project-context.ts
+      task-context.ts
     hooks/
       hook-context.ts
       hook-manager.ts
@@ -560,8 +576,8 @@ src/
         useAudioRecorder.ts
         useBooleanState.ts
         useClickOutside.ts
+        useCommands.ts
         useConfiguredHotkeys.ts
-        useCustomCommands.ts
         useDropdownState.ts
         useEffectiveEnvironmentVariable.ts
         useIndexedDB.ts
@@ -4877,6 +4893,1110 @@ File: src/common/locales/zh.json
 }
 
 ================
+File: src/common/types/bmad.ts
+================
+/**
+ * BMAD workflow execution phases
+ */
+export enum WorkflowPhase {
+  Analysis = 'analysis',
+  Planning = 'planning',
+  Solutioning = 'solutioning',
+  Implementation = 'implementation',
+  QuickFlow = 'quick-flow',
+}
+⋮----
+/**
+ * Metadata for a BMAD workflow
+ */
+export interface WorkflowMetadata {
+  id: string;
+  name: string;
+  phase: WorkflowPhase;
+  description: string;
+  workflowPath: string;
+  outputArtifact: string;
+  totalSteps: number;
+  requiredArtifacts?: string[];
+  followUps?: string[];
+}
+⋮----
+/**
+ * Incomplete workflow metadata
+ */
+export interface IncompleteWorkflowMetadata {
+  workflowId: string;
+  artifactPath: string;
+  stepsCompleted: number[];
+  nextStep: number;
+  lastModified: Date;
+  corrupted?: boolean; // True if artifact frontmatter is corrupted/unreadable
+  corruptionError?: string; // Error message explaining corruption
+}
+⋮----
+corrupted?: boolean; // True if artifact frontmatter is corrupted/unreadable
+corruptionError?: string; // Error message explaining corruption
+⋮----
+/**
+ * Story status values in sprint-status.yaml
+ */
+export enum StoryStatus {
+  Backlog = 'backlog',
+  ReadyForDev = 'ready-for-dev',
+  InProgress = 'in-progress',
+  Review = 'review',
+  Done = 'done',
+}
+⋮----
+/**
+ * Sprint status data parsed from sprint-status.yaml
+ */
+export interface SprintStatusData {
+  storyStatuses: StoryStatus[];
+  completedWorkflows: string[];
+}
+⋮----
+export type DetectedArtifact = {
+  path: string;
+  stepsCompleted?: string[];
+  status?: string;
+  error?: string;
+};
+⋮----
+export type DetectedArtifacts = {
+  [workflowId: string]: DetectedArtifact;
+};
+⋮----
+/**
+ * Workflow artifacts detection result
+ */
+export interface WorkflowArtifacts {
+  completedWorkflows: string[];
+  inProgressWorkflows: string[];
+  incompleteWorkflows?: IncompleteWorkflowMetadata[];
+  detectedArtifacts: DetectedArtifacts;
+  sprintStatus?: SprintStatusData;
+}
+⋮----
+/**
+ * BMAD Mode status
+ */
+export interface BmadStatus {
+  projectDir: string;
+  installed: boolean;
+  version?: string;
+  availableWorkflows: WorkflowMetadata[];
+  completedWorkflows: string[];
+  inProgressWorkflows: string[];
+  incompleteWorkflows?: IncompleteWorkflowMetadata[];
+  detectedArtifacts: DetectedArtifacts;
+  sprintStatus?: SprintStatusData;
+}
+⋮----
+/**
+ * BMAD installation result
+ */
+export interface InstallResult {
+  success: boolean;
+  version?: string;
+  message?: string;
+}
+⋮----
+/**
+ * BMAD error with recovery action
+ */
+export interface BmadError {
+  errorCode: string;
+  message: string;
+  recoveryAction?: string;
+  details?: string;
+}
+⋮----
+/**
+ * Workflow execution options
+ */
+export interface WorkflowExecutionOptions {
+  asSubtask?: boolean;
+  provider?: string;
+  model?: string;
+}
+⋮----
+/**
+ * Workflow execution result
+ */
+export interface WorkflowExecutionResult {
+  success: boolean;
+  artifactPath?: string;
+  error?: {
+    message: string;
+    errorCode?: string;
+    recoveryAction?: string;
+  };
+}
+
+================
+File: src/common/types/common.ts
+================
+import {
+  AnthropicProvider,
+  BedrockProvider,
+  DeepseekProvider,
+  GeminiProvider,
+  GroqProvider,
+  LlmProvider,
+  LmStudioProvider,
+  MinimaxProvider,
+  OllamaProvider,
+  OpenAiCompatibleProvider,
+  OpenAiProvider,
+  OpenCodeProvider,
+  OpenRouterProvider,
+  RequestyProvider,
+  VertexAiProvider,
+  SyntheticProvider,
+} from '@common/agent';
+import { z } from 'zod';
+⋮----
+import { ContextFile, ContextMemoryMode, ContextMessage, PromptContext, UsageReportData } from './context';
+⋮----
+import type { JSONSchema7Definition } from '@ai-sdk/provider';
+⋮----
+// Worktree schema definition
+⋮----
+export type Worktree = z.infer<typeof WorktreeSchema>;
+⋮----
+// Merge state for tracking merge operations and enabling revert
+⋮----
+export type MergeState = z.infer<typeof MergeStateSchema>;
+⋮----
+export interface WorktreeAheadCommits {
+  count: number;
+  commits: string[];
+}
+⋮----
+export interface WorktreeUncommittedFiles {
+  count: number;
+  files: string[];
+}
+⋮----
+export interface RebaseState {
+  inProgress: boolean;
+  hasUnmergedPaths: boolean;
+  unmergedFiles?: string[];
+}
+⋮----
+export interface ConflictResolutionFileContext {
+  filePath: string;
+  base?: string | null;
+  ours?: string | null;
+  theirs?: string | null;
+  current?: string;
+}
+⋮----
+export interface WorktreeIntegrationStatus {
+  targetBranch: string;
+  aheadCommits: WorktreeAheadCommits;
+  uncommittedFiles: WorktreeUncommittedFiles;
+  predictedConflicts: {
+    hasConflicts: boolean;
+    conflictingFiles?: string[];
+    conflictingCommits?: {
+      ours: string[];
+      theirs: string[];
+    };
+    canAutoMerge?: boolean;
+  };
+  rebaseState: RebaseState;
+}
+⋮----
+export interface WorktreeIntegrationStatusUpdatedData {
+  baseDir: string;
+  taskId: string;
+  status: WorktreeIntegrationStatus | null;
+}
+⋮----
+export type Mode = 'code' | 'ask' | 'architect' | 'context' | 'agent' | 'bmad';
+⋮----
+export interface AiderRunOptions {
+  autoApprove?: boolean;
+  denyCommands?: boolean;
+}
+⋮----
+export type EditFormat = 'diff' | 'diff-fenced' | 'whole' | 'udiff' | 'udiff-simple' | 'patch';
+⋮----
+export enum DiffViewMode {
+  SideBySide = 'side-by-side',
+  Unified = 'unified',
+  Compact = 'compact',
+}
+⋮----
+export enum MessageViewMode {
+  Full = 'full',
+  Compact = 'compact',
+}
+⋮----
+export enum ReasoningEffort {
+  High = 'high',
+  Medium = 'medium',
+  Low = 'low',
+  Minimal = 'minimal',
+  None = 'none',
+}
+⋮----
+export interface ResponseChunkData {
+  messageId: string;
+  baseDir: string;
+  taskId: string;
+  chunk: string;
+  reflectedMessage?: string;
+  promptContext?: PromptContext;
+}
+⋮----
+export interface ResponseCompletedData {
+  type: 'response-completed';
+  messageId: string;
+  baseDir: string;
+  taskId: string;
+  content: string;
+  reflectedMessage?: string;
+  editedFiles?: string[];
+  commitHash?: string;
+  commitMessage?: string;
+  diff?: string;
+  usageReport?: UsageReportData;
+  sequenceNumber?: number;
+  promptContext?: PromptContext;
+}
+⋮----
+export interface CommandOutputData {
+  baseDir: string;
+  taskId: string;
+  command: string;
+  output: string;
+}
+⋮----
+export type LogLevel = 'info' | 'warning' | 'error' | 'loading';
+⋮----
+export interface LogData {
+  baseDir: string;
+  taskId: string;
+  level: LogLevel;
+  message?: string;
+  finished?: boolean;
+  promptContext?: PromptContext;
+  actionIds?: string[];
+}
+⋮----
+export interface ToolData {
+  type: 'tool';
+  baseDir: string;
+  taskId: string;
+  id: string;
+  serverName: string;
+  toolName: string;
+  args?: unknown;
+  response?: string;
+  usageReport?: UsageReportData;
+  promptContext?: PromptContext;
+  finished?: boolean;
+}
+⋮----
+export interface ContextFilesUpdatedData {
+  baseDir: string;
+  taskId: string;
+  files: ContextFile[];
+}
+⋮----
+export interface UpdatedFile {
+  path: string;
+  additions: number;
+  deletions: number;
+  diff?: string;
+}
+⋮----
+export interface UpdatedFilesUpdatedData {
+  baseDir: string;
+  taskId: string;
+  files: UpdatedFile[];
+}
+⋮----
+export interface CommandsData {
+  baseDir: string;
+  customCommands: Command[];
+  extensionCommands: Command[];
+}
+⋮----
+export interface AutocompletionData {
+  baseDir: string;
+  taskId: string;
+  words?: string[];
+  allFiles?: string[];
+}
+⋮----
+export interface Answer {
+  text: string;
+  shortkey: string;
+}
+⋮----
+export interface QuestionData {
+  baseDir: string;
+  taskId: string;
+  text: string;
+  subject?: string;
+  isGroupQuestion?: boolean;
+  answers?: Answer[];
+  defaultAnswer: string;
+  internal?: boolean;
+  key?: string;
+}
+⋮----
+export interface QuestionAnsweredData {
+  baseDir: string;
+  taskId: string;
+  question: QuestionData;
+  answer: string;
+  userInput?: string;
+}
+⋮----
+export interface QueuedPromptData {
+  id: string;
+  text: string;
+  mode: Mode;
+  timestamp: number;
+}
+⋮----
+export interface QueuedPromptsUpdatedData {
+  baseDir: string;
+  taskId: string;
+  queuedPrompts: QueuedPromptData[];
+}
+⋮----
+export type ContextFileSourceType = 'companion' | 'aider' | 'app' | string;
+⋮----
+export enum OS {
+  Windows = 'windows',
+  Linux = 'linux',
+  MacOS = 'macos',
+}
+⋮----
+export interface CloudflareTunnelStatus {
+  isRunning: boolean;
+  url?: string;
+}
+⋮----
+export interface WindowState {
+  width: number;
+  height: number;
+  x: number | undefined;
+  y: number | undefined;
+  isMaximized: boolean;
+}
+⋮----
+// @deprecated: These properties are deprecated in favor of task-level settings
+// They are kept for backward compatibility and as defaults for new tasks
+⋮----
+export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
+⋮----
+export interface ProjectData {
+  active: boolean;
+  baseDir: string;
+  settings: ProjectSettings;
+}
+⋮----
+export interface RawModelInfo {
+  max_input_tokens: number;
+  max_output_tokens: number;
+  input_cost_per_token: number;
+  output_cost_per_token: number;
+  supports_function_calling: boolean;
+  supports_tool_choice: boolean;
+  litellm_provider: string;
+}
+⋮----
+export interface ModelsData {
+  baseDir: string;
+  taskId: string;
+  mainModel: string;
+  weakModel?: string | null;
+  architectModel?: string | null;
+  reasoningEffort?: string;
+  thinkingTokens?: string;
+  editFormat?: EditFormat;
+  info?: RawModelInfo;
+  error?: string;
+}
+⋮----
+export enum ToolApprovalState {
+  Always = 'always',
+  Never = 'never',
+  Ask = 'ask',
+}
+⋮----
+export enum ProjectStartMode {
+  Empty = 'empty',
+  Last = 'last',
+  Remote = 'remote',
+}
+⋮----
+export enum SuggestionMode {
+  Automatically = 'automatically',
+  OnTab = 'onTab',
+  MentionAtSign = 'mentionAtSign',
+}
+⋮----
+export interface PromptBehavior {
+  suggestionMode: SuggestionMode;
+  suggestionDelay: number;
+  requireCommandConfirmation: {
+    add: boolean;
+    readOnly: boolean;
+    model: boolean;
+    modeSwitching: boolean;
+  };
+  useVimBindings: boolean;
+}
+⋮----
+export enum InvocationMode {
+  OnDemand = 'on-demand',
+  Automatic = 'automatic',
+}
+⋮----
+export interface SubagentConfig {
+  enabled: boolean;
+  contextMemory: ContextMemoryMode;
+  systemPrompt: string;
+  invocationMode: InvocationMode;
+  color: string;
+  description: string;
+}
+⋮----
+export interface BashToolSettings {
+  allowedPattern: string;
+  deniedPattern: string;
+}
+⋮----
+export type ToolSettings = BashToolSettings;
+⋮----
+export interface AgentProfile {
+  id: string;
+  projectDir?: string; // If specified, it's a project-level profile, otherwise global
+  name: string;
+  provider: string;
+  model: string;
+  maxIterations: number;
+  maxTokens?: number; // Optional: overrides model maxOutputTokens when set
+  minTimeBetweenToolCalls: number; // in milliseconds
+  temperature?: number; // Optional: overrides model temperature when set
+  enabledServers: string[];
+  toolApprovals: Record<string, ToolApprovalState>;
+  toolSettings: Record<string, ToolSettings>;
+  includeContextFiles: boolean;
+  includeRepoMap: boolean;
+  usePowerTools: boolean;
+  useAiderTools: boolean;
+  useTodoTools: boolean;
+  useSubagents: boolean;
+  useTaskTools: boolean;
+  useMemoryTools: boolean;
+  useSkillsTools: boolean;
+  useExtensionTools: boolean;
+  customInstructions: string;
+  subagent: SubagentConfig;
+  isSubagent?: boolean; // flag to indicate if this profile is being used as a subagent
+  ruleFiles?: string[]; // Array of absolute paths to rule files for this agent profile
+}
+⋮----
+projectDir?: string; // If specified, it's a project-level profile, otherwise global
+⋮----
+maxTokens?: number; // Optional: overrides model maxOutputTokens when set
+minTimeBetweenToolCalls: number; // in milliseconds
+temperature?: number; // Optional: overrides model temperature when set
+⋮----
+isSubagent?: boolean; // flag to indicate if this profile is being used as a subagent
+ruleFiles?: string[]; // Array of absolute paths to rule files for this agent profile
+⋮----
+export interface EnvironmentVariable {
+  value: string;
+  source: string;
+}
+⋮----
+export type Theme = (typeof THEMES)[number];
+⋮----
+export type Font = (typeof FONTS)[number];
+⋮----
+export interface HotkeyConfig {
+  projectHotkeys: {
+    closeProject: string;
+    newProject: string;
+    usageDashboard: string;
+    modelLibrary: string;
+    settings: string;
+    cycleNextProject: string;
+    cyclePrevProject: string;
+    switchProject1: string;
+    switchProject2: string;
+    switchProject3: string;
+    switchProject4: string;
+    switchProject5: string;
+    switchProject6: string;
+    switchProject7: string;
+    switchProject8: string;
+    switchProject9: string;
+  };
+  taskHotkeys: {
+    switchTask1: string;
+    switchTask2: string;
+    switchTask3: string;
+    switchTask4: string;
+    switchTask5: string;
+    switchTask6: string;
+    switchTask7: string;
+    switchTask8: string;
+    switchTask9: string;
+    focusPrompt: string;
+    newTask: string;
+    closeTask: string;
+  };
+  dialogHotkeys: {
+    browseFolder: string;
+  };
+}
+⋮----
+export enum MemoryEmbeddingProvider {
+  SentenceTransformers = 'sentence-transformers',
+}
+⋮----
+export enum ContextCompactionType {
+  Compact = 'compact',
+  Handoff = 'handoff',
+}
+⋮----
+export interface TaskSettings {
+  smartTaskState: boolean;
+  autoGenerateTaskName: boolean;
+  showTaskStateActions: boolean;
+  worktreeSymlinkFolders: string[];
+  contextCompactingThreshold: number;
+  contextCompactionType: ContextCompactionType;
+}
+⋮----
+export interface MemoryConfig {
+  enabled: boolean;
+  provider: MemoryEmbeddingProvider;
+  model: string;
+  maxDistance: number;
+}
+⋮----
+export enum MemoryEmbeddingProgressPhase {
+  Idle = 'idle',
+  LoadingModel = 'loading-model',
+  ReEmbedding = 're-embedding',
+  Done = 'done',
+  Error = 'error',
+}
+⋮----
+export interface MemoryEmbeddingProgress {
+  phase: MemoryEmbeddingProgressPhase;
+  status: string | null;
+  done: number;
+  total: number;
+  finished: boolean;
+  error?: string;
+}
+⋮----
+export interface SettingsData {
+  onboardingFinished?: boolean;
+  language: string;
+  startupMode?: ProjectStartMode;
+  zoomLevel?: number;
+  notificationsEnabled?: boolean;
+  theme?: Theme;
+  font?: Font;
+  fontSize?: number;
+  renderMarkdown: boolean;
+  virtualizedRendering: boolean;
+  aiderDeskAutoUpdate: boolean;
+  diffViewMode?: DiffViewMode;
+  messageViewMode?: MessageViewMode;
+  aider: {
+    options: string;
+    environmentVariables: string;
+    addRuleFiles: boolean;
+    autoCommits: boolean;
+    cachingEnabled: boolean;
+    watchFiles: boolean;
+    confirmBeforeEdit: boolean;
+  };
+  preferredModels: string[];
+
+  mcpServers: Record<string, McpServerConfig>;
+  llmProviders: {
+    openai?: OpenAiProvider;
+    anthropic?: AnthropicProvider;
+    gemini?: GeminiProvider;
+    groq?: GroqProvider;
+    bedrock?: BedrockProvider;
+    deepseek?: DeepseekProvider;
+    ollama?: OllamaProvider;
+    lmstudio?: LmStudioProvider;
+    minimax?: MinimaxProvider;
+    'openai-compatible'?: OpenAiCompatibleProvider;
+    opencode?: OpenCodeProvider;
+    openrouter?: OpenRouterProvider;
+    requesty?: RequestyProvider;
+    synthetic?: SyntheticProvider;
+    'vertex-ai'?: VertexAiProvider;
+  };
+  telemetryEnabled: boolean;
+  telemetryInformed?: boolean;
+  promptBehavior: PromptBehavior;
+  server: {
+    enabled: boolean;
+    basicAuth: {
+      enabled: boolean;
+      username: string;
+      password: string;
+    };
+  };
+  memory: MemoryConfig;
+  taskSettings: TaskSettings;
+  hotkeyConfig?: HotkeyConfig;
+}
+⋮----
+export interface ProviderProfile {
+  id: string;
+  name?: string;
+  provider: LlmProvider;
+  headers?: Record<string, string>;
+  disabled?: boolean;
+}
+⋮----
+export interface ProvidersUpdatedData {
+  providers: ProviderProfile[];
+}
+⋮----
+export interface AgentProfilesUpdatedData {
+  profiles: AgentProfile[];
+}
+⋮----
+export interface VoiceSession {
+  ephemeralToken: string;
+  model: string;
+  idleTimeoutMs: number;
+}
+⋮----
+export interface ProjectStartedData {
+  baseDir: string;
+}
+⋮----
+export interface ClearTaskData {
+  baseDir: string;
+  taskId: string;
+  clearMessages: boolean;
+  clearSession: boolean;
+}
+⋮----
+export interface TokensCost {
+  tokens: number;
+  tokensEstimated?: boolean;
+  cost: number;
+}
+⋮----
+export interface TokensInfoData {
+  baseDir: string;
+  taskId: string;
+  chatHistory: TokensCost;
+  files: Record<string, TokensCost>;
+  repoMap: TokensCost;
+  systemMessages: TokensCost;
+  agent?: TokensCost;
+}
+⋮----
+export interface InputHistoryData {
+  baseDir: string;
+  taskId: string;
+  inputHistory: string[];
+}
+⋮----
+export interface UserMessageData {
+  type: 'user';
+  id: string;
+  baseDir: string;
+  taskId: string;
+  content: string;
+  promptContext?: PromptContext;
+}
+⋮----
+export interface MessageRemovedData {
+  baseDir: string;
+  taskId: string;
+  messageIds: string[];
+}
+⋮----
+export interface FileEdit {
+  path: string;
+  original: string;
+  updated: string;
+}
+⋮----
+export interface GenericTool {
+  groupName: string;
+  name: string;
+  description: string;
+}
+⋮----
+export interface McpToolInputSchema {
+  type: 'object';
+  properties: Record<string, JSONSchema7Definition>;
+}
+⋮----
+export interface McpTool {
+  serverName: string;
+  name: string;
+  description?: string;
+  inputSchema: McpToolInputSchema;
+}
+⋮----
+export interface McpServerConfig {
+  command?: string;
+  args?: string[];
+  env?: Readonly<Record<string, string>>;
+  url?: string;
+  headers?: Readonly<Record<string, string>>;
+}
+⋮----
+export interface VersionsInfo {
+  aiderDeskCurrentVersion?: string | null;
+  aiderCurrentVersion?: string | null;
+  aiderDeskAvailableVersion?: string | null;
+  aiderAvailableVersion?: string | null;
+  aiderDeskDownloadProgress?: number;
+  aiderDeskNewVersionReady?: boolean;
+  releaseNotes?: string | null;
+}
+⋮----
+export enum FileWriteMode {
+  Overwrite = 'overwrite',
+  Append = 'append',
+  CreateOnly = 'create_only',
+}
+⋮----
+export interface ModelInfo {
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  inputCostPerToken?: number;
+  outputCostPerToken?: number;
+  cacheWriteInputTokenCost?: number;
+  cacheReadInputTokenCost?: number;
+  useTemperature?: boolean;
+  temperature?: number;
+}
+⋮----
+export interface TaskContext {
+  version?: number;
+  contextMessages: ContextMessage[];
+  contextFiles: ContextFile[];
+}
+⋮----
+export interface TaskStateData {
+  messages: (ResponseCompletedData | UserMessageData | ToolData)[];
+  files: ContextFile[];
+  todoItems: TodoItem[];
+  question: QuestionData | null;
+  queuedPrompts: QueuedPromptData[];
+  workingMode: WorkingMode;
+}
+⋮----
+export type WorkingMode = z.infer<typeof WorkingModeSchema>;
+⋮----
+export type TaskData = z.infer<typeof TaskDataSchema>;
+⋮----
+export interface CreateTaskParams {
+  parentId?: string | null;
+  name?: string;
+  autoApprove?: boolean;
+  activate?: boolean;
+  handoff?: boolean;
+  sendEvent?: boolean;
+  provider?: string;
+  model?: string;
+}
+⋮----
+export interface TaskCreatedData {
+  baseDir: string;
+  task: TaskData;
+  activate?: boolean;
+  editLast?: boolean;
+}
+⋮----
+export enum DefaultTaskState {
+  Todo = 'TODO',
+  InProgress = 'IN_PROGRESS',
+  Interrupted = 'INTERRUPTED',
+  MoreInfoNeeded = 'MORE_INFO_NEEDED',
+  ReadyForReview = 'READY_FOR_REVIEW',
+  ReadyForImplementation = 'READY_FOR_IMPLEMENTATION',
+  Done = 'DONE',
+}
+⋮----
+export interface TodoItem {
+  name: string;
+  completed: boolean;
+}
+⋮----
+export interface UsageDataRow {
+  timestamp: string;
+  project: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  cost: number;
+}
+⋮----
+export interface Model {
+  id: string;
+  providerId: string;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  maxOutputTokensLimit?: number;
+  temperature?: number;
+  inputCostPerToken?: number;
+  outputCostPerToken?: number;
+  cacheWriteInputTokenCost?: number;
+  cacheReadInputTokenCost?: number;
+  supportsTools?: boolean;
+  isCustom?: boolean;
+  isHidden?: boolean;
+  hasModelOverrides?: boolean;
+  providerOverrides?: Record<string, unknown>;
+}
+⋮----
+export interface ProviderModelsData {
+  models?: Model[];
+  loading?: boolean;
+  errors?: Record<string, string>;
+}
+⋮----
+export interface ModelOverrides {
+  version: number;
+  models: Model[];
+}
+⋮----
+export interface Command {
+  name: string;
+  description: string;
+  arguments: CommandArgument[];
+}
+⋮----
+export interface CommandArgument {
+  description: string;
+  required?: boolean;
+}
+⋮----
+export interface CustomCommand extends Command {
+  template: string;
+  includeContext?: boolean;
+  autoApprove?: boolean;
+}
+⋮----
+export interface TerminalData {
+  terminalId: string;
+  baseDir: string;
+  taskId: string;
+  data: string;
+}
+⋮----
+export interface TerminalExitData {
+  terminalId: string;
+  baseDir: string;
+  taskId: string;
+  exitCode: number;
+  signal?: number;
+}
+⋮----
+export enum MemoryEntryType {
+  Task = 'task',
+  UserPreference = 'user-preference',
+  CodePattern = 'code-pattern',
+}
+⋮----
+export interface MemoryEntry {
+  id: string;
+  content: string;
+  type: MemoryEntryType;
+  taskId?: string;
+  projectId?: string;
+  timestamp: number;
+}
+⋮----
+export interface BranchInfo {
+  name: string;
+  isCurrent: boolean;
+  hasWorktree: boolean;
+}
+export interface NotificationData {
+  baseDir: string;
+  title: string;
+  body: string;
+}
+
+================
+File: src/common/types/context.ts
+================
+// JSON types
+export type JSONValue = null | string | number | boolean | JSONObject | JSONArray;
+export type JSONObject = { [key: string]: JSONValue };
+export type JSONArray = JSONValue[];
+⋮----
+// Data content type for binary data
+export type DataContent = string | Uint8Array | ArrayBuffer | Buffer;
+⋮----
+// Tool result output union
+export type ToolResultOutput =
+  | { type: 'text'; value: string }
+  | { type: 'json'; value: JSONValue }
+  | { type: 'error-text'; value: string }
+  | { type: 'error-json'; value: JSONValue }
+  | {
+      type: 'content';
+      value: Array<{ type: 'text'; text: string } | { type: 'media'; data: string; mediaType: string }>;
+    };
+⋮----
+// Content part interfaces
+export interface TextPart {
+  type: 'text';
+  text: string;
+}
+⋮----
+export interface ImagePart {
+  type: 'image';
+  image: DataContent | URL;
+  mediaType?: string;
+}
+⋮----
+export interface FilePart {
+  type: 'file';
+  data: DataContent | URL;
+  filename?: string;
+  mediaType: string;
+}
+⋮----
+export interface ReasoningPart {
+  type: 'reasoning';
+  text: string;
+}
+⋮----
+export interface ToolCallPart {
+  type: 'tool-call';
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+}
+⋮----
+export interface ToolResultPart {
+  type: 'tool-result';
+  toolCallId: string;
+  toolName: string;
+  output: ToolResultOutput;
+}
+⋮----
+// Content types
+export type UserContent = string | Array<TextPart | ImagePart | FilePart>;
+export type AssistantContent = string | Array<TextPart | FilePart | ReasoningPart | ToolCallPart | ToolResultPart>;
+export type ToolContent = Array<ToolResultPart>;
+⋮----
+export interface LocalizedString {
+  key: string;
+  params?: Record<string, unknown>;
+}
+⋮----
+export interface Group {
+  id: string;
+  name?: string | LocalizedString;
+  color?: string;
+  finished?: boolean;
+  interruptId?: string;
+}
+⋮----
+export interface UsageReportData {
+  model: string;
+  sentTokens: number;
+  receivedTokens: number;
+  messageCost: number;
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
+  aiderTotalCost?: number;
+  agentTotalCost?: number;
+}
+⋮----
+export interface PromptContext {
+  id: string;
+  group?: Group;
+}
+⋮----
+export enum MessageRole {
+  User = 'user',
+  Assistant = 'assistant',
+}
+⋮----
+// Base interface for all context messages with usage reporting
+interface BaseContextMessage {
+  id: string;
+  usageReport?: UsageReportData;
+  promptContext?: PromptContext;
+}
+⋮----
+// User message with usage report
+export interface ContextUserMessage extends BaseContextMessage {
+  role: 'user';
+  content: UserContent;
+}
+⋮----
+// Assistant message with full response metadata
+export interface ContextAssistantMessage extends BaseContextMessage {
+  role: 'assistant';
+  content: AssistantContent;
+  reflectedMessage?: string;
+  editedFiles?: string[];
+  commitHash?: string;
+  commitMessage?: string;
+  diff?: string;
+}
+⋮----
+// Tool message with usage report
+export interface ContextToolMessage extends BaseContextMessage {
+  role: 'tool';
+  content: ToolContent;
+}
+⋮----
+// Union type for enhanced context messages
+export type ContextMessage = ContextUserMessage | ContextAssistantMessage | ContextToolMessage;
+⋮----
+export interface ConnectorMessage {
+  role: MessageRole;
+  content: string;
+}
+⋮----
+export interface ContextFile {
+  path: string;
+  readOnly?: boolean;
+  source?: 'global-rule' | 'project-rule' | 'agent-rule';
+}
+⋮----
+export enum ContextMemoryMode {
+  Off = 'off',
+  FullContext = 'full-context',
+  LastMessage = 'last-message',
+}
+
+================
+File: src/common/types/index.ts
+================
+
+
+================
 File: src/common/agent.ts
 ================
 import { AgentProfile, ContextMemoryMode, InvocationMode, Model, ReasoningEffort, ToolApprovalState } from '@common/types';
@@ -5224,8 +6344,7 @@ import {
   CommandOutputData,
   ContextFilesUpdatedData,
   CreateTaskParams,
-  CustomCommand,
-  CustomCommandsUpdatedData,
+  CommandsData,
   EditFormat,
   EnvironmentVariable,
   FileEdit,
@@ -5384,7 +6503,7 @@ export interface ApplicationAPI {
   addLogListener: (baseDir: string, taskId: string, callback: (data: LogData) => void) => () => void;
   addContextFilesUpdatedListener: (baseDir: string, taskId: string, callback: (data: ContextFilesUpdatedData) => void) => () => void;
   addUpdatedFilesUpdatedListener: (baseDir: string, taskId: string, callback: (data: UpdatedFilesUpdatedData) => void) => () => void;
-  addCustomCommandsUpdatedListener: (baseDir: string, callback: (data: CustomCommandsUpdatedData) => void) => () => void;
+  addCommandsUpdatedListener: (baseDir: string, callback: (data: CommandsData) => void) => () => void;
   addUpdateAutocompletionListener: (baseDir: string, taskId: string, callback: (data: AutocompletionData) => void) => () => void;
   addAskQuestionListener: (baseDir: string, taskId: string, callback: (data: QuestionData) => void) => () => void;
   addQuestionAnsweredListener: (baseDir: string, taskId: string, callback: (data: QuestionAnsweredData) => void) => () => void;
@@ -5418,7 +6537,7 @@ export interface ApplicationAPI {
   addTaskCancelledListener: (baseDir: string, callback: (data: TaskData) => void) => () => void;
   addTaskDeletedListener: (baseDir: string, callback: (data: TaskData) => void) => () => void;
 
-  getCustomCommands: (baseDir: string) => Promise<CustomCommand[]>;
+  getCommands: (baseDir: string) => Promise<CommandsData>;
   runCustomCommand: (baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode) => Promise<void>;
 
   // Terminal operations
@@ -5488,151 +6607,9 @@ export interface ApplicationAPI {
 // BMAD operations
 
 ================
-File: src/common/bmad-types.ts
-================
-/**
- * BMAD workflow execution phases
- */
-export enum WorkflowPhase {
-  Analysis = 'analysis',
-  Planning = 'planning',
-  Solutioning = 'solutioning',
-  Implementation = 'implementation',
-  QuickFlow = 'quick-flow',
-}
-⋮----
-/**
- * Metadata for a BMAD workflow
- */
-export interface WorkflowMetadata {
-  id: string;
-  name: string;
-  phase: WorkflowPhase;
-  description: string;
-  workflowPath: string;
-  outputArtifact: string;
-  totalSteps: number;
-  requiredArtifacts?: string[];
-  followUps?: string[];
-}
-⋮----
-/**
- * Incomplete workflow metadata
- */
-export interface IncompleteWorkflowMetadata {
-  workflowId: string;
-  artifactPath: string;
-  stepsCompleted: number[];
-  nextStep: number;
-  lastModified: Date;
-  corrupted?: boolean; // True if artifact frontmatter is corrupted/unreadable
-  corruptionError?: string; // Error message explaining corruption
-}
-⋮----
-corrupted?: boolean; // True if artifact frontmatter is corrupted/unreadable
-corruptionError?: string; // Error message explaining corruption
-⋮----
-/**
- * Story status values in sprint-status.yaml
- */
-export enum StoryStatus {
-  Backlog = 'backlog',
-  ReadyForDev = 'ready-for-dev',
-  InProgress = 'in-progress',
-  Review = 'review',
-  Done = 'done',
-}
-⋮----
-/**
- * Sprint status data parsed from sprint-status.yaml
- */
-export interface SprintStatusData {
-  storyStatuses: StoryStatus[];
-  completedWorkflows: string[];
-}
-⋮----
-export type DetectedArtifact = {
-  path: string;
-  stepsCompleted?: string[];
-  status?: string;
-  error?: string;
-};
-⋮----
-export type DetectedArtifacts = {
-  [workflowId: string]: DetectedArtifact;
-};
-⋮----
-/**
- * Workflow artifacts detection result
- */
-export interface WorkflowArtifacts {
-  completedWorkflows: string[];
-  inProgressWorkflows: string[];
-  incompleteWorkflows?: IncompleteWorkflowMetadata[];
-  detectedArtifacts: DetectedArtifacts;
-  sprintStatus?: SprintStatusData;
-}
-⋮----
-/**
- * BMAD Mode status
- */
-export interface BmadStatus {
-  projectDir: string;
-  installed: boolean;
-  version?: string;
-  availableWorkflows: WorkflowMetadata[];
-  completedWorkflows: string[];
-  inProgressWorkflows: string[];
-  incompleteWorkflows?: IncompleteWorkflowMetadata[];
-  detectedArtifacts: DetectedArtifacts;
-  sprintStatus?: SprintStatusData;
-}
-⋮----
-/**
- * BMAD installation result
- */
-export interface InstallResult {
-  success: boolean;
-  version?: string;
-  message?: string;
-}
-⋮----
-/**
- * BMAD error with recovery action
- */
-export interface BmadError {
-  errorCode: string;
-  message: string;
-  recoveryAction?: string;
-  details?: string;
-}
-⋮----
-/**
- * Workflow execution options
- */
-export interface WorkflowExecutionOptions {
-  asSubtask?: boolean;
-  provider?: string;
-  model?: string;
-}
-⋮----
-/**
- * Workflow execution result
- */
-export interface WorkflowExecutionResult {
-  success: boolean;
-  artifactPath?: string;
-  error?: {
-    message: string;
-    errorCode?: string;
-    recoveryAction?: string;
-  };
-}
-
-================
 File: src/common/bmad-workflows.ts
 ================
-import { WorkflowMetadata, WorkflowPhase } from './bmad-types';
+import { WorkflowMetadata, WorkflowPhase } from './types';
 ⋮----
 /**
  * Registry of all BMAD workflows with metadata
@@ -5651,898 +6628,1336 @@ import { WorkflowMetadata, WorkflowPhase } from './bmad-types';
 // Quick Phase
 
 ================
-File: src/common/tools.ts
+File: src/common/extensions.ts
 ================
-
-
-================
-File: src/common/types.ts
-================
-import {
-  AnthropicProvider,
-  BedrockProvider,
-  DeepseekProvider,
-  GeminiProvider,
-  GroqProvider,
-  LlmProvider,
-  LmStudioProvider,
-  MinimaxProvider,
-  OllamaProvider,
-  OpenAiCompatibleProvider,
-  OpenAiProvider,
-  OpenCodeProvider,
-  OpenRouterProvider,
-  RequestyProvider,
-  VertexAiProvider,
-  SyntheticProvider,
-} from '@common/agent';
 import { z } from 'zod';
 ⋮----
-import type { JSONSchema7Definition } from '@ai-sdk/provider';
-import type { AssistantContent, ToolContent, UserContent } from 'ai';
+import type {
+  AgentProfile,
+  CommandArgument,
+  CommandsData,
+  ConnectorMessage,
+  ContextFile,
+  ContextMessage,
+  CreateTaskParams,
+  CustomCommand,
+  Mode,
+  Model,
+  ProjectSettings,
+  PromptContext,
+  QuestionData,
+  QueuedPromptData,
+  ResponseChunkData,
+  ResponseCompletedData,
+  TaskData,
+  TodoItem,
+  UpdatedFile,
+} from '@common/types';
 ⋮----
-// Worktree schema definition
+export type AgentStepResult = unknown;
 ⋮----
-export type Worktree = z.infer<typeof WorktreeSchema>;
-⋮----
-// Merge state for tracking merge operations and enabling revert
-⋮----
-export type MergeState = z.infer<typeof MergeStateSchema>;
-⋮----
-export interface WorktreeAheadCommits {
-  count: number;
-  commits: string[];
+/**
+ * Metadata describing an extension
+ */
+export interface ExtensionMetadata {
+  /** Extension name (displayed in UI) */
+  name: string;
+  /** Semantic version (e.g., "1.0.0") */
+  version: string;
+  /** Brief description of extension functionality */
+  description?: string;
+  /** Author name or organization */
+  author?: string;
+  /** Optional list of extension capabilities (e.g., ["tools", "ui-elements"]) */
+  capabilities?: string[];
 }
 ⋮----
-export interface WorktreeUncommittedFiles {
-  count: number;
-  files: string[];
+/** Extension name (displayed in UI) */
+⋮----
+/** Semantic version (e.g., "1.0.0") */
+⋮----
+/** Brief description of extension functionality */
+⋮----
+/** Author name or organization */
+⋮----
+/** Optional list of extension capabilities (e.g., ["tools", "ui-elements"]) */
+⋮----
+/**
+ * Result returned by tool execution
+ */
+export interface ToolResult {
+  /** Content array with text or image data */
+  content: Array<{ type: 'text'; text: string } | { type: 'image'; source: unknown }>;
+  /** Additional metadata for extensions */
+  details?: Record<string, unknown>;
+  /** Mark result as error */
+  isError?: boolean;
 }
 ⋮----
-export interface RebaseState {
-  inProgress: boolean;
-  hasUnmergedPaths: boolean;
-  unmergedFiles?: string[];
+/** Content array with text or image data */
+⋮----
+/** Additional metadata for extensions */
+⋮----
+/** Mark result as error */
+⋮----
+/**
+ * Definition of a tool that can be registered by an extension
+ *
+ * @example
+ * ```typescript
+ * const myTool: ToolDefinition = {
+ *   name: 'run-linter',
+ *   description: 'Run the project linter',
+ *   parameters: z.object({
+ *     fix: z.boolean().optional().describe('Auto-fix issues'),
+ *   }),
+ *   async execute(input, signal, context) {
+ *     const output = await runLinter(input.fix);
+ *     return output;
+ *   },
+ * };
+ * ```
+ */
+export interface ToolDefinition<TSchema extends z.ZodType = z.ZodType<Record<string, unknown>>> {
+  /** Tool identifier in kebab-case (e.g., 'run-linter') */
+  name: string;
+  /** Description for LLM to understand tool purpose */
+  description: string;
+  /** Zod schema for parameter validation */
+  inputSchema: TSchema;
+  /** Execute function with type-safe args */
+  execute: (input: z.infer<TSchema>, signal: AbortSignal | undefined, context: ExtensionContext) => Promise<unknown>;
 }
 ⋮----
-export interface ConflictResolutionFileContext {
-  filePath: string;
-  base?: string | null;
-  ours?: string | null;
-  theirs?: string | null;
-  current?: string;
+/** Tool identifier in kebab-case (e.g., 'run-linter') */
+⋮----
+/** Description for LLM to understand tool purpose */
+⋮----
+/** Zod schema for parameter validation */
+⋮----
+/** Execute function with type-safe args */
+⋮----
+/** UI element types */
+export type UIElementType = 'action-button' | 'status-indicator' | 'badge';
+⋮----
+/** Placement locations for UI elements */
+export enum UIPlacement {
+  /** Task sidebar area */
+  TaskSidebar = 'task-sidebar',
+  /** Chat toolbar area */
+  ChatToolbar = 'chat-toolbar',
+  /** Message action buttons */
+  MessageActions = 'message-actions',
+  /** Global toolbar */
+  GlobalToolbar = 'global-toolbar',
 }
 ⋮----
-export interface WorktreeIntegrationStatus {
-  targetBranch: string;
-  aheadCommits: WorktreeAheadCommits;
-  uncommittedFiles: WorktreeUncommittedFiles;
-  predictedConflicts: {
-    hasConflicts: boolean;
-    conflictingFiles?: string[];
-    conflictingCommits?: {
-      ours: string[];
-      theirs: string[];
-    };
-    canAutoMerge?: boolean;
-  };
-  rebaseState: RebaseState;
-}
+/** Task sidebar area */
 ⋮----
-export interface WorktreeIntegrationStatusUpdatedData {
-  baseDir: string;
-  taskId: string;
-  status: WorktreeIntegrationStatus | null;
-}
+/** Chat toolbar area */
 ⋮----
-export interface LocalizedString {
-  key: string;
-  params?: Record<string, unknown>;
-}
+/** Message action buttons */
 ⋮----
-export type Mode = 'code' | 'ask' | 'architect' | 'context' | 'agent' | 'bmad';
+/** Global toolbar */
 ⋮----
-export interface AiderRunOptions {
-  autoApprove?: boolean;
-  denyCommands?: boolean;
-}
-⋮----
-export type EditFormat = 'diff' | 'diff-fenced' | 'whole' | 'udiff' | 'udiff-simple' | 'patch';
-⋮----
-export enum DiffViewMode {
-  SideBySide = 'side-by-side',
-  Unified = 'unified',
-  Compact = 'compact',
-}
-⋮----
-export enum MessageViewMode {
-  Full = 'full',
-  Compact = 'compact',
-}
-⋮----
-export enum ReasoningEffort {
-  High = 'high',
-  Medium = 'medium',
-  Low = 'low',
-  Minimal = 'minimal',
-  None = 'none',
-}
-⋮----
-export enum ContextMemoryMode {
-  Off = 'off',
-  FullContext = 'full-context',
-  LastMessage = 'last-message',
-}
-⋮----
-export interface ResponseChunkData {
-  messageId: string;
-  baseDir: string;
-  taskId: string;
-  chunk: string;
-  reflectedMessage?: string;
-  promptContext?: PromptContext;
-}
-⋮----
-export interface ResponseCompletedData {
-  type: 'response-completed';
-  messageId: string;
-  baseDir: string;
-  taskId: string;
-  content: string;
-  reflectedMessage?: string;
-  editedFiles?: string[];
-  commitHash?: string;
-  commitMessage?: string;
-  diff?: string;
-  usageReport?: UsageReportData;
-  sequenceNumber?: number;
-  promptContext?: PromptContext;
-}
-⋮----
-export interface CommandOutputData {
-  baseDir: string;
-  taskId: string;
-  command: string;
-  output: string;
-}
-⋮----
-export type LogLevel = 'info' | 'warning' | 'error' | 'loading';
-⋮----
-export interface LogData {
-  baseDir: string;
-  taskId: string;
-  level: LogLevel;
-  message?: string;
-  finished?: boolean;
-  promptContext?: PromptContext;
-  actionIds?: string[];
-}
-⋮----
-export interface ToolData {
-  type: 'tool';
-  baseDir: string;
-  taskId: string;
+/**
+ * Definition of a UI element that can be registered by an extension
+ *
+ * @example
+ * ```typescript
+ * const myButton: UIElementDefinition = {
+ *   id: 'generate-jira-ticket',
+ *   type: 'action-button',
+ *   label: 'Create JIRA Ticket',
+ *   icon: 'FiExternalLink',
+ *   description: 'Create a JIRA ticket from this task',
+ *   placement: UIPlacement.TaskSidebar,
+ *   context: 'task',
+ *   onClick: 'handleJiraClick',
+ * };
+ * ```
+ */
+export interface UIElementDefinition {
+  /** Unique element identifier in kebab-case */
   id: string;
-  serverName: string;
-  toolName: string;
-  args?: unknown;
-  response?: string;
-  usageReport?: UsageReportData;
-  promptContext?: PromptContext;
-  finished?: boolean;
+  /** Element type (button, status indicator, etc.) */
+  type: UIElementType;
+  /** Display text for button or label */
+  label: string;
+  /** Optional icon name from react-icons library */
+  icon?: string;
+  /** Optional tooltip or help text */
+  description?: string;
+  /** Where in UI to render this element */
+  placement: UIPlacement;
+  /** Context type (task, project, global) */
+  context?: 'task' | 'project' | 'global';
+  /** Handler ID to call in extension when clicked */
+  onClick: string;
+  /** Optional: Conditional visibility check */
+  enabled?: (context: unknown) => boolean;
 }
 ⋮----
-export interface ContextFilesUpdatedData {
-  baseDir: string;
-  taskId: string;
+/** Unique element identifier in kebab-case */
+⋮----
+/** Element type (button, status indicator, etc.) */
+⋮----
+/** Display text for button or label */
+⋮----
+/** Optional icon name from react-icons library */
+⋮----
+/** Optional tooltip or help text */
+⋮----
+/** Where in UI to render this element */
+⋮----
+/** Context type (task, project, global) */
+⋮----
+/** Handler ID to call in extension when clicked */
+⋮----
+/** Optional: Conditional visibility check */
+⋮----
+/**
+ * Definition of a command that can be registered by an extension
+ *
+ * Extension commands are fully responsible for their own execution logic.
+ * The execute function should handle everything including:
+ * - Processing arguments
+ * - Performing any operations (file I/O, API calls, etc.)
+ * - Sending prompts to agent/aider if needed via context methods
+ * - Displaying results to the user
+ *
+ * @example
+ * ```typescript
+ * const myCommand: CommandDefinition = {
+ *   name: 'generate-tests',
+ *   description: 'Generate unit tests for the current file',
+ *   arguments: [
+ *     { description: 'File path to generate tests for', required: true },
+ *     { description: 'Test framework (jest, vitest, mocha)', required: false }
+ *   ],
+ *   async execute(args, context) {
+ *     const filePath = args[0];
+ *     const framework = args[1] || 'vitest';
+ *
+ *     // Read file, process it, send prompt to agent, etc.
+ *     const fileContent = await readFile(filePath);
+ *     const prompt = `Generate tests for ${filePath} using ${framework}...`;
+ *
+ *     // Extension handles sending the prompt
+ *     // (context would provide methods to do this)
+ *   },
+ * };
+ * ```
+ */
+export interface CommandDefinition {
+  /** Command name in kebab-case (e.g., 'generate-tests') */
+  name: string;
+  /** Description shown in autocomplete */
+  description: string;
+  /** Command arguments */
+  arguments?: CommandArgument[];
+  /** Execute function that handles the complete command logic */
+  execute: (args: string[], context: ExtensionContext) => Promise<void>;
+}
+⋮----
+/** Command name in kebab-case (e.g., 'generate-tests') */
+⋮----
+/** Description shown in autocomplete */
+⋮----
+/** Command arguments */
+⋮----
+/** Execute function that handles the complete command logic */
+⋮----
+// Event Payload Interfaces
+⋮----
+/** Event payload for task creation events */
+export interface TaskCreatedEvent {
+  task: TaskData;
+}
+⋮----
+/** Event payload for task prepared events */
+export interface TaskPreparedEvent {
+  task: TaskData;
+}
+⋮----
+/** Event payload for task initialization events */
+export interface TaskInitializedEvent {
+  readonly task: TaskData;
+}
+⋮----
+/** Event payload for task closed events */
+export interface TaskClosedEvent {
+  readonly task: TaskData;
+}
+⋮----
+/** Event payload for prompt started events */
+export interface PromptStartedEvent {
+  prompt: string;
+  mode: Mode;
+  promptContext: PromptContext;
+  blocked?: boolean;
+}
+⋮----
+/** Event payload for prompt finished events */
+export interface PromptFinishedEvent {
+  responses: ResponseCompletedData[];
+}
+⋮----
+/** Event payload for agent started events */
+export interface AgentStartedEvent {
+  agentProfile: AgentProfile;
+  prompt: string | null;
+  promptContext?: PromptContext;
+  systemPrompt: string | undefined;
+  contextMessages: ContextMessage[];
+  contextFiles: ContextFile[];
+  blocked?: boolean;
+}
+⋮----
+/** Event payload for agent finished events */
+export interface AgentFinishedEvent {
+  readonly aborted: boolean;
+  readonly contextMessages: ContextMessage[];
+  resultMessages: ContextMessage[];
+}
+⋮----
+/** Event payload for agent step finished events */
+export interface AgentStepFinishedEvent {
+  readonly agentProfile: AgentProfile;
+  readonly currentResponseId: string;
+  readonly stepResult: AgentStepResult;
+  finishReason: 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown';
+  responseMessages: ContextMessage[];
+}
+⋮----
+/** Event payload for tool approval events */
+export interface ToolApprovalEvent {
+  readonly toolName: string;
+  readonly input: Record<string, unknown> | undefined;
+  blocked?: boolean;
+  allowed?: boolean;
+}
+⋮----
+/** Event payload for tool called events */
+export interface ToolCalledEvent {
+  readonly toolName: string;
+  input: Record<string, unknown> | undefined;
+  output?: unknown;
+}
+⋮----
+/** Event payload for tool finished events */
+export interface ToolFinishedEvent {
+  readonly toolName: string;
+  readonly input: Record<string, unknown> | undefined;
+  output: unknown;
+}
+⋮----
+/** Event payload for files added events */
+export interface FilesAddedEvent {
   files: ContextFile[];
 }
 ⋮----
-export interface UpdatedFile {
-  path: string;
-  additions: number;
-  deletions: number;
-  diff?: string;
+/** Event payload for files dropped events */
+export interface FilesDroppedEvent {
+  files: ContextFile[];
 }
 ⋮----
-export interface UpdatedFilesUpdatedData {
-  baseDir: string;
-  taskId: string;
-  files: UpdatedFile[];
+/** Event payload for response message processed events */
+export interface ResponseChunkEvent {
+  chunk: ResponseChunkData;
 }
 ⋮----
-export interface CustomCommandsUpdatedData {
-  baseDir: string;
-  taskId: string;
-  commands: CustomCommand[];
+export interface ResponseCompletedEvent {
+  response: ResponseCompletedData;
 }
 ⋮----
-export interface AutocompletionData {
-  baseDir: string;
-  taskId: string;
-  words?: string[];
-  allFiles?: string[];
-}
-⋮----
-export interface Answer {
-  text: string;
-  shortkey: string;
-}
-⋮----
-export interface QuestionData {
-  baseDir: string;
-  taskId: string;
+export interface HandleApprovalEvent {
+  key: string;
   text: string;
   subject?: string;
-  isGroupQuestion?: boolean;
-  answers?: Answer[];
-  defaultAnswer: string;
-  internal?: boolean;
-  key?: string;
+  blocked?: boolean;
+  allowed?: boolean;
 }
 ⋮----
-export interface QuestionAnsweredData {
-  baseDir: string;
-  taskId: string;
+/** Event payload for subagent started events */
+export interface SubagentStartedEvent {
+  subagentProfile: AgentProfile;
+  prompt: string;
+  promptContext?: PromptContext;
+  contextMessages: ContextMessage[];
+  contextFiles: ContextFile[];
+  systemPrompt?: string;
+  blocked?: boolean;
+}
+⋮----
+/** Event payload for subagent finished events */
+export interface SubagentFinishedEvent {
+  readonly subagentProfile: AgentProfile;
+  resultMessages: ContextMessage[];
+}
+⋮----
+/** Event payload for question asked events */
+export interface QuestionAskedEvent {
   question: QuestionData;
+  answer?: string;
+}
+⋮----
+/** Event payload for question answered events */
+export interface QuestionAnsweredEvent {
+  readonly question: QuestionData;
   answer: string;
   userInput?: string;
 }
 ⋮----
-export interface QueuedPromptData {
-  id: string;
-  text: string;
+/** Event payload for command executed events */
+export interface CommandExecutedEvent {
+  command: string;
+  blocked?: boolean;
+}
+⋮----
+/** Event payload for custom command executed events */
+export interface CustomCommandExecutedEvent {
+  command: CustomCommand;
   mode: Mode;
-  timestamp: number;
+  blocked?: boolean;
+  prompt?: string;
 }
 ⋮----
-export interface QueuedPromptsUpdatedData {
-  baseDir: string;
-  taskId: string;
-  queuedPrompts: QueuedPromptData[];
-}
-⋮----
-export type ContextFileSourceType = 'companion' | 'aider' | 'app' | string;
-⋮----
-export enum OS {
-  Windows = 'windows',
-  Linux = 'linux',
-  MacOS = 'macos',
-}
-⋮----
-export interface CloudflareTunnelStatus {
-  isRunning: boolean;
-  url?: string;
-}
-⋮----
-export enum MessageRole {
-  User = 'user',
-  Assistant = 'assistant',
-}
-⋮----
-// Base interface for all context messages with usage reporting
-interface BaseContextMessage {
-  id: string;
-  usageReport?: UsageReportData;
-  promptContext?: PromptContext;
-}
-⋮----
-// User message with usage report
-export interface ContextUserMessage extends BaseContextMessage {
-  role: 'user';
-  content: UserContent;
-}
-⋮----
-// Assistant message with full response metadata
-export interface ContextAssistantMessage extends BaseContextMessage {
-  role: 'assistant';
-  content: AssistantContent;
-  reflectedMessage?: string;
-  editedFiles?: string[];
-  commitHash?: string;
-  commitMessage?: string;
-  diff?: string;
-}
-⋮----
-// Tool message with usage report
-export interface ContextToolMessage extends BaseContextMessage {
-  role: 'tool';
-  content: ToolContent;
-}
-⋮----
-// Union type for enhanced context messages
-export type ContextMessage = ContextUserMessage | ContextAssistantMessage | ContextToolMessage;
-⋮----
-export interface ContextFile {
-  path: string;
-  readOnly?: boolean;
-  source?: 'global-rule' | 'project-rule' | 'agent-rule';
-}
-⋮----
-export interface WindowState {
-  width: number;
-  height: number;
-  x: number | undefined;
-  y: number | undefined;
-  isMaximized: boolean;
-}
-⋮----
-// @deprecated: These properties are deprecated in favor of task-level settings
-// They are kept for backward compatibility and as defaults for new tasks
-⋮----
-export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
-⋮----
-export interface ProjectData {
-  active: boolean;
-  baseDir: string;
-  settings: ProjectSettings;
-}
-⋮----
-export interface RawModelInfo {
-  max_input_tokens: number;
-  max_output_tokens: number;
-  input_cost_per_token: number;
-  output_cost_per_token: number;
-  supports_function_calling: boolean;
-  supports_tool_choice: boolean;
-  litellm_provider: string;
-}
-⋮----
-export interface ModelsData {
-  baseDir: string;
-  taskId: string;
-  mainModel: string;
-  weakModel?: string | null;
-  architectModel?: string | null;
-  reasoningEffort?: string;
-  thinkingTokens?: string;
-  editFormat?: EditFormat;
-  info?: RawModelInfo;
-  error?: string;
-}
-⋮----
-export enum ToolApprovalState {
-  Always = 'always',
-  Never = 'never',
-  Ask = 'ask',
-}
-⋮----
-export enum ProjectStartMode {
-  Empty = 'empty',
-  Last = 'last',
-  Remote = 'remote',
-}
-⋮----
-export enum SuggestionMode {
-  Automatically = 'automatically',
-  OnTab = 'onTab',
-  MentionAtSign = 'mentionAtSign',
-}
-⋮----
-export interface PromptBehavior {
-  suggestionMode: SuggestionMode;
-  suggestionDelay: number;
-  requireCommandConfirmation: {
-    add: boolean;
-    readOnly: boolean;
-    model: boolean;
-    modeSwitching: boolean;
-  };
-  useVimBindings: boolean;
-}
-⋮----
-export enum InvocationMode {
-  OnDemand = 'on-demand',
-  Automatic = 'automatic',
-}
-⋮----
-export interface SubagentConfig {
-  enabled: boolean;
-  contextMemory: ContextMemoryMode;
-  systemPrompt: string;
-  invocationMode: InvocationMode;
-  color: string;
-  description: string;
-}
-⋮----
-export interface BashToolSettings {
-  allowedPattern: string;
-  deniedPattern: string;
-}
-⋮----
-export type ToolSettings = BashToolSettings;
-⋮----
-export interface AgentProfile {
-  id: string;
-  projectDir?: string; // If specified, it's a project-level profile, otherwise global
-  name: string;
-  provider: string;
-  model: string;
-  maxIterations: number;
-  maxTokens?: number; // Optional: overrides model maxOutputTokens when set
-  minTimeBetweenToolCalls: number; // in milliseconds
-  temperature?: number; // Optional: overrides model temperature when set
-  enabledServers: string[];
-  toolApprovals: Record<string, ToolApprovalState>;
-  toolSettings: Record<string, ToolSettings>;
-  includeContextFiles: boolean;
-  includeRepoMap: boolean;
-  usePowerTools: boolean;
-  useAiderTools: boolean;
-  useTodoTools: boolean;
-  useSubagents: boolean;
-  useTaskTools: boolean;
-  useMemoryTools: boolean;
-  useSkillsTools: boolean;
-  customInstructions: string;
-  subagent: SubagentConfig;
-  isSubagent?: boolean; // flag to indicate if this profile is being used as a subagent
-  ruleFiles?: string[]; // Array of absolute paths to rule files for this agent profile
-}
-⋮----
-projectDir?: string; // If specified, it's a project-level profile, otherwise global
-⋮----
-maxTokens?: number; // Optional: overrides model maxOutputTokens when set
-minTimeBetweenToolCalls: number; // in milliseconds
-temperature?: number; // Optional: overrides model temperature when set
-⋮----
-isSubagent?: boolean; // flag to indicate if this profile is being used as a subagent
-ruleFiles?: string[]; // Array of absolute paths to rule files for this agent profile
-⋮----
-export interface EnvironmentVariable {
-  value: string;
-  source: string;
-}
-⋮----
-export type Theme = (typeof THEMES)[number];
-⋮----
-export type Font = (typeof FONTS)[number];
-⋮----
-export interface HotkeyConfig {
-  projectHotkeys: {
-    closeProject: string;
-    newProject: string;
-    usageDashboard: string;
-    modelLibrary: string;
-    settings: string;
-    cycleNextProject: string;
-    cyclePrevProject: string;
-    switchProject1: string;
-    switchProject2: string;
-    switchProject3: string;
-    switchProject4: string;
-    switchProject5: string;
-    switchProject6: string;
-    switchProject7: string;
-    switchProject8: string;
-    switchProject9: string;
-  };
-  taskHotkeys: {
-    switchTask1: string;
-    switchTask2: string;
-    switchTask3: string;
-    switchTask4: string;
-    switchTask5: string;
-    switchTask6: string;
-    switchTask7: string;
-    switchTask8: string;
-    switchTask9: string;
-    focusPrompt: string;
-    newTask: string;
-    closeTask: string;
-  };
-  dialogHotkeys: {
-    browseFolder: string;
-  };
-}
-⋮----
-export enum MemoryEmbeddingProvider {
-  SentenceTransformers = 'sentence-transformers',
-}
-⋮----
-export enum ContextCompactionType {
-  Compact = 'compact',
-  Handoff = 'handoff',
-}
-⋮----
-export interface TaskSettings {
-  smartTaskState: boolean;
-  autoGenerateTaskName: boolean;
-  showTaskStateActions: boolean;
-  worktreeSymlinkFolders: string[];
-  contextCompactingThreshold: number;
-  contextCompactionType: ContextCompactionType;
-}
-⋮----
-export interface MemoryConfig {
-  enabled: boolean;
-  provider: MemoryEmbeddingProvider;
-  model: string;
-  maxDistance: number;
-}
-⋮----
-export enum MemoryEmbeddingProgressPhase {
-  Idle = 'idle',
-  LoadingModel = 'loading-model',
-  ReEmbedding = 're-embedding',
-  Done = 'done',
-  Error = 'error',
-}
-⋮----
-export interface MemoryEmbeddingProgress {
-  phase: MemoryEmbeddingProgressPhase;
-  status: string | null;
-  done: number;
-  total: number;
-  finished: boolean;
-  error?: string;
-}
-⋮----
-export interface SettingsData {
-  onboardingFinished?: boolean;
-  language: string;
-  startupMode?: ProjectStartMode;
-  zoomLevel?: number;
-  notificationsEnabled?: boolean;
-  theme?: Theme;
-  font?: Font;
-  fontSize?: number;
-  renderMarkdown: boolean;
-  virtualizedRendering: boolean;
-  aiderDeskAutoUpdate: boolean;
-  diffViewMode?: DiffViewMode;
-  messageViewMode?: MessageViewMode;
-  aider: {
-    options: string;
-    environmentVariables: string;
-    addRuleFiles: boolean;
-    autoCommits: boolean;
-    cachingEnabled: boolean;
-    watchFiles: boolean;
-    confirmBeforeEdit: boolean;
-  };
-  preferredModels: string[];
-
-  mcpServers: Record<string, McpServerConfig>;
-  llmProviders: {
-    openai?: OpenAiProvider;
-    anthropic?: AnthropicProvider;
-    gemini?: GeminiProvider;
-    groq?: GroqProvider;
-    bedrock?: BedrockProvider;
-    deepseek?: DeepseekProvider;
-    ollama?: OllamaProvider;
-    lmstudio?: LmStudioProvider;
-    minimax?: MinimaxProvider;
-    'openai-compatible'?: OpenAiCompatibleProvider;
-    opencode?: OpenCodeProvider;
-    openrouter?: OpenRouterProvider;
-    requesty?: RequestyProvider;
-    synthetic?: SyntheticProvider;
-    'vertex-ai'?: VertexAiProvider;
-  };
-  telemetryEnabled: boolean;
-  telemetryInformed?: boolean;
-  promptBehavior: PromptBehavior;
-  server: {
-    enabled: boolean;
-    basicAuth: {
-      enabled: boolean;
-      username: string;
-      password: string;
-    };
-  };
-  memory: MemoryConfig;
-  taskSettings: TaskSettings;
-  hotkeyConfig?: HotkeyConfig;
-}
-⋮----
-export interface ProviderProfile {
-  id: string;
-  name?: string;
-  provider: LlmProvider;
-  headers?: Record<string, string>;
-  disabled?: boolean;
-}
-⋮----
-export interface ProvidersUpdatedData {
-  providers: ProviderProfile[];
-}
-⋮----
-export interface AgentProfilesUpdatedData {
-  profiles: AgentProfile[];
-}
-⋮----
-export interface VoiceSession {
-  ephemeralToken: string;
-  model: string;
-  idleTimeoutMs: number;
-}
-⋮----
-export interface Group {
-  id: string;
-  name?: string | LocalizedString;
-  color?: string;
-  finished?: boolean;
-  interruptId?: string;
-}
-⋮----
-export interface PromptContext {
-  id: string;
-  group?: Group;
-}
-⋮----
-export interface ProjectStartedData {
-  baseDir: string;
-}
-⋮----
-export interface ClearTaskData {
-  baseDir: string;
-  taskId: string;
-  clearMessages: boolean;
-  clearSession: boolean;
-}
-⋮----
-export interface UsageReportData {
-  model: string;
-  sentTokens: number;
-  receivedTokens: number;
-  messageCost: number;
-  cacheWriteTokens?: number;
-  cacheReadTokens?: number;
-  aiderTotalCost?: number;
-  agentTotalCost?: number;
-}
-⋮----
-export interface TokensCost {
-  tokens: number;
-  tokensEstimated?: boolean;
-  cost: number;
-}
-⋮----
-export interface TokensInfoData {
-  baseDir: string;
-  taskId: string;
-  chatHistory: TokensCost;
-  files: Record<string, TokensCost>;
-  repoMap: TokensCost;
-  systemMessages: TokensCost;
-  agent?: TokensCost;
-}
-⋮----
-export interface InputHistoryData {
-  baseDir: string;
-  taskId: string;
-  inputHistory: string[];
-}
-⋮----
-export interface UserMessageData {
-  type: 'user';
-  id: string;
-  baseDir: string;
-  taskId: string;
-  content: string;
-  promptContext?: PromptContext;
-}
-⋮----
-export interface MessageRemovedData {
-  baseDir: string;
-  taskId: string;
-  messageIds: string[];
-}
-⋮----
-export interface FileEdit {
-  path: string;
-  original: string;
-  updated: string;
-}
-⋮----
-export interface GenericTool {
-  groupName: string;
-  name: string;
-  description: string;
-}
-⋮----
-export interface McpToolInputSchema {
-  type: 'object';
-  properties: Record<string, JSONSchema7Definition>;
-}
-⋮----
-export interface McpTool {
-  serverName: string;
-  name: string;
-  description?: string;
-  inputSchema: McpToolInputSchema;
-}
-⋮----
-export interface McpServerConfig {
-  command?: string;
-  args?: string[];
-  env?: Readonly<Record<string, string>>;
-  url?: string;
-  headers?: Readonly<Record<string, string>>;
-}
-⋮----
-export interface VersionsInfo {
-  aiderDeskCurrentVersion?: string | null;
-  aiderCurrentVersion?: string | null;
-  aiderDeskAvailableVersion?: string | null;
-  aiderAvailableVersion?: string | null;
-  aiderDeskDownloadProgress?: number;
-  aiderDeskNewVersionReady?: boolean;
-  releaseNotes?: string | null;
-}
-⋮----
-export enum FileWriteMode {
-  Overwrite = 'overwrite',
-  Append = 'append',
-  CreateOnly = 'create_only',
-}
-⋮----
-export interface ModelInfo {
-  maxInputTokens?: number;
-  maxOutputTokens?: number;
-  inputCostPerToken?: number;
-  outputCostPerToken?: number;
-  cacheWriteInputTokenCost?: number;
-  cacheReadInputTokenCost?: number;
-  useTemperature?: boolean;
-  temperature?: number;
-}
-⋮----
-export interface TaskContext {
-  version?: number;
-  contextMessages: ContextMessage[];
-  contextFiles: ContextFile[];
-}
-⋮----
-export interface TaskStateData {
-  messages: (ResponseCompletedData | UserMessageData | ToolData)[];
+/** Event payload for aider prompt started events */
+export interface AiderPromptStartedEvent {
+  prompt: string;
+  mode: Mode;
+  promptContext: PromptContext;
+  messages: ConnectorMessage[];
   files: ContextFile[];
-  todoItems: TodoItem[];
-  question: QuestionData | null;
-  queuedPrompts: QueuedPromptData[];
-  workingMode: WorkingMode;
-}
-⋮----
-export type WorkingMode = z.infer<typeof WorkingModeSchema>;
-⋮----
-export type TaskData = z.infer<typeof TaskDataSchema>;
-⋮----
-export interface CreateTaskParams {
-  parentId?: string | null;
-  name?: string;
+  blocked?: boolean;
   autoApprove?: boolean;
-  activate?: boolean;
-  handoff?: boolean;
-  sendEvent?: boolean;
-  provider?: string;
-  model?: string;
+  denyCommands?: boolean;
 }
 ⋮----
-export interface TaskCreatedData {
-  baseDir: string;
-  task: TaskData;
-  activate?: boolean;
-  editLast?: boolean;
+/** Event payload for aider prompt finished events */
+export interface AiderPromptFinishedEvent {
+  responses: ResponseCompletedData[];
 }
 ⋮----
-export enum DefaultTaskState {
-  Todo = 'TODO',
-  InProgress = 'IN_PROGRESS',
-  Interrupted = 'INTERRUPTED',
-  MoreInfoNeeded = 'MORE_INFO_NEEDED',
-  ReadyForReview = 'READY_FOR_REVIEW',
-  ReadyForImplementation = 'READY_FOR_IMPLEMENTATION',
-  Done = 'DONE',
+/** Options for asking questions to the user */
+export interface QuestionOptions {
+  subject?: string;
+  answers?: Array<{ text: string; shortkey: string }>;
+  defaultAnswer?: string;
 }
 ⋮----
-export interface TodoItem {
-  name: string;
-  completed: boolean;
+/**
+ * Safe subset of Task capabilities exposed to extensions.
+ * Provides read-only access to task data and safe operations.
+ */
+export interface TaskContext {
+  // Task Data (read-only access to all task properties)
+  readonly data: TaskData;
+
+  // Context Files (Read + Safe Write)
+  getContextFiles(): Promise<ContextFile[]>;
+  addFile(path: string, readOnly?: boolean): Promise<void>;
+  addFiles(...files: ContextFile[]): Promise<void>;
+  dropFile(path: string): Promise<void>;
+
+  // Messages (Read + Safe Write)
+  getContextMessages(): Promise<ContextMessage[]>;
+  addMessage(content: string, role?: 'user' | 'assistant'): Promise<void>;
+  removeMessage(messageId: string): Promise<void>;
+  removeLastMessage(): Promise<void>;
+  loadContextMessages(messages: ContextMessage[]): Promise<void>;
+  redoLastUserPrompt(mode?: string, updatedPrompt?: string): Promise<void>;
+
+  // Files & Repo (Read-only)
+  getTaskDir(): string;
+  getAddableFiles(searchRegex?: string): Promise<string[]>;
+  getAllFiles(useGit?: boolean): Promise<string[]>;
+  getUpdatedFiles(): Promise<UpdatedFile[]>;
+  getRepoMap(): string;
+  addToGit(path: string): Promise<void>;
+
+  // Todos (Read + Safe Write)
+  getTodos(): Promise<TodoItem[]>;
+  addTodo(name: string): Promise<TodoItem[]>;
+  updateTodo(name: string, updates: Partial<TodoItem>): Promise<TodoItem[]>;
+  deleteTodo(name: string): Promise<TodoItem[]>;
+  clearAllTodos(): Promise<TodoItem[]>;
+  setTodos(items: TodoItem[], initialUserPrompt?: string): Promise<void>;
+
+  // Execution
+  runPrompt(prompt: string, mode?: string): Promise<void>;
+  runCustomCommand(name: string, args?: string[], mode?: string): Promise<void>;
+  runSubagent(agentProfile: AgentProfile, prompt: string): Promise<void>;
+  runCommand(command: string): Promise<void>;
+  interruptResponse(): Promise<void>;
+  generateText(agentProfile: AgentProfile, systemPrompt: string, prompt: string): Promise<string | undefined>;
+
+  // User Interaction
+  askQuestion(text: string, options?: QuestionOptions): Promise<string>;
+  addLogMessage(level: 'info' | 'error' | 'warn' | 'debug' | 'loading', message?: string): void;
+
+  // Task Management
+  updateTask(updates: Partial<TaskData>): Promise<TaskData>;
+  handoffConversation(focus?: string, execute?: boolean): Promise<void>;
+
+  // Context Management
+  clearContext(): Promise<void>;
+  resetContext(): Promise<void>;
+  compactConversation(instructions?: string): Promise<void>;
+  generateContextMarkdown(): Promise<string | null>;
+  isInitialized(): boolean;
+
+  // Queued Prompts
+  getQueuedPrompts(): QueuedPromptData[];
+  sendQueuedPromptNow(promptId: string): Promise<void>;
+  removeQueuedPrompt(promptId: string): void;
+
+  // Advanced Operations
+  getTaskAgentProfile(): Promise<AgentProfile | null>;
+  answerQuestion(answer: string, userInput?: string): Promise<boolean>;
 }
 ⋮----
-export interface UsageDataRow {
-  timestamp: string;
-  project: string;
-  model: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_read_tokens: number;
-  cache_write_tokens: number;
-  cost: number;
+// Task Data (read-only access to all task properties)
+⋮----
+// Context Files (Read + Safe Write)
+getContextFiles(): Promise<ContextFile[]>;
+addFile(path: string, readOnly?: boolean): Promise<void>;
+addFiles(...files: ContextFile[]): Promise<void>;
+dropFile(path: string): Promise<void>;
+⋮----
+// Messages (Read + Safe Write)
+getContextMessages(): Promise<ContextMessage[]>;
+addMessage(content: string, role?: 'user' | 'assistant'): Promise<void>;
+removeMessage(messageId: string): Promise<void>;
+removeLastMessage(): Promise<void>;
+loadContextMessages(messages: ContextMessage[]): Promise<void>;
+redoLastUserPrompt(mode?: string, updatedPrompt?: string): Promise<void>;
+⋮----
+// Files & Repo (Read-only)
+getTaskDir(): string;
+getAddableFiles(searchRegex?: string): Promise<string[]>;
+getAllFiles(useGit?: boolean): Promise<string[]>;
+getUpdatedFiles(): Promise<UpdatedFile[]>;
+getRepoMap(): string;
+addToGit(path: string): Promise<void>;
+⋮----
+// Todos (Read + Safe Write)
+getTodos(): Promise<TodoItem[]>;
+addTodo(name: string): Promise<TodoItem[]>;
+updateTodo(name: string, updates: Partial<TodoItem>): Promise<TodoItem[]>;
+deleteTodo(name: string): Promise<TodoItem[]>;
+clearAllTodos(): Promise<TodoItem[]>;
+setTodos(items: TodoItem[], initialUserPrompt?: string): Promise<void>;
+⋮----
+// Execution
+runPrompt(prompt: string, mode?: string): Promise<void>;
+runCustomCommand(name: string, args?: string[], mode?: string): Promise<void>;
+runSubagent(agentProfile: AgentProfile, prompt: string): Promise<void>;
+runCommand(command: string): Promise<void>;
+interruptResponse(): Promise<void>;
+generateText(agentProfile: AgentProfile, systemPrompt: string, prompt: string): Promise<string | undefined>;
+⋮----
+// User Interaction
+askQuestion(text: string, options?: QuestionOptions): Promise<string>;
+addLogMessage(level: 'info' | 'error' | 'warn' | 'debug' | 'loading', message?: string): void;
+⋮----
+// Task Management
+updateTask(updates: Partial<TaskData>): Promise<TaskData>;
+handoffConversation(focus?: string, execute?: boolean): Promise<void>;
+⋮----
+// Context Management
+clearContext(): Promise<void>;
+resetContext(): Promise<void>;
+compactConversation(instructions?: string): Promise<void>;
+generateContextMarkdown(): Promise<string | null>;
+isInitialized(): boolean;
+⋮----
+// Queued Prompts
+getQueuedPrompts(): QueuedPromptData[];
+sendQueuedPromptNow(promptId: string): Promise<void>;
+removeQueuedPrompt(promptId: string): void;
+⋮----
+// Advanced Operations
+getTaskAgentProfile(): Promise<AgentProfile | null>;
+answerQuestion(answer: string, userInput?: string): Promise<boolean>;
+⋮----
+/**
+ * Safe subset of Project capabilities exposed to extensions.
+ * Provides read-only access to project data and safe operations.
+ */
+export interface ProjectContext {
+  // Identity
+  readonly baseDir: string;
+
+  // Task Management
+  createTask(params: CreateTaskParams): Promise<TaskData>;
+  getTask(taskId: string): TaskContext | null;
+  getTasks(): Promise<TaskData[]>;
+  getMostRecentTask(): TaskContext | null;
+  forkTask(taskId: string, messageId: string): Promise<TaskData>;
+  duplicateTask(taskId: string): Promise<TaskData>;
+  deleteTask(taskId: string): Promise<void>;
+
+  // Commands (Read-only)
+  getCommands(): CommandsData;
+
+  // Settings (Read-only)
+  getProjectSettings(): ProjectSettings;
+
+  // Input History (Read-only)
+  getInputHistory(): Promise<string[]>;
 }
 ⋮----
-export interface Model {
-  id: string;
-  providerId: string;
-  maxInputTokens?: number;
-  maxOutputTokens?: number;
-  maxOutputTokensLimit?: number;
-  temperature?: number;
-  inputCostPerToken?: number;
-  outputCostPerToken?: number;
-  cacheWriteInputTokenCost?: number;
-  cacheReadInputTokenCost?: number;
-  supportsTools?: boolean;
-  isCustom?: boolean;
-  isHidden?: boolean;
-  hasModelOverrides?: boolean;
-  providerOverrides?: Record<string, unknown>;
+// Identity
+⋮----
+// Task Management
+createTask(params: CreateTaskParams): Promise<TaskData>;
+getTask(taskId: string): TaskContext | null;
+getTasks(): Promise<TaskData[]>;
+getMostRecentTask(): TaskContext | null;
+forkTask(taskId: string, messageId: string): Promise<TaskData>;
+duplicateTask(taskId: string): Promise<TaskData>;
+deleteTask(taskId: string): Promise<void>;
+⋮----
+// Commands (Read-only)
+getCommands(): CommandsData;
+⋮----
+// Settings (Read-only)
+getProjectSettings(): ProjectSettings;
+⋮----
+// Input History (Read-only)
+getInputHistory(): Promise<string[]>;
+⋮----
+/**
+ * Context object passed to extension methods providing access to AiderDesk APIs
+ *
+ * @example
+ * ```typescript
+ * async onLoad(context: ExtensionContext) {
+ *   const taskContext = context.getTaskContext();
+ *   if (taskContext) {
+ *     context.log(`Task: ${taskContext.data.name}`, 'info');
+ *   }
+ * }
+ * ```
+ */
+export interface ExtensionContext {
+  /**
+   * Log a message to the AiderDesk console
+   * @param message - Message to log
+   * @param type - Log level (info, error, warn, debug)
+   */
+  log(message: string, type?: 'info' | 'error' | 'warn' | 'debug'): void;
+
+  /**
+   * Get the current project directory path
+   * @returns Absolute path to the project directory
+   */
+  getProjectDir(): string;
+
+  /**
+   * Get the current task context for safe task operations
+   * @returns TaskContext or null if no task is active
+   */
+  getTaskContext(): TaskContext | null;
+
+  /**
+   * Get the project context for safe project operations
+   * @returns ProjectContext
+   */
+  getProjectContext(): ProjectContext;
+
+  /**
+   * Create a new task
+   * @param name - Task name/title
+   * @param params - Optional task parameters (parentId, autoApprove, etc.)
+   * @returns Promise resolving to the new task ID
+   */
+  createTask(name: string, params?: CreateTaskParams): Promise<string>;
+
+  /**
+   * Get all available agent profiles
+   * @returns Promise resolving to array of agent profiles
+   */
+  getAgentProfiles(): Promise<AgentProfile[]>;
+
+  /**
+   * Get all available model configurations
+   * @returns Promise resolving to array of models
+   */
+  getModelConfigs(): Promise<Model[]>;
+
+  /**
+   * Get a specific setting value
+   * @param key - Setting key (dot-notation supported, e.g., 'general.theme')
+   * @returns Promise resolving to the setting value
+   */
+  getSetting(key: string): Promise<unknown>;
+
+  /**
+   * Update multiple settings at once
+   * @param updates - Partial settings object with updates
+   * @returns Promise that resolves when settings are saved
+   */
+  updateSettings(updates: Record<string, unknown>): Promise<void>;
+
+  /**
+   * Show a notification to the user
+   * @param message - Notification message
+   * @param type - Notification type (info, warning, error)
+   * @returns Promise that resolves when notification is shown
+   */
+  showNotification(message: string, type?: 'info' | 'warning' | 'error'): Promise<void>;
+
+  /**
+   * Show a confirmation dialog to the user
+   * @param message - Confirmation message
+   * @param confirmText - Custom confirm button text
+   * @param cancelText - Custom cancel button text
+   * @returns Promise resolving to true if confirmed, false otherwise
+   */
+  showConfirm(message: string, confirmText?: string, cancelText?: string): Promise<boolean>;
+
+  /**
+   * Show an input dialog to the user
+   * @param prompt - Input prompt/message
+   * @param placeholder - Input placeholder text
+   * @param defaultValue - Default input value
+   * @returns Promise resolving to the user input or undefined if cancelled
+   */
+  showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
+
+  /**
+   * Send a prompt to the agent or aider for execution
+   * @param prompt - The prompt text to send
+   * @param mode - Execution mode (agent, code, ask, architect)
+   * @returns Promise that resolves when prompt execution is complete
+   */
+  runPrompt(prompt: string, mode?: 'agent' | 'code' | 'ask' | 'architect'): Promise<void>;
 }
 ⋮----
-export interface ProviderModelsData {
-  models?: Model[];
-  loading?: boolean;
-  errors?: Record<string, string>;
+/**
+   * Log a message to the AiderDesk console
+   * @param message - Message to log
+   * @param type - Log level (info, error, warn, debug)
+   */
+log(message: string, type?: 'info' | 'error' | 'warn' | 'debug'): void;
+⋮----
+/**
+   * Get the current project directory path
+   * @returns Absolute path to the project directory
+   */
+getProjectDir(): string;
+⋮----
+/**
+   * Get the current task context for safe task operations
+   * @returns TaskContext or null if no task is active
+   */
+getTaskContext(): TaskContext | null;
+⋮----
+/**
+   * Get the project context for safe project operations
+   * @returns ProjectContext
+   */
+getProjectContext(): ProjectContext;
+⋮----
+/**
+   * Create a new task
+   * @param name - Task name/title
+   * @param params - Optional task parameters (parentId, autoApprove, etc.)
+   * @returns Promise resolving to the new task ID
+   */
+createTask(name: string, params?: CreateTaskParams): Promise<string>;
+⋮----
+/**
+   * Get all available agent profiles
+   * @returns Promise resolving to array of agent profiles
+   */
+getAgentProfiles(): Promise<AgentProfile[]>;
+⋮----
+/**
+   * Get all available model configurations
+   * @returns Promise resolving to array of models
+   */
+getModelConfigs(): Promise<Model[]>;
+⋮----
+/**
+   * Get a specific setting value
+   * @param key - Setting key (dot-notation supported, e.g., 'general.theme')
+   * @returns Promise resolving to the setting value
+   */
+getSetting(key: string): Promise<unknown>;
+⋮----
+/**
+   * Update multiple settings at once
+   * @param updates - Partial settings object with updates
+   * @returns Promise that resolves when settings are saved
+   */
+updateSettings(updates: Record<string, unknown>): Promise<void>;
+⋮----
+/**
+   * Show a notification to the user
+   * @param message - Notification message
+   * @param type - Notification type (info, warning, error)
+   * @returns Promise that resolves when notification is shown
+   */
+showNotification(message: string, type?: 'info' | 'warning' | 'error'): Promise<void>;
+⋮----
+/**
+   * Show a confirmation dialog to the user
+   * @param message - Confirmation message
+   * @param confirmText - Custom confirm button text
+   * @param cancelText - Custom cancel button text
+   * @returns Promise resolving to true if confirmed, false otherwise
+   */
+showConfirm(message: string, confirmText?: string, cancelText?: string): Promise<boolean>;
+⋮----
+/**
+   * Show an input dialog to the user
+   * @param prompt - Input prompt/message
+   * @param placeholder - Input placeholder text
+   * @param defaultValue - Default input value
+   * @returns Promise resolving to the user input or undefined if cancelled
+   */
+showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
+⋮----
+/**
+   * Send a prompt to the agent or aider for execution
+   * @param prompt - The prompt text to send
+   * @param mode - Execution mode (agent, code, ask, architect)
+   * @returns Promise that resolves when prompt execution is complete
+   */
+runPrompt(prompt: string, mode?: 'agent' | 'code' | 'ask' | 'architect'): Promise<void>;
+⋮----
+/**
+ * Main extension interface that all extensions must implement
+ *
+ * All methods are optional - implement only what you need.
+ * Event handlers can return void or a partial event to modify the event data.
+ *
+ * @example
+ * ```typescript
+ * class MyExtension implements Extension {
+ *   async onLoad(context: ExtensionContext) {
+ *     this.context = context;
+ *     context.log('My extension loaded!', 'info');
+ *   }
+ *
+ *   getTools(context: ExtensionContext): ToolDefinition[] {
+ *     return [{
+ *       name: 'my-tool',
+ *       description: 'My custom tool',
+ *       parameters: z.object({ input: z.string() }),
+ *       async execute(args, signal, context) {
+ *         return { content: [{ type: 'text', text: args.input }] };
+ *       },
+ *     }];
+ *   }
+ *
+ *   async onPromptSubmitted(event: PromptSubmittedEvent, context: ExtensionContext) {
+ *     context.log(`Prompt: ${event.prompt}`, 'debug');
+ *   }
+ * }
+ * ```
+ */
+export interface Extension {
+  // Lifecycle methods
+
+  /**
+   * Called when extension is loaded
+   * Use this to initialize your extension, set up state, etc.
+   */
+  onLoad?(context: ExtensionContext): void | Promise<void>;
+
+  /**
+   * Called when extension is unloaded
+   * Clean up resources, save state, etc.
+   */
+  onUnload?(): void | Promise<void>;
+
+  // Tool registration
+
+  /**
+   * Return array of tools this extension provides
+   * Called when extension is loaded and when tools need to be refreshed
+   */
+  getTools?(context: ExtensionContext): ToolDefinition[];
+
+  // UI element registration
+
+  /**
+   * Return array of UI elements this extension provides
+   * Called when extension is loaded and when UI needs to be refreshed
+   */
+  getUIElements?(): UIElementDefinition[];
+
+  // Command registration
+
+  /**
+   * Return array of commands this extension provides
+   * Called when extension is loaded and when commands need to be refreshed
+   */
+  getCommands?(context: ExtensionContext): CommandDefinition[];
+
+  // Agent registration
+
+  /**
+   * Return array of agent profiles this extension provides
+   * Called when extension is loaded and when agents need to be refreshed
+   * Extension-provided agents will be included in the list of all agents
+   */
+  getAgents?(context: ExtensionContext): AgentProfile[];
+
+  /**
+   * Called when a user updates an extension-provided agent profile
+   * Extension should persist the updated profile and return it from future getAgents() calls
+   * @param context - Extension context (no project available for global operations)
+   * @param agentId - The ID of the agent being updated
+   * @param updatedProfile - The complete updated profile
+   * @returns The updated agent profile
+   */
+  onAgentProfileUpdated?(context: ExtensionContext, agentId: string, updatedProfile: AgentProfile): Promise<AgentProfile>;
+
+  // Task Events
+
+  /**
+   * Called when a new task is created
+   * @returns void or partial event to modify task data
+   */
+  onTaskCreated?(event: TaskCreatedEvent, context: ExtensionContext): Promise<void | Partial<TaskCreatedEvent>>;
+
+  /**
+   * Called when a task is prepared (both new and loaded tasks)
+   * @returns void or partial event to modify task data
+   */
+  onTaskPrepared?(event: TaskPreparedEvent, context: ExtensionContext): Promise<void | Partial<TaskPreparedEvent>>;
+
+  /**
+   * Called when a task is initialized and ready for use
+   * @returns void or partial event to modify task data
+   */
+  onTaskInitialized?(event: TaskInitializedEvent, context: ExtensionContext): Promise<void | Partial<TaskInitializedEvent>>;
+
+  /**
+   * Called when a task is closed
+   * @returns void or partial event to modify task data
+   */
+  onTaskClosed?(event: TaskClosedEvent, context: ExtensionContext): Promise<void | Partial<TaskClosedEvent>>;
+
+  // Prompt Events
+
+  /**
+   * Called when prompt processing starts
+   * @returns void or partial event to modify
+   */
+  onPromptStarted?(event: PromptStartedEvent, context: ExtensionContext): Promise<void | Partial<PromptStartedEvent>>;
+
+  /**
+   * Called when prompt processing finishes
+   * @returns void or partial event to modify
+   */
+  onPromptFinished?(event: PromptFinishedEvent, context: ExtensionContext): Promise<void | Partial<PromptFinishedEvent>>;
+
+  // Agent Events
+
+  /**
+   * Called when agent mode starts
+   * @returns void or partial event to modify prompt
+   */
+  onAgentStarted?(event: AgentStartedEvent, context: ExtensionContext): Promise<void | Partial<AgentStartedEvent>>;
+
+  /**
+   * Called when agent mode finishes
+   * @returns void or partial event to modify result messages
+   */
+  onAgentFinished?(event: AgentFinishedEvent, context: ExtensionContext): Promise<void | Partial<AgentFinishedEvent>>;
+
+  /**
+   * Called after each agent step completes
+   * @returns void or partial event
+   */
+  onAgentStepFinished?(event: AgentStepFinishedEvent, context: ExtensionContext): Promise<void | Partial<AgentStepFinishedEvent>>;
+
+  // Tool Events
+
+  /**
+   * Called when a tool requires approval
+   * Set event.blocked = true to prevent execution
+   * @returns void or partial event to modify approval behavior
+   */
+  onToolApproval?(event: ToolApprovalEvent, context: ExtensionContext): Promise<void | Partial<ToolApprovalEvent>>;
+
+  /**
+   * Called when a tool is about to be executed
+   * Set event.blocked = true to prevent execution
+   * @returns void or partial event to modify tool call
+   */
+  onToolCalled?(event: ToolCalledEvent, context: ExtensionContext): Promise<void | Partial<ToolCalledEvent>>;
+
+  /**
+   * Called after tool execution completes
+   * Use modifiedResult to change the result
+   * @returns void or partial event to modify result
+   */
+  onToolFinished?(event: ToolFinishedEvent, context: ExtensionContext): Promise<void | Partial<ToolFinishedEvent>>;
+
+  // File Events
+
+  /**
+   * Called when files are added to context
+   * Modify event.files to filter, add, or clear files (return empty array to prevent addition)
+   * @returns void or partial event to modify files
+   */
+  onFilesAdded?(event: FilesAddedEvent, context: ExtensionContext): Promise<void | Partial<FilesAddedEvent>>;
+
+  /**
+   * Called when files are dropped into the chat
+   * Modify event.files to filter, add, or clear files (return empty array to prevent addition)
+   * @returns void or partial event to modify files
+   */
+  onFilesDropped?(event: FilesDroppedEvent, context: ExtensionContext): Promise<void | Partial<FilesDroppedEvent>>;
+
+  // Message Events
+
+  /**
+   * Called on each response chunk
+   * @returns void or partial event to modify message
+   */
+  onResponseChunk?(event: ResponseChunkEvent, context: ExtensionContext): Promise<void | Partial<ResponseChunkEvent>>;
+
+  /**
+   * Called on response completion
+   * @returns void or partial event to modify message
+   */
+  onResponseCompleted?(event: ResponseCompletedEvent, context: ExtensionContext): Promise<void | Partial<ResponseCompletedEvent>>;
+
+  // Approval Events
+
+  /**
+   * Called when handling user approval requests
+   * Set event.blocked = true to prevent approval handling
+   * @returns void or partial event to modify approval
+   */
+  onHandleApproval?(event: HandleApprovalEvent, context: ExtensionContext): Promise<void | Partial<HandleApprovalEvent>>;
+
+  // Subagent Events
+
+  /**
+   * Called when a subagent starts
+   * Set event.blocked = true to prevent subagent spawning
+   * @returns void or partial event to modify prompt
+   */
+  onSubagentStarted?(event: SubagentStartedEvent, context: ExtensionContext): Promise<void | Partial<SubagentStartedEvent>>;
+
+  /**
+   * Called when a subagent finishes
+   * @returns void or partial event to modify result
+   */
+  onSubagentFinished?(event: SubagentFinishedEvent, context: ExtensionContext): Promise<void | Partial<SubagentFinishedEvent>>;
+
+  // Question Events
+
+  /**
+   * Called when a question is asked to the user
+   * @returns void or partial event to modify question
+   */
+  onQuestionAsked?(event: QuestionAskedEvent, context: ExtensionContext): Promise<void | Partial<QuestionAskedEvent>>;
+
+  /**
+   * Called when user answers a question
+   * @returns void or partial event to modify answer
+   */
+  onQuestionAnswered?(event: QuestionAnsweredEvent, context: ExtensionContext): Promise<void | Partial<QuestionAnsweredEvent>>;
+
+  // Command Events
+
+  /**
+   * Called when a slash command is executed
+   * @returns void or partial event to modify command
+   */
+  onCommandExecuted?(event: CommandExecutedEvent, context: ExtensionContext): Promise<void | Partial<CommandExecutedEvent>>;
+
+  /**
+   * Called when a custom command is executed
+   * Set event.blocked = true to prevent execution
+   * Set event.prompt to override the processed template
+   * @returns void or partial event to modify command execution
+   */
+  onCustomCommandExecuted?(event: CustomCommandExecutedEvent, context: ExtensionContext): Promise<void | Partial<CustomCommandExecutedEvent>>;
+
+  // Aider Events (Legacy)
+
+  /**
+   * Called when Aider prompt starts (legacy event)
+   * @returns void or partial event to modify prompt
+   */
+  onAiderPromptStarted?(event: AiderPromptStartedEvent, context: ExtensionContext): Promise<void | Partial<AiderPromptStartedEvent>>;
+
+  /**
+   * Called when Aider prompt finishes (legacy event)
+   * @returns void or partial event to modify responses
+   */
+  onAiderPromptFinished?(event: AiderPromptFinishedEvent, context: ExtensionContext): Promise<void | Partial<AiderPromptFinishedEvent>>;
 }
 ⋮----
-export interface ModelOverrides {
-  version: number;
-  models: Model[];
-}
+// Lifecycle methods
 ⋮----
-export interface CustomCommandArgument {
-  description: string;
-  required?: boolean;
-}
+/**
+   * Called when extension is loaded
+   * Use this to initialize your extension, set up state, etc.
+   */
+onLoad?(context: ExtensionContext): void | Promise<void>;
 ⋮----
-export interface CustomCommand {
-  name: string;
-  description: string;
-  arguments: CustomCommandArgument[];
-  template: string;
-  includeContext?: boolean;
-  autoApprove?: boolean;
-}
+/**
+   * Called when extension is unloaded
+   * Clean up resources, save state, etc.
+   */
+onUnload?(): void | Promise<void>;
 ⋮----
-export interface TerminalData {
-  terminalId: string;
-  baseDir: string;
-  taskId: string;
-  data: string;
-}
+// Tool registration
 ⋮----
-export interface TerminalExitData {
-  terminalId: string;
-  baseDir: string;
-  taskId: string;
-  exitCode: number;
-  signal?: number;
-}
+/**
+   * Return array of tools this extension provides
+   * Called when extension is loaded and when tools need to be refreshed
+   */
+getTools?(context: ExtensionContext): ToolDefinition[];
 ⋮----
-export enum MemoryEntryType {
-  Task = 'task',
-  UserPreference = 'user-preference',
-  CodePattern = 'code-pattern',
-}
+// UI element registration
 ⋮----
-export interface MemoryEntry {
-  id: string;
-  content: string;
-  type: MemoryEntryType;
-  taskId?: string;
-  projectId?: string;
-  timestamp: number;
-}
+/**
+   * Return array of UI elements this extension provides
+   * Called when extension is loaded and when UI needs to be refreshed
+   */
+getUIElements?(): UIElementDefinition[];
 ⋮----
-export interface BranchInfo {
-  name: string;
-  isCurrent: boolean;
-  hasWorktree: boolean;
+// Command registration
+⋮----
+/**
+   * Return array of commands this extension provides
+   * Called when extension is loaded and when commands need to be refreshed
+   */
+getCommands?(context: ExtensionContext): CommandDefinition[];
+⋮----
+// Agent registration
+⋮----
+/**
+   * Return array of agent profiles this extension provides
+   * Called when extension is loaded and when agents need to be refreshed
+   * Extension-provided agents will be included in the list of all agents
+   */
+getAgents?(context: ExtensionContext): AgentProfile[];
+⋮----
+/**
+   * Called when a user updates an extension-provided agent profile
+   * Extension should persist the updated profile and return it from future getAgents() calls
+   * @param context - Extension context (no project available for global operations)
+   * @param agentId - The ID of the agent being updated
+   * @param updatedProfile - The complete updated profile
+   * @returns The updated agent profile
+   */
+onAgentProfileUpdated?(context: ExtensionContext, agentId: string, updatedProfile: AgentProfile): Promise<AgentProfile>;
+⋮----
+// Task Events
+⋮----
+/**
+   * Called when a new task is created
+   * @returns void or partial event to modify task data
+   */
+onTaskCreated?(event: TaskCreatedEvent, context: ExtensionContext): Promise<void | Partial<TaskCreatedEvent>>;
+⋮----
+/**
+   * Called when a task is prepared (both new and loaded tasks)
+   * @returns void or partial event to modify task data
+   */
+onTaskPrepared?(event: TaskPreparedEvent, context: ExtensionContext): Promise<void | Partial<TaskPreparedEvent>>;
+⋮----
+/**
+   * Called when a task is initialized and ready for use
+   * @returns void or partial event to modify task data
+   */
+onTaskInitialized?(event: TaskInitializedEvent, context: ExtensionContext): Promise<void | Partial<TaskInitializedEvent>>;
+⋮----
+/**
+   * Called when a task is closed
+   * @returns void or partial event to modify task data
+   */
+onTaskClosed?(event: TaskClosedEvent, context: ExtensionContext): Promise<void | Partial<TaskClosedEvent>>;
+⋮----
+// Prompt Events
+⋮----
+/**
+   * Called when prompt processing starts
+   * @returns void or partial event to modify
+   */
+onPromptStarted?(event: PromptStartedEvent, context: ExtensionContext): Promise<void | Partial<PromptStartedEvent>>;
+⋮----
+/**
+   * Called when prompt processing finishes
+   * @returns void or partial event to modify
+   */
+onPromptFinished?(event: PromptFinishedEvent, context: ExtensionContext): Promise<void | Partial<PromptFinishedEvent>>;
+⋮----
+// Agent Events
+⋮----
+/**
+   * Called when agent mode starts
+   * @returns void or partial event to modify prompt
+   */
+onAgentStarted?(event: AgentStartedEvent, context: ExtensionContext): Promise<void | Partial<AgentStartedEvent>>;
+⋮----
+/**
+   * Called when agent mode finishes
+   * @returns void or partial event to modify result messages
+   */
+onAgentFinished?(event: AgentFinishedEvent, context: ExtensionContext): Promise<void | Partial<AgentFinishedEvent>>;
+⋮----
+/**
+   * Called after each agent step completes
+   * @returns void or partial event
+   */
+onAgentStepFinished?(event: AgentStepFinishedEvent, context: ExtensionContext): Promise<void | Partial<AgentStepFinishedEvent>>;
+⋮----
+// Tool Events
+⋮----
+/**
+   * Called when a tool requires approval
+   * Set event.blocked = true to prevent execution
+   * @returns void or partial event to modify approval behavior
+   */
+onToolApproval?(event: ToolApprovalEvent, context: ExtensionContext): Promise<void | Partial<ToolApprovalEvent>>;
+⋮----
+/**
+   * Called when a tool is about to be executed
+   * Set event.blocked = true to prevent execution
+   * @returns void or partial event to modify tool call
+   */
+onToolCalled?(event: ToolCalledEvent, context: ExtensionContext): Promise<void | Partial<ToolCalledEvent>>;
+⋮----
+/**
+   * Called after tool execution completes
+   * Use modifiedResult to change the result
+   * @returns void or partial event to modify result
+   */
+onToolFinished?(event: ToolFinishedEvent, context: ExtensionContext): Promise<void | Partial<ToolFinishedEvent>>;
+⋮----
+// File Events
+⋮----
+/**
+   * Called when files are added to context
+   * Modify event.files to filter, add, or clear files (return empty array to prevent addition)
+   * @returns void or partial event to modify files
+   */
+onFilesAdded?(event: FilesAddedEvent, context: ExtensionContext): Promise<void | Partial<FilesAddedEvent>>;
+⋮----
+/**
+   * Called when files are dropped into the chat
+   * Modify event.files to filter, add, or clear files (return empty array to prevent addition)
+   * @returns void or partial event to modify files
+   */
+onFilesDropped?(event: FilesDroppedEvent, context: ExtensionContext): Promise<void | Partial<FilesDroppedEvent>>;
+⋮----
+// Message Events
+⋮----
+/**
+   * Called on each response chunk
+   * @returns void or partial event to modify message
+   */
+onResponseChunk?(event: ResponseChunkEvent, context: ExtensionContext): Promise<void | Partial<ResponseChunkEvent>>;
+⋮----
+/**
+   * Called on response completion
+   * @returns void or partial event to modify message
+   */
+onResponseCompleted?(event: ResponseCompletedEvent, context: ExtensionContext): Promise<void | Partial<ResponseCompletedEvent>>;
+⋮----
+// Approval Events
+⋮----
+/**
+   * Called when handling user approval requests
+   * Set event.blocked = true to prevent approval handling
+   * @returns void or partial event to modify approval
+   */
+onHandleApproval?(event: HandleApprovalEvent, context: ExtensionContext): Promise<void | Partial<HandleApprovalEvent>>;
+⋮----
+// Subagent Events
+⋮----
+/**
+   * Called when a subagent starts
+   * Set event.blocked = true to prevent subagent spawning
+   * @returns void or partial event to modify prompt
+   */
+onSubagentStarted?(event: SubagentStartedEvent, context: ExtensionContext): Promise<void | Partial<SubagentStartedEvent>>;
+⋮----
+/**
+   * Called when a subagent finishes
+   * @returns void or partial event to modify result
+   */
+onSubagentFinished?(event: SubagentFinishedEvent, context: ExtensionContext): Promise<void | Partial<SubagentFinishedEvent>>;
+⋮----
+// Question Events
+⋮----
+/**
+   * Called when a question is asked to the user
+   * @returns void or partial event to modify question
+   */
+onQuestionAsked?(event: QuestionAskedEvent, context: ExtensionContext): Promise<void | Partial<QuestionAskedEvent>>;
+⋮----
+/**
+   * Called when user answers a question
+   * @returns void or partial event to modify answer
+   */
+onQuestionAnswered?(event: QuestionAnsweredEvent, context: ExtensionContext): Promise<void | Partial<QuestionAnsweredEvent>>;
+⋮----
+// Command Events
+⋮----
+/**
+   * Called when a slash command is executed
+   * @returns void or partial event to modify command
+   */
+onCommandExecuted?(event: CommandExecutedEvent, context: ExtensionContext): Promise<void | Partial<CommandExecutedEvent>>;
+⋮----
+/**
+   * Called when a custom command is executed
+   * Set event.blocked = true to prevent execution
+   * Set event.prompt to override the processed template
+   * @returns void or partial event to modify command execution
+   */
+onCustomCommandExecuted?(event: CustomCommandExecutedEvent, context: ExtensionContext): Promise<void | Partial<CustomCommandExecutedEvent>>;
+⋮----
+// Aider Events (Legacy)
+⋮----
+/**
+   * Called when Aider prompt starts (legacy event)
+   * @returns void or partial event to modify prompt
+   */
+onAiderPromptStarted?(event: AiderPromptStartedEvent, context: ExtensionContext): Promise<void | Partial<AiderPromptStartedEvent>>;
+⋮----
+/**
+   * Called when Aider prompt finishes (legacy event)
+   * @returns void or partial event to modify responses
+   */
+onAiderPromptFinished?(event: AiderPromptFinishedEvent, context: ExtensionContext): Promise<void | Partial<AiderPromptFinishedEvent>>;
+⋮----
+/**
+ * Constructor type for extension classes
+ */
+export interface ExtensionConstructor {
+  new (): Extension;
+  metadata?: ExtensionMetadata;
 }
-export interface NotificationData {
-  baseDir: string;
-  title: string;
-  body: string;
-}
+
+================
+File: src/common/tools.ts
+================
+
 
 ================
 File: src/common/utils.ts
 ================
 import fs from 'fs/promises';
 ⋮----
-import { TOOL_GROUP_NAME_SEPARATOR } from '@common/tools';
+import { EXTENSION_TOOL_GROUP_NAME, TOOL_GROUP_NAME_SEPARATOR } from '@common/tools';
 ⋮----
 import { OS, UsageReportData } from './types';
 ⋮----
@@ -6734,7 +8149,15 @@ export class ApprovalManager
 ⋮----
 constructor(
 ⋮----
-public async handleApproval(key: string, text: string, subject?: string): Promise<[boolean, string | undefined]>
+async handleToolApproval(
+    toolName: string,
+    input: Record<string, unknown> | undefined,
+    key: string,
+    text: string,
+    subject?: string,
+): Promise<[boolean, string | undefined]>
+⋮----
+async handleApproval(key: string, text: string, subject?: string): Promise<[boolean, string | undefined]>
 ⋮----
 return [true, undefined]; // Auto-approve
 ⋮----
@@ -7110,17 +8533,16 @@ export const createTodoToolset = (task: Task, profile: AgentProfile, promptConte
 ================
 File: src/main/agent/agent-profile-manager.ts
 ================
-import fs from 'fs/promises';
-import path from 'path';
 import { homedir } from 'os';
 ⋮----
 import { FSWatcher, watch } from 'chokidar';
-import debounce from 'lodash/debounce';
+import { debounce } from 'lodash';
 import { DEFAULT_AGENT_PROFILE, DEFAULT_AGENT_PROFILES } from '@common/agent';
 import { fileExists } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
 ⋮----
 import type { AgentProfile } from '@common/types';
+import type { ExtensionRegistry } from '@/extensions/extension-registry';
 ⋮----
 import { AIDER_DESK_AGENTS_DIR, AIDER_DESK_RULES_DIR } from '@/constants';
 import logger from '@/logger';
@@ -7158,9 +8580,9 @@ export class AgentProfileManager
 // Directory watching (one watcher per directory)
 private directoryWatchers: Map<string, FSWatcher> = new Map(); // agentsDir → watcher
 ⋮----
-constructor(private readonly eventManager: EventManager)
+constructor(
 ⋮----
-public async start(): Promise<void>
+public async init(): Promise<void>
 ⋮----
 public async initializeForProject(projectDir: string): Promise<void>
 ⋮----
@@ -7174,7 +8596,7 @@ public removeProject(projectDir: string): void
 ⋮----
 // Clean up directory watcher
 ⋮----
-private notifyListeners(): void
+public sendAgentProfilesUpdated(): void
 ⋮----
 private async initializeProfiles(ensureDefaults = true): Promise<void>
 ⋮----
@@ -7287,6 +8709,10 @@ public async deleteProfile(profileId: string): Promise<void>
 ⋮----
 public getProfile(profileId: string): AgentProfile | undefined
 ⋮----
+// Check extension agents first (they can override file-based profiles)
+⋮----
+// Fall back to file-based profiles
+⋮----
 private getOrderedProfiles(profileContexts: AgentProfileContext[]): AgentProfile[]
 ⋮----
 // First, prioritize project profiles over global profiles
@@ -7297,7 +8723,15 @@ private getGlobalProfiles(): AgentProfile[]
 ⋮----
 public getAllProfiles(): AgentProfile[]
 ⋮----
-public getProjectProfiles(projectDir: string, includeGlobal = true): AgentProfile[]
+// Get extension agents first (they can override file-based profiles)
+⋮----
+// Then get file-based profiles
+⋮----
+// Extension agents come first for override capability
+⋮----
+public getProjectProfiles(projectDir: string, includeGlobal = true, includeExtension = true): AgentProfile[]
+⋮----
+// Extension agents come first for override capability
 ⋮----
 public async updateAgentProfilesOrder(agentProfiles: AgentProfile[]): Promise<void>
 ⋮----
@@ -7418,6 +8852,7 @@ import { TelemetryManager } from '@/telemetry/telemetry-manager';
 import { ResponseMessage } from '@/messages';
 import { createSubagentsToolset } from '@/agent/tools/subagents';
 import { AgentProfileManager } from '@/agent/agent-profile-manager';
+import { ExtensionManager } from '@/extensions/extension-manager';
 ⋮----
 export class Agent
 ⋮----
@@ -7486,7 +8921,9 @@ return; // Do not add the tool if it's never approved
 ⋮----
 // Add provider-specific tools
 ⋮----
-private wrapToolsWithHooks(task: Task, toolSet: ToolSet): ToolSet
+// Add extension tools
+⋮----
+private wrapToolsWithHooks(task: Task, toolSet: ToolSet, abortSignal?: AbortSignal, promptContext?: PromptContext): ToolSet
 ⋮----
 private convertMpcToolToAiSdkTool(
     providerName: LlmProviderName,
@@ -10586,7 +12023,7 @@ import { promisify } from 'util';
 ⋮----
 import { v4 as uuidv4 } from 'uuid';
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
-import { StoryStatus } from '@common/bmad-types';
+import { StoryStatus } from '@common/types';
 import { glob } from 'glob';
 ⋮----
 import { ContextPreparer } from './context-preparer';
@@ -10599,9 +12036,9 @@ import type {
   IncompleteWorkflowMetadata,
   SprintStatusData,
   WorkflowArtifacts,
-} from '@common/bmad-types';
+  ContextFile,
+} from '@common/types';
 import type { Task } from '@/task';
-import type { ContextFile } from '@common/types';
 ⋮----
 import logger from '@/logger';
 ⋮----
@@ -10768,7 +12205,7 @@ import { glob } from 'glob';
 import { ContextMessage, ContextUserMessage } from '@common/types';
 import { fileExists } from '@common/utils';
 ⋮----
-import type { BmadStatus } from '@common/bmad-types';
+import type { BmadStatus } from '@common/types';
 ⋮----
 import logger from '@/logger';
 import { execWithShellPath } from '@/utils';
@@ -10970,7 +12407,7 @@ import { watch, FSWatcher } from 'chokidar';
 import { loadFront } from 'yaml-front-matter';
 import debounce from 'lodash/debounce';
 ⋮----
-import type { CustomCommand } from '@common/types';
+import type { CommandArgument, CustomCommand } from '@common/types';
 ⋮----
 import { AIDER_DESK_COMMANDS_DIR } from '@/constants';
 import logger from '@/logger';
@@ -11035,7 +12472,7 @@ getAllCommands(): CustomCommand[]
 ⋮----
 async processCommandTemplate(command: CustomCommand, args: string[]): Promise<string>
 ⋮----
-private substituteArguments(template: string, args: string[], commandArgs: CustomCommand['arguments']): string
+private substituteArguments(template: string, args: string[], commandArgs: CommandArgument[]): string
 ⋮----
 // First, substitute {{ARGUMENTS}} placeholder with all arguments joined by spaces
 ⋮----
@@ -11095,11 +12532,6 @@ constructor()
 ⋮----
 public init()
 ⋮----
-// SQL statement to create the 'messages' table if it doesn't already exist.
-// This table stores information about messages, including their content, token usage, and cost.
-⋮----
-// Execute the SQL statement to ensure the table is ready for use.
-⋮----
 /**
    * Saves a message to the database.
    * @param id The unique identifier for the message.
@@ -11119,6 +12551,10 @@ public saveMessage(id: string, type: 'tool' | 'assistant', project: string, mode
 public close(): void
 ⋮----
 public queryUsageData(from: Date, to: Date): UsageDataRow[]
+⋮----
+public getExtensionState(extensionId: string, key: string): unknown
+⋮----
+public setExtensionState(extensionId: string, key: string, value: unknown): void
 
 ================
 File: src/main/data-manager/index.ts
@@ -11131,7 +12567,6 @@ File: src/main/events/event-manager.ts
 import { Socket } from 'socket.io';
 import {
   ContextFile,
-  CustomCommand,
   InputHistoryData,
   ProviderProfile,
   LogData,
@@ -11164,9 +12599,10 @@ import {
   UpdatedFilesUpdatedData,
   QueuedPromptData,
   QueuedPromptsUpdatedData,
+  BmadStatus,
+  CommandsData,
 } from '@common/types';
 ⋮----
-import type { BmadStatus } from '@common/bmad-types';
 import type { BrowserWindow } from 'electron';
 ⋮----
 import logger from '@/logger';
@@ -11233,8 +12669,8 @@ sendUpdateTokensInfo(tokensInfo: TokensInfoData): void
 // Input history events
 sendInputHistoryUpdated(baseDir: string, taskId: string, inputHistory: string[]): void
 ⋮----
-// Custom commands events
-sendCustomCommandsUpdated(baseDir: string, taskId: string, commands: CustomCommand[]): void
+// Commands events
+sendCommandsUpdated(data: CommandsData): void
 ⋮----
 sendCustomCommandError(baseDir: string, taskId: string, error: string): void
 ⋮----
@@ -11300,6 +12736,608 @@ sendBmadStatusChanged(status: BmadStatus): void
 File: src/main/events/index.ts
 ================
 
+
+================
+File: src/main/extensions/__fixtures__/invalid-syntax.ts
+================
+
+
+================
+File: src/main/extensions/__fixtures__/prohibited-import.ts
+================
+import { app } from 'electron';
+
+================
+File: src/main/extensions/__fixtures__/valid-extension.ts
+================
+
+
+================
+File: src/main/extensions/extension-context.ts
+================
+import { ProjectContextImpl } from './project-context';
+import { TaskContextImpl } from './task-context';
+⋮----
+import type { ExtensionContext, ProjectContext, TaskContext } from '@common/extensions';
+import type { AgentProfile, CreateTaskParams, Mode, Model, SettingsData } from '@common/types';
+import type { AgentProfileManager } from '@/agent';
+import type { ModelManager } from '@/models';
+import type { Project } from '@/project';
+import type { Store } from '@/store';
+import type { Task } from '@/task';
+⋮----
+import logger from '@/logger';
+⋮----
+export class NotImplementedError extends Error
+⋮----
+constructor(methodName: string)
+⋮----
+export class ExtensionContextImpl implements ExtensionContext
+⋮----
+constructor(
+⋮----
+log(message: string, type: 'info' | 'error' | 'warn' | 'debug' = 'info'): void
+⋮----
+getProjectDir(): string
+⋮----
+getTaskContext(): TaskContext | null
+⋮----
+getProjectContext(): ProjectContext
+⋮----
+async createTask(name: string, params?: CreateTaskParams): Promise<string>
+⋮----
+async getAgentProfiles(): Promise<AgentProfile[]>
+⋮----
+async getModelConfigs(): Promise<Model[]>
+⋮----
+async showNotification(_message: string, _type?: 'info' | 'warning' | 'error'): Promise<void>
+⋮----
+async showConfirm(_message: string, _confirmText?: string, _cancelText?: string): Promise<boolean>
+⋮----
+async showInput(_prompt: string, _placeholder?: string, _defaultValue?: string): Promise<string | undefined>
+⋮----
+async getSetting(key: string): Promise<unknown>
+⋮----
+async updateSettings(updates: Record<string, unknown>): Promise<void>
+⋮----
+async runPrompt(prompt: string, mode: Mode = 'agent'): Promise<void>
+
+================
+File: src/main/extensions/extension-loader.ts
+================
+import path from 'path';
+⋮----
+import { createJiti } from 'jiti';
+import { Extension, ExtensionMetadata } from '@common/extensions';
+⋮----
+import logger from '@/logger';
+⋮----
+// Define the interface for the loaded module
+interface ExtensionModule {
+  default: {
+    new (): Extension;
+    metadata?: ExtensionMetadata;
+  };
+}
+⋮----
+export class ExtensionLoader
+⋮----
+constructor()
+⋮----
+// Initialize jiti relative to the current file or project root
+// Typically we want it to resolve relative to where we are loading from
+// Disable cache to always load fresh file content
+⋮----
+private deriveExtensionName(filePath: string): string
+⋮----
+// If the file is index.ts or index.js, use the parent folder name
+⋮----
+// Otherwise, use the filename without extension
+⋮----
+async loadExtension(filePath: string): Promise<
+⋮----
+// Use jiti to load the file
+// jiti handles TypeScript compilation on the fly
+⋮----
+// Check if default export exists
+⋮----
+// Check if it's a class/constructor
+⋮----
+// Check for static metadata, or generate from filename
+⋮----
+// Instantiate the extension
+
+================
+File: src/main/extensions/extension-manager.ts
+================
+import fs from 'fs/promises';
+import path from 'path';
+⋮----
+import { FSWatcher, watch } from 'chokidar';
+import debounce from 'lodash/debounce';
+import { z } from 'zod';
+import { ToolApprovalState } from '@common/types';
+⋮----
+import { ExtensionLoader } from './extension-loader';
+import { ExtensionRegistry, LoadedExtension, RegisteredTool, RegisteredCommand, RegisteredAgent } from './extension-registry';
+import { ExtensionContextImpl } from './extension-context';
+⋮----
+import type { AgentProfile } from '@common/types';
+import type { Store } from '@/store';
+import type { AgentProfileManager } from '@/agent';
+import type { ModelManager } from '@/models';
+import type {
+  AgentFinishedEvent,
+  AgentStartedEvent,
+  AgentStepFinishedEvent,
+  AiderPromptFinishedEvent,
+  AiderPromptStartedEvent,
+  CommandExecutedEvent,
+  CustomCommandExecutedEvent,
+  Extension,
+  ExtensionContext,
+  FilesAddedEvent,
+  FilesDroppedEvent,
+  HandleApprovalEvent,
+  PromptFinishedEvent,
+  PromptStartedEvent,
+  QuestionAnsweredEvent,
+  QuestionAskedEvent,
+  ResponseChunkEvent,
+  ResponseCompletedEvent,
+  SubagentFinishedEvent,
+  SubagentStartedEvent,
+  TaskClosedEvent,
+  TaskCreatedEvent,
+  TaskInitializedEvent,
+  TaskPreparedEvent,
+  ToolApprovalEvent,
+  ToolCalledEvent,
+  ToolDefinition,
+  ToolFinishedEvent,
+  CommandDefinition,
+} from '@common/extensions';
+import type { ToolCallOptions, ToolSet } from 'ai';
+import type { ProjectManager } from '@/project/project-manager';
+⋮----
+import logger from '@/logger';
+import { AIDER_DESK_EXTENSIONS_DIR, AIDER_DESK_GLOBAL_EXTENSIONS_DIR } from '@/constants';
+import { Project } from '@/project';
+import { Task } from '@/task';
+⋮----
+/**
+ * Mapping of extension event names to their event payload types
+ */
+export type ExtensionEventMap = {
+  onTaskCreated: TaskCreatedEvent;
+  onTaskPrepared: TaskPreparedEvent;
+  onTaskInitialized: TaskInitializedEvent;
+  onTaskClosed: TaskClosedEvent;
+  onPromptStarted: PromptStartedEvent;
+  onPromptFinished: PromptFinishedEvent;
+  onAgentStarted: AgentStartedEvent;
+  onAgentFinished: AgentFinishedEvent;
+  onAgentStepFinished: AgentStepFinishedEvent;
+  onAiderPromptStarted: AiderPromptStartedEvent;
+  onAiderPromptFinished: AiderPromptFinishedEvent;
+  onToolApproval: ToolApprovalEvent;
+  onToolCalled: ToolCalledEvent;
+  onToolFinished: ToolFinishedEvent;
+  onFilesAdded: FilesAddedEvent;
+  onFilesDropped: FilesDroppedEvent;
+  onResponseChunk: ResponseChunkEvent;
+  onResponseCompleted: ResponseCompletedEvent;
+  onHandleApproval: HandleApprovalEvent;
+  onSubagentStarted: SubagentStartedEvent;
+  onSubagentFinished: SubagentFinishedEvent;
+  onQuestionAsked: QuestionAskedEvent;
+  onQuestionAnswered: QuestionAnsweredEvent;
+  onCommandExecuted: CommandExecutedEvent;
+  onCustomCommandExecuted: CustomCommandExecutedEvent;
+};
+⋮----
+export class ExtensionManager
+⋮----
+constructor(
+    private readonly store: Store,
+    private readonly agentProfileManager: AgentProfileManager,
+    private readonly modelManager: ModelManager,
+    private readonly projectManager: ProjectManager,
+    private readonly registry: ExtensionRegistry = new ExtensionRegistry(),
+)
+⋮----
+async init(): Promise<void>
+⋮----
+private async initializeExtension(loaded: LoadedExtension, project?: Project): Promise<boolean>
+⋮----
+/**
+   * Loads, registers, and initializes an extension from a file path.
+   * Combines the common pattern of load → register → initialize.
+   */
+private async loadAndInitializeExtension(filePath: string, project?: Project): Promise<boolean>
+⋮----
+/**
+   * Unified method to load all extensions from a directory.
+   * Discovers, loads, initializes, and collects tools/commands for all extensions in the directory.
+   * Used for both global initialization and project-specific loading.
+   *
+   * @param dir - The directory to load extensions from
+   * @param project - Optional project instance (for project-specific extensions)
+   * @returns Object with loadedCount, initializedCount, and errors
+   */
+private async loadExtensionsForDir(dir: string, project?: Project): Promise<void>
+⋮----
+// Notify about agent profile updates (extension agents may have changed)
+⋮----
+// Global extensions loaded - notify all projects
+⋮----
+getExtensions(): LoadedExtension[]
+⋮----
+getExtension(name: string): LoadedExtension | undefined
+⋮----
+isInitialized(): boolean
+⋮----
+async dispose(): Promise<void>
+⋮----
+async unloadExtension(filePath: string): Promise<void>
+⋮----
+private findExtensionByPath(filePath: string): LoadedExtension | undefined
+⋮----
+private async discoverExtensionsFromDir(extensionsDir: string): Promise<string[]>
+⋮----
+private async scanDirectory(dir: string): Promise<string[]>
+⋮----
+private async fileExists(filePath: string): Promise<boolean>
+⋮----
+private async setupWatcherForDir(dir: string, onChange: () => Promise<void>): Promise<FSWatcher | null>
+⋮----
+private async startHotReloadWatcher(): Promise<void>
+⋮----
+private async reloadGlobalExtensions(): Promise<void>
+⋮----
+private async unloadExtensionsForDir(dir: string): Promise<void>
+⋮----
+private async stopGlobalWatcher(): Promise<void>
+⋮----
+async reloadProjectExtensions(project: Project): Promise<void>
+⋮----
+async stopProjectWatcher(projectDir: string): Promise<void>
+⋮----
+validateToolDefinition(tool: ToolDefinition):
+⋮----
+collectTools(): RegisteredTool[]
+⋮----
+getTools(): RegisteredTool[]
+⋮----
+getToolsByExtension(extensionName: string): RegisteredTool[]
+⋮----
+/**
+   * Creates a Vercel AI SDK compatible ToolSet from registered extension tools.
+   * Each tool is wrapped with validation, error handling, and ExtensionContext creation.
+   *
+   * @param task - The current Task instance
+   * @param profile - The agent profile with tool approval settings
+   * @param abortSignal - Optional AbortSignal for cancellation support
+   * @returns A ToolSet containing all approved extension tools
+   */
+createExtensionToolset(task: Task, profile: AgentProfile, abortSignal?: AbortSignal): ToolSet
+⋮----
+// Skip if tool is marked as Never approved
+⋮----
+// Error isolation - log and return error message
+⋮----
+validateCommandDefinition(command: CommandDefinition):
+⋮----
+collectCommands(): RegisteredCommand[]
+⋮----
+getCommands(): RegisteredCommand[]
+⋮----
+getCommandsByExtension(extensionName: string): RegisteredCommand[]
+⋮----
+collectAgents(project?: Project, task?: Task): RegisteredAgent[]
+⋮----
+getAgents(): RegisteredAgent[]
+⋮----
+getAgentsByExtension(extensionName: string): RegisteredAgent[]
+⋮----
+/**
+   * Attempts to update an extension-provided agent profile.
+   * @param profile - The updated profile
+   * @returns The updated profile if handled by extension, null if not an extension agent
+   */
+async updateAgentProfile(profile: AgentProfile): Promise<AgentProfile | null>
+⋮----
+// Update the agent in registry with the returned profile
+⋮----
+async executeCommand(commandName: string, args: string[], project: Project, task?: Task): Promise<void>
+⋮----
+/**
+   * Dispatches an event to all loaded and initialized extensions.
+   * Runs in parallel with HookManager triggers, allowing extensions to respond
+   * to the same events as hooks. Events can be modified or blocked by extensions.
+   *
+   * @param eventName - The name of the event to dispatch
+   * @param event - The event payload
+   * @param project - The current Project instance
+   * @param task - Optional Task instance (not available for all events)
+   * @returns The potentially modified event (blocked status is part of the event)
+   */
+async dispatchEvent<K extends keyof ExtensionEventMap>(
+    eventName: K,
+    event: ExtensionEventMap[K],
+    project: Project,
+    task?: Task,
+): Promise<ExtensionEventMap[K]>
+⋮----
+// Get all extensions (global + project-specific)
+⋮----
+// Early exit if no extensions
+⋮----
+// Sort extensions: global first, then project-specific
+⋮----
+// Skip uninitialized extensions
+⋮----
+// Get the handler method dynamically
+⋮----
+// Skip if extension doesn't handle this event
+⋮----
+// Create ExtensionContext for this extension
+⋮----
+// Call the extension handler
+// Using type assertion to handle dynamic dispatch across different event types
+⋮----
+// Process result if extension returned modifications
+⋮----
+// Merge partial event modifications
+⋮----
+// Check for blocking
+⋮----
+// Continue to next extension - errors don't stop the chain
+⋮----
+/**
+   * Sorts extensions for event dispatch: global extensions first, then project-specific
+   * @param extensions - All loaded extensions
+   * @param projectDir - Current project directory
+   * @returns Sorted array of extensions
+   */
+private sortExtensionsForDispatch(extensions: LoadedExtension[], projectDir: string): LoadedExtension[]
+⋮----
+/**
+   * Sends commands updated notification to all projects.
+   * Used when global extensions are loaded/reloaded without a specific project context.
+   */
+private sendCommandsUpdatedToAllProjects(): void
+
+================
+File: src/main/extensions/extension-registry.ts
+================
+import { Extension, ExtensionMetadata, ToolDefinition, CommandDefinition } from '@common/extensions';
+⋮----
+import type { AgentProfile } from '@common/types';
+⋮----
+import logger from '@/logger';
+⋮----
+export interface LoadedExtension {
+  instance: Extension;
+  metadata: ExtensionMetadata;
+  filePath: string;
+  initialized: boolean;
+  projectDir?: string;
+}
+⋮----
+export interface RegisteredTool {
+  extensionName: string;
+  tool: ToolDefinition;
+}
+⋮----
+export interface RegisteredCommand {
+  extensionName: string;
+  command: CommandDefinition;
+}
+⋮----
+export interface RegisteredAgent {
+  extensionName: string;
+  agent: AgentProfile;
+}
+⋮----
+export class ExtensionRegistry
+⋮----
+register(extension: Extension, metadata: ExtensionMetadata, filePath: string, projectDir?: string)
+⋮----
+setInitialized(name: string, initialized: boolean): void
+⋮----
+getExtensions(projectDir?: string): LoadedExtension[]
+⋮----
+getExtension(name: string): LoadedExtension | undefined
+⋮----
+unregister(name: string): boolean
+⋮----
+clear()
+⋮----
+registerTool(extensionName: string, tool: ToolDefinition): void
+⋮----
+getTools(): RegisteredTool[]
+⋮----
+getToolsByExtension(extensionName: string): RegisteredTool[]
+⋮----
+clearTools(): void
+⋮----
+registerCommand(extensionName: string, command: CommandDefinition): void
+⋮----
+getCommands(): RegisteredCommand[]
+⋮----
+getCommandsByExtension(extensionName: string): RegisteredCommand[]
+⋮----
+getCommandByName(name: string): RegisteredCommand | undefined
+⋮----
+clearCommands(): void
+⋮----
+registerAgent(extensionName: string, agent: AgentProfile): void
+⋮----
+getAgents(): RegisteredAgent[]
+⋮----
+getAgentsByExtension(extensionName: string): RegisteredAgent[]
+⋮----
+getAgentById(agentId: string): RegisteredAgent | undefined
+⋮----
+clearAgents(): void
+
+================
+File: src/main/extensions/index.ts
+================
+
+
+================
+File: src/main/extensions/project-context.ts
+================
+import { TaskContextImpl } from './task-context';
+⋮----
+import type { ProjectContext, TaskContext } from '@common/extensions';
+import type { CommandsData, CreateTaskParams, ProjectSettings, TaskData } from '@common/types';
+import type { Project } from '@/project';
+⋮----
+export class ProjectContextImpl implements ProjectContext
+⋮----
+constructor(private readonly project: Project)
+⋮----
+get baseDir(): string
+⋮----
+async createTask(params: CreateTaskParams): Promise<TaskData>
+⋮----
+getTask(taskId: string): TaskContext | null
+⋮----
+async getTasks(): Promise<TaskData[]>
+⋮----
+getMostRecentTask(): TaskContext | null
+⋮----
+async forkTask(taskId: string, messageId: string): Promise<TaskData>
+⋮----
+async duplicateTask(taskId: string): Promise<TaskData>
+⋮----
+async deleteTask(taskId: string): Promise<void>
+⋮----
+getCommands(): CommandsData
+⋮----
+getProjectSettings(): ProjectSettings
+⋮----
+async getInputHistory(): Promise<string[]>
+
+================
+File: src/main/extensions/task-context.ts
+================
+import type { QuestionOptions, TaskContext } from '@common/extensions';
+import type { AgentProfile, ContextFile, ContextMessage, LogLevel, Mode, QueuedPromptData, TaskData, TodoItem, UpdatedFile } from '@common/types';
+import type { Task } from '@/task';
+⋮----
+export class TaskContextImpl implements TaskContext
+⋮----
+constructor(private readonly task: Task)
+⋮----
+get data(): TaskData
+⋮----
+// Context Files (Read + Safe Write)
+⋮----
+async getContextFiles(): Promise<ContextFile[]>
+⋮----
+async addFile(path: string, readOnly = false): Promise<void>
+⋮----
+async addFiles(...files: ContextFile[]): Promise<void>
+⋮----
+async dropFile(path: string): Promise<void>
+⋮----
+// Messages (Read + Safe Write)
+⋮----
+async getContextMessages(): Promise<ContextMessage[]>
+⋮----
+async addMessage(content: string, role: 'user' | 'assistant' = 'user'): Promise<void>
+⋮----
+async removeMessage(messageId: string): Promise<void>
+⋮----
+async removeLastMessage(): Promise<void>
+⋮----
+async loadContextMessages(messages: ContextMessage[]): Promise<void>
+⋮----
+async redoLastUserPrompt(mode?: string, updatedPrompt?: string): Promise<void>
+⋮----
+// Files & Repo (Read-only)
+⋮----
+getTaskDir(): string
+⋮----
+async getAddableFiles(searchRegex?: string): Promise<string[]>
+⋮----
+async getAllFiles(useGit = true): Promise<string[]>
+⋮----
+async getUpdatedFiles(): Promise<UpdatedFile[]>
+⋮----
+getRepoMap(): string
+⋮----
+async addToGit(path: string): Promise<void>
+⋮----
+// Todos (Read + Safe Write)
+⋮----
+async getTodos(): Promise<TodoItem[]>
+⋮----
+async addTodo(name: string): Promise<TodoItem[]>
+⋮----
+async updateTodo(name: string, updates: Partial<TodoItem>): Promise<TodoItem[]>
+⋮----
+async deleteTodo(name: string): Promise<TodoItem[]>
+⋮----
+async clearAllTodos(): Promise<TodoItem[]>
+⋮----
+async setTodos(items: TodoItem[], initialUserPrompt = ''): Promise<void>
+⋮----
+// Execution
+⋮----
+async runPrompt(prompt: string, mode?: string): Promise<void>
+⋮----
+async runCustomCommand(name: string, args: string[] = [], mode?: string): Promise<void>
+⋮----
+async runSubagent(agentProfile: AgentProfile, prompt: string): Promise<void>
+⋮----
+async runCommand(command: string): Promise<void>
+⋮----
+async interruptResponse(): Promise<void>
+⋮----
+async generateText(agentProfile: AgentProfile, systemPrompt: string, prompt: string): Promise<string | undefined>
+⋮----
+// User Interaction
+⋮----
+async askQuestion(text: string, options?: QuestionOptions): Promise<string>
+⋮----
+addLogMessage(level: 'info' | 'error' | 'warn' | 'debug' | 'loading', message?: string): void
+⋮----
+// Task Management
+⋮----
+async updateTask(updates: Partial<TaskData>): Promise<TaskData>
+⋮----
+async handoffConversation(focus?: string, execute = false): Promise<void>
+⋮----
+// Context Management
+⋮----
+async clearContext(): Promise<void>
+⋮----
+async resetContext(): Promise<void>
+⋮----
+async compactConversation(instructions?: string): Promise<void>
+⋮----
+async generateContextMarkdown(): Promise<string | null>
+⋮----
+isInitialized(): boolean
+⋮----
+// Queued Prompts
+⋮----
+getQueuedPrompts(): QueuedPromptData[]
+⋮----
+async sendQueuedPromptNow(promptId: string): Promise<void>
+⋮----
+removeQueuedPrompt(promptId: string): void
+⋮----
+// Advanced Operations
+⋮----
+async getTaskAgentProfile(): Promise<AgentProfile | null>
+⋮----
+async answerQuestion(answer: string, userInput?: string): Promise<boolean>
 
 ================
 File: src/main/hooks/hook-context.ts
@@ -13500,6 +15538,7 @@ import { WorktreeManager } from '@/worktrees';
 import { MemoryManager } from '@/memory/memory-manager';
 import { HookManager } from '@/hooks/hook-manager';
 import { PromptsManager } from '@/prompts';
+import { ExtensionManager } from '@/extensions/extension-manager';
 ⋮----
 export class ProjectManager
 ⋮----
@@ -13515,6 +15554,7 @@ constructor(
     private readonly memoryManager: MemoryManager,
     private readonly hookManager: HookManager,
     private readonly promptsManager: PromptsManager,
+    private readonly extensionManager: ExtensionManager,
 )
 ⋮----
 private findProject(baseDir: string): Project | undefined
@@ -13537,7 +15577,9 @@ modelsUpdated()
 ⋮----
 projectSettingsChanged(baseDir: string, oldSettings: ProjectSettings, newSettings: ProjectSettings)
 ⋮----
-public getCustomCommands(baseDir: string)
+public getCommands(baseDir: string)
+⋮----
+public getProjects(): Project[]
 ⋮----
 agentProfileUpdated(oldProfile: AgentProfile, profile: AgentProfile)
 
@@ -13547,11 +15589,20 @@ File: src/main/project/project.ts
 import fs from 'fs/promises';
 import path from 'path';
 ⋮----
-import { CustomCommand, DefaultTaskState, ProjectSettings, SettingsData, TaskData, CreateTaskParams, WorkflowExecutionResult } from '@common/types';
+import {
+  BmadStatus,
+  Command,
+  CommandsData,
+  CreateTaskParams,
+  DefaultTaskState,
+  InstallResult,
+  ProjectSettings,
+  SettingsData,
+  TaskData,
+  WorkflowExecutionResult,
+} from '@common/types';
 import { fileExists } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
-⋮----
-import type { BmadStatus, InstallResult } from '@common/bmad-types';
 ⋮----
 import { AgentProfileManager, McpManager } from '@/agent';
 import { Connector } from '@/connector';
@@ -13568,6 +15619,7 @@ import { WorktreeManager } from '@/worktrees';
 import { MemoryManager } from '@/memory/memory-manager';
 import { HookManager } from '@/hooks/hook-manager';
 import { PromptsManager } from '@/prompts';
+import { ExtensionManager } from '@/extensions/extension-manager';
 import { AIDER_DESK_WATCH_FILES_LOCK } from '@/constants';
 import { determineMainModel, determineWeakModel } from '@/utils';
 import { BmadManager } from '@/bmad/bmad-manager';
@@ -13587,6 +15639,7 @@ constructor(
     private readonly memoryManager: MemoryManager,
     private readonly hookManager: HookManager,
     private readonly promptsManager: PromptsManager,
+    private readonly extensionManager: ExtensionManager,
 )
 ⋮----
 public async start()
@@ -13595,9 +15648,17 @@ private async prepareInternalTask()
 ⋮----
 public async createNewTask(params?: CreateTaskParams)
 ⋮----
+// Allow extensions to modify initial task data before task is created
+⋮----
+// Apply modifications from extension
+⋮----
 // adding files from internal task that keeps track of files to new task
 ⋮----
-private prepareTask(taskId: string = uuidv4(), initialTaskData?: Partial<TaskData>)
+private async prepareTask(taskId: string = uuidv4(), initialTaskData?: Partial<TaskData>)
+⋮----
+// Allow extensions to modify task data after preparation
+⋮----
+// Apply modifications from extension
 ⋮----
 private async loadTasks()
 ⋮----
@@ -13623,9 +15684,9 @@ public async addToInputHistory(message: string)
 ⋮----
 private async sendInputHistoryUpdatedEvent()
 ⋮----
-public getCustomCommands()
+public getCommands(): CommandsData
 ⋮----
-public sendCustomCommandsUpdated(commands: CustomCommand[])
+public sendCommandsUpdated(commands: CommandsData = this.getCommands())
 ⋮----
 private async deleteTaskInternal(taskId: string): Promise<void>
 ⋮----
@@ -14039,7 +16100,7 @@ constructor(private readonly eventsHandler: EventsHandler)
 ⋮----
 registerRoutes(router: Router): void
 ⋮----
-// Get custom commands
+// Get commands
 ⋮----
 // Run custom command
 
@@ -15054,6 +17115,7 @@ import { promises as fs } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import debounce from 'lodash/debounce';
 import {
+  ConnectorMessage,
   ContextFile,
   ContextMessage,
   ContextToolMessage,
@@ -15149,7 +17211,7 @@ removeLastMessage(): void
 ⋮----
 removeMessagesUpToLastUserMessage(): ContextMessage[]
 ⋮----
-toConnectorMessages(contextMessages: ContextMessage[] = this.messages):
+toConnectorMessages(contextMessages: ContextMessage[] = this.messages): ConnectorMessage[]
 ⋮----
 async save(): Promise<void>
 ⋮----
@@ -15321,6 +17383,9 @@ import {
   UserMessageData,
   WorkingMode,
   AIDER_COMMANDS,
+  ConnectorMessage,
+  WorkflowExecutionOptions,
+  WorkflowExecutionResult,
 } from '@common/types';
 import { extractProviderModel, extractTextContent, fileExists, parseUsageReport } from '@common/utils';
 import { COMPACT_CONVERSATION_AGENT_PROFILE, CONFLICT_RESOLUTION_PROFILE, HANDOFF_AGENT_PROFILE, INIT_PROJECT_AGENTS_PROFILE } from '@common/agent';
@@ -15329,7 +17394,7 @@ import debounce from 'lodash/debounce';
 import { isEqual } from 'lodash';
 ⋮----
 import type { SimpleGit } from 'simple-git';
-import type { WorkflowExecutionOptions, WorkflowExecutionResult } from '@common/bmad-types';
+import type { RegisteredCommand } from '@/extensions/extension-registry';
 ⋮----
 import { getAllFiles, isValidProjectFile } from '@/utils/file-system';
 import {
@@ -15359,6 +17424,7 @@ import { MemoryManager } from '@/memory/memory-manager';
 import { getElectronApp } from '@/app';
 import { HookManager } from '@/hooks/hook-manager';
 import { PromptsManager } from '@/prompts';
+import { ExtensionManager, ExtensionEventMap } from '@/extensions/extension-manager';
 ⋮----
 const getTaskFinishedNotificationText = (task: TaskData) =>
 ⋮----
@@ -15379,6 +17445,7 @@ constructor(
     private readonly memoryManager: MemoryManager,
     public readonly hookManager: HookManager,
     private readonly promptsManager: PromptsManager,
+    private readonly extensionManager: ExtensionManager,
     initialTaskData?: Partial<TaskData>,
 )
 ⋮----
@@ -15388,7 +17455,7 @@ public async getTaskAgentProfile(): Promise<AgentProfile | null>
 ⋮----
 // If no task-level profile, fall back to project-level
 ⋮----
-// If profile not found, try to create a temporary one from task-level provider/model
+// Apply task-level provider/model overrides if present
 ⋮----
 // Create a temporary profile with task-level overrides
 ⋮----
@@ -15446,6 +17513,17 @@ public removeConnector(connector: Connector)
 public getProjectDir()
 ⋮----
 public getTaskDir()
+⋮----
+/**
+   * Dispatches an extension event through the ExtensionManager.
+   * This public method provides controlled access to extension event dispatch
+   * without exposing the ExtensionManager instance directly.
+   *
+   * @param eventName - The name of the event to dispatch
+   * @param event - The event payload
+   * @returns Object containing potentially modified event, blocked status, and modified result
+   */
+public dispatchExtensionEvent<K extends keyof ExtensionEventMap>(eventName: K, event: ExtensionEventMap[K]): Promise<ExtensionEventMap[K]>
 ⋮----
 private normalizeFilePath(filePath: string): string
 ⋮----
@@ -15521,8 +17599,8 @@ private async determineTaskState(resultMessages: ContextMessage[]): Promise<stri
 public async runSubagent(
     profile: AgentProfile,
     prompt: string,
-    contextMessages: ContextMessage[],
-    contextFiles: ContextFile[],
+    contextMessages?: ContextMessage[],
+    contextFiles?: ContextFile[],
     systemPrompt?: string,
     abortSignal?: AbortSignal,
     promptContext?: PromptContext,
@@ -15532,10 +17610,7 @@ public sendPromptToAider(
     prompt: string,
     promptContext: PromptContext = { id: uuidv4() },
     mode?: Mode,
-    messages: {
-      role: MessageRole;
-      content: string;
-    }[] = this.contextManager.toConnectorMessages(),
+    messages: ConnectorMessage[] = this.contextManager.toConnectorMessages(),
     files: ContextFile[] = this.contextManager.getContextFiles(),
     options?: AiderRunOptions,
 ): Promise<ResponseCompletedData[]>
@@ -15548,7 +17623,7 @@ public promptFinished(promptId?: string)
 ⋮----
 public async processResponseMessage(message: ResponseMessage, saveToDb = true)
 ⋮----
-const sendResponseChunk = (chunk: string) =>
+const sendResponseChunk = async (chunk: string) =>
 ⋮----
 // First chunk: send immediately and create interval
 ⋮----
@@ -15568,7 +17643,7 @@ private notifyIfEnabled(title: string, text: string)
 ⋮----
 private getQuestionKey(question: QuestionData): string
 ⋮----
-public answerQuestion(answer: string, userInput?: string): boolean
+public async answerQuestion(answer: string, userInput?: string): Promise<boolean>
 ⋮----
 // If user input 'd' (don't ask again) or 'a' (always), store the determined answer.
 ⋮----
@@ -15576,11 +17651,15 @@ public answerQuestion(answer: string, userInput?: string): boolean
 ⋮----
 public async addFiles(...contextFiles: ContextFile[])
 ⋮----
+// Extension event uses plural name
+⋮----
 // Send add file message for each added file
 ⋮----
 public sendAddFile(contextFile: ContextFile, noUpdate?: boolean)
 ⋮----
-public dropFile(filePath: string)
+public async dropFile(filePath: string)
+⋮----
+// Extension event uses plural name and ContextFile array
 ⋮----
 // Send drop file message for each dropped file
 ⋮----
@@ -15722,13 +17801,15 @@ public async resetContext()
    */
 public async loadContextMessages(messages: ContextMessage[])
 ⋮----
-public interruptResponse(interruptId?: string)
+public async interruptResponse(interruptId?: string)
 ⋮----
 // Interrupt specific conflict resolution agent
 ⋮----
 // Default behavior: interrupt all agents
 ⋮----
 // cancel the task state determination and set the task to ready for review
+⋮----
+public getQueuedPrompts(): QueuedPromptData[]
 ⋮----
 public removeQueuedPrompt(promptId: string): void
 ⋮----
@@ -15808,8 +17889,8 @@ const extractSummary = (content: string): string =>
 public async handoffConversation(
     mode: Mode,
     focus: string = '',
-    contextMessages?: ContextMessage[],
     execute = false,
+    contextMessages?: ContextMessage[],
     waitForAgentCompletion = true,
     loadingMessage = 'Preparing handoff...',
 ): Promise<void>
@@ -15912,7 +17993,19 @@ private async addProjectAgentsToAiderConfig(): Promise<void>
 ⋮----
 // Write the updated config
 ⋮----
+private async runExtensionCommand(extensionCommand: RegisteredCommand, args: string[], _mode: Mode): Promise<void>
+⋮----
+// Validate required arguments
+⋮----
+// Execute the command - extension is fully responsible for its logic
+⋮----
 public async runCustomCommand(commandName: string, args: string[], mode: Mode = 'agent'): Promise<void>
+⋮----
+// First, check if this is an extension command
+⋮----
+// Handle extension command execution
+⋮----
+// Fall back to file-based custom command
 ⋮----
 // Handle shell command execution errors
 ⋮----
@@ -16033,6 +18126,8 @@ async agentProfileUpdated(oldProfile: AgentProfile, newProfile: AgentProfile)
 public getProject(): Project
 ⋮----
 public isInitialized()
+⋮----
+public async generateText(profile: AgentProfile, systemPrompt: string, prompt: string): Promise<string | undefined>
 
 ================
 File: src/main/telemetry/index.ts
@@ -17343,8 +19438,8 @@ import fs from 'fs/promises';
 import {
   AgentProfile,
   CloudflareTunnelStatus,
+  CommandsData,
   CreateTaskParams,
-  CustomCommand,
   EditFormat,
   EnvironmentVariable,
   FileEdit,
@@ -17372,7 +19467,7 @@ import {
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
 ⋮----
-import type { BmadStatus, InstallResult } from '@common/bmad-types';
+import type { BmadStatus, InstallResult } from '@common/types';
 import type { BrowserWindow } from 'electron';
 ⋮----
 import { McpManager, AgentProfileManager } from '@/agent';
@@ -17385,6 +19480,7 @@ import { TelemetryManager } from '@/telemetry';
 import { VersionsManager } from '@/versions';
 import { DataManager } from '@/data-manager';
 import { TerminalManager } from '@/terminal/terminal-manager';
+import { ExtensionManager } from '@/extensions';
 import logger from '@/logger';
 import { getDefaultProjectSettings, getEffectiveEnvironmentVariable, getFilePathSuggestions, isProjectPath, isValidPath, scrapeWeb } from '@/utils';
 import { AIDER_DESK_TMP_DIR, LOGS_DIR } from '@/constants';
@@ -17431,7 +19527,7 @@ addRecentProject(baseDir: string): void
 ⋮----
 removeRecentProject(baseDir: string): void
 ⋮----
-interruptResponse(baseDir: string, taskId: string, interruptId?: string): void
+async interruptResponse(baseDir: string, taskId: string, interruptId?: string): Promise<void>
 ⋮----
 clearContext(baseDir: string, taskId: string, includeLastMessage = true): void
 ⋮----
@@ -17471,7 +19567,7 @@ async runPrompt(baseDir: string, taskId: string, prompt: string, mode?: Mode): P
 ⋮----
 async savePrompt(baseDir: string, taskId: string, prompt: string): Promise<void>
 ⋮----
-answerQuestion(baseDir: string, taskId: string, answer: string): void
+async answerQuestion(baseDir: string, taskId: string, answer: string): Promise<void>
 ⋮----
 removeQueuedPrompt(baseDir: string, taskId: string, promptId: string): void
 ⋮----
@@ -17479,7 +19575,7 @@ async sendQueuedPromptNow(baseDir: string, taskId: string, promptId: string): Pr
 ⋮----
 runCommand(baseDir: string, taskId: string, command: string): void
 ⋮----
-async getCustomCommands(baseDir: string): Promise<CustomCommand[]>
+async getCommands(baseDir: string): Promise<CommandsData>
 ⋮----
 async runCustomCommand(baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode): Promise<void>
 ⋮----
@@ -17627,9 +19723,17 @@ getCloudflareTunnelStatus(): CloudflareTunnelStatus
 ⋮----
 async getAllAgentProfiles()
 ⋮----
+// Extension agents are now included in getAllProfiles()
+⋮----
 async createAgentProfile(profile: AgentProfile, projectDir?: string)
 ⋮----
 async updateAgentProfile(profile: AgentProfile)
+⋮----
+// First, check if this is an extension-provided agent
+⋮----
+// Extension handled it - notify projects of the change
+⋮----
+// Not an extension agent - use file-based storage
 ⋮----
 async deleteAgentProfile(profileId: string)
 ⋮----
@@ -17732,9 +19836,18 @@ import { ipcMain, clipboard } from 'electron';
 ⋮----
 import { EventsHandler } from './events-handler';
 ⋮----
+import type { ExtensionMetadata } from '@common/extensions';
+import type { ExtensionManager } from './extensions/extension-manager';
+⋮----
 import { ServerController } from '@/server';
 ⋮----
-export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController: ServerController) =>
+export interface ExtensionInfo {
+  metadata: ExtensionMetadata;
+  filePath: string;
+  initialized: boolean;
+}
+⋮----
+export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController: ServerController, extensionManager?: ExtensionManager) =>
 ⋮----
 // Voice handlers
 ⋮----
@@ -17751,6 +19864,8 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
 // Memory handlers
 ⋮----
 // BMAD handlers
+⋮----
+// Extension handlers
 
 ================
 File: src/main/logger.ts
@@ -17781,6 +19896,8 @@ import { VersionsManager } from '@/versions';
 import { TelemetryManager } from '@/telemetry';
 import { WorktreeManager } from '@/worktrees';
 import { MemoryManager } from '@/memory/memory-manager';
+import { ExtensionManager } from '@/extensions/extension-manager';
+import { ExtensionRegistry } from '@/extensions/extension-registry';
 import { Store } from '@/store';
 import { SERVER_PORT } from '@/constants';
 import logger from '@/logger';
@@ -17794,6 +19911,7 @@ export interface ManagersResult {
   cleanup: () => Promise<void>;
   modelManager: ModelManager;
   agentProfileManager: AgentProfileManager;
+  extensionManager: ExtensionManager;
 }
 ⋮----
 export const initManagers = async (store: Store, mainWindow: BrowserWindow | null = null): Promise<ManagersResult> =>
@@ -17810,7 +19928,16 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
 ⋮----
 // Initialize memory manager
 ⋮----
-// Initialize agent profile manager
+// Initialize extension registry (shared between ExtensionManager and AgentProfileManager)
+⋮----
+// Initialize agent profile manager with extension registry for unified profile access
+⋮----
+// Create a temporary project manager reference for circular dependency resolution
+// eslint-disable-next-line prefer-const
+⋮----
+// Initialize extension manager with lazy project manager access (non-blocking - errors should not crash app per NFR6)
+⋮----
+// Lazy getter for project manager to resolve circular dependency
 ⋮----
 // Initialize project manager
 ⋮----
@@ -17827,6 +19954,8 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
 // Create and initialize REST API controller with the server
 ⋮----
 // Initialize connector manager with the server
+⋮----
+// Wait for extension initialization to complete (but don't block startup)
 ⋮----
 // Start listening
 ⋮----
@@ -18247,8 +20376,8 @@ import {
   AutocompletionData,
   ClearTaskData,
   CommandOutputData,
+  CommandsData,
   ContextFilesUpdatedData,
-  CustomCommandsUpdatedData,
   FileEdit,
   InputHistoryData,
   LogData,
@@ -18368,8 +20497,7 @@ import {
   CloudflareTunnelStatus,
   CommandOutputData,
   ContextFilesUpdatedData,
-  CustomCommand,
-  CustomCommandsUpdatedData,
+  CommandsData,
   EditFormat,
   EnvironmentVariable,
   FileEdit,
@@ -18423,7 +20551,7 @@ import { io, Socket } from 'socket.io-client';
 import { compareBaseDirs } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
 ⋮----
-import type { BmadStatus } from '@common/bmad-types';
+import type { BmadStatus } from '@common/types';
 ⋮----
 type EventDataMap = {
   'settings-updated': SettingsData;
@@ -18431,7 +20559,7 @@ type EventDataMap = {
   'response-completed': ResponseCompletedData;
   log: LogData;
   'context-files-updated': ContextFilesUpdatedData;
-  'custom-commands-updated': CustomCommandsUpdatedData;
+  'commands-updated': CommandsData;
   'update-autocompletion': AutocompletionData;
   'ask-question': QuestionData;
   'question-answered': QuestionAnsweredData;
@@ -18612,7 +20740,7 @@ addResponseCompletedListener(baseDir: string, taskId: string, callback: (data: R
 addLogListener(baseDir: string, taskId: string, callback: (data: LogData) => void): () => void
 addContextFilesUpdatedListener(baseDir: string, taskId: string, callback: (data: ContextFilesUpdatedData) => void): () => void
 addUpdatedFilesUpdatedListener(baseDir: string, taskId: string, callback: (data: UpdatedFilesUpdatedData) => void): () => void
-addCustomCommandsUpdatedListener(baseDir: string, callback: (data: CustomCommandsUpdatedData) => void): () => void
+addCommandsUpdatedListener(baseDir: string, callback: (data: CommandsData) => void): () => void
 addUpdateAutocompletionListener(baseDir: string, taskId: string, callback: (data: AutocompletionData) => void): () => void
 addAskQuestionListener(baseDir: string, taskId: string, callback: (data: QuestionData) => void): () => void
 ⋮----
@@ -18658,7 +20786,7 @@ addTerminalDataListener(baseDir: string, callback: (data: TerminalData) => void)
 addTerminalExitListener(baseDir: string, callback: (data: TerminalExitData) => void): () => void
 addContextMenuListener(callback: (params: Electron.ContextMenuParams) => void): () => void
 addOpenSettingsListener(callback: (pageId: string) => void): () => void
-getCustomCommands(baseDir: string): Promise<CustomCommand[]>
+async getCommands(baseDir: string): Promise<CommandsData>
 runCustomCommand(baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode): Promise<void>
 isTerminalSupported(): boolean
 async createTerminal(baseDir: string, taskId: string, cols?: number, rows?: number): Promise<string>
@@ -18840,7 +20968,7 @@ const loadTools = async () =>
 ================
 File: src/renderer/src/components/bmad/ArtifactsSection.tsx
 ================
-import { DetectedArtifacts } from '@common/bmad-types';
+import { DetectedArtifacts } from '@common/types';
 import { useState, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FiFile, FiExternalLink, FiChevronDown } from 'react-icons/fi';
@@ -18996,7 +21124,7 @@ title=
 ================
 File: src/renderer/src/components/bmad/CurrentWorkflowHeader.tsx
 ================
-import { WorkflowMetadata, WorkflowPhase, IncompleteWorkflowMetadata } from '@common/bmad-types';
+import { WorkflowMetadata, WorkflowPhase, IncompleteWorkflowMetadata } from '@common/types';
 import { useTranslation } from 'react-i18next';
 import { FiEdit2 } from 'react-icons/fi';
 import { clsx } from 'clsx';
@@ -19029,8 +21157,7 @@ export const PathInfoCard = (
 ================
 File: src/renderer/src/components/bmad/SuggestedWorkflowCard.tsx
 ================
-import { Model, ProviderProfile } from '@common/types';
-import { WorkflowExecutionOptions, WorkflowMetadata } from '@common/bmad-types';
+import { Model, ProviderProfile, WorkflowExecutionOptions, WorkflowMetadata } from '@common/types';
 import { getProviderModelId } from '@common/agent';
 import { extractProviderModel } from '@common/utils';
 import { MouseEvent, useCallback, useState } from 'react';
@@ -19063,8 +21190,7 @@ const handleToggleModelSelector = () =>
 File: src/renderer/src/components/bmad/useBmadState.ts
 ================
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BmadStatus, WorkflowMetadata } from '@common/bmad-types';
-import { TaskData } from '@common/types';
+import { BmadStatus, WorkflowMetadata, TaskData } from '@common/types';
 ⋮----
 import { isResponseMessage, Message } from '@/types/message';
 import { useApi } from '@/contexts/ApiContext';
@@ -19102,7 +21228,7 @@ export const useBmadState = (
 ================
 File: src/renderer/src/components/bmad/WorkflowActionButton.tsx
 ================
-import { WorkflowMetadata } from '@common/bmad-types';
+import { WorkflowMetadata } from '@common/types';
 import { MouseEvent, useState } from 'react';
 import { CgSpinner } from 'react-icons/cg';
 import { HiCheck, HiClock } from 'react-icons/hi';
@@ -19140,7 +21266,7 @@ const handleExecuteWorkflow = async (e: MouseEvent<HTMLButtonElement>) =>
 ================
 File: src/renderer/src/components/bmad/WorkflowItem.tsx
 ================
-import { IncompleteWorkflowMetadata, WorkflowMetadata } from '@common/bmad-types';
+import { IncompleteWorkflowMetadata, WorkflowMetadata } from '@common/types';
 import { MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FiFile, FiExternalLink } from 'react-icons/fi';
@@ -19171,7 +21297,7 @@ const getStepInfo = () =>
 ================
 File: src/renderer/src/components/bmad/WorkflowList.tsx
 ================
-import { WorkflowPhase, BmadStatus } from '@common/bmad-types';
+import { WorkflowPhase, BmadStatus } from '@common/types';
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
 ⋮----
@@ -19198,7 +21324,7 @@ const getIncompleteWorkflow = (workflowId: string) =>
 ================
 File: src/renderer/src/components/bmad/WorkflowPhaseSection.tsx
 ================
-import { WorkflowMetadata, WorkflowPhase } from '@common/bmad-types';
+import { WorkflowMetadata, WorkflowPhase } from '@common/types';
 import { ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FaChevronDown } from 'react-icons/fa';
@@ -19222,7 +21348,7 @@ className=
 ================
 File: src/renderer/src/components/bmad/WorkflowSelector.tsx
 ================
-import { WorkflowMetadata, WorkflowPhase } from '@common/bmad-types';
+import { WorkflowMetadata, WorkflowPhase } from '@common/types';
 import { useRef, useState, useEffect, RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -20719,6 +22845,12 @@ type Props = {
   onRemoveUpTo?: () => void;
   hideMessageBar?: boolean;
 };
+⋮----
+const isStandardBashOutput = (obj: unknown): obj is
+⋮----
+const hasErrorProperty = (obj: unknown): obj is
+⋮----
+const hasDeniedProperty = (obj: unknown): obj is
 ⋮----
 const handleScrollToBottom = () =>
 ⋮----
@@ -25261,7 +27393,7 @@ import { InputHistoryMenu } from '@/components/PromptField/InputHistoryMenu';
 import { ModeSelector } from '@/components/PromptField/ModeSelector';
 import { showErrorNotification } from '@/utils/notifications';
 import { Button } from '@/components/common/Button';
-import { useCustomCommands } from '@/hooks/useCustomCommands';
+import { useCommands } from '@/hooks/useCommands';
 import { useApi } from '@/contexts/ApiContext';
 import { useProjectSettings } from '@/contexts/ProjectSettingsContext';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -25335,7 +27467,7 @@ const completionSource = async (context: CompletionContext): Promise<CompletionR
 ⋮----
 // Handle command suggestions
 ⋮----
-// Add custom commands to the list
+// Add custom and extension commands to the list
 ⋮----
 // Ensure cursor is at the end after setting text
 ⋮----
@@ -25353,13 +27485,13 @@ const onChange = (newText: string) =>
 ⋮----
 const handleSubmit = () =>
 ⋮----
-// Check if it's a custom command
+// Check if it's a custom or extension command
 ⋮----
 const handleSavePrompt = async () =>
 ⋮----
 const getAutocompleteDetailLabel = (item: string): [string | null, boolean] =>
 ⋮----
-// Check if it's a custom command
+// Check if it's a custom or extension command
 ⋮----
 const toggleVoice = () =>
 ⋮----
@@ -27353,6 +29485,20 @@ const listener = (event: MouseEvent) =>
 // Ignore clicks on null refs or if the ref doesn't contain the target
 
 ================
+File: src/renderer/src/hooks/useCommands.ts
+================
+import { Command } from '@common/types';
+import { useEffect, useState } from 'react';
+⋮----
+import { useApi } from '@/contexts/ApiContext';
+⋮----
+export const useCommands = (baseDir: string) =>
+⋮----
+// Load initial commands
+⋮----
+// Listen for commands updates
+
+================
 File: src/renderer/src/hooks/useConfiguredHotkeys.ts
 ================
 import { useMemo } from 'react';
@@ -27361,20 +29507,6 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { getHotkeys } from '@/utils/hotkeys';
 ⋮----
 export const useConfiguredHotkeys = () =>
-
-================
-File: src/renderer/src/hooks/useCustomCommands.ts
-================
-import { CustomCommand } from '@common/types';
-import { useEffect, useState } from 'react';
-⋮----
-import { useApi } from '@/contexts/ApiContext';
-⋮----
-export const useCustomCommands = (baseDir: string) =>
-⋮----
-// Load initial commands
-⋮----
-// Listen for commands updates
 
 ================
 File: src/renderer/src/hooks/useDropdownState.ts
@@ -30755,7 +32887,7 @@ export const resolveAgentProfile = (task: TaskData | undefined, projectAgentProf
 File: src/renderer/src/utils/bmad-suggestions.ts
 ================
 import { BMAD_WORKFLOWS } from '@common/bmad-workflows';
-import { WorkflowArtifacts, SprintStatusData, StoryStatus, WorkflowMetadata, WorkflowPhase } from '@common/bmad-types';
+import { WorkflowArtifacts, SprintStatusData, StoryStatus, WorkflowMetadata, WorkflowPhase } from '@common/types';
 ⋮----
 /**
  * Simple glob pattern matching for artifact paths
@@ -31591,6 +33723,7 @@ File: package.json
     "dev": "electron-vite dev",
     "dev:no-hmr": "NO_HMR=true electron-vite dev",
     "build:mcp": "esbuild src/mcp-server/aider-desk-mcp-server.ts --bundle --platform=node --outdir=out/mcp-server",
+    "build:extension-types": "dts-bundle-generator --external-imports zod node --project tsconfig.node.json --no-check --no-banner -o build/types/extension-types.d.ts src/common/extensions.ts",
     "prebuild:server": "electron-vite build && npm run build:mcp",
     "build:server": "vite build --config vite.config.server.ts && mkdir -p out/resources && cp -r resources/* out/resources",
     "postbuild:server": "npm rebuild",
@@ -31697,6 +33830,7 @@ File: package.json
     "i18next": "^24.2.3",
     "i18next-browser-languagedetector": "^8.0.4",
     "istextorbinary": "^9.5.0",
+    "jiti": "^2.6.1",
     "js-tiktoken": "^1.0.20",
     "langfuse-vercel": "^3.38.4",
     "lodash": "^4.17.21",
@@ -31780,6 +33914,7 @@ File: package.json
     "adm-zip": "^0.5.16",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.2.1",
+    "dts-bundle-generator": "^9.5.1",
     "electron": "^37.6.0",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.1",
