@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { ToolApprovalState } from '@common/types';
 
 import { ExtensionLoader } from './extension-loader';
-import { ExtensionRegistry, LoadedExtension, RegisteredTool, RegisteredCommand, RegisteredAgent } from './extension-registry';
+import { ExtensionRegistry, LoadedExtension, RegisteredTool, RegisteredCommand, RegisteredAgent, RegisteredMode } from './extension-registry';
 import { ExtensionContextImpl } from './extension-context';
 
 import type { AgentProfile } from '@common/types';
@@ -27,6 +27,7 @@ import type {
   FilesAddedEvent,
   FilesDroppedEvent,
   HandleApprovalEvent,
+  ModeDefinition,
   PromptFinishedEvent,
   PromptStartedEvent,
   QuestionAnsweredEvent,
@@ -127,7 +128,7 @@ export class ExtensionManager {
     }
 
     try {
-      const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project);
+      const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project, undefined, this);
       await instance.onLoad(context);
       this.registry.setInitialized(metadata.name, true);
       logger.info(`[Extensions] Initialized extension: ${metadata.name} v${metadata.version}`);
@@ -202,9 +203,11 @@ export class ExtensionManager {
     this.registry.clearTools();
     this.registry.clearCommands();
     this.registry.clearAgents();
+    this.registry.clearModes();
     this.collectTools();
     this.collectCommands();
     this.collectAgents();
+    this.collectModes();
 
     // Notify about agent profile updates (extension agents may have changed)
     this.agentProfileManager.sendAgentProfilesUpdated();
@@ -511,7 +514,7 @@ export class ExtensionManager {
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, undefined, undefined, this);
         const tools = instance.getTools(context);
 
         if (!Array.isArray(tools)) {
@@ -572,7 +575,7 @@ export class ExtensionManager {
 
     for (const { extensionName, tool } of registeredTools) {
       const toolId = `${extensionName}-${tool.name}`;
-      const context = new ExtensionContextImpl(extensionName, this.store, this.agentProfileManager, this.modelManager, task.project, task);
+      const context = new ExtensionContextImpl(extensionName, this.store, this.agentProfileManager, this.modelManager, task.project, task, this);
 
       // Skip if tool is marked as Never approved
       if (profile.toolApprovals?.[toolId] === ToolApprovalState.Never) {
@@ -649,7 +652,7 @@ export class ExtensionManager {
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, undefined, undefined, this);
         const commands = instance.getCommands(context);
 
         if (!Array.isArray(commands)) {
@@ -709,7 +712,7 @@ export class ExtensionManager {
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project, task);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project, task, this);
         const agents = instance.getAgents(context);
 
         if (!Array.isArray(agents)) {
@@ -753,6 +756,90 @@ export class ExtensionManager {
     return this.registry.getAgentsByExtension(extensionName);
   }
 
+  collectModes(): RegisteredMode[] {
+    const collectedModes: RegisteredMode[] = [];
+    const extensions = this.registry.getExtensions();
+
+    logger.info(`[Extensions] Collecting modes from ${extensions.length} extension(s)`);
+    for (const loaded of extensions) {
+      const { instance, metadata } = loaded;
+
+      if (!instance.getModes) {
+        logger.debug(`[Extensions] Extension '${metadata.name}' has no getModes method`);
+        continue;
+      }
+
+      try {
+        const modes = instance.getModes();
+
+        if (!Array.isArray(modes)) {
+          logger.error(`[Extensions] Extension '${metadata.name}' getModes() did not return an array`);
+          continue;
+        }
+
+        if (modes.length === 0) {
+          logger.debug(`[Extensions] Extension '${metadata.name}' returned empty modes array`);
+          continue;
+        }
+
+        for (const mode of modes) {
+          const validation = this.validateModeDefinition(mode);
+
+          if (!validation.isValid) {
+            logger.error(`[Extensions] Invalid mode '${mode.name}' from extension '${metadata.name}': ${validation.errors.join(', ')}`);
+            continue;
+          }
+
+          this.registry.registerMode(metadata.name, mode);
+          collectedModes.push({ extensionName: metadata.name, mode });
+          logger.debug(`[Extensions] Collected mode '${mode.name}' from extension '${metadata.name}'`);
+        }
+      } catch (error) {
+        logger.error(`[Extensions] Failed to collect modes from extension '${metadata.name}':`, error);
+      }
+    }
+
+    const modeCount = collectedModes.length;
+    if (modeCount > 0) {
+      logger.info(`[Extensions] Collected ${modeCount} mode(s) from extensions`);
+    }
+
+    return collectedModes;
+  }
+
+  getModes(): RegisteredMode[] {
+    return this.registry.getModes();
+  }
+
+  getModesByExtension(extensionName: string): RegisteredMode[] {
+    return this.registry.getModesByExtension(extensionName);
+  }
+
+  validateModeDefinition(mode: ModeDefinition): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    if (!mode.name || typeof mode.name !== 'string') {
+      errors.push('Mode must have a valid name');
+    }
+
+    if (!mode.label || typeof mode.label !== 'string') {
+      errors.push('Mode must have a valid label');
+    }
+
+    if (mode.description !== undefined && typeof mode.description !== 'string') {
+      errors.push('Mode description must be a string if provided');
+    }
+
+    if (mode.icon !== undefined && typeof mode.icon !== 'string') {
+      errors.push('Mode icon must be a string if provided');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+    };
+  }
+
   /**
    * Attempts to update an extension-provided agent profile.
    * @param profile - The updated profile
@@ -773,7 +860,7 @@ export class ExtensionManager {
       throw new Error(`Extension '${registered.extensionName}' does not support profile updates`);
     }
 
-    const context = new ExtensionContextImpl(registered.extensionName, this.store, this.agentProfileManager, this.modelManager);
+    const context = new ExtensionContextImpl(registered.extensionName, this.store, this.agentProfileManager, this.modelManager, undefined, undefined, this);
 
     logger.info(`[Extensions] Updating agent profile '${profile.id}' via extension '${registered.extensionName}'`);
     const updatedProfile = await extension.instance.onAgentProfileUpdated(context, profile.id, profile);
@@ -800,7 +887,7 @@ export class ExtensionManager {
     const { extensionName, command } = registered;
 
     try {
-      const context = new ExtensionContextImpl(extensionName, this.store, this.agentProfileManager, this.modelManager, project, task);
+      const context = new ExtensionContextImpl(extensionName, this.store, this.agentProfileManager, this.modelManager, project, task, this);
 
       logger.info(`[Extensions] Executing command '${commandName}' from extension '${extensionName}'`);
       await command.execute(args, context);
@@ -861,7 +948,7 @@ export class ExtensionManager {
 
       try {
         // Create ExtensionContext for this extension
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project, task);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project, task, this);
 
         // Call the extension handler
         // Using type assertion to handle dynamic dispatch across different event types

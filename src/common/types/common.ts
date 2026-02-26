@@ -89,9 +89,15 @@ export interface WorktreeIntegrationStatusUpdatedData {
   status: WorktreeIntegrationStatus | null;
 }
 
-export type Mode = 'code' | 'ask' | 'architect' | 'context' | 'agent' | 'bmad';
+export interface ModeDefinition {
+  name: Mode;
+  label: string;
+  description?: string;
+  /** Icon name from react-icons (e.g., 'GoCodeReview', 'FiLayers') */
+  icon?: string;
+}
 
-export const AGENT_MODES: Mode[] = ['agent', 'bmad'];
+export type Mode = string;
 
 export const AIDER_MODES: Mode[] = ['code', 'ask', 'architect', 'context'];
 
@@ -282,7 +288,7 @@ export const ProjectSettingsSchema = z.object({
   modelEditFormats: z.record(z.string(), z.enum(['diff', 'diff-fenced', 'whole', 'udiff', 'udiff-simple', 'patch'])),
   reasoningEffort: z.string().optional(),
   thinkingTokens: z.string().optional(),
-  currentMode: z.enum(['code', 'ask', 'architect', 'context', 'agent', 'bmad']),
+  currentMode: z.string(),
   contextCompactingThreshold: z.number().optional(),
   weakModelLocked: z.boolean().optional(),
   autoApproveLocked: z.boolean().optional(),
@@ -761,7 +767,7 @@ export const TaskDataSchema = z.object({
   architectModel: z.string().nullable().optional(),
   reasoningEffort: z.string().optional(),
   thinkingTokens: z.string().optional(),
-  currentMode: z.enum(['code', 'ask', 'architect', 'context', 'agent', 'bmad']).optional(),
+  currentMode: z.string().optional(),
   contextCompactingThreshold: z.number().optional(),
   weakModelLocked: z.boolean().optional(),
   handoff: z.boolean().optional(),

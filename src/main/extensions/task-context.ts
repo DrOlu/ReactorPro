@@ -1,5 +1,17 @@
-import type { QuestionOptions, TaskContext } from '@common/extensions';
-import type { AgentProfile, ContextFile, ContextMessage, LogLevel, Mode, QueuedPromptData, TaskData, TodoItem, UpdatedFile } from '@common/types';
+import {
+  AgentProfile,
+  ContextFile,
+  ContextMessage,
+  Mode,
+  PromptContext,
+  QueuedPromptData,
+  TaskData,
+  TodoItem,
+  UpdatedFile,
+  UsageReportData,
+} from '@common/types';
+
+import type { QuestionOptions, TaskContext, ResponseMessage } from '@common/extensions';
 import type { Task } from '@/task';
 
 export class TaskContextImpl implements TaskContext {
@@ -33,10 +45,8 @@ export class TaskContextImpl implements TaskContext {
     return this.task.getContextMessages();
   }
 
-  async addMessage(content: string, role: 'user' | 'assistant' = 'user'): Promise<void> {
-    const { MessageRole } = await import('@common/types');
-    const messageRole = role === 'user' ? MessageRole.User : MessageRole.Assistant;
-    await this.task.addRoleContextMessage(messageRole, content);
+  async addContextMessage(message: ContextMessage, updateContextInfo = false): Promise<void> {
+    await this.task.addContextMessage(message, updateContextInfo);
   }
 
   async removeMessage(messageId: string): Promise<void> {
@@ -53,6 +63,38 @@ export class TaskContextImpl implements TaskContext {
 
   async redoLastUserPrompt(mode?: string, updatedPrompt?: string): Promise<void> {
     await this.task.redoLastUserPrompt((mode as Mode) || 'agent', updatedPrompt);
+  }
+
+  async removeMessagesUpTo(messageId: string): Promise<void> {
+    await this.task.removeMessagesUpTo(messageId);
+  }
+
+  addUserMessage(id: string, content: string, promptContext?: PromptContext) {
+    this.task.addUserMessage(id, content, promptContext);
+  }
+
+  addToolMessage(
+    id: string,
+    serverName: string,
+    toolName: string,
+    input?: unknown,
+    response?: string,
+    usageReport?: UsageReportData,
+    promptContext?: PromptContext,
+    saveToDb = true,
+    finished = !!response,
+  ) {
+    this.task.addToolMessage(id, serverName, toolName, input, response, usageReport, promptContext, saveToDb, finished);
+  }
+
+  async addResponseMessage(message: ResponseMessage, saveToDb = true) {
+    await this.task.processResponseMessage(
+      {
+        ...message,
+        action: 'response',
+      },
+      saveToDb,
+    );
   }
 
   // Files & Repo (Read-only)
@@ -147,9 +189,12 @@ export class TaskContextImpl implements TaskContext {
     return answer;
   }
 
-  addLogMessage(level: 'info' | 'error' | 'warn' | 'debug' | 'loading', message?: string): void {
-    const logLevel = level === 'loading' ? 'loading' : (level as LogLevel);
-    this.task.addLogMessage(logLevel as LogLevel, message);
+  addLogMessage(level: 'info' | 'error' | 'warning', message?: string): void {
+    this.task.addLogMessage(level, message);
+  }
+
+  addLoadingMessage(message?: string, finished?: boolean): void {
+    this.task.addLogMessage('loading', message, finished);
   }
 
   // Task Management

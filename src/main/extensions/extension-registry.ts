@@ -1,4 +1,4 @@
-import { Extension, ExtensionMetadata, ToolDefinition, CommandDefinition } from '@common/extensions';
+import { Extension, ExtensionMetadata, ToolDefinition, CommandDefinition, ModeDefinition } from '@common/extensions';
 
 import type { AgentProfile } from '@common/types';
 
@@ -27,11 +27,17 @@ export interface RegisteredAgent {
   agent: AgentProfile;
 }
 
+export interface RegisteredMode {
+  extensionName: string;
+  mode: ModeDefinition;
+}
+
 export class ExtensionRegistry {
   private extensions = new Map<string, LoadedExtension>();
   private tools = new Map<string, RegisteredTool>();
   private commands = new Map<string, RegisteredCommand>();
   private agents = new Map<string, RegisteredAgent>();
+  private modes = new Map<string, RegisteredMode>();
 
   register(extension: Extension, metadata: ExtensionMetadata, filePath: string, projectDir?: string) {
     logger.info(`[Extensions] Registering extension: ${metadata.name}`);
@@ -76,6 +82,11 @@ export class ExtensionRegistry {
         this.agents.delete(agentKey);
       }
     }
+    for (const [modeKey, registered] of this.modes) {
+      if (registered.extensionName === name) {
+        this.modes.delete(modeKey);
+      }
+    }
     return this.extensions.delete(name);
   }
 
@@ -84,6 +95,7 @@ export class ExtensionRegistry {
     this.tools.clear();
     this.commands.clear();
     this.agents.clear();
+    this.modes.clear();
   }
 
   registerTool(extensionName: string, tool: ToolDefinition): void {
@@ -159,5 +171,33 @@ export class ExtensionRegistry {
   clearAgents(): void {
     logger.info('[Extensions] Cleared all agents');
     this.agents.clear();
+  }
+
+  registerMode(extensionName: string, mode: ModeDefinition): void {
+    logger.info(`[Extensions] Registered mode '${mode.name}' from extension '${extensionName}'`);
+    const modeKey = `${extensionName}:${mode.name}`;
+    this.modes.set(modeKey, { extensionName, mode });
+  }
+
+  getModes(): RegisteredMode[] {
+    return Array.from(this.modes.values());
+  }
+
+  getModesByExtension(extensionName: string): RegisteredMode[] {
+    return Array.from(this.modes.values()).filter((registered) => registered.extensionName === extensionName);
+  }
+
+  getModeByName(name: string): RegisteredMode | undefined {
+    for (const registered of this.modes.values()) {
+      if (registered.mode.name === name) {
+        return registered;
+      }
+    }
+    return undefined;
+  }
+
+  clearModes(): void {
+    logger.info('[Extensions] Cleared all modes');
+    this.modes.clear();
   }
 }

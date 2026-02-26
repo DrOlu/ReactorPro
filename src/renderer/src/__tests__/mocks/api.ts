@@ -22,9 +22,9 @@ import {
   AgentProfile,
   MemoryEntry,
   MemoryEmbeddingProgress,
+  BmadStatus,
+  ModeDefinition,
 } from '@common/types';
-
-import type { BmadStatus } from '@common/types';
 
 /**
  * Creates a comprehensive mock for ApplicationAPI
@@ -242,6 +242,9 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     deleteProjectMemories: vi.fn((): Promise<number> => Promise.resolve(0)),
     writeToClipboard: vi.fn((): Promise<void> => Promise.resolve()),
     openPath: vi.fn((): Promise<boolean> => Promise.resolve(true)),
+
+    // Custom modes operations
+    getCustomModes: vi.fn((): Promise<ModeDefinition[]> => Promise.resolve([])),
 
     // BMAD operations
     installBmad: vi.fn((): Promise<{ success: boolean; message?: string }> => Promise.resolve({ success: false })),

@@ -591,6 +591,7 @@ const api: ApplicationAPI = {
   },
 
   getCommands: (baseDir) => ipcRenderer.invoke('get-commands', baseDir),
+  getCustomModes: (baseDir) => ipcRenderer.invoke('get-custom-modes', baseDir),
   runCustomCommand: (baseDir, taskId, commandName, args, mode) => ipcRenderer.invoke('run-custom-command', baseDir, taskId, commandName, args, mode),
 
   // Terminal operations

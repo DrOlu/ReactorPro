@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-import type {
+import {
   AgentProfile,
   CommandArgument,
   CommandsData,
@@ -10,6 +9,7 @@ import type {
   CreateTaskParams,
   CustomCommand,
   Mode,
+  ModeDefinition,
   Model,
   ProjectSettings,
   PromptContext,
@@ -20,9 +20,20 @@ import type {
   TaskData,
   TodoItem,
   UpdatedFile,
+  UsageReportData,
 } from '@common/types';
 
 export type AgentStepResult = unknown;
+export type { ModeDefinition };
+
+export interface ResponseMessage {
+  id: string;
+  content: string;
+  reflectedMessage?: string;
+  finished: boolean;
+  usageReport?: UsageReportData;
+  promptContext?: PromptContext;
+}
 
 /**
  * Metadata describing an extension
@@ -215,6 +226,7 @@ export interface PromptFinishedEvent {
 
 /** Event payload for agent started events */
 export interface AgentStartedEvent {
+  readonly mode: Mode;
   agentProfile: AgentProfile;
   prompt: string | null;
   promptContext?: PromptContext;
@@ -226,6 +238,7 @@ export interface AgentStartedEvent {
 
 /** Event payload for agent finished events */
 export interface AgentFinishedEvent {
+  readonly mode: Mode;
   readonly aborted: boolean;
   readonly contextMessages: ContextMessage[];
   resultMessages: ContextMessage[];
@@ -233,6 +246,7 @@ export interface AgentFinishedEvent {
 
 /** Event payload for agent step finished events */
 export interface AgentStepFinishedEvent {
+  readonly mode: Mode;
   readonly agentProfile: AgentProfile;
   readonly currentResponseId: string;
   readonly stepResult: AgentStepResult;
@@ -371,13 +385,29 @@ export interface TaskContext {
   addFiles(...files: ContextFile[]): Promise<void>;
   dropFile(path: string): Promise<void>;
 
-  // Messages (Read + Safe Write)
+  // Data Context Messages (Read + Safe Write)
   getContextMessages(): Promise<ContextMessage[]>;
-  addMessage(content: string, role?: 'user' | 'assistant'): Promise<void>;
+  addContextMessage(message: ContextMessage, updateContextInfo?: boolean): Promise<void>;
   removeMessage(messageId: string): Promise<void>;
   removeLastMessage(): Promise<void>;
+  removeMessagesUpTo(messageId: string): Promise<void>;
   loadContextMessages(messages: ContextMessage[]): Promise<void>;
   redoLastUserPrompt(mode?: string, updatedPrompt?: string): Promise<void>;
+
+  // UI Context Messages
+  addUserMessage(id: string, content: string, promptContext?: PromptContext): void;
+  addToolMessage(
+    id: string,
+    serverName: string,
+    toolName: string,
+    input?: unknown,
+    response?: string,
+    usageReport?: UsageReportData,
+    promptContext?: PromptContext,
+    saveToDb?: boolean,
+    finished?: boolean,
+  ): void;
+  addResponseMessage(message: ResponseMessage, saveToDb?: boolean): Promise<void>;
 
   // Files & Repo (Read-only)
   getTaskDir(): string;
@@ -405,7 +435,8 @@ export interface TaskContext {
 
   // User Interaction
   askQuestion(text: string, options?: QuestionOptions): Promise<string>;
-  addLogMessage(level: 'info' | 'error' | 'warn' | 'debug' | 'loading', message?: string): void;
+  addLogMessage(level: 'info' | 'error' | 'warning', message?: string): void;
+  addLoadingMessage(message?: string, finished?: boolean): void;
 
   // Task Management
   updateTask(updates: Partial<TaskData>): Promise<TaskData>;
@@ -555,6 +586,12 @@ export interface ExtensionContext {
   showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
 
   /**
+   * Get all custom modes registered by extensions
+   * @returns Promise resolving to array of mode definitions
+   */
+  getCustomModes(): Promise<ModeDefinition[]>;
+
+  /**
    * Send a prompt to the agent or aider for execution
    * @param prompt - The prompt text to send
    * @param mode - Execution mode (agent, code, ask, architect)
@@ -632,6 +669,14 @@ export interface Extension {
    * Called when extension is loaded and when commands need to be refreshed
    */
   getCommands?(context: ExtensionContext): CommandDefinition[];
+
+  // Mode registration
+
+  /**
+   * Return array of modes this extension provides
+   * Called when extension is loaded and when modes need to be refreshed
+   */
+  getModes?(): ModeDefinition[];
 
   // Agent registration
 

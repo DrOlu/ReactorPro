@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { CreateTaskParams, ProjectSettingsSchema, TaskDataSchema } from '@common/types';
+import { CreateTaskParams, ProjectSettingsSchema, TaskDataSchema, ModeDefinition } from '@common/types';
 
 import { BaseApi } from './base-api';
 
@@ -1023,6 +1023,21 @@ export class ProjectApi extends BaseApi {
         const { projectDir, ...settings } = parsed;
         const updatedSettings = await this.eventsHandler.patchProjectSettings(projectDir, settings);
         res.status(200).json(updatedSettings);
+      }),
+    );
+
+    // Get custom modes
+    router.get(
+      '/project/custom-modes',
+      this.handleRequest(async (req, res) => {
+        const parsed = this.validateRequest(GetProjectSettingsSchema, req.query, res);
+        if (!parsed) {
+          return;
+        }
+
+        const { projectDir } = parsed;
+        const customModes = await this.eventsHandler.getCustomModes(projectDir);
+        res.status(200).json(customModes satisfies ModeDefinition[]);
       }),
     );
 

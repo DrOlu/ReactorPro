@@ -33,7 +33,7 @@ import {
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
 
-import type { BmadStatus, InstallResult } from '@common/types';
+import type { ModeDefinition, BmadStatus, InstallResult } from '@common/types';
 import type { BrowserWindow } from 'electron';
 
 import { McpManager, AgentProfileManager } from '@/agent';
@@ -386,6 +386,10 @@ export class EventsHandler {
 
   async getCommands(baseDir: string): Promise<CommandsData> {
     return this.projectManager.getCommands(baseDir);
+  }
+
+  async getCustomModes(baseDir: string): Promise<ModeDefinition[]> {
+    return this.projectManager.getCustomModes(baseDir);
   }
 
   async runCustomCommand(baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode): Promise<void> {

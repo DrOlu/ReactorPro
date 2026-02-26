@@ -1,6 +1,7 @@
 import {
   AgentProfilesUpdatedData,
   AutocompletionData,
+  BmadStatus,
   ClearTaskData,
   CloudflareTunnelStatus,
   CommandOutputData,
@@ -15,6 +16,7 @@ import {
   McpTool,
   MessageRemovedData,
   Mode,
+  ModeDefinition,
   Model,
   ModelsData,
   NotificationData,
@@ -58,8 +60,6 @@ import axios, { type AxiosInstance } from 'axios';
 import { io, Socket } from 'socket.io-client';
 import { compareBaseDirs } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
-
-import type { BmadStatus } from '@common/types';
 
 type EventDataMap = {
   'settings-updated': SettingsData;
@@ -815,6 +815,9 @@ export class BrowserApi implements ApplicationAPI {
       customCommands: response.customCommands,
       extensionCommands: response.extensionCommands,
     };
+  }
+  getCustomModes(baseDir: string): Promise<ModeDefinition[]> {
+    return this.get<ModeDefinition[]>('/project/custom-modes', { projectDir: baseDir });
   }
   runCustomCommand(baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode): Promise<void> {
     return this.post('/project/custom-commands', {

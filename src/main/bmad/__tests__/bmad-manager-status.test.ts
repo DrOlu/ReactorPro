@@ -5,6 +5,16 @@ import { BmadManager } from '../bmad-manager';
 
 import type { WorkflowArtifacts } from '@common/types';
 
+// Mock logger to prevent file system writes
+vi.mock('@/logger', () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 // Mock file system operations
 vi.mock('fs', () => ({
   default: {

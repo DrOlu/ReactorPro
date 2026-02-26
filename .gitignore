@@ -8,6 +8,7 @@ out
 .aider*
 !.aider-desk
 .aider-desk/tasks
+.aider-desk/plans
 .aider-desk/todos.json
 .aider-desk/tmp
 .junie*
