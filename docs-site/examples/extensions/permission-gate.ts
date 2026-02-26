@@ -5,7 +5,7 @@
  * Patterns checked: rm -rf, sudo, chmod/chown 777
  */
 
-import type { Extension, ExtensionContext, ToolCalledEvent } from '/home/wladimiiir/Projects/aider-desk/build/types/extension-types';
+import type { Extension, ExtensionContext, ToolCalledEvent } from '../../../build/types/extension-types';
 
 const dangerousPatterns = [/\brm\s+(-rf?|--recursive)/i, /\bsudo\b/i, /\b(chmod|chown)\b.*777/i];
 
@@ -39,7 +39,7 @@ class PermissionGateExtension implements Extension {
 			const taskContext = context.getTaskContext();
 			if (!taskContext) {
 				context.log('Dangerous command blocked (no task context for confirmation)', 'warn');
-				return { blocked: true };
+				return { output: 'Bash command execution denied by extension. Reason: Internal error in extension.' };
 			}
 
 			context.log('Asking user for confirmation...', 'info');

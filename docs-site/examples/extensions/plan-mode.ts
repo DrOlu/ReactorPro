@@ -11,7 +11,12 @@
  * 3. Enter your request - the extension will prepend planning instructions
  */
 
-import type { Extension, ExtensionContext, ModeDefinition, AgentStartedEvent } from '/home/wladimiiir/Projects/aider-desk/build/types/extension-types';
+import type {
+  Extension,
+  ExtensionContext,
+  ModeDefinition,
+  AgentStartedEvent,
+} from "../../../build/types/extension-types";
 
 const PLAN_USER_MESSAGE = `You are in planning mode. Before making any code changes, you must first create or update a detailed implementation plan in a file called plan.md.
 
@@ -23,7 +28,7 @@ const PLAN_USER_MESSAGE = `You are in planning mode. Before making any code chan
 5. **Implementation Steps**: Outline the specific changes for each file
 6. **Risks & Considerations**: Note any potential issues or edge cases
 
-**Important**: 
+**Important**:
 - Create or edit the plan.md file with your analysis
 - After presenting your plan, ask the user: "May I proceed with this plan?"
 - Wait for user confirmation before making any code changes`;

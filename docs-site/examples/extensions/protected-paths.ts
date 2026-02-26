@@ -5,7 +5,11 @@
  * Useful for preventing accidental modifications to sensitive files.
  */
 
-import type { Extension, ExtensionContext, ToolCalledEvent } from '/home/wladimiiir/Projects/aider-desk/build/types/extension-types';
+import type {
+  Extension,
+  ExtensionContext,
+  ToolCalledEvent,
+} from "../../../build/types/extension-types";
 
 const protectedPaths = ['.env', '.git/', 'node_modules/'];
 

@@ -21,7 +21,12 @@ import {
   TodoItem,
   UpdatedFile,
   UsageReportData,
+  ToolApprovalState,
+  InvocationMode,
+  ContextMemoryMode,
 } from '@common/types';
+
+export type { ToolApprovalState, InvocationMode, ContextMemoryMode };
 
 export type AgentStepResult = unknown;
 export type { ModeDefinition };
