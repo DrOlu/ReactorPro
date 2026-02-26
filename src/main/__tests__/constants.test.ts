@@ -5,13 +5,13 @@ import { AIDER_DESK_DIR, AIDER_DESK_HOOKS_DIR, AIDER_DESK_GLOBAL_HOOKS_DIR, AIDE
 describe('Extension Directory Constants', () => {
   it('should define AIDER_DESK_EXTENSIONS_DIR as project-specific extension directory', () => {
     expect(AIDER_DESK_EXTENSIONS_DIR).toBeDefined();
-    expect(AIDER_DESK_EXTENSIONS_DIR).toBe('.aider-desk/extensions');
+    expect(AIDER_DESK_EXTENSIONS_DIR).toBe('.reactorpro/extensions');
   });
 
   it('should define AIDER_DESK_GLOBAL_EXTENSIONS_DIR using user home directory', () => {
     expect(AIDER_DESK_GLOBAL_EXTENSIONS_DIR).toBeDefined();
-    expect(AIDER_DESK_GLOBAL_EXTENSIONS_DIR).toContain('.aider-desk/extensions');
-    expect(AIDER_DESK_GLOBAL_EXTENSIONS_DIR).not.toBe('.aider-desk/extensions');
+    expect(AIDER_DESK_GLOBAL_EXTENSIONS_DIR).toContain('.reactorpro/extensions');
+    expect(AIDER_DESK_GLOBAL_EXTENSIONS_DIR).not.toBe('.reactorpro/extensions');
   });
 
   it('should maintain consistent naming pattern with hook constants', () => {

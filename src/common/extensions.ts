@@ -456,7 +456,7 @@ export interface ProjectContext {
 }
 
 /**
- * Context object passed to extension methods providing access to AiderDesk APIs
+ * Context object passed to extension methods providing access to ReactorPro APIs
  *
  * @example
  * ```typescript
@@ -470,7 +470,7 @@ export interface ProjectContext {
  */
 export interface ExtensionContext {
   /**
-   * Log a message to the AiderDesk console
+   * Log a message to the ReactorPro console
    * @param message - Message to log
    * @param type - Log level (info, error, warn, debug)
    */

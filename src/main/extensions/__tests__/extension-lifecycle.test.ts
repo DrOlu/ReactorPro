@@ -294,7 +294,7 @@ describe('Extension Lifecycle', () => {
       await manager.dispose();
     });
 
-    it('should not crash AiderDesk on extension errors', async () => {
+    it('should not crash ReactorPro on extension errors', async () => {
       const extension: Extension = {
         async onLoad() {
           throw new Error('Critical error');
