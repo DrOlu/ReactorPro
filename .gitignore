@@ -32,3 +32,4 @@ start-docker.sh
 repomix-output.txt
 .eslintcache
 ai-docs
+.chunkhound.db*
