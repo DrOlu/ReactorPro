@@ -474,7 +474,12 @@ export class Agent {
 
           task.addToolMessage(options.toolCallId, serverName, messageToolName, effectiveArgs, undefined, undefined, promptContext);
 
-          const toolCalledExtensionResult = await this.extensionManager.dispatchEvent('onToolCalled', { toolName, input: effectiveArgs }, task.project, task);
+          const toolCalledExtensionResult = await this.extensionManager.dispatchEvent(
+            'onToolCalled',
+            { toolName, input: effectiveArgs, abortSignal: options.abortSignal || abortSignal },
+            task.project,
+            task,
+          );
           if (toolCalledExtensionResult.output) {
             return toolCalledExtensionResult.output;
           }

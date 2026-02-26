@@ -213,6 +213,11 @@ declare const ProjectSettingsSchema: z.ZodObject<{
 	autoApproveLocked: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>;
 export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
+export interface ProjectData {
+	active: boolean;
+	baseDir: string;
+	settings: ProjectSettings;
+}
 export declare enum ToolApprovalState {
 	Always = "always",
 	Never = "never",
@@ -535,6 +540,14 @@ export interface TaskInitializedEvent {
 export interface TaskClosedEvent {
 	readonly task: TaskData;
 }
+/** Event payload for project opened events */
+export interface ProjectOpenedEvent {
+	project: ProjectData;
+}
+/** Event payload for project closed events */
+export interface ProjectClosedEvent {
+	readonly project: ProjectData;
+}
 /** Event payload for prompt started events */
 export interface PromptStartedEvent {
 	prompt: string;
@@ -583,6 +596,7 @@ export interface ToolApprovalEvent {
 /** Event payload for tool called events */
 export interface ToolCalledEvent {
 	readonly toolName: string;
+	readonly abortSignal?: AbortSignal;
 	input: Record<string, unknown> | undefined;
 	output?: unknown;
 }
@@ -944,6 +958,16 @@ export interface Extension {
 	 * @returns void or partial event to modify task data
 	 */
 	onTaskClosed?(event: TaskClosedEvent, context: ExtensionContext): Promise<void | Partial<TaskClosedEvent>>;
+	/**
+	 * Called when a project is opened
+	 * @returns void or partial event to modify project data
+	 */
+	onProjectOpen?(event: ProjectOpenedEvent, context: ExtensionContext): Promise<void | Partial<ProjectOpenedEvent>>;
+	/**
+	 * Called when a project is closed
+	 * @returns void or partial event to modify project data
+	 */
+	onProjectClosed?(event: ProjectClosedEvent, context: ExtensionContext): Promise<void | Partial<ProjectClosedEvent>>;
 	/**
 	 * Called when prompt processing starts
 	 * @returns void or partial event to modify
