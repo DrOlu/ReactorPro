@@ -4,8 +4,8 @@ import fs from 'fs/promises';
 import {
   AgentProfile,
   CloudflareTunnelStatus,
+  CommandsData,
   CreateTaskParams,
-  CustomCommand,
   EditFormat,
   EnvironmentVariable,
   FileEdit,
@@ -33,7 +33,7 @@ import {
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
 
-import type { BmadStatus, InstallResult } from '@common/bmad-types';
+import type { BmadStatus, InstallResult } from '@common/types';
 import type { BrowserWindow } from 'electron';
 
 import { McpManager, AgentProfileManager } from '@/agent';
@@ -46,6 +46,7 @@ import { TelemetryManager } from '@/telemetry';
 import { VersionsManager } from '@/versions';
 import { DataManager } from '@/data-manager';
 import { TerminalManager } from '@/terminal/terminal-manager';
+import { ExtensionManager } from '@/extensions';
 import logger from '@/logger';
 import { getDefaultProjectSettings, getEffectiveEnvironmentVariable, getFilePathSuggestions, isProjectPath, isValidPath, scrapeWeb } from '@/utils';
 import { AIDER_DESK_TMP_DIR, LOGS_DIR } from '@/constants';
@@ -67,6 +68,7 @@ export class EventsHandler {
     private eventManager: EventManager,
     private readonly agentProfileManager: AgentProfileManager,
     private readonly memoryManager: MemoryManager,
+    private readonly extensionManager: ExtensionManager,
   ) {}
 
   loadSettings(): SettingsData {
@@ -208,8 +210,8 @@ export class EventsHandler {
     this.store.removeRecentProject(baseDir);
   }
 
-  interruptResponse(baseDir: string, taskId: string, interruptId?: string): void {
-    this.projectManager.getProject(baseDir).getTask(taskId)?.interruptResponse(interruptId);
+  async interruptResponse(baseDir: string, taskId: string, interruptId?: string): Promise<void> {
+    await this.projectManager.getProject(baseDir).getTask(taskId)?.interruptResponse(interruptId);
   }
 
   clearContext(baseDir: string, taskId: string, includeLastMessage = true): void {
@@ -363,8 +365,8 @@ export class EventsHandler {
     return this.projectManager.getProject(baseDir).getTask(taskId)?.savePromptOnly(prompt);
   }
 
-  answerQuestion(baseDir: string, taskId: string, answer: string): void {
-    this.projectManager.getProject(baseDir).getTask(taskId)?.answerQuestion(answer);
+  async answerQuestion(baseDir: string, taskId: string, answer: string): Promise<void> {
+    await this.projectManager.getProject(baseDir).getTask(taskId)?.answerQuestion(answer);
   }
 
   removeQueuedPrompt(baseDir: string, taskId: string, promptId: string): void {
@@ -382,8 +384,8 @@ export class EventsHandler {
     void this.projectManager.getProject(baseDir).getTask(taskId)?.runCommand(command);
   }
 
-  async getCustomCommands(baseDir: string): Promise<CustomCommand[]> {
-    return this.projectManager.getCustomCommands(baseDir);
+  async getCommands(baseDir: string): Promise<CommandsData> {
+    return this.projectManager.getCommands(baseDir);
   }
 
   async runCustomCommand(baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode): Promise<void> {
@@ -968,6 +970,7 @@ export class EventsHandler {
   }
 
   async getAllAgentProfiles() {
+    // Extension agents are now included in getAllProfiles()
     return this.agentProfileManager.getAllProfiles();
   }
 
@@ -977,12 +980,24 @@ export class EventsHandler {
   }
 
   async updateAgentProfile(profile: AgentProfile) {
+    // First, check if this is an extension-provided agent
+    const extensionProfile = await this.extensionManager.updateAgentProfile(profile);
+
+    if (extensionProfile) {
+      // Extension handled it - notify projects of the change
+      this.projectManager.agentProfileUpdated(profile, extensionProfile);
+      return;
+    }
+
+    // Not an extension agent - use file-based storage
     const oldProfile = this.agentProfileManager.getProfile(profile.id);
+    if (!oldProfile) {
+      logger.warn('Agent profile not found when updating:', profile.id);
+      return;
+    }
     await this.agentProfileManager.updateProfile(profile);
 
-    if (oldProfile) {
-      this.projectManager.agentProfileUpdated(oldProfile, profile);
-    }
+    this.projectManager.agentProfileUpdated(oldProfile, profile);
   }
 
   async deleteAgentProfile(profileId: string) {

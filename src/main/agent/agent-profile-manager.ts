@@ -1,14 +1,15 @@
-import fs from 'fs/promises';
-import path from 'path';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { homedir } from 'os';
 
 import { FSWatcher, watch } from 'chokidar';
-import debounce from 'lodash/debounce';
+import { debounce } from 'lodash';
 import { DEFAULT_AGENT_PROFILE, DEFAULT_AGENT_PROFILES } from '@common/agent';
 import { fileExists } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { AgentProfile } from '@common/types';
+import type { ExtensionRegistry } from '@/extensions/extension-registry';
 
 import { AIDER_DESK_AGENTS_DIR, AIDER_DESK_RULES_DIR } from '@/constants';
 import logger from '@/logger';
@@ -74,9 +75,12 @@ export class AgentProfileManager {
   // Directory watching (one watcher per directory)
   private directoryWatchers: Map<string, FSWatcher> = new Map(); // agentsDir → watcher
 
-  constructor(private readonly eventManager: EventManager) {}
+  constructor(
+    private readonly eventManager: EventManager,
+    private readonly extensionRegistry: ExtensionRegistry,
+  ) {}
 
-  public async start(): Promise<void> {
+  public async init(): Promise<void> {
     await this.initializeProfiles();
     await this.setupGlobalFileWatcher();
   }
@@ -92,7 +96,7 @@ export class AgentProfileManager {
     // Setup file watcher for project directory
     await this.setupWatcherForDirectory(projectAgentsDir);
 
-    this.notifyListeners();
+    this.sendAgentProfilesUpdated();
   }
 
   public removeProject(projectDir: string): void {
@@ -118,7 +122,7 @@ export class AgentProfileManager {
     }
   }
 
-  private notifyListeners(): void {
+  public sendAgentProfilesUpdated(): void {
     const allProfiles = this.getAllProfiles();
     this.eventManager.sendAgentProfilesUpdated(allProfiles);
   }
@@ -136,7 +140,7 @@ export class AgentProfileManager {
     // Load global profiles
     await this.loadProfilesFromDirectory(globalAgentsDir);
 
-    this.notifyListeners();
+    this.sendAgentProfilesUpdated();
   }
 
   private async ensureDefaultProfiles(globalAgentsDir: string): Promise<void> {
@@ -286,7 +290,7 @@ export class AgentProfileManager {
     await this.loadProfilesFromDirectory(agentsDir);
 
     // Notify listeners
-    this.notifyListeners();
+    this.sendAgentProfilesUpdated();
   }
 
   private async getExistingDirNames(agentsDir: string): Promise<Set<string>> {
@@ -564,7 +568,7 @@ export class AgentProfileManager {
     existingContext.agentProfile = profile;
     await this.saveProfileToFile(profile, configPath);
 
-    this.notifyListeners();
+    this.sendAgentProfilesUpdated();
   }
 
   public async deleteProfile(profileId: string): Promise<void> {
@@ -590,6 +594,12 @@ export class AgentProfileManager {
   }
 
   public getProfile(profileId: string): AgentProfile | undefined {
+    // Check extension agents first (they can override file-based profiles)
+    const extensionAgent = this.extensionRegistry.getAgentById(profileId);
+    if (extensionAgent) {
+      return extensionAgent.agent;
+    }
+    // Fall back to file-based profiles
     return this.profiles.get(profileId)?.agentProfile;
   }
 
@@ -618,15 +628,26 @@ export class AgentProfileManager {
   }
 
   public getAllProfiles(): AgentProfile[] {
-    return this.getOrderedProfiles(Array.from(this.profiles.values()));
+    // Get extension agents first (they can override file-based profiles)
+    const extensionAgents = this.extensionRegistry.getAgents().map((registered) => registered.agent);
+    // Then get file-based profiles
+    const fileBasedProfiles = this.getOrderedProfiles(Array.from(this.profiles.values()));
+    // Extension agents come first for override capability
+    return [...extensionAgents, ...fileBasedProfiles.filter((profile) => !extensionAgents.some((extAgent) => extAgent.id === profile.id))];
   }
 
-  public getProjectProfiles(projectDir: string, includeGlobal = true): AgentProfile[] {
+  public getProjectProfiles(projectDir: string, includeGlobal = true, includeExtension = true): AgentProfile[] {
     const projectProfiles = Array.from(this.profiles.values()).filter((ctx) => ctx.agentProfile.projectDir === projectDir);
     const profiles = this.getOrderedProfiles(projectProfiles);
 
     if (includeGlobal) {
       profiles.push(...this.getGlobalProfiles());
+    }
+
+    if (includeExtension) {
+      const extensionAgents = this.extensionRegistry.getAgents().map((registered) => registered.agent);
+      // Extension agents come first for override capability
+      return [...extensionAgents, ...profiles.filter((profile) => !extensionAgents.some((extAgent) => extAgent.id === profile.id))];
     }
 
     return profiles;
@@ -671,7 +692,7 @@ export class AgentProfileManager {
     }
 
     // Notify listeners
-    this.notifyListeners();
+    this.sendAgentProfilesUpdated();
   }
 
   private async mergeProjectRuleFilesIntoGlobalProfile(agentDirName: string, projectAgentsDir: string): Promise<void> {

@@ -39,6 +39,9 @@ import {
   UserMessageData,
   WorkingMode,
   AIDER_COMMANDS,
+  ConnectorMessage,
+  WorkflowExecutionOptions,
+  WorkflowExecutionResult,
 } from '@common/types';
 import { extractProviderModel, extractTextContent, fileExists, parseUsageReport } from '@common/utils';
 import { COMPACT_CONVERSATION_AGENT_PROFILE, CONFLICT_RESOLUTION_PROFILE, HANDOFF_AGENT_PROFILE, INIT_PROJECT_AGENTS_PROFILE } from '@common/agent';
@@ -47,7 +50,7 @@ import debounce from 'lodash/debounce';
 import { isEqual } from 'lodash';
 
 import type { SimpleGit } from 'simple-git';
-import type { WorkflowExecutionOptions, WorkflowExecutionResult } from '@common/bmad-types';
+import type { RegisteredCommand } from '@/extensions/extension-registry';
 
 import { getAllFiles, isValidProjectFile } from '@/utils/file-system';
 import {
@@ -77,6 +80,7 @@ import { MemoryManager } from '@/memory/memory-manager';
 import { getElectronApp } from '@/app';
 import { HookManager } from '@/hooks/hook-manager';
 import { PromptsManager } from '@/prompts';
+import { ExtensionManager, ExtensionEventMap } from '@/extensions/extension-manager';
 
 export const INTERNAL_TASK_ID = 'internal';
 export const RESPONSE_CHUNK_FLUSH_INTERVAL_MS = 10;
@@ -149,6 +153,7 @@ export class Task {
     private readonly memoryManager: MemoryManager,
     public readonly hookManager: HookManager,
     private readonly promptsManager: PromptsManager,
+    private readonly extensionManager: ExtensionManager,
     initialTaskData?: Partial<TaskData>,
   ) {
     this.task = {
@@ -167,6 +172,7 @@ export class Task {
       this.telemetryManager,
       this.memoryManager,
       this.promptsManager,
+      this.extensionManager,
     );
     this.tokensInfo = {
       baseDir: this.getProjectDir(),
@@ -202,7 +208,7 @@ export class Task {
       return null;
     }
 
-    // If profile not found, try to create a temporary one from task-level provider/model
+    // Apply task-level provider/model overrides if present
     if (this.task.provider && this.task.model) {
       // Create a temporary profile with task-level overrides
       profile = {
@@ -388,6 +394,7 @@ export class Task {
 
     this.initialized = true;
     await this.hookManager.trigger('onTaskInitialized', { task: this.task }, this, this.project);
+    await this.extensionManager.dispatchEvent('onTaskInitialized', { task: this.task }, this.project, this);
   }
 
   public async load(): Promise<TaskStateData> {
@@ -472,6 +479,19 @@ export class Task {
     return this.task.worktree ? this.task.worktree.path : this.project.baseDir;
   }
 
+  /**
+   * Dispatches an extension event through the ExtensionManager.
+   * This public method provides controlled access to extension event dispatch
+   * without exposing the ExtensionManager instance directly.
+   *
+   * @param eventName - The name of the event to dispatch
+   * @param event - The event payload
+   * @returns Object containing potentially modified event, blocked status, and modified result
+   */
+  public dispatchExtensionEvent<K extends keyof ExtensionEventMap>(eventName: K, event: ExtensionEventMap[K]): Promise<ExtensionEventMap[K]> {
+    return this.extensionManager.dispatchEvent(eventName, event, this.project, this);
+  }
+
   private normalizeFilePath(filePath: string): string {
     const normalizedPath = path.normalize(filePath);
 
@@ -499,10 +519,11 @@ export class Task {
       taskId: this.taskId,
     });
     await this.hookManager.trigger('onTaskClosed', { task: this.task }, this, this.project);
+    await this.extensionManager.dispatchEvent('onTaskClosed', { task: this.task }, this.project, this);
     if (clearContext) {
       this.eventManager.sendClearTask(this.project.baseDir, this.taskId, true, true);
     }
-    this.interruptResponse();
+    await this.interruptResponse();
     this.resolveAgentRunPromises();
     this.cleanupChunkBuffers();
 
@@ -577,7 +598,7 @@ export class Task {
 
   public async runPrompt(prompt: string, mode: Mode = 'code', addToInputHistory = true, userMessageId = uuidv4()): Promise<ResponseCompletedData[]> {
     if (this.currentQuestion) {
-      if (this.answerQuestion('n', prompt)) {
+      if (await this.answerQuestion('n', prompt)) {
         logger.debug('Processed by the answerQuestion function.');
         return [];
       }
@@ -604,19 +625,29 @@ export class Task {
     prompt = hookResult.event.prompt;
     mode = hookResult.event.mode;
 
+    let promptContext: PromptContext = {
+      id: userMessageId,
+    };
+
+    const extensionResult = await this.extensionManager.dispatchEvent('onPromptStarted', { prompt, mode, promptContext }, this.project, this);
+    if (extensionResult.blocked) {
+      logger.info('Prompt blocked by extension');
+      return [];
+    }
+    prompt = extensionResult.prompt;
+    mode = extensionResult.mode;
+    promptContext = extensionResult.promptContext;
+
     logger.info('Running prompt:', {
       baseDir: this.project.baseDir,
       prompt: prompt.substring(0, 100),
       mode,
+      promptContext,
     });
 
     if (addToInputHistory) {
       await this.project.addToInputHistory(prompt);
     }
-
-    const promptContext: PromptContext = {
-      id: userMessageId,
-    };
 
     this.addUserMessage(userMessageId, prompt);
     this.addLogMessage('loading');
@@ -687,20 +718,21 @@ export class Task {
     await this.waitForCurrentPromptToFinish();
 
     await this.hookManager.trigger('onPromptStarted', { prompt, mode }, this, this.project);
+
     const aiderHookResult = await this.hookManager.trigger('onAiderPromptStarted', { prompt, mode }, this, this.project);
     if (aiderHookResult.blocked) {
       logger.info('Aider prompt blocked by hook');
       return [];
     }
 
+    prompt = aiderHookResult.event.prompt;
+    mode = aiderHookResult.event.mode;
+
     await this.saveTask({
       name: this.task.name || this.getTaskNameFromPrompt(prompt),
       startedAt: new Date().toISOString(),
       state: DefaultTaskState.InProgress,
     });
-
-    prompt = aiderHookResult.event.prompt;
-    mode = aiderHookResult.event.mode;
 
     await this.aiderManager.waitForStart();
 
@@ -715,10 +747,35 @@ export class Task {
       promptContext,
     });
 
-    const responses = await this.sendPromptToAider(prompt, promptContext, mode, undefined, undefined, {
-      autoApprove: this.task.autoApprove,
+    let messages = this.contextManager.toConnectorMessages();
+    let files = this.contextManager.getContextFiles();
+
+    const extensionResult = await this.extensionManager.dispatchEvent(
+      'onAiderPromptStarted',
+      { prompt, mode, promptContext, messages, files },
+      this.project,
+      this,
+    );
+    if (extensionResult.blocked) {
+      logger.info('Aider prompt blocked by extension');
+      return [];
+    }
+
+    prompt = extensionResult.prompt;
+    mode = extensionResult.mode;
+    promptContext = extensionResult.promptContext;
+    messages = extensionResult.messages;
+    files = extensionResult.files;
+
+    let responses = await this.sendPromptToAider(prompt, promptContext, mode, messages, files, {
+      autoApprove: extensionResult.autoApprove ?? this.task.autoApprove,
+      denyCommands: extensionResult.denyCommands,
     });
     logger.debug('Responses:', { responses });
+
+    const finishedExtensionResult = await this.extensionManager.dispatchEvent('onAiderPromptFinished', { responses }, this.project, this);
+
+    responses = finishedExtensionResult.responses;
 
     for (const response of responses) {
       if (response.content || response.reflectedMessage) {
@@ -958,8 +1015,8 @@ export class Task {
   public async runSubagent(
     profile: AgentProfile,
     prompt: string,
-    contextMessages: ContextMessage[],
-    contextFiles: ContextFile[],
+    contextMessages?: ContextMessage[],
+    contextFiles?: ContextFile[],
     systemPrompt?: string,
     abortSignal?: AbortSignal,
     promptContext?: PromptContext,
@@ -970,12 +1027,51 @@ export class Task {
       return [];
     }
     prompt = hookResult.event.prompt;
+
+    if (!contextMessages) {
+      contextMessages = await this.getContextMessages();
+    }
+    if (!contextFiles) {
+      contextFiles = await this.getContextFiles();
+    }
+
+    const extensionResult = await this.extensionManager.dispatchEvent(
+      'onSubagentStarted',
+      {
+        subagentProfile: profile,
+        prompt,
+        contextMessages,
+        contextFiles,
+        systemPrompt,
+        promptContext,
+      },
+      this.project,
+      this,
+    );
+    if (extensionResult.blocked) {
+      logger.info('Subagent execution blocked by extension');
+      return [];
+    }
+    prompt = extensionResult.prompt;
+    contextMessages = extensionResult.contextMessages;
+    contextFiles = extensionResult.contextFiles;
+    systemPrompt = extensionResult.systemPrompt;
+    promptContext = extensionResult.promptContext;
+
     let resultMessages = await this.agent.runAgent(this, profile, prompt, promptContext, contextMessages, contextFiles, systemPrompt, false, abortSignal);
     const finishedHookResult = await this.hookManager.trigger('onSubagentFinished', { subagentId: profile.id, resultMessages }, this, this.project);
 
     if (finishedHookResult.event.resultMessages) {
       resultMessages = finishedHookResult.event.resultMessages;
     }
+
+    const subagentFinishedExtensionResult = await this.extensionManager.dispatchEvent(
+      'onSubagentFinished',
+      { subagentProfile: profile, resultMessages },
+      this.project,
+      this,
+    );
+    resultMessages = subagentFinishedExtensionResult.resultMessages;
 
     return resultMessages;
   }
@@ -984,10 +1080,7 @@ export class Task {
     prompt: string,
     promptContext: PromptContext = { id: uuidv4() },
     mode?: Mode,
-    messages: {
-      role: MessageRole;
-      content: string;
-    }[] = this.contextManager.toConnectorMessages(),
+    messages: ConnectorMessage[] = this.contextManager.toConnectorMessages(),
     files: ContextFile[] = this.contextManager.getContextFiles(),
     options?: AiderRunOptions,
   ): Promise<ResponseCompletedData[]> {
@@ -1038,8 +1131,8 @@ export class Task {
     }
 
     if (!message.finished) {
-      const sendResponseChunk = (chunk: string) => {
-        const data: ResponseChunkData = {
+      const sendResponseChunk = async (chunk: string) => {
+        let data: ResponseChunkData = {
           messageId: message.id,
           baseDir: this.project.baseDir,
           taskId: this.taskId,
@@ -1047,6 +1140,10 @@ export class Task {
           reflectedMessage: message.reflectedMessage,
           promptContext: message.promptContext,
         };
+
+        const extensionResult = await this.extensionManager.dispatchEvent('onResponseChunk', { chunk: data }, this.project, this);
+        data = extensionResult.chunk;
+
         try {
           this.eventManager.sendResponseChunk(data);
         } catch (error) {
@@ -1064,13 +1161,13 @@ export class Task {
           taskId: this.taskId,
           messageId: message.id,
         });
-        sendResponseChunk(message.content);
+        await sendResponseChunk(message.content);
 
         const messageId = message.id;
-        const interval = setInterval(() => {
+        const interval = setInterval(async () => {
           const entry = this.responseChunkMap.get(messageId);
           if (entry && entry.buffer.length > 0) {
-            sendResponseChunk(entry.buffer);
+            await sendResponseChunk(entry.buffer);
             logger.debug('Sending buffered chunk', {
               baseDir: this.project.baseDir,
               taskId: this.taskId,
@@ -1129,7 +1226,7 @@ export class Task {
         logger.info(`Usage report: ${JSON.stringify(usageReport)}`);
         this.updateTotalCosts(usageReport);
       }
-      const data: ResponseCompletedData = {
+      let data: ResponseCompletedData = {
         type: 'response-completed',
         messageId: message.id,
         content: message.content,
@@ -1144,6 +1241,9 @@ export class Task {
         sequenceNumber: message.sequenceNumber,
         promptContext: message.promptContext,
       };
+
+      const extensionResult = await this.extensionManager.dispatchEvent('onResponseCompleted', { response: data }, this.project, this);
+      data = extensionResult.response;
 
       this.sendResponseCompleted(data);
       this.closeCommandOutput();
@@ -1188,12 +1288,20 @@ export class Task {
     return question.key || `${question.text}_${question.subject || ''}`;
   }
 
-  public answerQuestion(answer: string, userInput?: string): boolean {
+  public async answerQuestion(answer: string, userInput?: string): Promise<boolean> {
     if (!this.currentQuestion) {
       return false;
     }
 
     void this.hookManager.trigger('onQuestionAnswered', { question: this.currentQuestion, answer, userInput }, this, this.project);
+    const extensionResult = await this.extensionManager.dispatchEvent(
+      'onQuestionAnswered',
+      { question: this.currentQuestion, answer, userInput },
+      this.project,
+      this,
+    );
+    answer = extensionResult.answer;
+    userInput = extensionResult.userInput;
 
     logger.info('Answering question:', {
       baseDir: this.project.baseDir,
@@ -1260,6 +1368,14 @@ export class Task {
       }
       contextFile = hookResult.event.file;
 
+      // Extension event uses plural name
+      const extensionResult = await this.extensionManager.dispatchEvent('onFilesAdded', { files: [contextFile] }, this.project, this);
+      if (extensionResult.files.length === 0) {
+        logger.info('File addition blocked by extension (empty files array)');
+        return false;
+      }
+      contextFile = extensionResult.files[0];
+
       const normalizedPath = this.normalizeFilePath(contextFile.path);
       logger.debug('Adding file or folder:', {
         path: normalizedPath,
@@ -1287,8 +1403,10 @@ export class Task {
     this.findMessageConnectors('add-file').forEach((connector) => connector.sendAddFileMessage(contextFile, noUpdate));
   }
 
-  public dropFile(filePath: string) {
-    void this.hookManager.trigger('onFileDropped', { filePath }, this, this.project);
+  public async dropFile(filePath: string) {
+    await this.hookManager.trigger('onFileDropped', { filePath }, this, this.project);
+    // Extension event uses plural name and ContextFile array
+    await this.extensionManager.dispatchEvent('onFilesDropped', { files: [{ path: filePath }] }, this.project, this);
     const normalizedPath = this.normalizeFilePath(filePath);
     logger.info('Dropping file or folder:', { path: normalizedPath });
     const droppedFiles = this.contextManager.dropContextFile(normalizedPath);
@@ -1298,8 +1416,8 @@ export class Task {
       this.sendDropFile(droppedFile.path, droppedFile.readOnly);
     }
 
-    void this.sendContextFilesUpdated();
-    void this.updateContextInfo(true, true);
+    await this.sendContextFilesUpdated();
+    await this.updateContextInfo(true, true);
   }
 
   public sendDropFile(filePath: string, readOnly?: boolean, noUpdate?: boolean): void {
@@ -1346,6 +1464,13 @@ export class Task {
       return;
     }
     command = hookResult.event.command;
+
+    const extensionResult = await this.extensionManager.dispatchEvent('onCommandExecuted', { command }, this.project, this);
+    if (extensionResult.blocked) {
+      logger.info('Command execution blocked by extension');
+      return;
+    }
+    command = extensionResult.command;
 
     if (this.currentQuestion) {
       this.answerQuestion('n');
@@ -1442,6 +1567,16 @@ export class Task {
       return [hookResult.result, undefined];
     }
 
+    const extensionResult = await this.extensionManager.dispatchEvent('onQuestionAsked', { question: questionData }, this.project, this);
+    if (extensionResult.answer) {
+      logger.info('Question answered by extension', {
+        question: questionData.text,
+        answer: extensionResult.answer,
+      });
+      return [extensionResult.answer, undefined];
+    }
+    questionData = extensionResult.question;
+
     if (this.currentQuestion) {
       // Wait if another question is already pending
       await new Promise((resolve) => {
@@ -1480,7 +1615,7 @@ export class Task {
 
       if (!questionData.internal) {
         // Auto-answer based on stored preference
-        this.answerQuestion(storedAnswer);
+        await this.answerQuestion(storedAnswer);
       } else {
         this.currentQuestion = null;
       }
@@ -1984,7 +2119,7 @@ export class Task {
     await this.contextManager.loadMessages(messages);
   }
 
-  public interruptResponse(interruptId?: string) {
+  public async interruptResponse(interruptId?: string) {
     if (interruptId) {
       // Interrupt specific conflict resolution agent
       logger.info('Interrupting specific conflict resolution agent:', {
@@ -1999,7 +2134,9 @@ export class Task {
         delete this.resolutionAbortControllers[interruptId];
         logger.info('Aborted conflict resolution agent', { interruptId });
       } else {
-        logger.warn('Conflict resolution agent not found for interruptId', { interruptId });
+        logger.warn('Conflict resolution agent not found for interruptId', {
+          interruptId,
+        });
       }
       return;
     }
@@ -2012,7 +2149,7 @@ export class Task {
     });
 
     if (this.currentQuestion) {
-      this.answerQuestion('n', 'Cancelled');
+      await this.answerQuestion('n', 'Cancelled');
     }
 
     this.findMessageConnectors('interrupt-response').forEach((connector) => connector.sendInterruptResponseMessage());
@@ -2034,6 +2171,10 @@ export class Task {
         });
       }
     }
+  }
+
+  public getQueuedPrompts(): QueuedPromptData[] {
+    return this.queuedPrompts;
   }
 
   public removeQueuedPrompt(promptId: string): void {
@@ -2400,8 +2541,8 @@ export class Task {
   public async handoffConversation(
     mode: Mode,
     focus: string = '',
-    contextMessages?: ContextMessage[],
     execute = false,
+    contextMessages?: ContextMessage[],
     waitForAgentCompletion = true,
     loadingMessage = 'Preparing handoff...',
   ): Promise<void> {
@@ -2512,7 +2653,10 @@ export class Task {
         content,
       }));
     } catch (error) {
-      logger.warn('Failed to read file for context extraction', { filePath, error });
+      logger.warn('Failed to read file for context extraction', {
+        filePath,
+        error,
+      });
     }
 
     const prompt = this.promptsManager.getCodeInlineRequestPrompt(this, {
@@ -2882,16 +3026,55 @@ export class Task {
     }
   }
 
+  private async runExtensionCommand(extensionCommand: RegisteredCommand, args: string[], _mode: Mode): Promise<void> {
+    const { command } = extensionCommand;
+
+    // Validate required arguments
+    const requiredArgs = command.arguments?.filter((arg) => arg.required !== false) || [];
+    if (args.length < requiredArgs.length) {
+      this.addLogMessage(
+        'error',
+        `Not enough arguments for command '${command.name}'. Expected arguments:\n${command.arguments?.map((arg, idx) => `${idx + 1}: ${arg.description}${arg.required === false ? ' (optional)' : ''}`).join('\n')}`,
+      );
+      this.eventManager.sendCustomCommandError(this.project.baseDir, this.taskId, `Argument mismatch for command: ${command.name}`);
+      return;
+    }
+
+    logger.info('Running extension command:', {
+      commandName: command.name,
+      args,
+    });
+    this.telemetryManager.captureCustomCommand(command.name, args.length, 'agent');
+
+    try {
+      // Execute the command - extension is fully responsible for its logic
+      await this.extensionManager.executeCommand(command.name, args, this.project, this);
+    } catch (error) {
+      logger.error('Extension command execution failed:', error);
+      this.addLogMessage('error', `Extension command failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.eventManager.sendCustomCommandError(this.project.baseDir, this.taskId, `Extension command execution failed: ${command.name}`);
+    }
+
+    await this.project.addToInputHistory(`/${command.name}${args.length > 0 ? ' ' + args.join(' ') : ''}`);
+  }
+
   public async runCustomCommand(commandName: string, args: string[], mode: Mode = 'agent'): Promise<void> {
-    const command = this.customCommandManager.getCommand(commandName);
+    // First, check if this is an extension command
+    const extensionCommand = this.extensionManager.getCommands().find((c) => c.command.name === commandName);
+
+    if (extensionCommand) {
+      // Handle extension command execution
+      await this.runExtensionCommand(extensionCommand, args, mode);
+      return;
+    }
+
+    // Fall back to file-based custom command
+    let command = this.customCommandManager.getCommand(commandName);
     if (!command) {
       this.addLogMessage('error', `Custom command '${commandName}' not found.`);
       this.eventManager.sendCustomCommandError(this.project.baseDir, this.taskId, `Invalid command: ${commandName}`);
       return;
     }
-
-    logger.info('Running custom command:', { commandName, args, mode });
-    this.telemetryManager.captureCustomCommand(commandName, args.length, mode);
 
     if (args.length < command.arguments.filter((arg) => arg.required !== false).length) {
       this.addLogMessage(
@@ -2906,22 +3089,37 @@ export class Task {
 
     this.addLogMessage('loading', 'Executing custom command...');
 
-    let prompt: string;
-    try {
-      prompt = await this.customCommandManager.processCommandTemplate(command, args);
-    } catch (error) {
-      // Handle shell command execution errors
-      if (error instanceof ShellCommandError) {
-        this.addLogMessage(
-          'error',
-          `Shell command failed: ${error.command}
+    const extensionResult = await this.extensionManager.dispatchEvent('onCustomCommandExecuted', { command, mode }, this.project, this);
+    if (extensionResult.blocked) {
+      logger.info('Custom command execution blocked by extension');
+      this.addLogMessage('loading', '', true);
+      return;
+    }
+
+    let prompt = extensionResult.prompt;
+    command = extensionResult.command;
+    mode = extensionResult.mode;
+
+    logger.info('Running custom command:', { commandName, args, mode });
+    this.telemetryManager.captureCustomCommand(commandName, args.length, mode);
+
+    if (!prompt) {
+      try {
+        prompt = await this.customCommandManager.processCommandTemplate(command, args);
+      } catch (error) {
+        // Handle shell command execution errors
+        if (error instanceof ShellCommandError) {
+          this.addLogMessage(
+            'error',
+            `Shell command failed: ${error.command}
 ${error.stderr}`,
-          true,
-        );
-        return;
+            true,
+          );
+          return;
+        }
+        // Re-throw other errors
+        throw error;
       }
-      // Re-throw other errors
-      throw error;
     }
 
     await this.project.addToInputHistory(`/${commandName}${args.length > 0 ? ' ' + args.join(' ') : ''}`);
@@ -2962,7 +3160,7 @@ ${error.stderr}`,
       return;
     }
 
-    this.interruptResponse();
+    await this.interruptResponse();
     await this.close(false, false);
     await this.init();
     if (this.task.createdAt) {
@@ -3561,7 +3759,9 @@ ${error.stderr}`,
       const worktreeRebaseState = await this.worktreeManager.getRebaseState(worktreePath);
 
       if (worktreeRebaseState.hasUnmergedPaths) {
-        logger.info('Conflicts found in worktree, resolving...', { worktreePath });
+        logger.info('Conflicts found in worktree, resolving...', {
+          worktreePath,
+        });
         await this.executeConflictResolution(worktreePath, 'worktree');
         return;
       }
@@ -3572,7 +3772,9 @@ ${error.stderr}`,
     const baseRebaseState = await this.worktreeManager.getRebaseState(baseDir);
 
     if (baseRebaseState.hasUnmergedPaths) {
-      logger.info('Conflicts found in main repository, resolving...', { baseDir });
+      logger.info('Conflicts found in main repository, resolving...', {
+        baseDir,
+      });
       await this.executeConflictResolution(baseDir, 'main repository');
       return;
     }
@@ -3698,5 +3900,9 @@ ${error.stderr}`,
 
   public isInitialized() {
     return this.initialized;
+  }
+
+  public async generateText(profile: AgentProfile, systemPrompt: string, prompt: string): Promise<string | undefined> {
+    return this.agent.generateText(profile, systemPrompt, prompt, this.getProjectDir());
   }
 }
