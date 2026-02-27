@@ -82,6 +82,7 @@ export class EventsHandler {
     void this.projectManager.settingsChanged(oldSettings, newSettings);
     this.telemetryManager.settingsChanged(oldSettings, newSettings);
     void this.memoryManager.settingsChanged(oldSettings, newSettings);
+    this.eventManager.sendSettingsUpdated(newSettings);
 
     return this.store.getSettings();
   }
@@ -765,11 +766,11 @@ export class EventsHandler {
     }
   }
 
-  setZoomLevel(zoomLevel: number): void {
+  async setZoomLevel(zoomLevel: number) {
     logger.info(`Setting zoom level to ${zoomLevel}`);
     this.mainWindow?.webContents.setZoomFactor(zoomLevel);
     const currentSettings = this.store.getSettings();
-    this.store.saveSettings({ ...currentSettings, zoomLevel });
+    await this.saveSettings({ ...currentSettings, zoomLevel });
   }
 
   async getVersions(forceRefresh = false): Promise<VersionsInfo> {
@@ -918,7 +919,7 @@ export class EventsHandler {
     return this.projectManager.getProject(baseDir).getTask(taskId)?.initProjectAgentsFile();
   }
 
-  enableServer(username?: string, password?: string): SettingsData {
+  async enableServer(username?: string, password?: string): Promise<SettingsData> {
     const currentSettings = this.store.getSettings();
     const updatedSettings: SettingsData = {
       ...currentSettings,
@@ -933,11 +934,10 @@ export class EventsHandler {
         },
       },
     };
-    this.store.saveSettings(updatedSettings);
-    return updatedSettings;
+    return await this.saveSettings(updatedSettings);
   }
 
-  disableServer(): SettingsData {
+  async disableServer(): Promise<SettingsData> {
     const currentSettings = this.store.getSettings();
     const updatedSettings: SettingsData = {
       ...currentSettings,
@@ -946,8 +946,7 @@ export class EventsHandler {
         enabled: false,
       },
     };
-    this.store.saveSettings(updatedSettings);
-    return updatedSettings;
+    return await this.saveSettings(updatedSettings);
   }
 
   async startCloudflareTunnel(): Promise<CloudflareTunnelStatus | null> {

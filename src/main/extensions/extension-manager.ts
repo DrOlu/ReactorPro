@@ -17,6 +17,7 @@ export type ExtensionsChangeListener = (extensions: LoadedExtension[]) => void;
 import type { AgentProfile } from '@common/types';
 import type { Store } from '@/store';
 import type { ModelManager } from '@/models';
+import type { EventManager } from '@/events';
 import type {
   AgentFinishedEvent,
   AgentStartedEvent,
@@ -119,6 +120,7 @@ export class ExtensionManager {
   constructor(
     private readonly store: Store,
     private readonly modelManager: ModelManager,
+    private readonly eventManager: EventManager,
     private readonly registry: ExtensionRegistry = new ExtensionRegistry(),
   ) {
     this.loader = new ExtensionLoader();
@@ -169,7 +171,7 @@ export class ExtensionManager {
     }
 
     try {
-      const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, undefined);
+      const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, undefined, this.eventManager);
       await instance.onLoad(context);
       this.registry.setInitialized(metadata.name, true);
       logger.info(`[Extensions] Initialized extension: ${metadata.name} v${metadata.version}`);
@@ -538,7 +540,7 @@ export class ExtensionManager {
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, task.project, task);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, task.project, task, this.eventManager);
         const tools = instance.getTools(context, mode, profile);
 
         if (!Array.isArray(tools)) {
@@ -580,7 +582,7 @@ export class ExtensionManager {
 
     for (const { extensionName, tool } of registeredTools) {
       const toolId = tool.name;
-      const context = new ExtensionContextImpl(extensionName, this.store, this.modelManager, task.project, task);
+      const context = new ExtensionContextImpl(extensionName, this.store, this.modelManager, task.project, task, this.eventManager);
 
       // Skip if tool is marked as Never approved
       if (profile.toolApprovals?.[toolId] === ToolApprovalState.Never) {
@@ -660,7 +662,7 @@ export class ExtensionManager {
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, undefined);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, undefined, this.eventManager);
         const commands = instance.getCommands(context);
 
         if (!Array.isArray(commands)) {
@@ -698,7 +700,7 @@ export class ExtensionManager {
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, undefined, undefined);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, undefined, undefined, this.eventManager);
         const agents = instance.getAgents(context);
 
         if (!Array.isArray(agents)) {
@@ -743,7 +745,7 @@ export class ExtensionManager {
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, undefined);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, undefined, this.eventManager);
         const modes = instance.getModes(context);
 
         if (!Array.isArray(modes)) {
@@ -808,7 +810,7 @@ export class ExtensionManager {
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, undefined, undefined);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, undefined, undefined, this.eventManager);
         const agents = instance.getAgents(context);
 
         if (!Array.isArray(agents)) {
@@ -855,7 +857,7 @@ export class ExtensionManager {
     const { extensionName, command } = registered;
 
     try {
-      const context = new ExtensionContextImpl(extensionName, this.store, this.modelManager, project, task);
+      const context = new ExtensionContextImpl(extensionName, this.store, this.modelManager, project, task, this.eventManager);
 
       logger.info(`[Extensions] Executing command '${commandName}' from extension '${extensionName}'`);
       await command.execute(args, context);

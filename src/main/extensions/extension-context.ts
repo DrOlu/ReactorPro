@@ -3,6 +3,7 @@ import { TaskContextImpl } from './task-context';
 
 import type { ExtensionContext, ProjectContext, TaskContext } from '@common/extensions';
 import type { Model, SettingsData } from '@common/types';
+import type { EventManager } from '@/events';
 import type { ModelManager } from '@/models';
 import type { Project } from '@/project';
 import type { Store } from '@/store';
@@ -17,6 +18,7 @@ export class ExtensionContextImpl implements ExtensionContext {
     private readonly modelManager?: ModelManager,
     private readonly project?: Project,
     private readonly taskInstance?: Task,
+    private readonly eventManager?: EventManager,
   ) {}
 
   log(message: string, type: 'info' | 'error' | 'warn' | 'debug' = 'info'): void {
@@ -79,6 +81,7 @@ export class ExtensionContextImpl implements ExtensionContext {
       const currentSettings = this.store.getSettings();
       const newSettings = { ...currentSettings, ...updates };
       this.store.saveSettings(newSettings);
+      this.eventManager?.sendSettingsUpdated(newSettings);
     } catch (error) {
       this.log(`Failed to update settings: ${error}`, 'error');
       throw error;

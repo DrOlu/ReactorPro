@@ -8,6 +8,7 @@ import { ExtensionRegistry } from '../extension-registry';
 import type { PathLike } from 'fs';
 import type { Store } from '@/store';
 import type { ModelManager } from '@/models';
+import type { EventManager } from '@/events';
 import type { FSWatcher } from 'chokidar';
 
 // Import fs to get the mocked module
@@ -53,6 +54,7 @@ describe('ExtensionManager', () => {
   let mockRegistry: unknown;
   let store: { getSettings: ReturnType<typeof vi.fn>; saveSettings: ReturnType<typeof vi.fn> };
   let modelManager: { getProviderModels: ReturnType<typeof vi.fn> };
+  let eventManager: { sendSettingsUpdated: ReturnType<typeof vi.fn> };
 
   // Get references to mocked fs functions
   const fsAccessMock = vi.mocked(fs.access);
@@ -80,7 +82,15 @@ describe('ExtensionManager', () => {
     modelManager = {
       getProviderModels: vi.fn().mockResolvedValue({ models: [] }),
     };
-    manager = new ExtensionManager(store as unknown as Store, modelManager as unknown as ModelManager, mockRegistry as any);
+    eventManager = {
+      sendSettingsUpdated: vi.fn(),
+    };
+    manager = new ExtensionManager(
+      store as unknown as Store,
+      modelManager as unknown as ModelManager,
+      eventManager as unknown as EventManager,
+      mockRegistry as any,
+    );
     (manager as unknown as Record<string, unknown>).loader = mockLoader;
   });
 

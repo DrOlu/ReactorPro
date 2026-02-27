@@ -56,6 +56,9 @@ const createMockDeps = () => ({
     getAllModels: vi.fn().mockResolvedValue([]),
   } as any,
   registry: new ExtensionRegistry(),
+  eventManager: {
+    sendSettingsUpdated: vi.fn(),
+  } as any,
 });
 
 describe('Extension Lifecycle', () => {
@@ -65,7 +68,7 @@ describe('Extension Lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeps = createMockDeps();
-    manager = new ExtensionManager(mockDeps.store, mockDeps.modelManager, mockDeps.registry);
+    manager = new ExtensionManager(mockDeps.store, mockDeps.modelManager, mockDeps.eventManager, mockDeps.registry);
   });
 
   afterEach(() => {

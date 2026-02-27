@@ -58,6 +58,9 @@ const createMockDeps = () => ({
   modelManager: {
     getAllModels: vi.fn().mockResolvedValue([]),
   } as any,
+  eventManager: {
+    sendSettingsUpdated: vi.fn(),
+  } as any,
 });
 
 const createValidTool = (overrides: Partial<ToolDefinition> = {}): ToolDefinition => ({
@@ -96,7 +99,7 @@ describe('Tool Registration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeps = createMockDeps();
-    manager = new ExtensionManager(mockDeps.store, mockDeps.modelManager);
+    manager = new ExtensionManager(mockDeps.store, mockDeps.modelManager, mockDeps.eventManager);
   });
 
   afterEach(() => {

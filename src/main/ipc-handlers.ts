@@ -275,8 +275,8 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     return await eventsHandler.exportTaskToMarkdown(baseDir, taskId);
   });
 
-  ipcMain.handle('set-zoom-level', (_, zoomLevel: number) => {
-    eventsHandler.setZoomLevel(zoomLevel);
+  ipcMain.handle('set-zoom-level', async (_, zoomLevel: number) => {
+    return await eventsHandler.setZoomLevel(zoomLevel);
   });
 
   ipcMain.handle('get-versions', async (_, forceRefresh = false) => {
@@ -429,7 +429,7 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
   ipcMain.handle('start-server', async (_, username?: string, password?: string) => {
     const started = await serverController.startServer();
     if (started) {
-      eventsHandler.enableServer(username, password);
+      await eventsHandler.enableServer(username, password);
     }
     return started;
   });
@@ -437,7 +437,7 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
   ipcMain.handle('stop-server', async () => {
     const stopped = await serverController.stopServer();
     if (stopped) {
-      eventsHandler.disableServer();
+      await eventsHandler.disableServer();
     }
     return stopped;
   });
