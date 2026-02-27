@@ -869,6 +869,7 @@ export interface Command {
 export interface CommandArgument {
   description: string;
   required?: boolean;
+  options?: string[];
 }
 
 export interface CustomCommand extends Command {

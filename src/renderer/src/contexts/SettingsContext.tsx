@@ -36,7 +36,6 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     return api.addSettingsUpdatedListener((data) => {
-      console.log('Settings updated:', data);
       setSettings(data);
       setTheme(data.theme || null);
       setFont(data.font || null);

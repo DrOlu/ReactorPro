@@ -268,6 +268,25 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
       const { state } = context;
       const text = state.doc.toString();
 
+      // Check if we're at a command argument position with options (before early return)
+      if (text.startsWith('/') && text.includes(' ')) {
+        const [command, ...args] = text.split(' ');
+        const allCommands = [...customCommands, ...extensionCommands];
+        const cmd = allCommands.find((c) => `/${c.name}` === command);
+        const argIndex = args.length - 1;
+        if (cmd?.arguments?.[argIndex]?.options) {
+          const currentArg = args[argIndex];
+          return {
+            from: state.doc.length - currentArg.length,
+            options: cmd.arguments[argIndex].options.map((opt) => ({
+              label: opt,
+              type: 'constant',
+            })),
+            validFor: /^\S*$/,
+          };
+        }
+      }
+
       if (!word || (word.from === word.to && !context.explicit)) {
         return null;
       }

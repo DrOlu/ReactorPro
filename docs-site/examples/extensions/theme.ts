@@ -44,6 +44,7 @@ const THEME_COMMAND: CommandDefinition = {
     {
       description: 'Name of the theme to apply',
       required: true,
+      options: [...AVAILABLE_THEMES],
     },
   ],
   async execute(args: string[], context: ExtensionContext): Promise<void> {
