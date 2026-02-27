@@ -552,6 +552,13 @@ describe('Project - deleteTask', () => {
       reloadProjectExtensions: vi.fn(() => Promise.resolve()),
       stopWatchingProject: vi.fn(),
       dispatchEvent: vi.fn(() => Promise.resolve({ event: {} as any, blocked: false, modifiedResult: undefined })),
+      getRegistry: vi.fn(
+        () =>
+          ({
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+          }) as any,
+      ),
     } as unknown as ExtensionManager;
 
     vi.mocked(determineMainModel).mockReturnValue('default-model');

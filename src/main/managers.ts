@@ -15,7 +15,6 @@ import { TelemetryManager } from '@/telemetry';
 import { WorktreeManager } from '@/worktrees';
 import { MemoryManager } from '@/memory/memory-manager';
 import { ExtensionManager } from '@/extensions/extension-manager';
-import { ExtensionRegistry } from '@/extensions/extension-registry';
 import { Store } from '@/store';
 import { SERVER_PORT } from '@/constants';
 import logger from '@/logger';
@@ -63,31 +62,18 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
 
   const worktreeManager = new WorktreeManager();
 
-  // Initialize extension registry (shared between ExtensionManager and AgentProfileManager)
-  const extensionRegistry = new ExtensionRegistry();
+  // Initialize extension manager (non-blocking - errors should not crash app)
+  const extensionManager = new ExtensionManager(store, modelManager);
+  extensionManager.init().catch((error) => {
+    logger.error('[Extensions] Extension system initialization failed, continuing without extensions:', error);
+  });
 
-  // Initialize agent profile manager with extension registry for unified profile access
-  const agentProfileManager = new AgentProfileManager(eventManager, extensionRegistry);
+  // Initialize agent profile manager with extension manager for unified profile access
+  const agentProfileManager = new AgentProfileManager(eventManager, extensionManager);
   await agentProfileManager.init();
 
-  // Create a temporary project manager reference for circular dependency resolution
-  // eslint-disable-next-line prefer-const
-  let projectManager: ProjectManager;
-
-  // Initialize extension manager with lazy project manager access (non-blocking - errors should not crash app per NFR6)
-  const extensionManager = new ExtensionManager(
-    store,
-    agentProfileManager,
-    modelManager,
-    // Lazy getter for project manager to resolve circular dependency
-    {
-      getProjects: () => projectManager.getProjects(),
-    } as ProjectManager,
-    extensionRegistry,
-  );
-
   // Initialize project manager
-  projectManager = new ProjectManager(
+  const projectManager = new ProjectManager(
     store,
     mcpManager,
     telemetryManager,
@@ -101,10 +87,6 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
     promptsManager,
     extensionManager,
   );
-
-  const extensionInitPromise = extensionManager.init().catch((error) => {
-    logger.error('[Extensions] Extension system initialization failed, continuing without extensions:', error);
-  });
 
   // Initialize terminal manager
   const terminalManager = new TerminalManager(eventManager, worktreeManager, telemetryManager);
@@ -141,9 +123,6 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
 
   // Initialize connector manager with the server
   const connectorManager = new ConnectorManager(httpServer, projectManager, eventManager);
-
-  // Wait for extension initialization to complete (but don't block startup)
-  await extensionInitPromise;
 
   // Start listening
   httpServer.listen(SERVER_PORT);

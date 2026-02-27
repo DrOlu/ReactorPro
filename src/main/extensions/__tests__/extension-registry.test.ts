@@ -1,10 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Extension, ExtensionMetadata } from '@common/extensions';
-import { ContextMemoryMode, InvocationMode } from '@common/types';
 
 import { ExtensionRegistry } from '../extension-registry';
-
-import type { AgentProfile } from '@common/types';
 
 describe('ExtensionRegistry', () => {
   let registry: ExtensionRegistry;
@@ -69,84 +66,64 @@ describe('ExtensionRegistry', () => {
     expect(registry.getExtensions()).toHaveLength(0);
   });
 
-  describe('Agent Registration', () => {
-    let mockAgent: AgentProfile;
+  it('should unregister an extension', () => {
+    registry.register(mockExtension, mockMetadata, '/path/to/ext.ts');
+    expect(registry.getExtension('test-ext')).toBeDefined();
 
-    beforeEach(() => {
-      mockAgent = {
-        id: 'test-agent-id',
-        name: 'Test Agent',
-        provider: 'openai',
-        model: 'gpt-4',
-        maxIterations: 10,
-        minTimeBetweenToolCalls: 0,
-        enabledServers: [],
-        toolApprovals: {},
-        toolSettings: {},
-        includeContextFiles: true,
-        includeRepoMap: true,
-        usePowerTools: false,
-        useAiderTools: false,
-        useTodoTools: false,
-        useSubagents: false,
-        useTaskTools: false,
-        useMemoryTools: false,
-        useSkillsTools: false,
-        useExtensionTools: false,
-        customInstructions: '',
-        subagent: {
-          enabled: false,
-          contextMemory: ContextMemoryMode.Off,
-          systemPrompt: '',
-          invocationMode: InvocationMode.OnDemand,
-          color: '#000000',
-          description: '',
-        },
-      };
+    const result = registry.unregister('test-ext');
+    expect(result).toBe(true);
+    expect(registry.getExtension('test-ext')).toBeUndefined();
+  });
+
+  it('should return false when unregistering unknown extension', () => {
+    const result = registry.unregister('unknown-ext');
+    expect(result).toBe(false);
+  });
+
+  describe('Project filtering', () => {
+    it('should filter extensions by projectDir', () => {
+      registry.register(mockExtension, mockMetadata, '/path/1');
+      const meta2 = { ...mockMetadata, name: 'project-ext' };
+      registry.register(mockExtension, meta2, '/path/2', '/project/dir');
+
+      const allExtensions = registry.getExtensions();
+      expect(allExtensions).toHaveLength(2);
+
+      const filteredExtensions = registry.getExtensions('/project/dir');
+      expect(filteredExtensions).toHaveLength(2);
+      expect(filteredExtensions.some((e) => e.metadata.name === 'test-ext')).toBe(true);
+      expect(filteredExtensions.some((e) => e.metadata.name === 'project-ext')).toBe(true);
+
+      const otherProjectExtensions = registry.getExtensions('/other/project');
+      expect(otherProjectExtensions).toHaveLength(1);
+      expect(otherProjectExtensions[0].metadata.name).toBe('test-ext');
     });
 
-    it('should register and retrieve an agent', () => {
-      registry.registerAgent('test-ext', mockAgent);
+    it('should include global extensions when filtering by projectDir', () => {
+      registry.register(mockExtension, mockMetadata, '/path/1');
+      const meta2 = { ...mockMetadata, name: 'project-ext' };
+      registry.register(mockExtension, meta2, '/path/2', '/project/dir');
 
-      const agents = registry.getAgents();
-      expect(agents).toHaveLength(1);
-      expect(agents[0].extensionName).toBe('test-ext');
-      expect(agents[0].agent).toEqual(mockAgent);
+      const extensions = registry.getExtensions('/project/dir');
+      expect(extensions).toHaveLength(2);
     });
 
-    it('should get agents by extension name', () => {
-      const mockAgent2 = { ...mockAgent, id: 'test-agent-2', name: 'Test Agent 2' };
-      registry.registerAgent('test-ext', mockAgent);
-      registry.registerAgent('test-ext', mockAgent2);
-      registry.registerAgent('other-ext', { ...mockAgent, id: 'other-agent' });
+    it('should return only extensions matching projectDir or global when projectDir is specified', () => {
+      registry.register(mockExtension, mockMetadata, '/path/1');
+      const meta2 = { ...mockMetadata, name: 'project-a-ext' };
+      registry.register(mockExtension, meta2, '/path/2', '/project/a');
+      const meta3 = { ...mockMetadata, name: 'project-b-ext' };
+      registry.register(mockExtension, meta3, '/path/3', '/project/b');
 
-      const agents = registry.getAgentsByExtension('test-ext');
-      expect(agents).toHaveLength(2);
-      expect(agents.every((a) => a.extensionName === 'test-ext')).toBe(true);
-    });
+      const extensionsA = registry.getExtensions('/project/a');
+      expect(extensionsA).toHaveLength(2);
+      expect(extensionsA.some((e) => e.metadata.name === 'test-ext')).toBe(true);
+      expect(extensionsA.some((e) => e.metadata.name === 'project-a-ext')).toBe(true);
+      expect(extensionsA.some((e) => e.metadata.name === 'project-b-ext')).toBe(false);
 
-    it('should clear all agents', () => {
-      registry.registerAgent('test-ext', mockAgent);
-      registry.clearAgents();
-      expect(registry.getAgents()).toHaveLength(0);
-    });
-
-    it('should clear agents when unregistering extension', () => {
-      registry.register(mockExtension, mockMetadata, '/path/to/ext.ts');
-      registry.registerAgent('test-ext', mockAgent);
-
-      registry.unregister('test-ext');
-
-      expect(registry.getAgents()).toHaveLength(0);
-    });
-
-    it('should clear agents when clearing registry', () => {
-      registry.register(mockExtension, mockMetadata, '/path/to/ext.ts');
-      registry.registerAgent('test-ext', mockAgent);
-
-      registry.clear();
-
-      expect(registry.getAgents()).toHaveLength(0);
+      const extensionsB = registry.getExtensions('/project/b');
+      expect(extensionsB).toHaveLength(2);
+      expect(extensionsB.some((e) => e.metadata.name === 'project-b-ext')).toBe(true);
     });
   });
 });

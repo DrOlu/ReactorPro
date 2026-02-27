@@ -4,6 +4,37 @@ import { ExtensionManager } from '../extension-manager';
 import { ExtensionRegistry } from '../extension-registry';
 
 import type { Extension, CommandDefinition } from '@common/extensions';
+import type { Project } from '@/project';
+
+vi.mock('@/logger', () => ({
+  default: {
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
+vi.mock('../extension-loader', () => ({
+  ExtensionLoader: class {
+    loadExtension = vi.fn();
+  },
+}));
+
+vi.mock('../extension-validator', () => ({
+  ExtensionValidator: class {
+    validateExtension = vi.fn().mockResolvedValue({ isValid: true, errors: [] });
+  },
+}));
+
+vi.mock('../extension-watcher', () => ({
+  ExtensionWatcher: vi.fn(),
+}));
+
+const createMockProject = (baseDir = '/project/dir'): Project =>
+  ({
+    baseDir,
+  }) as Project;
 
 describe('Extension Command Registration', () => {
   let registry: ExtensionRegistry;
@@ -14,7 +45,7 @@ describe('Extension Command Registration', () => {
 
   describe('CommandDefinition Validation', () => {
     it('should accept valid command definition', () => {
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any);
 
       const command: CommandDefinition = {
         name: 'test-command',
@@ -30,7 +61,7 @@ describe('Extension Command Registration', () => {
     });
 
     it('should reject command with invalid name format', () => {
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any);
 
       const command: CommandDefinition = {
         name: 'TestCommand', // PascalCase not allowed
@@ -42,11 +73,13 @@ describe('Extension Command Registration', () => {
 
       const result = manager.validateCommandDefinition(command);
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain("Command name 'TestCommand' must be kebab-case (e.g., 'generate-tests', 'my-command')");
+      expect(result.errors).toContain(
+        "Command name 'TestCommand' must start with a lowercase letter and contain only lowercase letters, numbers, hyphens, or underscores (e.g., 'generate-tests', 'my---command', 'command_name')",
+      );
     });
 
     it('should reject command with empty description', () => {
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any);
 
       const command: CommandDefinition = {
         name: 'test-command',
@@ -62,7 +95,7 @@ describe('Extension Command Registration', () => {
     });
 
     it('should reject command without execute function', () => {
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any);
 
       const command = {
         name: 'test-command',
@@ -75,7 +108,7 @@ describe('Extension Command Registration', () => {
     });
 
     it('should accept command with arguments array', () => {
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any);
 
       const command: CommandDefinition = {
         name: 'test-command',
@@ -95,169 +128,7 @@ describe('Extension Command Registration', () => {
     });
   });
 
-  describe('ExtensionRegistry Command Storage', () => {
-    it('should register and retrieve commands', () => {
-      const command: CommandDefinition = {
-        name: 'test-command',
-        description: 'A test command',
-        execute: async () => {
-          // Command logic
-        },
-      };
-
-      registry.registerCommand('test-extension', command);
-
-      const commands = registry.getCommands();
-      expect(commands).toHaveLength(1);
-      expect(commands[0].extensionName).toBe('test-extension');
-      expect(commands[0].command.name).toBe('test-command');
-    });
-
-    it('should retrieve commands by extension name', () => {
-      const command1: CommandDefinition = {
-        name: 'command-one',
-        description: 'First command',
-        execute: async () => {
-          // Command logic
-        },
-      };
-
-      const command2: CommandDefinition = {
-        name: 'command-two',
-        description: 'Second command',
-        execute: async () => {
-          // Command logic
-        },
-      };
-
-      registry.registerCommand('extension-a', command1);
-      registry.registerCommand('extension-a', command2);
-      registry.registerCommand('extension-b', command1);
-
-      const extensionACommands = registry.getCommandsByExtension('extension-a');
-      expect(extensionACommands).toHaveLength(2);
-      expect(extensionACommands[0].extensionName).toBe('extension-a');
-      expect(extensionACommands[1].extensionName).toBe('extension-a');
-    });
-
-    it('should retrieve command by name', () => {
-      const command: CommandDefinition = {
-        name: 'unique-command',
-        description: 'A unique command',
-        execute: async () => {
-          // Command logic
-        },
-      };
-
-      registry.registerCommand('test-extension', command);
-
-      const found = registry.getCommandByName('unique-command');
-      expect(found).toBeDefined();
-      expect(found?.command.name).toBe('unique-command');
-      expect(found?.extensionName).toBe('test-extension');
-    });
-
-    it('should return undefined for non-existent command', () => {
-      const found = registry.getCommandByName('non-existent');
-      expect(found).toBeUndefined();
-    });
-
-    it('should clear all commands', () => {
-      const command: CommandDefinition = {
-        name: 'test-command',
-        description: 'A test command',
-        execute: async () => {
-          // Command logic
-        },
-      };
-
-      registry.registerCommand('test-extension', command);
-      expect(registry.getCommands()).toHaveLength(1);
-
-      registry.clearCommands();
-      expect(registry.getCommands()).toHaveLength(0);
-    });
-
-    it('should remove commands when unregistering extension', () => {
-      const extension: Extension = {
-        getCommands: () => [
-          {
-            name: 'test-command',
-            description: 'A test command',
-            execute: async () => {
-              // Command logic
-            },
-          },
-        ],
-      };
-
-      registry.register(extension, { name: 'test-ext', version: '1.0.0', description: 'Test', author: 'Test' }, '/path/to/ext.ts');
-      registry.registerCommand('test-ext', {
-        name: 'test-command',
-        description: 'A test command',
-        execute: async () => {
-          // Command logic
-        },
-      });
-
-      expect(registry.getCommands()).toHaveLength(1);
-
-      registry.unregister('test-ext');
-      expect(registry.getCommands()).toHaveLength(0);
-    });
-  });
-
-  describe('Command Execution', () => {
-    it('should execute command with correct arguments', async () => {
-      const mockExecute = vi.fn(async () => {
-        // Command logic
-      });
-
-      const command: CommandDefinition = {
-        name: 'test-command',
-        description: 'A test command',
-        execute: mockExecute,
-      };
-
-      registry.registerCommand('test-extension', command);
-
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
-      // Inject the registry (normally done internally)
-      (manager as any).registry = registry;
-
-      await manager.executeCommand('test-command', ['arg1', 'arg2'], {} as any);
-
-      expect(mockExecute).toHaveBeenCalledWith(['arg1', 'arg2'], expect.any(Object));
-    });
-
-    it('should throw error for non-existent command', async () => {
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
-      (manager as any).registry = registry;
-
-      await expect(manager.executeCommand('non-existent', [], {} as any)).rejects.toThrow("Extension command 'non-existent' not found");
-    });
-
-    it('should handle command execution errors', async () => {
-      const mockExecute = vi.fn(async () => {
-        throw new Error('Command execution failed');
-      });
-
-      const command: CommandDefinition = {
-        name: 'failing-command',
-        description: 'A failing command',
-        execute: mockExecute,
-      };
-
-      registry.registerCommand('test-extension', command);
-
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
-      (manager as any).registry = registry;
-
-      await expect(manager.executeCommand('failing-command', [], {} as any)).rejects.toThrow("Extension command 'failing-command' failed");
-    });
-  });
-
-  describe('Extension getCommands Method', () => {
+  describe('getCommands (dynamic)', () => {
     it('should collect commands from extension', () => {
       const extension: Extension = {
         getCommands: () => [
@@ -281,10 +152,10 @@ describe('Extension Command Registration', () => {
 
       registry.register(extension, { name: 'test-ext', version: '1.0.0', description: 'Test', author: 'Test' }, '/path/to/ext.ts');
 
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any);
       (manager as any).registry = registry;
 
-      const commands = manager.collectCommands();
+      const commands = manager.getCommands(createMockProject());
 
       expect(commands).toHaveLength(2);
       expect(commands[0].command.name).toBe('command-one');
@@ -299,10 +170,10 @@ describe('Extension Command Registration', () => {
 
       registry.register(extension, { name: 'test-ext', version: '1.0.0', description: 'Test', author: 'Test' }, '/path/to/ext.ts');
 
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any);
       (manager as any).registry = registry;
 
-      const commands = manager.collectCommands();
+      const commands = manager.getCommands(createMockProject());
       expect(commands).toHaveLength(0);
     });
 
@@ -328,14 +199,108 @@ describe('Extension Command Registration', () => {
 
       registry.register(extension, { name: 'test-ext', version: '1.0.0', description: 'Test', author: 'Test' }, '/path/to/ext.ts');
 
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any);
       (manager as any).registry = registry;
 
-      const commands = manager.collectCommands();
+      const commands = manager.getCommands(createMockProject());
 
       // Only valid command should be collected
       expect(commands).toHaveLength(1);
       expect(commands[0].command.name).toBe('valid-command');
+    });
+
+    it('should filter commands by project directory', () => {
+      const globalExtension: Extension = {
+        getCommands: () => [
+          {
+            name: 'global-command',
+            description: 'Global command',
+            execute: async () => {},
+          },
+        ],
+      };
+
+      const projectExtension: Extension = {
+        getCommands: () => [
+          {
+            name: 'project-command',
+            description: 'Project command',
+            execute: async () => {},
+          },
+        ],
+      };
+
+      registry.register(globalExtension, { name: 'global-ext', version: '1.0.0', description: 'Test', author: 'Test' }, '/global/ext.ts');
+      registry.register(projectExtension, { name: 'project-ext', version: '1.0.0', description: 'Test', author: 'Test' }, '/project/ext.ts', '/project/dir');
+
+      const manager = new ExtensionManager({} as any, {} as any);
+      (manager as any).registry = registry;
+
+      const commandsForProject = manager.getCommands(createMockProject('/project/dir'));
+      expect(commandsForProject).toHaveLength(2);
+      expect(commandsForProject.map((c) => c.command.name)).toContain('global-command');
+      expect(commandsForProject.map((c) => c.command.name)).toContain('project-command');
+
+      const commandsForOtherProject = manager.getCommands(createMockProject('/other/project'));
+      expect(commandsForOtherProject).toHaveLength(1);
+      expect(commandsForOtherProject[0].command.name).toBe('global-command');
+    });
+  });
+
+  describe('Command Execution', () => {
+    it('should execute command with correct arguments', async () => {
+      const mockExecute = vi.fn(async () => {
+        // Command logic
+      });
+
+      const extension: Extension = {
+        getCommands: () => [
+          {
+            name: 'test-command',
+            description: 'A test command',
+            execute: mockExecute,
+          },
+        ],
+      };
+
+      registry.register(extension, { name: 'test-ext', version: '1.0.0', description: 'Test', author: 'Test' }, '/path/to/ext.ts');
+
+      const manager = new ExtensionManager({} as any, {} as any);
+      (manager as any).registry = registry;
+
+      await manager.executeCommand('test-command', ['arg1', 'arg2'], createMockProject());
+
+      expect(mockExecute).toHaveBeenCalledWith(['arg1', 'arg2'], expect.any(Object));
+    });
+
+    it('should throw error for non-existent command', async () => {
+      const manager = new ExtensionManager({} as any, {} as any);
+      (manager as any).registry = registry;
+
+      await expect(manager.executeCommand('non-existent', [], createMockProject())).rejects.toThrow("Extension command 'non-existent' not found");
+    });
+
+    it('should handle command execution errors', async () => {
+      const mockExecute = vi.fn(async () => {
+        throw new Error('Command execution failed');
+      });
+
+      const extension: Extension = {
+        getCommands: () => [
+          {
+            name: 'failing-command',
+            description: 'A failing command',
+            execute: mockExecute,
+          },
+        ],
+      };
+
+      registry.register(extension, { name: 'test-ext', version: '1.0.0', description: 'Test', author: 'Test' }, '/path/to/ext.ts');
+
+      const manager = new ExtensionManager({} as any, {} as any);
+      (manager as any).registry = registry;
+
+      await expect(manager.executeCommand('failing-command', [], createMockProject())).rejects.toThrow("Extension command 'failing-command' failed");
     });
   });
 });

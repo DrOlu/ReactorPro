@@ -9,8 +9,8 @@ import { fileExists } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { AgentProfile } from '@common/types';
-import type { ExtensionRegistry } from '@/extensions/extension-registry';
 
+import { ExtensionManager, ExtensionsChangeListener } from '@/extensions/extension-manager';
 import { AIDER_DESK_AGENTS_DIR, AIDER_DESK_RULES_DIR } from '@/constants';
 import logger from '@/logger';
 import { EventManager } from '@/events';
@@ -75,14 +75,22 @@ export class AgentProfileManager {
   // Directory watching (one watcher per directory)
   private directoryWatchers: Map<string, FSWatcher> = new Map(); // agentsDir → watcher
 
+  // Listener for extension changes
+  private extensionsChangeListener: ExtensionsChangeListener;
+
   constructor(
     private readonly eventManager: EventManager,
-    private readonly extensionRegistry: ExtensionRegistry,
-  ) {}
+    private readonly extensionManager: ExtensionManager,
+  ) {
+    this.extensionsChangeListener = () => {
+      this.sendAgentProfilesUpdated();
+    };
+  }
 
   public async init(): Promise<void> {
     await this.initializeProfiles();
     await this.setupGlobalFileWatcher();
+    this.extensionManager.addListener(this.extensionsChangeListener);
   }
 
   public async initializeForProject(projectDir: string): Promise<void> {
@@ -595,7 +603,7 @@ export class AgentProfileManager {
 
   public getProfile(profileId: string): AgentProfile | undefined {
     // Check extension agents first (they can override file-based profiles)
-    const extensionAgent = this.extensionRegistry.getAgentById(profileId);
+    const extensionAgent = this.extensionManager.getAgentById(profileId);
     if (extensionAgent) {
       return extensionAgent.agent;
     }
@@ -629,7 +637,7 @@ export class AgentProfileManager {
 
   public getAllProfiles(): AgentProfile[] {
     // Get extension agents first (they can override file-based profiles)
-    const extensionAgents = this.extensionRegistry.getAgents().map((registered) => registered.agent);
+    const extensionAgents = this.extensionManager.getAgents(undefined).map((registered) => registered.agent);
     // Then get file-based profiles
     const fileBasedProfiles = this.getOrderedProfiles(Array.from(this.profiles.values()));
     // Extension agents come first for override capability
@@ -645,7 +653,7 @@ export class AgentProfileManager {
     }
 
     if (includeExtension) {
-      const extensionAgents = this.extensionRegistry.getAgents().map((registered) => registered.agent);
+      const extensionAgents = this.extensionManager.getAgents(projectDir).map((registered) => registered.agent);
       // Extension agents come first for override capability
       return [...extensionAgents, ...profiles.filter((profile) => !extensionAgents.some((extAgent) => extAgent.id === profile.id))];
     }
@@ -735,6 +743,9 @@ export class AgentProfileManager {
   }
 
   async dispose(): Promise<void> {
+    // Remove extension change listener
+    this.extensionManager.removeListener(this.extensionsChangeListener);
+
     // Clean up all directory watchers
     for (const watcher of this.directoryWatchers.values()) {
       await watcher.close();

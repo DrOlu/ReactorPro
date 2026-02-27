@@ -66,15 +66,11 @@ const testExtension: Extension = {
     // context should have all methods
     const taskContext = context.getTaskContext();
     const projectDir = context.getProjectDir();
-    void context.getSetting('general.theme');
-    await context.updateSettings({ general: { theme: 'dark' } });
+    void context.getSetting('theme');
+    await context.updateSettings({ theme: 'dark' });
 
     context.log(`Extension loaded in ${projectDir}`, 'info');
     context.log(`Current task: ${taskContext?.data.name ?? 'none'}`, 'debug');
-
-    await context.showNotification('Extension loaded!', 'info');
-    void context.showConfirm('Proceed?', 'Yes', 'No');
-    void context.showInput('Enter value:', 'placeholder');
   },
 
   async onUnload() {

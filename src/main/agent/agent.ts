@@ -341,6 +341,7 @@ export class Agent {
 
   private async getAvailableTools(
     task: Task,
+    mode: Mode,
     profile: AgentProfile,
     provider: ProviderProfile,
     mcpConnectors: McpConnector[] = [],
@@ -450,7 +451,7 @@ export class Agent {
 
     // Add extension tools
     if (this.extensionManager.isInitialized() && profile.useExtensionTools !== false) {
-      const extensionTools = this.extensionManager.createExtensionToolset(task, profile, abortSignal);
+      const extensionTools = this.extensionManager.createExtensionToolset(task, mode, profile, abortSignal);
       Object.assign(toolSet, extensionTools);
     }
 
@@ -858,7 +859,17 @@ export class Agent {
       return resultMessages;
     }
 
-    const toolSet = await this.getAvailableTools(task, profile, provider, mcpConnectors, contextMessages, resultMessages, effectiveAbortSignal, promptContext);
+    const toolSet = await this.getAvailableTools(
+      task,
+      mode,
+      profile,
+      provider,
+      mcpConnectors,
+      contextMessages,
+      resultMessages,
+      effectiveAbortSignal,
+      promptContext,
+    );
 
     logger.info(`Running prompt with ${Object.keys(toolSet).length} tools.`);
     logger.debug('Tools:', {
@@ -1638,7 +1649,7 @@ export class Agent {
       }
 
       const messages = await this.prepareMessages(task, profile, await task.getContextMessages(), await task.getContextFiles());
-      const toolSet = await this.getAvailableTools(task, profile, provider);
+      const toolSet = await this.getAvailableTools(task, 'agent', profile, provider);
       const systemPrompt = await this.promptsManager.getSystemPrompt(this.store.getSettings(), task, profile);
 
       const cacheControl = this.modelManager.getCacheControl(profile, provider.provider);

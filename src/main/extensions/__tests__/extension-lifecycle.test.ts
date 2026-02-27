@@ -52,15 +52,8 @@ const createMockMetadata = (overrides: Partial<ExtensionMetadata> = {}): Extensi
 
 const createMockDeps = () => ({
   store: {} as any,
-  agentProfileManager: {
-    getAllProfiles: vi.fn().mockReturnValue([]),
-    sendAgentProfilesUpdated: vi.fn(),
-  } as any,
   modelManager: {
     getAllModels: vi.fn().mockResolvedValue([]),
-  } as any,
-  projectManager: {
-    getProjects: vi.fn().mockReturnValue([]),
   } as any,
   registry: new ExtensionRegistry(),
 });
@@ -72,7 +65,7 @@ describe('Extension Lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeps = createMockDeps();
-    manager = new ExtensionManager(mockDeps.store, mockDeps.agentProfileManager, mockDeps.modelManager, mockDeps.projectManager, mockDeps.registry);
+    manager = new ExtensionManager(mockDeps.store, mockDeps.modelManager, mockDeps.registry);
   });
 
   afterEach(() => {

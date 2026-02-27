@@ -49,7 +49,7 @@ import debounce from 'lodash/debounce';
 import { isEqual } from 'lodash';
 
 import type { SimpleGit } from 'simple-git';
-import type { RegisteredCommand } from '@/extensions/extension-registry';
+import type { RegisteredCommand } from '@/extensions/extension-manager';
 
 import { getAllFiles, isValidProjectFile } from '@/utils/file-system';
 import {
@@ -299,6 +299,14 @@ export class Task {
         this.task.createdAt = new Date().toISOString();
       }
       this.task.updatedAt = new Date().toISOString();
+    }
+
+    // Allow extensions to modify task data before saving
+    const extensionResult = await this.extensionManager.dispatchEvent('onTaskUpdated', { task: this.task }, this.project, this);
+    if (extensionResult.task) {
+      for (const key of Object.keys(extensionResult.task)) {
+        this.task[key] = extensionResult.task[key];
+      }
     }
 
     await fs.mkdir(path.dirname(this.taskDataPath), { recursive: true });
@@ -3077,7 +3085,7 @@ export class Task {
 
   public async runCustomCommand(commandName: string, args: string[], mode: Mode = 'agent'): Promise<void> {
     // First, check if this is an extension command
-    const extensionCommand = this.extensionManager.getCommands().find((c) => c.command.name === commandName);
+    const extensionCommand = this.extensionManager.getCommands(this.project).find((c) => c.command.name === commandName);
 
     if (extensionCommand) {
       // Handle extension command execution

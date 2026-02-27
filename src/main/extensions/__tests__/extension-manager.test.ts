@@ -7,7 +7,6 @@ import { ExtensionRegistry } from '../extension-registry';
 
 import type { PathLike } from 'fs';
 import type { Store } from '@/store';
-import type { AgentProfileManager } from '@/agent';
 import type { ModelManager } from '@/models';
 import type { FSWatcher } from 'chokidar';
 
@@ -53,7 +52,6 @@ describe('ExtensionManager', () => {
   let mockLoader: unknown;
   let mockRegistry: unknown;
   let store: { getSettings: ReturnType<typeof vi.fn>; saveSettings: ReturnType<typeof vi.fn> };
-  let agentProfileManager: { getAllProfiles: ReturnType<typeof vi.fn>; sendAgentProfilesUpdated: ReturnType<typeof vi.fn> };
   let modelManager: { getProviderModels: ReturnType<typeof vi.fn> };
 
   // Get references to mocked fs functions
@@ -73,44 +71,16 @@ describe('ExtensionManager', () => {
       getExtensions: vi.fn().mockReturnValue([]),
       unregister: vi.fn(),
       setInitialized: vi.fn(),
-      clearTools: vi.fn(),
-      clearCommands: vi.fn(),
-      clearAgents: vi.fn(),
-      clearModes: vi.fn(),
-      registerTool: vi.fn(),
-      getTools: vi.fn().mockReturnValue([]),
-      getToolsByExtension: vi.fn().mockReturnValue([]),
-      registerCommand: vi.fn(),
-      getCommands: vi.fn().mockReturnValue([]),
-      getCommandsByExtension: vi.fn().mockReturnValue([]),
-      registerAgent: vi.fn(),
-      getAgents: vi.fn().mockReturnValue([]),
-      getAgentsByExtension: vi.fn().mockReturnValue([]),
-      getModes: vi.fn().mockReturnValue([]),
-      getModesByExtension: vi.fn().mockReturnValue([]),
     };
 
     store = {
       getSettings: vi.fn().mockReturnValue({}),
       saveSettings: vi.fn(),
     };
-    agentProfileManager = {
-      getAllProfiles: vi.fn().mockReturnValue([]),
-      sendAgentProfilesUpdated: vi.fn(),
-    };
     modelManager = {
       getProviderModels: vi.fn().mockResolvedValue({ models: [] }),
     };
-    const projectManager = {
-      getProjects: vi.fn().mockReturnValue([]),
-    };
-    manager = new ExtensionManager(
-      store as unknown as Store,
-      agentProfileManager as unknown as AgentProfileManager,
-      modelManager as unknown as ModelManager,
-      projectManager as any,
-      mockRegistry as any,
-    );
+    manager = new ExtensionManager(store as unknown as Store, modelManager as unknown as ModelManager, mockRegistry as any);
     (manager as unknown as Record<string, unknown>).loader = mockLoader;
   });
 
@@ -552,118 +522,6 @@ describe('ExtensionManager', () => {
   });
 
   describe('hot reload integration', () => {
-    it('should reload all extensions when file changes are detected', async () => {
-      vi.useFakeTimers();
-
-      const { watch } = await import('chokidar');
-      const mockChokidarWatcher = {
-        on: vi.fn().mockReturnThis(),
-        close: vi.fn().mockResolvedValue(undefined),
-      };
-      (watch as ReturnType<typeof vi.fn>).mockReturnValue(mockChokidarWatcher as unknown as FSWatcher);
-
-      fsAccessMock.mockRejectedValue(new Error('Directory does not exist'));
-      (mockRegistry as ExtensionRegistry).getExtensions = vi.fn().mockReturnValue([]);
-
-      await manager.init();
-
-      const changeHandler = mockChokidarWatcher.on.mock.calls.find((call: unknown[]) => (call as [string, unknown])[0] === 'change')?.[1] as (
-        path: string,
-      ) => void;
-
-      expect(changeHandler).toBeDefined();
-
-      if (changeHandler) {
-        changeHandler('/global/extensions/test.ts');
-      }
-
-      // Advance timers past the debounce period (1000ms)
-      await vi.advanceTimersByTimeAsync(1100);
-
-      // The directory-level reload clears and re-collects tools/commands
-      expect((mockRegistry as ExtensionRegistry).clearTools).toHaveBeenCalled();
-      expect((mockRegistry as ExtensionRegistry).clearCommands).toHaveBeenCalled();
-
-      vi.useRealTimers();
-    });
-
-    it('should reload all extensions when file is deleted', async () => {
-      vi.useFakeTimers();
-
-      const { watch } = await import('chokidar');
-      const mockChokidarWatcher = {
-        on: vi.fn().mockReturnThis(),
-        close: vi.fn().mockResolvedValue(undefined),
-      };
-      (watch as ReturnType<typeof vi.fn>).mockReturnValue(mockChokidarWatcher as unknown as FSWatcher);
-
-      fsAccessMock.mockRejectedValue(new Error('Directory does not exist'));
-      (mockRegistry as ExtensionRegistry).getExtensions = vi.fn().mockReturnValue([]);
-
-      await manager.init();
-
-      const unlinkHandler = mockChokidarWatcher.on.mock.calls.find((call: unknown[]) => (call as [string, unknown])[0] === 'unlink')?.[1] as (
-        path: string,
-      ) => void;
-
-      expect(unlinkHandler).toBeDefined();
-
-      if (unlinkHandler) {
-        unlinkHandler('/global/extensions/test.ts');
-      }
-
-      // Advance timers past the debounce period (1000ms)
-      await vi.advanceTimersByTimeAsync(1100);
-
-      // The directory-level reload clears and re-collects tools/commands
-      expect((mockRegistry as ExtensionRegistry).clearTools).toHaveBeenCalled();
-      expect((mockRegistry as ExtensionRegistry).clearCommands).toHaveBeenCalled();
-
-      vi.useRealTimers();
-    });
-
-    it('should debounce multiple file changes into single reload', async () => {
-      vi.useFakeTimers();
-
-      const { watch } = await import('chokidar');
-      const mockChokidarWatcher = {
-        on: vi.fn().mockReturnThis(),
-        close: vi.fn().mockResolvedValue(undefined),
-      };
-      (watch as ReturnType<typeof vi.fn>).mockReturnValue(mockChokidarWatcher as unknown as FSWatcher);
-
-      fsAccessMock.mockRejectedValue(new Error('Directory does not exist'));
-      (mockRegistry as ExtensionRegistry).getExtensions = vi.fn().mockReturnValue([]);
-      (mockRegistry as ExtensionRegistry).clearTools = vi.fn();
-      (mockRegistry as ExtensionRegistry).clearCommands = vi.fn();
-
-      await manager.init();
-
-      // Reset the call count after init
-      (mockRegistry as ExtensionRegistry).clearTools = vi.fn();
-      (mockRegistry as ExtensionRegistry).clearCommands = vi.fn();
-
-      const changeHandler = mockChokidarWatcher.on.mock.calls.find((call: unknown[]) => (call as [string, unknown])[0] === 'change')?.[1] as (
-        path: string,
-      ) => void;
-
-      if (changeHandler) {
-        // Trigger multiple changes in quick succession
-        changeHandler('/global/extensions/ext1.ts');
-        changeHandler('/global/extensions/ext2.ts');
-        changeHandler('/global/extensions/ext3.ts');
-      }
-
-      // Advance timers past the debounce period (1000ms)
-      await vi.advanceTimersByTimeAsync(1100);
-
-      // Due to debouncing, clearTools should be called only once (single reload)
-      expect((mockRegistry as ExtensionRegistry).clearTools).toHaveBeenCalledTimes(1);
-      expect((mockRegistry as ExtensionRegistry).clearCommands).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
-    });
-
     it('should continue watching after a reload failure', async () => {
       vi.useFakeTimers();
 

@@ -1,5 +1,117 @@
 import { z } from 'zod';
 
+export type LlmProviderName = "anthropic" | "anthropic-compatible" | "azure" | "bedrock" | "cerebras" | "claude-agent-sdk" | "deepseek" | "gemini" | "gemini-cli" | "gpustack" | "groq" | "kimi-plan" | "litellm" | "lmstudio" | "minimax" | "ollama" | "openai" | "openai-compatible" | "opencode" | "openrouter" | "requesty" | "synthetic" | "vertex-ai" | "zai-plan";
+export interface LlmProviderBase {
+	name: LlmProviderName;
+	disableStreaming?: boolean;
+	voiceEnabled?: boolean;
+}
+export interface VoiceControlSettings {
+	idleTimeoutMs: number;
+	systemInstructions: string;
+}
+export interface OllamaProvider extends LlmProviderBase {
+	name: "ollama";
+	baseUrl: string;
+}
+declare enum OpenAiVoiceModel {
+	Gpt4oMiniTranscribe = "gpt-4o-mini-transcribe",
+	Gpt4oTranscribe = "gpt-4o-transcribe"
+}
+export interface OpenAiVoiceControlSettings extends VoiceControlSettings {
+	model: OpenAiVoiceModel;
+	language: string;
+}
+export interface OpenAiProvider extends LlmProviderBase {
+	name: "openai";
+	apiKey: string;
+	reasoningEffort?: ReasoningEffort;
+	useWebSearch: boolean;
+	voice?: Partial<OpenAiVoiceControlSettings>;
+}
+export interface AnthropicProvider extends LlmProviderBase {
+	name: "anthropic";
+	apiKey: string;
+}
+declare enum GeminiVoiceModel {
+	GeminiLive25FlashNativeAudio = "gemini-2.5-flash-native-audio-preview-12-2025"
+}
+export interface GeminiVoiceControlSettings extends VoiceControlSettings {
+	model: GeminiVoiceModel;
+	temperature: number;
+}
+export interface GeminiProvider extends LlmProviderBase {
+	name: "gemini";
+	apiKey: string;
+	customBaseUrl?: string;
+	includeThoughts: boolean;
+	thinkingBudget: number;
+	useSearchGrounding: boolean;
+	voice?: Partial<GeminiVoiceControlSettings>;
+}
+export interface VertexAiProvider extends LlmProviderBase {
+	name: "vertex-ai";
+	project: string;
+	location: string;
+	googleCloudCredentialsJson?: string;
+	includeThoughts: boolean;
+	thinkingBudget: number;
+}
+export interface LmStudioProvider extends LlmProviderBase {
+	name: "lmstudio";
+	baseUrl: string;
+}
+export interface DeepseekProvider extends LlmProviderBase {
+	name: "deepseek";
+	apiKey: string;
+}
+export interface GroqProvider extends LlmProviderBase {
+	name: "groq";
+	apiKey: string;
+}
+export interface BedrockProvider extends LlmProviderBase {
+	name: "bedrock";
+	accessKeyId: string;
+	secretAccessKey: string;
+	region: string;
+	sessionToken?: string;
+}
+export interface OpenAiCompatibleProvider extends LlmProviderBase {
+	name: "openai-compatible";
+	apiKey: string;
+	baseUrl?: string;
+	reasoningEffort?: ReasoningEffort;
+}
+export interface OpenRouterProvider extends LlmProviderBase {
+	name: "openrouter";
+	apiKey: string;
+	requireParameters: boolean;
+	order: string[];
+	only: string[];
+	ignore: string[];
+	allowFallbacks: boolean;
+	dataCollection: "allow" | "deny";
+	quantizations: string[];
+	sort: "price" | "throughput" | null;
+}
+export interface RequestyProvider extends LlmProviderBase {
+	name: "requesty";
+	apiKey: string;
+	useAutoCache: boolean;
+	reasoningEffort: ReasoningEffort;
+}
+export interface OpenCodeProvider extends LlmProviderBase {
+	name: "opencode";
+	apiKey: string;
+}
+export interface MinimaxProvider extends LlmProviderBase {
+	name: "minimax";
+	apiKey: string;
+}
+export interface SyntheticProvider extends LlmProviderBase {
+	name: "synthetic";
+	apiKey: string;
+}
 export type JSONValue = null | string | number | boolean | JSONObject | JSONArray;
 export type JSONObject = {
 	[key: string]: JSONValue;
@@ -137,6 +249,22 @@ export interface ModeDefinition {
 	icon?: string;
 }
 export type Mode = string;
+declare enum DiffViewMode {
+	SideBySide = "side-by-side",
+	Unified = "unified",
+	Compact = "compact"
+}
+declare enum MessageViewMode {
+	Full = "full",
+	Compact = "compact"
+}
+declare enum ReasoningEffort {
+	High = "high",
+	Medium = "medium",
+	Low = "low",
+	Minimal = "minimal",
+	None = "none"
+}
 export interface ResponseChunkData {
 	messageId: string;
 	baseDir: string;
@@ -223,6 +351,27 @@ export declare enum ToolApprovalState {
 	Never = "never",
 	Ask = "ask"
 }
+declare enum ProjectStartMode {
+	Empty = "empty",
+	Last = "last",
+	Remote = "remote"
+}
+declare enum SuggestionMode {
+	Automatically = "automatically",
+	OnTab = "onTab",
+	MentionAtSign = "mentionAtSign"
+}
+export interface PromptBehavior {
+	suggestionMode: SuggestionMode;
+	suggestionDelay: number;
+	requireCommandConfirmation: {
+		add: boolean;
+		readOnly: boolean;
+		model: boolean;
+		modeSwitching: boolean;
+	};
+	useVimBindings: boolean;
+}
 export declare enum InvocationMode {
 	OnDemand = "on-demand",
 	Automatic = "automatic"
@@ -267,6 +416,169 @@ export interface AgentProfile {
 	subagent: SubagentConfig;
 	isSubagent?: boolean;
 	ruleFiles?: string[];
+}
+declare const THEMES: readonly [
+	"dark",
+	"light",
+	"charcoal",
+	"neon",
+	"neopunk",
+	"aurora",
+	"ocean",
+	"forest",
+	"lavender",
+	"bw",
+	"midnight",
+	"serenity",
+	"cappuccino",
+	"fresh",
+	"botanical-garden",
+	"botanical-garden-dark"
+];
+export type Theme = (typeof THEMES)[number];
+declare const FONTS: readonly [
+	"Sono",
+	"Poppins",
+	"Nunito",
+	"Quicksand",
+	"PlayfairDisplay",
+	"Lora",
+	"SpaceGrotesk",
+	"Orbitron",
+	"Enriqueta",
+	"FunnelDisplay",
+	"GoogleSansCode",
+	"Inter",
+	"JetBrainsMono",
+	"RobotoMono",
+	"Sansation",
+	"Silkscreen",
+	"SourceCodePro",
+	"SpaceMono",
+	"UbuntuMono"
+];
+export type Font = (typeof FONTS)[number];
+export interface HotkeyConfig {
+	projectHotkeys: {
+		closeProject: string;
+		newProject: string;
+		usageDashboard: string;
+		modelLibrary: string;
+		settings: string;
+		cycleNextProject: string;
+		cyclePrevProject: string;
+		switchProject1: string;
+		switchProject2: string;
+		switchProject3: string;
+		switchProject4: string;
+		switchProject5: string;
+		switchProject6: string;
+		switchProject7: string;
+		switchProject8: string;
+		switchProject9: string;
+	};
+	taskHotkeys: {
+		switchTask1: string;
+		switchTask2: string;
+		switchTask3: string;
+		switchTask4: string;
+		switchTask5: string;
+		switchTask6: string;
+		switchTask7: string;
+		switchTask8: string;
+		switchTask9: string;
+		focusPrompt: string;
+		newTask: string;
+		closeTask: string;
+	};
+	dialogHotkeys: {
+		browseFolder: string;
+	};
+}
+declare enum MemoryEmbeddingProvider {
+	SentenceTransformers = "sentence-transformers"
+}
+declare enum ContextCompactionType {
+	Compact = "compact",
+	Handoff = "handoff"
+}
+export interface TaskSettings {
+	smartTaskState: boolean;
+	autoGenerateTaskName: boolean;
+	showTaskStateActions: boolean;
+	worktreeSymlinkFolders: string[];
+	contextCompactingThreshold: number;
+	contextCompactionType: ContextCompactionType;
+}
+export interface MemoryConfig {
+	enabled: boolean;
+	provider: MemoryEmbeddingProvider;
+	model: string;
+	maxDistance: number;
+}
+export interface SettingsData {
+	onboardingFinished?: boolean;
+	language: string;
+	startupMode?: ProjectStartMode;
+	zoomLevel?: number;
+	notificationsEnabled?: boolean;
+	theme?: Theme;
+	font?: Font;
+	fontSize?: number;
+	renderMarkdown: boolean;
+	virtualizedRendering: boolean;
+	aiderDeskAutoUpdate: boolean;
+	diffViewMode?: DiffViewMode;
+	messageViewMode?: MessageViewMode;
+	aider: {
+		options: string;
+		environmentVariables: string;
+		addRuleFiles: boolean;
+		autoCommits: boolean;
+		cachingEnabled: boolean;
+		watchFiles: boolean;
+		confirmBeforeEdit: boolean;
+	};
+	preferredModels: string[];
+	mcpServers: Record<string, McpServerConfig>;
+	llmProviders: {
+		openai?: OpenAiProvider;
+		anthropic?: AnthropicProvider;
+		gemini?: GeminiProvider;
+		groq?: GroqProvider;
+		bedrock?: BedrockProvider;
+		deepseek?: DeepseekProvider;
+		ollama?: OllamaProvider;
+		lmstudio?: LmStudioProvider;
+		minimax?: MinimaxProvider;
+		"openai-compatible"?: OpenAiCompatibleProvider;
+		opencode?: OpenCodeProvider;
+		openrouter?: OpenRouterProvider;
+		requesty?: RequestyProvider;
+		synthetic?: SyntheticProvider;
+		"vertex-ai"?: VertexAiProvider;
+	};
+	telemetryEnabled: boolean;
+	telemetryInformed?: boolean;
+	promptBehavior: PromptBehavior;
+	server: {
+		enabled: boolean;
+		basicAuth: {
+			enabled: boolean;
+			username: string;
+			password: string;
+		};
+	};
+	memory: MemoryConfig;
+	taskSettings: TaskSettings;
+	hotkeyConfig?: HotkeyConfig;
+}
+export interface McpServerConfig {
+	command?: string;
+	args?: string[];
+	env?: Readonly<Record<string, string>>;
+	url?: string;
+	headers?: Readonly<Record<string, string>>;
 }
 declare const TaskDataSchema: z.ZodObject<{
 	id: z.ZodString;
@@ -540,6 +852,10 @@ export interface TaskInitializedEvent {
 export interface TaskClosedEvent {
 	readonly task: TaskData;
 }
+/** Event payload for task updated events */
+export interface TaskUpdatedEvent {
+	task: TaskData;
+}
 /** Event payload for project opened events */
 export interface ProjectOpenedEvent {
 	project: ProjectData;
@@ -757,6 +1073,7 @@ export interface ProjectContext {
 	forkTask(taskId: string, messageId: string): Promise<TaskData>;
 	duplicateTask(taskId: string): Promise<TaskData>;
 	deleteTask(taskId: string): Promise<void>;
+	getAgentProfiles(): AgentProfile[];
 	getCommands(): CommandsData;
 	getProjectSettings(): ProjectSettings;
 	getInputHistory(): Promise<string[]>;
@@ -776,7 +1093,7 @@ export interface ProjectContext {
  */
 export interface ExtensionContext {
 	/**
-	 * Log a message to the AiderDesk console
+	 * Log a message to the AiderDesk console and log files
 	 * @param message - Message to log
 	 * @param type - Log level (info, error, warn, debug)
 	 */
@@ -797,18 +1114,6 @@ export interface ExtensionContext {
 	 */
 	getProjectContext(): ProjectContext;
 	/**
-	 * Create a new task
-	 * @param name - Task name/title
-	 * @param params - Optional task parameters (parentId, autoApprove, etc.)
-	 * @returns Promise resolving to the new task ID
-	 */
-	createTask(name: string, params?: CreateTaskParams): Promise<string>;
-	/**
-	 * Get all available agent profiles
-	 * @returns Promise resolving to array of agent profiles
-	 */
-	getAgentProfiles(): Promise<AgentProfile[]>;
-	/**
 	 * Get all available model configurations
 	 * @returns Promise resolving to array of models
 	 */
@@ -824,42 +1129,7 @@ export interface ExtensionContext {
 	 * @param updates - Partial settings object with updates
 	 * @returns Promise that resolves when settings are saved
 	 */
-	updateSettings(updates: Record<string, unknown>): Promise<void>;
-	/**
-	 * Show a notification to the user
-	 * @param message - Notification message
-	 * @param type - Notification type (info, warning, error)
-	 * @returns Promise that resolves when notification is shown
-	 */
-	showNotification(message: string, type?: "info" | "warning" | "error"): Promise<void>;
-	/**
-	 * Show a confirmation dialog to the user
-	 * @param message - Confirmation message
-	 * @param confirmText - Custom confirm button text
-	 * @param cancelText - Custom cancel button text
-	 * @returns Promise resolving to true if confirmed, false otherwise
-	 */
-	showConfirm(message: string, confirmText?: string, cancelText?: string): Promise<boolean>;
-	/**
-	 * Show an input dialog to the user
-	 * @param prompt - Input prompt/message
-	 * @param placeholder - Input placeholder text
-	 * @param defaultValue - Default input value
-	 * @returns Promise resolving to the user input or undefined if cancelled
-	 */
-	showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
-	/**
-	 * Get all custom modes registered by extensions
-	 * @returns Promise resolving to array of mode definitions
-	 */
-	getCustomModes(): Promise<ModeDefinition[]>;
-	/**
-	 * Send a prompt to the agent or aider for execution
-	 * @param prompt - The prompt text to send
-	 * @param mode - Execution mode (agent, code, ask, architect)
-	 * @returns Promise that resolves when prompt execution is complete
-	 */
-	runPrompt(prompt: string, mode?: "agent" | "code" | "ask" | "architect"): Promise<void>;
+	updateSettings(updates: Partial<SettingsData>): Promise<void>;
 }
 /**
  * Main extension interface that all extensions must implement
@@ -906,8 +1176,11 @@ export interface Extension {
 	/**
 	 * Return array of tools this extension provides
 	 * Called when extension is loaded and when tools need to be refreshed
+	 * @param context - Extension context
+	 * @param mode - Current mode
+	 * @param agentProfile - Current agent profile
 	 */
-	getTools?(context: ExtensionContext): ToolDefinition[];
+	getTools?(context: ExtensionContext, mode: string, agentProfile: AgentProfile): ToolDefinition[];
 	/**
 	 * Return array of UI elements this extension provides
 	 * Called when extension is loaded and when UI needs to be refreshed
@@ -922,7 +1195,7 @@ export interface Extension {
 	 * Return array of modes this extension provides
 	 * Called when extension is loaded and when modes need to be refreshed
 	 */
-	getModes?(): ModeDefinition[];
+	getModes?(context: ExtensionContext): ModeDefinition[];
 	/**
 	 * Return array of agent profiles this extension provides
 	 * Called when extension is loaded and when agents need to be refreshed
@@ -958,6 +1231,12 @@ export interface Extension {
 	 * @returns void or partial event to modify task data
 	 */
 	onTaskClosed?(event: TaskClosedEvent, context: ExtensionContext): Promise<void | Partial<TaskClosedEvent>>;
+	/**
+	 * Called before a task is updated and saved
+	 * Modify event.task to change the task data before it's persisted
+	 * @returns void or partial event to modify task data
+	 */
+	onTaskUpdated?(event: TaskUpdatedEvent, context: ExtensionContext): Promise<void | Partial<TaskUpdatedEvent>>;
 	/**
 	 * Called when a project is opened
 	 * @returns void or partial event to modify project data

@@ -2,32 +2,21 @@ import { ProjectContextImpl } from './project-context';
 import { TaskContextImpl } from './task-context';
 
 import type { ExtensionContext, ProjectContext, TaskContext } from '@common/extensions';
-import type { AgentProfile, CreateTaskParams, Mode, Model, SettingsData, ModeDefinition } from '@common/types';
-import type { AgentProfileManager } from '@/agent';
+import type { Model, SettingsData } from '@common/types';
 import type { ModelManager } from '@/models';
 import type { Project } from '@/project';
 import type { Store } from '@/store';
 import type { Task } from '@/task';
-import type { ExtensionManager } from './extension-manager';
 
 import logger from '@/logger';
-
-export class NotImplementedError extends Error {
-  constructor(methodName: string) {
-    super(`Method '${methodName}' is not implemented yet. This feature will be available in a future epic.`);
-    this.name = 'NotImplementedError';
-  }
-}
 
 export class ExtensionContextImpl implements ExtensionContext {
   constructor(
     private readonly extensionId: string,
     private readonly store?: Store,
-    private readonly agentProfileManager?: AgentProfileManager,
     private readonly modelManager?: ModelManager,
     private readonly project?: Project,
     private readonly taskInstance?: Task,
-    private readonly extensionManager?: ExtensionManager,
   ) {}
 
   log(message: string, type: 'info' | 'error' | 'warn' | 'debug' = 'info'): void {
@@ -50,34 +39,6 @@ export class ExtensionContextImpl implements ExtensionContext {
     return new ProjectContextImpl(this.project);
   }
 
-  async createTask(name: string, params?: CreateTaskParams): Promise<string> {
-    if (!this.project) {
-      throw new NotImplementedError('createTask');
-    }
-    try {
-      const taskParams = { name, ...params };
-      const task = await this.project.createNewTask(taskParams);
-      this.log(`Created task: ${task.id}`, 'info');
-      return task.id;
-    } catch (error) {
-      this.log(`Failed to create task: ${error instanceof Error ? error.message : String(error)}`, 'error');
-      throw error;
-    }
-  }
-
-  async getAgentProfiles(): Promise<AgentProfile[]> {
-    if (!this.agentProfileManager) {
-      this.log('AgentProfileManager not available, returning empty agent profiles', 'warn');
-      return [];
-    }
-    try {
-      return this.agentProfileManager.getAllProfiles();
-    } catch (error) {
-      this.log(`Failed to get agent profiles: ${error}`, 'error');
-      return [];
-    }
-  }
-
   async getModelConfigs(): Promise<Model[]> {
     if (!this.modelManager) {
       this.log('ModelManager not available, returning empty model configs', 'warn');
@@ -92,21 +53,9 @@ export class ExtensionContextImpl implements ExtensionContext {
     }
   }
 
-  async showNotification(_message: string, _type?: 'info' | 'warning' | 'error'): Promise<void> {
-    throw new NotImplementedError('showNotification');
-  }
-
-  async showConfirm(_message: string, _confirmText?: string, _cancelText?: string): Promise<boolean> {
-    throw new NotImplementedError('showConfirm');
-  }
-
-  async showInput(_prompt: string, _placeholder?: string, _defaultValue?: string): Promise<string | undefined> {
-    throw new NotImplementedError('showInput');
-  }
-
   async getSetting(key: string): Promise<unknown> {
     if (!this.store) {
-      throw new NotImplementedError('getSetting');
+      throw new Error('Store not available');
     }
     try {
       const settings = this.store.getSettings();
@@ -122,44 +71,17 @@ export class ExtensionContextImpl implements ExtensionContext {
     }
   }
 
-  async updateSettings(updates: Record<string, unknown>): Promise<void> {
+  async updateSettings(updates: Partial<SettingsData>): Promise<void> {
     if (!this.store) {
-      throw new NotImplementedError('updateSettings');
+      throw new Error('Store not available');
     }
     try {
       const currentSettings = this.store.getSettings();
-      const newSettings = { ...currentSettings, ...updates } as SettingsData;
+      const newSettings = { ...currentSettings, ...updates };
       this.store.saveSettings(newSettings);
     } catch (error) {
       this.log(`Failed to update settings: ${error}`, 'error');
       throw error;
-    }
-  }
-
-  async runPrompt(prompt: string, mode: Mode = 'agent'): Promise<void> {
-    if (!this.taskInstance) {
-      throw new NotImplementedError('runPrompt');
-    }
-    try {
-      this.log(`Running prompt in mode: ${mode}`, 'info');
-      await this.taskInstance.runPrompt(prompt, mode);
-    } catch (error) {
-      this.log(`Failed to run prompt: ${error instanceof Error ? error.message : String(error)}`, 'error');
-      throw error;
-    }
-  }
-
-  async getCustomModes(): Promise<ModeDefinition[]> {
-    if (!this.extensionManager) {
-      this.log('ExtensionManager not available, returning empty modes', 'warn');
-      return [];
-    }
-    try {
-      const registeredModes = this.extensionManager.getModes();
-      return registeredModes.map((registered) => registered.mode);
-    } catch (error) {
-      this.log(`Failed to get custom modes: ${error}`, 'error');
-      return [];
     }
   }
 }
