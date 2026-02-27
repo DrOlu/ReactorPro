@@ -1,15 +1,42 @@
-# ChunkHound Semantic Search Tool Extension
+# ChunkHound Search Tool Extension
 
-This extension demonstrates how to **override a native A Power tool** (`power---semantic_search`) with a custom implementation using ChunkHound for semantic code search.
+This extension demonstrates how to **override a native Power tool** (`power---semantic_search`) by registering a custom tool with the same name via `getTools()`.
 
 ## What This Extension Does
 
-- **Overrides `power---semantic_search`**: Intercepts all calls to the built-in semantic search tool and routes them through ChunkHound CLI
+- **Overrides `power---semantic_search`**: Registers a tool with the same name as the built-in semantic search, replacing it with ChunkHound-powered search
 - **Uses ChunkHound's embedding-based search**: Better semantic understanding of code
 - **Per-project indexing**: Each project gets its own `.chunkhound.db` database in the project root
 - **Auto-indexing on project open**: Starts background indexing when a project is opened
 - **Auto-reindexing**: Detects file modifications and reindexes before the next search
+- **Pagination support**: Includes `pageSize` and `offset` parameters for result pagination
 - **Abort support**: Properly handles interrupted operations
+
+## How Tool Override Works
+
+This extension uses `getTools()` to register a tool with the **same name** as the built-in `power---semantic_search`:
+
+```typescript
+getTools(_context: ExtensionContext): ToolDefinition[] {
+  const searchTool: ToolDefinition<typeof inputSchema> = {
+    // override power---semantic_search tool
+    name: 'power---semantic_search',
+    description: 'Search code in repository using semantic search powered by ChunkHound...',
+    inputSchema,
+    execute: async (input, signal) => {
+      return chunkhoundSearch(query, projectDir, context, signal, pageSize, offset);
+    },
+  };
+
+  return [searchTool];
+}
+```
+
+When an extension registers a tool with the same name as a native Power tool, AiderDesk uses the extension's implementation instead of the built-in one. This allows you to:
+
+- Replace built-in tools with custom implementations
+- Add enhanced functionality to existing tools
+- Integrate external services (like ChunkHound) seamlessly
 
 ## Prerequisites
 
@@ -36,12 +63,12 @@ uv tool install chunkhound
 Copy this folder to your AiderDesk global extensions directory:
 
 ```bash
-cp -r . ~/.aider-desk/extensions/chunkhound-on-semantic-search-tool
+cp -r . ~/.aider-desk/extensions/chunkhound-search
 ```
 
 ### 4. Configure Embedding Provider
 
-Create a `.chunkhound.json` file in the **extension folder** (`~/.aider-desk/extensions/chunkhound-on-semantic-search-tool/`):
+Create a `.chunkhound.json` file in the **extension folder** (`~/.aider-desk/extensions/chunkhound-search/`):
 
 **VoyageAI (Recommended - fastest, most accurate, cost-effective):**
 ```json
@@ -84,30 +111,9 @@ ollama pull dengcao/Qwen3-Embedding-8B:Q5_K_M
 ollama serve
 ```
 
-## How Tool Override Works
-
-This extension uses the `onToolCalled` event to intercept calls to `power---semantic_search`:
-
-```typescript
-async onToolCalled(event: ToolCalledEvent, context: ExtensionContext, signal?: AbortSignal): Promise<void | Partial<ToolCalledEvent>> {
-  // Check if this is the semantic_search tool
-  if (event.toolName !== 'power---semantic_search') {
-    return undefined;
-  }
-
-  // Run ChunkHound search instead
-  const result = await chunkhoundSearch(query, projectDir, maxTokens, context, signal);
-
-  // Return the result to override the built-in tool
-  return { output: result };
-}
-```
-
-When `onToolCalled` returns `{ output: ... }`, the original tool execution is **blocked** and the returned result is used instead.
-
 ## Usage
 
-Once installed, the extension automatically intercepts all `power---semantic_search` tool calls and routes them through ChunkHound.
+Once installed, the extension automatically replaces the built-in `power---semantic_search` tool with ChunkHound-powered search.
 
 Your AI assistant can now search your codebase using natural language queries:
 
@@ -117,10 +123,11 @@ Your AI assistant can now search your codebase using natural language queries:
 
 ## Configuration Options
 
-The extension supports the same parameters as the built-in semantic search:
+The extension supports these parameters:
 
-- `query` - Search query (required)
-- `maxTokens` - Maximum tokens to return (default: 5000)
+- `query` - Search query with Elasticsearch syntax. Use `+` for important terms (required)
+- `pageSize` - Number of results per page (default: 10)
+- `offset` - Page offset for results, 0-based (default: 0)
 
 ## How It Works
 
@@ -145,7 +152,7 @@ chunkhound --version
 
 Make sure `.chunkhound.json` exists in the extension folder:
 ```bash
-ls ~/.aider-desk/extensions/chunkhound-on-semantic-search-tool/.chunkhound.json
+ls ~/.aider-desk/extensions/chunkhound-search/.chunkhound.json
 ```
 
 ### Indexing Issues

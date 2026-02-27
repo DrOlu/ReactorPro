@@ -467,7 +467,7 @@ export class ExtensionManager {
     }
   }
 
-  private static readonly KEBAB_CASE_REGEX = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+  private static readonly TOOL_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 
   validateToolDefinition(tool: ToolDefinition): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
@@ -475,8 +475,10 @@ export class ExtensionManager {
     try {
       if (!tool.name) {
         errors.push('Tool name must be a non-empty string');
-      } else if (!ExtensionManager.KEBAB_CASE_REGEX.test(tool.name)) {
-        errors.push(`Tool name '${tool.name}' must be kebab-case (e.g., 'run-linter', 'my-custom-tool')`);
+      } else if (!ExtensionManager.TOOL_NAME_REGEX.test(tool.name)) {
+        errors.push(
+          `Tool name '${tool.name}' must start with a letter and contain only letters, numbers, hyphens, or underscores (e.g., 'run-linter', 'my---tool', 'tool_name')`,
+        );
       }
 
       if (!tool.description || tool.description.trim() === '') {
@@ -574,7 +576,7 @@ export class ExtensionManager {
     const registeredTools = this.registry.getTools();
 
     for (const { extensionName, tool } of registeredTools) {
-      const toolId = `${extensionName}-${tool.name}`;
+      const toolId = tool.name;
       const context = new ExtensionContextImpl(extensionName, this.store, this.agentProfileManager, this.modelManager, task.project, task, this);
 
       // Skip if tool is marked as Never approved
@@ -613,8 +615,10 @@ export class ExtensionManager {
     try {
       if (!command.name) {
         errors.push('Command name must be a non-empty string');
-      } else if (!ExtensionManager.KEBAB_CASE_REGEX.test(command.name)) {
-        errors.push(`Command name '${command.name}' must be kebab-case (e.g., 'generate-tests', 'my-command')`);
+      } else if (!ExtensionManager.TOOL_NAME_REGEX.test(command.name)) {
+        errors.push(
+          `Command name '${command.name}' must start with a letter and contain only letters, numbers, hyphens, or underscores (e.g., 'generate-tests', 'my---command', 'command_name')`,
+        );
       }
 
       if (!command.description || command.description.trim() === '') {
