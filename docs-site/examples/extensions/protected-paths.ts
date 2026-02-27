@@ -56,7 +56,7 @@ export const metadata = {
 	name: 'Protected Paths Extension',
 	version: '1.0.0',
 	description: 'Blocks write and edit operations to protected paths (.env, .git/, node_modules/)',
-	author: 'AiderDesk',
+	author: 'ReactorPro',
 	capabilities: ['events'],
 };
 

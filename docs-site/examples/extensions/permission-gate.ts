@@ -69,7 +69,7 @@ export const metadata = {
 	name: 'Permission Gate Extension',
 	version: '1.0.0',
 	description: 'Prompts for confirmation before running potentially dangerous bash commands (rm -rf, sudo, chmod/chown 777)',
-	author: 'AiderDesk',
+	author: 'ReactorPro',
 	capabilities: ['events'],
 };
 

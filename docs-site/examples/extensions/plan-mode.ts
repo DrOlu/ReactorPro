@@ -7,7 +7,7 @@
  *
  * Usage:
  * 1. This extension automatically registers the 'plan' mode
- * 2. Select 'Plan' mode from the mode selector in AiderDesk
+ * 2. Select 'Plan' mode from the mode selector in ReactorPro
  * 3. Enter your request - the extension will prepend planning instructions
  */
 
@@ -80,7 +80,7 @@ export const metadata = {
 	name: 'Plan Mode Extension',
 	version: '1.1.0',
 	description: 'Adds a Plan mode that enforces planning and analysis before making code changes',
-	author: 'AiderDesk',
+	author: 'ReactorPro',
 	capabilities: ['modes', 'events'],
 };
 

@@ -6,10 +6,10 @@
  * bubblewrap on Linux).
  *
  * Config files (merged, project takes precedence):
- * - ~/.aider-desk/sandbox.json (global)
- * - <project>/.aider-desk/sandbox.json (project-local)
+ * - ~/.reactorpro/sandbox.json (global)
+ * - <project>/.reactorpro/sandbox.json (project-local)
  *
- * Example .aider-desk/sandbox.json:
+ * Example .reactorpro/sandbox.json:
  * ```json
  * {
  *   "enabled": true,
@@ -26,8 +26,8 @@
  * ```
  *
  * Setup:
- * 1. Copy this file to ~/.aider-desk/extensions/
- * 2. Run `npm install @anthropic-ai/sandbox-runtime` in ~/.aider-desk/extensions/
+ * 1. Copy this file to ~/.reactorpro/extensions/
+ * 2. Run `npm install @anthropic-ai/sandbox-runtime` in ~/.reactorpro/extensions/
  *
  * Linux also requires: bubblewrap, socat, ripgrep
  */
@@ -83,8 +83,8 @@ let sandboxInitialized = false;
 let SandboxManager: typeof import('@anthropic-ai/sandbox-runtime').SandboxManager | null = null;
 
 function loadConfig(cwd: string): SandboxConfig {
-  const projectConfigPath = join(cwd, '.aider-desk', 'sandbox.json');
-  const globalConfigPath = join(homedir(), '.aider-desk', 'sandbox.json');
+  const projectConfigPath = join(cwd, '.reactorpro', 'sandbox.json');
+  const globalConfigPath = join(homedir(), '.reactorpro', 'sandbox.json');
 
   let globalConfig: Partial<SandboxConfig> = {};
   let projectConfig: Partial<SandboxConfig> = {};
@@ -366,7 +366,7 @@ export const metadata = {
   name: 'Sandbox Extension',
   version: '1.0.0',
   description: 'OS-level sandboxing for bash commands using @anthropic-ai/sandbox-runtime (sandbox-exec on macOS, bubblewrap on Linux)',
-  author: 'AiderDesk',
+  author: 'ReactorPro',
   capabilities: ['events', 'tools'],
 };
 
