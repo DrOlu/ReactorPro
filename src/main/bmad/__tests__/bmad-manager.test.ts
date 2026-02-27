@@ -412,10 +412,13 @@ describe('BmadManager', () => {
 
         expect(mockTask.runPromptInAgent).toHaveBeenCalledWith(
           agentProfile,
+          'bmad',
           null,
           expect.objectContaining({ id: expect.any(String) }),
           expect.any(Array),
           expect.any(Array),
+          undefined,
+          true,
         );
       });
 
@@ -439,6 +442,7 @@ describe('BmadManager', () => {
 
         expect(mockTask.runPromptInAgent).toHaveBeenCalledWith(
           expect.anything(),
+          'bmad',
           null,
           expect.anything(),
           expect.any(Array),
@@ -446,6 +450,8 @@ describe('BmadManager', () => {
             { path: '/project/prd.md', readOnly: true },
             { path: '/project/architecture.md', readOnly: true },
           ]),
+          undefined,
+          true,
         );
       });
 

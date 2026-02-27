@@ -1,5 +1,5 @@
 import { normalizeBaseDir } from '@common/utils';
-import { AgentProfile, ProjectSettings, SettingsData } from '@common/types';
+import { AgentProfile, ProjectSettings, SettingsData, ModeDefinition } from '@common/types';
 
 import { TelemetryManager } from '@/telemetry';
 import { AgentProfileManager, McpManager } from '@/agent';
@@ -126,6 +126,10 @@ export class ProjectManager {
 
   public getCommands(baseDir: string) {
     return this.getProject(baseDir).getCommands();
+  }
+
+  public getCustomModes(baseDir: string): ModeDefinition[] {
+    return this.getProject(baseDir).getCustomModes();
   }
 
   public getProjects(): Project[] {

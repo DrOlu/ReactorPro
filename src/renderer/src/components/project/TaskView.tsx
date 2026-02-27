@@ -1,4 +1,4 @@
-import { AGENT_MODES, DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
+import { AIDER_MODES, DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
 import { forwardRef, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResizableBox, ResizeCallbackData } from 'react-resizable';
@@ -162,7 +162,7 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
 
     const currentModel = useMemo(() => {
       let model: Model | undefined;
-      if (AGENT_MODES.includes(currentMode)) {
+      if (!AIDER_MODES.includes(currentMode)) {
         if (activeAgentProfile) {
           model = models.find((m) => m.id === activeAgentProfile.model && m.providerId === activeAgentProfile.provider);
         }
@@ -175,7 +175,7 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
     const maxInputTokens = currentModel?.maxInputTokens || 0;
 
     const todoListVisible = useMemo(() => {
-      return AGENT_MODES.includes(currentMode) && activeAgentProfile?.useTodoTools;
+      return !AIDER_MODES.includes(currentMode) && activeAgentProfile?.useTodoTools;
     }, [currentMode, activeAgentProfile?.useTodoTools]);
 
     const handleOpenModelSelector = useCallback(() => {

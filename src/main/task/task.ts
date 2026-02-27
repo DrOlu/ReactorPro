@@ -7,7 +7,6 @@ import YAML from 'yaml';
 import {
   AiderRunOptions,
   AIDER_MODES,
-  AGENT_MODES,
   AgentProfile,
   ContextAssistantMessage,
   ContextFile,
@@ -408,7 +407,7 @@ export class Task {
     const mode = this.getCurrentMode();
     return {
       messages: this.contextManager.getContextMessagesData(),
-      files: await this.getContextFiles(AGENT_MODES.includes(mode)),
+      files: await this.getContextFiles(!AIDER_MODES.includes(mode)),
       todoItems: await this.getTodos(),
       question: this.currentQuestion,
       queuedPrompts: this.queuedPrompts,
@@ -655,7 +654,7 @@ export class Task {
     this.telemetryManager.captureRunPrompt(mode);
     // Generate promptContext for this run
 
-    if (AGENT_MODES.includes(mode)) {
+    if (!AIDER_MODES.includes(mode)) {
       const profile = await this.getTaskAgentProfile();
       logger.debug('AgentProfile:', profile);
 
@@ -663,9 +662,9 @@ export class Task {
         throw new Error('No active Agent profile found');
       }
 
-      return this.runPromptInAgent(profile, prompt, promptContext);
+      return this.runPromptInAgent(profile, mode, prompt, promptContext);
     } else {
-      return this.runPromptInAider(prompt, promptContext, mode);
+      return this.runPromptInAider(mode, prompt, promptContext);
     }
   }
 
@@ -714,7 +713,7 @@ export class Task {
     return [];
   }
 
-  public async runPromptInAider(prompt: string, promptContext: PromptContext, mode: Mode = 'code'): Promise<ResponseCompletedData[]> {
+  public async runPromptInAider(mode: Mode, prompt: string, promptContext: PromptContext): Promise<ResponseCompletedData[]> {
     await this.waitForCurrentPromptToFinish();
 
     await this.hookManager.trigger('onPromptStarted', { prompt, mode }, this, this.project);
@@ -819,6 +818,7 @@ export class Task {
 
   public async runPromptInAgent(
     profile: AgentProfile,
+    mode: Mode,
     prompt: string | null,
     promptContext: PromptContext = { id: uuidv4() },
     contextMessages?: ContextMessage[],
@@ -838,7 +838,7 @@ export class Task {
       state: DefaultTaskState.InProgress,
     });
 
-    const agentMessages = await this.agent.runAgent(this, profile, prompt, promptContext, contextMessages, contextFiles, systemPrompt);
+    const agentMessages = await this.agent.runAgent(this, profile, prompt, mode, promptContext, contextMessages, contextFiles, systemPrompt);
     if (agentMessages.length > 0) {
       // send messages to connectors
       this.contextManager.toConnectorMessages(agentMessages).forEach((message) => {
@@ -1021,6 +1021,11 @@ export class Task {
     abortSignal?: AbortSignal,
     promptContext?: PromptContext,
   ): Promise<ContextMessage[]> {
+    profile = {
+      ...profile,
+      isSubagent: true,
+    };
+
     const hookResult = await this.hookManager.trigger('onSubagentStarted', { subagentId: profile.id, prompt }, this, this.project);
     if (hookResult.blocked) {
       logger.info('Subagent execution blocked by hook');
@@ -1058,7 +1063,18 @@ export class Task {
     systemPrompt = extensionResult.systemPrompt;
     promptContext = extensionResult.promptContext;
 
-    let resultMessages = await this.agent.runAgent(this, profile, prompt, promptContext, contextMessages, contextFiles, systemPrompt, false, abortSignal);
+    let resultMessages = await this.agent.runAgent(
+      this,
+      profile,
+      prompt,
+      'subagent',
+      promptContext,
+      contextMessages,
+      contextFiles,
+      systemPrompt,
+      false,
+      abortSignal,
+    );
     const finishedHookResult = await this.hookManager.trigger('onSubagentFinished', { subagentId: profile.id, resultMessages }, this, this.project);
 
     if (finishedHookResult.event.resultMessages) {
@@ -1452,7 +1468,7 @@ export class Task {
 
   private async sendContextFilesUpdated() {
     const mode = this.getCurrentMode();
-    const allFiles = await this.getContextFiles(AGENT_MODES.includes(mode));
+    const allFiles = await this.getContextFiles(!AIDER_MODES.includes(mode));
 
     this.eventManager.sendContextFilesUpdated(this.project.baseDir, this.taskId, allFiles);
   }
@@ -2282,7 +2298,7 @@ export class Task {
     }
   }
 
-  private addUserMessage(id: string, content: string, promptContext?: PromptContext) {
+  addUserMessage(id: string, content: string, promptContext?: PromptContext) {
     logger.info('Adding user message:', {
       baseDir: this.project.baseDir,
       content: content.substring(0, 100),
@@ -2367,7 +2383,7 @@ export class Task {
 
     const mode = this.getCurrentMode();
 
-    if (AGENT_MODES.includes(mode)) {
+    if (!AIDER_MODES.includes(mode)) {
       const profile = await this.getTaskAgentProfile();
       if (!profile) {
         logger.error('No active Agent profile found for resume');
@@ -2378,7 +2394,7 @@ export class Task {
       logger.info('Resuming agent task...');
       this.addLogMessage('loading', 'Resuming task...');
 
-      void this.runPromptInAgent(profile, null);
+      void this.runPromptInAgent(profile, mode, null);
     } else {
       // In other modes, check if last message is user
       const contextMessages = await this.contextManager.getContextMessages();
@@ -2451,7 +2467,7 @@ export class Task {
     };
 
     try {
-      if (AGENT_MODES.includes(mode)) {
+      if (!AIDER_MODES.includes(mode)) {
         // Agent mode logic
         if (!profile) {
           throw new Error('No active Agent profile found');
@@ -2470,6 +2486,7 @@ export class Task {
           this,
           compactConversationAgentProfile,
           this.promptsManager.getCompactConversationPrompt(this, customInstructions),
+          'compact-conversation',
           promptContext,
           contextMessages,
           [],
@@ -2530,9 +2547,9 @@ export class Task {
       });
       this.addLogMessage('error', 'Failed to compact conversation. Original conversation preserved.');
       // Prevent memory leaks by cleaning up pending prompt resources
-      if (AGENT_MODES.includes(mode) && waitForAgentCompletion) {
+      if (!AIDER_MODES.includes(mode) && waitForAgentCompletion) {
         this.resolveAgentRunPromises();
-      } else if (!AGENT_MODES.includes(mode)) {
+      } else if (AIDER_MODES.includes(mode)) {
         this.promptFinished();
       }
     }
@@ -2565,7 +2582,7 @@ export class Task {
     const handoffPrompt = await this.promptsManager.getHandoffPrompt(this, focus.trim().length ? focus.trim() : undefined);
     let generatedPrompt: string | undefined;
 
-    if (AGENT_MODES.includes(mode)) {
+    if (!AIDER_MODES.includes(mode)) {
       // Agent mode logic
       const profile = await this.getTaskAgentProfile();
       if (!profile) {
@@ -2946,7 +2963,7 @@ export class Task {
       };
 
       // Run the agent with the modified profile
-      await this.runPromptInAgent(initProjectRulesAgentProfile, this.promptsManager.getInitProjectPrompt(this));
+      await this.runPromptInAgent(initProjectRulesAgentProfile, 'init-project-agents-file', this.promptsManager.getInitProjectPrompt(this));
 
       // Check if the AGENTS.md file was created
       const projectAgentsPath = path.join(this.project.baseDir, 'AGENTS.md');
@@ -3132,7 +3149,7 @@ ${error.stderr}`,
     this.addLogMessage('loading', 'Executing custom command...');
 
     try {
-      if (AGENT_MODES.includes(mode)) {
+      if (!AIDER_MODES.includes(mode)) {
         // Agent mode logic
         const profile = await this.getTaskAgentProfile();
         if (!profile) {
@@ -3144,10 +3161,10 @@ ${error.stderr}`,
 
         const messages = command.includeContext === false ? [] : undefined;
         const contextFiles = command.includeContext === false ? [] : undefined;
-        await this.runPromptInAgent(profile, prompt, promptContext, messages, contextFiles, systemPrompt);
+        await this.runPromptInAgent(profile, mode, prompt, promptContext, messages, contextFiles, systemPrompt);
       } else {
         // All other modes (code, ask, architect)
-        await this.runPromptInAider(prompt, promptContext, mode);
+        await this.runPromptInAider(mode, prompt, promptContext);
       }
     } finally {
       // Clear loading message after execution completes (success or failure)
@@ -3698,7 +3715,18 @@ ${error.stderr}`,
           });
           const systemPrompt = this.promptsManager.getConflictResolutionSystemPrompt(this);
 
-          await this.agent.runAgent(this, conflictProfile, prompt, promptContext, [], [{ path: filePath }], systemPrompt, false, abortController.signal);
+          await this.agent.runAgent(
+            this,
+            conflictProfile,
+            prompt,
+            'conflict-resolution',
+            promptContext,
+            [],
+            [{ path: filePath }],
+            systemPrompt,
+            false,
+            abortController.signal,
+          );
 
           // Update context based on whether it was interrupted or resolved
           if (promptContext.group) {

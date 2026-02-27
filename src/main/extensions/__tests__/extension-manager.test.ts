@@ -76,6 +76,7 @@ describe('ExtensionManager', () => {
       clearTools: vi.fn(),
       clearCommands: vi.fn(),
       clearAgents: vi.fn(),
+      clearModes: vi.fn(),
       registerTool: vi.fn(),
       getTools: vi.fn().mockReturnValue([]),
       getToolsByExtension: vi.fn().mockReturnValue([]),
@@ -85,6 +86,8 @@ describe('ExtensionManager', () => {
       registerAgent: vi.fn(),
       getAgents: vi.fn().mockReturnValue([]),
       getAgentsByExtension: vi.fn().mockReturnValue([]),
+      getModes: vi.fn().mockReturnValue([]),
+      getModesByExtension: vi.fn().mockReturnValue([]),
     };
 
     store = {

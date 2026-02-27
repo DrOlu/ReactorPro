@@ -106,6 +106,8 @@ describe('TaskSidebar', () => {
       target: { value: 'Task 1' },
     });
 
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     await waitFor(() => {
       expect(screen.getByText('Task 1')).toBeInTheDocument();
       expect(screen.queryByText('Task 2')).not.toBeInTheDocument();

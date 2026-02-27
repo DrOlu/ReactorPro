@@ -11,6 +11,7 @@ import {
   DefaultTaskState,
   McpTool,
   McpToolInputSchema,
+  Mode,
   PromptContext,
   ProviderProfile,
   ToolApprovalState,
@@ -696,6 +697,7 @@ export class Agent {
     task: Task,
     profile: AgentProfile,
     prompt: string | null,
+    mode: Mode = 'agent',
     promptContext?: PromptContext,
     initialContextMessages?: ContextMessage[],
     initialContextFiles?: ContextFile[],
@@ -726,6 +728,7 @@ export class Agent {
     const extensionResult = await this.extensionManager.dispatchEvent(
       'onAgentStarted',
       {
+        mode,
         agentProfile: profile,
         prompt,
         promptContext,
@@ -1053,7 +1056,14 @@ export class Agent {
           }
           const extensionResult = await this.extensionManager.dispatchEvent(
             'onAgentStepFinished',
-            { agentProfile: profile, currentResponseId, stepResult, finishReason, responseMessages },
+            {
+              mode,
+              agentProfile: profile,
+              currentResponseId,
+              stepResult,
+              finishReason,
+              responseMessages,
+            },
             task.project,
             task,
           );
@@ -1260,7 +1270,12 @@ export class Agent {
       }
       const extensionResult = await this.extensionManager.dispatchEvent(
         'onAgentFinished',
-        { aborted: false, contextMessages, resultMessages },
+        {
+          mode,
+          aborted: false,
+          contextMessages,
+          resultMessages,
+        },
         task.project,
         task,
       );
@@ -1275,7 +1290,12 @@ export class Agent {
         }
         const extensionResult = await this.extensionManager.dispatchEvent(
           'onAgentFinished',
-          { aborted: true, contextMessages, resultMessages },
+          {
+            mode,
+            aborted: true,
+            contextMessages,
+            resultMessages,
+          },
           task.project,
           task,
         );

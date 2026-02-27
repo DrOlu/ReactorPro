@@ -343,6 +343,10 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     return eventsHandler.getCommands(baseDir);
   });
 
+  ipcMain.handle('get-custom-modes', async (_, baseDir: string) => {
+    return eventsHandler.getCustomModes(baseDir);
+  });
+
   ipcMain.handle('run-custom-command', async (_, baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode) => {
     await eventsHandler.runCustomCommand(baseDir, taskId, commandName, args, mode);
   });

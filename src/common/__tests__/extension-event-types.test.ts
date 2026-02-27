@@ -85,6 +85,7 @@ describe('Event Payload Interfaces', () => {
   describe('Agent Events', () => {
     it('AgentStartedEvent should have required fields', () => {
       const event: AgentStartedEvent = {
+        mode: 'agent',
         agentProfile: {} as AgentProfile,
         prompt: 'test prompt',
         systemPrompt: undefined,
@@ -100,6 +101,7 @@ describe('Event Payload Interfaces', () => {
 
     it('AgentStartedEvent should support optional promptContext and blocked fields', () => {
       const event: AgentStartedEvent = {
+        mode: 'agent',
         agentProfile: {} as AgentProfile,
         prompt: null,
         promptContext: {} as PromptContext,
@@ -114,6 +116,7 @@ describe('Event Payload Interfaces', () => {
 
     it('AgentFinishedEvent should have resultMessages field', () => {
       const event: AgentFinishedEvent = {
+        mode: 'agent',
         resultMessages: [],
         aborted: false,
         contextMessages: [],
@@ -123,6 +126,7 @@ describe('Event Payload Interfaces', () => {
 
     it('AgentStepFinishedEvent should have all required fields', () => {
       const event: AgentStepFinishedEvent = {
+        mode: 'agent',
         agentProfile: {} as AgentProfile,
         currentResponseId: 'response-1',
         stepResult: {} as any,

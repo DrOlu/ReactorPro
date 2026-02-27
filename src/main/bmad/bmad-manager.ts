@@ -582,10 +582,13 @@ export class BmadManager {
         task.addLogMessage('loading');
         await task.runPromptInAgent(
           agentProfile,
+          'bmad',
           null, // No user prompt - workflow is system-driven
           promptContext,
           preparedContext.contextMessages,
           contextFiles,
+          undefined,
+          true,
         );
       }
 

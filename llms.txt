@@ -578,6 +578,7 @@ src/
         useClickOutside.ts
         useCommands.ts
         useConfiguredHotkeys.ts
+        useCustomModes.ts
         useDropdownState.ts
         useEffectiveEnvironmentVariable.ts
         useIndexedDB.ts
@@ -5115,7 +5116,17 @@ export interface WorktreeIntegrationStatusUpdatedData {
   status: WorktreeIntegrationStatus | null;
 }
 ⋮----
-export type Mode = 'code' | 'ask' | 'architect' | 'context' | 'agent' | 'bmad';
+export interface ModeDefinition {
+  name: Mode;
+  label: string;
+  description?: string;
+  /** Icon name from react-icons (e.g., 'GoCodeReview', 'FiLayers') */
+  icon?: string;
+}
+⋮----
+/** Icon name from react-icons (e.g., 'GoCodeReview', 'FiLayers') */
+⋮----
+export type Mode = string;
 ⋮----
 export interface AiderRunOptions {
   autoApprove?: boolean;
@@ -6356,6 +6367,7 @@ import {
   MemoryEntry,
   MessageRemovedData,
   Mode,
+  ModeDefinition,
   Model,
   ModelsData,
   NotificationData,
@@ -6538,6 +6550,7 @@ export interface ApplicationAPI {
   addTaskDeletedListener: (baseDir: string, callback: (data: TaskData) => void) => () => void;
 
   getCommands: (baseDir: string) => Promise<CommandsData>;
+  getCustomModes: (baseDir: string) => Promise<ModeDefinition[]>;
   runCustomCommand: (baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode) => Promise<void>;
 
   // Terminal operations
@@ -6631,8 +6644,7 @@ import { WorkflowMetadata, WorkflowPhase } from './types';
 File: src/common/extensions.ts
 ================
 import { z } from 'zod';
-⋮----
-import type {
+import {
   AgentProfile,
   CommandArgument,
   CommandsData,
@@ -6642,6 +6654,7 @@ import type {
   CreateTaskParams,
   CustomCommand,
   Mode,
+  ModeDefinition,
   Model,
   ProjectSettings,
   PromptContext,
@@ -6652,9 +6665,22 @@ import type {
   TaskData,
   TodoItem,
   UpdatedFile,
+  UsageReportData,
+  ToolApprovalState,
+  InvocationMode,
+  ContextMemoryMode,
 } from '@common/types';
 ⋮----
 export type AgentStepResult = unknown;
+⋮----
+export interface ResponseMessage {
+  id: string;
+  content: string;
+  reflectedMessage?: string;
+  finished: boolean;
+  usageReport?: UsageReportData;
+  promptContext?: PromptContext;
+}
 ⋮----
 /**
  * Metadata describing an extension
@@ -6905,6 +6931,7 @@ export interface PromptFinishedEvent {
 ⋮----
 /** Event payload for agent started events */
 export interface AgentStartedEvent {
+  readonly mode: Mode;
   agentProfile: AgentProfile;
   prompt: string | null;
   promptContext?: PromptContext;
@@ -6916,6 +6943,7 @@ export interface AgentStartedEvent {
 ⋮----
 /** Event payload for agent finished events */
 export interface AgentFinishedEvent {
+  readonly mode: Mode;
   readonly aborted: boolean;
   readonly contextMessages: ContextMessage[];
   resultMessages: ContextMessage[];
@@ -6923,6 +6951,7 @@ export interface AgentFinishedEvent {
 ⋮----
 /** Event payload for agent step finished events */
 export interface AgentStepFinishedEvent {
+  readonly mode: Mode;
   readonly agentProfile: AgentProfile;
   readonly currentResponseId: string;
   readonly stepResult: AgentStepResult;
@@ -7061,13 +7090,29 @@ export interface TaskContext {
   addFiles(...files: ContextFile[]): Promise<void>;
   dropFile(path: string): Promise<void>;
 
-  // Messages (Read + Safe Write)
+  // Data Context Messages (Read + Safe Write)
   getContextMessages(): Promise<ContextMessage[]>;
-  addMessage(content: string, role?: 'user' | 'assistant'): Promise<void>;
+  addContextMessage(message: ContextMessage, updateContextInfo?: boolean): Promise<void>;
   removeMessage(messageId: string): Promise<void>;
   removeLastMessage(): Promise<void>;
+  removeMessagesUpTo(messageId: string): Promise<void>;
   loadContextMessages(messages: ContextMessage[]): Promise<void>;
   redoLastUserPrompt(mode?: string, updatedPrompt?: string): Promise<void>;
+
+  // UI Context Messages
+  addUserMessage(id: string, content: string, promptContext?: PromptContext): void;
+  addToolMessage(
+    id: string,
+    serverName: string,
+    toolName: string,
+    input?: unknown,
+    response?: string,
+    usageReport?: UsageReportData,
+    promptContext?: PromptContext,
+    saveToDb?: boolean,
+    finished?: boolean,
+  ): void;
+  addResponseMessage(message: ResponseMessage, saveToDb?: boolean): Promise<void>;
 
   // Files & Repo (Read-only)
   getTaskDir(): string;
@@ -7095,7 +7140,8 @@ export interface TaskContext {
 
   // User Interaction
   askQuestion(text: string, options?: QuestionOptions): Promise<string>;
-  addLogMessage(level: 'info' | 'error' | 'warn' | 'debug' | 'loading', message?: string): void;
+  addLogMessage(level: 'info' | 'error' | 'warning', message?: string): void;
+  addLoadingMessage(message?: string, finished?: boolean): void;
 
   // Task Management
   updateTask(updates: Partial<TaskData>): Promise<TaskData>;
@@ -7126,13 +7172,29 @@ addFile(path: string, readOnly?: boolean): Promise<void>;
 addFiles(...files: ContextFile[]): Promise<void>;
 dropFile(path: string): Promise<void>;
 ⋮----
-// Messages (Read + Safe Write)
+// Data Context Messages (Read + Safe Write)
 getContextMessages(): Promise<ContextMessage[]>;
-addMessage(content: string, role?: 'user' | 'assistant'): Promise<void>;
+addContextMessage(message: ContextMessage, updateContextInfo?: boolean): Promise<void>;
 removeMessage(messageId: string): Promise<void>;
 removeLastMessage(): Promise<void>;
+removeMessagesUpTo(messageId: string): Promise<void>;
 loadContextMessages(messages: ContextMessage[]): Promise<void>;
 redoLastUserPrompt(mode?: string, updatedPrompt?: string): Promise<void>;
+⋮----
+// UI Context Messages
+addUserMessage(id: string, content: string, promptContext?: PromptContext): void;
+addToolMessage(
+    id: string,
+    serverName: string,
+    toolName: string,
+    input?: unknown,
+    response?: string,
+    usageReport?: UsageReportData,
+    promptContext?: PromptContext,
+    saveToDb?: boolean,
+    finished?: boolean,
+  ): void;
+addResponseMessage(message: ResponseMessage, saveToDb?: boolean): Promise<void>;
 ⋮----
 // Files & Repo (Read-only)
 getTaskDir(): string;
@@ -7160,7 +7222,8 @@ generateText(agentProfile: AgentProfile, systemPrompt: string, prompt: string): 
 ⋮----
 // User Interaction
 askQuestion(text: string, options?: QuestionOptions): Promise<string>;
-addLogMessage(level: 'info' | 'error' | 'warn' | 'debug' | 'loading', message?: string): void;
+addLogMessage(level: 'info' | 'error' | 'warning', message?: string): void;
+addLoadingMessage(message?: string, finished?: boolean): void;
 ⋮----
 // Task Management
 updateTask(updates: Partial<TaskData>): Promise<TaskData>;
@@ -7329,6 +7392,12 @@ export interface ExtensionContext {
   showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
 
   /**
+   * Get all custom modes registered by extensions
+   * @returns Promise resolving to array of mode definitions
+   */
+  getCustomModes(): Promise<ModeDefinition[]>;
+
+  /**
    * Send a prompt to the agent or aider for execution
    * @param prompt - The prompt text to send
    * @param mode - Execution mode (agent, code, ask, architect)
@@ -7423,6 +7492,12 @@ showConfirm(message: string, confirmText?: string, cancelText?: string): Promise
 showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
 ⋮----
 /**
+   * Get all custom modes registered by extensions
+   * @returns Promise resolving to array of mode definitions
+   */
+getCustomModes(): Promise<ModeDefinition[]>;
+⋮----
+/**
    * Send a prompt to the agent or aider for execution
    * @param prompt - The prompt text to send
    * @param mode - Execution mode (agent, code, ask, architect)
@@ -7499,6 +7574,14 @@ export interface Extension {
    * Called when extension is loaded and when commands need to be refreshed
    */
   getCommands?(context: ExtensionContext): CommandDefinition[];
+
+  // Mode registration
+
+  /**
+   * Return array of modes this extension provides
+   * Called when extension is loaded and when modes need to be refreshed
+   */
+  getModes?(): ModeDefinition[];
 
   // Agent registration
 
@@ -7738,6 +7821,14 @@ getUIElements?(): UIElementDefinition[];
    * Called when extension is loaded and when commands need to be refreshed
    */
 getCommands?(context: ExtensionContext): CommandDefinition[];
+⋮----
+// Mode registration
+⋮----
+/**
+   * Return array of modes this extension provides
+   * Called when extension is loaded and when modes need to be refreshed
+   */
+getModes?(): ModeDefinition[];
 ⋮----
 // Agent registration
 ⋮----
@@ -8787,6 +8878,7 @@ import {
   DefaultTaskState,
   McpTool,
   McpToolInputSchema,
+  Mode,
   PromptContext,
   ProviderProfile,
   ToolApprovalState,
@@ -8986,6 +9078,7 @@ async runAgent(
     task: Task,
     profile: AgentProfile,
     prompt: string | null,
+    mode: Mode = 'agent',
     promptContext?: PromptContext,
     initialContextMessages?: ContextMessage[],
     initialContextFiles?: ContextFile[],
@@ -12759,12 +12852,13 @@ import { ProjectContextImpl } from './project-context';
 import { TaskContextImpl } from './task-context';
 ⋮----
 import type { ExtensionContext, ProjectContext, TaskContext } from '@common/extensions';
-import type { AgentProfile, CreateTaskParams, Mode, Model, SettingsData } from '@common/types';
+import type { AgentProfile, CreateTaskParams, Mode, Model, SettingsData, ModeDefinition } from '@common/types';
 import type { AgentProfileManager } from '@/agent';
 import type { ModelManager } from '@/models';
 import type { Project } from '@/project';
 import type { Store } from '@/store';
 import type { Task } from '@/task';
+import type { ExtensionManager } from './extension-manager';
 ⋮----
 import logger from '@/logger';
 ⋮----
@@ -12801,6 +12895,8 @@ async getSetting(key: string): Promise<unknown>
 async updateSettings(updates: Record<string, unknown>): Promise<void>
 ⋮----
 async runPrompt(prompt: string, mode: Mode = 'agent'): Promise<void>
+⋮----
+async getCustomModes(): Promise<ModeDefinition[]>
 
 ================
 File: src/main/extensions/extension-loader.ts
@@ -12859,7 +12955,7 @@ import { z } from 'zod';
 import { ToolApprovalState } from '@common/types';
 ⋮----
 import { ExtensionLoader } from './extension-loader';
-import { ExtensionRegistry, LoadedExtension, RegisteredTool, RegisteredCommand, RegisteredAgent } from './extension-registry';
+import { ExtensionRegistry, LoadedExtension, RegisteredTool, RegisteredCommand, RegisteredAgent, RegisteredMode } from './extension-registry';
 import { ExtensionContextImpl } from './extension-context';
 ⋮----
 import type { AgentProfile } from '@common/types';
@@ -12879,6 +12975,7 @@ import type {
   FilesAddedEvent,
   FilesDroppedEvent,
   HandleApprovalEvent,
+  ModeDefinition,
   PromptFinishedEvent,
   PromptStartedEvent,
   QuestionAnsweredEvent,
@@ -13040,6 +13137,14 @@ getAgents(): RegisteredAgent[]
 ⋮----
 getAgentsByExtension(extensionName: string): RegisteredAgent[]
 ⋮----
+collectModes(): RegisteredMode[]
+⋮----
+getModes(): RegisteredMode[]
+⋮----
+getModesByExtension(extensionName: string): RegisteredMode[]
+⋮----
+validateModeDefinition(mode: ModeDefinition):
+⋮----
 /**
    * Attempts to update an extension-provided agent profile.
    * @param profile - The updated profile
@@ -13111,7 +13216,7 @@ private sendCommandsUpdatedToAllProjects(): void
 ================
 File: src/main/extensions/extension-registry.ts
 ================
-import { Extension, ExtensionMetadata, ToolDefinition, CommandDefinition } from '@common/extensions';
+import { Extension, ExtensionMetadata, ToolDefinition, CommandDefinition, ModeDefinition } from '@common/extensions';
 ⋮----
 import type { AgentProfile } from '@common/types';
 ⋮----
@@ -13138,6 +13243,11 @@ export interface RegisteredCommand {
 export interface RegisteredAgent {
   extensionName: string;
   agent: AgentProfile;
+}
+⋮----
+export interface RegisteredMode {
+  extensionName: string;
+  mode: ModeDefinition;
 }
 ⋮----
 export class ExtensionRegistry
@@ -13181,6 +13291,16 @@ getAgentsByExtension(extensionName: string): RegisteredAgent[]
 getAgentById(agentId: string): RegisteredAgent | undefined
 ⋮----
 clearAgents(): void
+⋮----
+registerMode(extensionName: string, mode: ModeDefinition): void
+⋮----
+getModes(): RegisteredMode[]
+⋮----
+getModesByExtension(extensionName: string): RegisteredMode[]
+⋮----
+getModeByName(name: string): RegisteredMode | undefined
+⋮----
+clearModes(): void
 
 ================
 File: src/main/extensions/index.ts
@@ -13225,8 +13345,20 @@ async getInputHistory(): Promise<string[]>
 ================
 File: src/main/extensions/task-context.ts
 ================
-import type { QuestionOptions, TaskContext } from '@common/extensions';
-import type { AgentProfile, ContextFile, ContextMessage, LogLevel, Mode, QueuedPromptData, TaskData, TodoItem, UpdatedFile } from '@common/types';
+import {
+  AgentProfile,
+  ContextFile,
+  ContextMessage,
+  Mode,
+  PromptContext,
+  QueuedPromptData,
+  TaskData,
+  TodoItem,
+  UpdatedFile,
+  UsageReportData,
+} from '@common/types';
+⋮----
+import type { QuestionOptions, TaskContext, ResponseMessage } from '@common/extensions';
 import type { Task } from '@/task';
 ⋮----
 export class TaskContextImpl implements TaskContext
@@ -13249,7 +13381,7 @@ async dropFile(path: string): Promise<void>
 ⋮----
 async getContextMessages(): Promise<ContextMessage[]>
 ⋮----
-async addMessage(content: string, role: 'user' | 'assistant' = 'user'): Promise<void>
+async addContextMessage(message: ContextMessage, updateContextInfo = false): Promise<void>
 ⋮----
 async removeMessage(messageId: string): Promise<void>
 ⋮----
@@ -13258,6 +13390,24 @@ async removeLastMessage(): Promise<void>
 async loadContextMessages(messages: ContextMessage[]): Promise<void>
 ⋮----
 async redoLastUserPrompt(mode?: string, updatedPrompt?: string): Promise<void>
+⋮----
+async removeMessagesUpTo(messageId: string): Promise<void>
+⋮----
+addUserMessage(id: string, content: string, promptContext?: PromptContext)
+⋮----
+addToolMessage(
+    id: string,
+    serverName: string,
+    toolName: string,
+    input?: unknown,
+    response?: string,
+    usageReport?: UsageReportData,
+    promptContext?: PromptContext,
+    saveToDb = true,
+    finished = !!response,
+)
+⋮----
+async addResponseMessage(message: ResponseMessage, saveToDb = true)
 ⋮----
 // Files & Repo (Read-only)
 ⋮----
@@ -13305,7 +13455,9 @@ async generateText(agentProfile: AgentProfile, systemPrompt: string, prompt: str
 ⋮----
 async askQuestion(text: string, options?: QuestionOptions): Promise<string>
 ⋮----
-addLogMessage(level: 'info' | 'error' | 'warn' | 'debug' | 'loading', message?: string): void
+addLogMessage(level: 'info' | 'error' | 'warning', message?: string): void
+⋮----
+addLoadingMessage(message?: string, finished?: boolean): void
 ⋮----
 // Task Management
 ⋮----
@@ -15524,7 +15676,7 @@ const migrateSessionFile = async (project: Project, sessionsDirPath: string, tas
 File: src/main/project/project-manager.ts
 ================
 import { normalizeBaseDir } from '@common/utils';
-import { AgentProfile, ProjectSettings, SettingsData } from '@common/types';
+import { AgentProfile, ProjectSettings, SettingsData, ModeDefinition } from '@common/types';
 ⋮----
 import { TelemetryManager } from '@/telemetry';
 import { AgentProfileManager, McpManager } from '@/agent';
@@ -15579,6 +15731,8 @@ projectSettingsChanged(baseDir: string, oldSettings: ProjectSettings, newSetting
 ⋮----
 public getCommands(baseDir: string)
 ⋮----
+public getCustomModes(baseDir: string): ModeDefinition[]
+⋮----
 public getProjects(): Project[]
 ⋮----
 agentProfileUpdated(oldProfile: AgentProfile, profile: AgentProfile)
@@ -15596,6 +15750,7 @@ import {
   CreateTaskParams,
   DefaultTaskState,
   InstallResult,
+  ModeDefinition,
   ProjectSettings,
   SettingsData,
   TaskData,
@@ -15685,6 +15840,8 @@ public async addToInputHistory(message: string)
 private async sendInputHistoryUpdatedEvent()
 ⋮----
 public getCommands(): CommandsData
+⋮----
+public getCustomModes(): ModeDefinition[]
 ⋮----
 public sendCommandsUpdated(commands: CommandsData = this.getCommands())
 ⋮----
@@ -16180,7 +16337,7 @@ File: src/main/server/rest-api/project-api.ts
 ================
 import { Router } from 'express';
 import { z } from 'zod';
-import { CreateTaskParams, ProjectSettingsSchema, TaskDataSchema } from '@common/types';
+import { CreateTaskParams, ProjectSettingsSchema, TaskDataSchema, ModeDefinition } from '@common/types';
 ⋮----
 import { BaseApi } from './base-api';
 ⋮----
@@ -16283,6 +16440,8 @@ registerRoutes(router: Router): void
 // Get project settings
 ⋮----
 // Update project settings
+⋮----
+// Get custom modes
 ⋮----
 // Interrupt project
 ⋮----
@@ -17351,7 +17510,6 @@ import YAML from 'yaml';
 import {
   AiderRunOptions,
   AIDER_MODES,
-  AGENT_MODES,
   AgentProfile,
   ContextAssistantMessage,
   ContextFile,
@@ -17557,7 +17715,7 @@ public async savePromptOnly(prompt: string, addInputHistory = true): Promise<voi
 ⋮----
 private async runNextQueuedPrompt(): Promise<ResponseCompletedData[]>
 ⋮----
-public async runPromptInAider(prompt: string, promptContext: PromptContext, mode: Mode = 'code'): Promise<ResponseCompletedData[]>
+public async runPromptInAider(mode: Mode, prompt: string, promptContext: PromptContext): Promise<ResponseCompletedData[]>
 ⋮----
 // Detect files in prompt and ask to add them to context (only for aider modes)
 ⋮----
@@ -17567,6 +17725,7 @@ public async runPromptInAider(prompt: string, promptContext: PromptContext, mode
 ⋮----
 public async runPromptInAgent(
     profile: AgentProfile,
+    mode: Mode,
     prompt: string | null,
     promptContext: PromptContext = { id: uuidv4() },
     contextMessages?: ContextMessage[],
@@ -17835,7 +17994,7 @@ public addToolMessage(
 ⋮----
 private updateTotalCosts(usageReport: UsageReportData)
 ⋮----
-private addUserMessage(id: string, content: string, promptContext?: PromptContext)
+addUserMessage(id: string, content: string, promptContext?: PromptContext)
 ⋮----
 public async removeLastMessage()
 ⋮----
@@ -19467,7 +19626,7 @@ import {
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
 ⋮----
-import type { BmadStatus, InstallResult } from '@common/types';
+import type { ModeDefinition, BmadStatus, InstallResult } from '@common/types';
 import type { BrowserWindow } from 'electron';
 ⋮----
 import { McpManager, AgentProfileManager } from '@/agent';
@@ -19576,6 +19735,8 @@ async sendQueuedPromptNow(baseDir: string, taskId: string, promptId: string): Pr
 runCommand(baseDir: string, taskId: string, command: string): void
 ⋮----
 async getCommands(baseDir: string): Promise<CommandsData>
+⋮----
+async getCustomModes(baseDir: string): Promise<ModeDefinition[]>
 ⋮----
 async runCustomCommand(baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode): Promise<void>
 ⋮----
@@ -20493,6 +20654,7 @@ File: src/renderer/src/api/browser-api.ts
 import {
   AgentProfilesUpdatedData,
   AutocompletionData,
+  BmadStatus,
   ClearTaskData,
   CloudflareTunnelStatus,
   CommandOutputData,
@@ -20507,6 +20669,7 @@ import {
   McpTool,
   MessageRemovedData,
   Mode,
+  ModeDefinition,
   Model,
   ModelsData,
   NotificationData,
@@ -20550,8 +20713,6 @@ import axios, { type AxiosInstance } from 'axios';
 import { io, Socket } from 'socket.io-client';
 import { compareBaseDirs } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
-⋮----
-import type { BmadStatus } from '@common/types';
 ⋮----
 type EventDataMap = {
   'settings-updated': SettingsData;
@@ -20787,6 +20948,7 @@ addTerminalExitListener(baseDir: string, callback: (data: TerminalExitData) => v
 addContextMenuListener(callback: (params: Electron.ContextMenuParams) => void): () => void
 addOpenSettingsListener(callback: (pageId: string) => void): () => void
 async getCommands(baseDir: string): Promise<CommandsData>
+getCustomModes(baseDir: string): Promise<ModeDefinition[]>
 runCustomCommand(baseDir: string, taskId: string, commandName: string, args: string[], mode: Mode): Promise<void>
 isTerminalSupported(): boolean
 async createTerminal(baseDir: string, taskId: string, cols?: number, rows?: number): Promise<string>
@@ -26806,7 +26968,7 @@ onSquash=
 ================
 File: src/renderer/src/components/project/TaskView.tsx
 ================
-import { AGENT_MODES, DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
+import { AIDER_MODES, DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
 import { forwardRef, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResizableBox, ResizeCallbackData } from 'react-resizable';
@@ -27341,21 +27503,28 @@ const handleScroll = () =>
 ================
 File: src/renderer/src/components/PromptField/ModeSelector.tsx
 ================
-import { memo } from 'react';
+import { ElementType, memo, useMemo } from 'react';
 import { CgTerminal } from 'react-icons/cg';
 import { FaRegQuestionCircle } from 'react-icons/fa';
 import { AiOutlineFileSearch } from 'react-icons/ai';
 import { RiRobot2Line } from 'react-icons/ri';
 import { GoProjectRoadmap } from 'react-icons/go';
 import { FiLayers } from 'react-icons/fi';
-import { Mode } from '@common/types';
+import { TbTargetArrow } from 'react-icons/tb';
+import { Mode, ModeDefinition } from '@common/types';
 ⋮----
 import { ItemSelector, ItemConfig } from '@/components/common/ItemSelector';
+import { useCustomModes } from '@/hooks/useCustomModes';
 ⋮----
 type Props = {
+  baseDir: string;
   mode: Mode;
   onModeChange: (mode: Mode) => void;
 };
+⋮----
+const getIconComponent = (iconName?: string): ElementType =>
+⋮----
+const customModeToItemConfig = (mode: ModeDefinition): ItemConfig<Mode> => (
 
 ================
 File: src/renderer/src/components/PromptField/PromptField.tsx
@@ -27371,7 +27540,7 @@ import {
 } from '@codemirror/autocomplete';
 import { EditorView, keymap } from '@codemirror/view';
 import { vim } from '@replit/codemirror-vim';
-import { AGENT_MODES, Mode, PromptBehavior, QueuedPromptData, QuestionData, SuggestionMode, TaskData } from '@common/types';
+import { AIDER_MODES, Mode, PromptBehavior, QueuedPromptData, QuestionData, SuggestionMode, TaskData } from '@common/types';
 import { githubDarkInit } from '@uiw/codemirror-theme-github';
 import CodeMirror, { Annotation, Prec, type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
@@ -29163,7 +29332,7 @@ title=
 ================
 File: src/renderer/src/components/TokenUsageBar.tsx
 ================
-import { AGENT_MODES, Mode, TaskData, TokensInfoData } from '@common/types';
+import { AIDER_MODES, Mode, TaskData, TokensInfoData } from '@common/types';
 import { MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import debounce from 'lodash/debounce';
@@ -29505,6 +29674,17 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { getHotkeys } from '@/utils/hotkeys';
 ⋮----
 export const useConfiguredHotkeys = () =>
+
+================
+File: src/renderer/src/hooks/useCustomModes.ts
+================
+import { useEffect, useState } from 'react';
+⋮----
+import type { ModeDefinition } from '@common/types';
+⋮----
+import { useApi } from '@/contexts/ApiContext';
+⋮----
+export const useCustomModes = (baseDir: string) =>
 
 ================
 File: src/renderer/src/hooks/useDropdownState.ts

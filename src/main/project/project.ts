@@ -8,6 +8,7 @@ import {
   CreateTaskParams,
   DefaultTaskState,
   InstallResult,
+  ModeDefinition,
   ProjectSettings,
   SettingsData,
   TaskData,
@@ -381,6 +382,10 @@ export class Project {
       customCommands: this.customCommandManager.getAllCommands(),
       extensionCommands,
     };
+  }
+
+  public getCustomModes(): ModeDefinition[] {
+    return this.extensionManager.getModes().map((registered) => registered.mode);
   }
 
   public sendCommandsUpdated(commands: CommandsData = this.getCommands()) {

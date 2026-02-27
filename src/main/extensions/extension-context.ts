@@ -2,12 +2,13 @@ import { ProjectContextImpl } from './project-context';
 import { TaskContextImpl } from './task-context';
 
 import type { ExtensionContext, ProjectContext, TaskContext } from '@common/extensions';
-import type { AgentProfile, CreateTaskParams, Mode, Model, SettingsData } from '@common/types';
+import type { AgentProfile, CreateTaskParams, Mode, Model, SettingsData, ModeDefinition } from '@common/types';
 import type { AgentProfileManager } from '@/agent';
 import type { ModelManager } from '@/models';
 import type { Project } from '@/project';
 import type { Store } from '@/store';
 import type { Task } from '@/task';
+import type { ExtensionManager } from './extension-manager';
 
 import logger from '@/logger';
 
@@ -26,6 +27,7 @@ export class ExtensionContextImpl implements ExtensionContext {
     private readonly modelManager?: ModelManager,
     private readonly project?: Project,
     private readonly taskInstance?: Task,
+    private readonly extensionManager?: ExtensionManager,
   ) {}
 
   log(message: string, type: 'info' | 'error' | 'warn' | 'debug' = 'info'): void {
@@ -144,6 +146,20 @@ export class ExtensionContextImpl implements ExtensionContext {
     } catch (error) {
       this.log(`Failed to run prompt: ${error instanceof Error ? error.message : String(error)}`, 'error');
       throw error;
+    }
+  }
+
+  async getCustomModes(): Promise<ModeDefinition[]> {
+    if (!this.extensionManager) {
+      this.log('ExtensionManager not available, returning empty modes', 'warn');
+      return [];
+    }
+    try {
+      const registeredModes = this.extensionManager.getModes();
+      return registeredModes.map((registered) => registered.mode);
+    } catch (error) {
+      this.log(`Failed to get custom modes: ${error}`, 'error');
+      return [];
     }
   }
 }

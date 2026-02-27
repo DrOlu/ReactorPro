@@ -9,7 +9,7 @@ import {
 } from '@codemirror/autocomplete';
 import { EditorView, keymap } from '@codemirror/view';
 import { vim } from '@replit/codemirror-vim';
-import { AGENT_MODES, Mode, PromptBehavior, QueuedPromptData, QuestionData, SuggestionMode, TaskData } from '@common/types';
+import { AIDER_MODES, Mode, PromptBehavior, QueuedPromptData, QuestionData, SuggestionMode, TaskData } from '@common/types';
 import { githubDarkInit } from '@uiw/codemirror-theme-github';
 import CodeMirror, { Annotation, Prec, type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
@@ -418,7 +418,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
             break;
           case '/model':
             prepareForNextPrompt();
-            if (AGENT_MODES.includes(mode)) {
+            if (!AIDER_MODES.includes(mode)) {
               openAgentModelSelector?.(args);
             } else {
               openModelSelector?.(args);
@@ -477,7 +477,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
             break;
           }
           case '/init': {
-            if (!AGENT_MODES.includes(mode)) {
+            if (AIDER_MODES.includes(mode)) {
               showErrorNotification(t('promptField.agentModeOnly'));
               return;
             }
@@ -683,7 +683,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
           return [command.description, false];
         }
 
-        if (item === '/init' && !AGENT_MODES.includes(mode)) {
+        if (item === '/init' && !!AIDER_MODES.includes(mode)) {
           return [t('commands.agentModeOnly'), true];
         }
 
@@ -1128,10 +1128,10 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
             </div>
           </div>
           <div className={clsx('relative w-full flex flex-wrap', isMobile ? 'items-start gap-0.5' : 'items-center')}>
-            <div className={clsx('flex gap-1.5', isMobile && AGENT_MODES.includes(mode) ? 'flex-col items-start' : 'items-center')}>
-              <ModeSelector mode={mode} onModeChange={onModeChanged} />
+            <div className={clsx('flex gap-1.5', isMobile && !AIDER_MODES.includes(mode) ? 'flex-col items-start' : 'items-center')}>
+              <ModeSelector baseDir={baseDir} mode={mode} onModeChange={onModeChanged} />
               <div className="flex gap-2">
-                {AGENT_MODES.includes(mode) && <AgentSelector projectDir={baseDir} task={task} isActive={isActive} showSettingsPage={showSettingsPage} />}
+                {!AIDER_MODES.includes(mode) && <AgentSelector projectDir={baseDir} task={task} isActive={isActive} showSettingsPage={showSettingsPage} />}
                 <AutoApprove
                   enabled={!!task?.autoApprove}
                   locked={projectSettings?.autoApproveLocked ?? false}

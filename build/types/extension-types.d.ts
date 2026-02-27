@@ -124,12 +124,19 @@ export interface ContextFile {
 	readOnly?: boolean;
 	source?: "global-rule" | "project-rule" | "agent-rule";
 }
-declare enum ContextMemoryMode {
+export declare enum ContextMemoryMode {
 	Off = "off",
 	FullContext = "full-context",
 	LastMessage = "last-message"
 }
-export type Mode = "code" | "ask" | "architect" | "context" | "agent" | "bmad";
+export interface ModeDefinition {
+	name: Mode;
+	label: string;
+	description?: string;
+	/** Icon name from react-icons (e.g., 'GoCodeReview', 'FiLayers') */
+	icon?: string;
+}
+export type Mode = string;
 export interface ResponseChunkData {
 	messageId: string;
 	baseDir: string;
@@ -200,25 +207,18 @@ declare const ProjectSettingsSchema: z.ZodObject<{
 	}>>;
 	reasoningEffort: z.ZodOptional<z.ZodString>;
 	thinkingTokens: z.ZodOptional<z.ZodString>;
-	currentMode: z.ZodEnum<{
-		code: "code";
-		ask: "ask";
-		architect: "architect";
-		context: "context";
-		agent: "agent";
-		bmad: "bmad";
-	}>;
+	currentMode: z.ZodString;
 	contextCompactingThreshold: z.ZodOptional<z.ZodNumber>;
 	weakModelLocked: z.ZodOptional<z.ZodBoolean>;
 	autoApproveLocked: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>;
 export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
-declare enum ToolApprovalState {
+export declare enum ToolApprovalState {
 	Always = "always",
 	Never = "never",
 	Ask = "ask"
 }
-declare enum InvocationMode {
+export declare enum InvocationMode {
 	OnDemand = "on-demand",
 	Automatic = "automatic"
 }
@@ -304,14 +304,7 @@ declare const TaskDataSchema: z.ZodObject<{
 	architectModel: z.ZodOptional<z.ZodNullable<z.ZodString>>;
 	reasoningEffort: z.ZodOptional<z.ZodString>;
 	thinkingTokens: z.ZodOptional<z.ZodString>;
-	currentMode: z.ZodOptional<z.ZodEnum<{
-		code: "code";
-		ask: "ask";
-		architect: "architect";
-		context: "context";
-		agent: "agent";
-		bmad: "bmad";
-	}>>;
+	currentMode: z.ZodOptional<z.ZodString>;
 	contextCompactingThreshold: z.ZodOptional<z.ZodNumber>;
 	weakModelLocked: z.ZodOptional<z.ZodBoolean>;
 	handoff: z.ZodOptional<z.ZodBoolean>;
@@ -365,6 +358,14 @@ export interface CustomCommand extends Command {
 	autoApprove?: boolean;
 }
 export type AgentStepResult = unknown;
+export interface ResponseMessage {
+	id: string;
+	content: string;
+	reflectedMessage?: string;
+	finished: boolean;
+	usageReport?: UsageReportData;
+	promptContext?: PromptContext;
+}
 /**
  * Metadata describing an extension
  */
@@ -547,6 +548,7 @@ export interface PromptFinishedEvent {
 }
 /** Event payload for agent started events */
 export interface AgentStartedEvent {
+	readonly mode: Mode;
 	agentProfile: AgentProfile;
 	prompt: string | null;
 	promptContext?: PromptContext;
@@ -557,12 +559,14 @@ export interface AgentStartedEvent {
 }
 /** Event payload for agent finished events */
 export interface AgentFinishedEvent {
+	readonly mode: Mode;
 	readonly aborted: boolean;
 	readonly contextMessages: ContextMessage[];
 	resultMessages: ContextMessage[];
 }
 /** Event payload for agent step finished events */
 export interface AgentStepFinishedEvent {
+	readonly mode: Mode;
 	readonly agentProfile: AgentProfile;
 	readonly currentResponseId: string;
 	readonly stepResult: AgentStepResult;
@@ -683,11 +687,15 @@ export interface TaskContext {
 	addFiles(...files: ContextFile[]): Promise<void>;
 	dropFile(path: string): Promise<void>;
 	getContextMessages(): Promise<ContextMessage[]>;
-	addMessage(content: string, role?: "user" | "assistant"): Promise<void>;
+	addContextMessage(message: ContextMessage, updateContextInfo?: boolean): Promise<void>;
 	removeMessage(messageId: string): Promise<void>;
 	removeLastMessage(): Promise<void>;
+	removeMessagesUpTo(messageId: string): Promise<void>;
 	loadContextMessages(messages: ContextMessage[]): Promise<void>;
 	redoLastUserPrompt(mode?: string, updatedPrompt?: string): Promise<void>;
+	addUserMessage(id: string, content: string, promptContext?: PromptContext): void;
+	addToolMessage(id: string, serverName: string, toolName: string, input?: unknown, response?: string, usageReport?: UsageReportData, promptContext?: PromptContext, saveToDb?: boolean, finished?: boolean): void;
+	addResponseMessage(message: ResponseMessage, saveToDb?: boolean): Promise<void>;
 	getTaskDir(): string;
 	getAddableFiles(searchRegex?: string): Promise<string[]>;
 	getAllFiles(useGit?: boolean): Promise<string[]>;
@@ -707,7 +715,8 @@ export interface TaskContext {
 	interruptResponse(): Promise<void>;
 	generateText(agentProfile: AgentProfile, systemPrompt: string, prompt: string): Promise<string | undefined>;
 	askQuestion(text: string, options?: QuestionOptions): Promise<string>;
-	addLogMessage(level: "info" | "error" | "warn" | "debug" | "loading", message?: string): void;
+	addLogMessage(level: "info" | "error" | "warning", message?: string): void;
+	addLoadingMessage(message?: string, finished?: boolean): void;
 	updateTask(updates: Partial<TaskData>): Promise<TaskData>;
 	handoffConversation(focus?: string, execute?: boolean): Promise<void>;
 	clearContext(): Promise<void>;
@@ -826,6 +835,11 @@ export interface ExtensionContext {
 	 */
 	showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
 	/**
+	 * Get all custom modes registered by extensions
+	 * @returns Promise resolving to array of mode definitions
+	 */
+	getCustomModes(): Promise<ModeDefinition[]>;
+	/**
 	 * Send a prompt to the agent or aider for execution
 	 * @param prompt - The prompt text to send
 	 * @param mode - Execution mode (agent, code, ask, architect)
@@ -890,6 +904,11 @@ export interface Extension {
 	 * Called when extension is loaded and when commands need to be refreshed
 	 */
 	getCommands?(context: ExtensionContext): CommandDefinition[];
+	/**
+	 * Return array of modes this extension provides
+	 * Called when extension is loaded and when modes need to be refreshed
+	 */
+	getModes?(): ModeDefinition[];
 	/**
 	 * Return array of agent profiles this extension provides
 	 * Called when extension is loaded and when agents need to be refreshed
