@@ -20,7 +20,7 @@ export class ExtensionContextImpl implements ExtensionContext {
   ) {}
 
   log(message: string, type: 'info' | 'error' | 'warn' | 'debug' = 'info'): void {
-    const logFn = logger[type] ?? logger.info;
+    const logFn = logger[type];
     logFn(`[Extension:${this.extensionId}] ${message}`);
   }
 

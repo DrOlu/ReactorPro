@@ -3051,25 +3051,14 @@ export class Task {
     }
   }
 
-  private async runExtensionCommand(extensionCommand: RegisteredCommand, args: string[], _mode: Mode): Promise<void> {
+  private async runExtensionCommand(extensionCommand: RegisteredCommand, args: string[], mode: Mode): Promise<void> {
     const { command } = extensionCommand;
-
-    // Validate required arguments
-    const requiredArgs = command.arguments?.filter((arg) => arg.required !== false) || [];
-    if (args.length < requiredArgs.length) {
-      this.addLogMessage(
-        'error',
-        `Not enough arguments for command '${command.name}'. Expected arguments:\n${command.arguments?.map((arg, idx) => `${idx + 1}: ${arg.description}${arg.required === false ? ' (optional)' : ''}`).join('\n')}`,
-      );
-      this.eventManager.sendCustomCommandError(this.project.baseDir, this.taskId, `Argument mismatch for command: ${command.name}`);
-      return;
-    }
 
     logger.info('Running extension command:', {
       commandName: command.name,
       args,
     });
-    this.telemetryManager.captureCustomCommand(command.name, args.length, 'agent');
+    this.telemetryManager.captureCustomCommand(command.name, args.length, mode);
 
     try {
       // Execute the command - extension is fully responsible for its logic
