@@ -1005,7 +1005,34 @@ export class Agent {
         ...providerParameters,
       });
 
-      const getBaseModelCallParams = () => {
+      const getBaseModelCallParams = async () => {
+        const getOptimizedMessages = async () => {
+          const originalMessages = messages as ContextMessage[];
+          const optimized = await optimizeMessages(
+            messages,
+            cacheControl,
+            task,
+            profile,
+            projectProfiles,
+            initialUserRequestMessageIndex,
+            this.extensionManager,
+          );
+
+          const extensionResult = await this.extensionManager.dispatchEvent(
+            'onOptimizeMessages',
+            {
+              originalMessages,
+              optimizedMessages: optimized as ContextMessage[],
+            },
+            task.project,
+            task,
+          );
+
+          return (extensionResult.optimizedMessages as ModelMessage[]) ?? optimized;
+        };
+
+        const optimizedMessages = await getOptimizedMessages();
+
         return {
           providerOptions,
           model: wrapLanguageModel({
@@ -1015,7 +1042,7 @@ export class Agent {
             }),
           }),
           system: systemPrompt,
-          messages: optimizeMessages(messages, cacheControl, task, profile, projectProfiles, initialUserRequestMessageIndex),
+          messages: optimizedMessages,
           tools: toolSet,
           abortSignal: effectiveAbortSignal,
           maxOutputTokens: effectiveMaxOutputTokens,
@@ -1117,14 +1144,14 @@ export class Agent {
         if (this.modelManager.isStreamingDisabled(provider, profile.model)) {
           logger.debug('Streaming disabled, using generateText');
           await generateText({
-            ...getBaseModelCallParams(),
+            ...(await getBaseModelCallParams()),
             onStepFinish,
             experimental_repairToolCall: repairToolCall,
           });
         } else {
           logger.debug('Streaming enabled, using streamText');
           const result = streamText({
-            ...getBaseModelCallParams(),
+            ...(await getBaseModelCallParams()),
             experimental_transform: smoothStream({
               delayInMs: 20,
               chunking: 'line',
@@ -1620,7 +1647,7 @@ export class Agent {
       const result = await generateText({
         model,
         system: systemPrompt,
-        messages: optimizeMessages(messages),
+        messages: await optimizeMessages(messages),
         abortSignal: effectiveAbortSignal,
         providerOptions,
         ...providerParameters,
@@ -1660,7 +1687,7 @@ export class Agent {
       const lastUserIndex = messages.map((m) => m.role).lastIndexOf('user');
       const userRequestMessageIndex = lastUserIndex >= 0 ? lastUserIndex : 0;
 
-      const optimizedMessages = optimizeMessages(
+      const optimizedMessages = await optimizeMessages(
         messages,
         cacheControl,
         task,

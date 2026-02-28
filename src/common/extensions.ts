@@ -275,6 +275,18 @@ export interface AgentStepFinishedEvent {
   responseMessages: ContextMessage[];
 }
 
+/** Event payload for message optimization events */
+export interface OptimizeMessagesEvent {
+  readonly originalMessages: ContextMessage[];
+  optimizedMessages: ContextMessage[];
+}
+
+/** Event payload for important reminders events */
+export interface ImportantRemindersEvent {
+  readonly profile: AgentProfile;
+  remindersContent: string;
+}
+
 /** Event payload for tool approval events */
 export interface ToolApprovalEvent {
   readonly toolName: string;
@@ -756,6 +768,20 @@ export interface Extension {
    * @returns void or partial event
    */
   onAgentStepFinished?(event: AgentStepFinishedEvent, context: ExtensionContext): Promise<void | Partial<AgentStepFinishedEvent>>;
+
+  /**
+   * Called when messages are optimized before being sent to the LLM
+   * Modify event.optimizedMessages to change the messages that will be sent
+   * @returns void or partial event to modify optimized messages
+   */
+  onOptimizeMessages?(event: OptimizeMessagesEvent, context: ExtensionContext): Promise<void | Partial<OptimizeMessagesEvent>>;
+
+  /**
+   * Called when important reminders are being added to the user message
+   * Modify event.remindersContent to change the reminders content
+   * @returns void or partial event to modify reminders content
+   */
+  onImportantReminders?(event: ImportantRemindersEvent, context: ExtensionContext): Promise<void | Partial<ImportantRemindersEvent>>;
 
   // Tool Events
 
