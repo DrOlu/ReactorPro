@@ -1315,6 +1315,7 @@
     "low": "Low",
     "medium": "Medium",
     "high": "High",
+    "xhigh": "XHigh",
     "max": "Max"
   },
   "commands": {

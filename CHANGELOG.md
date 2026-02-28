@@ -8,6 +8,7 @@
 - added Alibaba Coding Plan provider
 - added locking of files when using edit power tool to avoid race conditions
 - moved BMAD mode out of Preview mode
+- added xhigh reasoning effort for OpenAI and OpenAI compatible providers
 
 ## [0.54.0]
 

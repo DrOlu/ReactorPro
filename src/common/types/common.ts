@@ -122,6 +122,7 @@ export enum MessageViewMode {
 }
 
 export enum ReasoningEffort {
+  XHigh = 'xhigh',
   High = 'high',
   Medium = 'medium',
   Low = 'low',
