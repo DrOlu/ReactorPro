@@ -11,7 +11,6 @@ import {
   Mode,
   ModeDefinition,
   Model,
-  ProjectData,
   ProjectSettings,
   PromptContext,
   QuestionData,
@@ -224,13 +223,13 @@ export interface TaskUpdatedEvent {
 }
 
 /** Event payload for project opened events */
-export interface ProjectOpenedEvent {
-  project: ProjectData;
+export interface ProjectStartedEvent {
+  readonly baseDir: string;
 }
 
 /** Event payload for project closed events */
-export interface ProjectClosedEvent {
-  readonly project: ProjectData;
+export interface ProjectStoppedEvent {
+  readonly baseDir: string;
 }
 
 /** Event payload for prompt started events */
@@ -713,16 +712,16 @@ export interface Extension {
   // Project Events
 
   /**
-   * Called when a project is opened
+   * Called when a project is started
    * @returns void or partial event to modify project data
    */
-  onProjectOpen?(event: ProjectOpenedEvent, context: ExtensionContext): Promise<void | Partial<ProjectOpenedEvent>>;
+  onProjectStarted?(event: ProjectStartedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStartedEvent>>;
 
   /**
    * Called when a project is closed
    * @returns void or partial event to modify project data
    */
-  onProjectClosed?(event: ProjectClosedEvent, context: ExtensionContext): Promise<void | Partial<ProjectClosedEvent>>;
+  onProjectStopped?(event: ProjectStoppedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStoppedEvent>>;
 
   // Prompt Events
 

@@ -37,6 +37,12 @@ vi.mock('path', () => ({
     join: vi.fn((...parts: string[]) => parts.join('/')),
     basename: vi.fn((file) => file.split('/').pop() || file),
     resolve: vi.fn((path) => path),
+    relative: vi.fn((from: string, to: string) => {
+      if (to.startsWith(from + '/')) {
+        return to.slice(from.length + 1);
+      }
+      return to;
+    }),
   },
 }));
 

@@ -51,6 +51,8 @@ import type {
   ToolDefinition,
   ToolFinishedEvent,
   CommandDefinition,
+  ProjectStartedEvent,
+  ProjectStoppedEvent,
 } from '@common/extensions';
 import type { ToolCallOptions, ToolSet } from 'ai';
 
@@ -83,6 +85,8 @@ export interface RegisteredMode {
  * Mapping of extension event names to their event payload types
  */
 export type ExtensionEventMap = {
+  onProjectStarted: ProjectStartedEvent;
+  onProjectStopped: ProjectStoppedEvent;
   onTaskCreated: TaskCreatedEvent;
   onTaskPrepared: TaskPreparedEvent;
   onTaskInitialized: TaskInitializedEvent;
@@ -331,8 +335,8 @@ export class ExtensionManager {
     const extensionMap = new Map<string, string>();
 
     for (const extPath of extensionPaths) {
-      const filename = path.basename(extPath);
-      extensionMap.set(filename, extPath);
+      const extensionKey = path.relative(extensionsDir, extPath);
+      extensionMap.set(extensionKey, extPath);
     }
 
     const extensions = Array.from(extensionMap.values());
