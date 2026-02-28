@@ -344,6 +344,7 @@ export class Agent {
     mode: Mode,
     profile: AgentProfile,
     provider: ProviderProfile,
+    model: string,
     mcpConnectors: McpConnector[] = [],
     messages?: ContextMessage[],
     resultMessages?: ContextMessage[],
@@ -446,7 +447,7 @@ export class Agent {
     Object.assign(toolSet, helperTools);
 
     // Add provider-specific tools
-    const providerTools = await this.modelManager.getProviderTools(provider, profile.model);
+    const providerTools = await this.modelManager.getProviderTools(provider, model);
     Object.assign(toolSet, providerTools);
 
     // Add extension tools
@@ -734,31 +735,6 @@ export class Agent {
       systemPrompt = await this.promptsManager.getSystemPrompt(this.store.getSettings(), task, profile);
     }
 
-    const extensionResult = await this.extensionManager.dispatchEvent(
-      'onAgentStarted',
-      {
-        mode,
-        agentProfile: profile,
-        prompt,
-        promptContext,
-        contextMessages,
-        contextFiles,
-        systemPrompt,
-      },
-      task.project,
-      task,
-    );
-    if (extensionResult.blocked) {
-      logger.info('Agent execution blocked by extension');
-      return [];
-    }
-    profile = extensionResult.agentProfile;
-    prompt = extensionResult.prompt;
-    promptContext = extensionResult.promptContext;
-    contextMessages = extensionResult.contextMessages;
-    contextFiles = extensionResult.contextFiles;
-    systemPrompt = extensionResult.systemPrompt;
-
     const userRequestMessage: ContextUserMessage | null = prompt
       ? {
           id: promptContext?.id || uuidv4(),
@@ -768,16 +744,48 @@ export class Agent {
         }
       : null;
 
-    if (userRequestMessage && includeInContext) {
-      await task.addContextMessage(userRequestMessage);
-    }
-
     const settings = this.store.getSettings();
     const projectProfiles = this.agentProfileManager.getProjectProfiles(task.getProjectDir());
     let resultMessages: ContextMessage[] = userRequestMessage ? [userRequestMessage] : [];
 
     const providers = this.store.getProviders();
-    const provider = providers.find((p) => p.id === profile.provider);
+    let provider = providers.find((p) => p.id === profile.provider);
+    let modelName = profile.model;
+
+    if (provider) {
+      const extensionResult = await this.extensionManager.dispatchEvent(
+        'onAgentStarted',
+        {
+          mode,
+          prompt,
+          agentProfile: profile,
+          providerProfile: provider,
+          model: modelName,
+          promptContext,
+          contextMessages,
+          contextFiles,
+          systemPrompt,
+        },
+        task.project,
+        task,
+      );
+      if (extensionResult.blocked) {
+        logger.info('Agent execution blocked by extension');
+        return [];
+      }
+      profile = extensionResult.agentProfile;
+      provider = extensionResult.providerProfile;
+      modelName = extensionResult.model;
+      prompt = extensionResult.prompt;
+      promptContext = extensionResult.promptContext;
+      contextMessages = extensionResult.contextMessages;
+      contextFiles = extensionResult.contextFiles;
+      systemPrompt = extensionResult.systemPrompt;
+    }
+
+    if (userRequestMessage && includeInContext) {
+      await task.addContextMessage(userRequestMessage);
+    }
     if (!provider) {
       logger.error(`Provider ${profile.provider} not found`);
       task.addLogMessage('error', 'Selected model is not configured. Select another model and try again.', true, promptContext);
@@ -815,8 +823,8 @@ export class Agent {
     const effectiveAbortSignal = abortSignal || (controllerId ? this.abortControllers.get(controllerId)?.signal : undefined);
 
     const cacheControl = this.modelManager.getCacheControl(profile, provider.provider);
-    const providerOptions = this.modelManager.getProviderOptions(provider, profile.model);
-    const providerParameters = this.modelManager.getProviderParameters(provider, profile.model);
+    const providerOptions = this.modelManager.getProviderOptions(provider, modelName);
+    const providerParameters = this.modelManager.getProviderParameters(provider, modelName);
 
     const firstUserMessage = contextMessages.length > 0 ? contextMessages[0] : null;
     let messages = await this.prepareMessages(task, profile, contextMessages, contextFiles);
@@ -828,7 +836,7 @@ export class Agent {
     messages.push(...resultMessages);
 
     // Normalize messages for provider-specific requirements
-    messages = this.modelManager.normalizeMessages(provider, profile.model, messages);
+    messages = this.modelManager.normalizeMessages(provider, modelName, messages);
 
     let mcpConnectors: McpConnector[] = [];
     try {
@@ -867,6 +875,7 @@ export class Agent {
       mode,
       profile,
       provider,
+      modelName,
       mcpConnectors,
       contextMessages,
       resultMessages,
@@ -885,12 +894,12 @@ export class Agent {
       logger.debug('Creating LLM model', {
         providerId: provider.id,
         providerName: provider.provider.name,
-        modelName: profile.model,
+        modelName: modelName,
       });
 
       const model = await this.modelManager.createLlm(
         provider,
-        profile.model,
+        modelName,
         settings,
         task.getProjectDir(),
         toolSet,
@@ -993,7 +1002,7 @@ export class Agent {
       };
 
       // Get the model to use its temperature and max output tokens settings
-      const modelSettings = this.modelManager.getModelSettings(profile.provider, profile.model);
+      const modelSettings = this.modelManager.getModelSettings(provider.provider.name, modelName);
       const effectiveTemperature = profile.temperature ?? modelSettings?.temperature;
       const effectiveMaxOutputTokens = profile.maxTokens ?? modelSettings?.maxOutputTokens;
 
@@ -1092,7 +1101,7 @@ export class Agent {
             return;
           }
 
-          responseMessages = await this.processStep(currentResponseId, stepResult, task, profile, provider, promptContext, abortSignal);
+          responseMessages = await this.processStep(currentResponseId, stepResult, task, provider, modelName, promptContext, abortSignal);
           const hookResult = await task.hookManager.trigger('onAgentStepFinished', { stepResult, finishReason, responseMessages }, task, task.project);
           if (hookResult?.event?.finishReason) {
             finishReason = hookResult.event.finishReason;
@@ -1124,6 +1133,8 @@ export class Agent {
         const shouldContinue = await this.compactMessagesIfNeeded(
           task,
           profile,
+          provider,
+          modelName,
           userRequestMessage || findLastUserMessage(contextMessages)!,
           contextMessages,
           contextFiles,
@@ -1141,7 +1152,7 @@ export class Agent {
           break;
         }
 
-        if (this.modelManager.isStreamingDisabled(provider, profile.model)) {
+        if (this.modelManager.isStreamingDisabled(provider, modelName)) {
           logger.debug('Streaming disabled, using generateText');
           await generateText({
             ...(await getBaseModelCallParams()),
@@ -1240,7 +1251,7 @@ export class Agent {
           if (
             iterationError instanceof APICallError &&
             iterationError.isRetryable &&
-            this.modelManager.isRetryable(resolvedProvider, profile.model, iterationError)
+            this.modelManager.isRetryable(resolvedProvider, modelName, iterationError)
           ) {
             // try again
             continue;
@@ -1679,7 +1690,7 @@ export class Agent {
       }
 
       const messages = await this.prepareMessages(task, profile, await task.getContextMessages(), await task.getContextFiles());
-      const toolSet = await this.getAvailableTools(task, 'agent', profile, provider);
+      const toolSet = await this.getAvailableTools(task, 'agent', profile, provider, profile.model);
       const systemPrompt = await this.promptsManager.getSystemPrompt(this.store.getSettings(), task, profile);
 
       const cacheControl = this.modelManager.getCacheControl(profile, provider.provider);
@@ -1741,8 +1752,8 @@ export class Agent {
     currentResponseId: string,
     { content, reasoningText, text, toolCalls, toolResults, finishReason, usage, providerMetadata, response, reasoning, files }: StepResult<TOOLS>,
     task: Task,
-    profile: AgentProfile,
     provider: ProviderProfile,
+    model: string,
     promptContext?: PromptContext,
     abortSignal?: AbortSignal,
   ): Promise<ContextMessage[]> {
@@ -1761,7 +1772,7 @@ export class Agent {
     });
 
     const messages: ContextMessage[] = [];
-    const usageReport: UsageReportData = this.modelManager.getUsageReport(task, provider, profile.model, usage, providerMetadata);
+    const usageReport: UsageReportData = this.modelManager.getUsageReport(task, provider, model, usage, providerMetadata);
 
     if (providerMetadata) {
       await task.updateTask({ lastAgentProviderMetadata: providerMetadata });
@@ -1856,6 +1867,8 @@ export class Agent {
   private async compactMessagesIfNeeded(
     task: Task,
     profile: AgentProfile,
+    provider: ProviderProfile,
+    model: string,
     userRequestMessage: ContextUserMessage,
     contextMessages: ContextMessage[],
     contextFiles: ContextFile[],
@@ -1870,7 +1883,7 @@ export class Agent {
       ? ContextCompactionType.Compact
       : (this.store.getSettings().taskSettings.contextCompactionType ?? ContextCompactionType.Compact);
     const usageReport = resultMessages[resultMessages.length - 1]?.usageReport;
-    const maxTokens = this.modelManager.getModelSettings(profile.provider, profile.model)?.maxInputTokens;
+    const maxTokens = this.modelManager.getModelSettings(provider.provider.name, model)?.maxInputTokens;
 
     if (contextCompactingThreshold === 0 || !usageReport || !maxTokens) {
       return true;

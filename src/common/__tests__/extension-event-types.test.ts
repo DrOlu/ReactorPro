@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
-import type { AgentProfile, ContextFile, Mode, PromptContext, QuestionData, ResponseCompletedData, TaskData } from '@common/types';
+import type { AgentProfile, ContextFile, Mode, PromptContext, ProviderProfile, QuestionData, ResponseCompletedData, TaskData } from '@common/types';
 import type {
   AgentFinishedEvent,
   AgentStartedEvent,
@@ -87,6 +87,8 @@ describe('Event Payload Interfaces', () => {
       const event: AgentStartedEvent = {
         mode: 'agent',
         agentProfile: {} as AgentProfile,
+        providerProfile: {} as ProviderProfile,
+        model: 'gpt-4',
         prompt: 'test prompt',
         systemPrompt: undefined,
         contextMessages: [],
@@ -103,6 +105,8 @@ describe('Event Payload Interfaces', () => {
       const event: AgentStartedEvent = {
         mode: 'agent',
         agentProfile: {} as AgentProfile,
+        providerProfile: {} as ProviderProfile,
+        model: 'gpt-4',
         prompt: null,
         promptContext: {} as PromptContext,
         systemPrompt: 'system',

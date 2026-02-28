@@ -25,6 +25,7 @@ import {
   InvocationMode,
   ContextMemoryMode,
   SettingsData,
+  ProviderProfile,
 } from '@common/types';
 
 export type { ToolApprovalState, InvocationMode, ContextMemoryMode };
@@ -248,8 +249,10 @@ export interface PromptFinishedEvent {
 /** Event payload for agent started events */
 export interface AgentStartedEvent {
   readonly mode: Mode;
-  agentProfile: AgentProfile;
   prompt: string | null;
+  agentProfile: AgentProfile;
+  providerProfile: ProviderProfile;
+  model: string;
   promptContext?: PromptContext;
   systemPrompt: string | undefined;
   contextMessages: ContextMessage[];
