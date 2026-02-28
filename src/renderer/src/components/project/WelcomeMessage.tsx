@@ -30,6 +30,7 @@ export const WelcomeMessage = ({ onModeChange, mode, projectDir, taskId }: Props
   const modes = [
     { icon: RiRobot2Line, key: 'agent', value: 'agent' as Mode },
     { icon: CgTerminal, key: 'code', value: 'code' as Mode },
+    { icon: FiLayers, key: 'bmad', value: 'bmad' as Mode },
   ];
 
   const tips = ['addFiles', 'askQuestion', 'useCommands', 'switchMode'];
@@ -64,12 +65,12 @@ export const WelcomeMessage = ({ onModeChange, mode, projectDir, taskId }: Props
 
         <div className="mb-8">
           <h2 className="text-sm font-semibold text-text-primary mb-3">{t('welcomeMessage.modes.title')}:</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
             {modes.map(({ icon: Icon, key, value }) => (
               <div
                 key={key}
                 onClick={() => handleModeClick(value)}
-                className="bg-bg-primary-light-strong border border-border-dark-light rounded-md p-3 text-xs cursor-pointer hover:scale-105 hover:border-border-primary transition-all duration-200"
+                className="bg-bg-primary-light-strong border border-border-dark-light rounded-md p-3 text-xs cursor-pointer hover:scale-105 hover:border-border-primary transition-all duration-200 w-full md:w-[calc(50%-6px)]"
               >
                 <div className="flex items-center justify-center gap-2 mb-2 text-text-primary font-semibold">
                   <Icon className="w-3.5 h-3.5 flex-shrink-0" />
