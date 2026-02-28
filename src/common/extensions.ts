@@ -309,6 +309,11 @@ export interface FilesDroppedEvent {
   files: ContextFile[];
 }
 
+/** Event payload for rule files retrieved events */
+export interface RuleFilesRetrievedEvent {
+  files: ContextFile[];
+}
+
 /** Event payload for response message processed events */
 export interface ResponseChunkEvent {
   chunk: ResponseChunkData;
@@ -791,6 +796,13 @@ export interface Extension {
    * @returns void or partial event to modify files
    */
   onFilesDropped?(event: FilesDroppedEvent, context: ExtensionContext): Promise<void | Partial<FilesDroppedEvent>>;
+
+  /**
+   * Called when rule files are retrieved
+   * Modify event.files to filter, add, or clear rule files
+   * @returns void or partial event to modify files
+   */
+  onRuleFilesRetrieved?(event: RuleFilesRetrievedEvent, context: ExtensionContext): Promise<void | Partial<RuleFilesRetrievedEvent>>;
 
   // Message Events
 

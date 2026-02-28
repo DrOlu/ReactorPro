@@ -38,6 +38,7 @@ import type {
   QuestionAskedEvent,
   ResponseChunkEvent,
   ResponseCompletedEvent,
+  RuleFilesRetrievedEvent,
   SubagentFinishedEvent,
   SubagentStartedEvent,
   TaskClosedEvent,
@@ -99,6 +100,7 @@ export type ExtensionEventMap = {
   onToolFinished: ToolFinishedEvent;
   onFilesAdded: FilesAddedEvent;
   onFilesDropped: FilesDroppedEvent;
+  onRuleFilesRetrieved: RuleFilesRetrievedEvent;
   onResponseChunk: ResponseChunkEvent;
   onResponseCompleted: ResponseCompletedEvent;
   onHandleApproval: HandleApprovalEvent;
