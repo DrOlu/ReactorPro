@@ -2012,7 +2012,9 @@ export class Task {
       }
     }
 
-    return ruleFiles;
+    // Dispatch extension event to allow modification of rule files
+    const extensionResult = await this.extensionManager.dispatchEvent('onRuleFilesRetrieved', { files: ruleFiles }, this.project, this);
+    return extensionResult.files;
   }
 
   public getRepoMap(): string {

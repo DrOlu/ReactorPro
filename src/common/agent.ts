@@ -45,6 +45,7 @@ export type LlmProviderName =
   | 'gemini-cli'
   | 'gpustack'
   | 'groq'
+  | 'alibaba-plan'
   | 'kimi-plan'
   | 'litellm'
   | 'lmstudio'
@@ -78,6 +79,7 @@ export interface OllamaProvider extends LlmProviderBase {
 }
 
 export const AVAILABLE_PROVIDERS: LlmProviderName[] = [
+  'alibaba-plan',
   'anthropic',
   'anthropic-compatible',
   'azure',
@@ -150,6 +152,12 @@ export interface KimiPlanProvider extends LlmProviderBase {
   apiKey: string;
 }
 export const isKimiPlanProvider = (provider: LlmProviderBase): provider is KimiPlanProvider => provider.name === 'kimi-plan';
+
+export interface AlibabaPlanProvider extends LlmProviderBase {
+  name: 'alibaba-plan';
+  apiKey: string;
+}
+export const isAlibabaPlanProvider = (provider: LlmProviderBase): provider is AlibabaPlanProvider => provider.name === 'alibaba-plan';
 
 export enum GeminiVoiceModel {
   GeminiLive25FlashNativeAudio = 'gemini-2.5-flash-native-audio-preview-12-2025',
@@ -316,6 +324,7 @@ export type LlmProvider =
   | GroqProvider
   | GpustackProvider
   | CerebrasProvider
+  | AlibabaPlanProvider
   | KimiPlanProvider
   | OpenAiCompatibleProvider
   | LitellmProvider
@@ -330,6 +339,7 @@ export type LlmProvider =
 export const DEFAULT_MODEL_TEMPERATURE = 0.0;
 
 export const DEFAULT_PROVIDER_MODELS: Partial<Record<LlmProviderName, string>> = {
+  'alibaba-plan': 'qwen3-coder-plus',
   anthropic: 'claude-sonnet-4-5-20250929',
   cerebras: 'qwen-3-235b-a22b-instruct-2507',
   'claude-agent-sdk': 'sonnet',
@@ -653,6 +663,12 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
         name: 'kimi-plan',
         apiKey: '',
       } satisfies KimiPlanProvider;
+      break;
+    case 'alibaba-plan':
+      provider = {
+        name: 'alibaba-plan',
+        apiKey: '',
+      } satisfies AlibabaPlanProvider;
       break;
     case 'gpustack':
       provider = {

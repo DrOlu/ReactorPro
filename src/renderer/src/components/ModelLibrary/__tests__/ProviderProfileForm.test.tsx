@@ -32,6 +32,7 @@ vi.mock('@/hooks/useEffectiveEnvironmentVariable', () => ({
 // Mock providers as they might have many dependencies
 vi.mock('@/components/ModelLibrary/providers', () => ({
   OpenAiParameters: () => <div data-testid="openai-params">OpenAI Parameters</div>,
+  AlibabaPlanParameters: () => <div>Alibaba Plan Parameters</div>,
   AnthropicParameters: () => <div>Anthropic Parameters</div>,
   AnthropicCompatibleParameters: () => <div>Anthropic Compatible Parameters</div>,
   AzureParameters: () => <div>Azure Parameters</div>,

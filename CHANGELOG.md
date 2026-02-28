@@ -5,6 +5,7 @@
 - added support for commiting changes via the Updated Files page
 - added comprehensive Extention system
 - omit deleted files in Updated Files
+- added Alibaba Coding Plan provider
 
 ## [0.54.0]
 

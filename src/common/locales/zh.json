@@ -346,6 +346,9 @@
   "kimiPlan": {
     "apiKey": "API 密钥"
   },
+  "alibabaPlan": {
+    "apiKey": "API 密钥"
+  },
   "deepseek": {
     "apiKey": "API 密钥"
   },
@@ -383,6 +386,7 @@
   "providers": {
     "anthropic": "Anthropic",
     "anthropic-compatible": "Anthropic 兼容",
+    "alibaba-plan": "阿里云编码计划",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
     "claude-agent-sdk": "Claude Agent SDK",
