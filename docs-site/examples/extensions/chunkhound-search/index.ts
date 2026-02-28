@@ -3,7 +3,7 @@
  *
  * Provides a 'chunkhound-search' tool via getTools() that uses ChunkHound
  * for semantic code search. This demonstrates how to register custom tools
- * that extend AiderDesk's capabilities.
+ * that extend ReactorPro's capabilities.
  *
  * ChunkHound provides:
  * - Better semantic understanding of code
@@ -446,7 +446,7 @@ export const metadata = {
   name: 'ChunkHound Search Tool Extension',
   version: '1.0.0',
   description: 'Provides chunkhound-search tool using ChunkHound for semantic code search with better understanding',
-  author: 'AiderDesk',
+  author: 'ReactorPro',
   capabilities: ['tools'],
 };
 

@@ -527,7 +527,7 @@ export interface ProjectContext {
  */
 export interface ExtensionContext {
   /**
-   * Log a message to the AiderDesk console and log files
+   * Log a message to the ReactorPro console and log files
    * @param message - Message to log
    * @param type - Log level (info, error, warn, debug)
    */

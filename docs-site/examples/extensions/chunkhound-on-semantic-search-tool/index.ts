@@ -438,7 +438,7 @@ export const metadata = {
   name: 'ChunkHound Search Extension',
   version: '1.5.0',
   description: 'Overrides power---semantic_search to use ChunkHound for semantic code search with better understanding',
-  author: 'AiderDesk',
+  author: 'ReactorPro',
   capabilities: ['events'],
 };
 

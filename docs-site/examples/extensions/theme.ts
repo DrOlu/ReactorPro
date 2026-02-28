@@ -1,7 +1,7 @@
 /**
  * Theme Extension
  *
- * Registers a 'theme' command that switches the AiderDesk theme.
+ * Registers a 'theme' command that switches the ReactorPro theme.
  * Uses updateSettings to change the application theme.
  *
  * Usage:
@@ -39,7 +39,7 @@ const AVAILABLE_THEMES = [
 
 const THEME_COMMAND: CommandDefinition = {
   name: 'theme',
-  description: 'Switch the AiderDesk theme',
+  description: 'Switch the ReactorPro theme',
   arguments: [
     {
       description: 'Name of the theme to apply',
@@ -92,8 +92,8 @@ class ThemeExtension implements Extension {
 export const metadata = {
   name: 'Theme Extension',
   version: '1.0.0',
-  description: 'Adds a /theme command to switch AiderDesk themes',
-  author: 'AiderDesk',
+  description: 'Adds a /theme command to switch ReactorPro themes',
+  author: 'ReactorPro',
   capabilities: ['commands'],
 };
 

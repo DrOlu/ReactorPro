@@ -67,7 +67,7 @@ export const metadata = {
   name: 'Generate Tests Extension',
   version: '1.0.0',
   description: 'Adds a /generate-tests command that generates unit tests for a specified file',
-  author: 'AiderDesk',
+  author: 'ReactorPro',
   capabilities: ['commands'],
 };
 

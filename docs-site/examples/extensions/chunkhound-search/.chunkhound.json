@@ -6,6 +6,6 @@
   },
   "indexing": {
     "include": ["**/*.py", "**/*.js", "**/*.ts", "**/*.tsx"],
-    "exclude": ["**/node_modules/**", "**/__pycache__/**", "**/.aider-desk/**"]
+    "exclude": ["**/node_modules/**", "**/__pycache__/**", "**/.reactorpro/**"]
   }
 }

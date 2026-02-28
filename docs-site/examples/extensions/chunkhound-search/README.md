@@ -32,7 +32,7 @@ getTools(_context: ExtensionContext): ToolDefinition[] {
 }
 ```
 
-When an extension registers a tool with the same name as a native Power tool, AiderDesk uses the extension's implementation instead of the built-in one. This allows you to:
+When an extension registers a tool with the same name as a native Power tool, ReactorPro uses the extension's implementation instead of the built-in one. This allows you to:
 
 - Replace built-in tools with custom implementations
 - Add enhanced functionality to existing tools
@@ -60,15 +60,15 @@ uv tool install chunkhound
 
 ### 3. Install the Extension
 
-Copy this folder to your AiderDesk global extensions directory:
+Copy this folder to your ReactorPro global extensions directory:
 
 ```bash
-cp -r . ~/.aider-desk/extensions/chunkhound-search
+cp -r . ~/.reactorpro/extensions/chunkhound-search
 ```
 
 ### 4. Configure Embedding Provider
 
-Create a `.chunkhound.json` file in the **extension folder** (`~/.aider-desk/extensions/chunkhound-search/`):
+Create a `.chunkhound.json` file in the **extension folder** (`~/.reactorpro/extensions/chunkhound-search/`):
 
 **VoyageAI (Recommended - fastest, most accurate, cost-effective):**
 ```json
@@ -152,7 +152,7 @@ chunkhound --version
 
 Make sure `.chunkhound.json` exists in the extension folder:
 ```bash
-ls ~/.aider-desk/extensions/chunkhound-search/.chunkhound.json
+ls ~/.reactorpro/extensions/chunkhound-search/.chunkhound.json
 ```
 
 ### Indexing Issues
