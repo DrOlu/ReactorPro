@@ -1464,16 +1464,30 @@ export class WorktreeManager {
           const additions = parts[0] === '-' ? 0 : parseInt(parts[0], 10);
           const deletions = parts[1] === '-' ? 0 : parseInt(parts[1], 10);
           const filePath = parts.slice(2).join('\t'); // Handle paths with tabs
+
+          // Skip empty file paths
+          if (!filePath) {
+            continue;
+          }
+
           const absoluteFilePath = join(worktreePath, filePath);
 
           // Check if file is binary and skip diff generation
           let diff = '';
           try {
-            const fileContentBuffer = await fs.readFile(absoluteFilePath);
-            if (isBinary(filePath, fileContentBuffer)) {
-              // Binary file - skip diff
-              files.push({ path: filePath, additions, deletions, diff });
-              continue;
+            // Check if file exists (it may have been deleted)
+            const fileExists = await fs
+              .access(absoluteFilePath)
+              .then(() => true)
+              .catch(() => false);
+
+            if (fileExists) {
+              const fileContentBuffer = await fs.readFile(absoluteFilePath);
+              if (isBinary(filePath, fileContentBuffer)) {
+                // Binary file - skip diff
+                files.push({ path: filePath, additions, deletions, diff });
+                continue;
+              }
             }
 
             // Escape file path for git command - use quotes and -- separator

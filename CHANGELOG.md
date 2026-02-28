@@ -4,6 +4,7 @@
 
 - added support for commiting changes via the Updated Files page
 - added comprehensive Extention system
+- omit deleted files in Updated Files
 
 ## [0.54.0]
 
