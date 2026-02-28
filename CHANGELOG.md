@@ -6,6 +6,7 @@
 - added comprehensive Extention system
 - omit deleted files in Updated Files
 - added Alibaba Coding Plan provider
+- added locking of files when using edit power tool to avoid race conditions
 
 ## [0.54.0]
 
