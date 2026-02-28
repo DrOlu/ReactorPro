@@ -464,20 +464,20 @@ export class Agent {
     for (const [toolName, toolDef] of Object.entries(toolSet)) {
       wrappedToolSet[toolName] = {
         ...toolDef,
-        execute: async (args: Record<string, unknown> | undefined, options: ToolCallOptions) => {
-          const hookResult = await task.hookManager.trigger('onToolCalled', { toolName, args }, task, task.project);
+        execute: async (input: Record<string, unknown> | undefined, options: ToolCallOptions) => {
+          const hookResult = await task.hookManager.trigger('onToolCalled', { toolName, args: input }, task, task.project);
           if (hookResult.blocked) {
             logger.warn(`Tool execution blocked by hook: ${toolName}`);
             return 'Tool execution blocked by hook.';
           }
-          const effectiveArgs = hookResult.event.args as Record<string, unknown> | undefined;
+          let effectiveInput = hookResult.event.args ?? (input as Record<string, unknown> | undefined);
           const [serverName, messageToolName] = extractServerNameToolName(toolName);
 
-          task.addToolMessage(options.toolCallId, serverName, messageToolName, effectiveArgs, undefined, undefined, promptContext);
+          task.addToolMessage(options.toolCallId, serverName, messageToolName, effectiveInput, undefined, undefined, promptContext);
 
           const toolCalledExtensionResult = await this.extensionManager.dispatchEvent(
             'onToolCalled',
-            { toolName, input: effectiveArgs, abortSignal: options.abortSignal || abortSignal },
+            { toolName, input: effectiveInput, abortSignal: options.abortSignal || abortSignal },
             task.project,
             task,
           );
@@ -485,15 +485,18 @@ export class Agent {
             return toolCalledExtensionResult.output;
           }
 
+          // Use modified input from extension if provided
+          effectiveInput = (toolCalledExtensionResult.input ?? effectiveInput) as Record<string, unknown> | undefined;
+
           if (!options.abortSignal && abortSignal) {
             options.abortSignal = abortSignal;
           }
 
-          const result = await toolDef.execute!(effectiveArgs, options);
-          const toolFinishedHookResult = await task.hookManager.trigger('onToolFinished', { toolName, args: effectiveArgs, result }, task, task.project);
+          const result = await toolDef.execute!(effectiveInput, options);
+          const toolFinishedHookResult = await task.hookManager.trigger('onToolFinished', { toolName, args: effectiveInput, result }, task, task.project);
           const toolFinishedExtensionResult = await this.extensionManager.dispatchEvent(
             'onToolFinished',
-            { toolName, input: effectiveArgs, output: result },
+            { toolName, input: effectiveInput, output: result },
             task.project,
             task,
           );
