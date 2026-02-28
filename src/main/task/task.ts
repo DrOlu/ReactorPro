@@ -660,8 +660,8 @@ export class Task {
     this.addLogMessage('loading');
 
     this.telemetryManager.captureRunPrompt(mode);
-    // Generate promptContext for this run
 
+    let responses: ResponseCompletedData[] = [];
     if (!AIDER_MODES.includes(mode)) {
       const profile = await this.getTaskAgentProfile();
       logger.debug('AgentProfile:', profile);
@@ -670,10 +670,13 @@ export class Task {
         throw new Error('No active Agent profile found');
       }
 
-      return this.runPromptInAgent(profile, mode, prompt, promptContext);
+      responses = await this.runPromptInAgent(profile, mode, prompt, promptContext);
     } else {
-      return this.runPromptInAider(mode, prompt, promptContext);
+      responses = await this.runPromptInAider(mode, prompt, promptContext);
     }
+
+    const promptFinishedExtensionResult = await this.extensionManager.dispatchEvent('onPromptFinished', { responses }, this.project, this);
+    return promptFinishedExtensionResult.responses;
   }
 
   public async savePromptOnly(prompt: string, addInputHistory = true): Promise<void> {
