@@ -5804,6 +5804,7 @@ export interface Command {
 export interface CommandArgument {
   description: string;
   required?: boolean;
+  options?: string[];
 }
 ⋮----
 export interface CustomCommand extends Command {
@@ -6656,6 +6657,7 @@ import {
   Mode,
   ModeDefinition,
   Model,
+  ProjectData,
   ProjectSettings,
   PromptContext,
   QuestionData,
@@ -6669,6 +6671,7 @@ import {
   ToolApprovalState,
   InvocationMode,
   ContextMemoryMode,
+  SettingsData,
 } from '@common/types';
 ⋮----
 export type AgentStepResult = unknown;
@@ -6916,6 +6919,21 @@ export interface TaskClosedEvent {
   readonly task: TaskData;
 }
 ⋮----
+/** Event payload for task updated events */
+export interface TaskUpdatedEvent {
+  task: TaskData;
+}
+⋮----
+/** Event payload for project opened events */
+export interface ProjectOpenedEvent {
+  project: ProjectData;
+}
+⋮----
+/** Event payload for project closed events */
+export interface ProjectClosedEvent {
+  readonly project: ProjectData;
+}
+⋮----
 /** Event payload for prompt started events */
 export interface PromptStartedEvent {
   prompt: string;
@@ -6970,6 +6988,7 @@ export interface ToolApprovalEvent {
 /** Event payload for tool called events */
 export interface ToolCalledEvent {
   readonly toolName: string;
+  readonly abortSignal?: AbortSignal;
   input: Record<string, unknown> | undefined;
   output?: unknown;
 }
@@ -7262,6 +7281,9 @@ export interface ProjectContext {
   duplicateTask(taskId: string): Promise<TaskData>;
   deleteTask(taskId: string): Promise<void>;
 
+  // Agent Profiles
+  getAgentProfiles(): AgentProfile[];
+
   // Commands (Read-only)
   getCommands(): CommandsData;
 
@@ -7282,6 +7304,9 @@ getMostRecentTask(): TaskContext | null;
 forkTask(taskId: string, messageId: string): Promise<TaskData>;
 duplicateTask(taskId: string): Promise<TaskData>;
 deleteTask(taskId: string): Promise<void>;
+⋮----
+// Agent Profiles
+getAgentProfiles(): AgentProfile[];
 ⋮----
 // Commands (Read-only)
 getCommands(): CommandsData;
@@ -7307,7 +7332,7 @@ getInputHistory(): Promise<string[]>;
  */
 export interface ExtensionContext {
   /**
-   * Log a message to the ReactorPro console
+   * Log a message to the AiderDesk console and log files
    * @param message - Message to log
    * @param type - Log level (info, error, warn, debug)
    */
@@ -7332,20 +7357,6 @@ export interface ExtensionContext {
   getProjectContext(): ProjectContext;
 
   /**
-   * Create a new task
-   * @param name - Task name/title
-   * @param params - Optional task parameters (parentId, autoApprove, etc.)
-   * @returns Promise resolving to the new task ID
-   */
-  createTask(name: string, params?: CreateTaskParams): Promise<string>;
-
-  /**
-   * Get all available agent profiles
-   * @returns Promise resolving to array of agent profiles
-   */
-  getAgentProfiles(): Promise<AgentProfile[]>;
-
-  /**
    * Get all available model configurations
    * @returns Promise resolving to array of models
    */
@@ -7363,51 +7374,11 @@ export interface ExtensionContext {
    * @param updates - Partial settings object with updates
    * @returns Promise that resolves when settings are saved
    */
-  updateSettings(updates: Record<string, unknown>): Promise<void>;
-
-  /**
-   * Show a notification to the user
-   * @param message - Notification message
-   * @param type - Notification type (info, warning, error)
-   * @returns Promise that resolves when notification is shown
-   */
-  showNotification(message: string, type?: 'info' | 'warning' | 'error'): Promise<void>;
-
-  /**
-   * Show a confirmation dialog to the user
-   * @param message - Confirmation message
-   * @param confirmText - Custom confirm button text
-   * @param cancelText - Custom cancel button text
-   * @returns Promise resolving to true if confirmed, false otherwise
-   */
-  showConfirm(message: string, confirmText?: string, cancelText?: string): Promise<boolean>;
-
-  /**
-   * Show an input dialog to the user
-   * @param prompt - Input prompt/message
-   * @param placeholder - Input placeholder text
-   * @param defaultValue - Default input value
-   * @returns Promise resolving to the user input or undefined if cancelled
-   */
-  showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
-
-  /**
-   * Get all custom modes registered by extensions
-   * @returns Promise resolving to array of mode definitions
-   */
-  getCustomModes(): Promise<ModeDefinition[]>;
-
-  /**
-   * Send a prompt to the agent or aider for execution
-   * @param prompt - The prompt text to send
-   * @param mode - Execution mode (agent, code, ask, architect)
-   * @returns Promise that resolves when prompt execution is complete
-   */
-  runPrompt(prompt: string, mode?: 'agent' | 'code' | 'ask' | 'architect'): Promise<void>;
+  updateSettings(updates: Partial<SettingsData>): Promise<void>;
 }
 ⋮----
 /**
-   * Log a message to the ReactorPro console
+   * Log a message to the AiderDesk console and log files
    * @param message - Message to log
    * @param type - Log level (info, error, warn, debug)
    */
@@ -7432,20 +7403,6 @@ getTaskContext(): TaskContext | null;
 getProjectContext(): ProjectContext;
 ⋮----
 /**
-   * Create a new task
-   * @param name - Task name/title
-   * @param params - Optional task parameters (parentId, autoApprove, etc.)
-   * @returns Promise resolving to the new task ID
-   */
-createTask(name: string, params?: CreateTaskParams): Promise<string>;
-⋮----
-/**
-   * Get all available agent profiles
-   * @returns Promise resolving to array of agent profiles
-   */
-getAgentProfiles(): Promise<AgentProfile[]>;
-⋮----
-/**
    * Get all available model configurations
    * @returns Promise resolving to array of models
    */
@@ -7463,47 +7420,7 @@ getSetting(key: string): Promise<unknown>;
    * @param updates - Partial settings object with updates
    * @returns Promise that resolves when settings are saved
    */
-updateSettings(updates: Record<string, unknown>): Promise<void>;
-⋮----
-/**
-   * Show a notification to the user
-   * @param message - Notification message
-   * @param type - Notification type (info, warning, error)
-   * @returns Promise that resolves when notification is shown
-   */
-showNotification(message: string, type?: 'info' | 'warning' | 'error'): Promise<void>;
-⋮----
-/**
-   * Show a confirmation dialog to the user
-   * @param message - Confirmation message
-   * @param confirmText - Custom confirm button text
-   * @param cancelText - Custom cancel button text
-   * @returns Promise resolving to true if confirmed, false otherwise
-   */
-showConfirm(message: string, confirmText?: string, cancelText?: string): Promise<boolean>;
-⋮----
-/**
-   * Show an input dialog to the user
-   * @param prompt - Input prompt/message
-   * @param placeholder - Input placeholder text
-   * @param defaultValue - Default input value
-   * @returns Promise resolving to the user input or undefined if cancelled
-   */
-showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
-⋮----
-/**
-   * Get all custom modes registered by extensions
-   * @returns Promise resolving to array of mode definitions
-   */
-getCustomModes(): Promise<ModeDefinition[]>;
-⋮----
-/**
-   * Send a prompt to the agent or aider for execution
-   * @param prompt - The prompt text to send
-   * @param mode - Execution mode (agent, code, ask, architect)
-   * @returns Promise that resolves when prompt execution is complete
-   */
-runPrompt(prompt: string, mode?: 'agent' | 'code' | 'ask' | 'architect'): Promise<void>;
+updateSettings(updates: Partial<SettingsData>): Promise<void>;
 ⋮----
 /**
  * Main extension interface that all extensions must implement
@@ -7556,8 +7473,11 @@ export interface Extension {
   /**
    * Return array of tools this extension provides
    * Called when extension is loaded and when tools need to be refreshed
+   * @param context - Extension context
+   * @param mode - Current mode
+   * @param agentProfile - Current agent profile
    */
-  getTools?(context: ExtensionContext): ToolDefinition[];
+  getTools?(context: ExtensionContext, mode: string, agentProfile: AgentProfile): ToolDefinition[];
 
   // UI element registration
 
@@ -7581,7 +7501,7 @@ export interface Extension {
    * Return array of modes this extension provides
    * Called when extension is loaded and when modes need to be refreshed
    */
-  getModes?(): ModeDefinition[];
+  getModes?(context: ExtensionContext): ModeDefinition[];
 
   // Agent registration
 
@@ -7627,6 +7547,27 @@ export interface Extension {
    * @returns void or partial event to modify task data
    */
   onTaskClosed?(event: TaskClosedEvent, context: ExtensionContext): Promise<void | Partial<TaskClosedEvent>>;
+
+  /**
+   * Called before a task is updated and saved
+   * Modify event.task to change the task data before it's persisted
+   * @returns void or partial event to modify task data
+   */
+  onTaskUpdated?(event: TaskUpdatedEvent, context: ExtensionContext): Promise<void | Partial<TaskUpdatedEvent>>;
+
+  // Project Events
+
+  /**
+   * Called when a project is opened
+   * @returns void or partial event to modify project data
+   */
+  onProjectOpen?(event: ProjectOpenedEvent, context: ExtensionContext): Promise<void | Partial<ProjectOpenedEvent>>;
+
+  /**
+   * Called when a project is closed
+   * @returns void or partial event to modify project data
+   */
+  onProjectClosed?(event: ProjectClosedEvent, context: ExtensionContext): Promise<void | Partial<ProjectClosedEvent>>;
 
   // Prompt Events
 
@@ -7803,8 +7744,11 @@ onUnload?(): void | Promise<void>;
 /**
    * Return array of tools this extension provides
    * Called when extension is loaded and when tools need to be refreshed
+   * @param context - Extension context
+   * @param mode - Current mode
+   * @param agentProfile - Current agent profile
    */
-getTools?(context: ExtensionContext): ToolDefinition[];
+getTools?(context: ExtensionContext, mode: string, agentProfile: AgentProfile): ToolDefinition[];
 ⋮----
 // UI element registration
 ⋮----
@@ -7828,7 +7772,7 @@ getCommands?(context: ExtensionContext): CommandDefinition[];
    * Return array of modes this extension provides
    * Called when extension is loaded and when modes need to be refreshed
    */
-getModes?(): ModeDefinition[];
+getModes?(context: ExtensionContext): ModeDefinition[];
 ⋮----
 // Agent registration
 ⋮----
@@ -7874,6 +7818,27 @@ onTaskInitialized?(event: TaskInitializedEvent, context: ExtensionContext): Prom
    * @returns void or partial event to modify task data
    */
 onTaskClosed?(event: TaskClosedEvent, context: ExtensionContext): Promise<void | Partial<TaskClosedEvent>>;
+⋮----
+/**
+   * Called before a task is updated and saved
+   * Modify event.task to change the task data before it's persisted
+   * @returns void or partial event to modify task data
+   */
+onTaskUpdated?(event: TaskUpdatedEvent, context: ExtensionContext): Promise<void | Partial<TaskUpdatedEvent>>;
+⋮----
+// Project Events
+⋮----
+/**
+   * Called when a project is opened
+   * @returns void or partial event to modify project data
+   */
+onProjectOpen?(event: ProjectOpenedEvent, context: ExtensionContext): Promise<void | Partial<ProjectOpenedEvent>>;
+⋮----
+/**
+   * Called when a project is closed
+   * @returns void or partial event to modify project data
+   */
+onProjectClosed?(event: ProjectClosedEvent, context: ExtensionContext): Promise<void | Partial<ProjectClosedEvent>>;
 ⋮----
 // Prompt Events
 ⋮----
@@ -8633,8 +8598,8 @@ import { fileExists } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
 ⋮----
 import type { AgentProfile } from '@common/types';
-import type { ExtensionRegistry } from '@/extensions/extension-registry';
 ⋮----
+import { ExtensionManager, ExtensionsChangeListener } from '@/extensions/extension-manager';
 import { AIDER_DESK_AGENTS_DIR, AIDER_DESK_RULES_DIR } from '@/constants';
 import logger from '@/logger';
 import { EventManager } from '@/events';
@@ -8671,7 +8636,12 @@ export class AgentProfileManager
 // Directory watching (one watcher per directory)
 private directoryWatchers: Map<string, FSWatcher> = new Map(); // agentsDir → watcher
 ⋮----
+// Listener for extension changes
+⋮----
 constructor(
+    private readonly eventManager: EventManager,
+    private readonly extensionManager: ExtensionManager,
+)
 ⋮----
 public async init(): Promise<void>
 ⋮----
@@ -8856,6 +8826,8 @@ return; // No global profile found with matching directory name
 ⋮----
 async dispose(): Promise<void>
 ⋮----
+// Remove extension change listener
+⋮----
 // Clean up all directory watchers
 ⋮----
 // Clear profiles
@@ -8986,6 +8958,7 @@ private async getWorkingFilesMessages(task: Task, contextFiles: ContextFile[]): 
 ⋮----
 private async getAvailableTools(
     task: Task,
+    mode: Mode,
     profile: AgentProfile,
     provider: ProviderProfile,
     mcpConnectors: McpConnector[] = [],
@@ -12500,11 +12473,13 @@ import { watch, FSWatcher } from 'chokidar';
 import { loadFront } from 'yaml-front-matter';
 import debounce from 'lodash/debounce';
 ⋮----
-import type { CommandArgument, CustomCommand } from '@common/types';
+import type { Command, CommandArgument, CommandsData, CustomCommand } from '@common/types';
+import type { EventManager } from '@/events';
+import type { ExtensionManager, ExtensionsChangeListener } from '@/extensions';
 ⋮----
 import { AIDER_DESK_COMMANDS_DIR } from '@/constants';
 import logger from '@/logger';
-import { Project } from '@/project/project';
+import { Project } from '@/project';
 ⋮----
 // Constants for shell command formatting
 ⋮----
@@ -12527,8 +12502,6 @@ interface ExecError extends Error {
 ⋮----
 export class CustomCommandManager
 ⋮----
-constructor(private readonly project: Project)
-⋮----
 public async start(): Promise<void>
 ⋮----
 private async initializeCommands(): Promise<void>
@@ -12549,7 +12522,7 @@ private async setupWatcherForDirectory(commandsDir: string): Promise<void>
 ⋮----
 private async reloadCommands(): Promise<void>
 ⋮----
-private notifyCommandsUpdated(): void
+public sendCommandsUpdated(): void
 ⋮----
 private async loadCommandsFromDir(commandsDir: string, commands: Map<string, CustomCommand>): Promise<void>
 ⋮----
@@ -12561,7 +12534,11 @@ private async loadCommandFile(filePath: string, name: string, commands: Map<stri
 ⋮----
 getCommand(name: string): CustomCommand | undefined
 ⋮----
-getAllCommands(): CustomCommand[]
+getAllCommands(): CommandsData
+⋮----
+// Get extension commands first
+⋮----
+// Get custom commands from files
 ⋮----
 async processCommandTemplate(command: CustomCommand, args: string[]): Promise<string>
 ⋮----
@@ -12852,19 +12829,14 @@ import { ProjectContextImpl } from './project-context';
 import { TaskContextImpl } from './task-context';
 ⋮----
 import type { ExtensionContext, ProjectContext, TaskContext } from '@common/extensions';
-import type { AgentProfile, CreateTaskParams, Mode, Model, SettingsData, ModeDefinition } from '@common/types';
-import type { AgentProfileManager } from '@/agent';
+import type { Model, SettingsData } from '@common/types';
+import type { EventManager } from '@/events';
 import type { ModelManager } from '@/models';
 import type { Project } from '@/project';
 import type { Store } from '@/store';
 import type { Task } from '@/task';
-import type { ExtensionManager } from './extension-manager';
 ⋮----
 import logger from '@/logger';
-⋮----
-export class NotImplementedError extends Error
-⋮----
-constructor(methodName: string)
 ⋮----
 export class ExtensionContextImpl implements ExtensionContext
 ⋮----
@@ -12878,25 +12850,11 @@ getTaskContext(): TaskContext | null
 ⋮----
 getProjectContext(): ProjectContext
 ⋮----
-async createTask(name: string, params?: CreateTaskParams): Promise<string>
-⋮----
-async getAgentProfiles(): Promise<AgentProfile[]>
-⋮----
 async getModelConfigs(): Promise<Model[]>
-⋮----
-async showNotification(_message: string, _type?: 'info' | 'warning' | 'error'): Promise<void>
-⋮----
-async showConfirm(_message: string, _confirmText?: string, _cancelText?: string): Promise<boolean>
-⋮----
-async showInput(_prompt: string, _placeholder?: string, _defaultValue?: string): Promise<string | undefined>
 ⋮----
 async getSetting(key: string): Promise<unknown>
 ⋮----
-async updateSettings(updates: Record<string, unknown>): Promise<void>
-⋮----
-async runPrompt(prompt: string, mode: Mode = 'agent'): Promise<void>
-⋮----
-async getCustomModes(): Promise<ModeDefinition[]>
+async updateSettings(updates: Partial<SettingsData>): Promise<void>
 
 ================
 File: src/main/extensions/extension-loader.ts
@@ -12955,13 +12913,15 @@ import { z } from 'zod';
 import { ToolApprovalState } from '@common/types';
 ⋮----
 import { ExtensionLoader } from './extension-loader';
-import { ExtensionRegistry, LoadedExtension, RegisteredTool, RegisteredCommand, RegisteredAgent, RegisteredMode } from './extension-registry';
+import { ExtensionRegistry, LoadedExtension } from './extension-registry';
 import { ExtensionContextImpl } from './extension-context';
+⋮----
+export type ExtensionsChangeListener = (extensions: LoadedExtension[]) => void;
 ⋮----
 import type { AgentProfile } from '@common/types';
 import type { Store } from '@/store';
-import type { AgentProfileManager } from '@/agent';
 import type { ModelManager } from '@/models';
+import type { EventManager } from '@/events';
 import type {
   AgentFinishedEvent,
   AgentStartedEvent,
@@ -12988,6 +12948,7 @@ import type {
   TaskCreatedEvent,
   TaskInitializedEvent,
   TaskPreparedEvent,
+  TaskUpdatedEvent,
   ToolApprovalEvent,
   ToolCalledEvent,
   ToolDefinition,
@@ -12995,12 +12956,31 @@ import type {
   CommandDefinition,
 } from '@common/extensions';
 import type { ToolCallOptions, ToolSet } from 'ai';
-import type { ProjectManager } from '@/project/project-manager';
 ⋮----
 import logger from '@/logger';
 import { AIDER_DESK_EXTENSIONS_DIR, AIDER_DESK_GLOBAL_EXTENSIONS_DIR } from '@/constants';
 import { Project } from '@/project';
 import { Task } from '@/task';
+⋮----
+export interface RegisteredTool {
+  extensionName: string;
+  tool: ToolDefinition;
+}
+⋮----
+export interface RegisteredCommand {
+  extensionName: string;
+  command: CommandDefinition;
+}
+⋮----
+export interface RegisteredAgent {
+  extensionName: string;
+  agent: AgentProfile;
+}
+⋮----
+export interface RegisteredMode {
+  extensionName: string;
+  mode: ModeDefinition;
+}
 ⋮----
 /**
  * Mapping of extension event names to their event payload types
@@ -13010,6 +12990,7 @@ export type ExtensionEventMap = {
   onTaskPrepared: TaskPreparedEvent;
   onTaskInitialized: TaskInitializedEvent;
   onTaskClosed: TaskClosedEvent;
+  onTaskUpdated: TaskUpdatedEvent;
   onPromptStarted: PromptStartedEvent;
   onPromptFinished: PromptFinishedEvent;
   onAgentStarted: AgentStartedEvent;
@@ -13037,11 +13018,14 @@ export class ExtensionManager
 ⋮----
 constructor(
     private readonly store: Store,
-    private readonly agentProfileManager: AgentProfileManager,
     private readonly modelManager: ModelManager,
-    private readonly projectManager: ProjectManager,
+    private readonly eventManager: EventManager,
     private readonly registry: ExtensionRegistry = new ExtensionRegistry(),
 )
+⋮----
+addListener(listener: ExtensionsChangeListener): void
+⋮----
+removeListener(listener: ExtensionsChangeListener): void
 ⋮----
 async init(): Promise<void>
 ⋮----
@@ -13063,10 +13047,6 @@ private async loadAndInitializeExtension(filePath: string, project?: Project): P
    * @returns Object with loadedCount, initializedCount, and errors
    */
 private async loadExtensionsForDir(dir: string, project?: Project): Promise<void>
-⋮----
-// Notify about agent profile updates (extension agents may have changed)
-⋮----
-// Global extensions loaded - notify all projects
 ⋮----
 getExtensions(): LoadedExtension[]
 ⋮----
@@ -13102,22 +13082,19 @@ async stopProjectWatcher(projectDir: string): Promise<void>
 ⋮----
 validateToolDefinition(tool: ToolDefinition):
 ⋮----
-collectTools(): RegisteredTool[]
-⋮----
-getTools(): RegisteredTool[]
-⋮----
-getToolsByExtension(extensionName: string): RegisteredTool[]
+getTools(task: Task, mode: string, profile: AgentProfile): RegisteredTool[]
 ⋮----
 /**
    * Creates a Vercel AI SDK compatible ToolSet from registered extension tools.
    * Each tool is wrapped with validation, error handling, and ExtensionContext creation.
    *
    * @param task - The current Task instance
+   * @param mode - The current mode
    * @param profile - The agent profile with tool approval settings
    * @param abortSignal - Optional AbortSignal for cancellation support
    * @returns A ToolSet containing all approved extension tools
    */
-createExtensionToolset(task: Task, profile: AgentProfile, abortSignal?: AbortSignal): ToolSet
+createExtensionToolset(task: Task, mode: string, profile: AgentProfile, abortSignal?: AbortSignal): ToolSet
 ⋮----
 // Skip if tool is marked as Never approved
 ⋮----
@@ -13125,34 +13102,17 @@ createExtensionToolset(task: Task, profile: AgentProfile, abortSignal?: AbortSig
 ⋮----
 validateCommandDefinition(command: CommandDefinition):
 ⋮----
-collectCommands(): RegisteredCommand[]
+getCommands(project: Project): RegisteredCommand[]
 ⋮----
-getCommands(): RegisteredCommand[]
+getAgents(projectDir?: string): RegisteredAgent[]
 ⋮----
-getCommandsByExtension(extensionName: string): RegisteredCommand[]
+getAgentById(agentId: string, projectDir?: string): RegisteredAgent | undefined
 ⋮----
-collectAgents(project?: Project, task?: Task): RegisteredAgent[]
-⋮----
-getAgents(): RegisteredAgent[]
-⋮----
-getAgentsByExtension(extensionName: string): RegisteredAgent[]
-⋮----
-collectModes(): RegisteredMode[]
-⋮----
-getModes(): RegisteredMode[]
-⋮----
-getModesByExtension(extensionName: string): RegisteredMode[]
+getModes(project: Project): RegisteredMode[]
 ⋮----
 validateModeDefinition(mode: ModeDefinition):
 ⋮----
-/**
-   * Attempts to update an extension-provided agent profile.
-   * @param profile - The updated profile
-   * @returns The updated profile if handled by extension, null if not an extension agent
-   */
 async updateAgentProfile(profile: AgentProfile): Promise<AgentProfile | null>
-⋮----
-// Update the agent in registry with the returned profile
 ⋮----
 async executeCommand(commandName: string, args: string[], project: Project, task?: Task): Promise<void>
 ⋮----
@@ -13206,19 +13166,11 @@ async dispatchEvent<K extends keyof ExtensionEventMap>(
    * @returns Sorted array of extensions
    */
 private sortExtensionsForDispatch(extensions: LoadedExtension[], projectDir: string): LoadedExtension[]
-⋮----
-/**
-   * Sends commands updated notification to all projects.
-   * Used when global extensions are loaded/reloaded without a specific project context.
-   */
-private sendCommandsUpdatedToAllProjects(): void
 
 ================
 File: src/main/extensions/extension-registry.ts
 ================
-import { Extension, ExtensionMetadata, ToolDefinition, CommandDefinition, ModeDefinition } from '@common/extensions';
-⋮----
-import type { AgentProfile } from '@common/types';
+import { Extension, ExtensionMetadata } from '@common/extensions';
 ⋮----
 import logger from '@/logger';
 ⋮----
@@ -13228,26 +13180,6 @@ export interface LoadedExtension {
   filePath: string;
   initialized: boolean;
   projectDir?: string;
-}
-⋮----
-export interface RegisteredTool {
-  extensionName: string;
-  tool: ToolDefinition;
-}
-⋮----
-export interface RegisteredCommand {
-  extensionName: string;
-  command: CommandDefinition;
-}
-⋮----
-export interface RegisteredAgent {
-  extensionName: string;
-  agent: AgentProfile;
-}
-⋮----
-export interface RegisteredMode {
-  extensionName: string;
-  mode: ModeDefinition;
 }
 ⋮----
 export class ExtensionRegistry
@@ -13263,44 +13195,6 @@ getExtension(name: string): LoadedExtension | undefined
 unregister(name: string): boolean
 ⋮----
 clear()
-⋮----
-registerTool(extensionName: string, tool: ToolDefinition): void
-⋮----
-getTools(): RegisteredTool[]
-⋮----
-getToolsByExtension(extensionName: string): RegisteredTool[]
-⋮----
-clearTools(): void
-⋮----
-registerCommand(extensionName: string, command: CommandDefinition): void
-⋮----
-getCommands(): RegisteredCommand[]
-⋮----
-getCommandsByExtension(extensionName: string): RegisteredCommand[]
-⋮----
-getCommandByName(name: string): RegisteredCommand | undefined
-⋮----
-clearCommands(): void
-⋮----
-registerAgent(extensionName: string, agent: AgentProfile): void
-⋮----
-getAgents(): RegisteredAgent[]
-⋮----
-getAgentsByExtension(extensionName: string): RegisteredAgent[]
-⋮----
-getAgentById(agentId: string): RegisteredAgent | undefined
-⋮----
-clearAgents(): void
-⋮----
-registerMode(extensionName: string, mode: ModeDefinition): void
-⋮----
-getModes(): RegisteredMode[]
-⋮----
-getModesByExtension(extensionName: string): RegisteredMode[]
-⋮----
-getModeByName(name: string): RegisteredMode | undefined
-⋮----
-clearModes(): void
 
 ================
 File: src/main/extensions/index.ts
@@ -13313,7 +13207,7 @@ File: src/main/extensions/project-context.ts
 import { TaskContextImpl } from './task-context';
 ⋮----
 import type { ProjectContext, TaskContext } from '@common/extensions';
-import type { CommandsData, CreateTaskParams, ProjectSettings, TaskData } from '@common/types';
+import type { AgentProfile, CommandsData, CreateTaskParams, ProjectSettings, TaskData } from '@common/types';
 import type { Project } from '@/project';
 ⋮----
 export class ProjectContextImpl implements ProjectContext
@@ -13335,6 +13229,8 @@ async forkTask(taskId: string, messageId: string): Promise<TaskData>
 async duplicateTask(taskId: string): Promise<TaskData>
 ⋮----
 async deleteTask(taskId: string): Promise<void>
+⋮----
+getAgentProfiles(): AgentProfile[]
 ⋮----
 getCommands(): CommandsData
 ⋮----
@@ -15744,9 +15640,8 @@ import fs from 'fs/promises';
 import path from 'path';
 ⋮----
 import {
+  AgentProfile,
   BmadStatus,
-  Command,
-  CommandsData,
   CreateTaskParams,
   DefaultTaskState,
   InstallResult,
@@ -15839,11 +15734,11 @@ public async addToInputHistory(message: string)
 ⋮----
 private async sendInputHistoryUpdatedEvent()
 ⋮----
-public getCommands(): CommandsData
-⋮----
 public getCustomModes(): ModeDefinition[]
 ⋮----
-public sendCommandsUpdated(commands: CommandsData = this.getCommands())
+public getCustomCommandManager(): CustomCommandManager
+⋮----
+public getAgentProfiles(): AgentProfile[]
 ⋮----
 private async deleteTaskInternal(taskId: string): Promise<void>
 ⋮----
@@ -17552,7 +17447,7 @@ import debounce from 'lodash/debounce';
 import { isEqual } from 'lodash';
 ⋮----
 import type { SimpleGit } from 'simple-git';
-import type { RegisteredCommand } from '@/extensions/extension-registry';
+import type { RegisteredCommand } from '@/extensions/extension-manager';
 ⋮----
 import { getAllFiles, isValidProjectFile } from '@/utils/file-system';
 import {
@@ -17645,6 +17540,8 @@ private isInternal()
 public async saveTask(updates?: Partial<TaskData>, updateTimestamps = true): Promise<TaskData>
 ⋮----
 // Internal task is not saved
+⋮----
+// Allow extensions to modify task data before saving
 ⋮----
 public async init()
 ⋮----
@@ -18152,9 +18049,7 @@ private async addProjectAgentsToAiderConfig(): Promise<void>
 ⋮----
 // Write the updated config
 ⋮----
-private async runExtensionCommand(extensionCommand: RegisteredCommand, args: string[], _mode: Mode): Promise<void>
-⋮----
-// Validate required arguments
+private async runExtensionCommand(extensionCommand: RegisteredCommand, args: string[], mode: Mode): Promise<void>
 ⋮----
 // Execute the command - extension is fully responsible for its logic
 ⋮----
@@ -19820,7 +19715,7 @@ async generateTaskMarkdown(baseDir: string, taskId: string): Promise<string | nu
 ⋮----
 async exportTaskToMarkdown(baseDir: string, taskId: string): Promise<void>
 ⋮----
-setZoomLevel(zoomLevel: number): void
+async setZoomLevel(zoomLevel: number)
 ⋮----
 async getVersions(forceRefresh = false): Promise<VersionsInfo>
 ⋮----
@@ -19872,9 +19767,9 @@ async clearAllTodos(baseDir: string, taskId: string): Promise<TodoItem[]>
 ⋮----
 async initProjectRulesFile(baseDir: string, taskId: string): Promise<void>
 ⋮----
-enableServer(username?: string, password?: string): SettingsData
+async enableServer(username?: string, password?: string): Promise<SettingsData>
 ⋮----
-disableServer(): SettingsData
+async disableServer(): Promise<SettingsData>
 ⋮----
 async startCloudflareTunnel(): Promise<CloudflareTunnelStatus | null>
 ⋮----
@@ -20058,7 +19953,6 @@ import { TelemetryManager } from '@/telemetry';
 import { WorktreeManager } from '@/worktrees';
 import { MemoryManager } from '@/memory/memory-manager';
 import { ExtensionManager } from '@/extensions/extension-manager';
-import { ExtensionRegistry } from '@/extensions/extension-registry';
 import { Store } from '@/store';
 import { SERVER_PORT } from '@/constants';
 import logger from '@/logger';
@@ -20089,16 +19983,9 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
 ⋮----
 // Initialize memory manager
 ⋮----
-// Initialize extension registry (shared between ExtensionManager and AgentProfileManager)
+// Initialize extension manager (non-blocking - errors should not crash app)
 ⋮----
-// Initialize agent profile manager with extension registry for unified profile access
-⋮----
-// Create a temporary project manager reference for circular dependency resolution
-// eslint-disable-next-line prefer-const
-⋮----
-// Initialize extension manager with lazy project manager access (non-blocking - errors should not crash app per NFR6)
-⋮----
-// Lazy getter for project manager to resolve circular dependency
+// Initialize agent profile manager with extension manager for unified profile access
 ⋮----
 // Initialize project manager
 ⋮----
@@ -20115,8 +20002,6 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
 // Create and initialize REST API controller with the server
 ⋮----
 // Initialize connector manager with the server
-⋮----
-// Wait for extension initialization to complete (but don't block startup)
 ⋮----
 // Start listening
 ⋮----
@@ -26969,7 +26854,7 @@ onSquash=
 File: src/renderer/src/components/project/TaskView.tsx
 ================
 import { AIDER_MODES, DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
-import { forwardRef, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
+import { forwardRef, startTransition, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResizableBox, ResizeCallbackData } from 'react-resizable';
 import { clsx } from 'clsx';
@@ -27629,6 +27514,8 @@ type Props = {
 // eslint-disable-next-line react-hooks/exhaustive-deps
 ⋮----
 const completionSource = async (context: CompletionContext): Promise<CompletionResult | null> =>
+⋮----
+// Check if we're at a command argument position with options (before early return)
 ⋮----
 // Handle @-based file suggestions (exclusive)
 ⋮----

@@ -7,13 +7,17 @@ import { z } from 'zod';
 import { ToolApprovalState } from '@common/types';
 
 import { ExtensionLoader } from './extension-loader';
-import { ExtensionRegistry, LoadedExtension, RegisteredTool, RegisteredCommand, RegisteredAgent, RegisteredMode } from './extension-registry';
+import { ExtensionRegistry, LoadedExtension } from './extension-registry';
 import { ExtensionContextImpl } from './extension-context';
+
+export type { LoadedExtension } from './extension-registry';
+
+export type ExtensionsChangeListener = (extensions: LoadedExtension[]) => void;
 
 import type { AgentProfile } from '@common/types';
 import type { Store } from '@/store';
-import type { AgentProfileManager } from '@/agent';
 import type { ModelManager } from '@/models';
+import type { EventManager } from '@/events';
 import type {
   AgentFinishedEvent,
   AgentStartedEvent,
@@ -40,6 +44,7 @@ import type {
   TaskCreatedEvent,
   TaskInitializedEvent,
   TaskPreparedEvent,
+  TaskUpdatedEvent,
   ToolApprovalEvent,
   ToolCalledEvent,
   ToolDefinition,
@@ -47,12 +52,31 @@ import type {
   CommandDefinition,
 } from '@common/extensions';
 import type { ToolCallOptions, ToolSet } from 'ai';
-import type { ProjectManager } from '@/project/project-manager';
 
 import logger from '@/logger';
 import { AIDER_DESK_EXTENSIONS_DIR, AIDER_DESK_GLOBAL_EXTENSIONS_DIR } from '@/constants';
 import { Project } from '@/project';
 import { Task } from '@/task';
+
+export interface RegisteredTool {
+  extensionName: string;
+  tool: ToolDefinition;
+}
+
+export interface RegisteredCommand {
+  extensionName: string;
+  command: CommandDefinition;
+}
+
+export interface RegisteredAgent {
+  extensionName: string;
+  agent: AgentProfile;
+}
+
+export interface RegisteredMode {
+  extensionName: string;
+  mode: ModeDefinition;
+}
 
 /**
  * Mapping of extension event names to their event payload types
@@ -62,6 +86,7 @@ export type ExtensionEventMap = {
   onTaskPrepared: TaskPreparedEvent;
   onTaskInitialized: TaskInitializedEvent;
   onTaskClosed: TaskClosedEvent;
+  onTaskUpdated: TaskUpdatedEvent;
   onPromptStarted: PromptStartedEvent;
   onPromptFinished: PromptFinishedEvent;
   onAgentStarted: AgentStartedEvent;
@@ -90,15 +115,33 @@ export class ExtensionManager {
   private globalWatcher: FSWatcher | null = null;
   private projectWatchers: Map<string, FSWatcher> = new Map();
   private initialized = false;
+  private listeners: ExtensionsChangeListener[] = [];
 
   constructor(
     private readonly store: Store,
-    private readonly agentProfileManager: AgentProfileManager,
     private readonly modelManager: ModelManager,
-    private readonly projectManager: ProjectManager,
+    private readonly eventManager: EventManager,
     private readonly registry: ExtensionRegistry = new ExtensionRegistry(),
   ) {
     this.loader = new ExtensionLoader();
+  }
+
+  private debouncedNotifyListeners = debounce(() => {
+    const extensions = this.registry.getExtensions();
+    for (const listener of this.listeners) {
+      listener(extensions);
+    }
+  }, 100);
+
+  addListener(listener: ExtensionsChangeListener): void {
+    this.listeners.push(listener);
+  }
+
+  removeListener(listener: ExtensionsChangeListener): void {
+    const index = this.listeners.indexOf(listener);
+    if (index > -1) {
+      this.listeners.splice(index, 1);
+    }
   }
 
   async init(): Promise<void> {
@@ -128,7 +171,7 @@ export class ExtensionManager {
     }
 
     try {
-      const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project, undefined, this);
+      const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, undefined, this.eventManager);
       await instance.onLoad(context);
       this.registry.setInitialized(metadata.name, true);
       logger.info(`[Extensions] Initialized extension: ${metadata.name} v${metadata.version}`);
@@ -200,30 +243,13 @@ export class ExtensionManager {
       }
     }
 
-    this.registry.clearTools();
-    this.registry.clearCommands();
-    this.registry.clearAgents();
-    this.registry.clearModes();
-    this.collectTools();
-    this.collectCommands();
-    this.collectAgents();
-    this.collectModes();
-
-    // Notify about agent profile updates (extension agents may have changed)
-    this.agentProfileManager.sendAgentProfilesUpdated();
-
-    if (project) {
-      project.sendCommandsUpdated();
-    } else {
-      // Global extensions loaded - notify all projects
-      this.sendCommandsUpdatedToAllProjects();
-    }
-
     if (loadedCount > 0) {
       logger.info(`[Extensions] Loaded ${initializedCount}/${loadedCount} extension(s) from ${dir}`);
     } else {
       logger.debug(`[Extensions] No extensions found in ${dir}`);
     }
+
+    this.debouncedNotifyListeners();
   }
 
   getExtensions(): LoadedExtension[] {
@@ -444,7 +470,6 @@ export class ExtensionManager {
         logger.info(`[Extensions] Project extensions changed for ${projectDir}, reloading...`);
         await this.unloadExtensionsForDir(projectExtensionsDir);
         await this.loadExtensionsForDir(projectExtensionsDir, project);
-        project.sendCommandsUpdated();
       });
 
       if (watcher) {
@@ -452,8 +477,6 @@ export class ExtensionManager {
         logger.info(`[Extensions] Started watching project extensions: ${projectDir}`);
       }
     }
-
-    project.sendCommandsUpdated();
 
     logger.info(`[Extensions] Reloaded extensions for project: ${projectDir}`);
   }
@@ -467,16 +490,21 @@ export class ExtensionManager {
     }
   }
 
-  private static readonly KEBAB_CASE_REGEX = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+  private static readonly TOOL_NAME_REGEX = /^[a-z][a-z0-9_-]*$/;
 
-  validateToolDefinition(tool: ToolDefinition): { isValid: boolean; errors: string[] } {
+  validateToolDefinition(tool: ToolDefinition): {
+    isValid: boolean;
+    errors: string[];
+  } {
     const errors: string[] = [];
 
     try {
       if (!tool.name) {
         errors.push('Tool name must be a non-empty string');
-      } else if (!ExtensionManager.KEBAB_CASE_REGEX.test(tool.name)) {
-        errors.push(`Tool name '${tool.name}' must be kebab-case (e.g., 'run-linter', 'my-custom-tool')`);
+      } else if (!ExtensionManager.TOOL_NAME_REGEX.test(tool.name)) {
+        errors.push(
+          `Tool name '${tool.name}' must start with a lowercase letter and contain only lowercase letters, numbers, hyphens, or underscores (e.g., 'run-linter', 'my---tool', 'tool_name')`,
+        );
       }
 
       if (!tool.description || tool.description.trim() === '') {
@@ -500,30 +528,23 @@ export class ExtensionManager {
     };
   }
 
-  collectTools(): RegisteredTool[] {
+  getTools(task: Task, mode: string, profile: AgentProfile): RegisteredTool[] {
     const collectedTools: RegisteredTool[] = [];
-    const extensions = this.registry.getExtensions();
+    const extensions = this.registry.getExtensions(task.getProjectDir());
 
-    logger.info(`[Extensions] Collecting tools from ${extensions.length} extension(s)`);
     for (const loaded of extensions) {
       const { instance, metadata } = loaded;
 
       if (!instance.getTools) {
-        logger.debug(`[Extensions] Extension '${metadata.name}' has no getTools method`);
         continue;
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, undefined, undefined, this);
-        const tools = instance.getTools(context);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, task.project, task, this.eventManager);
+        const tools = instance.getTools(context, mode, profile);
 
         if (!Array.isArray(tools)) {
           logger.error(`[Extensions] Extension '${metadata.name}' getTools() did not return an array`);
-          continue;
-        }
-
-        if (tools.length === 0) {
-          logger.debug(`[Extensions] Extension '${metadata.name}' returned empty tools array`);
           continue;
         }
 
@@ -535,29 +556,14 @@ export class ExtensionManager {
             continue;
           }
 
-          this.registry.registerTool(metadata.name, tool);
           collectedTools.push({ extensionName: metadata.name, tool });
-          logger.debug(`[Extensions] Collected tool '${tool.name}' from extension '${metadata.name}'`);
         }
       } catch (error) {
-        logger.error(`[Extensions] Failed to collect tools from extension '${metadata.name}':`, error);
+        logger.error(`[Extensions] Failed to get tools from extension '${metadata.name}':`, error);
       }
     }
 
-    const toolCount = collectedTools.length;
-    if (toolCount > 0) {
-      logger.info(`[Extensions] Collected ${toolCount} tool(s) from extensions`);
-    }
-
     return collectedTools;
-  }
-
-  getTools(): RegisteredTool[] {
-    return this.registry.getTools();
-  }
-
-  getToolsByExtension(extensionName: string): RegisteredTool[] {
-    return this.registry.getToolsByExtension(extensionName);
   }
 
   /**
@@ -565,17 +571,18 @@ export class ExtensionManager {
    * Each tool is wrapped with validation, error handling, and ExtensionContext creation.
    *
    * @param task - The current Task instance
+   * @param mode - The current mode
    * @param profile - The agent profile with tool approval settings
    * @param abortSignal - Optional AbortSignal for cancellation support
    * @returns A ToolSet containing all approved extension tools
    */
-  createExtensionToolset(task: Task, profile: AgentProfile, abortSignal?: AbortSignal): ToolSet {
+  createExtensionToolset(task: Task, mode: string, profile: AgentProfile, abortSignal?: AbortSignal): ToolSet {
     const toolSet: ToolSet = {};
-    const registeredTools = this.registry.getTools();
+    const registeredTools = this.getTools(task, mode, profile);
 
     for (const { extensionName, tool } of registeredTools) {
-      const toolId = `${extensionName}-${tool.name}`;
-      const context = new ExtensionContextImpl(extensionName, this.store, this.agentProfileManager, this.modelManager, task.project, task, this);
+      const toolId = tool.name;
+      const context = new ExtensionContextImpl(extensionName, this.store, this.modelManager, task.project, task, this.eventManager);
 
       // Skip if tool is marked as Never approved
       if (profile.toolApprovals?.[toolId] === ToolApprovalState.Never) {
@@ -607,14 +614,19 @@ export class ExtensionManager {
     return toolSet;
   }
 
-  validateCommandDefinition(command: CommandDefinition): { isValid: boolean; errors: string[] } {
+  validateCommandDefinition(command: CommandDefinition): {
+    isValid: boolean;
+    errors: string[];
+  } {
     const errors: string[] = [];
 
     try {
       if (!command.name) {
         errors.push('Command name must be a non-empty string');
-      } else if (!ExtensionManager.KEBAB_CASE_REGEX.test(command.name)) {
-        errors.push(`Command name '${command.name}' must be kebab-case (e.g., 'generate-tests', 'my-command')`);
+      } else if (!ExtensionManager.TOOL_NAME_REGEX.test(command.name)) {
+        errors.push(
+          `Command name '${command.name}' must start with a lowercase letter and contain only lowercase letters, numbers, hyphens, or underscores (e.g., 'generate-tests', 'my---command', 'command_name')`,
+        );
       }
 
       if (!command.description || command.description.trim() === '') {
@@ -638,30 +650,23 @@ export class ExtensionManager {
     };
   }
 
-  collectCommands(): RegisteredCommand[] {
+  getCommands(project: Project): RegisteredCommand[] {
     const collectedCommands: RegisteredCommand[] = [];
-    const extensions = this.registry.getExtensions();
+    const extensions = this.registry.getExtensions(project.baseDir);
 
-    logger.info(`[Extensions] Collecting commands from ${extensions.length} extension(s)`);
     for (const loaded of extensions) {
       const { instance, metadata } = loaded;
 
       if (!instance.getCommands) {
-        logger.info(`[Extensions] Extension '${metadata.name}' has no getCommands method`);
         continue;
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, undefined, undefined, this);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, undefined, this.eventManager);
         const commands = instance.getCommands(context);
 
         if (!Array.isArray(commands)) {
           logger.error(`[Extensions] Extension '${metadata.name}' getCommands() did not return an array`);
-          continue;
-        }
-
-        if (commands.length === 0) {
-          logger.debug(`[Extensions] Extension '${metadata.name}' returned empty commands array`);
           continue;
         }
 
@@ -673,55 +678,33 @@ export class ExtensionManager {
             continue;
           }
 
-          this.registry.registerCommand(metadata.name, command);
           collectedCommands.push({ extensionName: metadata.name, command });
-          logger.debug(`[Extensions] Collected command '${command.name}' from extension '${metadata.name}'`);
         }
       } catch (error) {
-        logger.error(`[Extensions] Failed to collect commands from extension '${metadata.name}':`, error);
+        logger.error(`[Extensions] Failed to get commands from extension '${metadata.name}':`, error);
       }
-    }
-
-    const commandCount = collectedCommands.length;
-    if (commandCount > 0) {
-      logger.info(`[Extensions] Collected ${commandCount} command(s) from extensions`);
     }
 
     return collectedCommands;
   }
 
-  getCommands(): RegisteredCommand[] {
-    return this.registry.getCommands();
-  }
-
-  getCommandsByExtension(extensionName: string): RegisteredCommand[] {
-    return this.registry.getCommandsByExtension(extensionName);
-  }
-
-  collectAgents(project?: Project, task?: Task): RegisteredAgent[] {
+  getAgents(projectDir?: string): RegisteredAgent[] {
     const collectedAgents: RegisteredAgent[] = [];
-    const extensions = this.registry.getExtensions();
+    const extensions = this.registry.getExtensions(projectDir);
 
-    logger.info(`[Extensions] Collecting agents from ${extensions.length} extension(s)`);
     for (const loaded of extensions) {
       const { instance, metadata } = loaded;
 
       if (!instance.getAgents) {
-        logger.debug(`[Extensions] Extension '${metadata.name}' has no getAgents method`);
         continue;
       }
 
       try {
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project, task, this);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, undefined, undefined, this.eventManager);
         const agents = instance.getAgents(context);
 
         if (!Array.isArray(agents)) {
           logger.error(`[Extensions] Extension '${metadata.name}' getAgents() did not return an array`);
-          continue;
-        }
-
-        if (agents.length === 0) {
-          logger.debug(`[Extensions] Extension '${metadata.name}' returned empty agents array`);
           continue;
         }
 
@@ -731,54 +714,42 @@ export class ExtensionManager {
             continue;
           }
 
-          this.registry.registerAgent(metadata.name, agent);
+          if (loaded.projectDir && !agent.projectDir) {
+            agent.projectDir = loaded.projectDir;
+          }
+
           collectedAgents.push({ extensionName: metadata.name, agent });
-          logger.debug(`[Extensions] Collected agent '${agent.name}' from extension '${metadata.name}'`);
         }
       } catch (error) {
-        logger.error(`[Extensions] Failed to collect agents from extension '${metadata.name}':`, error);
+        logger.error(`[Extensions] Failed to get agents from extension '${metadata.name}':`, error);
       }
-    }
-
-    const agentCount = collectedAgents.length;
-    if (agentCount > 0) {
-      logger.info(`[Extensions] Collected ${agentCount} agent(s) from extensions`);
     }
 
     return collectedAgents;
   }
 
-  getAgents(): RegisteredAgent[] {
-    return this.registry.getAgents();
+  getAgentById(agentId: string, projectDir?: string): RegisteredAgent | undefined {
+    const agents = this.getAgents(projectDir);
+    return agents.find((a) => a.agent.id === agentId);
   }
 
-  getAgentsByExtension(extensionName: string): RegisteredAgent[] {
-    return this.registry.getAgentsByExtension(extensionName);
-  }
-
-  collectModes(): RegisteredMode[] {
+  getModes(project: Project): RegisteredMode[] {
     const collectedModes: RegisteredMode[] = [];
-    const extensions = this.registry.getExtensions();
+    const extensions = this.registry.getExtensions(project.baseDir);
 
-    logger.info(`[Extensions] Collecting modes from ${extensions.length} extension(s)`);
     for (const loaded of extensions) {
       const { instance, metadata } = loaded;
 
       if (!instance.getModes) {
-        logger.debug(`[Extensions] Extension '${metadata.name}' has no getModes method`);
         continue;
       }
 
       try {
-        const modes = instance.getModes();
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, undefined, this.eventManager);
+        const modes = instance.getModes(context);
 
         if (!Array.isArray(modes)) {
           logger.error(`[Extensions] Extension '${metadata.name}' getModes() did not return an array`);
-          continue;
-        }
-
-        if (modes.length === 0) {
-          logger.debug(`[Extensions] Extension '${metadata.name}' returned empty modes array`);
           continue;
         }
 
@@ -790,32 +761,20 @@ export class ExtensionManager {
             continue;
           }
 
-          this.registry.registerMode(metadata.name, mode);
           collectedModes.push({ extensionName: metadata.name, mode });
-          logger.debug(`[Extensions] Collected mode '${mode.name}' from extension '${metadata.name}'`);
         }
       } catch (error) {
-        logger.error(`[Extensions] Failed to collect modes from extension '${metadata.name}':`, error);
+        logger.error(`[Extensions] Failed to get modes from extension '${metadata.name}':`, error);
       }
-    }
-
-    const modeCount = collectedModes.length;
-    if (modeCount > 0) {
-      logger.info(`[Extensions] Collected ${modeCount} mode(s) from extensions`);
     }
 
     return collectedModes;
   }
 
-  getModes(): RegisteredMode[] {
-    return this.registry.getModes();
-  }
-
-  getModesByExtension(extensionName: string): RegisteredMode[] {
-    return this.registry.getModesByExtension(extensionName);
-  }
-
-  validateModeDefinition(mode: ModeDefinition): { isValid: boolean; errors: string[] } {
+  validateModeDefinition(mode: ModeDefinition): {
+    isValid: boolean;
+    errors: string[];
+  } {
     const errors: string[] = [];
 
     if (!mode.name || typeof mode.name !== 'string') {
@@ -840,45 +799,56 @@ export class ExtensionManager {
     };
   }
 
-  /**
-   * Attempts to update an extension-provided agent profile.
-   * @param profile - The updated profile
-   * @returns The updated profile if handled by extension, null if not an extension agent
-   */
   async updateAgentProfile(profile: AgentProfile): Promise<AgentProfile | null> {
-    const registered = this.registry.getAgentById(profile.id);
-    if (!registered) {
-      return null;
+    const extensions = this.registry.getExtensions();
+
+    for (const loaded of extensions) {
+      const { instance, metadata } = loaded;
+
+      if (!instance.getAgents) {
+        continue;
+      }
+
+      try {
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, undefined, undefined, this.eventManager);
+        const agents = instance.getAgents(context);
+
+        if (!Array.isArray(agents)) {
+          continue;
+        }
+
+        const matchingAgent = agents.find((agent) => agent.id === profile.id);
+        if (!matchingAgent) {
+          continue;
+        }
+
+        if (!instance.onAgentProfileUpdated) {
+          throw new Error(
+            `Extension '${metadata.name}' does not support profile updates. Implement onAgentProfileUpdated() in your extension that provides the agent.`,
+          );
+        }
+
+        logger.info(`[Extensions] Updating agent profile '${profile.id}' via extension '${metadata.name}'`);
+        const updatedProfile = await instance.onAgentProfileUpdated(context, profile.id, profile);
+
+        if (!updatedProfile) {
+          throw new Error(`Extension '${metadata.name}' did not return an updated profile`);
+        }
+
+        logger.info(`[Extensions] Agent profile '${profile.id}' updated successfully`);
+        return updatedProfile;
+      } catch (error) {
+        logger.error(`[Extensions] Failed to update agent profile from extension '${metadata.name}':`, error);
+        throw error;
+      }
     }
 
-    const extension = this.registry.getExtension(registered.extensionName);
-    if (!extension) {
-      return null;
-    }
-
-    if (!extension.instance.onAgentProfileUpdated) {
-      throw new Error(`Extension '${registered.extensionName}' does not support profile updates`);
-    }
-
-    const context = new ExtensionContextImpl(registered.extensionName, this.store, this.agentProfileManager, this.modelManager, undefined, undefined, this);
-
-    logger.info(`[Extensions] Updating agent profile '${profile.id}' via extension '${registered.extensionName}'`);
-    const updatedProfile = await extension.instance.onAgentProfileUpdated(context, profile.id, profile);
-
-    if (!updatedProfile) {
-      throw new Error(`Extension '${registered.extensionName}' did not return an updated profile`);
-    }
-
-    // Update the agent in registry with the returned profile
-    registered.agent = updatedProfile;
-    this.agentProfileManager.sendAgentProfilesUpdated();
-
-    logger.info(`[Extensions] Agent profile '${profile.id}' updated successfully`);
-    return updatedProfile;
+    return null;
   }
 
   async executeCommand(commandName: string, args: string[], project: Project, task?: Task): Promise<void> {
-    const registered = this.registry.getCommandByName(commandName);
+    const commands = this.getCommands(project);
+    const registered = commands.find((c) => c.command.name === commandName);
 
     if (!registered) {
       throw new Error(`Extension command '${commandName}' not found`);
@@ -887,7 +857,7 @@ export class ExtensionManager {
     const { extensionName, command } = registered;
 
     try {
-      const context = new ExtensionContextImpl(extensionName, this.store, this.agentProfileManager, this.modelManager, project, task, this);
+      const context = new ExtensionContextImpl(extensionName, this.store, this.modelManager, project, task, this.eventManager);
 
       logger.info(`[Extensions] Executing command '${commandName}' from extension '${extensionName}'`);
       await command.execute(args, context);
@@ -948,7 +918,7 @@ export class ExtensionManager {
 
       try {
         // Create ExtensionContext for this extension
-        const context = new ExtensionContextImpl(metadata.name, this.store, this.agentProfileManager, this.modelManager, project, task, this);
+        const context = new ExtensionContextImpl(metadata.name, this.store, this.modelManager, project, task);
 
         // Call the extension handler
         // Using type assertion to handle dynamic dispatch across different event types
@@ -985,28 +955,5 @@ export class ExtensionManager {
     const global = extensions.filter((e) => !e.projectDir);
     const projectSpecific = extensions.filter((e) => e.projectDir === projectDir);
     return [...global, ...projectSpecific];
-  }
-
-  /**
-   * Sends commands updated notification to all projects.
-   * Used when global extensions are loaded/reloaded without a specific project context.
-   */
-  private sendCommandsUpdatedToAllProjects(): void {
-    const projects = this.projectManager.getProjects();
-
-    if (projects.length === 0) {
-      logger.debug('[Extensions] No active projects to notify about command updates');
-      return;
-    }
-
-    logger.debug(`[Extensions] Notifying ${projects.length} project(s) about command updates`);
-
-    for (const project of projects) {
-      try {
-        project.sendCommandsUpdated();
-      } catch (error) {
-        logger.error(`[Extensions] Failed to send commands updated to project ${project.baseDir}:`, error);
-      }
-    }
   }
 }

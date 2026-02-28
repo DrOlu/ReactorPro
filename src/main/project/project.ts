@@ -2,9 +2,8 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import {
+  AgentProfile,
   BmadStatus,
-  Command,
-  CommandsData,
   CreateTaskParams,
   DefaultTaskState,
   InstallResult,
@@ -61,7 +60,7 @@ export class Project {
     private readonly promptsManager: PromptsManager,
     private readonly extensionManager: ExtensionManager,
   ) {
-    this.customCommandManager = new CustomCommandManager(this);
+    this.customCommandManager = new CustomCommandManager(this, this.eventManager, this.extensionManager);
     this.bmadManager = new BmadManager(this.baseDir);
     this.tasksLoadingPromise = this.loadTasks();
   }
@@ -364,32 +363,16 @@ export class Project {
     this.eventManager.sendInputHistoryUpdated(this.baseDir, INTERNAL_TASK_ID, history);
   }
 
-  public getCommands(): CommandsData {
-    const extensionCommands: Command[] = this.extensionManager.getCommands().map((registered) => ({
-      name: registered.command.name,
-      description: registered.command.description,
-      arguments: registered.command.arguments || [],
-    }));
-
-    logger.info('Sending commands updated event', {
-      baseDir: this.baseDir,
-      customCommands: this.customCommandManager.getAllCommands().length,
-      extensionCommands: extensionCommands.length,
-    });
-
-    return {
-      baseDir: this.baseDir,
-      customCommands: this.customCommandManager.getAllCommands(),
-      extensionCommands,
-    };
-  }
-
   public getCustomModes(): ModeDefinition[] {
-    return this.extensionManager.getModes().map((registered) => registered.mode);
+    return this.extensionManager.getModes(this).map((registered) => registered.mode);
   }
 
-  public sendCommandsUpdated(commands: CommandsData = this.getCommands()) {
-    this.eventManager.sendCommandsUpdated(commands);
+  public getCustomCommandManager(): CustomCommandManager {
+    return this.customCommandManager;
+  }
+
+  public getAgentProfiles(): AgentProfile[] {
+    return this.agentProfileManager.getProjectProfiles(this.baseDir);
   }
 
   private async deleteTaskInternal(taskId: string): Promise<void> {

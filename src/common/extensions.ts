@@ -11,6 +11,7 @@ import {
   Mode,
   ModeDefinition,
   Model,
+  ProjectData,
   ProjectSettings,
   PromptContext,
   QuestionData,
@@ -24,6 +25,7 @@ import {
   ToolApprovalState,
   InvocationMode,
   ContextMemoryMode,
+  SettingsData,
 } from '@common/types';
 
 export type { ToolApprovalState, InvocationMode, ContextMemoryMode };
@@ -216,6 +218,21 @@ export interface TaskClosedEvent {
   readonly task: TaskData;
 }
 
+/** Event payload for task updated events */
+export interface TaskUpdatedEvent {
+  task: TaskData;
+}
+
+/** Event payload for project opened events */
+export interface ProjectOpenedEvent {
+  project: ProjectData;
+}
+
+/** Event payload for project closed events */
+export interface ProjectClosedEvent {
+  readonly project: ProjectData;
+}
+
 /** Event payload for prompt started events */
 export interface PromptStartedEvent {
   prompt: string;
@@ -270,6 +287,7 @@ export interface ToolApprovalEvent {
 /** Event payload for tool called events */
 export interface ToolCalledEvent {
   readonly toolName: string;
+  readonly abortSignal?: AbortSignal;
   input: Record<string, unknown> | undefined;
   output?: unknown;
 }
@@ -481,6 +499,9 @@ export interface ProjectContext {
   duplicateTask(taskId: string): Promise<TaskData>;
   deleteTask(taskId: string): Promise<void>;
 
+  // Agent Profiles
+  getAgentProfiles(): AgentProfile[];
+
   // Commands (Read-only)
   getCommands(): CommandsData;
 
@@ -506,7 +527,7 @@ export interface ProjectContext {
  */
 export interface ExtensionContext {
   /**
-   * Log a message to the ReactorPro console
+   * Log a message to the AiderDesk console and log files
    * @param message - Message to log
    * @param type - Log level (info, error, warn, debug)
    */
@@ -531,20 +552,6 @@ export interface ExtensionContext {
   getProjectContext(): ProjectContext;
 
   /**
-   * Create a new task
-   * @param name - Task name/title
-   * @param params - Optional task parameters (parentId, autoApprove, etc.)
-   * @returns Promise resolving to the new task ID
-   */
-  createTask(name: string, params?: CreateTaskParams): Promise<string>;
-
-  /**
-   * Get all available agent profiles
-   * @returns Promise resolving to array of agent profiles
-   */
-  getAgentProfiles(): Promise<AgentProfile[]>;
-
-  /**
    * Get all available model configurations
    * @returns Promise resolving to array of models
    */
@@ -562,47 +569,7 @@ export interface ExtensionContext {
    * @param updates - Partial settings object with updates
    * @returns Promise that resolves when settings are saved
    */
-  updateSettings(updates: Record<string, unknown>): Promise<void>;
-
-  /**
-   * Show a notification to the user
-   * @param message - Notification message
-   * @param type - Notification type (info, warning, error)
-   * @returns Promise that resolves when notification is shown
-   */
-  showNotification(message: string, type?: 'info' | 'warning' | 'error'): Promise<void>;
-
-  /**
-   * Show a confirmation dialog to the user
-   * @param message - Confirmation message
-   * @param confirmText - Custom confirm button text
-   * @param cancelText - Custom cancel button text
-   * @returns Promise resolving to true if confirmed, false otherwise
-   */
-  showConfirm(message: string, confirmText?: string, cancelText?: string): Promise<boolean>;
-
-  /**
-   * Show an input dialog to the user
-   * @param prompt - Input prompt/message
-   * @param placeholder - Input placeholder text
-   * @param defaultValue - Default input value
-   * @returns Promise resolving to the user input or undefined if cancelled
-   */
-  showInput(prompt: string, placeholder?: string, defaultValue?: string): Promise<string | undefined>;
-
-  /**
-   * Get all custom modes registered by extensions
-   * @returns Promise resolving to array of mode definitions
-   */
-  getCustomModes(): Promise<ModeDefinition[]>;
-
-  /**
-   * Send a prompt to the agent or aider for execution
-   * @param prompt - The prompt text to send
-   * @param mode - Execution mode (agent, code, ask, architect)
-   * @returns Promise that resolves when prompt execution is complete
-   */
-  runPrompt(prompt: string, mode?: 'agent' | 'code' | 'ask' | 'architect'): Promise<void>;
+  updateSettings(updates: Partial<SettingsData>): Promise<void>;
 }
 
 /**
@@ -656,8 +623,11 @@ export interface Extension {
   /**
    * Return array of tools this extension provides
    * Called when extension is loaded and when tools need to be refreshed
+   * @param context - Extension context
+   * @param mode - Current mode
+   * @param agentProfile - Current agent profile
    */
-  getTools?(context: ExtensionContext): ToolDefinition[];
+  getTools?(context: ExtensionContext, mode: string, agentProfile: AgentProfile): ToolDefinition[];
 
   // UI element registration
 
@@ -681,7 +651,7 @@ export interface Extension {
    * Return array of modes this extension provides
    * Called when extension is loaded and when modes need to be refreshed
    */
-  getModes?(): ModeDefinition[];
+  getModes?(context: ExtensionContext): ModeDefinition[];
 
   // Agent registration
 
@@ -727,6 +697,27 @@ export interface Extension {
    * @returns void or partial event to modify task data
    */
   onTaskClosed?(event: TaskClosedEvent, context: ExtensionContext): Promise<void | Partial<TaskClosedEvent>>;
+
+  /**
+   * Called before a task is updated and saved
+   * Modify event.task to change the task data before it's persisted
+   * @returns void or partial event to modify task data
+   */
+  onTaskUpdated?(event: TaskUpdatedEvent, context: ExtensionContext): Promise<void | Partial<TaskUpdatedEvent>>;
+
+  // Project Events
+
+  /**
+   * Called when a project is opened
+   * @returns void or partial event to modify project data
+   */
+  onProjectOpen?(event: ProjectOpenedEvent, context: ExtensionContext): Promise<void | Partial<ProjectOpenedEvent>>;
+
+  /**
+   * Called when a project is closed
+   * @returns void or partial event to modify project data
+   */
+  onProjectClosed?(event: ProjectClosedEvent, context: ExtensionContext): Promise<void | Partial<ProjectClosedEvent>>;
 
   // Prompt Events
 

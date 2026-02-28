@@ -91,6 +91,10 @@ describe('Project Inheritance', () => {
         reloadProjectExtensions: vi.fn(),
         stopWatchingProject: vi.fn(),
         dispatchEvent: vi.fn(() => Promise.resolve({ event: {}, blocked: false, modifiedResult: undefined })),
+        getRegistry: vi.fn(() => ({
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        })),
       } as any,
     );
 

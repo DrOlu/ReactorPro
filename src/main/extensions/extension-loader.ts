@@ -20,7 +20,13 @@ export class ExtensionLoader {
     // Initialize jiti relative to the current file or project root
     // Typically we want it to resolve relative to where we are loading from
     // Disable cache to always load fresh file content
-    this.jiti = createJiti(import.meta.url || __filename, { fsCache: false, moduleCache: false });
+    this.jiti = createJiti(import.meta.url || __filename, {
+      fsCache: false,
+      moduleCache: false,
+      alias: {
+        zod: require.resolve('zod'),
+      },
+    });
   }
 
   private deriveExtensionName(filePath: string): string {

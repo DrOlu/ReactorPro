@@ -56,15 +56,12 @@ const createMockMetadata = (overrides: Partial<ExtensionMetadata> = {}): Extensi
 
 const createMockDeps = () => ({
   store: {} as any,
-  agentProfileManager: {
-    getAllProfiles: vi.fn().mockReturnValue([]),
-  } as any,
   modelManager: {
     getAllModels: vi.fn().mockResolvedValue([]),
     getProviderModels: vi.fn().mockResolvedValue({ models: [] }),
   } as any,
-  projectManager: {
-    getProjects: vi.fn().mockReturnValue([]),
+  eventManager: {
+    sendSettingsUpdated: vi.fn(),
   } as any,
 });
 
@@ -99,6 +96,7 @@ const createMockTask = (): Task => {
       trigger: vi.fn().mockResolvedValue({ blocked: false, event: {} }),
     },
     addToolMessage: vi.fn(),
+    getProjectDir: () => '/test/project',
   } as unknown as Task;
   return task;
 };
@@ -136,6 +134,11 @@ const createMockProfile = (): AgentProfile => ({
   },
 });
 
+const createMockProject = (baseDir = '/project/dir'): Project =>
+  ({
+    baseDir,
+  }) as Project;
+
 describe('Extension Tool Integration with Agent', () => {
   let manager: ExtensionManager;
   let mockDeps: ReturnType<typeof createMockDeps>;
@@ -143,7 +146,7 @@ describe('Extension Tool Integration with Agent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDeps = createMockDeps();
-    manager = new ExtensionManager(mockDeps.store, mockDeps.agentProfileManager, mockDeps.modelManager, mockDeps.projectManager);
+    manager = new ExtensionManager(mockDeps.store, mockDeps.modelManager, mockDeps.eventManager);
   });
 
   afterEach(() => {
@@ -156,7 +159,7 @@ describe('Extension Tool Integration with Agent', () => {
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
       expect(toolset).toBeDefined();
       expect(Object.keys(toolset)).toHaveLength(0);
@@ -171,16 +174,15 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
       expect(toolset).toBeDefined();
-      expect(Object.keys(toolset)).toContain('test-extension-my-custom-tool');
+      expect(Object.keys(toolset)).toContain('my-custom-tool');
     });
 
     it('should create ExtensionContext with Task', async () => {
@@ -193,16 +195,15 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
       // Execute the tool
-      const toolKey = 'test-extension-test-tool';
+      const toolKey = 'test-tool';
       const toolDef = toolset[toolKey];
       expect(toolDef).toBeDefined();
       await toolDef!.execute!({ input: 'test' }, { toolCallId: 'call-123' } as ToolCallOptions);
@@ -223,16 +224,15 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortController = new AbortController();
       const abortSignal = abortController.signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
-      const toolKey = 'test-extension-test-tool';
+      const toolKey = 'test-tool';
       const toolDef = toolset[toolKey];
       expect(toolDef).toBeDefined();
       await toolDef!.execute!({ input: 'test' }, { toolCallId: 'call-123' } as ToolCallOptions);
@@ -254,15 +254,14 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
-      const toolKey = 'test-extension-test-tool';
+      const toolKey = 'test-tool';
       const toolDef = toolset[toolKey];
       expect(toolDef).toBeDefined();
       // Should not throw
@@ -286,15 +285,14 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
-      const toolKey = 'test-extension-test-tool';
+      const toolKey = 'test-tool';
       const toolDef = toolset[toolKey];
       expect(toolDef).toBeDefined();
       const result = await toolDef!.execute!({ input: 'test' }, { toolCallId: 'call-123' } as ToolCallOptions);
@@ -315,15 +313,14 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
-      const toolKey = 'test-extension-test-tool';
+      const toolKey = 'test-tool';
       const toolDef = toolset[toolKey];
       expect(toolDef).toBeDefined();
       const result = await toolDef!.execute!({ input: 'test' }, { toolCallId: 'call-123' } as ToolCallOptions);
@@ -344,14 +341,13 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
       const startTime = Date.now();
-      manager.createExtensionToolset(task, profile, abortSignal);
+      manager.createExtensionToolset(task, 'agent', profile, abortSignal);
       const creationTime = Date.now() - startTime;
 
       // Toolset creation should be fast (< 100ms)
@@ -369,15 +365,14 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
-      expect(Object.keys(toolset)).toContain('my-extension-my-tool');
+      expect(Object.keys(toolset)).toContain('my-tool');
     });
 
     it('should handle multiple tools from same extension', async () => {
@@ -390,17 +385,15 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, tool1);
-      registry.registerTool(metadata.name, tool2);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
-      expect(Object.keys(toolset)).toContain('multi-extension-tool-one');
-      expect(Object.keys(toolset)).toContain('multi-extension-tool-two');
+      expect(Object.keys(toolset)).toContain('tool-one');
+      expect(Object.keys(toolset)).toContain('tool-two');
     });
   });
 
@@ -414,18 +407,17 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       profile.toolApprovals = {
-        'test-extension-never-approved-tool': 'never' as any,
+        'never-approved-tool': 'never' as any,
       };
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
-      expect(Object.keys(toolset)).not.toContain('test-extension-never-approved-tool');
+      expect(Object.keys(toolset)).not.toContain('never-approved-tool');
     });
   });
 
@@ -439,15 +431,14 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
-      expect(toolset['test-extension-test-tool']!.description).toBe('A custom tool description');
+      expect(toolset['test-tool']!.description).toBe('A custom tool description');
     });
 
     it('should preserve Zod schema as inputSchema', async () => {
@@ -463,15 +454,14 @@ describe('Extension Tool Integration with Agent', () => {
 
       const registry = (manager as any).registry as ExtensionRegistry;
       registry.register(extension, metadata, '/test/path.ts');
-      registry.registerTool(metadata.name, testTool);
 
       const task = createMockTask();
       const profile = createMockProfile();
       const abortSignal = new AbortController().signal;
 
-      const toolset = manager.createExtensionToolset(task, profile, abortSignal);
+      const toolset = manager.createExtensionToolset(task, 'agent', profile, abortSignal);
 
-      expect(toolset['test-extension-test-tool']!.inputSchema).toBe(schema);
+      expect(toolset['test-tool']!.inputSchema).toBe(schema);
     });
   });
 
@@ -490,7 +480,10 @@ describe('Extension Tool Integration with Agent', () => {
               const filePath = args[0];
               const framework = args[1] || 'vitest';
               const prompt = `Generate comprehensive unit tests for ${filePath} using ${framework} framework.\n\nInclude:\n- Edge cases\n- Error handling\n- Mock examples`;
-              await context.runPrompt(prompt);
+              const taskContext = context.getTaskContext();
+              if (taskContext) {
+                await taskContext.runPrompt(prompt);
+              }
             },
           },
           {
@@ -499,7 +492,10 @@ describe('Extension Tool Integration with Agent', () => {
             execute: async (args, context) => {
               const files = args.join(', ');
               const prompt = `Review the following files for:\n- Code quality\n- Best practices\n- Potential bugs\n- Security concerns\n\nFiles: ${files}`;
-              await context.runPrompt(prompt);
+              const taskContext = context.getTaskContext();
+              if (taskContext) {
+                await taskContext.runPrompt(prompt);
+              }
             },
           },
         ],
@@ -509,10 +505,10 @@ describe('Extension Tool Integration with Agent', () => {
       const registry = new ExtensionRegistry();
       registry.register(extension, metadata, '/test/path.ts');
 
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
       (manager as any).registry = registry;
 
-      const commands = manager.collectCommands();
+      const commands = manager.getCommands(createMockProject());
 
       expect(commands).toHaveLength(2);
       expect(commands[0].command.name).toBe('generate-tests');
@@ -539,10 +535,10 @@ describe('Extension Tool Integration with Agent', () => {
       const registry = new ExtensionRegistry();
       registry.register(extension, metadata, '/test/path.ts');
 
-      const manager = new ExtensionManager({} as any, {} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
+      const manager = new ExtensionManager({} as any, {} as any, { getProjects: vi.fn().mockReturnValue([]) } as any);
       (manager as any).registry = registry;
 
-      manager.collectCommands();
+      manager.getCommands(createMockProject());
 
       await manager.executeCommand('test-command', ['arg1', 'arg2'], {} as any);
 

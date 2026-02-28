@@ -125,7 +125,7 @@ export class ProjectManager {
   }
 
   public getCommands(baseDir: string) {
-    return this.getProject(baseDir).getCommands();
+    return this.getProject(baseDir).getCustomCommandManager().getAllCommands();
   }
 
   public getCustomModes(baseDir: string): ModeDefinition[] {

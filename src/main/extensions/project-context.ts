@@ -1,7 +1,7 @@
 import { TaskContextImpl } from './task-context';
 
 import type { ProjectContext, TaskContext } from '@common/extensions';
-import type { CommandsData, CreateTaskParams, ProjectSettings, TaskData } from '@common/types';
+import type { AgentProfile, CommandsData, CreateTaskParams, ProjectSettings, TaskData } from '@common/types';
 import type { Project } from '@/project';
 
 export class ProjectContextImpl implements ProjectContext {
@@ -41,8 +41,12 @@ export class ProjectContextImpl implements ProjectContext {
     await this.project.deleteTask(taskId);
   }
 
+  getAgentProfiles(): AgentProfile[] {
+    return this.project.getAgentProfiles();
+  }
+
   getCommands(): CommandsData {
-    return this.project.getCommands();
+    return this.project.getCustomCommandManager().getAllCommands();
   }
 
   getProjectSettings(): ProjectSettings {

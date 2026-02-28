@@ -1,5 +1,5 @@
 import { AIDER_MODES, DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
-import { forwardRef, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
+import { forwardRef, startTransition, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResizableBox, ResizeCallbackData } from 'react-resizable';
 import { clsx } from 'clsx';
@@ -289,15 +289,17 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
           api.redoLastUserPrompt(projectDir, task.id, currentMode, prompt);
         } else {
           if (!question && !inProgress) {
-            // OPTIMISTIC: Add user message immediately before backend response
-            const optimisticUserMessage = {
-              id: uuidv4(),
-              type: 'user',
-              content: prompt,
-              isOptimistic: true,
-            } satisfies UserMessage;
-            setMessages(task.id, (prevMessages) => [...prevMessages, optimisticUserMessage]);
-            setDisplayedMessages([...displayedMessages, optimisticUserMessage]);
+            startTransition(() => {
+              // OPTIMISTIC: Add user message immediately before backend response
+              const optimisticUserMessage = {
+                id: uuidv4(),
+                type: 'user',
+                content: prompt,
+                isOptimistic: true,
+              } satisfies UserMessage;
+              setMessages(task.id, (prevMessages) => [...prevMessages, optimisticUserMessage]);
+              setDisplayedMessages([...displayedMessages, optimisticUserMessage]);
+            });
           }
           api.runPrompt(projectDir, task.id, prompt, currentMode);
         }

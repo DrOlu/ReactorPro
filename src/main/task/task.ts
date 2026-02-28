@@ -49,7 +49,7 @@ import debounce from 'lodash/debounce';
 import { isEqual } from 'lodash';
 
 import type { SimpleGit } from 'simple-git';
-import type { RegisteredCommand } from '@/extensions/extension-registry';
+import type { RegisteredCommand } from '@/extensions/extension-manager';
 
 import { getAllFiles, isValidProjectFile } from '@/utils/file-system';
 import {
@@ -299,6 +299,14 @@ export class Task {
         this.task.createdAt = new Date().toISOString();
       }
       this.task.updatedAt = new Date().toISOString();
+    }
+
+    // Allow extensions to modify task data before saving
+    const extensionResult = await this.extensionManager.dispatchEvent('onTaskUpdated', { task: this.task }, this.project, this);
+    if (extensionResult.task) {
+      for (const key of Object.keys(extensionResult.task)) {
+        this.task[key] = extensionResult.task[key];
+      }
     }
 
     await fs.mkdir(path.dirname(this.taskDataPath), { recursive: true });
@@ -3043,25 +3051,14 @@ export class Task {
     }
   }
 
-  private async runExtensionCommand(extensionCommand: RegisteredCommand, args: string[], _mode: Mode): Promise<void> {
+  private async runExtensionCommand(extensionCommand: RegisteredCommand, args: string[], mode: Mode): Promise<void> {
     const { command } = extensionCommand;
-
-    // Validate required arguments
-    const requiredArgs = command.arguments?.filter((arg) => arg.required !== false) || [];
-    if (args.length < requiredArgs.length) {
-      this.addLogMessage(
-        'error',
-        `Not enough arguments for command '${command.name}'. Expected arguments:\n${command.arguments?.map((arg, idx) => `${idx + 1}: ${arg.description}${arg.required === false ? ' (optional)' : ''}`).join('\n')}`,
-      );
-      this.eventManager.sendCustomCommandError(this.project.baseDir, this.taskId, `Argument mismatch for command: ${command.name}`);
-      return;
-    }
 
     logger.info('Running extension command:', {
       commandName: command.name,
       args,
     });
-    this.telemetryManager.captureCustomCommand(command.name, args.length, 'agent');
+    this.telemetryManager.captureCustomCommand(command.name, args.length, mode);
 
     try {
       // Execute the command - extension is fully responsible for its logic
@@ -3077,7 +3074,7 @@ export class Task {
 
   public async runCustomCommand(commandName: string, args: string[], mode: Mode = 'agent'): Promise<void> {
     // First, check if this is an extension command
-    const extensionCommand = this.extensionManager.getCommands().find((c) => c.command.name === commandName);
+    const extensionCommand = this.extensionManager.getCommands(this.project).find((c) => c.command.name === commandName);
 
     if (extensionCommand) {
       // Handle extension command execution
