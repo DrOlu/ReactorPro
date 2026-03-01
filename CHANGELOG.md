@@ -9,6 +9,7 @@
 - added locking of files when using edit power tool to avoid race conditions
 - moved BMAD mode out of Preview mode
 - added xhigh reasoning effort for OpenAI and OpenAI compatible providers
+- speed up startup by loading some of the long-loading managers in background
 
 ## [0.54.0]
 

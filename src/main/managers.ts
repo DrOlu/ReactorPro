@@ -32,9 +32,11 @@ export interface ManagersResult {
 }
 
 export const initManagers = async (store: Store, mainWindow: BrowserWindow | null = null): Promise<ManagersResult> => {
-  // Initialize telemetry manager
+  // Initialize telemetry manager (non-blocking - analytics not critical for startup)
   const telemetryManager = new TelemetryManager(store);
-  await telemetryManager.init();
+  telemetryManager.init().catch((error) => {
+    logger.error('[Telemetry] Telemetry initialization failed, continuing without analytics:', error);
+  });
 
   // Initialize MCP manager
   const mcpManager = new McpManager();
@@ -50,15 +52,23 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
   const dataManager = new DataManager();
   dataManager.init();
 
-  // Initialize memory manager
+  // Initialize memory manager (non-blocking - heavy operation with lazy loading)
   const memoryManager = new MemoryManager(store);
-  await memoryManager.init();
+  memoryManager.init().catch((error) => {
+    logger.error('[Memory] Memory system initialization failed, continuing without memories:', error);
+  });
 
+  // Initialize hook manager (non-blocking - has lazy init in trigger method)
   const hookManager = new HookManager();
-  await hookManager.init();
+  hookManager.init().catch((error) => {
+    logger.error('[Hooks] Hook system initialization failed:', error);
+  });
 
+  // Initialize prompts manager (non-blocking - templates compile lazily)
   const promptsManager = new PromptsManager();
-  await promptsManager.init();
+  promptsManager.init().catch((error) => {
+    logger.error('[Prompts] Prompts system initialization failed:', error);
+  });
 
   const worktreeManager = new WorktreeManager();
 
