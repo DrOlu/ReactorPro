@@ -72,6 +72,7 @@ export class Project {
     await this.extensionManager.reloadProjectExtensions(this);
     await this.sendInputHistoryUpdatedEvent();
 
+    await this.extensionManager.dispatchEvent('onProjectStarted', { baseDir: this.baseDir }, this);
     this.eventManager.sendProjectStarted(this.baseDir);
   }
 
@@ -514,6 +515,8 @@ export class Project {
   }
 
   async close() {
+    await this.extensionManager.dispatchEvent('onProjectStopped', { baseDir: this.baseDir }, this);
+
     this.customCommandManager.dispose();
     this.agentProfileManager.removeProject(this.baseDir);
     await this.hookManager.stopWatchingProject(this.baseDir);

@@ -22,6 +22,8 @@ import type {
   AgentFinishedEvent,
   AgentStartedEvent,
   AgentStepFinishedEvent,
+  OptimizeMessagesEvent,
+  ImportantRemindersEvent,
   AiderPromptFinishedEvent,
   AiderPromptStartedEvent,
   CommandExecutedEvent,
@@ -38,6 +40,7 @@ import type {
   QuestionAskedEvent,
   ResponseChunkEvent,
   ResponseCompletedEvent,
+  RuleFilesRetrievedEvent,
   SubagentFinishedEvent,
   SubagentStartedEvent,
   TaskClosedEvent,
@@ -50,6 +53,8 @@ import type {
   ToolDefinition,
   ToolFinishedEvent,
   CommandDefinition,
+  ProjectStartedEvent,
+  ProjectStoppedEvent,
 } from '@common/extensions';
 import type { ToolCallOptions, ToolSet } from 'ai';
 
@@ -82,6 +87,8 @@ export interface RegisteredMode {
  * Mapping of extension event names to their event payload types
  */
 export type ExtensionEventMap = {
+  onProjectStarted: ProjectStartedEvent;
+  onProjectStopped: ProjectStoppedEvent;
   onTaskCreated: TaskCreatedEvent;
   onTaskPrepared: TaskPreparedEvent;
   onTaskInitialized: TaskInitializedEvent;
@@ -92,6 +99,8 @@ export type ExtensionEventMap = {
   onAgentStarted: AgentStartedEvent;
   onAgentFinished: AgentFinishedEvent;
   onAgentStepFinished: AgentStepFinishedEvent;
+  onOptimizeMessages: OptimizeMessagesEvent;
+  onImportantReminders: ImportantRemindersEvent;
   onAiderPromptStarted: AiderPromptStartedEvent;
   onAiderPromptFinished: AiderPromptFinishedEvent;
   onToolApproval: ToolApprovalEvent;
@@ -99,6 +108,7 @@ export type ExtensionEventMap = {
   onToolFinished: ToolFinishedEvent;
   onFilesAdded: FilesAddedEvent;
   onFilesDropped: FilesDroppedEvent;
+  onRuleFilesRetrieved: RuleFilesRetrievedEvent;
   onResponseChunk: ResponseChunkEvent;
   onResponseCompleted: ResponseCompletedEvent;
   onHandleApproval: HandleApprovalEvent;
@@ -329,8 +339,8 @@ export class ExtensionManager {
     const extensionMap = new Map<string, string>();
 
     for (const extPath of extensionPaths) {
-      const filename = path.basename(extPath);
-      extensionMap.set(filename, extPath);
+      const extensionKey = path.relative(extensionsDir, extPath);
+      extensionMap.set(extensionKey, extPath);
     }
 
     const extensions = Array.from(extensionMap.values());

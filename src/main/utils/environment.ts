@@ -54,6 +54,7 @@ const readApiKeyFromConfFile = (filePath: string, envVarName: string): string | 
           OPENAI_API_KEY: ['openai'],
           ANTHROPIC_API_KEY: ['anthropic', 'anthropic-compatible'],
           GROQ_API_KEY: ['groq'],
+          ALIBABA_PLAN_API_KEY: ['alibaba-plan'],
           KIMI_PLAN_API_KEY: ['kimi-plan'],
           DEEPSEEK_API_KEY: ['deepseek'],
           OPENROUTER_API_KEY: ['openrouter'],

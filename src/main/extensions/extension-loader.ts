@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { createJiti } from 'jiti';
+import { createJiti, type JitiOptions } from 'jiti';
 import { Extension, ExtensionMetadata } from '@common/extensions';
 
 import logger from '@/logger';
@@ -13,20 +13,37 @@ interface ExtensionModule {
   };
 }
 
-export class ExtensionLoader {
-  private jiti: ReturnType<typeof createJiti>;
+// Base jiti options shared across all instances
+const baseJitiOptions: JitiOptions = {
+  fsCache: false,
+  moduleCache: false,
+  alias: {
+    zod: require.resolve('zod'),
+  },
+};
 
-  constructor() {
-    // Initialize jiti relative to the current file or project root
-    // Typically we want it to resolve relative to where we are loading from
-    // Disable cache to always load fresh file content
-    this.jiti = createJiti(import.meta.url || __filename, {
-      fsCache: false,
-      moduleCache: false,
-      alias: {
-        zod: require.resolve('zod'),
-      },
-    });
+export class ExtensionLoader {
+  private jitiCache: Map<string, ReturnType<typeof createJiti>> = new Map();
+
+  /**
+   * Get or create a jiti instance for a specific extension directory.
+   * This ensures module resolution happens relative to the extension's directory.
+   */
+  private getJitiForExtension(filePath: string): ReturnType<typeof createJiti> {
+    const parsedPath = path.parse(filePath);
+    const extensionDir = parsedPath.name === 'index' ? parsedPath.dir : path.dirname(filePath);
+
+    // Check if we already have a jiti instance for this directory
+    const cached = this.jitiCache.get(extensionDir);
+    if (cached) {
+      return cached;
+    }
+
+    // Create a new jiti instance with the extension directory as base
+    const jiti = createJiti(extensionDir, baseJitiOptions);
+    this.jitiCache.set(extensionDir, jiti);
+
+    return jiti;
   }
 
   private deriveExtensionName(filePath: string): string {
@@ -45,9 +62,12 @@ export class ExtensionLoader {
 
   async loadExtension(filePath: string): Promise<{ extension: Extension; metadata: ExtensionMetadata } | null> {
     try {
+      // Use extension-specific jiti instance for proper module resolution
+      const jiti = this.getJitiForExtension(filePath);
+
       // Use jiti to load the file
       // jiti handles TypeScript compilation on the fly
-      const module = (await this.jiti.import(filePath)) as ExtensionModule;
+      const module = (await jiti.import(filePath)) as ExtensionModule;
 
       // Check if default export exists
       if (!module.default) {

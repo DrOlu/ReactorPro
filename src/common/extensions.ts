@@ -11,7 +11,6 @@ import {
   Mode,
   ModeDefinition,
   Model,
-  ProjectData,
   ProjectSettings,
   PromptContext,
   QuestionData,
@@ -26,6 +25,7 @@ import {
   InvocationMode,
   ContextMemoryMode,
   SettingsData,
+  ProviderProfile,
 } from '@common/types';
 
 export type { ToolApprovalState, InvocationMode, ContextMemoryMode };
@@ -224,13 +224,13 @@ export interface TaskUpdatedEvent {
 }
 
 /** Event payload for project opened events */
-export interface ProjectOpenedEvent {
-  project: ProjectData;
+export interface ProjectStartedEvent {
+  readonly baseDir: string;
 }
 
 /** Event payload for project closed events */
-export interface ProjectClosedEvent {
-  readonly project: ProjectData;
+export interface ProjectStoppedEvent {
+  readonly baseDir: string;
 }
 
 /** Event payload for prompt started events */
@@ -249,8 +249,10 @@ export interface PromptFinishedEvent {
 /** Event payload for agent started events */
 export interface AgentStartedEvent {
   readonly mode: Mode;
-  agentProfile: AgentProfile;
   prompt: string | null;
+  agentProfile: AgentProfile;
+  providerProfile: ProviderProfile;
+  model: string;
   promptContext?: PromptContext;
   systemPrompt: string | undefined;
   contextMessages: ContextMessage[];
@@ -274,6 +276,18 @@ export interface AgentStepFinishedEvent {
   readonly stepResult: AgentStepResult;
   finishReason: 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown';
   responseMessages: ContextMessage[];
+}
+
+/** Event payload for message optimization events */
+export interface OptimizeMessagesEvent {
+  readonly originalMessages: ContextMessage[];
+  optimizedMessages: ContextMessage[];
+}
+
+/** Event payload for important reminders events */
+export interface ImportantRemindersEvent {
+  readonly profile: AgentProfile;
+  remindersContent: string;
 }
 
 /** Event payload for tool approval events */
@@ -306,6 +320,11 @@ export interface FilesAddedEvent {
 
 /** Event payload for files dropped events */
 export interface FilesDroppedEvent {
+  files: ContextFile[];
+}
+
+/** Event payload for rule files retrieved events */
+export interface RuleFilesRetrievedEvent {
   files: ContextFile[];
 }
 
@@ -708,16 +727,16 @@ export interface Extension {
   // Project Events
 
   /**
-   * Called when a project is opened
+   * Called when a project is started
    * @returns void or partial event to modify project data
    */
-  onProjectOpen?(event: ProjectOpenedEvent, context: ExtensionContext): Promise<void | Partial<ProjectOpenedEvent>>;
+  onProjectStarted?(event: ProjectStartedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStartedEvent>>;
 
   /**
    * Called when a project is closed
    * @returns void or partial event to modify project data
    */
-  onProjectClosed?(event: ProjectClosedEvent, context: ExtensionContext): Promise<void | Partial<ProjectClosedEvent>>;
+  onProjectStopped?(event: ProjectStoppedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStoppedEvent>>;
 
   // Prompt Events
 
@@ -752,6 +771,20 @@ export interface Extension {
    * @returns void or partial event
    */
   onAgentStepFinished?(event: AgentStepFinishedEvent, context: ExtensionContext): Promise<void | Partial<AgentStepFinishedEvent>>;
+
+  /**
+   * Called when messages are optimized before being sent to the LLM
+   * Modify event.optimizedMessages to change the messages that will be sent
+   * @returns void or partial event to modify optimized messages
+   */
+  onOptimizeMessages?(event: OptimizeMessagesEvent, context: ExtensionContext): Promise<void | Partial<OptimizeMessagesEvent>>;
+
+  /**
+   * Called when important reminders are being added to the user message
+   * Modify event.remindersContent to change the reminders content
+   * @returns void or partial event to modify reminders content
+   */
+  onImportantReminders?(event: ImportantRemindersEvent, context: ExtensionContext): Promise<void | Partial<ImportantRemindersEvent>>;
 
   // Tool Events
 
@@ -791,6 +824,13 @@ export interface Extension {
    * @returns void or partial event to modify files
    */
   onFilesDropped?(event: FilesDroppedEvent, context: ExtensionContext): Promise<void | Partial<FilesDroppedEvent>>;
+
+  /**
+   * Called when rule files are retrieved
+   * Modify event.files to filter, add, or clear rule files
+   * @returns void or partial event to modify files
+   */
+  onRuleFilesRetrieved?(event: RuleFilesRetrievedEvent, context: ExtensionContext): Promise<void | Partial<RuleFilesRetrievedEvent>>;
 
   // Message Events
 

@@ -346,6 +346,9 @@
   "kimiPlan": {
     "apiKey": "API 密钥"
   },
+  "alibabaPlan": {
+    "apiKey": "API 密钥"
+  },
   "deepseek": {
     "apiKey": "API 密钥"
   },
@@ -383,6 +386,7 @@
   "providers": {
     "anthropic": "Anthropic",
     "anthropic-compatible": "Anthropic 兼容",
+    "alibaba-plan": "阿里云编码计划",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
     "claude-agent-sdk": "Claude Agent SDK",
@@ -1285,6 +1289,7 @@
     "low": "低",
     "medium": "中",
     "high": "高",
+    "xhigh": "极高",
     "max": "最大"
   },
   "commands": {
@@ -1562,12 +1567,16 @@
       "code": {
         "title": "代码模式",
         "description": "用于直接代码更改和特定任务。重要提示：将文件添加到上下文以确保 AI 处理正确的文件。"
+      },
+      "bmad": {
+        "title": "BMAD 模式",
+        "description": "用于规划、规范和实现功能的引导式工作流程。最适合结构化的开发流程。"
       }
     }
   },
   "bmad": {
     "welcome": {
-      "title": "欢迎使用 BMAD 模式 (预览)",
+      "title": "欢迎使用 BMAD 模式",
       "subtitle": "用于规划、规范和实现功能的引导式工作流"
     },
     "workflows": {

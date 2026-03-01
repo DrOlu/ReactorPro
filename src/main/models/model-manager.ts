@@ -26,6 +26,7 @@ import { geminiProviderStrategy } from './providers/gemini';
 import { geminiCliProviderStrategy } from './providers/gemini-cli';
 import { gpustackProviderStrategy } from './providers/gpustack';
 import { groqProviderStrategy } from './providers/groq';
+import { alibabaPlanProviderStrategy } from './providers/alibaba-plan';
 import { kimiPlanProviderStrategy } from './providers/kimi-plan';
 import { litellmProviderStrategy } from './providers/litellm';
 import { lmStudioProviderStrategy } from './providers/lm-studio';
@@ -96,6 +97,7 @@ export class ModelManager {
     'gemini-cli': geminiCliProviderStrategy,
     gpustack: gpustackProviderStrategy,
     groq: groqProviderStrategy,
+    'alibaba-plan': alibabaPlanProviderStrategy,
     'kimi-plan': kimiPlanProviderStrategy,
     litellm: litellmProviderStrategy,
     lmstudio: lmStudioProviderStrategy,

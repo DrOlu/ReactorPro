@@ -140,6 +140,7 @@ src/
       memory-manager.ts
     models/
       providers/
+        alibaba-plan.ts
         anthropic-compatible.ts
         anthropic.ts
         azure.ts
@@ -400,6 +401,7 @@ src/
           VirtualizedMessages.tsx
         ModelLibrary/
           providers/
+            AlibabaPlanParameters.tsx
             AnthropicCompatibleParameters.tsx
             AnthropicParameters.tsx
             AzureAdvancedSettings.tsx
@@ -605,6 +607,7 @@ src/
       i18n/
         index.ts
       icons/
+        AlibabaPlanIcon.tsx
         AnthropicCompatibleIcon.tsx
         AnthropicIcon.tsx
         AzureIcon.tsx
@@ -1723,6 +1726,9 @@ File: src/common/locales/en.json
   "kimiPlan": {
     "apiKey": "API Key"
   },
+  "alibabaPlan": {
+    "apiKey": "API Key"
+  },
   "deepseek": {
     "apiKey": "API Key"
   },
@@ -1803,6 +1809,7 @@ File: src/common/locales/en.json
   "providers": {
     "anthropic": "Anthropic",
     "anthropic-compatible": "Anthropic Compatible",
+    "alibaba-plan": "Alibaba Coding Plan",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
     "claude-agent-sdk": "Claude Agent SDK",
@@ -2728,6 +2735,7 @@ File: src/common/locales/en.json
     "low": "Low",
     "medium": "Medium",
     "high": "High",
+    "xhigh": "XHigh",
     "max": "Max"
   },
   "commands": {
@@ -2968,12 +2976,16 @@ File: src/common/locales/en.json
       "code": {
         "title": "Code Mode",
         "description": "Use for direct code changes and specific tasks. Important: Add files to context to ensure the AI works on the right files."
+      },
+      "bmad": {
+        "title": "BMAD Mode",
+        "description": "Guided workflows for planning, spec'ing, and implementing features. Best for structured development processes."
       }
     }
   },
   "bmad": {
     "welcome": {
-      "title": "Welcome to BMAD Mode (Preview)",
+      "title": "Welcome to BMAD Mode",
       "subtitle": "Guided workflows for planning, spec'ing, and implementing features"
     },
     "workflows": {
@@ -3498,6 +3510,9 @@ File: src/common/locales/zh.json
   "kimiPlan": {
     "apiKey": "API 密钥"
   },
+  "alibabaPlan": {
+    "apiKey": "API 密钥"
+  },
   "deepseek": {
     "apiKey": "API 密钥"
   },
@@ -3535,6 +3550,7 @@ File: src/common/locales/zh.json
   "providers": {
     "anthropic": "Anthropic",
     "anthropic-compatible": "Anthropic 兼容",
+    "alibaba-plan": "阿里云编码计划",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
     "claude-agent-sdk": "Claude Agent SDK",
@@ -4437,6 +4453,7 @@ File: src/common/locales/zh.json
     "low": "低",
     "medium": "中",
     "high": "高",
+    "xhigh": "极高",
     "max": "最大"
   },
   "commands": {
@@ -4714,12 +4731,16 @@ File: src/common/locales/zh.json
       "code": {
         "title": "代码模式",
         "description": "用于直接代码更改和特定任务。重要提示：将文件添加到上下文以确保 AI 处理正确的文件。"
+      },
+      "bmad": {
+        "title": "BMAD 模式",
+        "description": "用于规划、规范和实现功能的引导式工作流程。最适合结构化的开发流程。"
       }
     }
   },
   "bmad": {
     "welcome": {
-      "title": "欢迎使用 BMAD 模式 (预览)",
+      "title": "欢迎使用 BMAD 模式",
       "subtitle": "用于规划、规范和实现功能的引导式工作流"
     },
     "workflows": {
@@ -5147,6 +5168,7 @@ export enum MessageViewMode {
 }
 ⋮----
 export enum ReasoningEffort {
+  XHigh = 'xhigh',
   High = 'high',
   Medium = 'medium',
   Low = 'low',
@@ -6058,6 +6080,7 @@ export type LlmProviderName =
   | 'gemini-cli'
   | 'gpustack'
   | 'groq'
+  | 'alibaba-plan'
   | 'kimi-plan'
   | 'litellm'
   | 'lmstudio'
@@ -6134,6 +6157,12 @@ export interface KimiPlanProvider extends LlmProviderBase {
   apiKey: string;
 }
 export const isKimiPlanProvider = (provider: LlmProviderBase): provider is KimiPlanProvider
+⋮----
+export interface AlibabaPlanProvider extends LlmProviderBase {
+  name: 'alibaba-plan';
+  apiKey: string;
+}
+export const isAlibabaPlanProvider = (provider: LlmProviderBase): provider is AlibabaPlanProvider
 ⋮----
 export enum GeminiVoiceModel {
   GeminiLive25FlashNativeAudio = 'gemini-2.5-flash-native-audio-preview-12-2025',
@@ -6303,6 +6332,7 @@ export type LlmProvider =
   | GroqProvider
   | GpustackProvider
   | CerebrasProvider
+  | AlibabaPlanProvider
   | KimiPlanProvider
   | OpenAiCompatibleProvider
   | LitellmProvider
@@ -6657,7 +6687,6 @@ import {
   Mode,
   ModeDefinition,
   Model,
-  ProjectData,
   ProjectSettings,
   PromptContext,
   QuestionData,
@@ -6672,6 +6701,7 @@ import {
   InvocationMode,
   ContextMemoryMode,
   SettingsData,
+  ProviderProfile,
 } from '@common/types';
 ⋮----
 export type AgentStepResult = unknown;
@@ -6925,13 +6955,13 @@ export interface TaskUpdatedEvent {
 }
 ⋮----
 /** Event payload for project opened events */
-export interface ProjectOpenedEvent {
-  project: ProjectData;
+export interface ProjectStartedEvent {
+  readonly baseDir: string;
 }
 ⋮----
 /** Event payload for project closed events */
-export interface ProjectClosedEvent {
-  readonly project: ProjectData;
+export interface ProjectStoppedEvent {
+  readonly baseDir: string;
 }
 ⋮----
 /** Event payload for prompt started events */
@@ -6950,8 +6980,10 @@ export interface PromptFinishedEvent {
 /** Event payload for agent started events */
 export interface AgentStartedEvent {
   readonly mode: Mode;
-  agentProfile: AgentProfile;
   prompt: string | null;
+  agentProfile: AgentProfile;
+  providerProfile: ProviderProfile;
+  model: string;
   promptContext?: PromptContext;
   systemPrompt: string | undefined;
   contextMessages: ContextMessage[];
@@ -6975,6 +7007,18 @@ export interface AgentStepFinishedEvent {
   readonly stepResult: AgentStepResult;
   finishReason: 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown';
   responseMessages: ContextMessage[];
+}
+⋮----
+/** Event payload for message optimization events */
+export interface OptimizeMessagesEvent {
+  readonly originalMessages: ContextMessage[];
+  optimizedMessages: ContextMessage[];
+}
+⋮----
+/** Event payload for important reminders events */
+export interface ImportantRemindersEvent {
+  readonly profile: AgentProfile;
+  remindersContent: string;
 }
 ⋮----
 /** Event payload for tool approval events */
@@ -7007,6 +7051,11 @@ export interface FilesAddedEvent {
 ⋮----
 /** Event payload for files dropped events */
 export interface FilesDroppedEvent {
+  files: ContextFile[];
+}
+⋮----
+/** Event payload for rule files retrieved events */
+export interface RuleFilesRetrievedEvent {
   files: ContextFile[];
 }
 ⋮----
@@ -7558,16 +7607,16 @@ export interface Extension {
   // Project Events
 
   /**
-   * Called when a project is opened
+   * Called when a project is started
    * @returns void or partial event to modify project data
    */
-  onProjectOpen?(event: ProjectOpenedEvent, context: ExtensionContext): Promise<void | Partial<ProjectOpenedEvent>>;
+  onProjectStarted?(event: ProjectStartedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStartedEvent>>;
 
   /**
    * Called when a project is closed
    * @returns void or partial event to modify project data
    */
-  onProjectClosed?(event: ProjectClosedEvent, context: ExtensionContext): Promise<void | Partial<ProjectClosedEvent>>;
+  onProjectStopped?(event: ProjectStoppedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStoppedEvent>>;
 
   // Prompt Events
 
@@ -7602,6 +7651,20 @@ export interface Extension {
    * @returns void or partial event
    */
   onAgentStepFinished?(event: AgentStepFinishedEvent, context: ExtensionContext): Promise<void | Partial<AgentStepFinishedEvent>>;
+
+  /**
+   * Called when messages are optimized before being sent to the LLM
+   * Modify event.optimizedMessages to change the messages that will be sent
+   * @returns void or partial event to modify optimized messages
+   */
+  onOptimizeMessages?(event: OptimizeMessagesEvent, context: ExtensionContext): Promise<void | Partial<OptimizeMessagesEvent>>;
+
+  /**
+   * Called when important reminders are being added to the user message
+   * Modify event.remindersContent to change the reminders content
+   * @returns void or partial event to modify reminders content
+   */
+  onImportantReminders?(event: ImportantRemindersEvent, context: ExtensionContext): Promise<void | Partial<ImportantRemindersEvent>>;
 
   // Tool Events
 
@@ -7641,6 +7704,13 @@ export interface Extension {
    * @returns void or partial event to modify files
    */
   onFilesDropped?(event: FilesDroppedEvent, context: ExtensionContext): Promise<void | Partial<FilesDroppedEvent>>;
+
+  /**
+   * Called when rule files are retrieved
+   * Modify event.files to filter, add, or clear rule files
+   * @returns void or partial event to modify files
+   */
+  onRuleFilesRetrieved?(event: RuleFilesRetrievedEvent, context: ExtensionContext): Promise<void | Partial<RuleFilesRetrievedEvent>>;
 
   // Message Events
 
@@ -7829,16 +7899,16 @@ onTaskUpdated?(event: TaskUpdatedEvent, context: ExtensionContext): Promise<void
 // Project Events
 ⋮----
 /**
-   * Called when a project is opened
+   * Called when a project is started
    * @returns void or partial event to modify project data
    */
-onProjectOpen?(event: ProjectOpenedEvent, context: ExtensionContext): Promise<void | Partial<ProjectOpenedEvent>>;
+onProjectStarted?(event: ProjectStartedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStartedEvent>>;
 ⋮----
 /**
    * Called when a project is closed
    * @returns void or partial event to modify project data
    */
-onProjectClosed?(event: ProjectClosedEvent, context: ExtensionContext): Promise<void | Partial<ProjectClosedEvent>>;
+onProjectStopped?(event: ProjectStoppedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStoppedEvent>>;
 ⋮----
 // Prompt Events
 ⋮----
@@ -7873,6 +7943,20 @@ onAgentFinished?(event: AgentFinishedEvent, context: ExtensionContext): Promise<
    * @returns void or partial event
    */
 onAgentStepFinished?(event: AgentStepFinishedEvent, context: ExtensionContext): Promise<void | Partial<AgentStepFinishedEvent>>;
+⋮----
+/**
+   * Called when messages are optimized before being sent to the LLM
+   * Modify event.optimizedMessages to change the messages that will be sent
+   * @returns void or partial event to modify optimized messages
+   */
+onOptimizeMessages?(event: OptimizeMessagesEvent, context: ExtensionContext): Promise<void | Partial<OptimizeMessagesEvent>>;
+⋮----
+/**
+   * Called when important reminders are being added to the user message
+   * Modify event.remindersContent to change the reminders content
+   * @returns void or partial event to modify reminders content
+   */
+onImportantReminders?(event: ImportantRemindersEvent, context: ExtensionContext): Promise<void | Partial<ImportantRemindersEvent>>;
 ⋮----
 // Tool Events
 ⋮----
@@ -7912,6 +7996,13 @@ onFilesAdded?(event: FilesAddedEvent, context: ExtensionContext): Promise<void |
    * @returns void or partial event to modify files
    */
 onFilesDropped?(event: FilesDroppedEvent, context: ExtensionContext): Promise<void | Partial<FilesDroppedEvent>>;
+⋮----
+/**
+   * Called when rule files are retrieved
+   * Modify event.files to filter, add, or clear rule files
+   * @returns void or partial event to modify files
+   */
+onRuleFilesRetrieved?(event: RuleFilesRetrievedEvent, context: ExtensionContext): Promise<void | Partial<RuleFilesRetrievedEvent>>;
 ⋮----
 // Message Events
 ⋮----
@@ -8316,6 +8407,18 @@ import { Task } from '@/task';
 import logger from '@/logger';
 import { filterIgnoredFiles, scrapeWeb } from '@/utils';
 import { isAbortError, isFileNotFoundError } from '@/utils/errors';
+⋮----
+/**
+ * File lock map to prevent race conditions when multiple edits target the same file.
+ * Each file path maps to a promise representing the ongoing operation.
+ * New operations on the same file must wait for the previous one to complete.
+ */
+⋮----
+/**
+ * Acquires a lock for a file and executes the operation.
+ * If another operation is in progress for the same file, it waits for it to complete.
+ */
+const withFileLock = <T>(filePath: string, operation: () => Promise<T>): Promise<T> =>
 ⋮----
 /**
  * Expands a tilde (~) at the beginning of a path to the user's home directory.
@@ -8961,6 +9064,7 @@ private async getAvailableTools(
     mode: Mode,
     profile: AgentProfile,
     provider: ProviderProfile,
+    model: string,
     mcpConnectors: McpConnector[] = [],
     messages?: ContextMessage[],
     resultMessages?: ContextMessage[],
@@ -8989,6 +9093,8 @@ return; // Do not add the tool if it's never approved
 // Add extension tools
 ⋮----
 private wrapToolsWithHooks(task: Task, toolSet: ToolSet, abortSignal?: AbortSignal, promptContext?: PromptContext): ToolSet
+⋮----
+// Use modified input from extension if provided
 ⋮----
 private convertMpcToolToAiSdkTool(
     providerName: LlmProviderName,
@@ -9090,7 +9196,9 @@ error: error.message, // Pass the validation error message
 ⋮----
 // Get the model to use its temperature and max output tokens settings
 ⋮----
-const getBaseModelCallParams = () =>
+const getBaseModelCallParams = async () =>
+⋮----
+const getOptimizedMessages = async () =>
 ⋮----
 const onStepFinish = async (stepResult: StepResult<typeof toolSet>) =>
 ⋮----
@@ -9174,8 +9282,8 @@ private async processStep<TOOLS extends ToolSet>(
     currentResponseId: string,
     { content, reasoningText, text, toolCalls, toolResults, finishReason, usage, providerMetadata, response, reasoning, files }: StepResult<TOOLS>,
     task: Task,
-    profile: AgentProfile,
     provider: ProviderProfile,
+    model: string,
     promptContext?: PromptContext,
     abortSignal?: AbortSignal,
 ): Promise<ContextMessage[]>
@@ -9198,6 +9306,8 @@ isLast ? usageReport : undefined, // Only add usage report to the last tool mess
 private async compactMessagesIfNeeded(
     task: Task,
     profile: AgentProfile,
+    provider: ProviderProfile,
+    model: string,
     userRequestMessage: ContextUserMessage,
     contextMessages: ContextMessage[],
     contextFiles: ContextFile[],
@@ -9381,30 +9491,35 @@ import logger from '@/logger';
 import { type CacheControl } from '@/models';
 import { Task } from '@/task';
 import { getSubagentId } from '@/agent/tools/subagents';
+import { ExtensionManager } from '@/extensions';
 ⋮----
 /**
  * Optimizes the messages before sending them to the LLM. This should reduce the token count and improve the performance.
  */
-export const optimizeMessages = (
+export const optimizeMessages = async (
   messages: ModelMessage[],
   cacheControl?: CacheControl,
   task: Task | null = null,
   profile: AgentProfile | null = null,
   projectProfiles: AgentProfile[] = [],
   userRequestMessageIndex: number = -1,
-) =>
+  extensionManager?: ExtensionManager,
+): Promise<ModelMessage[]> =>
 ⋮----
-const addImportantReminders = (
+const addImportantReminders = async (
   task: Task,
   profile: AgentProfile,
   projectProfiles: AgentProfile[],
   userRequestMessageIndex: number,
   messages: ModelMessage[],
-): ModelMessage[] =>
+  extensionManager?: ExtensionManager,
+): Promise<ModelMessage[]> =>
 ⋮----
 // Add reminder about automatic subagents
 ⋮----
 // Add reminder about worktree mode
+⋮----
+// Dispatch event to extensions to allow modification of reminders
 ⋮----
 /**
  * For run_prompt tool, which returns `responses` array, we should replace this array with empty array.
@@ -12861,7 +12976,7 @@ File: src/main/extensions/extension-loader.ts
 ================
 import path from 'path';
 ⋮----
-import { createJiti } from 'jiti';
+import { createJiti, type JitiOptions } from 'jiti';
 import { Extension, ExtensionMetadata } from '@common/extensions';
 ⋮----
 import logger from '@/logger';
@@ -12874,13 +12989,19 @@ interface ExtensionModule {
   };
 }
 ⋮----
+// Base jiti options shared across all instances
+⋮----
 export class ExtensionLoader
 ⋮----
-constructor()
+/**
+   * Get or create a jiti instance for a specific extension directory.
+   * This ensures module resolution happens relative to the extension's directory.
+   */
+private getJitiForExtension(filePath: string): ReturnType<typeof createJiti>
 ⋮----
-// Initialize jiti relative to the current file or project root
-// Typically we want it to resolve relative to where we are loading from
-// Disable cache to always load fresh file content
+// Check if we already have a jiti instance for this directory
+⋮----
+// Create a new jiti instance with the extension directory as base
 ⋮----
 private deriveExtensionName(filePath: string): string
 ⋮----
@@ -12889,6 +13010,8 @@ private deriveExtensionName(filePath: string): string
 // Otherwise, use the filename without extension
 ⋮----
 async loadExtension(filePath: string): Promise<
+⋮----
+// Use extension-specific jiti instance for proper module resolution
 ⋮----
 // Use jiti to load the file
 // jiti handles TypeScript compilation on the fly
@@ -12926,6 +13049,8 @@ import type {
   AgentFinishedEvent,
   AgentStartedEvent,
   AgentStepFinishedEvent,
+  OptimizeMessagesEvent,
+  ImportantRemindersEvent,
   AiderPromptFinishedEvent,
   AiderPromptStartedEvent,
   CommandExecutedEvent,
@@ -12942,6 +13067,7 @@ import type {
   QuestionAskedEvent,
   ResponseChunkEvent,
   ResponseCompletedEvent,
+  RuleFilesRetrievedEvent,
   SubagentFinishedEvent,
   SubagentStartedEvent,
   TaskClosedEvent,
@@ -12954,6 +13080,8 @@ import type {
   ToolDefinition,
   ToolFinishedEvent,
   CommandDefinition,
+  ProjectStartedEvent,
+  ProjectStoppedEvent,
 } from '@common/extensions';
 import type { ToolCallOptions, ToolSet } from 'ai';
 ⋮----
@@ -12986,6 +13114,8 @@ export interface RegisteredMode {
  * Mapping of extension event names to their event payload types
  */
 export type ExtensionEventMap = {
+  onProjectStarted: ProjectStartedEvent;
+  onProjectStopped: ProjectStoppedEvent;
   onTaskCreated: TaskCreatedEvent;
   onTaskPrepared: TaskPreparedEvent;
   onTaskInitialized: TaskInitializedEvent;
@@ -12996,6 +13126,8 @@ export type ExtensionEventMap = {
   onAgentStarted: AgentStartedEvent;
   onAgentFinished: AgentFinishedEvent;
   onAgentStepFinished: AgentStepFinishedEvent;
+  onOptimizeMessages: OptimizeMessagesEvent;
+  onImportantReminders: ImportantRemindersEvent;
   onAiderPromptStarted: AiderPromptStartedEvent;
   onAiderPromptFinished: AiderPromptFinishedEvent;
   onToolApproval: ToolApprovalEvent;
@@ -13003,6 +13135,7 @@ export type ExtensionEventMap = {
   onToolFinished: ToolFinishedEvent;
   onFilesAdded: FilesAddedEvent;
   onFilesDropped: FilesDroppedEvent;
+  onRuleFilesRetrieved: RuleFilesRetrievedEvent;
   onResponseChunk: ResponseChunkEvent;
   onResponseCompleted: ResponseCompletedEvent;
   onHandleApproval: HandleApprovalEvent;
@@ -13670,6 +13803,28 @@ async deleteMemoriesForProject(projectId: string): Promise<number>
 async clearAllMemories(): Promise<boolean>
 ⋮----
 isMemoryEnabled(): boolean
+
+================
+File: src/main/models/providers/alibaba-plan.ts
+================
+import { Model, ProviderProfile, SettingsData } from '@common/types';
+import { isAlibabaPlanProvider, AlibabaPlanProvider } from '@common/agent';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+⋮----
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+⋮----
+import { AiderModelMapping, LlmProviderStrategy, LoadModelsResponse } from '@/models';
+import logger from '@/logger';
+import { getEffectiveEnvironmentVariable } from '@/utils';
+import { getDefaultUsageReport } from '@/models/providers/default';
+⋮----
+const loadAlibabaPlanModels = async (profile: ProviderProfile, settings: SettingsData): Promise<LoadModelsResponse> =>
+⋮----
+const hasAlibabaPlanEnvVars = (settings: SettingsData): boolean =>
+⋮----
+const getAlibabaPlanAiderMapping = (provider: ProviderProfile, modelId: string, settings: SettingsData, projectDir: string): AiderModelMapping =>
+⋮----
+const createAlibabaPlanLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModelV2 =>
 
 ================
 File: src/main/models/providers/anthropic-compatible.ts
@@ -15126,6 +15281,7 @@ import { geminiProviderStrategy } from './providers/gemini';
 import { geminiCliProviderStrategy } from './providers/gemini-cli';
 import { gpustackProviderStrategy } from './providers/gpustack';
 import { groqProviderStrategy } from './providers/groq';
+import { alibabaPlanProviderStrategy } from './providers/alibaba-plan';
 import { kimiPlanProviderStrategy } from './providers/kimi-plan';
 import { litellmProviderStrategy } from './providers/litellm';
 import { lmStudioProviderStrategy } from './providers/lm-studio';
@@ -17602,8 +17758,6 @@ public async runPrompt(prompt: string, mode: Mode = 'code', addToInputHistory = 
 ⋮----
 // Queue the prompt for later execution
 ⋮----
-// Generate promptContext for this run
-⋮----
 public async savePromptOnly(prompt: string, addInputHistory = true): Promise<void>
 ⋮----
 // Add to context manager
@@ -17822,6 +17976,8 @@ public async getRuleFilesAsContextFiles(profile?: AgentProfile): Promise<Context
 // Convert to relative path with ~/ prefix if in home directory
 ⋮----
 // Rule file doesn't exist or can't be accessed
+⋮----
+// Dispatch extension event to allow modification of rule files
 ⋮----
 public getRepoMap(): string
 ⋮----
@@ -19343,7 +19499,11 @@ async getUpdatedFiles(worktreePath: string): Promise<UpdatedFile[]>
 ⋮----
 const filePath = parts.slice(2).join('\t'); // Handle paths with tabs
 ⋮----
+// Skip empty file paths
+⋮----
 // Check if file is binary and skip diff generation
+⋮----
+// Check if file exists (it may have been deleted)
 ⋮----
 // Binary file - skip diff
 ⋮----
@@ -21279,8 +21439,11 @@ import { WorkflowMetadata } from '@common/types';
 import { MouseEvent, useState } from 'react';
 import { CgSpinner } from 'react-icons/cg';
 import { HiCheck, HiClock } from 'react-icons/hi';
+import { FiBox, FiCalendar, FiClipboard, FiCode, FiEye, FiFilePlus, FiFileText, FiLayout, FiList, FiPlay, FiSearch, FiZap } from 'react-icons/fi';
+import { RiBrain2Line } from 'react-icons/ri';
 import { clsx } from 'clsx';
 import { useTranslation } from 'react-i18next';
+import { IoPlayCircleOutline } from 'react-icons/io5';
 ⋮----
 import { Button } from '@/components/common/Button';
 import { useApi } from '@/contexts/ApiContext';
@@ -21295,6 +21458,8 @@ type Props = {
   taskId: string;
   onRefresh: () => Promise<void>;
 };
+⋮----
+const getWorkflowIcon = (workflowId: string): typeof FiSearch =>
 ⋮----
 export const WorkflowActionButton = (
 ⋮----
@@ -24423,6 +24588,27 @@ onFork=
 aria-label=
 
 ================
+File: src/renderer/src/components/ModelLibrary/providers/AlibabaPlanParameters.tsx
+================
+import { ChangeEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { AlibabaPlanProvider } from '@common/agent';
+⋮----
+import { Input } from '@/components/common/Input';
+import { useEffectiveEnvironmentVariable } from '@/hooks/useEffectiveEnvironmentVariable';
+⋮----
+type Props = {
+  provider: AlibabaPlanProvider;
+  onChange: (updated: AlibabaPlanProvider) => void;
+};
+⋮----
+export const AlibabaPlanParameters = (
+⋮----
+const handleApiKeyChange = (e: ChangeEvent<HTMLInputElement>) =>
+⋮----
+label=
+
+================
 File: src/renderer/src/components/ModelLibrary/providers/AnthropicCompatibleParameters.tsx
 ================
 import { ChangeEvent } from 'react';
@@ -25803,6 +25989,7 @@ import {
 } from '@/icons';
 import { useResponsive } from '@/hooks/useResponsive';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { AlibabaPlanIcon } from '@/icons/AlibabaPlanIcon';
 import { KimiPlanIcon } from '@/icons/KimiPlanIcon';
 ⋮----
 type Props = {
@@ -25904,6 +26091,7 @@ import {
   GeminiParameters,
   GpustackParameters,
   GroqParameters,
+  AlibabaPlanParameters,
   KimiPlanParameters,
   LitellmParameters,
   LmStudioParameters,
@@ -26005,6 +26193,7 @@ import {
   SyntheticIcon,
   VertexAiIcon,
   ZaiPlanIcon,
+  AlibabaPlanIcon,
   KimiPlanIcon,
 } from '@/icons';
 ⋮----
@@ -30039,6 +30228,15 @@ import en from '@common/locales/en.json';
 import zh from '@common/locales/zh.json';
 ⋮----
 // eslint-disable-next-line import/no-named-as-default-member
+
+================
+File: src/renderer/src/icons/AlibabaPlanIcon.tsx
+================
+type Props = {
+  width?: number;
+  height?: number;
+  className?: string;
+};
 
 ================
 File: src/renderer/src/icons/AnthropicCompatibleIcon.tsx

@@ -9,6 +9,7 @@ export * from './DeepseekParameters';
 export * from './GeminiParameters';
 export * from './GpustackParameters';
 export * from './GroqParameters';
+export * from './AlibabaPlanParameters';
 export * from './KimiPlanParameters';
 export * from './LitellmParameters';
 export * from './MinimaxParameters';

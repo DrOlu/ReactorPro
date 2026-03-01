@@ -34,6 +34,29 @@ import { filterIgnoredFiles, scrapeWeb } from '@/utils';
 import { isAbortError, isFileNotFoundError } from '@/utils/errors';
 
 /**
+ * File lock map to prevent race conditions when multiple edits target the same file.
+ * Each file path maps to a promise representing the ongoing operation.
+ * New operations on the same file must wait for the previous one to complete.
+ */
+const fileLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Acquires a lock for a file and executes the operation.
+ * If another operation is in progress for the same file, it waits for it to complete.
+ */
+const withFileLock = <T>(filePath: string, operation: () => Promise<T>): Promise<T> => {
+  const currentLock = fileLocks.get(filePath) || Promise.resolve();
+  const newLock = currentLock.then(operation, operation);
+  fileLocks.set(filePath, newLock);
+  newLock.finally(() => {
+    if (fileLocks.get(filePath) === newLock) {
+      fileLocks.delete(filePath);
+    }
+  });
+  return newLock;
+};
+
+/**
  * Expands a tilde (~) at the beginning of a path to the user's home directory.
  * @param filePath - The file path to expand
  * @returns The expanded path with ~ replaced by the home directory
@@ -156,46 +179,49 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
       }
 
       const absolutePath = path.resolve(task.getTaskDir(), expandedPath);
-      try {
-        const fileContent = await fs.readFile(absolutePath, { encoding: 'utf8', signal: abortSignal });
-        let modifiedContent: string;
 
-        if (isRegex) {
-          const regex = new RegExp(searchTerm, replaceAll ? 'g' : '');
-          modifiedContent = fileContent.replace(regex, replacementText);
-        } else {
-          const sanitizedSearchTerm = sanitize(searchTerm);
-          const sanitizedReplacementText = sanitize(replacementText);
+      return withFileLock(absolutePath, async () => {
+        try {
+          const fileContent = await fs.readFile(absolutePath, { encoding: 'utf8', signal: abortSignal });
+          let modifiedContent: string;
 
-          if (replaceAll) {
-            modifiedContent = fileContent.replaceAll(sanitizedSearchTerm, sanitizedReplacementText);
+          if (isRegex) {
+            const regex = new RegExp(searchTerm, replaceAll ? 'g' : '');
+            modifiedContent = fileContent.replace(regex, replacementText);
           } else {
-            modifiedContent = fileContent.replace(sanitizedSearchTerm, sanitizedReplacementText);
+            const sanitizedSearchTerm = sanitize(searchTerm);
+            const sanitizedReplacementText = sanitize(replacementText);
+
+            if (replaceAll) {
+              modifiedContent = fileContent.replaceAll(sanitizedSearchTerm, sanitizedReplacementText);
+            } else {
+              modifiedContent = fileContent.replace(sanitizedSearchTerm, sanitizedReplacementText);
+            }
           }
-        }
 
-        if (fileContent === modifiedContent) {
-          const improveInfo = searchTerm.startsWith('\\\n')
-            ? 'Do not start the search term with a \\ character. No escape characters are needed.'
-            : searchTerm.includes('\\"')
-              ? 'Try not using the \\ in the string like \\" and others, but use only ".'
-              : 'When you try again make sure to exactly match content, character for character, including all comments, docstrings, etc.';
+          if (fileContent === modifiedContent) {
+            const improveInfo = searchTerm.startsWith('\\\n')
+              ? 'Do not start the search term with a \\ character. No escape characters are needed.'
+              : searchTerm.includes('\\"')
+                ? 'Try not using the \\ in the string like \\" and others, but use only ".'
+                : 'When you try again make sure to exactly match content, character for character, including all comments, docstrings, etc.';
 
-          return `Warning: Given 'searchTerm' was not found in the file. Content remains the same. ${improveInfo}`;
-        }
+            return `Warning: Given 'searchTerm' was not found in the file. Content remains the same. ${improveInfo}`;
+          }
 
-        await fs.writeFile(absolutePath, modifiedContent, { encoding: 'utf8', signal: abortSignal });
-        return `Successfully edited '${filePath}'.`;
-      } catch (error) {
-        if (isAbortError(error)) {
-          return 'Operation was cancelled by user.';
+          await fs.writeFile(absolutePath, modifiedContent, { encoding: 'utf8', signal: abortSignal });
+          return `Successfully edited '${filePath}'.`;
+        } catch (error) {
+          if (isAbortError(error)) {
+            return 'Operation was cancelled by user.';
+          }
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (isFileNotFoundError(error)) {
+            return `Error: File '${filePath}' not found.`;
+          }
+          return `Error editing file '${filePath}': ${errorMessage}`;
         }
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (isFileNotFoundError(error)) {
-          return `Error: File '${filePath}' not found.`;
-        }
-        return `Error editing file '${filePath}': ${errorMessage}`;
-      }
+      });
     },
   });
 

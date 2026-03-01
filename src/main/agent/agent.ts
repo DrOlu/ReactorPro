@@ -344,6 +344,7 @@ export class Agent {
     mode: Mode,
     profile: AgentProfile,
     provider: ProviderProfile,
+    model: string,
     mcpConnectors: McpConnector[] = [],
     messages?: ContextMessage[],
     resultMessages?: ContextMessage[],
@@ -446,7 +447,7 @@ export class Agent {
     Object.assign(toolSet, helperTools);
 
     // Add provider-specific tools
-    const providerTools = await this.modelManager.getProviderTools(provider, profile.model);
+    const providerTools = await this.modelManager.getProviderTools(provider, model);
     Object.assign(toolSet, providerTools);
 
     // Add extension tools
@@ -464,20 +465,20 @@ export class Agent {
     for (const [toolName, toolDef] of Object.entries(toolSet)) {
       wrappedToolSet[toolName] = {
         ...toolDef,
-        execute: async (args: Record<string, unknown> | undefined, options: ToolCallOptions) => {
-          const hookResult = await task.hookManager.trigger('onToolCalled', { toolName, args }, task, task.project);
+        execute: async (input: Record<string, unknown> | undefined, options: ToolCallOptions) => {
+          const hookResult = await task.hookManager.trigger('onToolCalled', { toolName, args: input }, task, task.project);
           if (hookResult.blocked) {
             logger.warn(`Tool execution blocked by hook: ${toolName}`);
             return 'Tool execution blocked by hook.';
           }
-          const effectiveArgs = hookResult.event.args as Record<string, unknown> | undefined;
+          let effectiveInput = hookResult.event.args ?? (input as Record<string, unknown> | undefined);
           const [serverName, messageToolName] = extractServerNameToolName(toolName);
 
-          task.addToolMessage(options.toolCallId, serverName, messageToolName, effectiveArgs, undefined, undefined, promptContext);
+          task.addToolMessage(options.toolCallId, serverName, messageToolName, effectiveInput, undefined, undefined, promptContext);
 
           const toolCalledExtensionResult = await this.extensionManager.dispatchEvent(
             'onToolCalled',
-            { toolName, input: effectiveArgs, abortSignal: options.abortSignal || abortSignal },
+            { toolName, input: effectiveInput, abortSignal: options.abortSignal || abortSignal },
             task.project,
             task,
           );
@@ -485,15 +486,18 @@ export class Agent {
             return toolCalledExtensionResult.output;
           }
 
+          // Use modified input from extension if provided
+          effectiveInput = (toolCalledExtensionResult.input ?? effectiveInput) as Record<string, unknown> | undefined;
+
           if (!options.abortSignal && abortSignal) {
             options.abortSignal = abortSignal;
           }
 
-          const result = await toolDef.execute!(effectiveArgs, options);
-          const toolFinishedHookResult = await task.hookManager.trigger('onToolFinished', { toolName, args: effectiveArgs, result }, task, task.project);
+          const result = await toolDef.execute!(effectiveInput, options);
+          const toolFinishedHookResult = await task.hookManager.trigger('onToolFinished', { toolName, args: effectiveInput, result }, task, task.project);
           const toolFinishedExtensionResult = await this.extensionManager.dispatchEvent(
             'onToolFinished',
-            { toolName, input: effectiveArgs, output: result },
+            { toolName, input: effectiveInput, output: result },
             task.project,
             task,
           );
@@ -731,31 +735,6 @@ export class Agent {
       systemPrompt = await this.promptsManager.getSystemPrompt(this.store.getSettings(), task, profile);
     }
 
-    const extensionResult = await this.extensionManager.dispatchEvent(
-      'onAgentStarted',
-      {
-        mode,
-        agentProfile: profile,
-        prompt,
-        promptContext,
-        contextMessages,
-        contextFiles,
-        systemPrompt,
-      },
-      task.project,
-      task,
-    );
-    if (extensionResult.blocked) {
-      logger.info('Agent execution blocked by extension');
-      return [];
-    }
-    profile = extensionResult.agentProfile;
-    prompt = extensionResult.prompt;
-    promptContext = extensionResult.promptContext;
-    contextMessages = extensionResult.contextMessages;
-    contextFiles = extensionResult.contextFiles;
-    systemPrompt = extensionResult.systemPrompt;
-
     const userRequestMessage: ContextUserMessage | null = prompt
       ? {
           id: promptContext?.id || uuidv4(),
@@ -765,16 +744,48 @@ export class Agent {
         }
       : null;
 
-    if (userRequestMessage && includeInContext) {
-      await task.addContextMessage(userRequestMessage);
-    }
-
     const settings = this.store.getSettings();
     const projectProfiles = this.agentProfileManager.getProjectProfiles(task.getProjectDir());
     let resultMessages: ContextMessage[] = userRequestMessage ? [userRequestMessage] : [];
 
     const providers = this.store.getProviders();
-    const provider = providers.find((p) => p.id === profile.provider);
+    let provider = providers.find((p) => p.id === profile.provider);
+    let modelName = profile.model;
+
+    if (provider) {
+      const extensionResult = await this.extensionManager.dispatchEvent(
+        'onAgentStarted',
+        {
+          mode,
+          prompt,
+          agentProfile: profile,
+          providerProfile: provider,
+          model: modelName,
+          promptContext,
+          contextMessages,
+          contextFiles,
+          systemPrompt,
+        },
+        task.project,
+        task,
+      );
+      if (extensionResult.blocked) {
+        logger.info('Agent execution blocked by extension');
+        return [];
+      }
+      profile = extensionResult.agentProfile;
+      provider = extensionResult.providerProfile;
+      modelName = extensionResult.model;
+      prompt = extensionResult.prompt;
+      promptContext = extensionResult.promptContext;
+      contextMessages = extensionResult.contextMessages;
+      contextFiles = extensionResult.contextFiles;
+      systemPrompt = extensionResult.systemPrompt;
+    }
+
+    if (userRequestMessage && includeInContext) {
+      await task.addContextMessage(userRequestMessage);
+    }
     if (!provider) {
       logger.error(`Provider ${profile.provider} not found`);
       task.addLogMessage('error', 'Selected model is not configured. Select another model and try again.', true, promptContext);
@@ -812,8 +823,8 @@ export class Agent {
     const effectiveAbortSignal = abortSignal || (controllerId ? this.abortControllers.get(controllerId)?.signal : undefined);
 
     const cacheControl = this.modelManager.getCacheControl(profile, provider.provider);
-    const providerOptions = this.modelManager.getProviderOptions(provider, profile.model);
-    const providerParameters = this.modelManager.getProviderParameters(provider, profile.model);
+    const providerOptions = this.modelManager.getProviderOptions(provider, modelName);
+    const providerParameters = this.modelManager.getProviderParameters(provider, modelName);
 
     const firstUserMessage = contextMessages.length > 0 ? contextMessages[0] : null;
     let messages = await this.prepareMessages(task, profile, contextMessages, contextFiles);
@@ -825,7 +836,7 @@ export class Agent {
     messages.push(...resultMessages);
 
     // Normalize messages for provider-specific requirements
-    messages = this.modelManager.normalizeMessages(provider, profile.model, messages);
+    messages = this.modelManager.normalizeMessages(provider, modelName, messages);
 
     let mcpConnectors: McpConnector[] = [];
     try {
@@ -864,6 +875,7 @@ export class Agent {
       mode,
       profile,
       provider,
+      modelName,
       mcpConnectors,
       contextMessages,
       resultMessages,
@@ -882,12 +894,12 @@ export class Agent {
       logger.debug('Creating LLM model', {
         providerId: provider.id,
         providerName: provider.provider.name,
-        modelName: profile.model,
+        modelName: modelName,
       });
 
       const model = await this.modelManager.createLlm(
         provider,
-        profile.model,
+        modelName,
         settings,
         task.getProjectDir(),
         toolSet,
@@ -990,7 +1002,7 @@ export class Agent {
       };
 
       // Get the model to use its temperature and max output tokens settings
-      const modelSettings = this.modelManager.getModelSettings(profile.provider, profile.model);
+      const modelSettings = this.modelManager.getModelSettings(provider.provider.name, modelName);
       const effectiveTemperature = profile.temperature ?? modelSettings?.temperature;
       const effectiveMaxOutputTokens = profile.maxTokens ?? modelSettings?.maxOutputTokens;
 
@@ -1002,7 +1014,34 @@ export class Agent {
         ...providerParameters,
       });
 
-      const getBaseModelCallParams = () => {
+      const getBaseModelCallParams = async () => {
+        const getOptimizedMessages = async () => {
+          const originalMessages = messages as ContextMessage[];
+          const optimized = await optimizeMessages(
+            messages,
+            cacheControl,
+            task,
+            profile,
+            projectProfiles,
+            initialUserRequestMessageIndex,
+            this.extensionManager,
+          );
+
+          const extensionResult = await this.extensionManager.dispatchEvent(
+            'onOptimizeMessages',
+            {
+              originalMessages,
+              optimizedMessages: optimized as ContextMessage[],
+            },
+            task.project,
+            task,
+          );
+
+          return (extensionResult.optimizedMessages as ModelMessage[]) ?? optimized;
+        };
+
+        const optimizedMessages = await getOptimizedMessages();
+
         return {
           providerOptions,
           model: wrapLanguageModel({
@@ -1012,7 +1051,7 @@ export class Agent {
             }),
           }),
           system: systemPrompt,
-          messages: optimizeMessages(messages, cacheControl, task, profile, projectProfiles, initialUserRequestMessageIndex),
+          messages: optimizedMessages,
           tools: toolSet,
           abortSignal: effectiveAbortSignal,
           maxOutputTokens: effectiveMaxOutputTokens,
@@ -1062,7 +1101,7 @@ export class Agent {
             return;
           }
 
-          responseMessages = await this.processStep(currentResponseId, stepResult, task, profile, provider, promptContext, abortSignal);
+          responseMessages = await this.processStep(currentResponseId, stepResult, task, provider, modelName, promptContext, abortSignal);
           const hookResult = await task.hookManager.trigger('onAgentStepFinished', { stepResult, finishReason, responseMessages }, task, task.project);
           if (hookResult?.event?.finishReason) {
             finishReason = hookResult.event.finishReason;
@@ -1094,6 +1133,8 @@ export class Agent {
         const shouldContinue = await this.compactMessagesIfNeeded(
           task,
           profile,
+          provider,
+          modelName,
           userRequestMessage || findLastUserMessage(contextMessages)!,
           contextMessages,
           contextFiles,
@@ -1111,17 +1152,17 @@ export class Agent {
           break;
         }
 
-        if (this.modelManager.isStreamingDisabled(provider, profile.model)) {
+        if (this.modelManager.isStreamingDisabled(provider, modelName)) {
           logger.debug('Streaming disabled, using generateText');
           await generateText({
-            ...getBaseModelCallParams(),
+            ...(await getBaseModelCallParams()),
             onStepFinish,
             experimental_repairToolCall: repairToolCall,
           });
         } else {
           logger.debug('Streaming enabled, using streamText');
           const result = streamText({
-            ...getBaseModelCallParams(),
+            ...(await getBaseModelCallParams()),
             experimental_transform: smoothStream({
               delayInMs: 20,
               chunking: 'line',
@@ -1210,7 +1251,7 @@ export class Agent {
           if (
             iterationError instanceof APICallError &&
             iterationError.isRetryable &&
-            this.modelManager.isRetryable(resolvedProvider, profile.model, iterationError)
+            this.modelManager.isRetryable(resolvedProvider, modelName, iterationError)
           ) {
             // try again
             continue;
@@ -1617,7 +1658,7 @@ export class Agent {
       const result = await generateText({
         model,
         system: systemPrompt,
-        messages: optimizeMessages(messages),
+        messages: await optimizeMessages(messages),
         abortSignal: effectiveAbortSignal,
         providerOptions,
         ...providerParameters,
@@ -1649,7 +1690,7 @@ export class Agent {
       }
 
       const messages = await this.prepareMessages(task, profile, await task.getContextMessages(), await task.getContextFiles());
-      const toolSet = await this.getAvailableTools(task, 'agent', profile, provider);
+      const toolSet = await this.getAvailableTools(task, 'agent', profile, provider, profile.model);
       const systemPrompt = await this.promptsManager.getSystemPrompt(this.store.getSettings(), task, profile);
 
       const cacheControl = this.modelManager.getCacheControl(profile, provider.provider);
@@ -1657,7 +1698,7 @@ export class Agent {
       const lastUserIndex = messages.map((m) => m.role).lastIndexOf('user');
       const userRequestMessageIndex = lastUserIndex >= 0 ? lastUserIndex : 0;
 
-      const optimizedMessages = optimizeMessages(
+      const optimizedMessages = await optimizeMessages(
         messages,
         cacheControl,
         task,
@@ -1711,8 +1752,8 @@ export class Agent {
     currentResponseId: string,
     { content, reasoningText, text, toolCalls, toolResults, finishReason, usage, providerMetadata, response, reasoning, files }: StepResult<TOOLS>,
     task: Task,
-    profile: AgentProfile,
     provider: ProviderProfile,
+    model: string,
     promptContext?: PromptContext,
     abortSignal?: AbortSignal,
   ): Promise<ContextMessage[]> {
@@ -1731,7 +1772,7 @@ export class Agent {
     });
 
     const messages: ContextMessage[] = [];
-    const usageReport: UsageReportData = this.modelManager.getUsageReport(task, provider, profile.model, usage, providerMetadata);
+    const usageReport: UsageReportData = this.modelManager.getUsageReport(task, provider, model, usage, providerMetadata);
 
     if (providerMetadata) {
       await task.updateTask({ lastAgentProviderMetadata: providerMetadata });
@@ -1826,6 +1867,8 @@ export class Agent {
   private async compactMessagesIfNeeded(
     task: Task,
     profile: AgentProfile,
+    provider: ProviderProfile,
+    model: string,
     userRequestMessage: ContextUserMessage,
     contextMessages: ContextMessage[],
     contextFiles: ContextFile[],
@@ -1840,7 +1883,7 @@ export class Agent {
       ? ContextCompactionType.Compact
       : (this.store.getSettings().taskSettings.contextCompactionType ?? ContextCompactionType.Compact);
     const usageReport = resultMessages[resultMessages.length - 1]?.usageReport;
-    const maxTokens = this.modelManager.getModelSettings(profile.provider, profile.model)?.maxInputTokens;
+    const maxTokens = this.modelManager.getModelSettings(provider.provider.name, model)?.maxInputTokens;
 
     if (contextCompactingThreshold === 0 || !usageReport || !maxTokens) {
       return true;

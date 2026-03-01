@@ -9,6 +9,7 @@ export { GeminiCliIcon } from './GeminiCliIcon';
 export { GeminiIcon } from './GeminiIcon';
 export { GpustackIcon } from './GpustackIcon';
 export { GroqIcon } from './GroqIcon';
+export { AlibabaPlanIcon } from './AlibabaPlanIcon';
 export { KimiPlanIcon } from './KimiPlanIcon';
 export { LitellmIcon } from './LitellmIcon';
 export { LmStudioIcon } from './LmStudioIcon';

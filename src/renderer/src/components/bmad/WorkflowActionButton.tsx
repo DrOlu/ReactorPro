@@ -2,8 +2,11 @@ import { WorkflowMetadata } from '@common/types';
 import { MouseEvent, useState } from 'react';
 import { CgSpinner } from 'react-icons/cg';
 import { HiCheck, HiClock } from 'react-icons/hi';
+import { FiBox, FiCalendar, FiClipboard, FiCode, FiEye, FiFilePlus, FiFileText, FiLayout, FiList, FiPlay, FiSearch, FiZap } from 'react-icons/fi';
+import { RiBrain2Line } from 'react-icons/ri';
 import { clsx } from 'clsx';
 import { useTranslation } from 'react-i18next';
+import { IoPlayCircleOutline } from 'react-icons/io5';
 
 import { Button } from '@/components/common/Button';
 import { useApi } from '@/contexts/ApiContext';
@@ -17,6 +20,26 @@ type Props = {
   projectDir: string;
   taskId: string;
   onRefresh: () => Promise<void>;
+};
+
+const WORKFLOW_ICONS: Record<string, typeof FiSearch> = {
+  brainstorming: RiBrain2Line,
+  research: FiSearch,
+  'create-product-brief': FiFileText,
+  'create-prd': FiClipboard,
+  'create-ux-design': FiLayout,
+  'create-architecture': FiBox,
+  'create-epics-and-stories': FiList,
+  'sprint-planning': FiCalendar,
+  'create-story': FiFilePlus,
+  'dev-story': FiCode,
+  'code-review': FiEye,
+  'quick-spec': FiZap,
+  'quick-dev': FiPlay,
+};
+
+const getWorkflowIcon = (workflowId: string): typeof FiSearch => {
+  return WORKFLOW_ICONS[workflowId] || FiFileText;
 };
 
 export const WorkflowActionButton = ({ workflow, isCompleted, isInProgress, isSuggested, projectDir, taskId, onRefresh }: Props) => {
@@ -59,13 +82,16 @@ export const WorkflowActionButton = ({ workflow, isCompleted, isInProgress, isSu
   };
 
   const buttonColor = isSuggested && !isCompleted ? 'primary' : 'tertiary';
+  const WorkflowIcon = getWorkflowIcon(workflow.id);
 
   return (
     <Button onClick={handleExecuteWorkflow} color={buttonColor} size="sm" disabled={loading} className="gap-1">
       {loading && <CgSpinner className="animate-spin w-4 h-4" />}
+      {!loading && !isCompleted && !isInProgress && <WorkflowIcon className="w-4 h-4" />}
       {isCompleted && !loading && <HiCheck className="w-4 h-4 text-success-default" />}
       {isInProgress && !loading && <HiClock className="w-4 h-4 text-warning-default" />}
       <span className={clsx({ 'line-through': isCompleted })}>{loading ? t('bmad.workflows.executing') : workflow.name}</span>
+      {!loading && !isCompleted && !isInProgress && <IoPlayCircleOutline className="w-3.5 h-3.5 ml-2" />}
     </Button>
   );
 };
