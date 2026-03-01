@@ -12,6 +12,7 @@
 - speed up startup by loading some of the long-loading managers in background
 - better handling of memory embedding process when swithing between models
 - removed BAAI/bge-large-en-v1.5 as Memory embedding model due to app crash
+- added Copy as Markdown action to task actions menu in task sidebar
 
 ## [0.54.0]
 

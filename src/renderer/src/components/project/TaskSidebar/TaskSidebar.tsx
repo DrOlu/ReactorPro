@@ -35,6 +35,7 @@ type Props = {
   onToggleCollapse: () => void;
   updateTask?: (taskId: string, updates: Partial<TaskData>) => Promise<void>;
   deleteTask?: (taskId: string) => Promise<void>;
+  onCopyAsMarkdown?: (taskId: string) => void;
   onExportToMarkdown?: (taskId: string) => void;
   onExportToImage?: (taskId: string) => void;
   onDuplicateTask?: (taskId: string) => void;
@@ -53,6 +54,7 @@ const TaskSidebarComponent = ({
   onToggleCollapse,
   updateTask,
   deleteTask,
+  onCopyAsMarkdown,
   onExportToMarkdown,
   onExportToImage,
   onDuplicateTask,
@@ -534,6 +536,7 @@ const TaskSidebarComponent = ({
                           onUnarchiveTask={handleUnarchiveTask}
                           onTogglePin={handleTogglePin}
                           onChangeState={handleChangeState}
+                          onCopyAsMarkdown={onCopyAsMarkdown}
                           onExportToMarkdown={onExportToMarkdown}
                           onExportToImage={onExportToImage}
                           onDuplicateTask={onDuplicateTask}

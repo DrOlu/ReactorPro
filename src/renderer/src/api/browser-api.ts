@@ -549,24 +549,33 @@ export class BrowserApi implements ApplicationAPI {
     return this.post('/project/tasks/load', { projectDir: baseDir, id });
   }
 
-  async exportTaskToMarkdown(baseDir: string, taskId: string): Promise<void> {
+  async exportTaskToMarkdown(baseDir: string, taskId: string, copyOnly: boolean = false): Promise<string | void> {
     const response = await this.apiClient.post('/project/tasks/export-markdown', {
       projectDir: baseDir,
       taskId,
+      copyOnly,
     });
 
-    const markdownContent = response.data;
-    const filename = `session-${new Date().toISOString().replace(/:/g, '-').substring(0, 19)}.md`;
+    if (copyOnly) {
+      const { markdown } = response.data;
+      if (!markdown) {
+        throw new Error('No markdown content received');
+      }
+      return markdown;
+    } else {
+      const markdownContent = response.data;
+      const filename = `session-${new Date().toISOString().replace(/:/g, '-').substring(0, 19)}.md`;
 
-    const blob = new Blob([markdownContent], { type: 'text/markdown' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+      const blob = new Blob([markdownContent], { type: 'text/markdown' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    }
   }
 
   getRecentProjects(): Promise<string[]> {

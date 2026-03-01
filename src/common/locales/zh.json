@@ -1447,6 +1447,8 @@
     "taskNamePlaceholder": "输入任务名称...",
     "untitled": "[未命名]",
     "exportAsMarkdown": "导出为 Markdown",
+    "copyAsMarkdown": "复制为 Markdown",
+    "copiedAsMarkdown": "已复制为 Markdown",
     "exportAsImage": "导出为图片",
     "taskIdCopied": "任务 ID {{taskId}} 已复制到剪贴板",
     "duplicateTask": "复制任务",

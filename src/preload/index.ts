@@ -111,7 +111,10 @@ const api: ApplicationAPI = {
   getTasks: (baseDir) => ipcRenderer.invoke('get-tasks', baseDir),
   loadTask: (baseDir, taskId) => ipcRenderer.invoke('load-task', baseDir, taskId),
 
-  exportTaskToMarkdown: (baseDir, taskId) => ipcRenderer.invoke('export-task-to-markdown', baseDir, taskId),
+  exportTaskToMarkdown: async (baseDir, taskId, copyOnly) => {
+    const result = await ipcRenderer.invoke('export-task-to-markdown', baseDir, taskId, copyOnly);
+    return result;
+  },
   getRecentProjects: () => ipcRenderer.invoke('get-recent-projects'),
   addRecentProject: (baseDir) => ipcRenderer.invoke('add-recent-project', baseDir),
   removeRecentProject: (baseDir) => ipcRenderer.invoke('remove-recent-project', baseDir),

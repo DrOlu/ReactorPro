@@ -40,6 +40,7 @@ type Props = {
   onUnarchiveTask: (taskId: string) => Promise<void>;
   onTogglePin: (taskId: string) => Promise<void>;
   onChangeState: (taskId: string, newState: string) => Promise<void>;
+  onCopyAsMarkdown?: (taskId: string) => void;
   onExportToMarkdown?: (taskId: string) => void;
   onExportToImage?: (taskId: string) => void;
   onDuplicateTask?: (taskId: string) => void;
@@ -72,6 +73,7 @@ export const TaskItem = memo(
     onUnarchiveTask,
     onTogglePin,
     onChangeState,
+    onCopyAsMarkdown,
     onExportToMarkdown,
     onExportToImage,
     onDuplicateTask,
@@ -242,6 +244,7 @@ export const TaskItem = memo(
                 task={task}
                 onEdit={handleOnEdit}
                 onDelete={task.createdAt ? () => onDeleteClick(task.id) : undefined}
+                onCopyAsMarkdown={onCopyAsMarkdown && task.createdAt ? () => onCopyAsMarkdown(task.id) : undefined}
                 onExportToMarkdown={onExportToMarkdown && task.createdAt ? () => onExportToMarkdown(task.id) : undefined}
                 onExportToImage={onExportToImage && task.createdAt ? () => onExportToImage(task.id) : undefined}
                 onDuplicateTask={onDuplicateTask && task.createdAt ? () => onDuplicateTask(task.id) : undefined}
@@ -325,6 +328,7 @@ export const TaskItem = memo(
                   onUnarchiveTask={onUnarchiveTask}
                   onTogglePin={onTogglePin}
                   onChangeState={onChangeState}
+                  onCopyAsMarkdown={onCopyAsMarkdown}
                   onExportToMarkdown={onExportToMarkdown}
                   onExportToImage={onExportToImage}
                   onDuplicateTask={onDuplicateTask}

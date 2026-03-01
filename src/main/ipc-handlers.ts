@@ -271,8 +271,8 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     return await eventsHandler.reloadMcpServer(serverName, config);
   });
 
-  ipcMain.handle('export-task-to-markdown', async (_, baseDir: string, taskId: string) => {
-    return await eventsHandler.exportTaskToMarkdown(baseDir, taskId);
+  ipcMain.handle('export-task-to-markdown', async (_, baseDir: string, taskId: string, copyOnly: boolean = false) => {
+    return await eventsHandler.exportTaskToMarkdown(baseDir, taskId, copyOnly);
   });
 
   ipcMain.handle('set-zoom-level', async (_, zoomLevel: number) => {
