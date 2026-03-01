@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState, startTransition, useOptimistic, MouseEvent, useEffect } from 'react';
-import { HiChevronLeft, HiChevronRight, HiSparkles } from 'react-icons/hi';
+import { MouseEvent, startTransition, useCallback, useEffect, useMemo, useOptimistic, useState } from 'react';
+import { HiChevronDown, HiChevronLeft, HiChevronRight, HiSparkles, HiViewList } from 'react-icons/hi';
+import { AnimatePresence, motion } from 'framer-motion';
 import { MdOutlineCommit, MdUndo } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -7,15 +8,14 @@ import { DiffViewMode, UpdatedFile } from '@common/types';
 import { getLanguageFromPath } from '@common/utils';
 import { clsx } from 'clsx';
 
-import { IconButton } from '../common/IconButton';
-import { ModalOverlayLayout } from '../common/ModalOverlayLayout';
-import { ConfirmDialog } from '../common/ConfirmDialog';
-import { UDiffViewer, CompactDiffViewer, DiffLineCommentPanel, LineClickInfo } from '../common/DiffViewer';
-import { CompactSelect } from '../common/CompactSelect';
-import { TextArea } from '../common/TextArea';
-import { Checkbox } from '../common/Checkbox';
-import { Button } from '../common/Button';
-
+import { IconButton } from '@/components/common/IconButton';
+import { ModalOverlayLayout } from '@/components/common/ModalOverlayLayout';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { CompactDiffViewer, DiffLineCommentPanel, LineClickInfo, UDiffViewer } from '@/components/common/DiffViewer';
+import { CompactSelect } from '@/components/common/CompactSelect';
+import { TextArea } from '@/components/common/TextArea';
+import { Checkbox } from '@/components/common/Checkbox';
+import { Button } from '@/components/common/Button';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useApi } from '@/contexts/ApiContext';
 
@@ -33,7 +33,12 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
   const { settings, saveSettings } = useSettings();
   const [currentIndex, setCurrentIndex] = useState(initialFileIndex);
   const [diffViewMode, setDiffViewMode] = useOptimistic(settings?.diffViewMode || DiffViewMode.SideBySide);
-  const [activeLineInfo, setActiveLineInfo] = useState<{ lineKey: string; lineInfo: LineClickInfo; position: { top: number; left: number } } | null>(null);
+  const [activeLineInfo, setActiveLineInfo] = useState<{
+    lineKey: string;
+    lineInfo: LineClickInfo;
+    position: { top: number; left: number };
+    filePath: string;
+  } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showRevertConfirm, setShowRevertConfirm] = useState(false);
   const [isReverting, setIsReverting] = useState(false);
@@ -42,6 +47,8 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
   const [isGeneratingMessage, setIsGeneratingMessage] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
+  const [isAllFilesView, setIsAllFilesView] = useState(false);
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(() => new Set(files.map((f) => f.path)));
 
   const currentFile = files[currentIndex];
 
@@ -78,34 +85,28 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
     [settings, saveSettings, setDiffViewMode],
   );
 
-  const handleLineClick = useCallback(
-    (lineInfo: LineClickInfo, event: MouseEvent) => {
-      event.stopPropagation();
+  const handleLineClick = useCallback((lineInfo: LineClickInfo, event: MouseEvent, filePath: string) => {
+    event.stopPropagation();
 
-      if (!currentFile?.diff) {
-        return;
-      }
+    const target = event.target as HTMLElement;
+    const row = target.closest('tr');
+    if (!row) {
+      return;
+    }
 
-      const target = event.target as HTMLElement;
-      const row = target.closest('tr');
-      if (!row) {
-        return;
-      }
+    const rect = row.getBoundingClientRect();
+    const containerRect = row.closest('.diff-viewer-container')?.getBoundingClientRect() || rect;
 
-      const rect = row.getBoundingClientRect();
-      const containerRect = row.closest('.diff-viewer-container')?.getBoundingClientRect() || rect;
-
-      setActiveLineInfo({
-        lineKey: lineInfo.lineKey,
-        lineInfo,
-        position: {
-          top: rect.bottom - containerRect.top + 24,
-          left: Math.min(rect.left - containerRect.left + 20, containerRect.width - 320),
-        },
-      });
-    },
-    [currentFile],
-  );
+    setActiveLineInfo({
+      lineKey: lineInfo.lineKey,
+      lineInfo,
+      position: {
+        top: rect.bottom - containerRect.top + 24,
+        left: Math.min(rect.left - containerRect.left + 20, containerRect.width - 320),
+      },
+      filePath,
+    });
+  }, []);
 
   const handleCommentCancel = useCallback(() => {
     resetLineState();
@@ -113,14 +114,14 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
 
   const handleCommentSubmit = useCallback(
     async (comment: string) => {
-      if (!currentFile || !activeLineInfo || isSubmitting) {
+      if (!activeLineInfo || isSubmitting) {
         return;
       }
 
       setIsSubmitting(true);
 
       try {
-        api.runCodeInlineRequest(baseDir, taskId, currentFile.path, activeLineInfo.lineInfo.lineNumber, comment);
+        api.runCodeInlineRequest(baseDir, taskId, activeLineInfo.filePath, activeLineInfo.lineInfo.lineNumber, comment);
 
         resetLineState();
         onClose();
@@ -131,7 +132,7 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
         setIsSubmitting(false);
       }
     },
-    [api, baseDir, taskId, currentFile, activeLineInfo, isSubmitting, resetLineState, onClose],
+    [api, baseDir, taskId, activeLineInfo, isSubmitting, resetLineState, onClose],
   );
 
   const handleRevertClick = useCallback(() => {
@@ -193,6 +194,54 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
     }
   }, [api, baseDir, taskId, commitMessage, amend, onClose]);
 
+  const handleToggleViewMode = useCallback(() => {
+    setIsAllFilesView((prev) => !prev);
+    resetLineState();
+  }, [resetLineState]);
+
+  const handleToggleFileExpansion = useCallback((filePath: string) => {
+    setExpandedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(filePath)) {
+        next.delete(filePath);
+      } else {
+        next.add(filePath);
+      }
+      return next;
+    });
+  }, []);
+
+  const scrollToFile = useCallback(
+    (index: number) => {
+      const file = files[index];
+      if (!file) {
+        return;
+      }
+
+      const fileId = `diff-file-${index}`;
+      const element = document.getElementById(fileId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setCurrentIndex(index);
+      }
+    },
+    [files],
+  );
+
+  const handlePreviousInAllFiles = useCallback(() => {
+    const newIndex = Math.max(0, currentIndex - 1);
+    if (newIndex !== currentIndex) {
+      scrollToFile(newIndex);
+    }
+  }, [currentIndex, scrollToFile]);
+
+  const handleNextInAllFiles = useCallback(() => {
+    const newIndex = Math.min(files.length - 1, currentIndex + 1);
+    if (newIndex !== currentIndex) {
+      scrollToFile(newIndex);
+    }
+  }, [currentIndex, files.length, scrollToFile]);
+
   const diffViewOptions = useMemo(
     () => [
       { label: t('diffViewer.sideBySide'), value: DiffViewMode.SideBySide },
@@ -223,11 +272,15 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
       <div className="flex items-center border-b border-border-default justify-center bg-bg-secondary min-h-[44px] px-4">
         <div className="flex items-center justify-between w-full max-w-6xl">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="text-3xs sm:text-xs font-medium text-text-primary truncate" title={currentFile.path}>
-              {currentFile.path}
+            <span className="text-3xs sm:text-xs font-medium text-text-primary truncate" title={isAllFilesView ? t('contextFiles.allFiles') : currentFile.path}>
+              {isAllFilesView ? t('contextFiles.allFiles') : currentFile.path}
             </span>
-            {currentFile.additions > 0 && <span className="text-3xs sm:text-xs font-medium text-success shrink-0">+{currentFile.additions}</span>}
-            {currentFile.deletions > 0 && <span className="text-3xs sm:text-xs font-medium text-error shrink-0">-{currentFile.deletions}</span>}
+            {!isAllFilesView && (
+              <>
+                {currentFile.additions > 0 && <span className="text-3xs sm:text-xs font-medium text-success shrink-0">+{currentFile.additions}</span>}
+                {currentFile.deletions > 0 && <span className="text-3xs sm:text-xs font-medium text-error shrink-0">-{currentFile.deletions}</span>}
+              </>
+            )}
           </div>
           <div className="flex items-center gap-3 shrink-0 ml-4">
             <div className="hidden sm:block">
@@ -237,7 +290,7 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
               <div className="flex items-center gap-2">
                 <IconButton
                   icon={<HiChevronLeft className="h-5 w-5" />}
-                  onClick={handlePrevious}
+                  onClick={isAllFilesView ? handlePreviousInAllFiles : handlePrevious}
                   tooltip={t('common.previous')}
                   disabled={!canGoPrevious}
                   className={clsx(
@@ -250,12 +303,21 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
                 </span>
                 <IconButton
                   icon={<HiChevronRight className="h-5 w-5" />}
-                  onClick={handleNext}
+                  onClick={isAllFilesView ? handleNextInAllFiles : handleNext}
                   tooltip={t('common.next')}
                   disabled={!canGoNext}
                   className={clsx(
                     'p-1.5 rounded-md transition-colors',
                     canGoNext ? 'hover:bg-bg-tertiary text-text-secondary' : 'text-text-muted cursor-not-allowed',
+                  )}
+                />
+                <IconButton
+                  icon={<HiViewList className="h-4 w-4" />}
+                  onClick={handleToggleViewMode}
+                  tooltip={isAllFilesView ? t('contextFiles.viewSingleFile') : t('contextFiles.viewAllFiles')}
+                  className={clsx(
+                    'p-1.5 rounded-md transition-colors',
+                    isAllFilesView ? 'bg-bg-tertiary text-text-primary' : 'hover:bg-bg-tertiary text-text-secondary',
                   )}
                 />
               </div>
@@ -270,21 +332,80 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
         </div>
       </div>
       <div className="flex-1 overflow-auto p-4 bg-bg-primary-light scrollbar scrollbar-thumb-bg-tertiary scrollbar-track-transparent">
-        <div className="max-w-6xl mx-auto select-text bg-bg-code-block rounded-lg p-4 text-xs relative">
-          {diffViewMode === DiffViewMode.Compact ? (
-            <CompactDiffViewer udiff={currentFile.diff || ''} language={language} showFilename={false} />
-          ) : (
-            <UDiffViewer
-              udiff={currentFile.diff || ''}
-              language={language}
-              viewMode={diffViewMode}
-              showFilename={false}
-              onLineClick={handleLineClick}
-              activeLineKey={activeLineInfo?.lineKey}
-            />
-          )}
-          {activeLineInfo && <DiffLineCommentPanel onSubmit={handleCommentSubmit} onCancel={handleCommentCancel} position={activeLineInfo.position} />}
-        </div>
+        {isAllFilesView ? (
+          <div className="max-w-6xl mx-auto space-y-3">
+            {files.map((file, index) => {
+              const fileLanguage = file.path ? getLanguageFromPath(file.path) : 'text';
+              const isExpanded = expandedFiles.has(file.path);
+
+              return (
+                <div key={file.path} id={`diff-file-${index}`} className="select-text bg-bg-code-block rounded-lg text-xs relative overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFileExpansion(file.path)}
+                    className="w-full flex items-center gap-2 p-3 hover:bg-bg-tertiary transition-colors"
+                  >
+                    <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} transition={{ duration: 0.2 }}>
+                      <HiChevronDown className="h-4 w-4 text-text-secondary" />
+                    </motion.div>
+                    <span className="text-xs font-medium text-text-primary truncate text-left flex-1" title={file.path}>
+                      {file.path}
+                    </span>
+                    {file.additions > 0 && <span className="text-xs font-medium text-success shrink-0">+{file.additions}</span>}
+                    {file.deletions > 0 && <span className="text-xs font-medium text-error shrink-0">-{file.deletions}</span>}
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeInOut' }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-3 pb-3 pt-0 border-t border-border-default relative">
+                          {diffViewMode === DiffViewMode.Compact ? (
+                            <CompactDiffViewer udiff={file.diff || ''} language={fileLanguage} showFilename={false} />
+                          ) : (
+                            <UDiffViewer
+                              udiff={file.diff || ''}
+                              language={fileLanguage}
+                              viewMode={diffViewMode}
+                              showFilename={false}
+                              onLineClick={(lineInfo, event) => handleLineClick(lineInfo, event, file.path)}
+                              activeLineKey={activeLineInfo?.filePath === file.path ? activeLineInfo.lineKey : undefined}
+                            />
+                          )}
+                          {activeLineInfo?.filePath === file.path && (
+                            <DiffLineCommentPanel onSubmit={handleCommentSubmit} onCancel={handleCommentCancel} position={activeLineInfo.position} />
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="max-w-6xl mx-auto select-text bg-bg-code-block rounded-lg p-4 text-xs relative">
+            {diffViewMode === DiffViewMode.Compact ? (
+              <CompactDiffViewer udiff={currentFile.diff || ''} language={language} showFilename={false} />
+            ) : (
+              <UDiffViewer
+                udiff={currentFile.diff || ''}
+                language={language}
+                viewMode={diffViewMode}
+                showFilename={false}
+                onLineClick={(lineInfo, event) => handleLineClick(lineInfo, event, currentFile.path)}
+                activeLineKey={activeLineInfo?.filePath === currentFile.path ? activeLineInfo.lineKey : undefined}
+              />
+            )}
+            {activeLineInfo?.filePath === currentFile.path && (
+              <DiffLineCommentPanel onSubmit={handleCommentSubmit} onCancel={handleCommentCancel} position={activeLineInfo.position} />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Footer with Commit Section */}

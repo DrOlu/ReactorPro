@@ -13,6 +13,7 @@
 - better handling of memory embedding process when swithing between models
 - removed BAAI/bge-large-en-v1.5 as Memory embedding model due to app crash
 - added Copy as Markdown action to task actions menu in task sidebar
+- added mode to view all files at once in Updated Files page
 
 ## [0.54.0]
 
