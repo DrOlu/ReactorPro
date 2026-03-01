@@ -239,7 +239,6 @@ const HandoffConversationSchema = z.object({
 
 const RunCodeInlineRequestSchema = z.object({
   projectDir: z.string().min(1, 'Project directory is required'),
-  taskId: z.string().min(1, 'Task id is required'),
   filename: z.string().min(1, 'Filename is required'),
   lineNumber: z.number().int().min(1, 'Line number is required'),
   userComment: z.string().min(1, 'User comment is required'),
@@ -740,8 +739,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { projectDir, taskId, filename, lineNumber, userComment } = parsed;
-        await this.eventsHandler.runCodeInlineRequest(projectDir, taskId, filename, lineNumber, userComment);
+        const { projectDir, filename, lineNumber, userComment } = parsed;
+        await this.eventsHandler.runCodeInlineRequest(projectDir, filename, lineNumber, userComment);
         res.status(200).json({ message: 'Code inline request initiated' });
       }),
     );

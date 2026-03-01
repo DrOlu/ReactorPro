@@ -625,10 +625,9 @@ export class BrowserApi implements ApplicationAPI {
     });
   }
 
-  runCodeInlineRequest(baseDir: string, taskId: string, filename: string, lineNumber: number, userComment: string): void {
+  runCodeInlineRequest(baseDir: string, filename: string, lineNumber: number, userComment: string): void {
     this.post('/project/run-code-inline-request', {
       projectDir: baseDir,
-      taskId,
       filename,
       lineNumber,
       userComment,

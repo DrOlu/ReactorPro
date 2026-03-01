@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { RiCheckboxCircleFill, RiCloseCircleFill, RiErrorWarningFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { MdAssignment } from 'react-icons/md';
+import { ContextFile } from '@common/types';
 
 import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
@@ -20,11 +21,6 @@ type Props = {
 
 export const GetTaskToolMessage = ({ message, onRemove, compact = false, onFork, onRemoveUpTo, hideMessageBar }: Props) => {
   const { t } = useTranslation();
-
-  type ContextFile = {
-    path: string;
-    readOnly?: boolean;
-  };
 
   const taskId = message.args.taskId as string;
   const content = message.content && JSON.parse(message.content);
