@@ -2,7 +2,18 @@
 
 This directory contains example extensions demonstrating various capabilities of the AiderDesk extension system.
 
-## Extension Overview
+## Documentation
+
+For comprehensive documentation on creating and using extensions, see the [Extensions documentation](https://aiderdesk.hotovo.com/docs/extensions/):
+
+- [Extensions Overview](https://aiderdesk.hotovo.com/docs/extensions/) - What extensions can do
+- [Creating Extensions](https://aiderdesk.hotovo.com/docs/extensions/creating-extensions) - How to build extensions
+- [Installation Guide](https://aiderdesk.hotovo.com/docs/extensions/installation) - Install extensions globally or per-project
+- [API Reference](https://aiderdesk.hotovo.com/docs/extensions/api-reference) - Complete API documentation
+- [Events Reference](https://aiderdesk.hotovo.com/docs/extensions/events) - All available events
+- [Examples Gallery](https://aiderdesk.hotovo.com/docs/extensions/examples) - Browse all examples
+
+## Example Extensions
 
 | Extension | Description | Extension Functions |
 |-----------|-------------|---------------------|
@@ -22,7 +33,7 @@ This directory contains example extensions demonstrating various capabilities of
 | **[external-rules.ts](./external-rules.ts)** | Includes rule files from Cursor, Claude Code, and Roo Code configurations | `onLoad`, `onRuleFilesRetrieved` |
 | **[ultrathink.ts](./ultrathink.ts)** | Detects prompts like "ultrathink" / "think hard" and increases OpenAI/OpenAI-compatible reasoning effort (`xhigh` for `-max` models, otherwise `high`) | `onLoad`, `onAgentStarted` |
 
-## Using Extensions in Your Project
+## Quick Start
 
 ### 1. Download Type Definitions
 
@@ -33,28 +44,18 @@ For TypeScript support and autocompletion, download the extension type definitio
 curl -o extension-types.d.ts https://raw.githubusercontent.com/hotovo/aider-desk/main/build/types/extension-types.d.ts
 ```
 
-Or manually download from: [extension-types.d.ts](https://github.com/hotovo/aider-desk/blob/main/build/types/extension-types.d.ts)
-
-### 2. Install Extension
+### 2. Install an Extension
 
 Copy the extension file(s) to your AiderDesk extensions directory:
 
 ```bash
 # Global extensions (available to all projects)
-cp my-extension.ts ~/.aider-desk/extensions/
+cp sound-notification.ts ~/.aider-desk/extensions/
 
 # Project-specific extensions
-cp my-extension.ts .aider-desk/extensions/
+cp sound-notification.ts .aider-desk/extensions/
 ```
 
-### 3. Import Types (Optional)
+### 3. Hot Reload
 
-If you downloaded `extension-types.d.ts`, update the import path in your extension:
-
-```typescript
-// Original import from examples
-import type { Extension, ExtensionContext } from '../../../build/types/extension-types';
-
-// Update to your local path
-import type { Extension, ExtensionContext } from './extension-types';
-```
+Extensions are automatically reloaded when files change. No restart needed!
