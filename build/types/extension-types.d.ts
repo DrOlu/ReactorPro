@@ -29,8 +29,28 @@ export interface OpenAiProvider extends LlmProviderBase {
 	useWebSearch: boolean;
 	voice?: Partial<OpenAiVoiceControlSettings>;
 }
+export interface AzureProvider extends LlmProviderBase {
+	name: "azure";
+	apiKey: string;
+	resourceName: string;
+	apiVersion?: string;
+	reasoningEffort?: ReasoningEffort;
+}
 export interface AnthropicProvider extends LlmProviderBase {
 	name: "anthropic";
+	apiKey: string;
+}
+export interface AnthropicCompatibleProvider extends LlmProviderBase {
+	name: "anthropic-compatible";
+	apiKey: string;
+	baseUrl?: string;
+}
+export interface KimiPlanProvider extends LlmProviderBase {
+	name: "kimi-plan";
+	apiKey: string;
+}
+export interface AlibabaPlanProvider extends LlmProviderBase {
+	name: "alibaba-plan";
 	apiKey: string;
 }
 declare enum GeminiVoiceModel {
@@ -69,6 +89,19 @@ export interface GroqProvider extends LlmProviderBase {
 	name: "groq";
 	apiKey: string;
 }
+export interface CerebrasProvider extends LlmProviderBase {
+	name: "cerebras";
+	apiKey: string;
+}
+export interface ClaudeAgentSdkProvider extends LlmProviderBase {
+	name: "claude-agent-sdk";
+	systemPrompt?: string;
+	mcpServers?: Record<string, unknown>;
+}
+export interface GeminiCliProvider extends LlmProviderBase {
+	name: "gemini-cli";
+	projectId?: string;
+}
 export interface BedrockProvider extends LlmProviderBase {
 	name: "bedrock";
 	accessKeyId: string;
@@ -81,6 +114,16 @@ export interface OpenAiCompatibleProvider extends LlmProviderBase {
 	apiKey: string;
 	baseUrl?: string;
 	reasoningEffort?: ReasoningEffort;
+}
+export interface LitellmProvider extends LlmProviderBase {
+	name: "litellm";
+	apiKey: string;
+	baseUrl: string;
+}
+export interface GpustackProvider extends LlmProviderBase {
+	name: "gpustack";
+	apiKey?: string;
+	baseUrl?: string;
 }
 export interface OpenRouterProvider extends LlmProviderBase {
 	name: "openrouter";
@@ -104,6 +147,11 @@ export interface OpenCodeProvider extends LlmProviderBase {
 	name: "opencode";
 	apiKey: string;
 }
+export interface ZaiPlanProvider extends LlmProviderBase {
+	name: "zai-plan";
+	apiKey: string;
+	thinkingEnabled?: boolean;
+}
 export interface MinimaxProvider extends LlmProviderBase {
 	name: "minimax";
 	apiKey: string;
@@ -112,6 +160,7 @@ export interface SyntheticProvider extends LlmProviderBase {
 	name: "synthetic";
 	apiKey: string;
 }
+export type LlmProvider = OpenAiProvider | AnthropicProvider | AnthropicCompatibleProvider | AzureProvider | GeminiProvider | GeminiCliProvider | VertexAiProvider | LmStudioProvider | BedrockProvider | ClaudeAgentSdkProvider | DeepseekProvider | GroqProvider | GpustackProvider | CerebrasProvider | AlibabaPlanProvider | KimiPlanProvider | OpenAiCompatibleProvider | LitellmProvider | OllamaProvider | OpenCodeProvider | OpenRouterProvider | RequestyProvider | SyntheticProvider | ZaiPlanProvider | MinimaxProvider;
 export type JSONValue = null | string | number | boolean | JSONObject | JSONArray;
 export type JSONObject = {
 	[key: string]: JSONValue;
@@ -259,6 +308,7 @@ declare enum MessageViewMode {
 	Compact = "compact"
 }
 declare enum ReasoningEffort {
+	XHigh = "xhigh",
 	High = "high",
 	Medium = "medium",
 	Low = "low",
@@ -341,11 +391,6 @@ declare const ProjectSettingsSchema: z.ZodObject<{
 	autoApproveLocked: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>;
 export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
-export interface ProjectData {
-	active: boolean;
-	baseDir: string;
-	settings: ProjectSettings;
-}
 export declare enum ToolApprovalState {
 	Always = "always",
 	Never = "never",
@@ -572,6 +617,13 @@ export interface SettingsData {
 	memory: MemoryConfig;
 	taskSettings: TaskSettings;
 	hotkeyConfig?: HotkeyConfig;
+}
+export interface ProviderProfile {
+	id: string;
+	name?: string;
+	provider: LlmProvider;
+	headers?: Record<string, string>;
+	disabled?: boolean;
 }
 export interface McpServerConfig {
 	command?: string;
@@ -858,12 +910,12 @@ export interface TaskUpdatedEvent {
 	task: TaskData;
 }
 /** Event payload for project opened events */
-export interface ProjectOpenedEvent {
-	project: ProjectData;
+export interface ProjectStartedEvent {
+	readonly baseDir: string;
 }
 /** Event payload for project closed events */
-export interface ProjectClosedEvent {
-	readonly project: ProjectData;
+export interface ProjectStoppedEvent {
+	readonly baseDir: string;
 }
 /** Event payload for prompt started events */
 export interface PromptStartedEvent {
@@ -879,8 +931,10 @@ export interface PromptFinishedEvent {
 /** Event payload for agent started events */
 export interface AgentStartedEvent {
 	readonly mode: Mode;
-	agentProfile: AgentProfile;
 	prompt: string | null;
+	agentProfile: AgentProfile;
+	providerProfile: ProviderProfile;
+	model: string;
 	promptContext?: PromptContext;
 	systemPrompt: string | undefined;
 	contextMessages: ContextMessage[];
@@ -902,6 +956,16 @@ export interface AgentStepFinishedEvent {
 	readonly stepResult: AgentStepResult;
 	finishReason: "stop" | "length" | "content-filter" | "tool-calls" | "error" | "other" | "unknown";
 	responseMessages: ContextMessage[];
+}
+/** Event payload for message optimization events */
+export interface OptimizeMessagesEvent {
+	readonly originalMessages: ContextMessage[];
+	optimizedMessages: ContextMessage[];
+}
+/** Event payload for important reminders events */
+export interface ImportantRemindersEvent {
+	readonly profile: AgentProfile;
+	remindersContent: string;
 }
 /** Event payload for tool approval events */
 export interface ToolApprovalEvent {
@@ -1187,11 +1251,6 @@ export interface Extension {
 	 */
 	getTools?(context: ExtensionContext, mode: string, agentProfile: AgentProfile): ToolDefinition[];
 	/**
-	 * Return array of UI elements this extension provides
-	 * Called when extension is loaded and when UI needs to be refreshed
-	 */
-	getUIElements?(): UIElementDefinition[];
-	/**
 	 * Return array of commands this extension provides
 	 * Called when extension is loaded and when commands need to be refreshed
 	 */
@@ -1243,15 +1302,15 @@ export interface Extension {
 	 */
 	onTaskUpdated?(event: TaskUpdatedEvent, context: ExtensionContext): Promise<void | Partial<TaskUpdatedEvent>>;
 	/**
-	 * Called when a project is opened
+	 * Called when a project is started
 	 * @returns void or partial event to modify project data
 	 */
-	onProjectOpen?(event: ProjectOpenedEvent, context: ExtensionContext): Promise<void | Partial<ProjectOpenedEvent>>;
+	onProjectStarted?(event: ProjectStartedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStartedEvent>>;
 	/**
 	 * Called when a project is closed
 	 * @returns void or partial event to modify project data
 	 */
-	onProjectClosed?(event: ProjectClosedEvent, context: ExtensionContext): Promise<void | Partial<ProjectClosedEvent>>;
+	onProjectStopped?(event: ProjectStoppedEvent, context: ExtensionContext): Promise<void | Partial<ProjectStoppedEvent>>;
 	/**
 	 * Called when prompt processing starts
 	 * @returns void or partial event to modify
@@ -1277,6 +1336,18 @@ export interface Extension {
 	 * @returns void or partial event
 	 */
 	onAgentStepFinished?(event: AgentStepFinishedEvent, context: ExtensionContext): Promise<void | Partial<AgentStepFinishedEvent>>;
+	/**
+	 * Called when messages are optimized before being sent to the LLM
+	 * Modify event.optimizedMessages to change the messages that will be sent
+	 * @returns void or partial event to modify optimized messages
+	 */
+	onOptimizeMessages?(event: OptimizeMessagesEvent, context: ExtensionContext): Promise<void | Partial<OptimizeMessagesEvent>>;
+	/**
+	 * Called when important reminders are being added to the user message
+	 * Modify event.remindersContent to change the reminders content
+	 * @returns void or partial event to modify reminders content
+	 */
+	onImportantReminders?(event: ImportantRemindersEvent, context: ExtensionContext): Promise<void | Partial<ImportantRemindersEvent>>;
 	/**
 	 * Called when a tool requires approval
 	 * Set event.blocked = true to prevent execution

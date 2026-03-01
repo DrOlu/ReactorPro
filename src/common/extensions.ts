@@ -648,14 +648,6 @@ export interface Extension {
    */
   getTools?(context: ExtensionContext, mode: string, agentProfile: AgentProfile): ToolDefinition[];
 
-  // UI element registration
-
-  /**
-   * Return array of UI elements this extension provides
-   * Called when extension is loaded and when UI needs to be refreshed
-   */
-  getUIElements?(): UIElementDefinition[];
-
   // Command registration
 
   /**
