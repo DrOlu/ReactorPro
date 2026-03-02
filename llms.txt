@@ -217,6 +217,7 @@ src/
         v14-to-v15.ts
         v15-to-v16.ts
         v16-to-v17.ts
+        v17-to-v18.ts
         v2-to-v3.ts
         v3-to-v4.ts
         v4-to-v5.ts
@@ -2320,6 +2321,9 @@ File: src/common/locales/en.json
     "updatedFiles": "Updated Files",
     "updated": "Updated",
     "viewChanges": "View changes",
+    "viewAllFiles": "View all files",
+    "viewSingleFile": "View single file",
+    "allFiles": "All files",
     "add": "Add context files",
     "addFileTooltip": "Add file (use Ctrl/Cmd to add as Read-only)",
     "addFileTooltip.ctrl": "Add file (use Ctrl to add as Read-only)",
@@ -2856,13 +2860,15 @@ File: src/common/locales/en.json
     "taskNamePlaceholder": "Enter task name...",
     "untitled": "[Untitled]",
     "exportAsMarkdown": "Export as markdown",
+    "copyAsMarkdown": "Copy as markdown",
+    "copiedAsMarkdown": "Copied as Markdown",
     "exportAsImage": "Export as image",
     "taskIdCopied": "Task ID {{taskId}} copied to clipboard",
-    "duplicateTask": "Duplicate Task",
+    "duplicateTask": "Duplicate task",
     "search": "Search tasks",
     "searchPlaceholder": "Search tasks...",
-    "archiveTask": "Archive Task",
-    "unarchiveTask": "Unarchive Task",
+    "archiveTask": "Archive task",
+    "unarchiveTask": "Unarchive task",
     "showArchived": "Show archived",
     "hideArchived": "Hide archived",
     "archived": "Archived",
@@ -2876,7 +2882,7 @@ File: src/common/locales/en.json
     "archiveSelectedConfirm": "Are you sure you want to archive {{count}} selected tasks?",
     "unarchiveSelectedConfirm": "Are you sure you want to unarchive {{count}} selected tasks?",
     "generatingName": "Generating name...",
-    "changeState": "Change State",
+    "changeState": "Change state",
     "createSubtask": "Create subtask",
     "deleteConfirmWithSubtasks": "This task has {{count}} subtask(s). Delete anyway?"
   },
@@ -4021,6 +4027,9 @@ File: src/common/locales/zh.json
     "updatedFiles": "已更新文件",
     "updated": "已更新",
     "viewChanges": "查看更改",
+    "viewAllFiles": "查看所有文件",
+    "viewSingleFile": "查看单个文件",
+    "allFiles": "所有文件",
     "add": "添加上下文文件",
     "addFileTooltip": "添加文件 (按 Ctrl/Cmd 键添加为只读)",
     "addFileTooltip.ctrl": "添加文件 (按 Ctrl 键添加为只读)",
@@ -4611,6 +4620,8 @@ File: src/common/locales/zh.json
     "taskNamePlaceholder": "输入任务名称...",
     "untitled": "[未命名]",
     "exportAsMarkdown": "导出为 Markdown",
+    "copyAsMarkdown": "复制为 Markdown",
+    "copiedAsMarkdown": "已复制为 Markdown",
     "exportAsImage": "导出为图片",
     "taskIdCopied": "任务 ID {{taskId}} 已复制到剪贴板",
     "duplicateTask": "复制任务",
@@ -6506,7 +6517,7 @@ export interface ApplicationAPI {
   forkTask: (baseDir: string, taskId: string, messageId: string) => Promise<TaskData>;
   getTasks: (baseDir: string) => Promise<TaskData[]>;
   loadTask: (baseDir: string, taskId: string) => Promise<TaskStateData>;
-  exportTaskToMarkdown: (baseDir: string, taskId: string) => Promise<void>;
+  exportTaskToMarkdown: (baseDir: string, taskId: string, copyOnly?: boolean) => Promise<string | void>;
   getRecentProjects: () => Promise<string[]>;
   addRecentProject: (baseDir: string) => Promise<void>;
   removeRecentProject: (baseDir: string) => Promise<void>;
@@ -7528,14 +7539,6 @@ export interface Extension {
    */
   getTools?(context: ExtensionContext, mode: string, agentProfile: AgentProfile): ToolDefinition[];
 
-  // UI element registration
-
-  /**
-   * Return array of UI elements this extension provides
-   * Called when extension is loaded and when UI needs to be refreshed
-   */
-  getUIElements?(): UIElementDefinition[];
-
   // Command registration
 
   /**
@@ -7819,14 +7822,6 @@ onUnload?(): void | Promise<void>;
    * @param agentProfile - Current agent profile
    */
 getTools?(context: ExtensionContext, mode: string, agentProfile: AgentProfile): ToolDefinition[];
-⋮----
-// UI element registration
-⋮----
-/**
-   * Return array of UI elements this extension provides
-   * Called when extension is loaded and when UI needs to be refreshed
-   */
-getUIElements?(): UIElementDefinition[];
 ⋮----
 // Command registration
 ⋮----
@@ -13721,6 +13716,34 @@ export class MemoryManager
 constructor(private readonly store: Store)
 ⋮----
 /**
+   * Checks if an error indicates a corrupted or incomplete model file.
+   */
+private isCorruptedModelError(error: unknown): boolean
+⋮----
+/**
+   * Deletes the cached model directory for a given model name.
+   */
+private async deleteModelCache(modelName: string): Promise<void>
+⋮----
+/**
+   * Loads the embedding pipeline with retry logic for corrupted models.
+   * If the model fails to load due to corruption, it will delete the cache and retry once.
+   */
+private async loadEmbeddingPipelineWithRetry(modelName: string): Promise<FeatureExtractionPipeline | null>
+⋮----
+const attemptLoad = async (): Promise<FeatureExtractionPipeline | null> =>
+⋮----
+// @ts-expect-error progress is not typed properly
+⋮----
+// Check if this is a corrupted model error
+⋮----
+// Delete the corrupted cache
+⋮----
+// Retry loading
+⋮----
+// Non-corruption error, just log and fail
+⋮----
+/**
    * Initialize the database connection and the local embedding model.
    * This must be called before using other methods.
    */
@@ -13733,8 +13756,6 @@ public async init(config: MemoryConfig = this.store.getSettings().memory): Promi
 ⋮----
 // 2. Initialize Local Embedding Model (Singleton pattern for the pipeline)
 ⋮----
-// @ts-expect-error progress is not typed properly
-⋮----
 getProgress(): MemoryEmbeddingProgress
 ⋮----
 private async waitForInit(): Promise<boolean>
@@ -13744,8 +13765,6 @@ async settingsChanged(oldSettings: SettingsData, newSettings: SettingsData): Pro
 // init with old settings before migration
 ⋮----
 const migrate = async () =>
-⋮----
-// @ts-expect-error progress is not typed properly
 ⋮----
 /**
    * Generates a vector embedding for the given text using the local model.
@@ -16984,6 +17003,14 @@ existingDirNames.add(dirName); // Add to set to avoid collisions in same loop
 // keeping the agentProfiles in settings for now, just in case user needs to revert the version
 
 ================
+File: src/main/store/migrations/v17-to-v18.ts
+================
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { SettingsData } from '@common/types';
+⋮----
+export const migrateSettingsV17toV18 = (settings: any): SettingsData =>
+
+================
 File: src/main/store/migrations/v2-to-v3.ts
 ================
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -17106,6 +17133,7 @@ import { migrateProvidersV13toV14 } from '@/store/migrations/v13-to-v14';
 import { migrateSettingsV14toV15 } from '@/store/migrations/v14-to-v15';
 import { migrateSettingsV15toV16 } from '@/store/migrations/v15-to-v16';
 import { migrateSettingsV16toV17 } from '@/store/migrations/v16-to-v17';
+import { migrateSettingsV17toV18 } from '@/store/migrations/v17-to-v18';
 ⋮----
 const compareBaseDirs = (baseDir1: string, baseDir2: string): boolean =>
 ⋮----
@@ -19873,7 +19901,7 @@ async loadTask(baseDir: string, taskId: string): Promise<TaskStateData>
 ⋮----
 async generateTaskMarkdown(baseDir: string, taskId: string): Promise<string | null>
 ⋮----
-async exportTaskToMarkdown(baseDir: string, taskId: string): Promise<void>
+async exportTaskToMarkdown(baseDir: string, taskId: string, copyOnly: boolean = false): Promise<string | null>
 ⋮----
 async setZoomLevel(zoomLevel: number)
 ⋮----
@@ -20131,7 +20159,7 @@ export interface ManagersResult {
 ⋮----
 export const initManagers = async (store: Store, mainWindow: BrowserWindow | null = null): Promise<ManagersResult> =>
 ⋮----
-// Initialize telemetry manager
+// Initialize telemetry manager (non-blocking - analytics not critical for startup)
 ⋮----
 // Initialize MCP manager
 ⋮----
@@ -20141,7 +20169,11 @@ export const initManagers = async (store: Store, mainWindow: BrowserWindow | nul
 ⋮----
 // Initialize data manager
 ⋮----
-// Initialize memory manager
+// Initialize memory manager (non-blocking - heavy operation with lazy loading)
+⋮----
+// Initialize hook manager (non-blocking - has lazy init in trigger method)
+⋮----
+// Initialize prompts manager (non-blocking - templates compile lazily)
 ⋮----
 // Initialize extension manager (non-blocking - errors should not crash app)
 ⋮----
@@ -20899,7 +20931,7 @@ forkTask(baseDir: string, taskId: string, messageId: string): Promise<TaskData>
 getTasks(baseDir: string): Promise<TaskData[]>
 loadTask(baseDir: string, id: string): Promise<TaskStateData>
 ⋮----
-async exportTaskToMarkdown(baseDir: string, taskId: string): Promise<void>
+async exportTaskToMarkdown(baseDir: string, taskId: string, copyOnly: boolean = false): Promise<string | void>
 ⋮----
 getRecentProjects(): Promise<string[]>
 addRecentProject(baseDir: string): Promise<void>
@@ -22919,8 +22951,9 @@ File: src/renderer/src/components/ContextFiles/index.ts
 ================
 File: src/renderer/src/components/ContextFiles/UpdatedFilesDiffModal.tsx
 ================
-import { useCallback, useMemo, useState, startTransition, useOptimistic, MouseEvent, useEffect } from 'react';
-import { HiChevronLeft, HiChevronRight, HiSparkles } from 'react-icons/hi';
+import { MouseEvent, startTransition, useCallback, useEffect, useMemo, useOptimistic, useState } from 'react';
+import { HiChevronDown, HiChevronLeft, HiChevronRight, HiSparkles, HiViewList } from 'react-icons/hi';
+import { AnimatePresence, motion } from 'framer-motion';
 import { MdOutlineCommit, MdUndo } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -22928,15 +22961,14 @@ import { DiffViewMode, UpdatedFile } from '@common/types';
 import { getLanguageFromPath } from '@common/utils';
 import { clsx } from 'clsx';
 ⋮----
-import { IconButton } from '../common/IconButton';
-import { ModalOverlayLayout } from '../common/ModalOverlayLayout';
-import { ConfirmDialog } from '../common/ConfirmDialog';
-import { UDiffViewer, CompactDiffViewer, DiffLineCommentPanel, LineClickInfo } from '../common/DiffViewer';
-import { CompactSelect } from '../common/CompactSelect';
-import { TextArea } from '../common/TextArea';
-import { Checkbox } from '../common/Checkbox';
-import { Button } from '../common/Button';
-⋮----
+import { IconButton } from '@/components/common/IconButton';
+import { ModalOverlayLayout } from '@/components/common/ModalOverlayLayout';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { CompactDiffViewer, DiffLineCommentPanel, LineClickInfo, UDiffViewer } from '@/components/common/DiffViewer';
+import { CompactSelect } from '@/components/common/CompactSelect';
+import { TextArea } from '@/components/common/TextArea';
+import { Checkbox } from '@/components/common/Checkbox';
+import { Button } from '@/components/common/Button';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useApi } from '@/contexts/ApiContext';
 ⋮----
@@ -22959,6 +22991,8 @@ type Props = {
 // eslint-disable-next-line no-console
 ⋮----
 <ModalOverlayLayout title=
+⋮----
+onLineClick=
 ⋮----
 {/* Footer with Commit Section */}
 ⋮----
@@ -26305,6 +26339,7 @@ type Props = {
   onUnarchiveTask: (taskId: string) => Promise<void>;
   onTogglePin: (taskId: string) => Promise<void>;
   onChangeState: (taskId: string, newState: string) => Promise<void>;
+  onCopyAsMarkdown?: (taskId: string) => void;
   onExportToMarkdown?: (taskId: string) => void;
   onExportToImage?: (taskId: string) => void;
   onDuplicateTask?: (taskId: string) => void;
@@ -26348,7 +26383,7 @@ import { FaEllipsisVertical } from 'react-icons/fa6';
 import { IoLogoMarkdown } from 'react-icons/io';
 import { RiFlag2Line } from 'react-icons/ri';
 import { MdImage, MdPushPin, MdChevronRight } from 'react-icons/md';
-import { BiDuplicate, BiArchive, BiArchiveIn } from 'react-icons/bi';
+import { BiDuplicate, BiArchive, BiArchiveIn, BiCopy } from 'react-icons/bi';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 ⋮----
@@ -26359,6 +26394,7 @@ type Props = {
   task: TaskData;
   onEdit: () => void;
   onDelete?: () => void;
+  onCopyAsMarkdown?: () => void;
   onExportToMarkdown?: () => void;
   onExportToImage?: () => void;
   onDuplicateTask?: () => void;
@@ -26374,6 +26410,8 @@ const handleMenuClick = () =>
 const handleEditClick = (e: MouseEvent) =>
 ⋮----
 const handleDeleteClick = (e: MouseEvent) =>
+⋮----
+const handleCopyAsMarkdownClick = (e: MouseEvent) =>
 ⋮----
 const handleExportToMarkdownClick = (e: MouseEvent) =>
 ⋮----
@@ -26439,6 +26477,7 @@ type Props = {
   onToggleCollapse: () => void;
   updateTask?: (taskId: string, updates: Partial<TaskData>) => Promise<void>;
   deleteTask?: (taskId: string) => Promise<void>;
+  onCopyAsMarkdown?: (taskId: string) => void;
   onExportToMarkdown?: (taskId: string) => void;
   onExportToImage?: (taskId: string) => void;
   onDuplicateTask?: (taskId: string) => void;
@@ -26894,6 +26933,7 @@ import { getSortedVisibleTasks } from '@/utils/task-utils';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useBooleanState } from '@/hooks/useBooleanState';
 import { showNotification } from '@/utils/browser-notifications';
+import { showInfoNotification } from '@/utils/notifications';
 ⋮----
 type Props = {
   projectDir: string;
@@ -26947,6 +26987,8 @@ const initProject = async () =>
 // eslint-disable-next-line no-console
 ⋮----
 // Close current task
+⋮----
+// eslint-disable-next-line no-console
 ⋮----
 // eslint-disable-next-line no-console
 ⋮----
