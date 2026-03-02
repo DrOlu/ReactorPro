@@ -30,7 +30,7 @@ interface Extension {
 
 ## ExtensionContext
 
-Passed to all extension methods, providing access to AiderDesk APIs.
+Passed to all extension methods, providing access to ReactorPro APIs.
 
 ```typescript
 interface ExtensionContext {
@@ -57,7 +57,7 @@ interface ExtensionContext {
 
 | Method | Description |
 |--------|-------------|
-| `log(message, type?)` | Log a message to AiderDesk console and log files |
+| `log(message, type?)` | Log a message to ReactorPro console and log files |
 | `getProjectDir()` | Get the current project directory path |
 | `getTaskContext()` | Get the current task context (null if no task active) |
 | `getProjectContext()` | Get the project context for project operations |

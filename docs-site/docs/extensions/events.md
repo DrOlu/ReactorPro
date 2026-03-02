@@ -1,6 +1,6 @@
 # Events Reference
 
-Extensions can listen to and modify events throughout AiderDesk. This page documents all available events and their properties.
+Extensions can listen to and modify events throughout ReactorPro. This page documents all available events and their properties.
 
 ## Modifying Event Properties
 

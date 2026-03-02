@@ -1,6 +1,6 @@
 # Extensions
 
-Extensions allow you to extend and customize AiderDesk's functionality. They can add new tools, commands, modes, agent profiles, and react to various events in the application lifecycle.
+Extensions allow you to extend and customize ReactorPro's functionality. They can add new tools, commands, modes, agent profiles, and react to various events in the application lifecycle.
 
 ## What Extensions Can Do
 
@@ -14,7 +14,7 @@ Extensions allow you to extend and customize AiderDesk's functionality. They can
 
 ### Hook into Events
 
-Extensions can listen to and modify events throughout AiderDesk:
+Extensions can listen to and modify events throughout ReactorPro:
 
 - **Task Events** - Task creation, initialization, updates, and closure
 - **Agent Events** - Agent execution start, finish, and step completion
@@ -40,14 +40,14 @@ Extensions can be installed at two levels:
 
 | Level | Path | Scope |
 |-------|------|-------|
-| **Global** | `~/.aider-desk/extensions/` | Available to all projects |
-| **Project** | `./.aider-desk/extensions/` | Only for the current project |
+| **Global** | `~/.reactorpro/extensions/` | Available to all projects |
+| **Project** | `./.reactorpro/extensions/` | Only for the current project |
 
 Project-level extensions can override global extensions with the same name.
 
 ## Hot Reload
 
-Extensions are **automatically reloaded** when changes are detected. There's no need to restart AiderDesk when developing or modifying extensions. Just save your file and the changes take effect within seconds.
+Extensions are **automatically reloaded** when changes are detected. There's no need to restart ReactorPro when developing or modifying extensions. Just save your file and the changes take effect within seconds.
 
 ## Getting Started
 

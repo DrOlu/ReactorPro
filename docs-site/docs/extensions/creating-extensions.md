@@ -8,10 +8,10 @@ For the best development experience with autocompletion and type checking, downl
 
 ```bash
 # Download to your project
-curl -o extension-types.d.ts https://raw.githubusercontent.com/hotovo/aider-desk/main/build/types/extension-types.d.ts
+curl -o extension-types.d.ts https://raw.githubusercontent.com/hyperspace/reactorpro/main/build/types/extension-types.d.ts
 ```
 
-Or download manually from: [extension-types.d.ts](https://github.com/hotovo/aider-desk/blob/main/build/types/extension-types.d.ts)
+Or download manually from: [extension-types.d.ts](https://github.com/hyperspace/reactorpro/blob/main/build/types/extension-types.d.ts)
 
 Then reference it in your extension:
 
@@ -303,7 +303,7 @@ export default class ApiExtension implements Extension {
 After creating your folder extension with a `package.json`:
 
 ```bash
-cd ~/.aider-desk/extensions/my-complex-extension
+cd ~/.reactorpro/extensions/my-complex-extension
 npm install
 ```
 
@@ -325,7 +325,7 @@ export default class MyExtension implements Extension {
 }
 ```
 
-If no metadata is provided, AiderDesk derives the name from the filename and sets version to `1.0.0`.
+If no metadata is provided, ReactorPro derives the name from the filename and sets version to `1.0.0`.
 
 ## Naming Conventions
 

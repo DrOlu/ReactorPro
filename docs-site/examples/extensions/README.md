@@ -4,14 +4,14 @@ This directory contains example extensions demonstrating various capabilities of
 
 ## Documentation
 
-For comprehensive documentation on creating and using extensions, see the [Extensions documentation](https://aiderdesk.hotovo.com/docs/extensions/):
+For comprehensive documentation on creating and using extensions, see the [Extensions documentation](https://aiderdesk.hyperspace.com/docs/extensions/):
 
-- [Extensions Overview](https://aiderdesk.hotovo.com/docs/extensions/) - What extensions can do
-- [Creating Extensions](https://aiderdesk.hotovo.com/docs/extensions/creating-extensions) - How to build extensions
-- [Installation Guide](https://aiderdesk.hotovo.com/docs/extensions/installation) - Install extensions globally or per-project
-- [API Reference](https://aiderdesk.hotovo.com/docs/extensions/api-reference) - Complete API documentation
-- [Events Reference](https://aiderdesk.hotovo.com/docs/extensions/events) - All available events
-- [Examples Gallery](https://aiderdesk.hotovo.com/docs/extensions/examples) - Browse all examples
+- [Extensions Overview](https://aiderdesk.hyperspace.com/docs/extensions/) - What extensions can do
+- [Creating Extensions](https://aiderdesk.hyperspace.com/docs/extensions/creating-extensions) - How to build extensions
+- [Installation Guide](https://aiderdesk.hyperspace.com/docs/extensions/installation) - Install extensions globally or per-project
+- [API Reference](https://aiderdesk.hyperspace.com/docs/extensions/api-reference) - Complete API documentation
+- [Events Reference](https://aiderdesk.hyperspace.com/docs/extensions/events) - All available events
+- [Examples Gallery](https://aiderdesk.hyperspace.com/docs/extensions/examples) - Browse all examples
 
 ## Example Extensions
 
@@ -50,10 +50,10 @@ Copy the extension file(s) to your ReactorPro extensions directory:
 
 ```bash
 # Global extensions (available to all projects)
-cp sound-notification.ts ~/.aider-desk/extensions/
+cp sound-notification.ts ~/.reactorpro/extensions/
 
 # Project-specific extensions
-cp sound-notification.ts .aider-desk/extensions/
+cp sound-notification.ts .reactorpro/extensions/
 ```
 
 ### 3. Hot Reload
