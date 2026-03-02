@@ -189,30 +189,8 @@ describe('UpdatedFilesDiffModal - API Integration', () => {
   it('runCodeInlineRequest is available for inline code requests', async () => {
     mockRunCodeInlineRequest.mockImplementationOnce(() => {});
 
-    mockRunCodeInlineRequest(
-      '/project',
-      'test-task-id',
-      'src/utils/example.ts',
-      42,
-      'ts',
-      [
-        { lineNumber: 40, content: 'const a = 1;', type: 'normal' },
-        { lineNumber: 41, content: 'const b = 2;', type: 'normal' },
-      ],
-      'Add a new variable here',
-    );
+    mockRunCodeInlineRequest('/project', 'src/utils/example.ts', 42, 'Add a new variable here');
 
-    expect(mockRunCodeInlineRequest).toHaveBeenCalledWith(
-      '/project',
-      'test-task-id',
-      'src/utils/example.ts',
-      42,
-      'ts',
-      [
-        { lineNumber: 40, content: 'const a = 1;', type: 'normal' },
-        { lineNumber: 41, content: 'const b = 2;', type: 'normal' },
-      ],
-      'Add a new variable here',
-    );
+    expect(mockRunCodeInlineRequest).toHaveBeenCalledWith('/project', 'src/utils/example.ts', 42, 'Add a new variable here');
   });
 });

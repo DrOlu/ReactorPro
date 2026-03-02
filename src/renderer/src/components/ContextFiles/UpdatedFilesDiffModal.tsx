@@ -121,7 +121,7 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
       setIsSubmitting(true);
 
       try {
-        api.runCodeInlineRequest(baseDir, taskId, activeLineInfo.filePath, activeLineInfo.lineInfo.lineNumber, comment);
+        api.runCodeInlineRequest(baseDir, activeLineInfo.filePath, activeLineInfo.lineInfo.lineNumber, comment);
 
         resetLineState();
         onClose();
@@ -132,7 +132,7 @@ export const UpdatedFilesDiffModal = ({ files, initialFileIndex, onClose, baseDi
         setIsSubmitting(false);
       }
     },
-    [api, baseDir, taskId, activeLineInfo, isSubmitting, resetLineState, onClose],
+    [api, baseDir, activeLineInfo, isSubmitting, resetLineState, onClose],
   );
 
   const handleRevertClick = useCallback(() => {

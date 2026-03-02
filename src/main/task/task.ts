@@ -2665,57 +2665,6 @@ export class Task {
     this.eventManager.sendTaskCreated(newTask.task, true);
   }
 
-  public async runCodeInlineRequest(filename: string, lineNumber: number, userComment: string, contextSize: number = 5): Promise<void> {
-    this.addLogMessage('loading', 'Creating task for inline code request...');
-
-    const filePath = path.isAbsolute(filename) ? filename : path.join(this.getTaskDir(), filename);
-    const fileExtension = path.extname(filename).slice(1) || '';
-
-    let contextLines: { lineNumber: number; content: string }[] = [];
-    try {
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const lines = fileContent.split('\n');
-      const startLine = Math.max(0, lineNumber - contextSize - 1);
-      const endLine = Math.min(lines.length, lineNumber + contextSize);
-
-      contextLines = lines.slice(startLine, endLine).map((content, index) => ({
-        lineNumber: startLine + index + 1,
-        content,
-      }));
-    } catch (error) {
-      logger.warn('Failed to read file for context extraction', {
-        filePath,
-        error,
-      });
-    }
-
-    const prompt = this.promptsManager.getCodeInlineRequestPrompt(this, {
-      filename,
-      lineNumber,
-      fileExtension,
-      contextLines,
-      userComment,
-    });
-
-    const newTaskData = await this.project.createNewTask({
-      name: `${filename}:${lineNumber}`,
-      sendEvent: false,
-      autoApprove: true,
-      activate: true,
-    });
-
-    const newTask = this.project.getTask(newTaskData.id);
-    if (!newTask) {
-      throw new Error('Failed to get newly created task');
-    }
-
-    await newTask.init();
-    await newTask.savePromptOnly(prompt, false);
-    await newTask.resumeTask();
-
-    this.eventManager.sendTaskCreated(newTask.task, true);
-  }
-
   public async generateContextMarkdown(): Promise<string | null> {
     logger.info('Exporting context to Markdown:', {
       baseDir: this.project.baseDir,
