@@ -9,6 +9,11 @@
 - added locking of files when using edit power tool to avoid race conditions
 - moved BMAD mode out of Preview mode
 - added xhigh reasoning effort for OpenAI and OpenAI compatible providers
+- speed up startup by loading some of the long-loading managers in background
+- better handling of memory embedding process when swithing between models
+- removed BAAI/bge-large-en-v1.5 as Memory embedding model due to app crash
+- added Copy as Markdown action to task actions menu in task sidebar
+- added mode to view all files at once in Updated Files page
 
 ## [0.54.0]
 

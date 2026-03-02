@@ -4,18 +4,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { ToolApprovalEvent, UIPlacement } from '@common/extensions';
+import { ToolApprovalEvent } from '@common/extensions';
 import { z } from 'zod';
 
-import type {
-  Extension,
-  ExtensionContext,
-  ExtensionMetadata,
-  ToolDefinition,
-  UIElementDefinition,
-  TaskCreatedEvent,
-  PromptStartedEvent,
-} from '@common/extensions';
+import type { Extension, ExtensionContext, ExtensionMetadata, ToolDefinition, TaskCreatedEvent, PromptStartedEvent } from '@common/extensions';
 
 // Test ExtensionMetadata type
 const metadata: ExtensionMetadata = {
@@ -23,7 +15,7 @@ const metadata: ExtensionMetadata = {
   version: '1.0.0',
   description: 'A test extension',
   author: 'Test Author',
-  capabilities: ['tools', 'ui-elements'],
+  capabilities: ['tools'],
 };
 
 // Test ToolDefinition type with Zod
@@ -47,19 +39,6 @@ const testTool: ToolDefinition = {
   },
 };
 
-// Test UIElementDefinition type
-const testUIElement: UIElementDefinition = {
-  id: 'test-button',
-  type: 'action-button',
-  label: 'Test Button',
-  icon: 'FiPlus',
-  description: 'A test UI button',
-  placement: UIPlacement.TaskSidebar,
-  context: 'task',
-  onClick: 'handleTestClick',
-  enabled: (_ctx) => true,
-};
-
 // Test Extension interface
 const testExtension: Extension = {
   async onLoad(context: ExtensionContext) {
@@ -79,10 +58,6 @@ const testExtension: Extension = {
 
   getTools() {
     return [testTool];
-  },
-
-  getUIElements() {
-    return [testUIElement];
   },
 
   async onTaskCreated(event: TaskCreatedEvent, context: ExtensionContext) {
@@ -129,7 +104,7 @@ const isToolDefinition = function (obj: unknown): obj is ToolDefinition {
 };
 
 // Export for use in other tests
-export { testExtension, testTool, testUIElement, metadata, isExtension, isToolDefinition, TestExtensionConstructor };
+export { testExtension, testTool, metadata, isExtension, isToolDefinition, TestExtensionConstructor };
 
 describe('Extension Types Integration (Main Process)', () => {
   it('should have correct ExtensionMetadata type', () => {
@@ -145,16 +120,9 @@ describe('Extension Types Integration (Main Process)', () => {
     expect(typeof testTool.execute).toBe('function');
   });
 
-  it('should have correct UIElementDefinition type', () => {
-    expect(testUIElement.id).toBe('test-button');
-    expect(testUIElement.type).toBe('action-button');
-    expect(testUIElement.placement).toBe('task-sidebar');
-  });
-
   it('should have correct Extension interface implementation', () => {
     expect(typeof testExtension.onLoad).toBe('function');
     expect(typeof testExtension.getTools).toBe('function');
-    expect(typeof testExtension.getUIElements).toBe('function');
   });
 
   it('should have correct type guards', () => {

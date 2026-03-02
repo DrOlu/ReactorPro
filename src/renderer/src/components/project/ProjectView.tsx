@@ -19,6 +19,7 @@ import { getSortedVisibleTasks } from '@/utils/task-utils';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useBooleanState } from '@/hooks/useBooleanState';
 import { showNotification } from '@/utils/browser-notifications';
+import { showInfoNotification } from '@/utils/notifications';
 
 type Props = {
   projectDir: string;
@@ -426,6 +427,22 @@ export const ProjectView = ({ projectDir, isProjectActive = false, showSettingsP
     [api, projectDir],
   );
 
+  const handleCopyTaskAsMarkdown = useCallback(
+    async (taskId: string) => {
+      try {
+        const markdown = await api.exportTaskToMarkdown(projectDir, taskId, true);
+        if (markdown) {
+          await api.writeToClipboard(markdown);
+          showInfoNotification(t('taskSidebar.copiedAsMarkdown'));
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to copy task as markdown:', error);
+      }
+    },
+    [api, projectDir, t],
+  );
+
   const handleDuplicateTask = useCallback(
     async (taskId: string) => {
       try {
@@ -479,6 +496,7 @@ export const ProjectView = ({ projectDir, isProjectActive = false, showSettingsP
             onToggleCollapse={handleToggleCollapse}
             updateTask={handleUpdateTask}
             deleteTask={handleDeleteTask}
+            onCopyAsMarkdown={handleCopyTaskAsMarkdown}
             onExportToMarkdown={handleExportTaskToMarkdown}
             onExportToImage={handleExportTaskToImage}
             onDuplicateTask={handleDuplicateTask}

@@ -120,7 +120,7 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     forkTask: vi.fn((): Promise<TaskData> => Promise.resolve({ id: 'mock-fork-task-id' } as TaskData)),
     getTasks: vi.fn((): Promise<TaskData[]> => Promise.resolve([])),
     loadTask: vi.fn((): Promise<TaskStateData> => Promise.resolve({} as TaskStateData)),
-    exportTaskToMarkdown: vi.fn((): Promise<void> => Promise.resolve()),
+    exportTaskToMarkdown: vi.fn((): Promise<string | void> => Promise.resolve()),
 
     // Recent projects operations
     getRecentProjects: vi.fn((): Promise<string[]> => Promise.resolve([])),

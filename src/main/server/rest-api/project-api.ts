@@ -204,6 +204,7 @@ const GetTaskContextDataSchema = z.object({
 const ExportSessionToMarkdownSchema = z.object({
   projectDir: z.string().min(1, 'Project directory is required'),
   taskId: z.string().min(1, 'Task id is required'),
+  copyOnly: z.boolean().optional().default(false),
 });
 
 const RemoveLastMessageSchema = z.object({
@@ -636,7 +637,7 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { projectDir, taskId } = parsed;
+        const { projectDir, taskId, copyOnly } = parsed;
         const markdownContent = await this.eventsHandler.generateTaskMarkdown(projectDir, taskId);
 
         if (!markdownContent) {
@@ -644,10 +645,14 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const filename = `session-${new Date().toISOString().replace(/:/g, '-').substring(0, 19)}.md`;
-        res.setHeader('Content-Type', 'text/markdown');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.status(200).send(markdownContent);
+        if (copyOnly) {
+          res.status(200).json({ markdown: markdownContent });
+        } else {
+          const filename = `session-${new Date().toISOString().replace(/:/g, '-').substring(0, 19)}.md`;
+          res.setHeader('Content-Type', 'text/markdown');
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          res.status(200).send(markdownContent);
+        }
       }),
     );
 

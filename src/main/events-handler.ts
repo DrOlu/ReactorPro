@@ -725,10 +725,14 @@ export class EventsHandler {
     return (await this.projectManager.getProject(baseDir).getTask(taskId)?.generateContextMarkdown()) || null;
   }
 
-  async exportTaskToMarkdown(baseDir: string, taskId: string): Promise<void> {
+  async exportTaskToMarkdown(baseDir: string, taskId: string, copyOnly: boolean = false): Promise<string | null> {
     const markdownContent = await this.generateTaskMarkdown(baseDir, taskId);
 
     if (markdownContent) {
+      if (copyOnly) {
+        return markdownContent;
+      }
+
       try {
         const defaultPath = `${baseDir}/session-${new Date().toISOString().replace(/:/g, '-').substring(0, 19)}.md`;
         let filePath = defaultPath;
@@ -741,7 +745,7 @@ export class EventsHandler {
             filters: [{ name: 'Markdown Files', extensions: ['md'] }],
           });
           if (dialogResult.canceled) {
-            return;
+            return null;
           }
 
           filePath = dialogResult.filePath || defaultPath;
@@ -764,6 +768,8 @@ export class EventsHandler {
         logger.error('Error exporting session to Markdown', { dialogError });
       }
     }
+
+    return null;
   }
 
   async setZoomLevel(zoomLevel: number) {
