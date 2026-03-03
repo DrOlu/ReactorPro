@@ -20,7 +20,7 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:no-hmr": "NO_HMR=true electron-vite dev",
-    "build:mcp": "esbuild src/mcp-server/aider-desk-mcp-server.ts --bundle --platform=node --outdir=out/mcp-server",
+    "build:mcp": "esbuild src/mcp-server/reactorpro-mcp-server.ts --bundle --platform=node --outdir=out/mcp-server",
     "build:extensions": "npm run build --workspace=packages/extensions",
     "publish:extensions": "npm publish --workspace=packages/extensions",
     "prebuild:server": "electron-vite build && npm run build:mcp",

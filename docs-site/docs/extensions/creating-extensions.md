@@ -8,10 +8,10 @@ For the best development experience with autocompletion and type checking, downl
 
 ```bash
 # Download to your project
-curl -o extension-types.d.ts https://raw.githubusercontent.com/hotovo/aider-desk/main/packages/extensions/extensions.d.ts
+curl -o extension-types.d.ts https://raw.githubusercontent.com/hyperspace/reactorpro/main/packages/extensions/extensions.d.ts
 ```
 
-Or download manually from: [extensions.d.ts](https://github.com/hotovo/aider-desk/blob/main/packages/extensions/extensions.d.ts)
+Or download manually from: [extensions.d.ts](https://github.com/hyperspace/reactorpro/blob/main/packages/extensions/extensions.d.ts)
 
 Then reference it in your extension:
 
