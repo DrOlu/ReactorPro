@@ -1,4 +1,31 @@
-# ReactorPro Extension Examples
+# @aiderdesk/extensions
+
+TypeScript type definitions and examples for building [AiderDesk](https://aiderdesk.hotovo.com) extensions.
+
+## Installation
+
+```bash
+npm install @aiderdesk/extensions
+# or
+yarn add @aiderdesk/extensions
+# or
+pnpm add @aiderdesk/extensions
+```
+
+## Usage
+
+```typescript
+import type { Extension, ExtensionContext, ToolDefinition } from '@aiderdesk/extensions';
+import { z } from 'zod';
+
+export default class MyExtension implements Extension {
+  async onLoad(context: ExtensionContext) {
+    context.log('Extension loaded!', 'info');
+  }
+}
+```
+
+## Example Extensions
 
 This directory contains example extensions demonstrating various capabilities of the ReactorPro extension system.
 
@@ -41,7 +68,7 @@ For TypeScript support and autocompletion, download the extension type definitio
 
 ```bash
 # Download to your project
-curl -o extension-types.d.ts https://raw.githubusercontent.com/hyperspace/reactorpro/main/build/types/extension-types.d.ts
+curl -o extension-types.d.ts https://raw.githubusercontent.com/hotovo/aider-desk/main/packages/extensions/extensions.d.ts
 ```
 
 ### 2. Install an Extension

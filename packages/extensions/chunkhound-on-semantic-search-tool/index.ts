@@ -59,7 +59,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { Extension, ExtensionContext, ToolCalledEvent, ToolFinishedEvent, ProjectOpenedEvent } from '../../../build/types/extension-types';
+import type { Extension, ExtensionContext, ToolCalledEvent, ToolFinishedEvent, ProjectOpenedEvent } from '@aiderdesk/extensions';
 
 const CHUNKHOUND_DB_NAME = '.chunkhound.db';
 const CHUNKHOUND_CONFIG_NAME = '.chunkhound.json';

@@ -62,7 +62,7 @@ import { fileURLToPath } from 'node:url';
 
 import { z } from 'zod';
 
-import type { Extension, ExtensionContext, ProjectOpenedEvent, ToolFinishedEvent, ToolDefinition } from '../../../build/types/extension-types';
+import type { Extension, ExtensionContext, ProjectOpenedEvent, ToolFinishedEvent, ToolDefinition } from '@aiderdesk/extensions';
 
 const CHUNKHOUND_DB_NAME = '.chunkhound.db';
 const CHUNKHOUND_CONFIG_NAME = '.chunkhound.json';

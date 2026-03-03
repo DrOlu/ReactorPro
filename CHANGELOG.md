@@ -1,5 +1,10 @@
 # ReactorPro Changelog
 
+## [UNRELEASED]
+
+- initializing aider when repo map is included in Agent profile
+- added Timeout info to Bash tool message
+
 ## [0.55.0]
 
 - added support for commiting changes via the Updated Files page
