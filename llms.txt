@@ -34003,9 +34003,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "aider-desk",
+  "name": "reactorpro",
   "version": "0.56.0-dev",
-  "description": "Aider desktop application wrapper",
+  "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
@@ -34024,7 +34024,7 @@ File: package.json
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:no-hmr": "NO_HMR=true electron-vite dev",
-    "build:mcp": "esbuild src/mcp-server/aider-desk-mcp-server.ts --bundle --platform=node --outdir=out/mcp-server",
+    "build:mcp": "esbuild src/mcp-server/reactorpro-mcp-server.ts --bundle --platform=node --outdir=out/mcp-server",
     "build:extensions": "npm run build --workspace=packages/extensions",
     "publish:extensions": "npm publish --workspace=packages/extensions",
     "prebuild:server": "electron-vite build && npm run build:mcp",
