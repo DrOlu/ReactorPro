@@ -4,6 +4,8 @@
 
 - initializing aider when repo map is included in Agent profile
 - added Timeout info to Bash tool message
+- avoid multiple notifications when agent finishes a queued prompt
+- added day grouping to task list in task sidebar
 
 ## [0.55.0]
 

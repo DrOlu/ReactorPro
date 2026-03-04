@@ -82,12 +82,12 @@ To install an example from the ReactorPro repository:
 
 ```bash
 # Single file example
-curl -o ~/.reactorpro/extensions/sound-notification.ts \
-  https://raw.githubusercontent.com/hyperspace/reactorpro/main/packages/extensions/sound-notification.ts
+curl -o ~/.aider-desk/extensions/sound-notification.ts \
+  https://raw.githubusercontent.com/hotovo/aider-desk/main/packages/extensions/extensions/sound-notification.ts
 
 # Folder-based example
-git clone --depth 1 https://github.com/hyperspace/reactorpro temp-aider
-cp -r temp-aider/packages/extensions/sandbox ~/.reactorpro/extensions/
+git clone --depth 1 https://github.com/hotovo/aider-desk temp-aider
+cp -r temp-aider/packages/extensions/extensions/sandbox ~/.aider-desk/extensions/
 rm -rf temp-aider
 
 # Install dependencies for folder extensions
