@@ -6,6 +6,8 @@
 - added Timeout info to Bash tool message
 - avoid multiple notifications when agent finishes a queued prompt
 - added day grouping to task list in task sidebar
+- properly capturing stdout when bash tool executes piped commands
+- starting empty quick spec flow in BMAD mode now correctly sets the initial context
 
 ## [0.55.0]
 
