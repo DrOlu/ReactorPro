@@ -39,10 +39,10 @@ Install an extension directly from a URL:
 
 ```bash
 # Install from a direct file URL
-npx @aiderdesk/extensions install https://raw.githubusercontent.com/hotovo/aider-desk/main/packages/extensions/extensions/sound-notification.ts
+npx @aiderdesk/extensions install https://raw.githubusercontent.com/hyperspace/reactorpro/main/packages/extensions/extensions/sound-notification.ts
 
 # Install from GitHub repository
-npx @aiderdesk/extensions install https://github.com/hotovo/aider-desk --global
+npx @aiderdesk/extensions install https://github.com/hyperspace/reactorpro --global
 ```
 
 ### List Available Extensions
@@ -57,9 +57,9 @@ npx @aiderdesk/extensions list
 
 | Option | Description |
 |--------|-------------|
-| `-g, --global` | Install to global directory (`~/.aider-desk/extensions`) |
+| `-g, --global` | Install to global directory (`~/.reactorpro/extensions`) |
 | `-d, --directory <path>` | Custom installation directory |
-| No option | Install to project directory (`./.aider-desk/extensions`) |
+| No option | Install to project directory (`./.reactorpro/extensions`) |
 
 ## Manual Installation Locations
 
@@ -148,7 +148,7 @@ npx @aiderdesk/extensions install sound-notification
 npx @aiderdesk/extensions install sandbox --global
 ```
 
-Alternatively, you can manually download examples from the AiderDesk repository:
+Alternatively, you can manually download examples from the ReactorPro repository:
 
 ```bash
 # Single file example
