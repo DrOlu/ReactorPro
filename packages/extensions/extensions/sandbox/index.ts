@@ -277,7 +277,15 @@ async function tryInitialize(context: ExtensionContext): Promise<void> {
   }
 }
 
-class SandboxExtension implements Extension {
+export default class SandboxExtension implements Extension {
+  static metadata = {
+    name: 'Sandbox Extension',
+    version: '1.0.0',
+    description: 'OS-level sandboxing for bash commands using @anthropic-ai/sandbox-runtime (sandbox-exec on macOS, bubblewrap on Linux)',
+    author: 'wladimiiir',
+    capabilities: ['security'],
+  };
+
   async onLoad(context: ExtensionContext) {
     context.log('Sandbox Extension loaded', 'info');
   }
@@ -361,13 +369,3 @@ class SandboxExtension implements Extension {
     }
   }
 }
-
-export const metadata = {
-  name: 'Sandbox Extension',
-  version: '1.0.0',
-  description: 'OS-level sandboxing for bash commands using @anthropic-ai/sandbox-runtime (sandbox-exec on macOS, bubblewrap on Linux)',
-  author: 'ReactorPro',
-  capabilities: ['events', 'tools'],
-};
-
-export default SandboxExtension;

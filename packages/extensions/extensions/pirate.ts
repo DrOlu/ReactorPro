@@ -80,7 +80,8 @@ export default class PirateExtension implements Extension {
     name: 'pirate-agent',
     version: '1.0.0',
     description: 'Adds a Pirate agent that speaks like a swashbuckling sea dog',
-    author: 'ReactorPro',
+    author: 'wladimiiir',
+    capabilities: ['agents'],
   };
 
   onLoad?(context: ExtensionContext): void {
