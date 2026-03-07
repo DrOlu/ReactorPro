@@ -16,95 +16,95 @@ The following diagram shows the complete flow with all extension events:
 sequenceDiagram
     autonumber
     participant User
-    participant AiderDesk
+    participant ReactorPro
     participant Extension
     participant LLM
 
-    User->>AiderDesk: Submit prompt
+    User->>ReactorPro: Submit prompt
     
-    Note over AiderDesk,Extension: PHASE 1: Prompt Initialization
+    Note over ReactorPro,Extension: PHASE 1: Prompt Initialization
     
-    AiderDesk->>Extension: onPromptStarted
+    ReactorPro->>Extension: onPromptStarted
     Note right of Extension: Can modify prompt, mode<br/>Can block execution
     
-    Extension-->>AiderDesk: Modified or blocked
+    Extension-->>ReactorPro: Modified or blocked
     
     alt Blocked by extension
-        AiderDesk-->>User: Prompt blocked
+        ReactorPro-->>User: Prompt blocked
     else Not blocked
         
-        Note over AiderDesk,Extension: PHASE 2: Agent Execution
+        Note over ReactorPro,Extension: PHASE 2: Agent Execution
         
-        AiderDesk->>Extension: onAgentStarted
+        ReactorPro->>Extension: onAgentStarted
         Note right of Extension: Can modify prompt, files,<br/>system prompt, agent config<br/>Can block execution
         
-        Extension-->>AiderDesk: Modified or blocked
+        Extension-->>ReactorPro: Modified or blocked
         
         alt Blocked by extension
-            AiderDesk-->>User: Agent blocked
+            ReactorPro-->>User: Agent blocked
         else Not blocked
             
-            Note over AiderDesk: Preparing messages for LLM
+            Note over ReactorPro: Preparing messages for LLM
             
-            AiderDesk->>Extension: onOptimizeMessages
+            ReactorPro->>Extension: onOptimizeMessages
             Note right of Extension: Can modify optimizedMessages<br/>Cannot block
             
-            Extension-->>AiderDesk: Modified messages
+            Extension-->>ReactorPro: Modified messages
             
-            Note over AiderDesk,LLM: LLM Processing Loop
+            Note over ReactorPro,LLM: LLM Processing Loop
             
             loop For each LLM iteration
                 
-                LLM-->>AiderDesk: Response chunk
+                LLM-->>ReactorPro: Response chunk
                 
-                AiderDesk->>Extension: onResponseChunk
+                ReactorPro->>Extension: onResponseChunk
                 Note right of Extension: Can modify chunk<br/>Cannot block
                 
-                Extension-->>AiderDesk: Modified chunk
+                Extension-->>ReactorPro: Modified chunk
                 
                 alt Tool call needed
-                    AiderDesk->>Extension: onToolApproval
+                    ReactorPro->>Extension: onToolApproval
                     Note right of Extension: Can set allowed, blocked<br/>Can block tool execution
                     
-                    Extension-->>AiderDesk: Approval decision
+                    Extension-->>ReactorPro: Approval decision
                     
                     alt Tool approved
-                        AiderDesk->>Extension: onToolCalled
+                        ReactorPro->>Extension: onToolCalled
                         Note right of Extension: Can modify input<br/>Can block execution
                         
-                        Extension-->>AiderDesk: Modified input or blocked
+                        Extension-->>ReactorPro: Modified input or blocked
                         
                         alt Not blocked
-                            AiderDesk->>AiderDesk: Execute tool
-                            AiderDesk->>Extension: onToolFinished
+                            ReactorPro->>ReactorPro: Execute tool
+                            ReactorPro->>Extension: onToolFinished
                             Note right of Extension: Can modify output<br/>Cannot block
                             
-                            Extension-->>AiderDesk: Modified output
+                            Extension-->>ReactorPro: Modified output
                         end
                     end
                 end
                 
-                LLM-->>AiderDesk: Step completed
+                LLM-->>ReactorPro: Step completed
                 
-                AiderDesk->>Extension: onAgentStepFinished
+                ReactorPro->>Extension: onAgentStepFinished
                 Note right of Extension: Can modify finishReason,<br/>responseMessages<br/>Cannot block
                 
-                Extension-->>AiderDesk: Modified step result
+                Extension-->>ReactorPro: Modified step result
             end
             
-            Note over AiderDesk,Extension: PHASE 3: Completion
+            Note over ReactorPro,Extension: PHASE 3: Completion
             
-            AiderDesk->>Extension: onAgentFinished
+            ReactorPro->>Extension: onAgentFinished
             Note right of Extension: Can modify resultMessages<br/>Cannot block
             
-            Extension-->>AiderDesk: Modified result messages
+            Extension-->>ReactorPro: Modified result messages
             
-            AiderDesk->>Extension: onPromptFinished
+            ReactorPro->>Extension: onPromptFinished
             Note right of Extension: Can modify responses<br/>Cannot block
             
-            Extension-->>AiderDesk: Final responses
+            Extension-->>ReactorPro: Final responses
             
-            AiderDesk-->>User: Display responses
+            ReactorPro-->>User: Display responses
         end
     end
 ```
@@ -498,7 +498,7 @@ These events can only modify data, not prevent execution:
 
 ## Extension Context Capabilities
 
-Your extension receives an `ExtensionContext` object that provides safe access to AiderDesk:
+Your extension receives an `ExtensionContext` object that provides safe access to ReactorPro:
 
 ### Available in All Events
 

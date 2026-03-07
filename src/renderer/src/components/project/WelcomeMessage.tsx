@@ -90,7 +90,7 @@ export const WelcomeMessage = ({ onModeChange, mode, projectDir, taskId }: Props
     <div className="absolute inset-0 text-text-muted-light overflow-auto scrollbar-thin scrollbar-track-bg-primary-light scrollbar-thumb-bg-tertiary py-4 px-4">
       <motion.div className="text-center max-w-2xl w-full mx-auto" variants={containerVariants} initial="hidden" animate="visible">
         <motion.div variants={itemVariants} className="mb-8">
-          <img src={icon} alt="AiderDesk" className="h-14 w-14 mx-auto" />
+          <img src={icon} alt="ReactorPro" className="h-14 w-14 mx-auto" />
           <h1 className="text-2xl font-bold text-text-primary mb-2">{t('welcomeMessage.title')}</h1>
           <p className="text-sm text-text-secondary">{t('welcomeMessage.subtitle')}</p>
         </motion.div>

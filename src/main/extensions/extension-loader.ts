@@ -19,7 +19,7 @@ const baseJitiOptions: JitiOptions = {
   moduleCache: false,
   alias: {
     zod: require.resolve('zod'),
-    '@aiderdesk/extensions': require.resolve('@aiderdesk/extensions'),
+    '@reactorpro/extensions': require.resolve('@reactorpro/extensions'),
   },
 };
 
