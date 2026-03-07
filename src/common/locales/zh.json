@@ -443,7 +443,8 @@
       "available": {
         "empty": "所有可用扩展都已安装",
         "extensionsCount": "扩展",
-        "installedCount": "已安装"
+        "installedCount": "已安装",
+        "installedExtensions": "已安装扩展"
       },
       "search": {
         "placeholder": "搜索扩展..."
@@ -479,7 +480,11 @@
         "uninstall": "卸载扩展失败",
         "repositoryExists": "此仓库已添加",
         "cannotRemoveDefault": "无法移除默认仓库"
-      }
+      },
+      "previousContext": "上一个上下文",
+      "nextContext": "下一个上下文",
+      "expandReadme": "展开 README",
+      "collapseReadme": "收起 README"
     },
     "hotkeys": {
       "projectHotkeys": "项目快捷键",
@@ -941,6 +946,8 @@
     "confirmRevertTitle": "恢复文件更改？",
     "confirmRevertMessage": "这将丢弃此文件的所有更改。此操作无法撤销。",
     "revert": "恢复",
+    "expandWidth": "展开至全宽",
+    "collapseWidth": "收起宽度",
     "commitSection": "提交更改",
     "commitMessage": "提交信息",
     "commitMessagePlaceholder": "输入提交信息...",
@@ -1607,14 +1614,14 @@
     "title": "ReactorPro",
     "subtitle": "您的 AI 驱动编程助手",
     "features": {
-      "title": "您可以做什么：",
+      "title": "您可以做什么",
       "aiCoding": "使用 AI 辅助生成和修改代码",
       "contextManagement": "添加文件到上下文以获得更好的结果",
       "multiModel": "选择多种 AI 模型和提供商",
       "commands": "执行命令和运行测试"
     },
     "tips": {
-      "title": "入门指南：",
+      "title": "入门指南",
       "addFiles": "使用侧边栏或 /add 命令添加文件到上下文",
       "askQuestion": "在下方的提示字段中输入您的请求",
       "useCommands": "使用 / 命令进行快速操作",
@@ -1634,7 +1641,8 @@
         "title": "BMAD 模式",
         "description": "用于规划、规范和实现功能的引导式工作流程。最适合结构化的开发流程。"
       }
-    }
+    },
+    "selectMode": "选择"
   },
   "bmad": {
     "welcome": {

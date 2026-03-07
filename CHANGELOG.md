@@ -9,6 +9,10 @@
 - properly capturing stdout when bash tool executes piped commands
 - starting empty quick spec flow in BMAD mode now correctly sets the initial context
 - added settings page for Extension
+- added full-width toggle to Updated files page
+- refined welcome message layout
+- added connection timeout during startup and support for AIDER_DESK_NO_UPDATES environment variable
+- added onPromptTemplate event to manage system prompts in Extension
 
 ## [0.55.0]
 
