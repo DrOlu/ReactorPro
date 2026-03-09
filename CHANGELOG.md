@@ -2,6 +2,10 @@
 
 ## [UNRELEASED]
 
+- moved Files sidebar collapse/expand button to top-right of Context Files section header
+
+## [0.56.0]
+
 - initializing aider when repo map is included in Agent profile
 - added Timeout info to Bash tool message
 - avoid multiple notifications when agent finishes a queued prompt
