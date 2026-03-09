@@ -131,6 +131,18 @@ jobs:
                 }
               }
               
+              // Restore @aiderdesk scoped workspace package references
+              if (pkg.dependencies) {
+                for (const [key, value] of Object.entries(pkg.dependencies)) {
+                  if (key.startsWith('@reactorpro/')) {
+                    const originalKey = key.replace('@reactorpro/', '@aiderdesk/');
+                    pkg.dependencies[originalKey] = value;
+                    delete pkg.dependencies[key];
+                    console.log('Restored workspace dep: ' + originalKey);
+                  }
+                }
+              }
+              
               require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
             "
           fi
@@ -241,6 +253,11 @@ jobs:
             -e 's/Aider Desk/ReactorPro/g' \
             -e 's/aider-desk/reactorpro/g' \
             -e 's/aiderdesk/reactorpro/g' {} \;
+          
+          # Restore @aiderdesk scoped package references that were incorrectly renamed
+          find src packages -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.json" \) -exec sed -i \
+            -e 's/@reactorpro\/extensions/@aiderdesk\/extensions/g' \
+            -e 's/@reactorpro\/tree-sitter-utils/@aiderdesk\/tree-sitter-utils/g' {} \;
           
           # Update Hotovo references
           find src -type f \( -name "*.ts" -o -name "*.tsx" \) -exec sed -i \
