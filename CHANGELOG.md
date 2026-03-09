@@ -13,6 +13,13 @@
 - refined welcome message layout
 - added connection timeout during startup and support for AIDER_DESK_NO_UPDATES environment variable
 - added onPromptTemplate event to manage system prompts in Extension
+- removed unnecessary Close tooltip on overlay pages to avoid issue with tooltip getting stuck open
+- updated files not also show locally commited files when in worktree mode
+- code inline requests from the Updated files page now utilize the current task and mode
+- preserving activate skill tool messages when compacting the conversation
+- increased timeouts for LLM processing in Agent mode
+- exposed allTools argument to Extension tool execute function
+- preserving prompt field text when switching between projects
 
 ## [0.55.0]
 
