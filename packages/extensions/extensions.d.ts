@@ -737,7 +737,7 @@ export interface CustomCommand extends Command {
 	autoApprove?: boolean;
 }
 export type AgentStepResult = unknown;
-export declare const AIDER_DESK_EXTENSIONS_REPO_URL = "https://github.com/hotovo/aider-desk/tree/main/packages/extensions/extensions/";
+export declare const AIDER_DESK_EXTENSIONS_REPO_URL = "https://github.com/hyperspace/reactorpro/tree/main/packages/extensions/extensions/";
 export interface ResponseMessage {
 	id: string;
 	content: string;
@@ -1176,7 +1176,7 @@ export interface ProjectContext {
 	getInputHistory(): Promise<string[]>;
 }
 /**
- * Context object passed to extension methods providing access to AiderDesk APIs
+ * Context object passed to extension methods providing access to ReactorPro APIs
  *
  * @example
  * ```typescript
@@ -1190,7 +1190,7 @@ export interface ProjectContext {
  */
 export interface ExtensionContext {
 	/**
-	 * Log a message to the AiderDesk console and log files
+	 * Log a message to the ReactorPro console and log files
 	 * @param message - Message to log
 	 * @param type - Log level (info, error, warn, debug)
 	 */
