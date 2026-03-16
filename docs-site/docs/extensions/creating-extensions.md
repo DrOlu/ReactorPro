@@ -182,9 +182,9 @@ Be helpful and competent, but maintain the pirate persona throughout all interac
 
 ### Extension with UI Components
 
-Extensions can render custom React components in various locations throughout the AiderDesk interface. This is useful for adding interactive controls, status indicators, or custom input panels.
+Extensions can render custom React components in various locations throughout the ReactorPro interface. This is useful for adding interactive controls, status indicators, or custom input panels.
 
-<img src="./images/ui-components-overview.png" alt="UI Components in AiderDesk" width="800" />
+<img src="./images/ui-components-overview.png" alt="UI Components in ReactorPro" width="800" />
 
 #### Available Placements
 
@@ -200,7 +200,7 @@ UI components can be placed in the following locations:
 | `header-left` | Header bar | Left side of the header |
 | `header-right` | Header bar | Right side of the header |
 
-To see all available placements in action, check out the **ui-placement-demo** extension included with AiderDesk.
+To see all available placements in action, check out the **ui-placement-demo** extension included with ReactorPro.
 
 <img src="./images/ui-placements-demo.png" alt="UI Placement Demo Extension" width="800" />
 
@@ -339,7 +339,7 @@ The following components are available via `props.ui`:
 | `Slider` | Range slider |
 | `DatePicker` | Date picker |
 | `Chip` | Tag/chip component |
-| `ModelSelector` | AiderDesk model selector |
+| `ModelSelector` | ReactorPro model selector |
 | `Flex` | Flex container |
 | `Box` | Generic container |
 | `Text` | Text component |
@@ -355,7 +355,7 @@ The `jsx` function receives a `props` object with:
 | `React` | `React` | React library for hooks and createElement |
 | `task` | `TaskContext` | Current task context (if available) |
 | `projectDir` | `string` | Project directory path |
-| `api` | `ApplicationAPI` | AiderDesk API |
+| `api` | `ApplicationAPI` | ReactorPro API |
 | `mode` | `string` | Current chat mode |
 | `models` | `Model[]` | Available models |
 | `providers` | `Provider[]` | Available providers |

@@ -168,7 +168,7 @@ export interface UIComponentDefinition {
 }
 
 /**
- * Marker type for UI components provided by AiderDesk
+ * Marker type for UI components provided by ReactorPro
  * Actual component implementation is provided by renderer at runtime
  */
 export type UIComponent = object;

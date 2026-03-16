@@ -42,7 +42,7 @@ Install an extension directly from a URL:
 npx @aiderdesk/extensions install https://raw.githubusercontent.com/hyperspace/reactorpro/main/packages/extensions/extensions/sound-notification.ts
 
 # Install from GitHub repository
-npx @aiderdesk/extensions install https://github.com/hotovo/aider-desk --global
+npx @aiderdesk/extensions install https://github.com/hyperspace/reactorpro --global
 
 # Install from third-party repository
 npx @aiderdesk/extensions install https://raw.githubusercontent.com/username/my-extension/main/my-extension.ts --global

@@ -281,7 +281,7 @@ const planMode: ModeDefinition = {
 
 ## UIComponentDefinition
 
-Define custom React components that render in AiderDesk's UI.
+Define custom React components that render in ReactorPro's UI.
 
 ```typescript
 interface UIComponentDefinition {
