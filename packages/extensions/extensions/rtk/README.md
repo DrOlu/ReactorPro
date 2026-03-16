@@ -45,6 +45,12 @@ Commands already using `rtk`, heredocs (`<<`), and unrecognized commands pass th
 
 ## Prerequisites
 
+### Platform support
+
+- **macOS / Linux**: supported
+- **Windows**: supported if `bash`, `rtk`, and `jq` are available in `PATH`
+- On Windows, the extension invokes `rtk-rewrite.sh` through `bash` automatically
+
 ### 1. Install RTK
 
 **Homebrew (macOS/Linux):**
@@ -93,6 +99,22 @@ sudo apt install jq
 sudo dnf install jq
 ```
 
+### 3. Windows notes
+
+On Windows, make sure all of the following are available in `PATH`:
+
+- `bash` (for example from Git Bash)
+- `rtk`
+- `jq`
+
+Quick verification:
+
+```bash
+bash --version
+rtk --version
+jq --version
+```
+
 ## Installation
 
 1. Copy the extension folder to your ReactorPro extensions directory:
@@ -101,13 +123,15 @@ sudo dnf install jq
 cp -r . ~/.reactorpro/extensions/rtk
 ```
 
-2. Make the rewrite script executable:
+2. Make the rewrite script executable (macOS/Linux only):
 
 ```bash
 chmod +x ~/.reactorpro/extensions/rtk/rtk-rewrite.sh
 ```
 
-3. Restart ReactorPro
+On Windows, this step is not required because AiderDesk runs the script via `bash`.
+
+3. Restart AiderDesk
 
 ## How It Works
 
@@ -170,26 +194,47 @@ The extension uses the bundled `rtk-rewrite.sh` script. You can modify this scri
 - Change rewrite patterns
 - Add exclusions
 
+On Windows, the bundled shell script is still used; it is just launched through `bash` instead of being executed directly.
+
 ## Troubleshooting
 
 ### Commands not being rewritten
 
 1. Verify RTK is installed and in PATH:
    ```bash
+   # macOS / Linux
    which rtk
+
+   # Windows
+   where rtk
+
    rtk --version
    ```
 
 2. Verify jq is installed:
    ```bash
+   # macOS / Linux
    which jq
+
+   # Windows
+   where jq
    ```
 
-3. Check ReactorPro logs for extension errors
-
-4. Test the rewrite script manually:
+3. On Windows, verify `bash` is available:
    ```bash
-   echo '{"tool_input":{"command":"git status"}}' | ~/.reactorpro/extensions/rtk/rtk-rewrite.sh
+   where bash
+   bash --version
+   ```
+
+4. Check AiderDesk logs for extension errors
+
+5. Test the rewrite script manually:
+   ```bash
+   # macOS / Linux
+   echo '{"tool_input":{"command":"git status"}}' | ~/.aider-desk/extensions/rtk/rtk-rewrite.sh
+
+   # Windows (Git Bash / bash in PATH)
+   echo '{"tool_input":{"command":"git status"}}' | bash ~/.aider-desk/extensions/rtk/rtk-rewrite.sh
    ```
 
 ### Wrong RTK installed

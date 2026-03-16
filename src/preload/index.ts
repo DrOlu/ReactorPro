@@ -4,34 +4,38 @@ import {
   CommandOutputData,
   CommandsData,
   ContextFilesUpdatedData,
+  ContextMenuParams,
+  CreateTaskParams,
+  ExtensionUIRefreshData,
   FileEdit,
   InputHistoryData,
   LogData,
   McpServerConfig,
   MessageRemovedData,
+  ModalOverlayUrlData,
   ModelsData,
+  OpenDialogOptions,
   OS,
   ProjectSettings,
   ProjectStartedData,
   ProviderModelsData,
   ProvidersUpdatedData,
-  QueuedPromptsUpdatedData,
   QuestionAnsweredData,
   QuestionData,
+  QueuedPromptsUpdatedData,
   ResponseChunkData,
   ResponseCompletedData,
   SettingsData,
+  TaskCreatedData,
   TaskData,
-  CreateTaskParams,
   TerminalData,
   TerminalExitData,
   TokensInfoData,
   ToolData,
+  UpdatedFilesUpdatedData,
   UserMessageData,
   VersionsInfo,
   WorktreeIntegrationStatusUpdatedData,
-  TaskCreatedData,
-  UpdatedFilesUpdatedData,
 } from '@common/types';
 import { electronAPI } from '@electron-toolkit/preload';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
@@ -64,7 +68,7 @@ const api: ApplicationAPI = {
   sendQueuedPromptNow: (baseDir, taskId, promptId) => ipcRenderer.send('send-queued-prompt-now', baseDir, taskId, promptId),
   loadInputHistory: (baseDir) => ipcRenderer.invoke('load-input-history', baseDir),
   isOpenDialogSupported: () => true,
-  showOpenDialog: (options: Electron.OpenDialogSyncOptions) => ipcRenderer.invoke('show-open-dialog', options),
+  showOpenDialog: (options: OpenDialogOptions) => ipcRenderer.invoke('show-open-dialog', options),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   getOpenProjects: () => ipcRenderer.invoke('get-open-projects'),
   addOpenProject: (baseDir) => ipcRenderer.invoke('add-open-project', baseDir),
@@ -82,6 +86,7 @@ const api: ApplicationAPI = {
   getAllFiles: (baseDir, taskId, useGit = true) => ipcRenderer.invoke('get-all-files', baseDir, taskId, useGit),
   getUpdatedFiles: (baseDir, taskId) => ipcRenderer.invoke('get-updated-files', baseDir, taskId),
   restoreFile: (baseDir, taskId, filePath) => ipcRenderer.invoke('restore-file', baseDir, taskId, filePath),
+  readFile: (baseDir, filePath) => ipcRenderer.invoke('read-file', baseDir, filePath),
   generateCommitMessage: (baseDir, taskId) => ipcRenderer.invoke('generate-commit-message', baseDir, taskId),
   commitChanges: (baseDir, taskId, message, amend) => ipcRenderer.invoke('commit-changes', baseDir, taskId, message, amend),
   addFile: (baseDir, taskId, filePath, readOnly = false) => ipcRenderer.send('add-file', baseDir, taskId, filePath, readOnly),
@@ -109,6 +114,30 @@ const api: ApplicationAPI = {
   installExtension: (extensionId: string, repositoryUrl: string, projectDir?: string) =>
     ipcRenderer.invoke('install-extension', extensionId, repositoryUrl, projectDir),
   uninstallExtension: (extensionId: string, projectDir?: string) => ipcRenderer.invoke('uninstall-extension', extensionId, projectDir),
+  getExtensionUIComponents: (projectDir?: string, placement?: string) => ipcRenderer.invoke('get-extension-ui-components', projectDir, placement),
+  getUIExtensionData: (extensionId: string, componentId: string, projectDir?: string, taskId?: string) =>
+    ipcRenderer.invoke('get-extension-ui-data', extensionId, componentId, projectDir, taskId),
+  executeUIExtensionAction: (extensionId: string, componentId: string, action: string, args: unknown[], projectDir?: string, taskId?: string) =>
+    ipcRenderer.invoke('execute-extension-ui-action', extensionId, componentId, action, args, projectDir, taskId),
+  onExtensionUIRefresh: (callback: (data: ExtensionUIRefreshData) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, data: ExtensionUIRefreshData) => {
+      callback(data);
+    };
+    ipcRenderer.on('extension-ui-refresh', listener);
+    return () => {
+      ipcRenderer.removeListener('extension-ui-refresh', listener);
+    };
+  },
+  onModalOverlayUrl: (callback: (data: ModalOverlayUrlData) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, data: ModalOverlayUrlData) => {
+      callback(data);
+    };
+    ipcRenderer.on('modal-overlay-url', listener);
+    return () => {
+      ipcRenderer.removeListener('modal-overlay-url', listener);
+    };
+  },
+  isWebViewSupported: () => true,
 
   createNewTask: (baseDir, params?: CreateTaskParams) => ipcRenderer.invoke('create-new-task', baseDir, params),
   updateTask: (baseDir, id, updates) => ipcRenderer.invoke('update-task', baseDir, id, updates),
@@ -118,10 +147,7 @@ const api: ApplicationAPI = {
   getTasks: (baseDir) => ipcRenderer.invoke('get-tasks', baseDir),
   loadTask: (baseDir, taskId) => ipcRenderer.invoke('load-task', baseDir, taskId),
 
-  exportTaskToMarkdown: async (baseDir, taskId, copyOnly) => {
-    const result = await ipcRenderer.invoke('export-task-to-markdown', baseDir, taskId, copyOnly);
-    return result;
-  },
+  exportTaskToMarkdown: async (baseDir, taskId, copyOnly) => ipcRenderer.invoke('export-task-to-markdown', baseDir, taskId, copyOnly),
   getRecentProjects: () => ipcRenderer.invoke('get-recent-projects'),
   addRecentProject: (baseDir) => ipcRenderer.invoke('add-recent-project', baseDir),
   removeRecentProject: (baseDir) => ipcRenderer.invoke('remove-recent-project', baseDir),
@@ -585,7 +611,7 @@ const api: ApplicationAPI = {
   },
 
   addContextMenuListener: (callback) => {
-    const listener = (_: Electron.IpcRendererEvent, params: Electron.ContextMenuParams) => callback(params);
+    const listener = (_: Electron.IpcRendererEvent, params: ContextMenuParams) => callback(params);
     ipcRenderer.on('context-menu', listener);
     return () => {
       ipcRenderer.removeListener('context-menu', listener);

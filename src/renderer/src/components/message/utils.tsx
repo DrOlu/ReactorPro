@@ -2,7 +2,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Group } from '@common/types';
+import { Group, AssistantGroupMessage, GroupMessage, isResponseMessage, isToolMessage, Message, ResponseMessage, ToolMessage } from '@common/types';
 
 import { CustomCommandBashBlock } from './CustomCommandBashBlock';
 import { ThinkingAnswerBlock } from './ThinkingAnswerBlock';
@@ -10,7 +10,6 @@ import { ThinkingAnswerBlock } from './ThinkingAnswerBlock';
 import { CodeBlock } from '@/components/common/CodeBlock';
 import { MermaidDiagram } from '@/components/common/MermaidDiagram';
 import { CodeInline } from '@/components/common/CodeInline';
-import { AssistantGroupMessage, GroupMessage, isResponseMessage, isToolMessage, Message, ResponseMessage, ToolMessage } from '@/types/message';
 
 const ALL_FENCES = [
   ['````', '````'],
@@ -53,8 +52,12 @@ export const MARKDOWN_COMPONENTS: Components = {
   },
   // Basic styling for preformatted blocks (e.g., indented code)
   pre: (props) => <pre className="p-2 rounded my-2 overflow-x-auto" {...props} />,
-  // Table styling
-  table: (props) => <table className="divide-y divide-border-default border-border-default mb-2 rounded-sm" {...props} />,
+  // Table styling - wrapped in scrollable container for wide tables
+  table: (props) => (
+    <div className="overflow-x-auto scrollbar-thin scrollbar-track-bg-primary-light scrollbar-thumb-bg-secondary-light hover:scrollbar-thumb-bg-tertiary">
+      <table className="divide-y divide-border-default border-border-default mb-2 rounded-sm" {...props} />
+    </div>
+  ),
   thead: (props) => <thead className="bg-bg-secondary-light" {...props} />,
   tbody: (props) => <tbody className="bg-bg-primary-light-strong divide-y divide-border-default" {...props} />,
   tr: (props) => <tr {...props} />,

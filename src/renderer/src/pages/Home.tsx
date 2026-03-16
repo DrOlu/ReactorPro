@@ -17,6 +17,7 @@ import { ProjectTabs } from '@/components/project/ProjectTabs';
 import { ProjectView } from '@/components/project/ProjectView';
 import { SettingsPage } from '@/components/settings/SettingsPage';
 import { useVersions } from '@/hooks/useVersions';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 import { HtmlInfoDialog } from '@/components/common/HtmlInfoDialog';
 import { ProjectSettingsProvider } from '@/contexts/ProjectSettingsContext';
 import { TelemetryInfoDialog } from '@/components/TelemetryInfoDialog';
@@ -513,6 +514,7 @@ export const Home = () => {
             onReorderProjects={handleReorderProjects}
           />
           <div className="flex items-center flex-shrink-0">
+            <ExtensionComponentWrapper placement="header-right" />
             {showUpdateIcon && (
               <IconButton
                 icon={<MdUpload className="h-5 w-5 text-text-primary animate-pulse animate-slow" />}

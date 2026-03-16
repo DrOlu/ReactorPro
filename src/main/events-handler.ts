@@ -9,11 +9,14 @@ import {
   EditFormat,
   EnvironmentVariable,
   FileEdit,
+  InstalledExtension,
   McpServerConfig,
   McpTool,
   MemoryEntry,
   Mode,
   Model,
+  OpenDialogOptions,
+  OpenDialogResult,
   OS,
   ProjectData,
   ProjectSettings,
@@ -32,21 +35,23 @@ import {
   WorkflowExecutionResult,
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
+// @ts-expect-error istextorbinary is not typed properly
+import { isBinary } from 'istextorbinary';
 
-import type { ModeDefinition, BmadStatus, InstallResult } from '@common/types';
+import type { ModeDefinition, BmadStatus, InstallResult, ExtensionUIComponent } from '@common/types';
 import type { BrowserWindow } from 'electron';
 
 import { McpManager, AgentProfileManager } from '@/agent';
 import { MemoryManager } from '@/memory/memory-manager';
 import { ModelManager } from '@/models';
-import { ProjectManager } from '@/project';
+import { Project, ProjectManager } from '@/project';
 import { CloudflareTunnelManager } from '@/server';
 import { Store } from '@/store';
 import { TelemetryManager } from '@/telemetry';
 import { VersionsManager } from '@/versions';
 import { DataManager } from '@/data-manager';
 import { TerminalManager } from '@/terminal/terminal-manager';
-import { ExtensionManager } from '@/extensions';
+import { ExtensionManager, LoadedExtension } from '@/extensions';
 import logger from '@/logger';
 import { getDefaultProjectSettings, getEffectiveEnvironmentVariable, getFilePathSuggestions, isProjectPath, isValidPath, scrapeWeb } from '@/utils';
 import { AIDER_DESK_TMP_DIR, LOGS_DIR } from '@/constants';
@@ -71,10 +76,6 @@ export class EventsHandler {
     private readonly extensionManager: ExtensionManager,
   ) {}
 
-  getExtensionManager(): ExtensionManager {
-    return this.extensionManager;
-  }
-
   loadSettings(): SettingsData {
     return this.store.getSettings();
   }
@@ -86,6 +87,7 @@ export class EventsHandler {
     void this.projectManager.settingsChanged(oldSettings, newSettings);
     this.telemetryManager.settingsChanged(oldSettings, newSettings);
     void this.memoryManager.settingsChanged(oldSettings, newSettings);
+    this.extensionManager.settingsChanged(oldSettings, newSettings);
     this.eventManager.sendSettingsUpdated(newSettings);
 
     return this.store.getSettings();
@@ -551,6 +553,17 @@ export class EventsHandler {
     await task.restoreFile(filePath);
   }
 
+  async readFile(baseDir: string, filePath: string): Promise<string> {
+    const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(baseDir, filePath);
+    const fileContentBuffer = await fs.readFile(absolutePath);
+
+    if (isBinary(filePath, fileContentBuffer)) {
+      throw new Error('Cannot read binary file');
+    }
+
+    return fileContentBuffer.toString('utf-8');
+  }
+
   async generateCommitMessage(baseDir: string, taskId: string): Promise<string> {
     const task = this.projectManager.getProject(baseDir).getTask(taskId);
     if (!task) {
@@ -852,7 +865,7 @@ export class EventsHandler {
     this.projectManager.modelsUpdated();
   }
 
-  async showOpenDialog(options: Electron.OpenDialogSyncOptions): Promise<Electron.OpenDialogReturnValue> {
+  async showOpenDialog(options: OpenDialogOptions): Promise<OpenDialogResult> {
     if (!this.mainWindow) {
       return {
         canceled: true,
@@ -1071,5 +1084,82 @@ export class EventsHandler {
       throw new Error('Project not found');
     }
     return await project.resetBmadWorkflow();
+  }
+
+  getInstalledExtensions(projectDir?: string): InstalledExtension[] {
+    const extensions = this.extensionManager.getExtensions(projectDir);
+    return extensions.map((ext: LoadedExtension) => ({
+      id: ext.id,
+      metadata: ext.metadata,
+      filePath: ext.filePath,
+      initialized: ext.initialized,
+      projectDir: ext.projectDir,
+      readmeContent: ext.readmeContent,
+    }));
+  }
+
+  async getAvailableExtensions(repositories: string[], forceRefresh?: boolean) {
+    return await this.extensionManager.getAvailableExtensions(repositories, forceRefresh);
+  }
+
+  async installExtension(extensionId: string, repositoryUrl: string, projectDir?: string) {
+    let project: Project | undefined = undefined;
+    if (projectDir) {
+      project = this.projectManager.getProject(projectDir);
+      if (!project) {
+        throw new Error('Project not found');
+      }
+    }
+
+    return await this.extensionManager.installExtension(extensionId, repositoryUrl, project);
+  }
+
+  async uninstallExtension(extensionId: string, projectDir?: string) {
+    return await this.extensionManager.uninstallExtension(extensionId, projectDir);
+  }
+
+  getUIComponents(projectDir?: string, placement?: string): ExtensionUIComponent[] {
+    const project = projectDir ? this.projectManager.getProject(projectDir) : undefined;
+    const components = this.extensionManager.getUIComponents(project);
+    const filtered = placement ? components.filter((c) => c.component.placement === placement) : components;
+    return filtered.map((c) => ({
+      extensionId: c.extensionId,
+      componentId: c.component.id,
+      placement: c.component.placement,
+      jsx: c.component.jsx,
+      loadData: c.component.loadData,
+    }));
+  }
+
+  async getUIExtensionData(extensionId: string, componentId: string, projectDir?: string, taskId?: string): Promise<unknown> {
+    logger.info('Getting UI extension data:', {
+      extensionId,
+      componentId,
+      projectDir,
+      taskId,
+    });
+    const project = projectDir ? this.projectManager.getProject(projectDir) : undefined;
+    const task = taskId && project ? (project.getTask(taskId) ?? undefined) : undefined;
+    return await this.extensionManager.getUIExtensionData(extensionId, componentId, project, task);
+  }
+
+  async executeUIExtensionAction(
+    extensionId: string,
+    componentId: string,
+    action: string,
+    args: unknown[],
+    projectDir?: string,
+    taskId?: string,
+  ): Promise<unknown> {
+    logger.info('Executing UI extension action:', {
+      extensionId,
+      componentId,
+      action,
+      projectDir,
+      taskId,
+    });
+    const project = projectDir ? this.projectManager.getProject(projectDir) : undefined;
+    const task = taskId && project ? (project.getTask(taskId) ?? undefined) : undefined;
+    return await this.extensionManager.executeUIExtensionAction(extensionId, componentId, action, args, project, task);
   }
 }

@@ -36,6 +36,7 @@ import {
 export type LlmProviderName =
   | 'anthropic'
   | 'anthropic-compatible'
+  | 'auggie'
   | 'azure'
   | 'bedrock'
   | 'cerebras'
@@ -82,6 +83,7 @@ export const AVAILABLE_PROVIDERS: LlmProviderName[] = [
   'alibaba-plan',
   'anthropic',
   'anthropic-compatible',
+  'auggie',
   'azure',
   'bedrock',
   'cerebras',
@@ -147,6 +149,13 @@ export interface AnthropicCompatibleProvider extends LlmProviderBase {
 }
 export const isAnthropicCompatibleProvider = (provider: LlmProviderBase): provider is AnthropicCompatibleProvider => provider.name === 'anthropic-compatible';
 
+export interface AuggieProvider extends LlmProviderBase {
+  name: 'auggie';
+  apiKey: string;
+  apiUrl?: string;
+}
+export const isAuggieProvider = (provider: LlmProviderBase): provider is AuggieProvider => provider.name === 'auggie';
+
 export interface KimiPlanProvider extends LlmProviderBase {
   name: 'kimi-plan';
   apiKey: string;
@@ -156,6 +165,8 @@ export const isKimiPlanProvider = (provider: LlmProviderBase): provider is KimiP
 export interface AlibabaPlanProvider extends LlmProviderBase {
   name: 'alibaba-plan';
   apiKey: string;
+  thinkingEnabled?: boolean;
+  thinkingBudget?: number;
 }
 export const isAlibabaPlanProvider = (provider: LlmProviderBase): provider is AlibabaPlanProvider => provider.name === 'alibaba-plan';
 
@@ -313,6 +324,7 @@ export type LlmProvider =
   | OpenAiProvider
   | AnthropicProvider
   | AnthropicCompatibleProvider
+  | AuggieProvider
   | AzureProvider
   | GeminiProvider
   | GeminiCliProvider
@@ -340,19 +352,19 @@ export const DEFAULT_MODEL_TEMPERATURE = 0.0;
 
 export const DEFAULT_PROVIDER_MODELS: Partial<Record<LlmProviderName, string>> = {
   'alibaba-plan': 'qwen3-coder-plus',
-  anthropic: 'claude-sonnet-4-5-20250929',
+  anthropic: 'claude-sonnet-4-6',
   cerebras: 'qwen-3-235b-a22b-instruct-2507',
   'claude-agent-sdk': 'sonnet',
   deepseek: 'deepseek-chat',
-  gemini: 'gemini-3-pro',
+  gemini: 'gemini-pro-latest',
   'gemini-cli': 'gemini-2.5-flash',
   groq: 'moonshotai/kimi-k2-instruct-0905',
-  openai: 'gpt-5.2',
-  openrouter: 'anthropic/claude-sonnet-4.5',
-  opencode: 'claude-sonnet-4-5',
-  requesty: 'anthropic/claude-sonnet-4-5',
-  synthetic: 'anthropic/claude-sonnet-4.5',
-  'zai-plan': 'glm-4.7',
+  openai: 'gpt-5.4',
+  openrouter: 'anthropic/claude-sonnet-4.6',
+  opencode: 'claude-sonnet-4-6',
+  requesty: 'anthropic/claude-sonnet-4-6',
+  synthetic: 'hf:zai-org/GLM-4.7',
+  'zai-plan': 'glm-5',
   minimax: 'MiniMax-M2',
 };
 
@@ -626,6 +638,13 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
         baseUrl: '',
       } satisfies AnthropicCompatibleProvider;
       break;
+    case 'auggie':
+      provider = {
+        name: 'auggie',
+        apiKey: '',
+        apiUrl: '',
+      } satisfies AuggieProvider;
+      break;
     case 'gemini':
       provider = {
         name: 'gemini',
@@ -668,6 +687,8 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
       provider = {
         name: 'alibaba-plan',
         apiKey: '',
+        thinkingEnabled: true,
+        thinkingBudget: 8192,
       } satisfies AlibabaPlanProvider;
       break;
     case 'gpustack':

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { ReactNode, useState } from 'react';
 import { DefaultTaskState, Mode, TaskData } from '@common/types';
 
+import { ExtensionComponentWrapper } from '../extensions/ExtensionComponentWrapper';
+
 import { BmadTaskActions } from '@/components/bmad/BmadTaskActions';
 import { Button } from '@/components/common/Button';
 
@@ -66,10 +68,11 @@ export const TaskStateActions = ({
 
   const renderSection = (icon: ReactNode, text: string, actions: ReactNode) => {
     return (
-      <div className="p-2.5 max-w-full break-words text-xs border-t border-border-dark-light relative group bg-bg-primary-light-strong">
-        <div className="flex items-center gap-3">
+      <div className="px-4 p-2 max-w-full break-words text-xs border-t border-border-dark-light relative group bg-bg-primary-light-strong">
+        <div className="flex items-center gap-2">
           {icon}
           <div className="flex-1 text-text-secondary">{text}</div>
+          <ExtensionComponentWrapper placement="task-state-actions" direction="horizontal" />
           {actions}
         </div>
       </div>

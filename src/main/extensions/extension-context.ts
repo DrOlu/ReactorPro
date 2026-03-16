@@ -10,20 +10,22 @@ import type { Store } from '@/store';
 import type { Task } from '@/task';
 
 import logger from '@/logger';
+import { openUrl as openUrlUtil } from '@/utils/open-url';
 
 export class ExtensionContextImpl implements ExtensionContext {
   constructor(
     private readonly extensionId: string,
+    private readonly extensionName: string,
     private readonly store?: Store,
     private readonly modelManager?: ModelManager,
-    private readonly project?: Project,
-    private readonly taskInstance?: Task,
     private readonly eventManager?: EventManager,
+    private readonly project?: Project,
+    private readonly task?: Task,
   ) {}
 
   log(message: string, type: 'info' | 'error' | 'warn' | 'debug' = 'info'): void {
     const logFn = logger[type];
-    logFn(`[Extension:${this.extensionId}] ${message}`);
+    logFn(`[Extension:${this.extensionName}] ${message}`);
   }
 
   getProjectDir(): string {
@@ -31,7 +33,7 @@ export class ExtensionContextImpl implements ExtensionContext {
   }
 
   getTaskContext(): TaskContext | null {
-    return this.taskInstance ? new TaskContextImpl(this.taskInstance) : null;
+    return this.task ? new TaskContextImpl(this.task) : null;
   }
 
   getProjectContext(): ProjectContext {
@@ -84,6 +86,51 @@ export class ExtensionContextImpl implements ExtensionContext {
       this.eventManager?.sendSettingsUpdated(newSettings);
     } catch (error) {
       this.log(`Failed to update settings: ${error}`, 'error');
+      throw error;
+    }
+  }
+
+  triggerUIDataRefresh(componentId?: string, taskId?: string): void {
+    if (!this.eventManager) {
+      this.log('EventManager not available, cannot trigger UI data refresh', 'warn');
+      return;
+    }
+    this.log(`Triggering UI data refresh for component: ${componentId}, task: ${taskId}`, 'info');
+    this.eventManager.sendExtensionUIRefresh({
+      projectDir: this.project?.baseDir,
+      extensionId: this.extensionId,
+      componentId,
+      taskId,
+    });
+  }
+
+  triggerUIComponentsReload(): void {
+    if (!this.eventManager) {
+      this.log('EventManager not available, cannot trigger UI components reload', 'warn');
+      return;
+    }
+    this.log('Triggering UI components reload', 'info');
+    this.eventManager.sendExtensionUIRefresh({
+      projectDir: this.project?.baseDir,
+      extensionId: this.extensionId,
+      reloadComponents: true,
+    });
+  }
+
+  async openUrl(url: string, target: 'external' | 'window' | 'modal-overlay' = 'window'): Promise<void> {
+    this.log(`Opening URL: ${url} (target: ${target})`);
+    try {
+      if (target === 'modal-overlay') {
+        if (!this.eventManager) {
+          this.log('EventManager not available, cannot open URL in modal overlay', 'warn');
+          return;
+        }
+        this.eventManager.sendModalOverlayUrl(url);
+      } else {
+        await openUrlUtil(url, target);
+      }
+    } catch (error) {
+      this.log(`Failed to open URL: ${error}`, 'error');
       throw error;
     }
   }

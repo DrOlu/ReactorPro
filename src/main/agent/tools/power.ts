@@ -2,7 +2,9 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
+import { ChildProcess } from 'node:child_process';
 
+import treeKill from 'tree-kill';
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import { glob } from 'glob';
@@ -183,7 +185,10 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
 
       return withFileLock(absolutePath, async () => {
         try {
-          const fileContent = await fs.readFile(absolutePath, { encoding: 'utf8', signal: abortSignal });
+          const fileContent = await fs.readFile(absolutePath, {
+            encoding: 'utf8',
+            signal: abortSignal,
+          });
           let modifiedContent: string;
 
           if (isRegex) {
@@ -194,9 +199,10 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
             const sanitizedReplacementText = sanitize(replacementText);
 
             if (replaceAll) {
-              modifiedContent = fileContent.replaceAll(sanitizedSearchTerm, sanitizedReplacementText);
+              // Use replacer function to avoid special replacement patterns ($&, $`, '$', $$)
+              modifiedContent = fileContent.replaceAll(sanitizedSearchTerm, () => sanitizedReplacementText);
             } else {
-              modifiedContent = fileContent.replace(sanitizedSearchTerm, sanitizedReplacementText);
+              modifiedContent = fileContent.replace(sanitizedSearchTerm, () => sanitizedReplacementText);
             }
           }
 
@@ -210,7 +216,10 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
             return `Warning: Given 'searchTerm' was not found in the file. Content remains the same. ${improveInfo}`;
           }
 
-          await fs.writeFile(absolutePath, modifiedContent, { encoding: 'utf8', signal: abortSignal });
+          await fs.writeFile(absolutePath, modifiedContent, {
+            encoding: 'utf8',
+            signal: abortSignal,
+          });
           return `Successfully edited '${filePath}'.`;
         } catch (error) {
           if (isAbortError(error)) {
@@ -499,7 +508,10 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
         const searchRegex = new RegExp(searchTerm, caseSensitive ? undefined : 'i'); // Simpler for line-by-line test
 
         for (const absoluteFilePath of filteredFiles) {
-          const fileContent = await fs.readFile(absoluteFilePath, { encoding: 'utf8', signal: abortSignal });
+          const fileContent = await fs.readFile(absoluteFilePath, {
+            encoding: 'utf8',
+            signal: abortSignal,
+          });
           const lines = fileContent.split('\n');
           const relativeFilePath = path.relative(task.getTaskDir(), absoluteFilePath);
 
@@ -547,7 +559,7 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
   const bashTool = tool({
     description: POWER_TOOL_DESCRIPTIONS[TOOL_BASH],
     inputSchema: z.object({
-      command: z.string().describe('The shell command to execute (e.g., ls -la, npm install).'),
+      command: z.string().min(1).describe('The shell command to execute (e.g., ls -la, npm install).'),
       cwd: z.string().optional().describe('The working directory for the command (relative to <WorkingDirectory>). Default: <WorkingDirectory>.'),
       timeout: z.number().int().min(0).optional().default(120000).describe('Timeout for the command execution in milliseconds. Default: 120000 ms.'),
     }),
@@ -607,11 +619,17 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
         let exitCode = 0;
         let timeoutHandle: NodeJS.Timeout | null = null;
         let isResolved = false;
+        let childProcess: ChildProcess | null = null;
+        let abortListener: (() => void) | null = null;
 
         const cleanup = () => {
           if (timeoutHandle) {
             clearTimeout(timeoutHandle);
             timeoutHandle = null;
+          }
+          // Remove abort listener to prevent memory leaks
+          if (abortListener) {
+            abortSignal?.removeEventListener('abort', abortListener);
           }
         };
 
@@ -625,15 +643,19 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
           resolve({ stdout, stderr, exitCode });
         };
 
-        const abortListener = () => {
+        abortListener = () => {
           if (isResolved) {
             return;
           }
-          isResolved = true;
-          cleanup();
 
-          const cancelledMessage = 'Operation was cancelled by user.';
-          resolve(cancelledMessage);
+          if (childProcess?.pid) {
+            treeKill(childProcess.pid, 'SIGTERM');
+          }
+
+          // Use the standard resolution method with proper type
+          stderr = 'Operation was cancelled by user.';
+          exitCode = 130; // Standard cancel exit code (128 + SIGINT=2)
+          resolveWithResult();
         };
 
         // Listen for abort signal
@@ -641,20 +663,25 @@ Do not use escape characters \\ in the string like \\n or \\" and others. Do not
 
         try {
           const { shell: shellExec, args: shellArgs } = getShellCommandArgs(command);
-          const childProcess = spawn(shellExec, shellArgs, {
+          childProcess = spawn(shellExec, shellArgs, {
             cwd: absoluteCwd,
-            env: { ...process.env, PATH: getShellPath() },
+            env: { ...process.env, TERM: 'dumb', DEBIAN_FRONTEND: 'noninteractive', PATH: getShellPath() },
             stdio: ['ignore', 'pipe', 'pipe'], // Explicitly pipe stdout and stderr to capture output from piped commands
+            signal: abortSignal,
           });
 
           // Set timeout
           timeoutHandle = setTimeout(() => {
-            if (!isResolved) {
-              childProcess.kill('SIGTERM');
-              stderr = `Error: Command timed out after ${timeout}ms. Consider increasing the timeout parameter.`;
-              exitCode = 124;
-              resolveWithResult();
+            if (isResolved) {
+              return;
             }
+
+            if (childProcess?.pid) {
+              treeKill(childProcess.pid, 'SIGTERM');
+            }
+            stderr = `Error: Command timed out after ${timeout}ms. Consider increasing the timeout parameter.`;
+            exitCode = 124;
+            resolveWithResult();
           }, timeout);
 
           childProcess.stdout?.on('data', (data: Buffer) => {

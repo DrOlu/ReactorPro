@@ -65,6 +65,7 @@ src/
       common.ts
       context.ts
       index.ts
+      ui-messages.ts
     agent.ts
     api.ts
     bmad-workflows.ts
@@ -144,6 +145,7 @@ src/
         alibaba-plan.ts
         anthropic-compatible.ts
         anthropic.ts
+        auggie.ts
         azure.ts
         bedrock.ts
         cerebras.ts
@@ -252,6 +254,7 @@ src/
       file-system.ts
       index.ts
       mutex.ts
+      open-url.ts
       python.ts
       shell.ts
       web-scrapper.ts
@@ -338,6 +341,8 @@ src/
           MarkdownInfoDialog.tsx
           MermaidDiagram.tsx
           ModalOverlayLayout.tsx
+          ModalOverlayUrlViewer.tsx
+          ModelSelectorWrapper.tsx
           MultiSelect.tsx
           RadioButton.tsx
           Section.tsx
@@ -354,8 +359,12 @@ src/
         ContextFiles/
           ContextFiles.css
           ContextFiles.tsx
+          FilePreviewModal.tsx
           index.ts
           UpdatedFilesDiffModal.tsx
+        extensions/
+          ExtensionComponentWrapper.tsx
+          ExtensionUIErrorBoundary.tsx
         message/
           ActivateSkillToolMessage.tsx
           AssistantMessageBlock.tsx
@@ -405,9 +414,12 @@ src/
           VirtualizedMessages.tsx
         ModelLibrary/
           providers/
+            AlibabaPlanModelOverrides.tsx
             AlibabaPlanParameters.tsx
+            AlibabaPlanThinkingSettings.tsx
             AnthropicCompatibleParameters.tsx
             AnthropicParameters.tsx
+            AuggieParameters.tsx
             AzureAdvancedSettings.tsx
             AzureModelOverrides.tsx
             AzureParameters.tsx
@@ -557,10 +569,11 @@ src/
         AgentsContext.tsx
         ApiContext.tsx
         ContextMenuContext.tsx
+        ExtensionsContext.tsx
         ModelProviderContext.tsx
         ProjectSettingsContext.tsx
         SettingsContext.tsx
-        TaskContext.tsx
+        TasksContext.tsx
       fonts/
         Enriqueta.ttf
         FunnelDisplay.ttf
@@ -617,6 +630,7 @@ src/
         AlibabaPlanIcon.tsx
         AnthropicCompatibleIcon.tsx
         AnthropicIcon.tsx
+        AuggieIcon.tsx
         AzureIcon.tsx
         BedrockIcon.tsx
         CerebrasIcon.tsx
@@ -648,6 +662,7 @@ src/
         Onboarding.tsx
         Settings.tsx
       stores/
+        extensionUIStore.ts
         projectStore.ts
         taskStore.ts
       themes/
@@ -668,8 +683,6 @@ src/
         theme-ocean.scss
         theme-serenity.scss
         themes.scss
-      types/
-        message.ts
       utils/
         agents.ts
         bmad-suggestions.ts
@@ -1126,6 +1139,13 @@ max_delay = 5.0   # Maximum delay in seconds
 # Reset initialized flag before each connection attempt
 # This ensures on_connect runs properly after reconnection
 ⋮----
+# Add a small delay before the first connection attempt to give
+# the server time to be fully ready. This helps avoid the
+# "One or more namespaces failed to connect" error.
+⋮----
+# Connect with explicit timeout. The default is 5 seconds which can
+# be too short if the server is still initializing.
+⋮----
 # Explicitly call on_connect after successful connection
 # This ensures init message is sent even if the event handler doesn't fire
 # (which can happen on reconnection after namespace errors)
@@ -1136,6 +1156,8 @@ return  # Connection successful
 ⋮----
 # Calculate delay with exponential backoff
 delay = min(base_delay * (2 ** attempt), max_delay)
+⋮----
+# Disconnect any partial connection before retrying
 ⋮----
 async def wait(self)
 ⋮----
@@ -1684,6 +1706,8 @@ File: src/common/locales/en.json
     },
     "claudeAgentSdkAuthRequired": "This provider requires Claude Code CLI installation and authentication. Install from https://claude.com/product/claude-code and run `claude login` to authenticate.",
     "claudeAgentSdkAgentOnly": "This provider only works in Agent mode and is not supported in Code/Ask/Architect/Context modes.",
+    "auggieAuthRequired": "This provider requires Auggie CLI installation and authentication. Install from https://www.npmjs.com/package/@augmentcode/auggie-sdk and run `auggie login` to authenticate.",
+    "auggieAgentOnly": "This provider only works in Agent mode and is not supported in Code/Ask/Architect/Context modes.",
     "geminiCliAuthRequired": "This provider requires Gemini CLI installation and authentication. Install from https://geminicli.com and run `gemini` to authenticate.",
     "geminiCliAgentOnly": "This provider only works in Agent mode and is not supported in Code/Ask/Architect/Context modes.",
     "projectId": "Project ID",
@@ -1716,6 +1740,12 @@ File: src/common/locales/en.json
     "baseUrl": "Base URL",
     "baseUrlPlaceholder": "e.g. https://api.anthropic.com"
   },
+  "auggie": {
+    "apiKey": "API Token",
+    "apiKeyPlaceholder": "your-api-key (optional)",
+    "apiUrl": "API URL",
+    "apiUrlPlaceholder": "https://your-tenant.api.augmentcode.com (optional)"
+  },
   "minimax": {
     "apiKey": "API Key"
   },
@@ -1736,7 +1766,11 @@ File: src/common/locales/en.json
     "apiKey": "API Key"
   },
   "alibabaPlan": {
-    "apiKey": "API Key"
+    "apiKey": "API Key",
+    "thinkingEnabled": "Thinking Enabled",
+    "thinkingEnabledTooltip": "Enable thinking mode for enhanced reasoning capabilities",
+    "thinkingBudget": "Thinking Budget",
+    "thinkingBudgetTooltip": "Maximum number of tokens for thinking (0-81920)"
   },
   "deepseek": {
     "apiKey": "API Key"
@@ -1785,7 +1819,7 @@ File: src/common/locales/en.json
     "apiKey": "API Key",
     "mcp": {
       "title": "MCP Servers",
-      "infoTooltip": "Add Z.AI Coding Plan MCP servers to enable additional capabilities for the agent.",
+      "infoTooltip": "Add Z.ai Coding Plan MCP servers to enable additional capabilities for the agent.",
       "vision": {
         "name": "Vision",
         "description": "Image and video analysis using GLM-4.6V model"
@@ -1818,6 +1852,7 @@ File: src/common/locales/en.json
   "providers": {
     "anthropic": "Anthropic",
     "anthropic-compatible": "Anthropic Compatible",
+    "auggie": "Auggie SDK",
     "alibaba-plan": "Alibaba Coding Plan",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
@@ -1839,7 +1874,7 @@ File: src/common/locales/en.json
     "requesty": "Requesty",
     "synthetic": "Synthetic",
     "vertex-ai": "Vertex AI",
-    "zai-plan": "Z.AI Coding Plan",
+    "zai-plan": "Z.ai Coding Plan",
     "azure": "Azure"
   },
   "select": {
@@ -2381,6 +2416,10 @@ File: src/common/locales/en.json
   "fileChip": {
     "removeFileTooltip": "Remove file"
   },
+  "filePreview": {
+    "title": "File Viewer",
+    "errorLoading": "Failed to load file"
+  },
   "contextFiles": {
     "title": "Context Files",
     "updatedFiles": "Updated Files",
@@ -2561,6 +2600,10 @@ File: src/common/locales/en.json
       "parentTaskId": "Parent Task ID",
       "execute": "Execute",
       "executeInBackground": "Execute in background",
+      "mode": "Mode",
+      "autoApprove": "Auto Approve",
+      "worktree": "Worktree",
+      "executeAndWait": "Execute and Wait",
       "yes": "Yes",
       "no": "No",
       "taskId": "Task ID",
@@ -3498,6 +3541,8 @@ File: src/common/locales/zh.json
     },
     "claudeAgentSdkAuthRequired": "此提供商需要安装和认证 Claude Code CLI。请从 https://claude.com/product/claude-code 安装并运行 `claude login` 进行认证。",
     "claudeAgentSdkAgentOnly": "此提供商仅在代理模式下工作，不支持代码/询问/架构/上下文模式。",
+    "auggieAuthRequired": "此提供商需要安装和认证 Auggie CLI。请从 https://www.npmjs.com/package/@augmentcode/auggie-sdk 安装并运行 `auggie login` 进行认证。",
+    "auggieAgentOnly": "此提供商仅在代理模式下工作，不支持代码/询问/架构/上下文模式。",
     "geminiCliAuthRequired": "此提供商需要安装和认证 Gemini CLI。请从 https://geminicli.com 安装并运行 `gemini` 进行认证。",
     "geminiCliAgentOnly": "此提供商仅在代理模式下工作，不支持代码/询问/架构/上下文模式。",
     "projectId": "项目 ID",
@@ -3539,7 +3584,7 @@ File: src/common/locales/zh.json
     "apiKey": "API 密钥",
     "mcp": {
       "title": "MCP 服务器",
-      "infoTooltip": "添加 Z.AI Coding Plan MCP 服务器以为智能体启用更多功能。",
+      "infoTooltip": "添加 Z.ai Coding Plan MCP 服务器以为智能体启用更多功能。",
       "vision": {
         "name": "视觉",
         "description": "使用 GLM-4.6V 模型进行图像和视频分析"
@@ -3568,6 +3613,11 @@ File: src/common/locales/zh.json
     "baseUrl": "基础 URL",
     "baseUrlPlaceholder": "例如 https://api.anthropic.com"
   },
+  "auggie": {
+    "apiKey": "API 令牌",
+    "apiUrl": "API URL",
+    "apiUrlPlaceholder": "https://api.augmentcode.com"
+  },
   "minimax": {
     "apiKey": "API 密钥"
   },
@@ -3591,7 +3641,11 @@ File: src/common/locales/zh.json
     "apiKey": "API 密钥"
   },
   "alibabaPlan": {
-    "apiKey": "API 密钥"
+    "apiKey": "API 密钥",
+    "thinkingEnabled": "启用思考",
+    "thinkingEnabledTooltip": "启用思考模式以增强推理能力",
+    "thinkingBudget": "思考预算",
+    "thinkingBudgetTooltip": "思考的最大令牌数 (0-81920)"
   },
   "deepseek": {
     "apiKey": "API 密钥"
@@ -3630,6 +3684,7 @@ File: src/common/locales/zh.json
   "providers": {
     "anthropic": "Anthropic",
     "anthropic-compatible": "Anthropic 兼容",
+    "auggie": "Augie SDK",
     "alibaba-plan": "阿里云编码计划",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
@@ -3651,7 +3706,7 @@ File: src/common/locales/zh.json
     "requesty": "Requesty",
     "synthetic": "Synthetic",
     "vertex-ai": "Vertex AI",
-    "zai-plan": "Z.AI Coding Plan",
+    "zai-plan": "Z.ai Coding Plan",
     "azure": "Azure"
   },
   "select": {
@@ -4153,6 +4208,10 @@ File: src/common/locales/zh.json
   "fileChip": {
     "removeFileTooltip": "移除文件"
   },
+  "filePreview": {
+    "title": "文件查看器",
+    "errorLoading": "加载文件失败"
+  },
   "contextFiles": {
     "title": "上下文文件",
     "updatedFiles": "已更新文件",
@@ -4352,6 +4411,10 @@ File: src/common/locales/zh.json
       "parentTaskId": "父任务ID",
       "execute": "执行",
       "executeInBackground": "在后台执行",
+      "mode": "模式",
+      "autoApprove": "自动批准",
+      "worktree": "工作树",
+      "executeAndWait": "执行并等待",
       "yes": "是",
       "no": "否",
       "taskId": "任务ID",
@@ -6036,7 +6099,7 @@ export interface NotificationData {
   body: string;
 }
 ⋮----
-export interface LoadedExtension {
+export interface InstalledExtension {
   id: string;
   metadata: {
     name: string;
@@ -6064,6 +6127,45 @@ export interface AvailableExtension {
   repositoryUrl: string;
   hasDependencies?: boolean;
   readmeContent?: string;
+}
+⋮----
+export interface ExtensionUIComponent {
+  extensionId: string;
+  componentId: string;
+  placement: string;
+  jsx: string;
+  loadData?: boolean;
+}
+⋮----
+export interface ExtensionUIRefreshData {
+  projectDir?: string;
+  extensionId?: string;
+  componentId?: string;
+  taskId?: string;
+  reloadComponents?: boolean;
+}
+⋮----
+export type OpenDialogProperty = 'openFile' | 'openDirectory' | 'multiSelections';
+⋮----
+export interface OpenDialogOptions {
+  properties: OpenDialogProperty[];
+  defaultPath?: string;
+}
+⋮----
+export interface OpenDialogResult {
+  canceled: boolean;
+  filePaths: string[];
+}
+⋮----
+export interface ContextMenuParams {
+  x: number;
+  y: number;
+  selectionText?: string;
+  isEditable: boolean;
+}
+⋮----
+export interface ModalOverlayUrlData {
+  url: string;
 }
 
 ================
@@ -6221,6 +6323,107 @@ File: src/common/types/index.ts
 
 
 ================
+File: src/common/types/ui-messages.ts
+================
+import { TaskData, TokensInfoData } from './common';
+import { PromptContext, UsageReportData, Group } from './context';
+⋮----
+export interface Message {
+  id: string;
+  type: 'user' | 'response' | 'loading' | 'reflected-message' | 'command-output' | 'log' | 'tokens-info' | 'tool' | 'group' | 'task-info' | 'assistant-group';
+  content: string;
+  promptContext?: PromptContext;
+  children?: Message[];
+}
+⋮----
+export interface UserMessage extends Message {
+  type: 'user';
+  isOptimistic?: boolean;
+}
+⋮----
+export interface ResponseMessage extends Message {
+  type: 'response';
+  usageReport?: UsageReportData;
+}
+⋮----
+export interface ReflectedMessage extends Message {
+  type: 'reflected-message';
+  responseMessageId: string;
+}
+⋮----
+export interface LogMessage extends Message {
+  type: 'log';
+  level: 'info' | 'warning' | 'error';
+  actionIds?: string[];
+}
+⋮----
+export interface LoadingMessage extends Message {
+  type: 'loading';
+  actionIds?: string[];
+}
+⋮----
+export interface CommandOutputMessage extends Message {
+  type: 'command-output';
+  command: string;
+}
+⋮----
+export interface TokensInfoMessage extends Message {
+  type: 'tokens-info';
+  info: TokensInfoData;
+}
+⋮----
+export interface ToolMessage extends Message {
+  type: 'tool';
+  serverName: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  content: string; // Empty while executing, contains result when complete
+  usageReport?: UsageReportData;
+  finished?: boolean;
+}
+⋮----
+content: string; // Empty while executing, contains result when complete
+⋮----
+export const isUserMessage = (message: Message): message is UserMessage =>
+⋮----
+export const isResponseMessage = (message: Message): message is ResponseMessage =>
+⋮----
+export const isLogMessage = (message: Message): message is LogMessage =>
+⋮----
+export const isLoadingMessage = (message: Message): message is LoadingMessage =>
+⋮----
+export const isReflectedMessage = (message: Message): message is ReflectedMessage =>
+⋮----
+export const isCommandOutputMessage = (message: Message): message is CommandOutputMessage =>
+export const isTokensInfoMessage = (message: Message): message is TokensInfoMessage =>
+⋮----
+export const isToolMessage = (message: Message): message is ToolMessage =>
+⋮----
+export interface GroupMessage extends Message {
+  type: 'group';
+  group: Group;
+  children: Message[];
+}
+⋮----
+export const isGroupMessage = (message: Message): message is GroupMessage =>
+⋮----
+export interface TaskInfoMessage extends Message {
+  type: 'task-info';
+  task: TaskData;
+  messageCount: number;
+}
+⋮----
+export const isTaskInfoMessage = (message: Message): message is TaskInfoMessage =>
+⋮----
+export interface AssistantGroupMessage extends Message {
+  type: 'assistant-group';
+  responseMessage: ResponseMessage;
+  toolMessages: ToolMessage[];
+}
+⋮----
+export const isAssistantGroupMessage = (message: Message): message is AssistantGroupMessage =>
+
+================
 File: src/common/agent.ts
 ================
 import { AgentProfile, ContextMemoryMode, InvocationMode, Model, ReasoningEffort, ToolApprovalState } from '@common/types';
@@ -6261,6 +6464,7 @@ import {
 export type LlmProviderName =
   | 'anthropic'
   | 'anthropic-compatible'
+  | 'auggie'
   | 'azure'
   | 'bedrock'
   | 'cerebras'
@@ -6342,6 +6546,13 @@ export interface AnthropicCompatibleProvider extends LlmProviderBase {
 }
 export const isAnthropicCompatibleProvider = (provider: LlmProviderBase): provider is AnthropicCompatibleProvider
 ⋮----
+export interface AuggieProvider extends LlmProviderBase {
+  name: 'auggie';
+  apiKey: string;
+  apiUrl?: string;
+}
+export const isAuggieProvider = (provider: LlmProviderBase): provider is AuggieProvider
+⋮----
 export interface KimiPlanProvider extends LlmProviderBase {
   name: 'kimi-plan';
   apiKey: string;
@@ -6351,6 +6562,8 @@ export const isKimiPlanProvider = (provider: LlmProviderBase): provider is KimiP
 export interface AlibabaPlanProvider extends LlmProviderBase {
   name: 'alibaba-plan';
   apiKey: string;
+  thinkingEnabled?: boolean;
+  thinkingBudget?: number;
 }
 export const isAlibabaPlanProvider = (provider: LlmProviderBase): provider is AlibabaPlanProvider
 ⋮----
@@ -6511,6 +6724,7 @@ export type LlmProvider =
   | OpenAiProvider
   | AnthropicProvider
   | AnthropicCompatibleProvider
+  | AuggieProvider
   | AzureProvider
   | GeminiProvider
   | GeminiCliProvider
@@ -6575,6 +6789,7 @@ import {
   CloudflareTunnelStatus,
   CommandOutputData,
   ContextFilesUpdatedData,
+  ContextMenuParams,
   CreateTaskParams,
   CommandsData,
   EditFormat,
@@ -6592,6 +6807,8 @@ import {
   Model,
   ModelsData,
   NotificationData,
+  OpenDialogOptions,
+  OpenDialogResult,
   OS,
   ProjectData,
   ProjectSettings,
@@ -6623,8 +6840,11 @@ import {
   WorktreeIntegrationStatusUpdatedData,
   UpdatedFile,
   UpdatedFilesUpdatedData,
-  LoadedExtension,
+  InstalledExtension,
   AvailableExtension,
+  ExtensionUIComponent,
+  ExtensionUIRefreshData,
+  ModalOverlayUrlData,
 } from '@common/types';
 ⋮----
 export interface ApplicationAPI {
@@ -6651,7 +6871,7 @@ export interface ApplicationAPI {
   sendQueuedPromptNow: (baseDir: string, taskId: string, promptId: string) => void;
   loadInputHistory: (baseDir: string) => Promise<string[]>;
   isOpenDialogSupported: () => boolean;
-  showOpenDialog: (options: Electron.OpenDialogSyncOptions) => Promise<Electron.OpenDialogReturnValue>;
+  showOpenDialog: (options: OpenDialogOptions) => Promise<OpenDialogResult>;
   getPathForFile: (file: File) => string;
   getOpenProjects: () => Promise<ProjectData[]>;
   addOpenProject: (baseDir: string) => Promise<ProjectData[]>;
@@ -6669,6 +6889,7 @@ export interface ApplicationAPI {
   getAllFiles: (baseDir: string, taskId: string, useGit?: boolean) => Promise<string[]>;
   getUpdatedFiles: (baseDir: string, taskId: string) => Promise<UpdatedFile[]>;
   restoreFile: (baseDir: string, taskId: string, filePath: string) => Promise<void>;
+  readFile: (baseDir: string, filePath: string) => Promise<string>;
   generateCommitMessage: (baseDir: string, taskId: string) => Promise<string>;
   commitChanges: (baseDir: string, taskId: string, message: string, amend: boolean) => Promise<void>;
   addFile: (baseDir: string, taskId: string, filePath: string, readOnly?: boolean) => void;
@@ -6692,10 +6913,23 @@ export interface ApplicationAPI {
   reloadMcpServer: (serverName: string, config: McpServerConfig) => Promise<McpTool[]>;
 
   // Extension operations
-  getInstalledExtensions: (projectDir?: string) => Promise<LoadedExtension[]>;
+  getInstalledExtensions: (projectDir?: string) => Promise<InstalledExtension[]>;
   getAvailableExtensions: (repositories: string[], forceRefresh?: boolean) => Promise<AvailableExtension[]>;
   installExtension: (extensionId: string, repositoryUrl: string, projectDir?: string) => Promise<boolean>;
   uninstallExtension: (extensionId: string, projectDir?: string) => Promise<boolean>;
+  getExtensionUIComponents: (projectDir?: string, placement?: string) => Promise<ExtensionUIComponent[]>;
+  getUIExtensionData: (extensionId: string, componentId: string, projectDir?: string, taskId?: string) => Promise<unknown>;
+  executeUIExtensionAction: (
+    extensionId: string,
+    componentId: string,
+    action: string,
+    args: unknown[],
+    projectDir?: string,
+    taskId?: string,
+  ) => Promise<unknown>;
+  onExtensionUIRefresh: (callback: (data: ExtensionUIRefreshData) => void) => () => void;
+  onModalOverlayUrl: (callback: (data: ModalOverlayUrlData) => void) => () => void;
+  isWebViewSupported: () => boolean;
 
   createNewTask: (baseDir: string, params?: CreateTaskParams) => Promise<TaskData>;
   updateTask: (baseDir: string, id: string, updates: Partial<TaskData>) => Promise<boolean>;
@@ -6766,7 +7000,7 @@ export interface ApplicationAPI {
   addWorktreeIntegrationStatusUpdatedListener: (baseDir: string, taskId: string, callback: (data: WorktreeIntegrationStatusUpdatedData) => void) => () => void;
   addTerminalDataListener: (baseDir: string, callback: (data: TerminalData) => void) => () => void;
   addTerminalExitListener: (baseDir: string, callback: (data: TerminalExitData) => void) => () => void;
-  addContextMenuListener: (callback: (params: Electron.ContextMenuParams) => void) => () => void;
+  addContextMenuListener: (callback: (params: ContextMenuParams) => void) => () => void;
   addOpenSettingsListener: (callback: (pageId: string) => void) => () => void;
 
   // Task lifecycle event listeners
@@ -6881,8 +7115,8 @@ import {
   CommandsData,
   ConnectorMessage,
   ContextFile,
-  ContextMessage,
   ContextMemoryMode,
+  ContextMessage,
   CreateTaskParams,
   CustomCommand,
   InvocationMode,
@@ -7005,84 +7239,103 @@ export interface ToolDefinition<TSchema extends z.ZodType = z.ZodType<Record<str
 ⋮----
 /** Execute function with type-safe args */
 ⋮----
-/** UI element types */
-export type UIElementType = 'action-button' | 'status-indicator' | 'badge';
-⋮----
-/** Placement locations for UI elements */
-export enum UIPlacement {
-  /** Task sidebar area */
-  TaskSidebar = 'task-sidebar',
-  /** Chat toolbar area */
-  ChatToolbar = 'chat-toolbar',
-  /** Message action buttons */
-  MessageActions = 'message-actions',
-  /** Global toolbar */
-  GlobalToolbar = 'global-toolbar',
-}
-⋮----
-/** Task sidebar area */
-⋮----
-/** Chat toolbar area */
-⋮----
-/** Message action buttons */
-⋮----
-/** Global toolbar */
+/** Placement locations for extension UI components */
+export type UIComponentPlacement =
+  | 'task-status-bar-left'
+  | 'task-status-bar-right'
+  | 'task-usage-info-bottom'
+  | 'task-messages-top'
+  | 'task-messages-bottom'
+  | 'header-left'
+  | 'header-right'
+  | 'task-input-above'
+  | 'task-input-toolbar-left'
+  | 'task-input-toolbar-right'
+  | 'tasks-sidebar-header'
+  | 'tasks-sidebar-bottom'
+  | 'task-message-above'
+  | 'task-message-below'
+  | 'task-message-bar'
+  | 'task-top-bar-left'
+  | 'task-top-bar-right'
+  | 'task-state-actions';
 ⋮----
 /**
- * Definition of a UI element that can be registered by an extension
+ * Definition of a React UI component that can be registered by an extension.
+ * The component is defined as a JSX string and rendered using string-to-react-component.
+ *
+ * Available props for the component:
+ * - React: React object with hooks (useState, useEffect, useCallback, useMemo, useRef, etc.)
+ * - task: Current TaskData
+ * - projectDir: Project directory path
+ * - api: ApplicationAPI reference
+ * - mode: Current mode string
  *
  * @example
  * ```typescript
- * const myButton: UIElementDefinition = {
- *   id: 'generate-jira-ticket',
- *   type: 'action-button',
- *   label: 'Create JIRA Ticket',
- *   icon: 'FiExternalLink',
- *   description: 'Create a JIRA ticket from this task',
- *   placement: UIPlacement.TaskSidebar,
- *   context: 'task',
- *   onClick: 'handleJiraClick',
+ * const myStatusComponent: UIComponentDefinition = {
+ *   id: 'my-status-indicator',
+ *   placement: UIComponentPlacement.TaskStatusBar,
+ *   jsx: `
+ *     <div className="flex items-center gap-2 text-xs text-text-secondary">
+ *       <span>Task: {task.name}</span>
+ *       <span>Mode: {mode}</span>
+ *     </div>
+ *   `,
  * };
  * ```
  */
-export interface UIElementDefinition {
-  /** Unique element identifier in kebab-case */
+export interface UIComponentDefinition {
+  /** Unique component identifier*/
   id: string;
-  /** Element type (button, status indicator, etc.) */
-  type: UIElementType;
-  /** Display text for button or label */
-  label: string;
-  /** Optional icon name from react-icons library */
-  icon?: string;
-  /** Optional tooltip or help text */
-  description?: string;
-  /** Where in UI to render this element */
-  placement: UIPlacement;
-  /** Context type (task, project, global) */
-  context?: 'task' | 'project' | 'global';
-  /** Handler ID to call in extension when clicked */
-  onClick: string;
-  /** Optional: Conditional visibility check */
-  enabled?: (context: unknown) => boolean;
+  /** Where in UI to render this component */
+  placement: UIComponentPlacement;
+  /** JSX/TSX component as string to be parsed by string-to-react-component */
+  jsx: string;
+  /** Optional flag to indicate if the component should load data from the extension to be passed as a prop (default: false) */
+  loadData?: boolean;
 }
 ⋮----
-/** Unique element identifier in kebab-case */
+/** Unique component identifier*/
 ⋮----
-/** Element type (button, status indicator, etc.) */
+/** Where in UI to render this component */
 ⋮----
-/** Display text for button or label */
+/** JSX/TSX component as string to be parsed by string-to-react-component */
 ⋮----
-/** Optional icon name from react-icons library */
+/** Optional flag to indicate if the component should load data from the extension to be passed as a prop (default: false) */
 ⋮----
-/** Optional tooltip or help text */
+/**
+ * Marker type for UI components provided by AiderDesk
+ * Actual component implementation is provided by renderer at runtime
+ */
+export type UIComponent = object;
 ⋮----
-/** Where in UI to render this element */
+/**
+ * Common UI components available to extension JSX components
+ */
+export interface UIComponents {
+  Button: UIComponent;
+  Checkbox: UIComponent;
+  Input: UIComponent;
+  Select: UIComponent;
+  TextArea: UIComponent;
+  IconButton: UIComponent;
+  RadioButton: UIComponent;
+  MultiSelect: UIComponent;
+  Slider: UIComponent;
+  DatePicker: UIComponent;
+  Chip: UIComponent;
+  ModelSelector: UIComponent;
+}
 ⋮----
-/** Context type (task, project, global) */
-⋮----
-/** Handler ID to call in extension when clicked */
-⋮----
-/** Optional: Conditional visibility check */
+export interface UIComponentProps {
+  projectDir?: string;
+  task?: TaskData;
+  agentProfile?: AgentProfile;
+  models: Model[];
+  providers: ProviderProfile[];
+  ui: UIComponents;
+}
 ⋮----
 /**
  * Definition of a command that can be registered by an extension
@@ -7651,6 +7904,29 @@ export interface ExtensionContext {
    * @returns Promise that resolves when settings are saved
    */
   updateSettings(updates: Partial<SettingsData>): Promise<void>;
+
+  /**
+   * Trigger a data refresh for UI components in the renderer
+   * Use this when extension internal state changes and UI components need to re-fetch their data
+   * @param componentId - Optional component ID to refresh only a specific component
+   * @param taskId - Optional task ID to refresh only components for a specific task
+   */
+  triggerUIDataRefresh(componentId?: string, taskId?: string): void;
+
+  /**
+   * Trigger a full reload of all UI component definitions for this extension
+   * Use this when the component structure or definitions have changed
+   */
+  triggerUIComponentsReload(): void;
+
+  /**
+   * Open a URL either in external browser, a new window, or a modal overlay
+   * @param url - URL to open
+   * @param target - Where to open: 'external' (system browser), 'window' (new Electron window), or 'modal-overlay' (iframe in modal)
+   *                   In Node/Docker environments, 'window' falls back to 'external'
+   * @returns Promise that resolves when URL is opened
+   */
+  openUrl(url: string, target?: 'external' | 'window' | 'modal-overlay'): Promise<void>;
 }
 ⋮----
 /**
@@ -7697,6 +7973,29 @@ getSetting(key: string): Promise<unknown>;
    * @returns Promise that resolves when settings are saved
    */
 updateSettings(updates: Partial<SettingsData>): Promise<void>;
+⋮----
+/**
+   * Trigger a data refresh for UI components in the renderer
+   * Use this when extension internal state changes and UI components need to re-fetch their data
+   * @param componentId - Optional component ID to refresh only a specific component
+   * @param taskId - Optional task ID to refresh only components for a specific task
+   */
+triggerUIDataRefresh(componentId?: string, taskId?: string): void;
+⋮----
+/**
+   * Trigger a full reload of all UI component definitions for this extension
+   * Use this when the component structure or definitions have changed
+   */
+triggerUIComponentsReload(): void;
+⋮----
+/**
+   * Open a URL either in external browser, a new window, or a modal overlay
+   * @param url - URL to open
+   * @param target - Where to open: 'external' (system browser), 'window' (new Electron window), or 'modal-overlay' (iframe in modal)
+   *                   In Node/Docker environments, 'window' falls back to 'external'
+   * @returns Promise that resolves when URL is opened
+   */
+openUrl(url: string, target?: 'external' | 'window' | 'modal-overlay'): Promise<void>;
 ⋮----
 /**
  * Main extension interface that all extensions must implement
@@ -7789,6 +8088,34 @@ export interface Extension {
    * @returns The updated agent profile
    */
   onAgentProfileUpdated?(context: ExtensionContext, agentId: string, updatedProfile: AgentProfile): Promise<AgentProfile>;
+
+  // UI Component registration
+
+  /**
+   * Return array of React UI components this extension provides
+   * Components are defined as JSX/TSX strings and rendered using string-to-react-component
+   * Called when extension is loaded and when components need to be refreshed
+   */
+  getUIComponents?(context: ExtensionContext): UIComponentDefinition[];
+
+  /**
+   * Return data for a specific UI component
+   * Called when the component is mounted or when UI refresh is triggered
+   * @param componentId - The ID of the component to get data for
+   * @param context - Extension context
+   * @returns Data to be passed to the component as `data` binding
+   */
+  getUIExtensionData?(componentId: string, context: ExtensionContext): Promise<unknown>;
+
+  /**
+   * Handle an action triggered from a UI component via executeExtensionAction
+   * @param componentId - The ID of the component that triggered the action
+   * @param action - The action identifier
+   * @param args - Additional arguments passed from the component
+   * @param context - Extension context
+   * @returns Result of the action execution
+   */
+  executeUIExtensionAction?(componentId: string, action: string, args: unknown[], context: ExtensionContext): Promise<unknown>;
 
   // Task Events
 
@@ -8081,6 +8408,34 @@ getAgents?(context: ExtensionContext): AgentProfile[];
    */
 onAgentProfileUpdated?(context: ExtensionContext, agentId: string, updatedProfile: AgentProfile): Promise<AgentProfile>;
 ⋮----
+// UI Component registration
+⋮----
+/**
+   * Return array of React UI components this extension provides
+   * Components are defined as JSX/TSX strings and rendered using string-to-react-component
+   * Called when extension is loaded and when components need to be refreshed
+   */
+getUIComponents?(context: ExtensionContext): UIComponentDefinition[];
+⋮----
+/**
+   * Return data for a specific UI component
+   * Called when the component is mounted or when UI refresh is triggered
+   * @param componentId - The ID of the component to get data for
+   * @param context - Extension context
+   * @returns Data to be passed to the component as `data` binding
+   */
+getUIExtensionData?(componentId: string, context: ExtensionContext): Promise<unknown>;
+⋮----
+/**
+   * Handle an action triggered from a UI component via executeExtensionAction
+   * @param componentId - The ID of the component that triggered the action
+   * @param action - The action identifier
+   * @param args - Additional arguments passed from the component
+   * @param context - Extension context
+   * @returns Result of the action execution
+   */
+executeUIExtensionAction?(componentId: string, action: string, args: unknown[], context: ExtensionContext): Promise<unknown>;
+⋮----
 // Task Events
 ⋮----
 /**
@@ -8310,14 +8665,6 @@ onAiderPromptStarted?(event: AiderPromptStartedEvent, context: ExtensionContext)
    * @returns void or partial event to modify responses
    */
 onAiderPromptFinished?(event: AiderPromptFinishedEvent, context: ExtensionContext): Promise<void | Partial<AiderPromptFinishedEvent>>;
-⋮----
-/**
- * Constructor type for extension classes
- */
-export interface ExtensionConstructor {
-  new (): Extension;
-  metadata?: ExtensionMetadata;
-}
 
 ================
 File: src/common/tools.ts
@@ -8602,7 +8949,9 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
+import { ChildProcess } from 'node:child_process';
 ⋮----
+import treeKill from 'tree-kill';
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import { glob } from 'glob';
@@ -8677,6 +9026,8 @@ const sanitize = (str: string) =>
 ⋮----
 // Remove escaped newlines, quotes, tabs, etc. only when they have double backslashes
 ⋮----
+// Use replacer function to avoid special replacement patterns ($&, $`, '$', $$)
+⋮----
 absolute: false, // Keep paths relative to cwd for easier processing
 ⋮----
 // Convert to absolute paths for filtering, then back to relative
@@ -8697,9 +9048,15 @@ false, // not finished yet
 ⋮----
 const cleanup = () =>
 ⋮----
+// Remove abort listener to prevent memory leaks
+⋮----
 const resolveWithResult = () =>
 ⋮----
-const abortListener = () =>
+abortListener = () =>
+⋮----
+// Use the standard resolution method with proper type
+⋮----
+exitCode = 130; // Standard cancel exit code (128 + SIGINT=2)
 ⋮----
 // Listen for abort signal
 ⋮----
@@ -8930,6 +9287,7 @@ import { v4 as uuidv4 } from 'uuid';
 ⋮----
 import type { AgentProfile } from '@common/types';
 ⋮----
+import { Project } from '@/project';
 import { ExtensionManager, ExtensionsChangeListener } from '@/extensions/extension-manager';
 import { AIDER_DESK_AGENTS_DIR, AIDER_DESK_RULES_DIR } from '@/constants';
 import logger from '@/logger';
@@ -9121,7 +9479,7 @@ public getAllProfiles(): AgentProfile[]
 ⋮----
 // Extension agents come first for override capability
 ⋮----
-public getProjectProfiles(projectDir: string, includeGlobal = true, includeExtension = true): AgentProfile[]
+public getProjectProfiles(project: Project, includeGlobal = true, includeExtension = true): AgentProfile[]
 ⋮----
 // Extension agents come first for override capability
 ⋮----
@@ -12739,6 +13097,9 @@ public init(httpServer: HttpServer): void
 pingTimeout: 600_000, // 10 minutes
 maxHttpBufferSize: 1e8, // Increase payload size to 100 MB
 ⋮----
+// Log when Socket.IO server is ready to accept connections
+// The 'connection' event fires after the namespace handshake is complete
+⋮----
 public async close()
 ⋮----
 // Check if there's an existing connector with the same baseDir and taskId
@@ -13021,6 +13382,8 @@ import {
   QueuedPromptsUpdatedData,
   BmadStatus,
   CommandsData,
+  ExtensionUIRefreshData,
+  ModalOverlayUrlData,
 } from '@common/types';
 ⋮----
 import type { BrowserWindow } from 'electron';
@@ -13151,6 +13514,12 @@ private broadcastToEventConnectors(eventType: string, data: unknown): void
 ⋮----
 // BMAD events
 sendBmadStatusChanged(status: BmadStatus): void
+⋮----
+// Extension UI events
+sendExtensionUIRefresh(options:
+⋮----
+// Modal overlay URL events
+sendModalOverlayUrl(url: string): void
 
 ================
 File: src/main/events/index.ts
@@ -13187,6 +13556,7 @@ import type { Store } from '@/store';
 import type { Task } from '@/task';
 ⋮----
 import logger from '@/logger';
+import { openUrl as openUrlUtil } from '@/utils/open-url';
 ⋮----
 export class ExtensionContextImpl implements ExtensionContext
 ⋮----
@@ -13205,6 +13575,12 @@ async getModelConfigs(): Promise<Model[]>
 async getSetting(key: string): Promise<unknown>
 ⋮----
 async updateSettings(updates: Partial<SettingsData>): Promise<void>
+⋮----
+triggerUIDataRefresh(componentId?: string, taskId?: string): void
+⋮----
+triggerUIComponentsReload(): void
+⋮----
+async openUrl(url: string, target: 'external' | 'window' | 'modal-overlay' = 'window'): Promise<void>
 
 ================
 File: src/main/extensions/extension-fetcher.ts
@@ -13237,6 +13613,8 @@ private async fetchExtensionsFromRepo(repoUrl: string, forceRefresh: boolean): P
 private async fetchExtensionsViaGitClone(repoUrl: string): Promise<AvailableExtension[]>
 ⋮----
 private getCloneUrl(webUrl: string): string | null
+⋮----
+private getExtensionSubPath(repoUrl: string): string | null
 ⋮----
 private getExtensionsPath(repoUrl: string, clonedRepoPath: string): string
 ⋮----
@@ -13331,8 +13709,8 @@ import os from 'os';
 import { FSWatcher, watch } from 'chokidar';
 import debounce from 'lodash/debounce';
 import { z } from 'zod';
-import { AvailableExtension, ToolApprovalState } from '@common/types';
-import { AIDER_DESK_EXTENSIONS_REPO_URL, Tool } from '@common/extensions';
+import { AvailableExtension, SettingsData, ToolApprovalState } from '@common/types';
+import { AIDER_DESK_EXTENSIONS_REPO_URL, Tool, UIComponentDefinition } from '@common/extensions';
 ⋮----
 import { ExtensionLoader } from './extension-loader';
 import { ExtensionRegistry, LoadedExtension } from './extension-registry';
@@ -13394,23 +13772,33 @@ import { Task } from '@/task';
 export type ExtensionsChangeListener = (extensions: LoadedExtension[]) => void;
 ⋮----
 export interface RegisteredTool {
+  extensionId: string;
   extensionName: string;
   tool: ToolDefinition;
 }
 ⋮----
 export interface RegisteredCommand {
+  extensionId: string;
   extensionName: string;
   command: CommandDefinition;
 }
 ⋮----
 export interface RegisteredAgent {
+  extensionId: string;
   extensionName: string;
   agent: AgentProfile;
 }
 ⋮----
 export interface RegisteredMode {
+  extensionId: string;
   extensionName: string;
   mode: ModeDefinition;
+}
+⋮----
+export interface RegisteredUIComponent {
+  extensionId: string;
+  extensionName: string;
+  component: UIComponentDefinition;
 }
 ⋮----
 /**
@@ -13468,6 +13856,18 @@ constructor(
    */
 private filterEnabledExtensions(extensions: LoadedExtension[]): LoadedExtension[]
 ⋮----
+/**
+   * Handle settings changes. Detects when extensions with UI components
+   * are enabled/disabled and triggers UI refresh accordingly.
+   */
+settingsChanged(oldSettings: SettingsData, newSettings: SettingsData): void
+⋮----
+// Early exit if no change
+⋮----
+// Find extensions that changed state
+⋮----
+// Check if any changed extensions have UI components
+⋮----
 addListener(listener: ExtensionsChangeListener): void
 ⋮----
 removeListener(listener: ExtensionsChangeListener): void
@@ -13488,7 +13888,7 @@ private async initializeExtension(loaded: LoadedExtension, project?: Project): P
    * Loads, registers, and initializes an extension from a file path.
    * Combines the common pattern of load → register → initialize.
    */
-private async loadAndInitializeExtension(filePath: string, project?: Project): Promise<boolean>
+private async loadAndInitializeExtension(filePath: string, project?: Project): Promise<
 ⋮----
 /**
    * Unified method to load all extensions from a directory.
@@ -13502,8 +13902,6 @@ private async loadAndInitializeExtension(filePath: string, project?: Project): P
 private async loadExtensionsForDir(dir: string, project?: Project): Promise<void>
 ⋮----
 getExtensions(projectDir?: string): LoadedExtension[]
-⋮----
-getExtension(name: string): LoadedExtension | undefined
 ⋮----
 isInitialized(): boolean
 ⋮----
@@ -13562,13 +13960,23 @@ validateCommandDefinition(command: CommandDefinition):
 ⋮----
 getCommands(project: Project): RegisteredCommand[]
 ⋮----
-getAgents(projectDir?: string): RegisteredAgent[]
+getAgents(project?: Project): RegisteredAgent[]
 ⋮----
-getAgentById(agentId: string, projectDir?: string): RegisteredAgent | undefined
+getAgentById(agentId: string, project?: Project): RegisteredAgent | undefined
 ⋮----
 getModes(project: Project): RegisteredMode[]
 ⋮----
 validateModeDefinition(mode: ModeDefinition):
+⋮----
+getUIComponents(project?: Project): RegisteredUIComponent[]
+⋮----
+// Skip uninitialized extensions
+⋮----
+async getUIExtensionData(extensionId: string, componentId: string, project?: Project, task?: Task): Promise<unknown>
+⋮----
+async executeUIExtensionAction(extensionId: string, componentId: string, action: string, args: unknown[], project?: Project, task?: Task): Promise<unknown>
+⋮----
+validateUIComponentDefinition(component: UIComponentDefinition):
 ⋮----
 async updateAgentProfile(profile: AgentProfile): Promise<AgentProfile | null>
 ⋮----
@@ -13586,10 +13994,10 @@ async getAvailableExtensions(repositories: string[], forceRefresh = false): Prom
    * Install an extension from a repository
    * @param extensionId - Extension identifier
    * @param repositoryUrl - Repository URL where the extension is located
-   * @param projectDir - Optional project directory for project-level install
+   * @param project - Optional project for project-level install
    * @returns true if installation succeeded
    */
-async installExtension(extensionId: string, repositoryUrl: string, projectDir?: string): Promise<boolean>
+async installExtension(extensionId: string, repositoryUrl: string, project?: Project): Promise<boolean>
 ⋮----
 /**
    * Install npm dependencies for a folder extension
@@ -13602,7 +14010,7 @@ private getExtensionsPath(repoUrl: string, clonedRepoPath: string): string
 ⋮----
 /**
    * Uninstall an extension
-   * @param extensionId - Extension identifier (name)
+   * @param extensionId - Extension identifier (filePath)
    * @param projectDir - Optional project directory for project-level uninstall
    * @returns true if uninstallation succeeded
    */
@@ -13693,13 +14101,13 @@ async register(extension: Extension, metadata: ExtensionMetadata, filePath: stri
 ⋮----
 // README.md doesn't exist or can't be read, that's fine
 ⋮----
-setInitialized(name: string, initialized: boolean): void
+setInitialized(filePath: string, initialized: boolean): void
 ⋮----
 getExtensions(projectDir?: string): LoadedExtension[]
 ⋮----
-getExtension(name: string): LoadedExtension | undefined
+getExtension(filePath: string): LoadedExtension | undefined
 ⋮----
-unregister(name: string): boolean
+unregister(filePath: string): boolean
 ⋮----
 clear()
 
@@ -14208,10 +14616,10 @@ isMemoryEnabled(): boolean
 File: src/main/models/providers/alibaba-plan.ts
 ================
 import { Model, ProviderProfile, SettingsData } from '@common/types';
-import { isAlibabaPlanProvider, AlibabaPlanProvider } from '@common/agent';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { isAlibabaPlanProvider, AlibabaPlanProvider, LlmProvider } from '@common/agent';
+import { createAlibaba } from '@ai-sdk/alibaba';
 ⋮----
-import type { LanguageModelV2 } from '@ai-sdk/provider';
+import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider';
 ⋮----
 import { AiderModelMapping, LlmProviderStrategy, LoadModelsResponse } from '@/models';
 import logger from '@/logger';
@@ -14225,6 +14633,8 @@ const hasAlibabaPlanEnvVars = (settings: SettingsData): boolean =>
 const getAlibabaPlanAiderMapping = (provider: ProviderProfile, modelId: string, settings: SettingsData, projectDir: string): AiderModelMapping =>
 ⋮----
 const createAlibabaPlanLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModelV2 =>
+⋮----
+const getAlibabaPlanProviderOptions = (llmProvider: LlmProvider, model: Model): SharedV2ProviderOptions | undefined =>
 
 ================
 File: src/main/models/providers/anthropic-compatible.ts
@@ -14325,6 +14735,40 @@ export const getAnthropicCacheControl = (): CacheControl | undefined =>
 // Model discovery functions
 ⋮----
 // Configuration helpers
+
+================
+File: src/main/models/providers/auggie.ts
+================
+import { existsSync } from 'fs';
+import { homedir } from 'os';
+import path from 'path';
+⋮----
+import { AuggieProvider, isAuggieProvider } from '@common/agent';
+import { Model, ProviderProfile, SettingsData, UsageReportData } from '@common/types';
+⋮----
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+import type { AugmentLanguageModel as AugmentLanguageModelType } from '@augmentcode/auggie-sdk';
+⋮----
+import logger from '@/logger';
+import { AiderModelMapping, LlmProviderStrategy } from '@/models';
+import { LoadModelsResponse } from '@/models/types';
+import { findExecutableInPath, getEffectiveEnvironmentVariable } from '@/utils';
+import { getDefaultModelInfo } from '@/models/providers/default';
+import { Task } from '@/task';
+⋮----
+type AuggieSdkModule = typeof import('@augmentcode/auggie-sdk');
+⋮----
+const loadAuggieSdk = async (): Promise<AuggieSdkModule>
+⋮----
+export const loadAuggieModels = async (profile: ProviderProfile, _settings: SettingsData): Promise<LoadModelsResponse> =>
+⋮----
+export const hasAuggieEnvVars = (settings: SettingsData): boolean =>
+⋮----
+export const getAuggieAiderMapping = (provider: ProviderProfile, modelId: string): AiderModelMapping =>
+⋮----
+export const createAuggieLlm = async (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): Promise<LanguageModelV2> =>
+⋮----
+const getAuggieUsageReport = (_task: Task, _provider: ProviderProfile, model: Model): UsageReportData =>
 
 ================
 File: src/main/models/providers/azure.ts
@@ -15672,6 +16116,7 @@ import { extractProviderModel } from '@common/utils';
 ⋮----
 import { anthropicProviderStrategy } from './providers/anthropic';
 import { anthropicCompatibleProviderStrategy } from './providers/anthropic-compatible';
+import { auggieProviderStrategy } from './providers/auggie';
 import { azureProviderStrategy } from './providers/azure';
 import { bedrockProviderStrategy } from './providers/bedrock';
 import { cerebrasProviderStrategy } from './providers/cerebras';
@@ -16753,13 +17198,13 @@ import { z } from 'zod';
 ⋮----
 import { BaseApi } from './base-api';
 ⋮----
-import type { ExtensionManager } from '@/extensions/extension-manager';
+import type { EventsHandler } from '@/events-handler';
 ⋮----
 repositories: z.string().optional(), // Comma-separated URLs
 ⋮----
 export class ExtensionsApi extends BaseApi
 ⋮----
-constructor(private readonly extensionManager: ExtensionManager)
+constructor(private readonly eventsHandler: EventsHandler)
 ⋮----
 registerRoutes(router: Router): void
 ⋮----
@@ -16770,6 +17215,12 @@ registerRoutes(router: Router): void
 // Install extension
 ⋮----
 // Uninstall extension
+⋮----
+// Get extension UI components
+⋮----
+// Get extension UI component data
+⋮----
+// Execute extension UI action
 
 ================
 File: src/main/server/rest-api/index.ts
@@ -16894,6 +17345,8 @@ registerRoutes(router: Router): void
 // Revert last merge
 ⋮----
 // Restore file
+⋮----
+// Read file
 ⋮----
 // Generate commit message
 ⋮----
@@ -18016,6 +18469,7 @@ import {
   ContextFile,
   ContextMessage,
   ToolCallPart,
+  ToolResultPart,
   DefaultTaskState,
   EditFormat,
   FileEdit,
@@ -18248,6 +18702,8 @@ public async runPromptInAgent(
 // send messages to connectors
 ⋮----
 // Determine task state based on the last assistant message
+⋮----
+// check once again after determining task state which can task some time
 ⋮----
 public async executeBmadWorkflow(workflowId: string, options?: WorkflowExecutionOptions): Promise<WorkflowExecutionResult>
 ⋮----
@@ -18533,13 +18989,21 @@ private async reloadConnectorMessages()
 ⋮----
 private findSkillActivationMessages(contextMessages: ContextMessage[]): ContextMessage[]
 ⋮----
+// Collect all skill activations with their skill names
+// We'll deduplicate by keeping only the most recent activation per skill
+⋮----
 // Collect skill activation tool calls from this message
 ⋮----
-// If we found skill activation tool calls, create filtered messages
+// Extract skill name from the tool call input
 ⋮----
 // Find corresponding tool-result message
 ⋮----
-// Create a filtered tool message that only contains the skill activation tool-result
+// Find the tool result part
+⋮----
+// Store the activation, overwriting any previous one for the same skill
+// This keeps the most recent activation for each skill
+⋮----
+// Convert the deduplicated activations to the expected message format
 ⋮----
 // Create a filtered assistant message that only contains the skill activation tool-call
 ⋮----
@@ -19226,6 +19690,32 @@ export const acquireLock = async (resourceName: string, timeout?: number): Promi
 export const isLocked = (resourceName: string): boolean
 
 ================
+File: src/main/utils/open-url.ts
+================
+import { execSync } from 'child_process';
+import os from 'os';
+⋮----
+import { BrowserWindow } from 'electron';
+⋮----
+import { isElectron } from '@/app';
+import logger from '@/logger';
+⋮----
+/**
+ * Opens a URL either in external browser or a new BrowserWindow.
+ * In Node/Docker environments, 'window' falls back to external with a warning.
+ *
+ * @param url - URL to open
+ * @param target - Where to open: 'external' (system browser) or 'window' (new Electron window)
+ */
+export const openUrl = async (url: string, target: 'external' | 'window' = 'window'): Promise<void> =>
+⋮----
+/**
+ * Opens a URL in the system's default browser using platform-specific commands.
+ * Works in Node.js environments without Electron.
+ */
+const openInExternalBrowser = (url: string): void =>
+
+================
 File: src/main/utils/python.ts
 ================
 import path from 'path';
@@ -19628,6 +20118,7 @@ import { isBinary } from 'istextorbinary';
 import { execWithShellPath, withLock } from '@/utils';
 import { AIDER_DESK_TASKS_DIR } from '@/constants';
 import logger from '@/logger';
+import { isFileNotFoundError } from '@/utils/errors';
 ⋮----
 export class GitError extends Error
 ⋮----
@@ -19995,7 +20486,7 @@ async getUpdatedFiles(worktreePath: string, workingMode?: WorkingMode, mainBranc
 ⋮----
 // Build commit map for worktree mode
 ⋮----
-// In worktree mode, get all files that differ from main branch
+// In worktree mode, get all files that differ from main branch (including uncommitted)
 ⋮----
 // Get commit information for files in the range
 ⋮----
@@ -20026,6 +20517,10 @@ maxBuffer: 10 * 1024 * 1024, // 10 MB
 // If git diff fails (e.g., no HEAD commit), return empty array
 ⋮----
 async restoreFile(worktreePath: string, filePath: string): Promise<void>
+⋮----
+// Check if file is tracked in git
+⋮----
+// Tracked file - restore from HEAD
 ⋮----
 async getUncommittedDiff(worktreePath: string): Promise<string | null>
 ⋮----
@@ -20167,11 +20662,14 @@ import {
   EditFormat,
   EnvironmentVariable,
   FileEdit,
+  InstalledExtension,
   McpServerConfig,
   McpTool,
   MemoryEntry,
   Mode,
   Model,
+  OpenDialogOptions,
+  OpenDialogResult,
   OS,
   ProjectData,
   ProjectSettings,
@@ -20190,21 +20688,23 @@ import {
   WorkflowExecutionResult,
 } from '@common/types';
 import { normalizeBaseDir } from '@common/utils';
+// @ts-expect-error istextorbinary is not typed properly
+import { isBinary } from 'istextorbinary';
 ⋮----
-import type { ModeDefinition, BmadStatus, InstallResult } from '@common/types';
+import type { ModeDefinition, BmadStatus, InstallResult, ExtensionUIComponent } from '@common/types';
 import type { BrowserWindow } from 'electron';
 ⋮----
 import { McpManager, AgentProfileManager } from '@/agent';
 import { MemoryManager } from '@/memory/memory-manager';
 import { ModelManager } from '@/models';
-import { ProjectManager } from '@/project';
+import { Project, ProjectManager } from '@/project';
 import { CloudflareTunnelManager } from '@/server';
 import { Store } from '@/store';
 import { TelemetryManager } from '@/telemetry';
 import { VersionsManager } from '@/versions';
 import { DataManager } from '@/data-manager';
 import { TerminalManager } from '@/terminal/terminal-manager';
-import { ExtensionManager } from '@/extensions';
+import { ExtensionManager, LoadedExtension } from '@/extensions';
 import logger from '@/logger';
 import { getDefaultProjectSettings, getEffectiveEnvironmentVariable, getFilePathSuggestions, isProjectPath, isValidPath, scrapeWeb } from '@/utils';
 import { AIDER_DESK_TMP_DIR, LOGS_DIR } from '@/constants';
@@ -20214,8 +20714,6 @@ import { isElectron } from '@/app';
 export class EventsHandler
 ⋮----
 constructor(
-⋮----
-getExtensionManager(): ExtensionManager
 ⋮----
 loadSettings(): SettingsData
 ⋮----
@@ -20350,6 +20848,8 @@ async revertLastMerge(baseDir: string, taskId: string): Promise<void>
 ⋮----
 async restoreFile(baseDir: string, taskId: string, filePath: string): Promise<void>
 ⋮----
+async readFile(baseDir: string, filePath: string): Promise<string>
+⋮----
 async generateCommitMessage(baseDir: string, taskId: string): Promise<string>
 ⋮----
 async commitChanges(baseDir: string, taskId: string, message: string, amend: boolean): Promise<void>
@@ -20422,7 +20922,7 @@ async deleteModel(providerId: string, modelId: string): Promise<void>
 ⋮----
 async updateModels(modelUpdates: Array<
 ⋮----
-async showOpenDialog(options: Electron.OpenDialogSyncOptions): Promise<Electron.OpenDialogReturnValue>
+async showOpenDialog(options: OpenDialogOptions): Promise<OpenDialogResult>
 ⋮----
 async openLogsDirectory(): Promise<boolean>
 ⋮----
@@ -20489,6 +20989,27 @@ async installBmad(projectDir: string): Promise<InstallResult>
 async executeWorkflow(projectDir: string, taskId: string, workflowId: string, options?: WorkflowExecutionOptions): Promise<WorkflowExecutionResult>
 ⋮----
 async resetBmadWorkflow(projectDir: string): Promise<
+⋮----
+getInstalledExtensions(projectDir?: string): InstalledExtension[]
+⋮----
+async getAvailableExtensions(repositories: string[], forceRefresh?: boolean)
+⋮----
+async installExtension(extensionId: string, repositoryUrl: string, projectDir?: string)
+⋮----
+async uninstallExtension(extensionId: string, projectDir?: string)
+⋮----
+getUIComponents(projectDir?: string, placement?: string): ExtensionUIComponent[]
+⋮----
+async getUIExtensionData(extensionId: string, componentId: string, projectDir?: string, taskId?: string): Promise<unknown>
+⋮----
+async executeUIExtensionAction(
+    extensionId: string,
+    componentId: string,
+    action: string,
+    args: unknown[],
+    projectDir?: string,
+    taskId?: string,
+): Promise<unknown>
 
 ================
 File: src/main/index.ts
@@ -20497,6 +21018,7 @@ import { join } from 'path';
 import { existsSync, statSync } from 'fs';
 ⋮----
 import { compareBaseDirs, delay } from '@common/utils';
+import { ContextMenuParams } from '@common/types';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, dialog, Menu, session, shell } from 'electron';
 ⋮----
@@ -20559,6 +21081,7 @@ import {
   McpServerConfig,
   Mode,
   Model,
+  OpenDialogOptions,
   ProjectSettings,
   ProviderProfile,
   SettingsData,
@@ -20571,18 +21094,9 @@ import { ipcMain, clipboard } from 'electron';
 ⋮----
 import { EventsHandler } from './events-handler';
 ⋮----
-import type { ExtensionMetadata } from '@common/extensions';
-import type { ExtensionManager } from './extensions/extension-manager';
-⋮----
 import { ServerController } from '@/server';
 ⋮----
-export interface ExtensionInfo {
-  metadata: ExtensionMetadata;
-  filePath: string;
-  initialized: boolean;
-}
-⋮----
-export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController: ServerController, extensionManager?: ExtensionManager) =>
+export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController: ServerController) =>
 ⋮----
 // Voice handlers
 ⋮----
@@ -20601,8 +21115,6 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
 // Memory handlers
 ⋮----
 // BMAD handlers
-⋮----
-// Extension handlers
 
 ================
 File: src/main/logger.ts
@@ -21109,34 +21621,38 @@ import {
   CommandOutputData,
   CommandsData,
   ContextFilesUpdatedData,
+  ContextMenuParams,
+  CreateTaskParams,
+  ExtensionUIRefreshData,
   FileEdit,
   InputHistoryData,
   LogData,
   McpServerConfig,
   MessageRemovedData,
+  ModalOverlayUrlData,
   ModelsData,
+  OpenDialogOptions,
   OS,
   ProjectSettings,
   ProjectStartedData,
   ProviderModelsData,
   ProvidersUpdatedData,
-  QueuedPromptsUpdatedData,
   QuestionAnsweredData,
   QuestionData,
+  QueuedPromptsUpdatedData,
   ResponseChunkData,
   ResponseCompletedData,
   SettingsData,
+  TaskCreatedData,
   TaskData,
-  CreateTaskParams,
   TerminalData,
   TerminalExitData,
   TokensInfoData,
   ToolData,
+  UpdatedFilesUpdatedData,
   UserMessageData,
   VersionsInfo,
   WorktreeIntegrationStatusUpdatedData,
-  TaskCreatedData,
-  UpdatedFilesUpdatedData,
 } from '@common/types';
 import { electronAPI } from '@electron-toolkit/preload';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
@@ -21145,9 +21661,9 @@ import { compareBaseDirs } from '@common/utils';
 ⋮----
 // Extension operations
 ⋮----
-// Voice API
+const listener = (_: Electron.IpcRendererEvent, data: ExtensionUIRefreshData) =>
 ⋮----
-const listener = (_: Electron.IpcRendererEvent, data: SettingsData) =>
+// Voice API
 ⋮----
 // Task lifecycle event listeners
 ⋮----
@@ -21231,9 +21747,11 @@ import {
   CloudflareTunnelStatus,
   CommandOutputData,
   ContextFilesUpdatedData,
+  ContextMenuParams,
   CommandsData,
   EditFormat,
   EnvironmentVariable,
+  ExtensionUIRefreshData,
   FileEdit,
   InputHistoryData,
   LogData,
@@ -21245,6 +21763,8 @@ import {
   Model,
   ModelsData,
   NotificationData,
+  OpenDialogOptions,
+  OpenDialogResult,
   OS,
   ProjectData,
   ProjectSettings,
@@ -21279,8 +21799,10 @@ import {
   QueuedPromptsUpdatedData,
   WorkflowExecutionOptions,
   WorkflowExecutionResult,
-  LoadedExtension,
+  InstalledExtension,
   AvailableExtension,
+  ExtensionUIComponent,
+  ModalOverlayUrlData,
 } from '@common/types';
 import { ApplicationAPI } from '@common/api';
 import axios, { type AxiosInstance } from 'axios';
@@ -21325,6 +21847,8 @@ type EventDataMap = {
   'terminal-data': TerminalData;
   'terminal-exit': TerminalExitData;
   'bmad-status-changed': BmadStatus;
+  'extension-ui-refresh': ExtensionUIRefreshData;
+  'modal-overlay-url': ModalOverlayUrlData;
 };
 ⋮----
 type EventCallback<T> = (data: T) => void;
@@ -21385,7 +21909,7 @@ removeQueuedPrompt(baseDir: string, taskId: string, promptId: string): void
 sendQueuedPromptNow(baseDir: string, taskId: string, promptId: string): void
 loadInputHistory(baseDir: string): Promise<string[]>
 isOpenDialogSupported(): boolean
-showOpenDialog(options: Electron.OpenDialogSyncOptions): Promise<Electron.OpenDialogReturnValue>
+showOpenDialog(options: OpenDialogOptions): Promise<OpenDialogResult>
 getPathForFile(file: File): string
 getOpenProjects(): Promise<ProjectData[]>
 addOpenProject(baseDir: string): Promise<ProjectData[]>
@@ -21519,7 +22043,7 @@ addTaskCancelledListener(baseDir: string, callback: (data: TaskData) => void): (
 addTaskDeletedListener(baseDir: string, callback: (data: TaskData) => void): () => void
 addTerminalDataListener(baseDir: string, callback: (data: TerminalData) => void): () => void
 addTerminalExitListener(baseDir: string, callback: (data: TerminalExitData) => void): () => void
-addContextMenuListener(callback: (params: Electron.ContextMenuParams) => void): () => void
+addContextMenuListener(callback: (params: ContextMenuParams) => void): () => void
 addOpenSettingsListener(callback: (pageId: string) => void): () => void
 async getCommands(baseDir: string): Promise<CommandsData>
 getCustomModes(baseDir: string): Promise<ModeDefinition[]>
@@ -21555,6 +22079,8 @@ applyUncommittedChanges(baseDir: string, taskId: string, targetBranch?: string):
 revertLastMerge(baseDir: string, taskId: string): Promise<void>
 ⋮----
 restoreFile(baseDir: string, taskId: string, filePath: string): Promise<void>
+⋮----
+async readFile(baseDir: string, filePath: string): Promise<string>
 ⋮----
 listBranches(baseDir: string): Promise<Array<
 ⋮----
@@ -21611,13 +22137,25 @@ addNotificationListener(baseDir: string, callback: (data: NotificationData) => v
 ⋮----
 addBmadStatusChangedListener(baseDir: string, callback: (status: BmadStatus) => void): () => void
 ⋮----
-getInstalledExtensions(projectDir?: string): Promise<LoadedExtension[]>
+getInstalledExtensions(projectDir?: string): Promise<InstalledExtension[]>
 ⋮----
 getAvailableExtensions(repositories: string[], forceRefresh?: boolean): Promise<AvailableExtension[]>
 ⋮----
 installExtension(extensionId: string, repositoryUrl: string, projectDir?: string): Promise<boolean>
 ⋮----
 uninstallExtension(extensionId: string, projectDir?: string): Promise<boolean>
+⋮----
+getExtensionUIComponents(projectDir?: string, placement?: string): Promise<ExtensionUIComponent[]>
+⋮----
+getUIExtensionData(extensionId: string, componentId: string, projectDir?: string, taskId?: string): Promise<unknown>
+⋮----
+executeUIExtensionAction(extensionId: string, componentId: string, action: string, args: unknown[], projectDir?: string, taskId?: string): Promise<unknown>
+⋮----
+onExtensionUIRefresh(callback: (data: ExtensionUIRefreshData) => void): () => void
+⋮----
+onModalOverlayUrl(callback: (data: ModalOverlayUrlData) => void): () => void
+⋮----
+isWebViewSupported(): boolean
 
 ================
 File: src/renderer/src/components/AgentSelector/AgentSelector.tsx
@@ -21642,8 +22180,8 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useProjectSettings } from '@/contexts/ProjectSettingsContext';
 import { useApi } from '@/contexts/ApiContext';
 import { useAgents } from '@/contexts/AgentsContext';
-import { useTask } from '@/contexts/TaskContext';
-import { resolveAgentProfile } from '@/utils/agents';
+import { useTask } from '@/contexts/TasksContext';
+import { useActiveAgentProfile } from '@/utils/agents';
 ⋮----
 type Props = {
   projectDir: string;
@@ -21773,9 +22311,7 @@ import { SuggestedWorkflowCard } from '@/components/bmad/SuggestedWorkflowCard';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useApi } from '@/contexts/ApiContext';
 import { useModelProviders } from '@/contexts/ModelProviderContext';
-import { useProjectSettings } from '@/contexts/ProjectSettingsContext';
-import { useAgents } from '@/contexts/AgentsContext';
-import { resolveAgentProfile } from '@/utils/agents';
+import { useActiveAgentProfile } from '@/utils/agents';
 ⋮----
 type Props = {
   projectDir: string;
@@ -21934,9 +22470,8 @@ const handleToggleModelSelector = () =>
 File: src/renderer/src/components/bmad/useBmadState.ts
 ================
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BmadStatus, WorkflowMetadata, TaskData } from '@common/types';
+import { BmadStatus, WorkflowMetadata, TaskData, isResponseMessage, Message } from '@common/types';
 ⋮----
-import { isResponseMessage, Message } from '@/types/message';
 import { useApi } from '@/contexts/ApiContext';
 import { useTaskMessages } from '@/stores/taskStore';
 import { generateSuggestions } from '@/utils/bmad-suggestions';
@@ -22604,8 +23139,8 @@ const handleRevertChanges = () =>
 ================
 File: src/renderer/src/components/common/CodeInline.tsx
 ================
-import { clsx } from 'clsx';
 import { ReactNode } from 'react';
+import { twMerge } from 'tailwind-merge';
 ⋮----
 type Props = {
   className?: string;
@@ -22930,6 +23465,40 @@ type Props = {
 export const ModalOverlayLayout = (
 
 ================
+File: src/renderer/src/components/common/ModalOverlayUrlViewer.tsx
+================
+import { useEffect, useRef } from 'react';
+⋮----
+import { ModalOverlayLayout } from './ModalOverlayLayout';
+⋮----
+import { useApi } from '@/contexts/ApiContext';
+⋮----
+type Props = {
+  url: string;
+  onClose: () => void;
+};
+⋮----
+const handleClose = () =>
+
+================
+File: src/renderer/src/components/common/ModelSelectorWrapper.tsx
+================
+import { forwardRef, useCallback, useMemo } from 'react';
+import { Model } from '@common/types';
+import { getProviderModelId } from '@common/agent';
+⋮----
+import { ModelSelector, ModelSelectorRef } from '@/components/ModelSelector';
+import { useModelProviders } from '@/contexts/ModelProviderContext';
+import { useSettings } from '@/contexts/SettingsContext';
+⋮----
+type Props = {
+  className?: string;
+  selectedModelId?: string;
+  onChange: (model: Model) => void;
+  popupPlacement?: 'top' | 'bottom';
+};
+
+================
 File: src/renderer/src/components/common/MultiSelect.tsx
 ================
 import { useState, useRef, ReactNode } from 'react';
@@ -23242,6 +23811,7 @@ type Props<T> = {
 // Convert Column<T> to ColumnDef<T> for @tanstack/react-table
 ⋮----
 // Create table instance
+// eslint-disable-next-line react-hooks/incompatible-library
 ⋮----
 // Parent ref for virtualizer
 ⋮----
@@ -23316,6 +23886,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 ⋮----
 import { UpdatedFilesDiffModal } from './UpdatedFilesDiffModal';
+import { FilePreviewModal } from './FilePreviewModal';
 ⋮----
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Input } from '@/components/common/Input';
@@ -23409,6 +23980,14 @@ const dropFile = (item: TreeItem) => (e: React.MouseEvent<HTMLButtonElement>) =>
 ⋮----
 const addFile = (item: TreeItem) => (event: React.MouseEvent<HTMLButtonElement>) =>
 ⋮----
+const renderTreeItem = (
+    { item, title, children }: { item: TreeItem; title: React.ReactNode; children: React.ReactNode; context: unknown },
+    type: SectionType,
+    _treeData: Record<string, TreeItem>,
+    expandedItems: string[],
+    setExpandedItems: (items: string[]) => void,
+) =>
+⋮----
 // Get line stats for updated files section
 ⋮----
 // Actions logic
@@ -23423,6 +24002,12 @@ const renderTitle = () =>
 const renderFile = () =>
 ⋮----
 // Show line stats for updated files with click handler
+⋮----
+// Add click handler for project files to open preview
+⋮----
+<span className=
+⋮----
+// Add click handler for folders to toggle expand/collapse
 ⋮----
 
 ⋮----
@@ -23457,6 +24042,45 @@ onClick=
 {/* Rules Section */}
 ⋮----
 title=
+⋮----
+{/* File Preview Modal */}
+
+================
+File: src/renderer/src/components/ContextFiles/FilePreviewModal.tsx
+================
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { AiOutlineLoading3Quarters } from 'react-icons/ai';
+import { HiOutlineExclamation } from 'react-icons/hi';
+import CodeMirror from '@uiw/react-codemirror';
+import { EditorView } from '@codemirror/view';
+import { githubDarkInit } from '@uiw/codemirror-theme-github';
+import { LanguageSupport } from '@codemirror/language';
+import { languages } from '@codemirror/language-data';
+import { clsx } from 'clsx';
+⋮----
+import { ModalOverlayLayout } from '@/components/common/ModalOverlayLayout';
+import { useApi } from '@/contexts/ApiContext';
+⋮----
+type Props = {
+  filePath: string;
+  baseDir: string;
+  onClose: () => void;
+};
+⋮----
+const getLanguageDescription = (filePath: string) =>
+⋮----
+const loadLanguage = async () =>
+⋮----
+const fetchFileContent = async () =>
+⋮----
+const renderLoading = () => (
+    <div className="flex items-center justify-center h-full">
+      <AiOutlineLoading3Quarters className="w-8 h-8 text-text-muted animate-spin" />
+    </div>
+  );
+⋮----
+<div className=
 
 ================
 File: src/renderer/src/components/ContextFiles/index.ts
@@ -23522,6 +24146,78 @@ isGeneratingMessage
 title=
 
 ================
+File: src/renderer/src/components/extensions/ExtensionComponentWrapper.tsx
+================
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import StringToReactComponent from 'string-to-react-component';
+import { ExtensionUIComponent } from '@common/types';
+import { twMerge } from 'tailwind-merge';
+⋮----
+import { ExtensionUIErrorBoundary } from '@/components/extensions/ExtensionUIErrorBoundary';
+import { useApi } from '@/contexts/ApiContext';
+import { useExtensions } from '@/contexts/ExtensionsContext';
+import { useExtensionUIStore, useExtensionComponents } from '@/stores/extensionUIStore';
+⋮----
+type Props = {
+  placement: string;
+  className?: string;
+  direction?: 'horizontal' | 'vertical';
+  additionalProps?: Record<string, unknown>;
+};
+⋮----
+const ExtensionComponentWrapperInner = (
+⋮----
+// Use cached components from store
+⋮----
+// Load components on mount or when cache is empty
+⋮----
+// Load data for all components that need it
+⋮----
+// Handle refresh events
+⋮----
+// Filter by project
+⋮----
+// Handle component reload via store
+⋮----
+// Filter by task for data refresh
+⋮----
+// Reload data for affected components (stale-while-revalidate)
+⋮----
+const executeExtensionAction = async (action: string, ...args: unknown[]) =>
+⋮----
+<StringToReactComponent data=
+⋮----
+<div className=
+
+================
+File: src/renderer/src/components/extensions/ExtensionUIErrorBoundary.tsx
+================
+import { Component, ErrorInfo, ReactNode } from 'react';
+⋮----
+type Props = {
+  extensionId: string;
+  componentId: string;
+  children: ReactNode;
+};
+⋮----
+type State = {
+  hasError: boolean;
+  error: Error | null;
+};
+⋮----
+export class ExtensionUIErrorBoundary extends Component<Props, State>
+⋮----
+constructor(props: Props)
+⋮----
+static getDerivedStateFromError(error: Error): State
+⋮----
+componentDidCatch(error: Error, errorInfo: ErrorInfo): void
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+render(): ReactNode
+
+================
 File: src/renderer/src/components/message/ActivateSkillToolMessage.tsx
 ================
 import { MdPsychology } from 'react-icons/md';
@@ -23529,12 +24225,11 @@ import { CgSpinner } from 'react-icons/cg';
 import { useTranslation } from 'react-i18next';
 import { VscError } from 'react-icons/vsc';
 import { clsx } from 'clsx';
+import { ToolMessage } from '@common/types';
 ⋮----
 import { CopyMessageButton } from './CopyMessageButton';
 import { ExpandableMessageBlock } from './ExpandableMessageBlock';
 import { parseToolContent } from './utils';
-⋮----
-import { ToolMessage } from '@/types/message';
 ⋮----
 type Props = {
   message: ToolMessage;
@@ -23553,14 +24248,13 @@ File: src/renderer/src/components/message/AssistantMessageBlock.tsx
 import { memo, useRef } from 'react';
 import { clsx } from 'clsx';
 import { RiRobot2Line } from 'react-icons/ri';
-import { UsageReportData } from '@common/types';
+import { UsageReportData, AssistantGroupMessage, isResponseMessage, isToolMessage, ToolMessage } from '@common/types';
 ⋮----
 import { MessageBar } from './MessageBar';
 import { MessageBlock } from './MessageBlock';
 import { areMessagesEqual } from './utils';
 ⋮----
 import { useParsedContent } from '@/hooks/useParsedContent';
-import { AssistantGroupMessage, isResponseMessage, isToolMessage, ToolMessage } from '@/types/message';
 ⋮----
 type Props = {
   baseDir: string;
@@ -23593,8 +24287,8 @@ import { useTranslation } from 'react-i18next';
 import { RiTerminalLine, RiErrorWarningFill, RiCheckboxCircleFill, RiCloseCircleFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { MdKeyboardDoubleArrowDown } from 'react-icons/md';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -23628,10 +24322,9 @@ File: src/renderer/src/components/message/CommandOutputMessageBlock.tsx
 ================
 import { BiTerminal } from 'react-icons/bi';
 import { useTranslation } from 'react-i18next';
+import { CommandOutputMessage } from '@common/types';
 ⋮----
 import { CopyMessageButton } from './CopyMessageButton';
-⋮----
-import { CommandOutputMessage } from '@/types/message';
 ⋮----
 type Props = {
   message: CommandOutputMessage;
@@ -23661,11 +24354,11 @@ import {
   POWER_TOOL_GROUP_NAME,
   POWER_TOOL_SEMANTIC_SEARCH,
 } from '@common/tools';
+import { ToolMessage } from '@common/types';
 ⋮----
 import { CopyMessageButton } from './CopyMessageButton';
 import { parseToolContent } from './utils';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 ⋮----
 type Props = {
@@ -23721,8 +24414,8 @@ import { useTranslation } from 'react-i18next';
 import { RiCheckboxCircleFill, RiCloseCircleFill, RiErrorWarningFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { MdAssignmentAdd } from 'react-icons/md';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -23761,8 +24454,8 @@ File: src/renderer/src/components/message/DeleteMemoryToolMessage.tsx
 import { useTranslation } from 'react-i18next';
 import { FaBrain, FaCheckCircle, FaExclamationTriangle, FaTimesCircle } from 'react-icons/fa';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
 ⋮----
@@ -23784,8 +24477,8 @@ import { useTranslation } from 'react-i18next';
 import { RiCheckboxCircleFill, RiCloseCircleFill, RiErrorWarningFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { LiaFolderMinusSolid } from 'react-icons/lia';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { TaskStateChip } from '@/components/common/TaskStateChip';
@@ -23840,8 +24533,8 @@ File: src/renderer/src/components/message/FetchToolMessage.tsx
 import { useTranslation } from 'react-i18next';
 import { RiLinkM, RiErrorWarningFill, RiCheckboxCircleFill, RiCloseCircleFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { highlightWithLowlight } from '@/utils/highlighter';
@@ -23869,8 +24562,8 @@ import { RiCheckboxCircleFill, RiEditLine, RiErrorWarningFill, RiCloseCircleFill
 import { getLanguageFromPath } from '@common/utils';
 import { CgSpinner } from 'react-icons/cg';
 import { useTranslation } from 'react-i18next';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeBlock } from '@/components/common/CodeBlock';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock, ExpandableMessageBlockRef } from '@/components/message/ExpandableMessageBlock';
@@ -23894,8 +24587,8 @@ import { useTranslation } from 'react-i18next';
 import { RiFileTextLine, RiCheckboxCircleFill, RiErrorWarningFill, RiCloseCircleFill } from 'react-icons/ri';
 import { getLanguageFromPath } from '@common/utils';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeBlock } from '@/components/common/CodeBlock';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
@@ -23921,10 +24614,9 @@ import { useLayoutEffect, useRef } from 'react';
 import { RiCheckboxCircleFill, RiEditLine, RiErrorWarningFill, RiCloseCircleFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { useTranslation } from 'react-i18next';
-import { FileWriteMode } from '@common/types';
+import { FileWriteMode, ToolMessage } from '@common/types';
 import { getLanguageFromPath } from '@common/utils';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeBlock } from '@/components/common/CodeBlock';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock, ExpandableMessageBlockRef } from '@/components/message/ExpandableMessageBlock';
@@ -23949,8 +24641,8 @@ File: src/renderer/src/components/message/GetTaskMessageToolMessage.tsx
 import { useTranslation } from 'react-i18next';
 import { RiMessage3Line, RiCheckboxCircleFill, RiErrorWarningFill, RiCloseCircleFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -23973,9 +24665,8 @@ import { useTranslation } from 'react-i18next';
 import { RiCheckboxCircleFill, RiCloseCircleFill, RiErrorWarningFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { MdAssignment } from 'react-icons/md';
-import { ContextFile } from '@common/types';
+import { ContextFile, ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { TaskStateChip } from '@/components/common/TaskStateChip';
@@ -24007,8 +24698,8 @@ import { useTranslation } from 'react-i18next';
 import { RiFolderLine, RiFileTextLine, RiErrorWarningFill, RiCheckboxCircleFill, RiCloseCircleFill } from 'react-icons/ri';
 import { LuFolderSearch } from 'react-icons/lu';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24029,8 +24720,8 @@ import { useTranslation } from 'react-i18next';
 import { RiErrorWarningFill, RiCheckboxCircleFill, RiCloseCircleFill } from 'react-icons/ri';
 import { LuFileSearch } from 'react-icons/lu';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24051,14 +24742,23 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useMemo, useState, MouseEvent } from 'react';
 import { clsx } from 'clsx';
 import { useTranslation } from 'react-i18next';
-import { LocalizedString, UsageReportData } from '@common/types';
+import {
+  LocalizedString,
+  UsageReportData,
+  GroupMessage,
+  isResponseMessage,
+  isToolMessage,
+  isUserMessage,
+  Message,
+  ResponseMessage,
+  ToolMessage,
+} from '@common/types';
 ⋮----
 import { MessageBlock } from './MessageBlock';
 import { MessageBar } from './MessageBar';
 import { areMessagesEqual } from './utils';
 ⋮----
 import { Accordion } from '@/components/common/Accordion';
-import { GroupMessage, isResponseMessage, isToolMessage, isUserMessage, Message, ResponseMessage, ToolMessage } from '@/types/message';
 import { Button } from '@/components/common/Button';
 ⋮----
 type Props = {
@@ -24112,8 +24812,8 @@ File: src/renderer/src/components/message/ListMemoriesToolMessage.tsx
 import { useTranslation } from 'react-i18next';
 import { FaBrain, FaCheckCircle, FaExclamationTriangle, FaTimesCircle } from 'react-icons/fa';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24140,8 +24840,8 @@ import { useTranslation } from 'react-i18next';
 import { RiCheckboxCircleFill, RiCloseCircleFill, RiErrorWarningFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { LuClipboardList } from 'react-icons/lu';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { TaskStateChip } from '@/components/common/TaskStateChip';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24170,7 +24870,8 @@ const renderStatusIcon = () =>
 ================
 File: src/renderer/src/components/message/LoadingMessageBlock.tsx
 ================
-import { LoadingMessage } from '@/types/message';
+import { LoadingMessage } from '@common/types';
+⋮----
 import { useTypingAnimation } from '@/hooks/useTypingAnimation';
 import { MessageActions } from '@/components/message/MessageActions';
 ⋮----
@@ -24187,11 +24888,11 @@ File: src/renderer/src/components/message/LogMessageBlock.tsx
 import { FaInfoCircle, FaExclamationTriangle, FaExclamationCircle } from 'react-icons/fa';
 import { MdClose } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
+import { LogMessage } from '@common/types';
 ⋮----
 import { CopyMessageButton } from './CopyMessageButton';
 import { MessageActions } from './MessageActions';
 ⋮----
-import { LogMessage } from '@/types/message';
 import { IconButton } from '@/components/common/IconButton';
 ⋮----
 type Props = {
@@ -24243,7 +24944,7 @@ File: src/renderer/src/components/message/MessageBar.tsx
 import { useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { UsageReportData } from '@common/types';
+import { UsageReportData, Message } from '@common/types';
 import { MdCallSplit, MdDeleteForever, MdDeleteSweep, MdEdit, MdRedo } from 'react-icons/md';
 import { FaEllipsisVertical } from 'react-icons/fa6';
 import { twMerge } from 'tailwind-merge';
@@ -24254,6 +24955,7 @@ import { CopyMessageButton } from './CopyMessageButton';
 import { UsageInfo } from './UsageInfo';
 ⋮----
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 ⋮----
 type MenuPosition = {
   top?: number;
@@ -24266,6 +24968,7 @@ type Props = {
   className?: string;
   content?: string;
   usageReport?: UsageReportData;
+  message?: Message;
   remove?: () => void;
   redo?: () => void;
   edit?: () => void;
@@ -24324,6 +25027,19 @@ import {
   TASKS_TOOL_SEARCH_TASK,
   TASKS_TOOL_SEARCH_PARENT_TASK,
 } from '@common/tools';
+import {
+  isCommandOutputMessage,
+  isLoadingMessage,
+  isLogMessage,
+  isReflectedMessage,
+  isResponseMessage,
+  isTaskInfoMessage,
+  isToolMessage,
+  isUserMessage,
+  LogMessage,
+  Message,
+  ToolMessage,
+} from '@common/types';
 ⋮----
 import { CommandOutputMessageBlock } from './CommandOutputMessageBlock';
 import { LoadingMessageBlock } from './LoadingMessageBlock';
@@ -24356,20 +25072,6 @@ import { UpdateMemoryToolMessage } from './UpdateMemoryToolMessage';
 import { ActivateSkillToolMessage } from './ActivateSkillToolMessage';
 import { TaskInfoMessage } from './TaskInfoMessage';
 import { areMessagesEqual } from './utils';
-⋮----
-import {
-  isCommandOutputMessage,
-  isLoadingMessage,
-  isLogMessage,
-  isReflectedMessage,
-  isResponseMessage,
-  isTaskInfoMessage,
-  isToolMessage,
-  isUserMessage,
-  LogMessage,
-  Message,
-  ToolMessage,
-} from '@/types/message';
 ⋮----
 type Props = {
   baseDir: string;
@@ -24408,23 +25110,22 @@ const arePropsEqual = (prevProps: Props, nextProps: Props): boolean =>
 ================
 File: src/renderer/src/components/message/Messages.tsx
 ================
-import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, memo, ReactNode, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { toPng } from 'html-to-image';
 import { MdKeyboardDoubleArrowDown } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
-import { DefaultTaskState, MessageViewMode, TaskData } from '@common/types';
-import { TaskStateActions } from 'src/renderer/src/components/message/TaskStateActions';
+import { DefaultTaskState, isAssistantGroupMessage, isGroupMessage, isUserMessage, Message, MessageViewMode, TaskData } from '@common/types';
 ⋮----
 import { MessageBlock } from './MessageBlock';
 import { GroupMessageBlock } from './GroupMessageBlock';
 import { AssistantMessageBlock } from './AssistantMessageBlock';
 ⋮----
-import { isAssistantGroupMessage, isGroupMessage, isLoadingMessage, isUserMessage, Message } from '@/types/message';
 import { IconButton } from '@/components/common/IconButton';
 import { groupAssistantMessages, groupMessagesByPromptContext } from '@/components/message/utils';
 import { useScrollingPaused } from '@/hooks/useScrollingPaused';
 import { useUserMessageNavigation } from '@/hooks/useUserMessageNavigation';
 import { useSettings } from '@/contexts/SettingsContext';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 ⋮----
 export type MessagesRef = {
   exportToImage: () => void;
@@ -24440,14 +25141,8 @@ type Props = {
   allFiles?: string[];
   renderMarkdown: boolean;
   removeMessage: (message: Message) => void;
-  resumeTask: () => void;
   redoLastUserPrompt: () => void;
   editLastUserMessage: (content: string) => void;
-  onMarkAsDone: () => void;
-  onRunPrompt?: (prompt: string) => void;
-  onArchiveTask?: () => void;
-  onUnarchiveTask?: () => void;
-  onDeleteTask?: () => void;
   onInterrupt?: () => void;
   onForkFromMessage?: (message: Message) => void;
   onRemoveUpToMessage?: (message: Message) => void;
@@ -24461,6 +25156,10 @@ const exportToImage = async () =>
 ⋮----
 // eslint-disable-next-line no-console
 ⋮----
+onFork=
+⋮----
+// only pass message to extension if it is finished (optimization while streaming message)
+⋮----
 aria-label=
 
 ================
@@ -24469,11 +25168,11 @@ File: src/renderer/src/components/message/ReflectedMessageBlock.tsx
 import { useState } from 'react';
 import { MdKeyboardArrowDown, MdKeyboardArrowRight } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
+import { Message } from '@common/types';
 ⋮----
 import { CopyMessageButton } from './CopyMessageButton';
 ⋮----
 import { useParsedContent } from '@/hooks/useParsedContent';
-import { Message } from '@/types/message';
 ⋮----
 type Props = {
   baseDir: string;
@@ -24487,11 +25186,11 @@ File: src/renderer/src/components/message/ResponseMessageBlock.tsx
 ================
 import { clsx } from 'clsx';
 import { RiRobot2Line } from 'react-icons/ri';
+import { ResponseMessage } from '@common/types';
 ⋮----
 import { MessageBar } from './MessageBar';
 ⋮----
 import { useParsedContent } from '@/hooks/useParsedContent';
-import { ResponseMessage } from '@/types/message';
 ⋮----
 type Props = {
   baseDir: string;
@@ -24515,8 +25214,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FaBrain, FaCheckCircle, FaExclamationTriangle, FaTimesCircle, FaTrash } from 'react-icons/fa';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { IconButton } from '@/components/common/IconButton';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24559,8 +25258,8 @@ import { useTranslation } from 'react-i18next';
 import { RiCheckboxCircleFill, RiCloseCircleFill, RiErrorWarningFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { MdOutlineContentPasteSearch } from 'react-icons/md';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24581,8 +25280,8 @@ import { useTranslation } from 'react-i18next';
 import { RiCheckboxCircleFill, RiCloseCircleFill, RiErrorWarningFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { MdOutlineContentPasteSearch } from 'react-icons/md';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24603,8 +25302,8 @@ import { useTranslation } from 'react-i18next';
 import { RiErrorWarningFill, RiCheckboxCircleFill, RiCloseCircleFill } from 'react-icons/ri';
 import { FaSearchengin } from 'react-icons/fa6';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24624,8 +25323,8 @@ File: src/renderer/src/components/message/StoreMemoryToolMessage.tsx
 import { useTranslation } from 'react-i18next';
 import { FaBrain, FaCheckCircle, FaExclamationTriangle, FaTimesCircle } from 'react-icons/fa';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
 ⋮----
@@ -24647,8 +25346,8 @@ import { useTranslation } from 'react-i18next';
 import { RiToolsFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { FaExclamationTriangle } from 'react-icons/fa';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { MessageBar } from '@/components/message/MessageBar';
 import { CopyMessageButton } from '@/components/message/CopyMessageButton';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24669,8 +25368,8 @@ File: src/renderer/src/components/message/TaskInfoMessage.tsx
 import { useTranslation } from 'react-i18next';
 import { FaFolderOpen } from 'react-icons/fa';
 import { MdAssignment, MdClose } from 'react-icons/md';
+import { TaskInfoMessage as TaskInfoMessageType } from '@common/types';
 ⋮----
-import { TaskInfoMessage as TaskInfoMessageType } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 import { CopyMessageButton } from '@/components/message/CopyMessageButton';
 import { IconButton } from '@/components/common/IconButton';
@@ -24698,6 +25397,8 @@ import { RiAlertLine, RiCheckLine, RiPlayLine } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
 import { ReactNode, useState } from 'react';
 import { DefaultTaskState, Mode, TaskData } from '@common/types';
+⋮----
+import { ExtensionComponentWrapper } from '../extensions/ExtensionComponentWrapper';
 ⋮----
 import { BmadTaskActions } from '@/components/bmad/BmadTaskActions';
 import { Button } from '@/components/common/Button';
@@ -24793,12 +25494,12 @@ import {
   POWER_TOOL_GROUP_NAME,
   POWER_TOOL_SEMANTIC_SEARCH,
 } from '@common/tools';
+import { ToolMessage } from '@common/types';
 ⋮----
 import { CopyMessageButton } from './CopyMessageButton';
 import { parseToolContent } from './utils';
 import { ExpandableMessageBlock } from './ExpandableMessageBlock';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { CodeInline } from '@/components/common/CodeInline';
 ⋮----
 type Props = {
@@ -24838,8 +25539,8 @@ File: src/renderer/src/components/message/UpdateMemoryToolMessage.tsx
 import { useTranslation } from 'react-i18next';
 import { FaBrain, FaCheckCircle, FaExclamationTriangle, FaTimesCircle } from 'react-icons/fa';
 import { CgSpinner } from 'react-icons/cg';
+import { ToolMessage } from '@common/types';
 ⋮----
-import { ToolMessage } from '@/types/message';
 import { ExpandableMessageBlock } from '@/components/message/ExpandableMessageBlock';
 import { Tooltip } from '@/components/ui/Tooltip';
 ⋮----
@@ -24876,11 +25577,11 @@ File: src/renderer/src/components/message/UserMessageBlock.tsx
 import { FaRegUser } from 'react-icons/fa';
 import { clsx } from 'clsx';
 import { AnimatePresence, motion } from 'framer-motion';
+import { UserMessage } from '@common/types';
 ⋮----
 import { MessageBar } from './MessageBar';
 ⋮----
 import { useParsedContent } from '@/hooks/useParsedContent';
-import { UserMessage } from '@/types/message';
 ⋮----
 type Props = {
   baseDir: string;
@@ -24908,7 +25609,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Group } from '@common/types';
+import { Group, AssistantGroupMessage, GroupMessage, isResponseMessage, isToolMessage, Message, ResponseMessage, ToolMessage } from '@common/types';
 ⋮----
 import { CustomCommandBashBlock } from './CustomCommandBashBlock';
 import { ThinkingAnswerBlock } from './ThinkingAnswerBlock';
@@ -24916,7 +25617,6 @@ import { ThinkingAnswerBlock } from './ThinkingAnswerBlock';
 import { CodeBlock } from '@/components/common/CodeBlock';
 import { MermaidDiagram } from '@/components/common/MermaidDiagram';
 import { CodeInline } from '@/components/common/CodeInline';
-import { AssistantGroupMessage, GroupMessage, isResponseMessage, isToolMessage, Message, ResponseMessage, ToolMessage } from '@/types/message';
 ⋮----
 // Handle code blocks - check if it's a mermaid diagram or regular code
 ⋮----
@@ -24926,19 +25626,21 @@ import { AssistantGroupMessage, GroupMessage, isResponseMessage, isToolMessage, 
 ⋮----
 // Basic styling for preformatted blocks (e.g., indented code)
 ⋮----
-// Table styling
+// Table styling - wrapped in scrollable container for wide tables
 ⋮----
 // First check if the content matches the thinking/answer format
 const thinkingAnswerContent = parseThinkingAnswerFormat(content, baseDir, allFiles, renderMarkdown, renderThinking);
 if (thinkingAnswerContent)
 ⋮----
-const processCodeBlock = () =>
+if (currentText.trimEnd())
+⋮----
+if (renderMarkdown)
+⋮----
+if (codeContent.length > 0)
 ⋮----
 // Check if the line is just a filepath
 ⋮----
 // Check if line ends with a filepath
-⋮----
-const findFileInNextLine = (currentLine: number):
 ⋮----
 // Check if the next line is just a filepath
 ⋮----
@@ -25077,7 +25779,7 @@ File: src/renderer/src/components/message/VirtualizedMessages.tsx
 import { MdKeyboardDoubleArrowDown } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
-import { DefaultTaskState, MessageViewMode, TaskData } from '@common/types';
+import { DefaultTaskState, MessageViewMode, TaskData, isAssistantGroupMessage, isGroupMessage, isUserMessage, Message } from '@common/types';
 import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react';
 import { clsx } from 'clsx';
 ⋮----
@@ -25085,14 +25787,13 @@ import { MessageBlock } from './MessageBlock';
 import { GroupMessageBlock } from './GroupMessageBlock';
 import { AssistantMessageBlock } from './AssistantMessageBlock';
 ⋮----
-import { TaskStateActions } from '@/components/message/TaskStateActions';
-import { isAssistantGroupMessage, isGroupMessage, isLoadingMessage, isUserMessage, Message } from '@/types/message';
 import { IconButton } from '@/components/common/IconButton';
 import { groupAssistantMessages, groupMessagesByPromptContext } from '@/components/message/utils';
 import { showInfoNotification } from '@/utils/notifications';
 import { useScrollingPaused } from '@/hooks/useScrollingPaused';
 import { useUserMessageNavigation } from '@/hooks/useUserMessageNavigation';
 import { useSettings } from '@/contexts/SettingsContext';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 ⋮----
 export type VirtualizedMessagesRef = {
   exportToImage: () => void;
@@ -25108,16 +25809,11 @@ type Props = {
   allFiles?: string[];
   renderMarkdown: boolean;
   removeMessage: (message: Message) => void;
-  resumeTask: () => void;
   redoLastUserPrompt: () => void;
   editLastUserMessage: (content: string) => void;
-  onMarkAsDone: () => void;
-  onRunPrompt?: (prompt: string) => void;
-  onArchiveTask?: () => void;
-  onUnarchiveTask?: () => void;
-  onDeleteTask?: () => void;
   onInterrupt?: () => void;
   onForkFromMessage?: (message: Message) => void;
+  onRemoveUpToMessage?: (message: Message) => void;
 };
 ⋮----
 // Group messages by promptContext.group.id, then optionally group assistant messages for compact mode
@@ -25125,6 +25821,7 @@ type Props = {
 // Get all user message IDs
 ⋮----
 // Create virtualizer for dynamic sized items
+// eslint-disable-next-line react-hooks/incompatible-library
 ⋮----
 estimateSize: () => 44, // Initial estimate, will be measured
 ⋮----
@@ -25139,11 +25836,30 @@ onFork=
 aria-label=
 
 ================
+File: src/renderer/src/components/ModelLibrary/providers/AlibabaPlanModelOverrides.tsx
+================
+import { getDefaultProviderParams, AlibabaPlanProvider, LlmProvider } from '@common/agent';
+⋮----
+import { AlibabaPlanThinkingSettings } from './AlibabaPlanThinkingSettings';
+⋮----
+type Props = {
+  provider: LlmProvider;
+  overrides: Partial<AlibabaPlanProvider>;
+  onChange: (overrides: Record<string, unknown>) => void;
+};
+⋮----
+export const AlibabaPlanModelOverrides = (
+⋮----
+const handleProviderChange = (updatedProvider: AlibabaPlanProvider) =>
+
+================
 File: src/renderer/src/components/ModelLibrary/providers/AlibabaPlanParameters.tsx
 ================
 import { ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlibabaPlanProvider } from '@common/agent';
+⋮----
+import { AlibabaPlanThinkingSettings } from './AlibabaPlanThinkingSettings';
 ⋮----
 import { Input } from '@/components/common/Input';
 import { useEffectiveEnvironmentVariable } from '@/hooks/useEffectiveEnvironmentVariable';
@@ -25153,9 +25869,28 @@ type Props = {
   onChange: (updated: AlibabaPlanProvider) => void;
 };
 ⋮----
-export const AlibabaPlanParameters = (
-⋮----
 const handleApiKeyChange = (e: ChangeEvent<HTMLInputElement>) =>
+⋮----
+label=
+
+================
+File: src/renderer/src/components/ModelLibrary/providers/AlibabaPlanThinkingSettings.tsx
+================
+import { useTranslation } from 'react-i18next';
+import { AlibabaPlanProvider } from '@common/agent';
+⋮----
+import { Slider } from '@/components/common/Slider';
+import { Checkbox } from '@/components/common/Checkbox';
+import { InfoIcon } from '@/components/common/InfoIcon';
+⋮----
+type Props = {
+  provider: AlibabaPlanProvider;
+  onChange: (updated: AlibabaPlanProvider) => void;
+};
+⋮----
+const handleThinkingEnabledChange = (checked: boolean) =>
+⋮----
+const handleThinkingBudgetChange = (value: number) =>
 ⋮----
 label=
 
@@ -25198,6 +25933,27 @@ type Props = {
 export const AnthropicParameters = (
 ⋮----
 const handleApiKeyChange = (e: ChangeEvent<HTMLInputElement>) =>
+⋮----
+label=
+
+================
+File: src/renderer/src/components/ModelLibrary/providers/AuggieParameters.tsx
+================
+import { ChangeEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { AuggieProvider } from '@common/agent';
+⋮----
+import { Input } from '@/components/common/Input';
+import { useEffectiveEnvironmentVariable } from '@/hooks/useEffectiveEnvironmentVariable';
+⋮----
+type Props = {
+  provider: AuggieProvider;
+  onChange: (updated: AuggieProvider) => void;
+};
+⋮----
+const handleApiKeyChange = (e: ChangeEvent<HTMLInputElement>) =>
+⋮----
+const handleApiUrlChange = (e: ChangeEvent<HTMLInputElement>) =>
 ⋮----
 label=
 
@@ -26057,6 +26813,8 @@ export const useArrayField = (
   onChange: (updated: OpenRouterProvider) => void,
 ) =>
 ⋮----
+// eslint-disable-next-line react-hooks/set-state-in-effect
+⋮----
 const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
 ⋮----
 const handleBlur = () =>
@@ -26377,6 +27135,7 @@ import { AzureModelOverrides } from './providers/AzureModelOverrides';
 import { OpenAiCompatibleModelOverrides } from './providers/OpenAiCompatibleModelOverrides';
 import { DefaultModelOverrides } from './providers/DefaultModelOverrides';
 import { ZaiPlanModelOverrides } from './providers/ZaiPlanModelOverrides';
+import { AlibabaPlanModelOverrides } from './providers/AlibabaPlanModelOverrides';
 ⋮----
 import { Button } from '@/components/common/Button';
 import { Accordion } from '@/components/common/Accordion';
@@ -26516,6 +27275,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import {
   AnthropicIcon,
   AnthropicCompatibleIcon,
+  AuggieIcon,
   AzureIcon,
   BedrockIcon,
   CerebrasIcon,
@@ -26634,6 +27394,7 @@ import { DisableStreaming } from './DisableStreaming';
 import {
   AnthropicParameters,
   AnthropicCompatibleParameters,
+  AuggieParameters,
   AzureParameters,
   BedrockParameters,
   ClaudeAgentSdkParameters,
@@ -26721,8 +27482,10 @@ import { ProviderCard } from './ProviderCard';
 ⋮----
 import { IconButton } from '@/components/common/IconButton';
 import {
-  AnthropicIcon,
+  AlibabaPlanIcon,
   AnthropicCompatibleIcon,
+  AnthropicIcon,
+  AuggieIcon,
   AzureIcon,
   BedrockIcon,
   CerebrasIcon,
@@ -26732,6 +27495,7 @@ import {
   GeminiIcon,
   GpustackIcon,
   GroqIcon,
+  KimiPlanIcon,
   LitellmIcon,
   LmStudioIcon,
   MinimaxIcon,
@@ -26744,8 +27508,6 @@ import {
   SyntheticIcon,
   VertexAiIcon,
   ZaiPlanIcon,
-  AlibabaPlanIcon,
-  KimiPlanIcon,
 } from '@/icons';
 ⋮----
 type Props = {
@@ -26989,6 +27751,7 @@ import { TaskSidebarMultiSelectMenu } from './TaskSidebarMultiSelectMenu';
 import { TaskItem } from './TaskItem';
 import { TaskSectionHeader } from './TaskSectionHeader';
 ⋮----
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 import { getSortedVisibleTasks } from '@/utils/task-utils';
 import { groupTasksByDate } from '@/utils/date-utils';
 import { Input } from '@/components/common/Input';
@@ -27403,6 +28166,7 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import { MenuOption, useContextMenu } from '@/contexts/ContextMenuContext';
 import { useProjectProcessingState } from '@/stores/projectStore';
 import { useResponsive } from '@/hooks/useResponsive';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 ⋮----
 type Props = {
   openProjects: ProjectData[];
@@ -27458,13 +28222,15 @@ import { useProjectSettings } from '@/contexts/ProjectSettingsContext';
 import { LoadingOverlay } from '@/components/common/LoadingOverlay';
 import { TaskView, TaskViewRef } from '@/components/project/TaskView';
 import { useApi } from '@/contexts/ApiContext';
-import { TaskProvider } from '@/contexts/TaskContext';
+import { TasksProvider } from '@/contexts/TasksContext';
 import { useConfiguredHotkeys } from '@/hooks/useConfiguredHotkeys';
 import { getSortedVisibleTasks } from '@/utils/task-utils';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useBooleanState } from '@/hooks/useBooleanState';
 import { showNotification } from '@/utils/browser-notifications';
 import { showInfoNotification } from '@/utils/notifications';
+import { ExtensionsProvider } from '@/contexts/ExtensionsContext';
+import { useActiveAgentProfile } from '@/utils/agents';
 ⋮----
 type Props = {
   projectDir: string;
@@ -27537,9 +28303,9 @@ import { CgTerminal } from 'react-icons/cg';
 import { GoProjectRoadmap } from 'react-icons/go';
 import { IoMdClose } from 'react-icons/io';
 import { VscLock, VscUnlock } from 'react-icons/vsc';
-import { RiRobot2Line, RiMenuUnfold4Line } from 'react-icons/ri';
+import { RiMenuUnfold4Line, RiRobot2Line } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
-import { getProviderModelId, AVAILABLE_PROVIDERS } from '@common/agent';
+import { AVAILABLE_PROVIDERS, getProviderModelId } from '@common/agent';
 import { clsx } from 'clsx';
 import { extractProviderModel } from '@common/utils';
 ⋮----
@@ -27553,6 +28319,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useApi } from '@/contexts/ApiContext';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useModelProviders } from '@/contexts/ModelProviderContext';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 ⋮----
 export type TaskBarRef = {
   openMainModelSelector: (model?: string) => void;
@@ -27617,7 +28384,22 @@ onSquash=
 ================
 File: src/renderer/src/components/project/TaskView.tsx
 ================
-import { AIDER_MODES, DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
+import {
+  AIDER_MODES,
+  DefaultTaskState,
+  isLoadingMessage,
+  isLogMessage,
+  isTaskInfoMessage,
+  isUserMessage,
+  Message,
+  Mode,
+  Model,
+  ModelsData,
+  TaskData,
+  TaskInfoMessage,
+  TodoItem,
+  UserMessage,
+} from '@common/types';
 import { forwardRef, startTransition, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResizableBox, ResizeCallbackData } from 'react-resizable';
@@ -27631,14 +28413,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { useSidebarWidth } from './useSidebarWidth';
 ⋮----
 import { Tooltip } from '@/components/ui/Tooltip';
-import { isLogMessage, isTaskInfoMessage, isUserMessage, Message, TaskInfoMessage, UserMessage } from '@/types/message';
 import { Messages, MessagesRef } from '@/components/message/Messages';
 import { VirtualizedMessages, VirtualizedMessagesRef } from '@/components/message/VirtualizedMessages';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useProjectSettings } from '@/contexts/ProjectSettingsContext';
+import { useApi } from '@/contexts/ApiContext';
 import { AddFileDialog } from '@/components/project/AddFileDialog';
 import { TaskBar, TaskBarRef } from '@/components/project/TaskBar';
 import { PromptField, PromptFieldRef } from '@/components/PromptField';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 import { Button } from '@/components/common/Button';
 import { TodoWindow } from '@/components/project/TodoWindow';
 import { TerminalView, TerminalViewRef } from '@/components/terminal/TerminalView';
@@ -27646,17 +28429,16 @@ import { MobileSidebar } from '@/components/project/MobileSidebar';
 import { FilesContextInfoContent } from '@/components/project/FilesContextInfoContent';
 import { WelcomeMessage } from '@/components/project/WelcomeMessage';
 ⋮----
-import { useApi } from '@/contexts/ApiContext';
-import { resolveAgentProfile } from '@/utils/agents';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useActiveAgentProfile } from '@/utils/agents';
 import { useModelProviders } from '@/contexts/ModelProviderContext';
-import { useTask } from '@/contexts/TaskContext';
-import { useAgents } from '@/contexts/AgentsContext';
+import { useTask } from '@/contexts/TasksContext';
 import { useConfiguredHotkeys } from '@/hooks/useConfiguredHotkeys';
 import { LoadingOverlay } from '@/components/common/LoadingOverlay';
 import { useTaskMessages, useTaskState } from '@/stores/taskStore';
 import { showErrorNotification } from '@/utils/notifications';
 import { useSearchText } from '@/hooks/useSearchText';
+import { TaskStateActions } from '@/components/message/TaskStateActions';
 ⋮----
 type AddFileDialogOptions = {
   readOnly: boolean;
@@ -27718,6 +28500,8 @@ setEditingMessageIndex(null); // Clear editing state
 <div className=
 ⋮----
 
+⋮----
+height=
 ⋮----
 {/* Expand/Collapse Button for collapsed state */}
 ⋮----
@@ -27838,7 +28622,6 @@ import { RiRobot2Line } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
 import { FiCode, FiFile, FiLayers, FiTerminal, FiArrowRight } from 'react-icons/fi';
 import { CgTerminal } from 'react-icons/cg';
-import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 ⋮----
 // @ts-expect-error TypeScript is not aware of asset import
@@ -27856,8 +28639,6 @@ type Props = {
 };
 ⋮----
 const handleModeClick = (mode: Mode) =>
-⋮----
-className=
 ⋮----
 <div className=
 
@@ -28221,6 +29002,7 @@ import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { AudioAnalyzer } from '@/components/PromptField/AudioAnalyzer';
 import { AutoApprove } from '@/components/PromptField/AutoApprove';
 import { useResponsive } from '@/hooks/useResponsive';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 ⋮----
 const ANSWERS = ['y', 'n', 'a', 'd', 'maybe']; // Added 'maybe' (Branch B)
 ⋮----
@@ -28952,24 +29734,24 @@ import { useTranslation } from 'react-i18next';
 import { FaCheck, FaChevronDown, FaDownload } from 'react-icons/fa';
 import { clsx } from 'clsx';
 ⋮----
-import type { AvailableExtension, LoadedExtension } from '@common/types';
+import type { AvailableExtension, InstalledExtension } from '@common/types';
 ⋮----
 import { Button } from '@/components/common/Button';
 import { Checkbox } from '@/components/common/Checkbox';
 import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '@/components/message/utils';
 ⋮----
+// Helper to normalize extension data
+const getExtensionData = (extension: InstalledExtension | AvailableExtension) =>
+⋮----
 type Props = {
-  extension: LoadedExtension | AvailableExtension;
+  extension: InstalledExtension | AvailableExtension;
   isDisabled?: boolean;
   isUninstalling?: boolean;
   isInstalling?: boolean;
   onToggle?: (extensionName: string, isDisabled: boolean) => void;
-  onUninstall?: (extensionName: string) => void;
+  onUninstall?: (exensionFilePath: string) => void;
   onInstall?: (extension: AvailableExtension) => void;
 };
-⋮----
-// Helper to normalize extension data
-const getExtensionData = (extension: LoadedExtension | AvailableExtension) =>
 ⋮----
 const handleToggleExpand = () =>
 ⋮----
@@ -29019,7 +29801,7 @@ aria-label={isExpanded ? t('settings.extensions.collapseReadme') : t('settings.e
 ================
 File: src/renderer/src/components/settings/ExtensionsSettings.tsx
 ================
-import { AvailableExtension, LoadedExtension, ProjectData, SettingsData } from '@common/types';
+import { AvailableExtension, InstalledExtension, ProjectData, SettingsData } from '@common/types';
 import { Activity, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FaChevronLeft, FaChevronRight, FaPlus, FaSearch, FaSync, FaTrash } from 'react-icons/fa';
@@ -29066,9 +29848,11 @@ const handleRefresh = async () =>
 ⋮----
 // eslint-disable-next-line react-hooks/exhaustive-deps
 ⋮----
+// eslint-disable-next-line react-hooks/exhaustive-deps
+⋮----
 const handleToggleDisabled = (extensionName: string, isCurrentlyDisabled: boolean) =>
 ⋮----
-const handleUninstall = async (extensionName: string) =>
+const handleUninstall = async (extensionFilePath: string) =>
 ⋮----
 const handleInstall = async (extension: AvailableExtension) =>
 ⋮----
@@ -29077,11 +29861,11 @@ const handleAddRepository = () =>
 const handleRemoveRepository = (repositoryUrl: string) =>
 ⋮----
 // Filter by context: in Global context, hide project-level extensions
-// In project context, show both global extensions and extensions for that specific project
+// In project context, show only extensions for that specific project
 ⋮----
 // In global context, only show global extensions (no projectDir)
 ⋮----
-// In project context, show extensions for this project OR global extensions
+// In project context, only show extensions for this specific project
 ⋮----
 isUninstalling=
 ⋮----
@@ -29095,7 +29879,7 @@ isUninstalling=
 ⋮----
 // In global context, only consider global extensions
 ⋮----
-// In project context, consider extensions for this project or global extensions
+// In project context, only consider extensions for this specific project
 ⋮----
 // If installed, render with installed extension (LoadedExtension)
 ⋮----
@@ -30066,11 +30850,12 @@ className=
 ⋮----
 placeholder=
 ⋮----
+{/* eslint-disable-next-line react-hooks/refs */}
 
 ================
 File: src/renderer/src/components/CostInfo.tsx
 ================
-import { Mode, TokensInfoData, TaskData } from '@common/types';
+import { Mode, TaskData, TokensInfoData } from '@common/types';
 import { ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IoChevronDown, IoChevronUp, IoClose } from 'react-icons/io5';
@@ -30078,6 +30863,7 @@ import { MdOutlineRefresh, MdSettingsBackupRestore } from 'react-icons/md';
 ⋮----
 import { Tooltip } from '@/components/ui/Tooltip';
 import { TokenUsageBar } from '@/components/TokenUsageBar';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 ⋮----
 type Props = {
   tokensInfo?: TokensInfoData | null;
@@ -30162,7 +30948,7 @@ title=
 File: src/renderer/src/components/TokenUsageBar.tsx
 ================
 import { AIDER_MODES, Mode, TaskData, TokensInfoData } from '@common/types';
-import { MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import debounce from 'lodash/debounce';
 import { clsx } from 'clsx';
@@ -30239,6 +31025,7 @@ File: src/renderer/src/contexts/ContextMenuContext.tsx
 ================
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ContextMenuParams } from '@common/types';
 ⋮----
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useApi } from '@/contexts/ApiContext';
@@ -30268,7 +31055,7 @@ type Props = {
 ⋮----
 export const useContextMenu = () =>
 ⋮----
-const handleContextMenu = (params: Electron.ContextMenuParams) =>
+const handleContextMenu = (params: ContextMenuParams) =>
 ⋮----
 // Capture the target element when context menu is triggered
 ⋮----
@@ -30283,6 +31070,47 @@ const handleContextMenu = (params: Electron.ContextMenuParams) =>
 // Handle other elements with text content
 ⋮----
 // eslint-disable-next-line no-console
+
+================
+File: src/renderer/src/contexts/ExtensionsContext.tsx
+================
+import { createContext, ReactNode, useContext, useMemo } from 'react';
+import { UIComponentProps, UIComponents } from '@common/extensions';
+import { AgentProfile, TaskData, Message } from '@common/types';
+⋮----
+import { Button } from '@/components/common/Button';
+import { Checkbox } from '@/components/common/Checkbox';
+import { Input } from '@/components/common/Input';
+import { Select } from '@/components/common/Select';
+import { TextArea } from '@/components/common/TextArea';
+import { IconButton } from '@/components/common/IconButton';
+import { RadioButton } from '@/components/common/RadioButton';
+import { MultiSelect } from '@/components/common/MultiSelect';
+import { Slider } from '@/components/common/Slider';
+import { DatePicker } from '@/components/common/DatePicker';
+import { Chip } from '@/components/common/Chip';
+import { ModelSelectorWrapper } from '@/components/common/ModelSelectorWrapper';
+import { useModelProviders } from '@/contexts/ModelProviderContext';
+⋮----
+type ExtensionsContextValue = {
+  projectDir?: string;
+  task?: TaskData;
+  agentProfile?: AgentProfile;
+  messages?: Message[];
+  message?: Message;
+};
+⋮----
+type Props = ExtensionsContextValue & {
+  children: ReactNode;
+};
+⋮----
+const useExtensionsContext = (): ExtensionsContextValue =>
+⋮----
+type ExtensionsHookResult = {
+  componentProps: UIComponentProps;
+};
+⋮----
+export const useExtensions = (): ExtensionsHookResult =>
 
 ================
 File: src/renderer/src/contexts/ModelProviderContext.tsx
@@ -30376,15 +31204,14 @@ const saveSettings = async (updated: SettingsData) =>
 export const useSettings = () =>
 
 ================
-File: src/renderer/src/contexts/TaskContext.tsx
+File: src/renderer/src/contexts/TasksContext.tsx
 ================
 import React, { createContext, memo, ReactNode, useContext, useEffect, useMemo } from 'react';
 import { usePrevious } from '@reactuses/core';
-import { DefaultTaskState, TaskData, TodoItem, ModelsData } from '@common/types';
+import { DefaultTaskState, TaskData, TodoItem, ModelsData, isLoadingMessage, Message } from '@common/types';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/vanilla/shallow';
 ⋮----
-import { isLoadingMessage, Message } from '@/types/message';
 import { useTaskStore } from '@/stores/taskStore';
 import { useTaskResponseHandlers } from '@/hooks/useTaskResponseHandlers';
 import { useTaskToolHandlers } from '@/hooks/useTaskToolHandlers';
@@ -30762,8 +31589,8 @@ import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/vanilla/shallow';
 import { v4 as uuidv4 } from 'uuid';
 import { TODO_TOOL_GROUP_NAME } from '@common/tools';
+import { Message, ReflectedMessage, ResponseMessage, ToolMessage, UserMessage } from '@common/types';
 ⋮----
-import { Message, ReflectedMessage, ResponseMessage, ToolMessage, UserMessage } from '@/types/message';
 import { useTaskStore } from '@/stores/taskStore';
 import { useApi } from '@/contexts/ApiContext';
 ⋮----
@@ -30783,8 +31610,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/vanilla/shallow';
 ⋮----
-import type { CommandOutputData } from '@common/types';
-import type { CommandOutputMessage, Message } from '@/types/message';
+import type { CommandOutputData, CommandOutputMessage, Message } from '@common/types';
 ⋮----
 import { useApi } from '@/contexts/ApiContext';
 import { useTaskStore } from '@/stores/taskStore';
@@ -30830,8 +31656,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/vanilla/shallow';
 ⋮----
-import type { LogData } from '@common/types';
-import type { LogMessage, LoadingMessage, Message } from '@/types/message';
+import type { LogData, LogMessage, LoadingMessage, Message } from '@common/types';
 ⋮----
 import { useApi } from '@/contexts/ApiContext';
 import { useTaskStore } from '@/stores/taskStore';
@@ -30847,8 +31672,7 @@ import { useCallback, useEffect } from 'react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/vanilla/shallow';
 ⋮----
-import type { UserMessageData, MessageRemovedData } from '@common/types';
-import type { UserMessage } from '@/types/message';
+import type { UserMessageData, MessageRemovedData, UserMessage } from '@common/types';
 ⋮----
 import { useApi } from '@/contexts/ApiContext';
 import { useTaskStore } from '@/stores/taskStore';
@@ -30863,8 +31687,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/vanilla/shallow';
 ⋮----
-import type { ResponseChunkData, ResponseCompletedData } from '@common/types';
-import type { Message, ReflectedMessage, ResponseMessage } from '@/types/message';
+import type { ResponseChunkData, ResponseCompletedData, Message, ReflectedMessage, ResponseMessage } from '@common/types';
 ⋮----
 import { useApi } from '@/contexts/ApiContext';
 import { useTaskStore } from '@/stores/taskStore';
@@ -30879,8 +31702,7 @@ import { TODO_TOOL_CLEAR_ITEMS, TODO_TOOL_GET_ITEMS, TODO_TOOL_GROUP_NAME, TODO_
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/vanilla/shallow';
 ⋮----
-import type { TodoItem, ToolData } from '@common/types';
-import type { ToolMessage } from '@/types/message';
+import type { TodoItem, ToolData, ToolMessage } from '@common/types';
 ⋮----
 import { useApi } from '@/contexts/ApiContext';
 import { useTaskStore } from '@/stores/taskStore';
@@ -31042,6 +31864,33 @@ export const AnthropicIcon = ({ width = 64, height = 64, className }: Props) => 
     <svg fill="currentColor" fillRule="evenodd" viewBox="0 0 24 24" width={width * 0.75} height={height * 0.75} xmlns="http://www.w3.org/2000/svg">
       <title>Anthropic</title>
       <path d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm4.132 9.959L8.453 7.687 6.205 13.48H10.7z"></path>
+    </svg>
+  </div>
+);
+
+================
+File: src/renderer/src/icons/AuggieIcon.tsx
+================
+type Props = {
+  width?: number;
+  height?: number;
+  className?: string;
+};
+⋮----
+export const AuggieIcon = ({ width = 64, height = 64, className }: Props) => (
+  <div
+    aria-label="Auggie SDK"
+    className={`flex items-center justify-center rounded-md ${className || ''}`}
+    style={{
+      backgroundColor: 'rgb(0,0,0)',
+      color: 'rgb(255, 255, 255)',
+      height: `${height}px`,
+      width: `${width}px`,
+    }}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" width={width * 0.7} height={height * 0.7} viewBox="0 0 512 512" fill="currentColor" className={className}>
+      <path d="M78.844 464.762c-8.453 0-15.573-1.451-21.359-4.339-5.77-2.888-10.144-7.289-13.076-13.095-2.932-5.807-4.436-12.912-4.436-21.255v-86.028c0-10.605-2.125-18.321-6.329-23.135-4.234-4.798-11.742-7.334-22.507-7.579-3.35 0-6.034-1.253-8.066-3.804C1.008 303.005 0 300.087 0 296.832c0-3.53 1.008-6.448 3.071-8.725 2.048-2.277 4.762-3.53 8.066-3.774 10.765-.26 18.273-2.781 22.507-7.579 4.235-4.798 6.329-12.392 6.329-22.752v-86.028c0-12.637 3.35-22.249 10.005-28.804 6.654-6.555 16.287-9.856 28.866-9.856H181.5c3.862 0 7.042 1.146 9.617 3.408 2.559 2.277 3.862 5.195 3.862 8.694 0 3.301-1.086 6.128-3.257 8.542-2.172 2.414-5.057 3.622-8.671 3.622H87.732c-5.413 0-9.508 1.39-12.316 4.171-2.823 2.781-4.234 7.075-4.234 12.912v86.425c0 7.579-1.551 14.455-4.623 20.644-3.07 6.204-7.181 11.063-12.316 14.623-5.134 3.53-11.137 5.302-18.07 5.302v-1.528c6.933 0 12.936 1.773 18.07 5.303 5.135 3.529 9.245 8.404 12.316 14.623 3.072 6.188 4.623 13.064 4.623 20.643v86.808c0 5.837 1.411 10.115 4.234 12.911 2.823 2.812 6.934 4.172 12.316 4.172h95.318c3.583 0 6.468 1.207 8.671 3.606 2.202 2.414 3.257 5.257 3.257 8.542s-1.272 6.097-3.862 8.511c-2.575 2.414-5.771 3.606-9.617 3.606H78.844v-.092ZM330.501 464.768c-3.862 0-7.042-1.207-9.617-3.606-2.575-2.414-3.863-5.256-3.863-8.511 0-3.255 1.086-6.128 3.258-8.542 2.171-2.414 5.057-3.606 8.671-3.606h95.317c5.414 0 9.509-1.36 12.316-4.171 2.823-2.781 4.235-7.075 4.235-12.912v-86.808c0-7.579 1.551-14.455 4.622-20.643 3.071-6.204 7.182-11.063 12.316-14.623 5.134-3.53 11.137-5.303 18.071-5.303v1.528c-6.934 0-12.937-1.772-18.071-5.302-5.134-3.53-9.245-8.404-12.316-14.623-3.071-6.189-4.622-13.065-4.622-20.644v-86.425c0-5.807-1.412-10.1-4.235-12.912-2.823-2.781-6.933-4.171-12.316-4.171H328.95c-3.583 0-6.469-1.208-8.671-3.622-2.172-2.384-3.258-5.241-3.258-8.542 0-3.529 1.272-6.417 3.863-8.694 2.559-2.277 5.755-3.407 9.617-3.407h102.654c12.58 0 22.181 3.3 28.867 9.855 6.685 6.556 10.005 16.167 10.005 28.804v86.028c0 10.36 2.125 17.969 6.328 22.752 4.235 4.798 11.742 7.334 22.507 7.579 3.351.244 6.034 1.497 8.066 3.774 2.063 2.277 3.071 5.195 3.071 8.725 0 3.301-1.008 6.189-3.071 8.695-2.032 2.521-4.762 3.804-8.066 3.804-10.765.245-18.257 2.781-22.507 7.579-4.234 4.798-6.328 12.5-6.328 23.135v86.028c0 8.358-1.474 15.418-4.437 21.255-2.962 5.837-7.305 10.176-13.076 13.095-5.785 2.888-12.905 4.339-21.359 4.339H330.501v.092Z" />
+      <path d="M356.885 329.738c18.691 0 33.846-14.929 33.846-33.342 0-18.412-15.155-33.341-33.846-33.341-18.691 0-33.846 14.929-33.846 33.341 0 18.413 15.155 33.342 33.846 33.342ZM167.305 329.738c18.691 0 33.846-14.929 33.846-33.342 0-18.412-15.155-33.341-33.846-33.341-18.691 0-33.846 14.929-33.846 33.341 0 18.413 15.155 33.342 33.846 33.342ZM244.477 32.846l-2.59 68.135c0 3.82-3.661 5.73-10.983 5.73-7.321 0-10.982-1.91-10.982-5.73-.651-16.976-1.178-30.148-1.613-39.484-.217-9.55-.434-16.35-.651-20.384-.217-4.034-.326-6.479-.326-7.32v-1.268c0-4.874 4.529-7.319 13.572-7.319 9.044 0 13.573 2.552 13.573 7.64Zm54.941 0-2.59 68.135c0 3.82-3.661 5.73-10.982 5.73-7.322 0-10.982-1.91-10.982-5.73-.652-16.976-1.179-30.148-1.613-39.484-.218-9.55-.435-16.35-.652-20.384-.217-4.034-.326-6.479-.326-7.32v-1.268c0-4.874 4.53-7.319 13.573-7.319s13.572 2.552 13.572 7.64Z" />
     </svg>
   </div>
 );
@@ -31669,6 +32518,7 @@ import { ProjectTabs } from '@/components/project/ProjectTabs';
 import { ProjectView } from '@/components/project/ProjectView';
 import { SettingsPage } from '@/components/settings/SettingsPage';
 import { useVersions } from '@/hooks/useVersions';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 import { HtmlInfoDialog } from '@/components/common/HtmlInfoDialog';
 import { ProjectSettingsProvider } from '@/contexts/ProjectSettingsContext';
 import { TelemetryInfoDialog } from '@/components/TelemetryInfoDialog';
@@ -31896,6 +32746,98 @@ e.stopPropagation();
 {/* Content */}
 
 ================
+File: src/renderer/src/stores/extensionUIStore.ts
+================
+import { useShallow } from 'zustand/react/shallow';
+import { createWithEqualityFn } from 'zustand/traditional';
+import { shallow } from 'zustand/vanilla/shallow';
+import { ExtensionUIComponent, ExtensionUIRefreshData } from '@common/types';
+import { ApplicationAPI } from '@common/api';
+⋮----
+const getComponentsCacheKey = (projectDir?: string, placement?: string): string => `$
+⋮----
+const getDataCacheKey = (extensionId: string, componentId: string, projectDir?: string, taskId?: string): string
+⋮----
+interface ExtensionUIState {
+  componentsMap: Map<string, ExtensionUIComponent[]>;
+  dataMap: Map<string, unknown>;
+  loadingComponents: Set<string>;
+  loadingData: Set<string>;
+  initialized: boolean;
+}
+⋮----
+interface ExtensionUIActions {
+  loadComponents: (api: ApplicationAPI, projectDir?: string, placement?: string) => Promise<ExtensionUIComponent[]>;
+  loadComponentData: (
+    api: ApplicationAPI,
+    extensionId: string,
+    componentId: string,
+    projectDir?: string,
+    taskId?: string,
+    forceRefresh?: boolean,
+  ) => Promise<unknown>;
+  loadAllComponentsData: (
+    api: ApplicationAPI,
+    components: ExtensionUIComponent[],
+    projectDir?: string,
+    taskId?: string,
+    forceRefresh?: boolean,
+  ) => Promise<void>;
+  handleRefreshEvent: (api: ApplicationAPI, data: ExtensionUIRefreshData, projectDir?: string, taskId?: string) => void;
+  invalidateComponents: (projectDir?: string, placement?: string) => void;
+  invalidateData: (extensionId?: string, componentId?: string, projectDir?: string, taskId?: string) => void;
+  getComponents: (projectDir?: string, placement?: string) => ExtensionUIComponent[];
+  getComponentData: (extensionId: string, componentId: string, projectDir?: string, taskId?: string) => unknown;
+  isLoadingComponents: (projectDir?: string, placement?: string) => boolean;
+}
+⋮----
+type ExtensionUIStore = ExtensionUIState & ExtensionUIActions;
+⋮----
+// Return cached if available
+⋮----
+// Prevent duplicate requests
+⋮----
+// Wait for existing request - poll until loaded
+⋮----
+const checkLoaded = () =>
+⋮----
+// Mark as loading
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+// Return cached if available and not forcing refresh
+⋮----
+// Prevent duplicate requests (only block if no cached data to show)
+⋮----
+// If we have cached data, return it immediately (stale-while-revalidate)
+⋮----
+// Otherwise wait for the pending request
+⋮----
+// Mark as loading
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+// Return cached data on error if available
+⋮----
+// Only handle component reloads - data refresh is handled by forceRefresh in loadComponentData
+// We don't invalidate data cache to avoid flicker (stale-while-revalidate pattern)
+⋮----
+// Find all matching component cache keys to invalidate
+⋮----
+// Clear all
+⋮----
+// Clear all
+⋮----
+// If partial key, find all matching
+⋮----
+// Selector hooks for optimized re-renders
+export const useExtensionComponents = (projectDir?: string, placement?: string): ExtensionUIComponent[] =>
+⋮----
+export const useExtensionComponentData = (extensionId: string, componentId: string, projectDir?: string, taskId?: string): unknown =>
+⋮----
+export const useIsLoadingComponents = (projectDir?: string, placement?: string): boolean =>
+
+================
 File: src/renderer/src/stores/projectStore.ts
 ================
 import { useShallow } from 'zustand/react/shallow';
@@ -31921,11 +32863,9 @@ export const useProjectProcessingState = (projectBaseDir: string)
 File: src/renderer/src/stores/taskStore.ts
 ================
 import { useShallow } from 'zustand/react/shallow';
-import { ContextFile, ModelsData, QueuedPromptData, QuestionData, TodoItem, TokensInfoData } from '@common/types';
+import { ContextFile, ModelsData, QueuedPromptData, QuestionData, TodoItem, TokensInfoData, Message } from '@common/types';
 import { createWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/vanilla/shallow';
-⋮----
-import { Message } from '@/types/message';
 ⋮----
 export interface TaskState {
   loading: boolean;
@@ -33780,110 +34720,13 @@ File: src/renderer/src/themes/themes.scss
 @use 'theme-botanical-garden-dark.scss';
 
 ================
-File: src/renderer/src/types/message.ts
-================
-import { Group, PromptContext, TaskData, TokensInfoData, UsageReportData } from '@common/types';
-⋮----
-export interface Message {
-  id: string;
-  type: 'user' | 'response' | 'loading' | 'reflected-message' | 'command-output' | 'log' | 'tokens-info' | 'tool' | 'group' | 'task-info' | 'assistant-group';
-  content: string;
-  promptContext?: PromptContext;
-  children?: Message[];
-}
-⋮----
-export interface UserMessage extends Message {
-  type: 'user';
-  isOptimistic?: boolean;
-}
-⋮----
-export interface ResponseMessage extends Message {
-  type: 'response';
-  usageReport?: UsageReportData;
-}
-⋮----
-export interface ReflectedMessage extends Message {
-  type: 'reflected-message';
-  responseMessageId: string;
-}
-⋮----
-export interface LogMessage extends Message {
-  type: 'log';
-  level: 'info' | 'warning' | 'error';
-  actionIds?: string[];
-}
-⋮----
-export interface LoadingMessage extends Message {
-  type: 'loading';
-  actionIds?: string[];
-}
-⋮----
-export interface CommandOutputMessage extends Message {
-  type: 'command-output';
-  command: string;
-}
-⋮----
-export interface TokensInfoMessage extends Message {
-  type: 'tokens-info';
-  info: TokensInfoData;
-}
-⋮----
-export interface ToolMessage extends Message {
-  type: 'tool';
-  serverName: string;
-  toolName: string;
-  args: Record<string, unknown>;
-  content: string; // Empty while executing, contains result when complete
-  usageReport?: UsageReportData;
-  finished?: boolean;
-}
-⋮----
-content: string; // Empty while executing, contains result when complete
-⋮----
-export const isUserMessage = (message: Message): message is UserMessage =>
-⋮----
-export const isResponseMessage = (message: Message): message is ResponseMessage =>
-⋮----
-export const isLogMessage = (message: Message): message is LogMessage =>
-⋮----
-export const isLoadingMessage = (message: Message): message is LoadingMessage =>
-⋮----
-export const isReflectedMessage = (message: Message): message is ReflectedMessage =>
-⋮----
-export const isCommandOutputMessage = (message: Message): message is CommandOutputMessage =>
-⋮----
-export const isTokensInfoMessage = (message: Message): message is TokensInfoMessage =>
-⋮----
-export const isToolMessage = (message: Message): message is ToolMessage =>
-⋮----
-export interface GroupMessage extends Message {
-  type: 'group';
-  group: Group;
-  children: Message[];
-}
-⋮----
-export const isGroupMessage = (message: Message): message is GroupMessage =>
-⋮----
-export interface TaskInfoMessage extends Message {
-  type: 'task-info';
-  task: TaskData;
-  messageCount: number;
-}
-⋮----
-export const isTaskInfoMessage = (message: Message): message is TaskInfoMessage =>
-⋮----
-export interface AssistantGroupMessage extends Message {
-  type: 'assistant-group';
-  responseMessage: ResponseMessage;
-  toolMessages: ToolMessage[];
-}
-⋮----
-export const isAssistantGroupMessage = (message: Message): message is AssistantGroupMessage =>
-
-================
 File: src/renderer/src/utils/agents.ts
 ================
 import { AgentProfile, TaskData } from '@common/types';
+import { useMemo } from 'react';
+⋮----
+import { useAgents } from '@/contexts/AgentsContext';
+import { useProjectSettings } from '@/contexts/ProjectSettingsContext';
 ⋮----
 /**
  * Resolves the active agent profile for a task following the correct hierarchy:
@@ -33891,13 +34734,23 @@ import { AgentProfile, TaskData } from '@common/types';
  * 2. Project-level agent profile ID (fallback)
  * 3. Creates temporary profile if task has provider/model
  */
-export const resolveAgentProfile = (task: TaskData | undefined, projectAgentProfileId: string | undefined, profiles: AgentProfile[]): AgentProfile | null =>
+export const resolveAgentProfile = (
+  task: TaskData | undefined | null,
+  projectAgentProfileId: string | undefined,
+  profiles: AgentProfile[],
+): AgentProfile | null =>
 ⋮----
 // Check task-level agent profile first
 ⋮----
 // If no task-level profile, fall back to project-level
 ⋮----
 // Create a profile with task-level overrides
+⋮----
+/**
+ * Hook to resolve the active agent profile for a task.
+ * Uses useProjectSettings and useAgents internally to get the necessary data.
+ */
+export const useActiveAgentProfile = (task: TaskData | undefined | null, projectDir?: string): AgentProfile | null =>
 
 ================
 File: src/renderer/src/utils/bmad-suggestions.ts
@@ -34375,9 +35228,13 @@ import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
 import { ROUTES } from '@/utils/routes';
 ⋮----
 import { TooltipProvider } from '@/components/ui/Tooltip';
-import { ApiProvider } from '@/contexts/ApiContext';
+import { ApiProvider, useApi } from '@/contexts/ApiContext';
 import { ModelProviderProvider } from '@/contexts/ModelProviderContext';
 import { AgentsProvider } from '@/contexts/AgentsContext';
+import { ModalOverlayUrlViewer } from '@/components/common/ModalOverlayUrlViewer';
+import { ExtensionsProvider } from '@/contexts/ExtensionsContext';
+⋮----
+const ModalOverlayUrlHandler = () =>
 ⋮----
 const ThemeAndFontManager = () =>
 ⋮----
@@ -34482,7 +35339,7 @@ File: src/renderer/index.html
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: file:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http: https: ws: wss:;"
+      content="default-src 'self'; script-src 'self' blob: https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: file:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http: https: ws: wss:; frame-src http: https:;"
     />
     <link rel="stylesheet" href="/src/fonts.css">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
@@ -34736,9 +35593,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "reactorpro",
+  "name": "aider-desk",
   "version": "0.57.0-dev",
-  "description": "ReactorPro - AI coding agent for software engineers",
+  "description": "Aider desktop application wrapper",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
@@ -34783,6 +35640,7 @@ File: package.json
     "validate": "npm-run-all --parallel lint typecheck test"
   },
   "dependencies": {
+    "@ai-sdk/alibaba": "^0.0.3",
     "@ai-sdk/amazon-bedrock": "^3.0.87",
     "@ai-sdk/anthropic": "^2.0.70",
     "@ai-sdk/azure": "^2.0.100",
@@ -34794,12 +35652,16 @@ File: package.json
     "@ai-sdk/openai": "^2.0.98",
     "@ai-sdk/provider": "^2.0.1",
     "@aiderdesk/extensions": "workspace:*",
+    "@augmentcode/auggie-sdk": "^0.1.15",
     "@aws-crypto/sha256-js": "^5.0.0",
     "@aws-sdk/client-bedrock": "^3.887.0",
     "@aws-sdk/credential-provider-node": "^3.772.0",
     "@aws-sdk/credential-providers": "^3.782.0",
     "@aws-sdk/types": "^3.540.0",
+    "@babel/standalone": "^7.26.9",
     "@codemirror/autocomplete": "^6.18.7",
+    "@codemirror/language": "^6.12.2",
+    "@codemirror/language-data": "^6.5.2",
     "@dmitryrechkin/json-schema-to-zod": "^1.0.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
@@ -34837,7 +35699,7 @@ File: package.json
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
-    "ai": "^5.0.150",
+    "ai": "^5.0.153",
     "ai-sdk-provider-claude-code": "2.3.0",
     "ai-sdk-provider-gemini-cli": "^1.5.1",
     "apache-arrow": "18.1.0",
@@ -34906,6 +35768,7 @@ File: package.json
     "slugify": "^1.6.6",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
+    "string-to-react-component": "^4.0.1",
     "tailwind-merge": "^3.3.1",
     "textarea-caret": "^3.1.0",
     "tmp": "^0.2.3",

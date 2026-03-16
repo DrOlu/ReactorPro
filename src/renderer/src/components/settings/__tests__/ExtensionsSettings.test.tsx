@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AvailableExtension, LoadedExtension, SettingsData } from '@common/types';
+import { AvailableExtension, InstalledExtension, SettingsData } from '@common/types';
 import { AIDER_DESK_EXTENSIONS_REPO_URL } from '@common/extensions';
 
 import { ExtensionsSettings } from '../ExtensionsSettings';
@@ -22,7 +22,7 @@ const createMockAvailableExtension = (overrides: Partial<AvailableExtension> = {
   ...overrides,
 });
 
-const createMockLoadedExtension = (overrides: Partial<LoadedExtension> = {}): LoadedExtension => ({
+const createMockLoadedExtension = (overrides: Partial<InstalledExtension> = {}): InstalledExtension => ({
   id: 'test-extension',
   metadata: {
     name: 'Test Extension',
@@ -254,7 +254,7 @@ describe('ExtensionsSettings', () => {
       // Wait for reload
       await waitFor(() => {
         expect(mockApi.getInstalledExtensions).toHaveBeenCalledTimes(2);
-        expect(mockApi.getAvailableExtensions).toHaveBeenCalledTimes(2);
+        expect(mockApi.getAvailableExtensions).toHaveBeenCalledTimes(1);
       });
 
       // Verify the custom repository accordion is still expanded after re-render
@@ -325,7 +325,7 @@ describe('ExtensionsSettings', () => {
 
       // Wait for uninstall to complete
       await waitFor(() => {
-        expect(mockApi.uninstallExtension).toHaveBeenCalledWith('Test Extension', undefined);
+        expect(mockApi.uninstallExtension).toHaveBeenCalledWith('/mock/path/to/extension.js', undefined);
       });
 
       // Wait for reload
@@ -400,7 +400,7 @@ describe('ExtensionsSettings', () => {
 
       // Wait for reload
       await waitFor(() => {
-        expect(mockApi.getAvailableExtensions).toHaveBeenCalledTimes(2);
+        expect(mockApi.getAvailableExtensions).toHaveBeenCalledTimes(1);
       });
 
       // Verify both repositories are still expanded
@@ -586,7 +586,7 @@ describe('ExtensionsSettings', () => {
       fireEvent.click(uninstallButtons[0]);
 
       await waitFor(() => {
-        expect(mockApi.uninstallExtension).toHaveBeenCalledWith(extension.metadata.name, undefined);
+        expect(mockApi.uninstallExtension).toHaveBeenCalledWith(extension.filePath, undefined);
       });
     });
 
@@ -967,10 +967,12 @@ describe('ExtensionsSettings', () => {
     it('should filter installed extensions by name', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Alpha Extension', version: '1.0.0' },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'Beta Extension', version: '1.0.0' },
       });
 
@@ -997,10 +999,12 @@ describe('ExtensionsSettings', () => {
     it('should filter installed extensions by description', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Extension One', version: '1.0.0', description: 'A tool for testing' },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'Extension Two', version: '1.0.0', description: 'A utility for deployment' },
       });
 
@@ -1027,10 +1031,12 @@ describe('ExtensionsSettings', () => {
     it('should filter installed extensions by author', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Extension One', version: '1.0.0', author: 'John Doe' },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'Extension Two', version: '1.0.0', author: 'Jane Smith' },
       });
 
@@ -1145,10 +1151,12 @@ describe('ExtensionsSettings', () => {
     it('should display capability chips when extensions have capabilities', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Tool Extension', version: '1.0.0', capabilities: ['tools', 'commands'] },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'UI Extension', version: '1.0.0', capabilities: ['ui-elements'] },
       });
 
@@ -1186,10 +1194,12 @@ describe('ExtensionsSettings', () => {
     it('should filter installed extensions by selected capability', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Tool Extension', version: '1.0.0', capabilities: ['tools'] },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'UI Extension', version: '1.0.0', capabilities: ['ui-elements'] },
       });
 
@@ -1252,14 +1262,17 @@ describe('ExtensionsSettings', () => {
     it('should allow selecting multiple capabilities (OR filter)', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Tool Extension', version: '1.0.0', capabilities: ['tools'] },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'UI Extension', version: '1.0.0', capabilities: ['ui-elements'] },
       });
       const extension3 = createMockLoadedExtension({
         id: 'ext-3',
+        filePath: '/mock/path/to/extension3.js',
         metadata: { name: 'Command Extension', version: '1.0.0', capabilities: ['commands'] },
       });
 
@@ -1298,10 +1311,12 @@ describe('ExtensionsSettings', () => {
     it('should deselect capability when clicked again', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Tool Extension', version: '1.0.0', capabilities: ['tools'] },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'UI Extension', version: '1.0.0', capabilities: ['ui-elements'] },
       });
 
@@ -1336,10 +1351,12 @@ describe('ExtensionsSettings', () => {
     it('should show extensions with at least one selected capability', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Multi Extension', version: '1.0.0', capabilities: ['tools', 'commands'] },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'UI Extension', version: '1.0.0', capabilities: ['ui-elements'] },
       });
 
@@ -1368,10 +1385,12 @@ describe('ExtensionsSettings', () => {
     it('should handle extensions without capabilities when capability filter is active', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Tool Extension', version: '1.0.0', capabilities: ['tools'] },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'No Cap Extension', version: '1.0.0', capabilities: undefined },
       });
 
@@ -1450,14 +1469,17 @@ describe('ExtensionsSettings', () => {
     it('should filter by both search query and selected capabilities', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Alpha Tools', version: '1.0.0', capabilities: ['tools'] },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'Beta Tools', version: '1.0.0', capabilities: ['tools'] },
       });
       const extension3 = createMockLoadedExtension({
         id: 'ext-3',
+        filePath: '/mock/path/to/extension3.js',
         metadata: { name: 'Alpha UI', version: '1.0.0', capabilities: ['ui-elements'] },
       });
 
@@ -1523,14 +1545,17 @@ describe('ExtensionsSettings', () => {
     it('should preserve capability filter when search query changes', async () => {
       const extension1 = createMockLoadedExtension({
         id: 'ext-1',
+        filePath: '/mock/path/to/extension1.js',
         metadata: { name: 'Alpha Tools', version: '1.0.0', capabilities: ['tools'] },
       });
       const extension2 = createMockLoadedExtension({
         id: 'ext-2',
+        filePath: '/mock/path/to/extension2.js',
         metadata: { name: 'Beta Tools', version: '1.0.0', capabilities: ['tools'] },
       });
       const extension3 = createMockLoadedExtension({
         id: 'ext-3',
+        filePath: '/mock/path/to/extension3.js',
         metadata: { name: 'Alpha UI', version: '1.0.0', capabilities: ['ui-elements'] },
       });
 

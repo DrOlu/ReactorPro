@@ -37,6 +37,7 @@ import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { AudioAnalyzer } from '@/components/PromptField/AudioAnalyzer';
 import { AutoApprove } from '@/components/PromptField/AutoApprove';
 import { useResponsive } from '@/hooks/useResponsive';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 
 const External = Annotation.define<boolean>();
 
@@ -619,7 +620,6 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
     }, [isActive, disabled]);
 
     useEffect(() => {
-      console.log('text', text);
       const commandMatch = COMMANDS.find((cmd) => {
         if (text === cmd) {
           return true;
@@ -1033,6 +1033,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
               className={clsx(
                 'w-full px-2 py-1 border-2 border-border-default-dark rounded-md focus:outline-none focus:border-border-accent text-sm bg-bg-secondary text-text-primary placeholder-text-muted-dark resize-none overflow-y-auto transition-colors duration-200 max-h-[40vh] scrollbar-thin scrollbar-track-bg-secondary-light scrollbar-thumb-bg-fourth hover:scrollbar-thumb-bg-fourth',
                 voiceAvailable ? (isRecording ? 'pr-24' : 'pr-20') : 'pr-16',
+                !text && '!h-[40px]',
               )}
               theme={theme}
               basicSetup={{
@@ -1050,6 +1051,14 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
                 EditorView.theme({
                   '&.cm-focused': {
                     outline: 'none',
+                  },
+                  '.cm-placeholder': {
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  },
+                  '.cm-scroller': {
+                    overflowX: 'hidden',
                   },
                 }),
                 promptBehavior.useVimBindings ? vim() : keymap.of([]),
@@ -1179,8 +1188,10 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
                 />
               </div>
             </div>
+            <ExtensionComponentWrapper placement="task-input-toolbar-left" />
 
             <div className="flex-grow" />
+            <ExtensionComponentWrapper placement="task-input-toolbar-right" />
             {isMobile && (
               <div className="absolute top-0 right-0 z-10 flex items-center gap-1">
                 {toggleTerminal && (
@@ -1196,7 +1207,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
                 {showTaskInfo && (
                   <Tooltip content={t('promptField.taskInfo')}>
                     <Button variant="text" onClick={showTaskInfo} className="py-1.5" size="xs" color="tertiary">
-                      <FaInfoCircle className="w-3.5 h-3.5" />
+                      <FaInfoCircle className="w-3.5 h-3.5 text-text-tertiary" />
                     </Button>
                   </Tooltip>
                 )}
@@ -1218,7 +1229,7 @@ export const PromptField = forwardRef<PromptFieldRef, Props>(
               <Tooltip content={t('promptField.taskInfo')}>
                 <div>
                   <Button variant="text" onClick={showTaskInfo} className="py-1.5" size="xs" color="tertiary">
-                    <FaInfoCircle className="w-3.5 h-3.5" />
+                    <FaInfoCircle className="w-3.5 h-3.5 text-text-tertiary" />
                   </Button>
                 </div>
               </Tooltip>

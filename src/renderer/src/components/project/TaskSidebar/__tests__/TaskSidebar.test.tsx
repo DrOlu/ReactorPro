@@ -6,7 +6,7 @@ import { TaskData } from '@common/types';
 import { TaskSidebar } from '../TaskSidebar';
 
 import { render } from '@/__tests__/render';
-import { useTask } from '@/contexts/TaskContext';
+import { useTask } from '@/contexts/TasksContext';
 import { useTaskState, EMPTY_TASK_STATE } from '@/stores/taskStore';
 import { createMockTaskContext } from '@/__tests__/mocks/contexts';
 
@@ -18,8 +18,24 @@ vi.mock('react-i18next', () => ({
 }));
 
 // Mock useTask context
-vi.mock('@/contexts/TaskContext', () => ({
+vi.mock('@/contexts/TasksContext', () => ({
   useTask: vi.fn(),
+}));
+
+// Mock useExtensions hook
+vi.mock('@/contexts/ExtensionsContext', () => ({
+  useExtensions: vi.fn(() => ({
+    componentProps: {
+      projectDir: '/test/project',
+      task: null,
+      agentProfile: null,
+    },
+  })),
+}));
+
+// Mock ExtensionComponentWrapper to avoid API context requirement
+vi.mock('@/components/extensions/ExtensionComponentWrapper', () => ({
+  ExtensionComponentWrapper: () => null,
 }));
 
 // Mock useTaskState from taskStore
@@ -102,11 +118,14 @@ describe('TaskSidebar', () => {
     render(<TaskSidebar loading={false} tasks={mockTasks} activeTaskId="task-1" onTaskSelect={vi.fn()} isCollapsed={false} onToggleCollapse={vi.fn()} />);
 
     fireEvent.click(screen.getByTestId('search-toggle-button'));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('taskSidebar.searchPlaceholder')).toBeInTheDocument();
+    });
+
     fireEvent.change(screen.getByPlaceholderText('taskSidebar.searchPlaceholder'), {
       target: { value: 'Task 1' },
     });
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
 
     await waitFor(() => {
       expect(screen.getByText('Task 1')).toBeInTheDocument();

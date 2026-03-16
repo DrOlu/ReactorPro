@@ -2,8 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { RiToolsFill } from 'react-icons/ri';
 import { CgSpinner } from 'react-icons/cg';
 import { FaExclamationTriangle } from 'react-icons/fa';
+import { ToolMessage } from '@common/types';
 
-import { ToolMessage } from '@/types/message';
 import { MessageBar } from '@/components/message/MessageBar';
 import { CopyMessageButton } from '@/components/message/CopyMessageButton';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -60,7 +60,7 @@ export const SubagentToolMessage = ({ message, onRemove, compact = false, onRemo
   }
 
   return (
-    <div className="border border-border-dark-light rounded-md mb-2 group p-3 bg-bg-secondary">
+    <div className="border border-border-dark-light rounded-md group p-3 bg-bg-secondary">
       {renderHeader()}
 
       <div className="text-xs text-text-tertiary">

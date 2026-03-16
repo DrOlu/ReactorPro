@@ -1,10 +1,10 @@
 import { clsx } from 'clsx';
 import { RiRobot2Line } from 'react-icons/ri';
+import { ResponseMessage } from '@common/types';
 
 import { MessageBar } from './MessageBar';
 
 import { useParsedContent } from '@/hooks/useParsedContent';
-import { ResponseMessage } from '@/types/message';
 
 type Props = {
   baseDir: string;
@@ -32,7 +32,7 @@ export const ResponseMessageBlock = ({ baseDir, message, allFiles, renderMarkdow
         baseClasses,
         'relative flex flex-col group',
         !renderMarkdown && 'break-words whitespace-pre-wrap',
-        !compact && 'p-3 mb-2 border border-border-dark-light',
+        !compact && 'p-3 border border-border-dark-light',
       )}
     >
       <div className="flex items-start gap-2">

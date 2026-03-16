@@ -107,7 +107,7 @@ const LoadInputHistorySchema = z.object({
 const RedoLastUserPromptSchema = z.object({
   projectDir: z.string().min(1, 'Project directory is required'),
   taskId: z.string().min(1, 'Task id is required'),
-  mode: z.enum(['agent', 'code', 'ask', 'architect', 'context']),
+  mode: z.string().min(1, 'Mode is required'),
   updatedPrompt: z.string().optional(),
 });
 
@@ -227,7 +227,7 @@ const RemoveMessagesUpToSchema = z.object({
 const CompactConversationSchema = z.object({
   projectDir: z.string().min(1, 'Project directory is required'),
   taskId: z.string().min(1, 'Task id is required'),
-  mode: z.enum(['agent', 'code', 'ask', 'architect', 'context']),
+  mode: z.string().min(1, 'Mode is required'),
   customInstructions: z.string().optional(),
 });
 
@@ -275,6 +275,11 @@ const RevertLastMergeSchema = z.object({
 const RestoreFileSchema = z.object({
   projectDir: z.string().min(1, 'Project directory is required'),
   taskId: z.string().min(1, 'Task id is required'),
+  filePath: z.string().min(1, 'File path is required'),
+});
+
+const ReadFileSchema = z.object({
+  projectDir: z.string().min(1, 'Project directory is required'),
   filePath: z.string().min(1, 'File path is required'),
 });
 
@@ -819,6 +824,21 @@ export class ProjectApi extends BaseApi {
         const { projectDir, taskId, filePath } = parsed;
         await this.eventsHandler.restoreFile(projectDir, taskId, filePath);
         res.status(200).json({ message: 'File restored' });
+      }),
+    );
+
+    // Read file
+    router.post(
+      '/project/read-file',
+      this.handleRequest(async (req, res) => {
+        const parsed = this.validateRequest(ReadFileSchema, req.body, res);
+        if (!parsed) {
+          return;
+        }
+
+        const { projectDir, filePath } = parsed;
+        const content = await this.eventsHandler.readFile(projectDir, filePath);
+        res.status(200).json({ content });
       }),
     );
 

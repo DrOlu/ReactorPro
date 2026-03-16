@@ -255,6 +255,8 @@
     },
     "claudeAgentSdkAuthRequired": "此提供商需要安装和认证 Claude Code CLI。请从 https://claude.com/product/claude-code 安装并运行 `claude login` 进行认证。",
     "claudeAgentSdkAgentOnly": "此提供商仅在代理模式下工作，不支持代码/询问/架构/上下文模式。",
+    "auggieAuthRequired": "此提供商需要安装和认证 Auggie CLI。请从 https://www.npmjs.com/package/@augmentcode/auggie-sdk 安装并运行 `auggie login` 进行认证。",
+    "auggieAgentOnly": "此提供商仅在代理模式下工作，不支持代码/询问/架构/上下文模式。",
     "geminiCliAuthRequired": "此提供商需要安装和认证 Gemini CLI。请从 https://geminicli.com 安装并运行 `gemini` 进行认证。",
     "geminiCliAgentOnly": "此提供商仅在代理模式下工作，不支持代码/询问/架构/上下文模式。",
     "projectId": "项目 ID",
@@ -296,7 +298,7 @@
     "apiKey": "API 密钥",
     "mcp": {
       "title": "MCP 服务器",
-      "infoTooltip": "添加 Z.AI Coding Plan MCP 服务器以为智能体启用更多功能。",
+      "infoTooltip": "添加 Z.ai Coding Plan MCP 服务器以为智能体启用更多功能。",
       "vision": {
         "name": "视觉",
         "description": "使用 GLM-4.6V 模型进行图像和视频分析"
@@ -325,6 +327,11 @@
     "baseUrl": "基础 URL",
     "baseUrlPlaceholder": "例如 https://api.anthropic.com"
   },
+  "auggie": {
+    "apiKey": "API 令牌",
+    "apiUrl": "API URL",
+    "apiUrlPlaceholder": "https://api.augmentcode.com"
+  },
   "minimax": {
     "apiKey": "API 密钥"
   },
@@ -348,7 +355,11 @@
     "apiKey": "API 密钥"
   },
   "alibabaPlan": {
-    "apiKey": "API 密钥"
+    "apiKey": "API 密钥",
+    "thinkingEnabled": "启用思考",
+    "thinkingEnabledTooltip": "启用思考模式以增强推理能力",
+    "thinkingBudget": "思考预算",
+    "thinkingBudgetTooltip": "思考的最大令牌数 (0-81920)"
   },
   "deepseek": {
     "apiKey": "API 密钥"
@@ -387,6 +398,7 @@
   "providers": {
     "anthropic": "Anthropic",
     "anthropic-compatible": "Anthropic 兼容",
+    "auggie": "Augie SDK",
     "alibaba-plan": "阿里云编码计划",
     "bedrock": "Bedrock",
     "cerebras": "Cerebras",
@@ -408,7 +420,7 @@
     "requesty": "Requesty",
     "synthetic": "Synthetic",
     "vertex-ai": "Vertex AI",
-    "zai-plan": "Z.AI Coding Plan",
+    "zai-plan": "Z.ai Coding Plan",
     "azure": "Azure"
   },
   "select": {
@@ -910,6 +922,10 @@
   "fileChip": {
     "removeFileTooltip": "移除文件"
   },
+  "filePreview": {
+    "title": "文件查看器",
+    "errorLoading": "加载文件失败"
+  },
   "contextFiles": {
     "title": "上下文文件",
     "updatedFiles": "已更新文件",
@@ -1109,6 +1125,10 @@
       "parentTaskId": "父任务ID",
       "execute": "执行",
       "executeInBackground": "在后台执行",
+      "mode": "模式",
+      "autoApprove": "自动批准",
+      "worktree": "工作树",
+      "executeAndWait": "执行并等待",
       "yes": "是",
       "no": "否",
       "taskId": "任务ID",

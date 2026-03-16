@@ -6,9 +6,11 @@ import {
   CloudflareTunnelStatus,
   CommandOutputData,
   ContextFilesUpdatedData,
+  ContextMenuParams,
   CommandsData,
   EditFormat,
   EnvironmentVariable,
+  ExtensionUIRefreshData,
   FileEdit,
   InputHistoryData,
   LogData,
@@ -20,6 +22,8 @@ import {
   Model,
   ModelsData,
   NotificationData,
+  OpenDialogOptions,
+  OpenDialogResult,
   OS,
   ProjectData,
   ProjectSettings,
@@ -54,8 +58,10 @@ import {
   QueuedPromptsUpdatedData,
   WorkflowExecutionOptions,
   WorkflowExecutionResult,
-  LoadedExtension,
+  InstalledExtension,
   AvailableExtension,
+  ExtensionUIComponent,
+  ModalOverlayUrlData,
 } from '@common/types';
 import { ApplicationAPI } from '@common/api';
 import axios, { type AxiosInstance } from 'axios';
@@ -100,6 +106,8 @@ type EventDataMap = {
   'terminal-data': TerminalData;
   'terminal-exit': TerminalExitData;
   'bmad-status-changed': BmadStatus;
+  'extension-ui-refresh': ExtensionUIRefreshData;
+  'modal-overlay-url': ModalOverlayUrlData;
 };
 
 type EventCallback<T> = (data: T) => void;
@@ -170,6 +178,8 @@ export class BrowserApi implements ApplicationAPI {
       'terminal-exit': new Map(),
       'bmad-status-changed': new Map(),
       'queued-prompts-updated': new Map(),
+      'extension-ui-refresh': new Map(),
+      'modal-overlay-url': new Map(),
     };
     this.apiClient = axios.create({
       baseURL: `${baseUrl}/api`,
@@ -348,7 +358,7 @@ export class BrowserApi implements ApplicationAPI {
   isOpenDialogSupported(): boolean {
     return false;
   }
-  showOpenDialog(options: Electron.OpenDialogSyncOptions): Promise<Electron.OpenDialogReturnValue> {
+  showOpenDialog(options: OpenDialogOptions): Promise<OpenDialogResult> {
     void options;
     throw new UnsupportedError('showOpenDialog not supported yet.');
   }
@@ -812,7 +822,7 @@ export class BrowserApi implements ApplicationAPI {
   addTerminalExitListener(baseDir: string, callback: (data: TerminalExitData) => void): () => void {
     return this.addListener('terminal-exit', callback, baseDir);
   }
-  addContextMenuListener(callback: (params: Electron.ContextMenuParams) => void): () => void {
+  addContextMenuListener(callback: (params: ContextMenuParams) => void): () => void {
     void callback;
     return () => {};
   }
@@ -941,6 +951,14 @@ export class BrowserApi implements ApplicationAPI {
       taskId,
       filePath,
     });
+  }
+
+  async readFile(baseDir: string, filePath: string): Promise<string> {
+    const response = await this.post<{ projectDir: string; filePath: string }, { content: string }>('/project/read-file', {
+      projectDir: baseDir,
+      filePath,
+    });
+    return response.content;
   }
 
   listBranches(baseDir: string): Promise<Array<{ name: string; isCurrent: boolean; hasWorktree: boolean }>> {
@@ -1113,7 +1131,7 @@ export class BrowserApi implements ApplicationAPI {
     return this.addListener('bmad-status-changed', callback, baseDir);
   }
 
-  getInstalledExtensions(projectDir?: string): Promise<LoadedExtension[]> {
+  getInstalledExtensions(projectDir?: string): Promise<InstalledExtension[]> {
     return this.get('/extensions', { projectDir });
   }
 
@@ -1137,5 +1155,44 @@ export class BrowserApi implements ApplicationAPI {
       extensionId,
       projectDir,
     });
+  }
+
+  getExtensionUIComponents(projectDir?: string, placement?: string): Promise<ExtensionUIComponent[]> {
+    return this.get('/extensions/ui-components', {
+      projectDir,
+      placement,
+    });
+  }
+
+  getUIExtensionData(extensionId: string, componentId: string, projectDir?: string, taskId?: string): Promise<unknown> {
+    return this.get('/extensions/ui-data', {
+      extensionId,
+      componentId,
+      projectDir,
+      taskId,
+    });
+  }
+
+  executeUIExtensionAction(extensionId: string, componentId: string, action: string, args: unknown[], projectDir?: string, taskId?: string): Promise<unknown> {
+    return this.post('/extensions/ui-action', {
+      extensionId,
+      componentId,
+      action,
+      args,
+      projectDir,
+      taskId,
+    });
+  }
+
+  onExtensionUIRefresh(callback: (data: ExtensionUIRefreshData) => void): () => void {
+    return this.addListener('extension-ui-refresh', callback);
+  }
+
+  onModalOverlayUrl(callback: (data: ModalOverlayUrlData) => void): () => void {
+    return this.addListener('modal-overlay-url', callback);
+  }
+
+  isWebViewSupported(): boolean {
+    return false;
   }
 }

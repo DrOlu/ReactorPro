@@ -1,8 +1,31 @@
 # ReactorPro Changelog
 
-## [UNRELEASED]
+## [0.57.0]
 
 - moved Files sidebar collapse/expand button to top-right of Context Files section header
+- added extension UI components system
+- updated underlying library used for Alibaba Coding Plan for better stability
+- added thinking enabled and budget settings for Alibaba Coding Plan provider
+- correctly allowing custom mode names in the relevant Rest API endpoints
+- suppress mermaid rendering errors
+- allow reverting untracked (new) files in updated files sidebar
+- improved process killing reliability in bash tool
+- added openUrl functionality to Extension context to open URLs in a new window, external or in a modal overlay
+- improved extensions management for the project level
+- added programatic tool calls extension
+- properly fetching uncommited files to updated files when using worktree mode
+- added support for Auggie SDK provider
+- added missing horizontal scrollbar to markdown tables when they overflow the container
+- updated file edit tool to correctly replace text containing $ characters
+- improved connection handling for Aider connector
+- avoiding duplicated skill activations on compact
+- added mode, auto-approve, worktree mode and 'as subtask' input params to create task tool
+- fixed auto-compact threshold slider to correctly track mouse when dragging fast outside the component
+- made auto-compact threshold slider snap to steps of 5 for easier selection
+- added file preview modal for viewing project files in Context Files sidebar
+- added ability to expand/collapse folders by clicking on folder name in Project Files
+- correctly processing queued prompts in case the prompt has been added during the task state determination
+- properly handling the queued prompts while compacting
 
 ## [0.56.0]
 

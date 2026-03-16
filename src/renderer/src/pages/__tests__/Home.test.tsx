@@ -72,6 +72,36 @@ vi.mock('@/components/common/StyledTooltip', () => ({
   StyledTooltip: () => <div data-testid="styled-tooltip" />,
 }));
 
+// Mock useExtensions hook
+vi.mock('@/contexts/ExtensionsContext', () => ({
+  useExtensions: vi.fn(() => ({
+    componentProps: {
+      projectDir: '/test/project',
+      task: null,
+      agentProfile: null,
+      models: [],
+      providers: [],
+    },
+  })),
+}));
+
+// Mock useModelProviders hook
+vi.mock('@/contexts/ModelProviderContext', () => ({
+  useModelProviders: vi.fn(() => ({
+    models: [],
+    providers: [],
+    modelsLoading: false,
+    providersLoading: false,
+    errors: {},
+    refresh: vi.fn(),
+    saveProvider: vi.fn(),
+    deleteProvider: vi.fn(),
+    upsertModel: vi.fn(),
+    deleteModel: vi.fn(),
+    updateModels: vi.fn(),
+  })),
+}));
+
 describe('Home', () => {
   let mockApi: ReturnType<typeof createMockApi>;
 

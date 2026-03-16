@@ -1,20 +1,19 @@
-import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, memo, ReactNode, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { toPng } from 'html-to-image';
 import { MdKeyboardDoubleArrowDown } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
-import { DefaultTaskState, MessageViewMode, TaskData } from '@common/types';
-import { TaskStateActions } from 'src/renderer/src/components/message/TaskStateActions';
+import { DefaultTaskState, isAssistantGroupMessage, isGroupMessage, isUserMessage, Message, MessageViewMode, TaskData } from '@common/types';
 
 import { MessageBlock } from './MessageBlock';
 import { GroupMessageBlock } from './GroupMessageBlock';
 import { AssistantMessageBlock } from './AssistantMessageBlock';
 
-import { isAssistantGroupMessage, isGroupMessage, isLoadingMessage, isUserMessage, Message } from '@/types/message';
 import { IconButton } from '@/components/common/IconButton';
 import { groupAssistantMessages, groupMessagesByPromptContext } from '@/components/message/utils';
 import { useScrollingPaused } from '@/hooks/useScrollingPaused';
 import { useUserMessageNavigation } from '@/hooks/useUserMessageNavigation';
 import { useSettings } from '@/contexts/SettingsContext';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 
 export type MessagesRef = {
   exportToImage: () => void;
@@ -30,14 +29,8 @@ type Props = {
   allFiles?: string[];
   renderMarkdown: boolean;
   removeMessage: (message: Message) => void;
-  resumeTask: () => void;
   redoLastUserPrompt: () => void;
   editLastUserMessage: (content: string) => void;
-  onMarkAsDone: () => void;
-  onRunPrompt?: (prompt: string) => void;
-  onArchiveTask?: () => void;
-  onUnarchiveTask?: () => void;
-  onDeleteTask?: () => void;
   onInterrupt?: () => void;
   onForkFromMessage?: (message: Message) => void;
   onRemoveUpToMessage?: (message: Message) => void;
@@ -53,14 +46,8 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
       allFiles = [],
       renderMarkdown,
       removeMessage,
-      resumeTask,
       redoLastUserPrompt,
       editLastUserMessage,
-      onMarkAsDone,
-      onRunPrompt,
-      onArchiveTask,
-      onUnarchiveTask,
-      onDeleteTask,
       onInterrupt,
       onForkFromMessage,
       onRemoveUpToMessage,
@@ -79,7 +66,6 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
       return isCompactMode ? groupAssistantMessages(grouped) : grouped;
     }, [messages, isCompactMode]);
     const lastUserMessageIndex = processedMessages.findLastIndex(isUserMessage);
-    const isLastLoadingMessage = processedMessages.length > 0 && isLoadingMessage(processedMessages[processedMessages.length - 1]);
     const inProgress = task.state === DefaultTaskState.InProgress;
 
     const { scrollingPaused, setScrollingPaused, scrollToBottom, eventHandlers } = useScrollingPaused({
@@ -139,14 +125,14 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
       <div className="relative flex flex-col h-full">
         <div
           ref={messagesContainerRef}
-          className="flex flex-col flex-grow overflow-y-auto max-h-full p-4 scrollbar-thin scrollbar-track-bg-primary-light scrollbar-thumb-bg-tertiary hover:scrollbar-thumb-bg-fourth"
+          className="flex flex-col flex-grow overflow-y-auto max-h-full p-4 pb-2 scrollbar-thin scrollbar-track-bg-primary-light scrollbar-thumb-bg-tertiary hover:scrollbar-thumb-bg-fourth space-y-2"
           {...eventHandlers}
         >
           {processedMessages.map((message, index) => {
+            let messageBlock: ReactNode;
             if (isGroupMessage(message)) {
-              return (
+              messageBlock = (
                 <GroupMessageBlock
-                  key={message.id}
                   baseDir={baseDir}
                   taskId={taskId}
                   message={message}
@@ -158,11 +144,9 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
                   onInterrupt={onInterrupt}
                 />
               );
-            }
-            if (isAssistantGroupMessage(message)) {
-              return (
+            } else if (isAssistantGroupMessage(message)) {
+              messageBlock = (
                 <AssistantMessageBlock
-                  key={message.id}
                   baseDir={baseDir}
                   taskId={taskId}
                   message={message}
@@ -173,22 +157,34 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
                   onRemoveUpTo={onRemoveUpToMessage ? () => onRemoveUpToMessage(message) : undefined}
                 />
               );
+            } else {
+              messageBlock = (
+                <MessageBlock
+                  baseDir={baseDir}
+                  taskId={taskId}
+                  message={message}
+                  allFiles={allFiles}
+                  renderMarkdown={renderMarkdown}
+                  remove={inProgress ? undefined : () => removeMessage(message)}
+                  redo={index === lastUserMessageIndex && !inProgress ? redoLastUserPrompt : undefined}
+                  edit={index === lastUserMessageIndex ? editLastUserMessage : undefined}
+                  onInterrupt={onInterrupt}
+                  onFork={onForkFromMessage ? () => onForkFromMessage(message) : undefined}
+                  onRemoveUpTo={onRemoveUpToMessage ? () => onRemoveUpToMessage(message) : undefined}
+                />
+              );
             }
+
+            const additionalProps = {
+              // only pass message to extension if it is finished (optimization while streaming message)
+              message: 'finished' in message && !message.finished ? null : message,
+            };
             return (
-              <MessageBlock
-                key={message.id}
-                baseDir={baseDir}
-                taskId={taskId}
-                message={message}
-                allFiles={allFiles}
-                renderMarkdown={renderMarkdown}
-                remove={inProgress ? undefined : () => removeMessage(message)}
-                redo={index === lastUserMessageIndex && !inProgress ? redoLastUserPrompt : undefined}
-                edit={index === lastUserMessageIndex ? editLastUserMessage : undefined}
-                onInterrupt={onInterrupt}
-                onFork={onForkFromMessage ? () => onForkFromMessage(message) : undefined}
-                onRemoveUpTo={onRemoveUpToMessage ? () => onRemoveUpToMessage(message) : undefined}
-              />
+              <div key={message.id}>
+                <ExtensionComponentWrapper placement="task-message-above" additionalProps={additionalProps} />
+                {messageBlock}
+                <ExtensionComponentWrapper placement="task-message-below" additionalProps={additionalProps} />
+              </div>
             );
           })}
           <div ref={messagesEndRef} />
@@ -208,22 +204,6 @@ const MessagesComponent = forwardRef<MessagesRef, Props>(
             {(hasPreviousUserMessage || hasNextUserMessage) && renderGoToNext()}
           </div>
         </div>
-        {settings?.taskSettings?.showTaskStateActions && !inProgress && !isLastLoadingMessage && (
-          <TaskStateActions
-            state={task.state}
-            mode={task.currentMode}
-            isArchived={task.archived}
-            task={task}
-            projectDir={baseDir}
-            taskId={taskId}
-            onResumeTask={resumeTask}
-            onMarkAsDone={onMarkAsDone}
-            onRunPrompt={onRunPrompt}
-            onArchiveTask={onArchiveTask}
-            onUnarchiveTask={onUnarchiveTask}
-            onDeleteTask={onDeleteTask}
-          />
-        )}
       </div>
     );
   },

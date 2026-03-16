@@ -15,6 +15,7 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import { MenuOption, useContextMenu } from '@/contexts/ContextMenuContext';
 import { useProjectProcessingState } from '@/stores/projectStore';
 import { useResponsive } from '@/hooks/useResponsive';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 
 type Props = {
   openProjects: ProjectData[];
@@ -151,6 +152,7 @@ export const ProjectTabs = ({
         >
           <MdAdd className="h-5 w-5" />
         </button>
+        <ExtensionComponentWrapper placement="header-left" />
       </div>
     );
   }
@@ -205,6 +207,7 @@ export const ProjectTabs = ({
         >
           <MdAdd className="h-5 w-5" />
         </button>
+        <ExtensionComponentWrapper placement="header-left" />
       </TabList>
     </TabGroup>
   );

@@ -1,4 +1,19 @@
-import { AIDER_MODES, DefaultTaskState, Mode, Model, ModelsData, TaskData, TodoItem } from '@common/types';
+import {
+  AIDER_MODES,
+  DefaultTaskState,
+  isLoadingMessage,
+  isLogMessage,
+  isTaskInfoMessage,
+  isUserMessage,
+  Message,
+  Mode,
+  Model,
+  ModelsData,
+  TaskData,
+  TaskInfoMessage,
+  TodoItem,
+  UserMessage,
+} from '@common/types';
 import { forwardRef, startTransition, useCallback, useDeferredValue, useEffect, useImperativeHandle, useMemo, useOptimistic, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ResizableBox, ResizeCallbackData } from 'react-resizable';
@@ -12,14 +27,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { useSidebarWidth } from './useSidebarWidth';
 
 import { Tooltip } from '@/components/ui/Tooltip';
-import { isLogMessage, isTaskInfoMessage, isUserMessage, Message, TaskInfoMessage, UserMessage } from '@/types/message';
 import { Messages, MessagesRef } from '@/components/message/Messages';
 import { VirtualizedMessages, VirtualizedMessagesRef } from '@/components/message/VirtualizedMessages';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useProjectSettings } from '@/contexts/ProjectSettingsContext';
+import { useApi } from '@/contexts/ApiContext';
 import { AddFileDialog } from '@/components/project/AddFileDialog';
 import { TaskBar, TaskBarRef } from '@/components/project/TaskBar';
 import { PromptField, PromptFieldRef } from '@/components/PromptField';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 import { Button } from '@/components/common/Button';
 import { TodoWindow } from '@/components/project/TodoWindow';
 import { TerminalView, TerminalViewRef } from '@/components/terminal/TerminalView';
@@ -27,17 +43,16 @@ import { MobileSidebar } from '@/components/project/MobileSidebar';
 import { FilesContextInfoContent } from '@/components/project/FilesContextInfoContent';
 import { WelcomeMessage } from '@/components/project/WelcomeMessage';
 import 'react-resizable/css/styles.css';
-import { useApi } from '@/contexts/ApiContext';
-import { resolveAgentProfile } from '@/utils/agents';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useActiveAgentProfile } from '@/utils/agents';
 import { useModelProviders } from '@/contexts/ModelProviderContext';
-import { useTask } from '@/contexts/TaskContext';
-import { useAgents } from '@/contexts/AgentsContext';
+import { useTask } from '@/contexts/TasksContext';
 import { useConfiguredHotkeys } from '@/hooks/useConfiguredHotkeys';
 import { LoadingOverlay } from '@/components/common/LoadingOverlay';
 import { useTaskMessages, useTaskState } from '@/stores/taskStore';
 import { showErrorNotification } from '@/utils/notifications';
 import { useSearchText } from '@/hooks/useSearchText';
+import { TaskStateActions } from '@/components/message/TaskStateActions';
 
 type AddFileDialogOptions = {
   readOnly: boolean;
@@ -91,7 +106,6 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
     const api = useApi();
     const { models } = useModelProviders();
     const { loadTask, clearSession, resetTask, setMessages, setTodoItems, setAiderModelsData, answerQuestion, interruptResponse, refreshAllFiles } = useTask();
-    const { getProfiles } = useAgents();
 
     const taskState = useTaskState(task.id);
     const { loading, loaded, allFiles, contextFiles, autocompletionWords, tokensInfo, question, todoItems, aiderModelsData, queuedPrompts } = taskState;
@@ -113,14 +127,13 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
     const { renderSearchInput } = useSearchText(searchContainer, 'absolute top-1 left-1', isActive);
 
     const inProgress = task.state === DefaultTaskState.InProgress;
+    const isLastLoadingMessage = displayedMessages.length > 0 && isLoadingMessage(displayedMessages[displayedMessages.length - 1]);
 
     const promptFieldRef = useRef<PromptFieldRef>(null);
     const projectTopBarRef = useRef<TaskBarRef>(null);
     const messagesRef = useRef<MessagesRef | VirtualizedMessagesRef>(null);
     const terminalViewRef = useRef<TerminalViewRef | null>(null);
-    const activeAgentProfile = useMemo(() => {
-      return resolveAgentProfile(task, projectSettings?.agentProfileId, getProfiles(projectDir));
-    }, [task, projectSettings?.agentProfileId, getProfiles, projectDir]);
+    const activeAgentProfile = useActiveAgentProfile(task, projectDir);
 
     useEffect(() => {
       if (isActive && !taskState.loaded && !taskState.loading) {
@@ -392,18 +405,6 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
       [api, currentMode, projectDir, task.id],
     );
 
-    const handleArchiveTask = useCallback(() => {
-      onArchiveTask?.();
-    }, [onArchiveTask]);
-
-    const handleUnarchiveTask = useCallback(() => {
-      onUnarchiveTask?.();
-    }, [onUnarchiveTask]);
-
-    const handleDeleteTask = useCallback(() => {
-      onDeleteTask?.();
-    }, [onDeleteTask]);
-
     const handleForkFromMessage = useCallback(
       async (message: Message) => {
         try {
@@ -663,6 +664,7 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
                 onClearAllTodos={handleClearAllTodos}
               />
             )}
+            <ExtensionComponentWrapper placement="task-messages-top" />
             <div className="overflow-hidden flex-grow relative">
               {displayedMessages.length === 0 && !loading && !messagesPending && !inProgress ? (
                 <WelcomeMessage onModeChange={handleModeChange} mode={currentMode} projectDir={projectDir} taskId={task.id} />
@@ -678,15 +680,11 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
                       allFiles={allFiles}
                       renderMarkdown={settings.renderMarkdown}
                       removeMessage={handleRemoveMessage}
-                      resumeTask={handleResumeTask}
                       redoLastUserPrompt={handleRedoLastUserPrompt}
                       editLastUserMessage={handleEditLastUserMessage}
-                      onMarkAsDone={handleMarkAsDone}
-                      onRunPrompt={handleRunPrompt}
-                      onArchiveTask={handleArchiveTask}
-                      onUnarchiveTask={handleUnarchiveTask}
-                      onDeleteTask={handleDeleteTask}
                       onInterrupt={handleInterruptResponse}
+                      onForkFromMessage={handleForkFromMessage}
+                      onRemoveUpToMessage={handleRemoveUpToMessage}
                     />
                   ) : (
                     <Messages
@@ -698,14 +696,8 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
                       allFiles={allFiles}
                       renderMarkdown={settings.renderMarkdown}
                       removeMessage={handleRemoveMessage}
-                      resumeTask={handleResumeTask}
                       redoLastUserPrompt={handleRedoLastUserPrompt}
                       editLastUserMessage={handleEditLastUserMessage}
-                      onMarkAsDone={handleMarkAsDone}
-                      onRunPrompt={handleRunPrompt}
-                      onArchiveTask={handleArchiveTask}
-                      onUnarchiveTask={handleUnarchiveTask}
-                      onDeleteTask={handleDeleteTask}
                       onInterrupt={handleInterruptResponse}
                       onForkFromMessage={handleForkFromMessage}
                       onRemoveUpToMessage={handleRemoveUpToMessage}
@@ -714,6 +706,23 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
                 </>
               )}
             </div>
+            <ExtensionComponentWrapper placement="task-messages-bottom" />
+            {settings?.taskSettings?.showTaskStateActions && !inProgress && !isLastLoadingMessage && (
+              <TaskStateActions
+                state={task.state}
+                mode={task.currentMode}
+                isArchived={task.archived}
+                task={task}
+                projectDir={projectDir}
+                taskId={task.id}
+                onResumeTask={handleResumeTask}
+                onMarkAsDone={handleMarkAsDone}
+                onRunPrompt={handleRunPrompt}
+                onArchiveTask={onArchiveTask}
+                onUnarchiveTask={onUnarchiveTask}
+                onDeleteTask={onDeleteTask}
+              />
+            )}
             <ResizableBox
               className="flex flex-col flex-shrink-0"
               height={terminalVisible ? (isMobile ? 150 : 200) : 0}
@@ -752,6 +761,7 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
                   </Button>
                 </div>
               )}
+              <ExtensionComponentWrapper placement="task-input-above" />
               <PromptField
                 key={task.id}
                 ref={promptFieldRef}
@@ -793,6 +803,10 @@ export const TaskView = forwardRef<TaskViewRef, Props>(
                 showTaskInfo={handleShowTaskInfo}
                 handoffConversation={handleHandoff}
               />
+              <div className="flex gap-2 justify-between flex-wrap">
+                <ExtensionComponentWrapper placement="task-status-bar-left" />
+                <ExtensionComponentWrapper placement="task-status-bar-right" />
+              </div>
             </div>
           </div>
         </div>

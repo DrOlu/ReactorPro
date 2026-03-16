@@ -5,8 +5,8 @@ import {
   CommandsData,
   ConnectorMessage,
   ContextFile,
-  ContextMessage,
   ContextMemoryMode,
+  ContextMessage,
   CreateTaskParams,
   CustomCommand,
   InvocationMode,
@@ -110,57 +110,94 @@ export interface ToolDefinition<TSchema extends z.ZodType = z.ZodType<Record<str
   execute: (input: z.infer<TSchema>, signal: AbortSignal | undefined, context: ExtensionContext, allTools: Record<string, Tool>) => Promise<unknown>;
 }
 
-/** UI element types */
-export type UIElementType = 'action-button' | 'status-indicator' | 'badge';
-
-/** Placement locations for UI elements */
-export enum UIPlacement {
-  /** Task sidebar area */
-  TaskSidebar = 'task-sidebar',
-  /** Chat toolbar area */
-  ChatToolbar = 'chat-toolbar',
-  /** Message action buttons */
-  MessageActions = 'message-actions',
-  /** Global toolbar */
-  GlobalToolbar = 'global-toolbar',
-}
+/** Placement locations for extension UI components */
+export type UIComponentPlacement =
+  | 'task-status-bar-left'
+  | 'task-status-bar-right'
+  | 'task-usage-info-bottom'
+  | 'task-messages-top'
+  | 'task-messages-bottom'
+  | 'header-left'
+  | 'header-right'
+  | 'task-input-above'
+  | 'task-input-toolbar-left'
+  | 'task-input-toolbar-right'
+  | 'tasks-sidebar-header'
+  | 'tasks-sidebar-bottom'
+  | 'task-message-above'
+  | 'task-message-below'
+  | 'task-message-bar'
+  | 'task-top-bar-left'
+  | 'task-top-bar-right'
+  | 'task-state-actions';
 
 /**
- * Definition of a UI element that can be registered by an extension
+ * Definition of a React UI component that can be registered by an extension.
+ * The component is defined as a JSX string and rendered using string-to-react-component.
+ *
+ * Available props for the component:
+ * - React: React object with hooks (useState, useEffect, useCallback, useMemo, useRef, etc.)
+ * - task: Current TaskData
+ * - projectDir: Project directory path
+ * - api: ApplicationAPI reference
+ * - mode: Current mode string
  *
  * @example
  * ```typescript
- * const myButton: UIElementDefinition = {
- *   id: 'generate-jira-ticket',
- *   type: 'action-button',
- *   label: 'Create JIRA Ticket',
- *   icon: 'FiExternalLink',
- *   description: 'Create a JIRA ticket from this task',
- *   placement: UIPlacement.TaskSidebar,
- *   context: 'task',
- *   onClick: 'handleJiraClick',
+ * const myStatusComponent: UIComponentDefinition = {
+ *   id: 'my-status-indicator',
+ *   placement: UIComponentPlacement.TaskStatusBar,
+ *   jsx: `
+ *     <div className="flex items-center gap-2 text-xs text-text-secondary">
+ *       <span>Task: {task.name}</span>
+ *       <span>Mode: {mode}</span>
+ *     </div>
+ *   `,
  * };
  * ```
  */
-export interface UIElementDefinition {
-  /** Unique element identifier in kebab-case */
+export interface UIComponentDefinition {
+  /** Unique component identifier*/
   id: string;
-  /** Element type (button, status indicator, etc.) */
-  type: UIElementType;
-  /** Display text for button or label */
-  label: string;
-  /** Optional icon name from react-icons library */
-  icon?: string;
-  /** Optional tooltip or help text */
-  description?: string;
-  /** Where in UI to render this element */
-  placement: UIPlacement;
-  /** Context type (task, project, global) */
-  context?: 'task' | 'project' | 'global';
-  /** Handler ID to call in extension when clicked */
-  onClick: string;
-  /** Optional: Conditional visibility check */
-  enabled?: (context: unknown) => boolean;
+  /** Where in UI to render this component */
+  placement: UIComponentPlacement;
+  /** JSX/TSX component as string to be parsed by string-to-react-component */
+  jsx: string;
+  /** Optional flag to indicate if the component should load data from the extension to be passed as a prop (default: false) */
+  loadData?: boolean;
+}
+
+/**
+ * Marker type for UI components provided by AiderDesk
+ * Actual component implementation is provided by renderer at runtime
+ */
+export type UIComponent = object;
+
+/**
+ * Common UI components available to extension JSX components
+ */
+export interface UIComponents {
+  Button: UIComponent;
+  Checkbox: UIComponent;
+  Input: UIComponent;
+  Select: UIComponent;
+  TextArea: UIComponent;
+  IconButton: UIComponent;
+  RadioButton: UIComponent;
+  MultiSelect: UIComponent;
+  Slider: UIComponent;
+  DatePicker: UIComponent;
+  Chip: UIComponent;
+  ModelSelector: UIComponent;
+}
+
+export interface UIComponentProps {
+  projectDir?: string;
+  task?: TaskData;
+  agentProfile?: AgentProfile;
+  models: Model[];
+  providers: ProviderProfile[];
+  ui: UIComponents;
 }
 
 /**
@@ -611,6 +648,29 @@ export interface ExtensionContext {
    * @returns Promise that resolves when settings are saved
    */
   updateSettings(updates: Partial<SettingsData>): Promise<void>;
+
+  /**
+   * Trigger a data refresh for UI components in the renderer
+   * Use this when extension internal state changes and UI components need to re-fetch their data
+   * @param componentId - Optional component ID to refresh only a specific component
+   * @param taskId - Optional task ID to refresh only components for a specific task
+   */
+  triggerUIDataRefresh(componentId?: string, taskId?: string): void;
+
+  /**
+   * Trigger a full reload of all UI component definitions for this extension
+   * Use this when the component structure or definitions have changed
+   */
+  triggerUIComponentsReload(): void;
+
+  /**
+   * Open a URL either in external browser, a new window, or a modal overlay
+   * @param url - URL to open
+   * @param target - Where to open: 'external' (system browser), 'window' (new Electron window), or 'modal-overlay' (iframe in modal)
+   *                   In Node/Docker environments, 'window' falls back to 'external'
+   * @returns Promise that resolves when URL is opened
+   */
+  openUrl(url: string, target?: 'external' | 'window' | 'modal-overlay'): Promise<void>;
 }
 
 /**
@@ -704,6 +764,34 @@ export interface Extension {
    * @returns The updated agent profile
    */
   onAgentProfileUpdated?(context: ExtensionContext, agentId: string, updatedProfile: AgentProfile): Promise<AgentProfile>;
+
+  // UI Component registration
+
+  /**
+   * Return array of React UI components this extension provides
+   * Components are defined as JSX/TSX strings and rendered using string-to-react-component
+   * Called when extension is loaded and when components need to be refreshed
+   */
+  getUIComponents?(context: ExtensionContext): UIComponentDefinition[];
+
+  /**
+   * Return data for a specific UI component
+   * Called when the component is mounted or when UI refresh is triggered
+   * @param componentId - The ID of the component to get data for
+   * @param context - Extension context
+   * @returns Data to be passed to the component as `data` binding
+   */
+  getUIExtensionData?(componentId: string, context: ExtensionContext): Promise<unknown>;
+
+  /**
+   * Handle an action triggered from a UI component via executeExtensionAction
+   * @param componentId - The ID of the component that triggered the action
+   * @param action - The action identifier
+   * @param args - Additional arguments passed from the component
+   * @param context - Extension context
+   * @returns Result of the action execution
+   */
+  executeUIExtensionAction?(componentId: string, action: string, args: unknown[], context: ExtensionContext): Promise<unknown>;
 
   // Task Events
 
@@ -934,12 +1022,4 @@ export interface Extension {
    * @returns void or partial event to modify responses
    */
   onAiderPromptFinished?(event: AiderPromptFinishedEvent, context: ExtensionContext): Promise<void | Partial<AiderPromptFinishedEvent>>;
-}
-
-/**
- * Constructor type for extension classes
- */
-export interface ExtensionConstructor {
-  new (): Extension;
-  metadata?: ExtensionMetadata;
 }

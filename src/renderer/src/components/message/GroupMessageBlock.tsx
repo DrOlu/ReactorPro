@@ -2,14 +2,23 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useMemo, useState, MouseEvent } from 'react';
 import { clsx } from 'clsx';
 import { useTranslation } from 'react-i18next';
-import { LocalizedString, UsageReportData } from '@common/types';
+import {
+  LocalizedString,
+  UsageReportData,
+  GroupMessage,
+  isResponseMessage,
+  isToolMessage,
+  isUserMessage,
+  Message,
+  ResponseMessage,
+  ToolMessage,
+} from '@common/types';
 
 import { MessageBlock } from './MessageBlock';
 import { MessageBar } from './MessageBar';
 import { areMessagesEqual } from './utils';
 
 import { Accordion } from '@/components/common/Accordion';
-import { GroupMessage, isResponseMessage, isToolMessage, isUserMessage, Message, ResponseMessage, ToolMessage } from '@/types/message';
 import { Button } from '@/components/common/Button';
 
 type Props = {
@@ -104,7 +113,7 @@ const GroupMessageBlockComponent = ({ baseDir, taskId, message, allFiles, render
   );
 
   return (
-    <div className={clsx('bg-bg-secondary border border-border-dark-light rounded-md mb-2 relative')}>
+    <div className={clsx('bg-bg-secondary border border-border-dark-light rounded-md relative')}>
       {/* Color Bar */}
       <div
         className={clsx('absolute left-0 top-0 h-full w-1 rounded-tl-md rounded-bl-md z-10', !message.group.finished && 'animate-pulse')}
@@ -123,7 +132,7 @@ const GroupMessageBlockComponent = ({ baseDir, taskId, message, allFiles, render
         scrollToVisibleWhenExpanded={true}
         onOpenChange={setIsOpen}
       >
-        <div className="p-2 pl-3 pb-0.5 bg-bg-primary-light">
+        <div className="p-2 pl-3 bg-bg-primary-light space-y-2">
           {message.children.map((child, index) => (
             <MessageBlock
               key={child.id || index}

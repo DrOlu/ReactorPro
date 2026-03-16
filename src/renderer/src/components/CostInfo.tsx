@@ -1,4 +1,4 @@
-import { Mode, TokensInfoData, TaskData } from '@common/types';
+import { Mode, TaskData, TokensInfoData } from '@common/types';
 import { ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IoChevronDown, IoChevronUp, IoClose } from 'react-icons/io5';
@@ -6,6 +6,7 @@ import { MdOutlineRefresh, MdSettingsBackupRestore } from 'react-icons/md';
 
 import { Tooltip } from '@/components/ui/Tooltip';
 import { TokenUsageBar } from '@/components/TokenUsageBar';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 
 type Props = {
   tokensInfo?: TokensInfoData | null;
@@ -115,6 +116,7 @@ export const CostInfo = ({ tokensInfo, aiderTotalCost, clearMessages, refreshRep
         </div>
 
         <TokenUsageBar tokensInfo={tokensInfo} maxInputTokens={maxInputTokens} mode={mode} task={task} updateTask={updateTask} />
+        <ExtensionComponentWrapper placement="task-usage-info-bottom" direction="vertical" />
       </div>
     </div>
   );

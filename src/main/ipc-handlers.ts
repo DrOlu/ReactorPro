@@ -4,6 +4,7 @@ import {
   McpServerConfig,
   Mode,
   Model,
+  OpenDialogOptions,
   ProjectSettings,
   ProviderProfile,
   SettingsData,
@@ -16,18 +17,9 @@ import { ipcMain, clipboard } from 'electron';
 
 import { EventsHandler } from './events-handler';
 
-import type { ExtensionMetadata } from '@common/extensions';
-import type { ExtensionManager } from './extensions/extension-manager';
-
 import { ServerController } from '@/server';
 
-export interface ExtensionInfo {
-  metadata: ExtensionMetadata;
-  filePath: string;
-  initialized: boolean;
-}
-
-export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController: ServerController, extensionManager?: ExtensionManager) => {
+export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController: ServerController) => {
   // Voice handlers
   ipcMain.handle('create-voice-session', async (_, provider: ProviderProfile) => {
     return await eventsHandler.createVoiceSession(provider);
@@ -85,7 +77,7 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     await eventsHandler.resetTask(baseDir, taskId);
   });
 
-  ipcMain.handle('show-open-dialog', async (_, options: Electron.OpenDialogSyncOptions) => {
+  ipcMain.handle('show-open-dialog', async (_, options: OpenDialogOptions) => {
     return await eventsHandler.showOpenDialog(options);
   });
 
@@ -276,39 +268,35 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
 
   // Extension handlers
   ipcMain.handle('get-installed-extensions', (_, projectDir?: string) => {
-    if (!extensionManager) {
-      return [];
-    }
-    const extensions = extensionManager.getExtensions(projectDir);
-    return extensions.map((ext) => ({
-      id: ext.id,
-      metadata: ext.metadata,
-      filePath: ext.filePath,
-      initialized: ext.initialized,
-      projectDir: ext.projectDir,
-    }));
+    return eventsHandler.getInstalledExtensions(projectDir);
   });
 
   ipcMain.handle('get-available-extensions', async (_, repositories: string[], forceRefresh?: boolean) => {
-    if (!extensionManager) {
-      return [];
-    }
-    return await extensionManager.getAvailableExtensions(repositories, forceRefresh);
+    return await eventsHandler.getAvailableExtensions(repositories, forceRefresh);
   });
 
   ipcMain.handle('install-extension', async (_, extensionId: string, repositoryUrl: string, projectDir?: string) => {
-    if (!extensionManager) {
-      return false;
-    }
-    return await extensionManager.installExtension(extensionId, repositoryUrl, projectDir);
+    return await eventsHandler.installExtension(extensionId, repositoryUrl, projectDir);
   });
 
   ipcMain.handle('uninstall-extension', async (_, extensionId: string, projectDir?: string) => {
-    if (!extensionManager) {
-      return false;
-    }
-    return await extensionManager.uninstallExtension(extensionId, projectDir);
+    return await eventsHandler.uninstallExtension(extensionId, projectDir);
   });
+
+  ipcMain.handle('get-extension-ui-components', (_, projectDir?: string, placement?: string) => {
+    return eventsHandler.getUIComponents(projectDir, placement);
+  });
+
+  ipcMain.handle('get-extension-ui-data', async (_, extensionId: string, componentId: string, projectDir?: string, taskId?: string) => {
+    return await eventsHandler.getUIExtensionData(extensionId, componentId, projectDir, taskId);
+  });
+
+  ipcMain.handle(
+    'execute-extension-ui-action',
+    async (_, extensionId: string, componentId: string, action: string, args: unknown[], projectDir?: string, taskId?: string) => {
+      return await eventsHandler.executeUIExtensionAction(extensionId, componentId, action, args, projectDir, taskId);
+    },
+  );
 
   ipcMain.handle('export-task-to-markdown', async (_, baseDir: string, taskId: string, copyOnly: boolean = false) => {
     return await eventsHandler.exportTaskToMarkdown(baseDir, taskId, copyOnly);
@@ -430,6 +418,10 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
 
   ipcMain.handle('restore-file', async (_, baseDir: string, taskId: string, filePath: string) => {
     await eventsHandler.restoreFile(baseDir, taskId, filePath);
+  });
+
+  ipcMain.handle('read-file', async (_, baseDir: string, filePath: string) => {
+    return await eventsHandler.readFile(baseDir, filePath);
   });
 
   ipcMain.handle('generate-commit-message', async (_, baseDir: string, taskId: string) => {
@@ -582,17 +574,5 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
 
   ipcMain.handle('clipboard-write-text', async (_, text: string) => {
     clipboard.writeText(text);
-  });
-
-  // Extension handlers
-  ipcMain.handle('get-extensions', (): ExtensionInfo[] => {
-    if (!extensionManager) {
-      return [];
-    }
-    return extensionManager.getExtensions().map((ext) => ({
-      metadata: ext.metadata,
-      filePath: ext.filePath,
-      initialized: ext.initialized,
-    }));
   });
 };

@@ -15,11 +15,31 @@ import 'react-toastify/dist/ReactToastify.css';
 import { ROUTES } from '@/utils/routes';
 import '@/i18n';
 import { TooltipProvider } from '@/components/ui/Tooltip';
-import { ApiProvider } from '@/contexts/ApiContext';
+import { ApiProvider, useApi } from '@/contexts/ApiContext';
 import { ModelProviderProvider } from '@/contexts/ModelProviderContext';
 import { AgentsProvider } from '@/contexts/AgentsContext';
+import { ModalOverlayUrlViewer } from '@/components/common/ModalOverlayUrlViewer';
+import { ExtensionsProvider } from '@/contexts/ExtensionsContext';
 
 const ICON_CONTEXT_DEFAULT_VALUE: IconContext = {};
+
+const ModalOverlayUrlHandler = () => {
+  const [modalOverlayUrl, setModalOverlayUrl] = useState<string | null>(null);
+  const api = useApi();
+
+  useEffect(() => {
+    const unsubscribe = api.onModalOverlayUrl((data) => {
+      setModalOverlayUrl(data.url);
+    });
+    return unsubscribe;
+  }, [api]);
+
+  if (!modalOverlayUrl) {
+    return null;
+  }
+
+  return <ModalOverlayUrlViewer url={modalOverlayUrl} onClose={() => setModalOverlayUrl(null)} />;
+};
 
 const ThemeAndFontManager = () => {
   const { theme, font = 'Sono', fontSize = 16 } = useSettings();
@@ -101,9 +121,12 @@ const App = () => {
                 <SettingsProvider>
                   <AgentsProvider>
                     <ContextMenuProvider>
-                      <ThemeAndFontManager />
-                      <AnimatedRoutes />
-                      <ToastContainer />
+                      <ExtensionsProvider>
+                        <ThemeAndFontManager />
+                        <AnimatedRoutes />
+                        <ToastContainer />
+                        <ModalOverlayUrlHandler />
+                      </ExtensionsProvider>
                     </ContextMenuProvider>
                   </AgentsProvider>
                 </SettingsProvider>

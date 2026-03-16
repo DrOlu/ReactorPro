@@ -35,6 +35,8 @@ import {
   QueuedPromptsUpdatedData,
   BmadStatus,
   CommandsData,
+  ExtensionUIRefreshData,
+  ModalOverlayUrlData,
 } from '@common/types';
 
 import type { BrowserWindow } from 'electron';
@@ -416,5 +418,19 @@ export class EventManager {
   sendBmadStatusChanged(status: BmadStatus): void {
     this.sendToMainWindow('bmad-status-changed', status);
     this.broadcastToEventConnectors('bmad-status-changed', status);
+  }
+
+  // Extension UI events
+  sendExtensionUIRefresh(options: { projectDir?: string; extensionId?: string; componentId?: string; taskId?: string; reloadComponents?: boolean }): void {
+    const data: ExtensionUIRefreshData = options;
+    this.sendToMainWindow('extension-ui-refresh', data);
+    this.broadcastToEventConnectors('extension-ui-refresh', data);
+  }
+
+  // Modal overlay URL events
+  sendModalOverlayUrl(url: string): void {
+    const data: ModalOverlayUrlData = { url };
+    this.sendToMainWindow('modal-overlay-url', data);
+    this.broadcastToEventConnectors('modal-overlay-url', data);
   }
 }

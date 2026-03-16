@@ -5,9 +5,9 @@ import { CgTerminal } from 'react-icons/cg';
 import { GoProjectRoadmap } from 'react-icons/go';
 import { IoMdClose } from 'react-icons/io';
 import { VscLock, VscUnlock } from 'react-icons/vsc';
-import { RiRobot2Line, RiMenuUnfold4Line } from 'react-icons/ri';
+import { RiMenuUnfold4Line, RiRobot2Line } from 'react-icons/ri';
 import { useTranslation } from 'react-i18next';
-import { getProviderModelId, AVAILABLE_PROVIDERS } from '@common/agent';
+import { AVAILABLE_PROVIDERS, getProviderModelId } from '@common/agent';
 import { clsx } from 'clsx';
 import { extractProviderModel } from '@common/utils';
 
@@ -21,6 +21,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useApi } from '@/contexts/ApiContext';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useModelProviders } from '@/contexts/ModelProviderContext';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 
 export type TaskBarRef = {
   openMainModelSelector: (model?: string) => void;
@@ -379,6 +380,7 @@ export const TaskBar = React.forwardRef<TaskBarRef, Props>(
     }, [api, baseDir, task.id]);
 
     const isTwoRowLayout = !AIDER_MODES.includes(mode) && showAiderInfo;
+
     const renderAiderInfo = (showLabel = false) => {
       return (
         <div className={clsx('flex flex-wrap gap-x-2 flex-shrink-0', isMobile ? 'flex-col items-start gap-y-1' : 'flex-row items-center gap-y-0.5')}>
@@ -488,6 +490,7 @@ export const TaskBar = React.forwardRef<TaskBarRef, Props>(
 
                 {/* Row 2: AIDER */}
                 {renderAiderInfo(true)}
+                <ExtensionComponentWrapper placement="task-top-bar-left" />
               </div>
             ) : (
               // Original horizontal layout for other modes
@@ -538,10 +541,12 @@ export const TaskBar = React.forwardRef<TaskBarRef, Props>(
                   </>
                 )}
                 {showAiderInfo && renderAiderInfo()}
+                <ExtensionComponentWrapper placement="task-top-bar-left" />
               </div>
             )}
           </div>
           <div className="flex items-center space-x-1 mr-2">
+            <ExtensionComponentWrapper placement="task-top-bar-right" />
             <TaskWorkingMode
               task={task}
               onMerge={(branch) => handleMerge(false, branch)}

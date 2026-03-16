@@ -8,6 +8,7 @@ import {
   CloudflareTunnelStatus,
   CommandOutputData,
   ContextFilesUpdatedData,
+  ContextMenuParams,
   CreateTaskParams,
   CommandsData,
   EditFormat,
@@ -25,6 +26,8 @@ import {
   Model,
   ModelsData,
   NotificationData,
+  OpenDialogOptions,
+  OpenDialogResult,
   OS,
   ProjectData,
   ProjectSettings,
@@ -56,8 +59,11 @@ import {
   WorktreeIntegrationStatusUpdatedData,
   UpdatedFile,
   UpdatedFilesUpdatedData,
-  LoadedExtension,
+  InstalledExtension,
   AvailableExtension,
+  ExtensionUIComponent,
+  ExtensionUIRefreshData,
+  ModalOverlayUrlData,
 } from '@common/types';
 
 export interface ApplicationAPI {
@@ -84,7 +90,7 @@ export interface ApplicationAPI {
   sendQueuedPromptNow: (baseDir: string, taskId: string, promptId: string) => void;
   loadInputHistory: (baseDir: string) => Promise<string[]>;
   isOpenDialogSupported: () => boolean;
-  showOpenDialog: (options: Electron.OpenDialogSyncOptions) => Promise<Electron.OpenDialogReturnValue>;
+  showOpenDialog: (options: OpenDialogOptions) => Promise<OpenDialogResult>;
   getPathForFile: (file: File) => string;
   getOpenProjects: () => Promise<ProjectData[]>;
   addOpenProject: (baseDir: string) => Promise<ProjectData[]>;
@@ -102,6 +108,7 @@ export interface ApplicationAPI {
   getAllFiles: (baseDir: string, taskId: string, useGit?: boolean) => Promise<string[]>;
   getUpdatedFiles: (baseDir: string, taskId: string) => Promise<UpdatedFile[]>;
   restoreFile: (baseDir: string, taskId: string, filePath: string) => Promise<void>;
+  readFile: (baseDir: string, filePath: string) => Promise<string>;
   generateCommitMessage: (baseDir: string, taskId: string) => Promise<string>;
   commitChanges: (baseDir: string, taskId: string, message: string, amend: boolean) => Promise<void>;
   addFile: (baseDir: string, taskId: string, filePath: string, readOnly?: boolean) => void;
@@ -125,10 +132,23 @@ export interface ApplicationAPI {
   reloadMcpServer: (serverName: string, config: McpServerConfig) => Promise<McpTool[]>;
 
   // Extension operations
-  getInstalledExtensions: (projectDir?: string) => Promise<LoadedExtension[]>;
+  getInstalledExtensions: (projectDir?: string) => Promise<InstalledExtension[]>;
   getAvailableExtensions: (repositories: string[], forceRefresh?: boolean) => Promise<AvailableExtension[]>;
   installExtension: (extensionId: string, repositoryUrl: string, projectDir?: string) => Promise<boolean>;
   uninstallExtension: (extensionId: string, projectDir?: string) => Promise<boolean>;
+  getExtensionUIComponents: (projectDir?: string, placement?: string) => Promise<ExtensionUIComponent[]>;
+  getUIExtensionData: (extensionId: string, componentId: string, projectDir?: string, taskId?: string) => Promise<unknown>;
+  executeUIExtensionAction: (
+    extensionId: string,
+    componentId: string,
+    action: string,
+    args: unknown[],
+    projectDir?: string,
+    taskId?: string,
+  ) => Promise<unknown>;
+  onExtensionUIRefresh: (callback: (data: ExtensionUIRefreshData) => void) => () => void;
+  onModalOverlayUrl: (callback: (data: ModalOverlayUrlData) => void) => () => void;
+  isWebViewSupported: () => boolean;
 
   createNewTask: (baseDir: string, params?: CreateTaskParams) => Promise<TaskData>;
   updateTask: (baseDir: string, id: string, updates: Partial<TaskData>) => Promise<boolean>;
@@ -199,7 +219,7 @@ export interface ApplicationAPI {
   addWorktreeIntegrationStatusUpdatedListener: (baseDir: string, taskId: string, callback: (data: WorktreeIntegrationStatusUpdatedData) => void) => () => void;
   addTerminalDataListener: (baseDir: string, callback: (data: TerminalData) => void) => () => void;
   addTerminalExitListener: (baseDir: string, callback: (data: TerminalExitData) => void) => () => void;
-  addContextMenuListener: (callback: (params: Electron.ContextMenuParams) => void) => () => void;
+  addContextMenuListener: (callback: (params: ContextMenuParams) => void) => () => void;
   addOpenSettingsListener: (callback: (pageId: string) => void) => () => void;
 
   // Task lifecycle event listeners

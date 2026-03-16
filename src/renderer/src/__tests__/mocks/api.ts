@@ -24,8 +24,10 @@ import {
   MemoryEmbeddingProgress,
   BmadStatus,
   ModeDefinition,
-  LoadedExtension,
+  InstalledExtension,
   AvailableExtension,
+  ExtensionUIComponent,
+  OpenDialogResult,
 } from '@common/types';
 
 /**
@@ -37,6 +39,7 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     // Directory and logging operations
     isOpenLogsDirectorySupported: vi.fn((): boolean => true),
     openLogsDirectory: vi.fn((): Promise<boolean> => Promise.resolve(true)),
+    isWebViewSupported: vi.fn((): boolean => true),
 
     // Settings operations
     loadSettings: vi.fn((): Promise<SettingsData> => Promise.resolve({} as SettingsData)),
@@ -65,7 +68,7 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
 
     // Dialog operations
     isOpenDialogSupported: vi.fn((): boolean => true),
-    showOpenDialog: vi.fn((): Promise<Electron.OpenDialogReturnValue> => Promise.resolve({ canceled: false, filePaths: [] })),
+    showOpenDialog: vi.fn((): Promise<OpenDialogResult> => Promise.resolve({ canceled: false, filePaths: [] })),
     getPathForFile: vi.fn((): string => '/mock/path'),
 
     // Open projects operations
@@ -101,6 +104,7 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     pasteImage: vi.fn((): void => undefined),
     scrapeWeb: vi.fn((): Promise<void> => Promise.resolve()),
     initProjectRulesFile: vi.fn((): Promise<void> => Promise.resolve()),
+    readFile: vi.fn((): Promise<string> => Promise.resolve('')),
 
     // Todo operations
     getTodos: vi.fn((): Promise<TodoItem[]> => Promise.resolve([])),
@@ -238,10 +242,14 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     updateAgentProfilesOrder: vi.fn((): Promise<void> => Promise.resolve()),
 
     // Extension operations
-    getInstalledExtensions: vi.fn((): Promise<LoadedExtension[]> => Promise.resolve([])),
+    getInstalledExtensions: vi.fn((): Promise<InstalledExtension[]> => Promise.resolve([])),
     getAvailableExtensions: vi.fn((): Promise<AvailableExtension[]> => Promise.resolve([])),
     installExtension: vi.fn((): Promise<boolean> => Promise.resolve(true)),
     uninstallExtension: vi.fn((): Promise<boolean> => Promise.resolve(true)),
+    getExtensionUIComponents: vi.fn((): Promise<ExtensionUIComponent[]> => Promise.resolve([])),
+    getUIExtensionData: vi.fn((): Promise<unknown> => Promise.resolve({})),
+    executeUIExtensionAction: vi.fn((): Promise<unknown> => Promise.resolve({})),
+    onExtensionUIRefresh: vi.fn(() => vi.fn()),
 
     // Memory operations
     getMemoryEmbeddingProgress: vi.fn((): Promise<MemoryEmbeddingProgress> => Promise.resolve({} as MemoryEmbeddingProgress)),
@@ -275,6 +283,7 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     removeQueuedPrompt: vi.fn((): void => undefined),
     sendQueuedPromptNow: vi.fn((): Promise<void> => Promise.resolve()),
     addQueuedPromptsUpdatedListener: vi.fn(() => vi.fn()),
+    onModalOverlayUrl: vi.fn(() => vi.fn()),
   };
 
   return vi.mocked<ApplicationAPI>({ ...defaultMock, ...overrides });
