@@ -7305,7 +7305,7 @@ export interface UIComponentDefinition {
 /** Optional flag to indicate if the component should load data from the extension to be passed as a prop (default: false) */
 ⋮----
 /**
- * Marker type for UI components provided by AiderDesk
+ * Marker type for UI components provided by ReactorPro
  * Actual component implementation is provided by renderer at runtime
  */
 export type UIComponent = object;
@@ -35593,9 +35593,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "aider-desk",
+  "name": "reactorpro",
   "version": "0.58.0-dev",
-  "description": "Aider desktop application wrapper",
+  "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
