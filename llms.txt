@@ -35594,7 +35594,7 @@ File: package.json
 ================
 {
   "name": "aider-desk",
-  "version": "0.57.0-dev",
+  "version": "0.58.0-dev",
   "description": "Aider desktop application wrapper",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
