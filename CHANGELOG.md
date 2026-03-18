@@ -1,5 +1,10 @@
 # ReactorPro Changelog
 
+## [UNRELEASED]
+
+- added onAgentStepStarted extension hook
+- properly triggering onTaskUpdated on empty task updates
+
 ## [0.57.0]
 
 - moved Files sidebar collapse/expand button to top-right of Context Files section header
