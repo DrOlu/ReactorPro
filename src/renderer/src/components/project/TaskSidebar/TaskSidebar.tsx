@@ -70,7 +70,7 @@ const TaskSidebarComponent = ({
   const [showArchived, setShowArchived] = useState<boolean>(false);
   const [isSearchVisible, setIsSearchVisible] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [expandedIds, setExpandedIds] = useLocalStorage<string[]>('aider-desk-expanded-tasks', []);
+  const [expandedIds, setExpandedIds] = useLocalStorage<string[]>('reactorpro-expanded-tasks', []);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const listContainerRef = useRef<HTMLDivElement>(null);
