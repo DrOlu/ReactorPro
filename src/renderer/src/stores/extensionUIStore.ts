@@ -4,7 +4,8 @@ import { shallow } from 'zustand/vanilla/shallow';
 import { ExtensionUIComponent, ExtensionUIRefreshData } from '@common/types';
 import { ApplicationAPI } from '@common/api';
 
-const getComponentsCacheKey = (projectDir?: string, placement?: string): string => `${projectDir || 'global'}:${placement || 'default'}`;
+const getComponentsCacheKey = (placement?: string, projectDir?: string, taskId?: string): string =>
+  `${placement || 'default'}:${projectDir || 'global'}:${taskId || ''}`;
 
 const getDataCacheKey = (extensionId: string, componentId: string, projectDir?: string, taskId?: string): string =>
   `${extensionId}:${componentId}:${projectDir || ''}:${taskId || ''}`;
@@ -12,13 +13,14 @@ const getDataCacheKey = (extensionId: string, componentId: string, projectDir?: 
 interface ExtensionUIState {
   componentsMap: Map<string, ExtensionUIComponent[]>;
   dataMap: Map<string, unknown>;
+  dataLoadedMap: Map<string, boolean>;
   loadingComponents: Set<string>;
   loadingData: Set<string>;
   initialized: boolean;
 }
 
 interface ExtensionUIActions {
-  loadComponents: (api: ApplicationAPI, projectDir?: string, placement?: string) => Promise<ExtensionUIComponent[]>;
+  loadComponents: (api: ApplicationAPI, placement?: string, projectDir?: string, taskId?: string) => Promise<ExtensionUIComponent[]>;
   loadComponentData: (
     api: ApplicationAPI,
     extensionId: string,
@@ -27,19 +29,13 @@ interface ExtensionUIActions {
     taskId?: string,
     forceRefresh?: boolean,
   ) => Promise<unknown>;
-  loadAllComponentsData: (
-    api: ApplicationAPI,
-    components: ExtensionUIComponent[],
-    projectDir?: string,
-    taskId?: string,
-    forceRefresh?: boolean,
-  ) => Promise<void>;
   handleRefreshEvent: (api: ApplicationAPI, data: ExtensionUIRefreshData, projectDir?: string, taskId?: string) => void;
-  invalidateComponents: (projectDir?: string, placement?: string) => void;
+  invalidateComponents: (placement?: string, projectDir?: string, taskId?: string) => void;
   invalidateData: (extensionId?: string, componentId?: string, projectDir?: string, taskId?: string) => void;
-  getComponents: (projectDir?: string, placement?: string) => ExtensionUIComponent[];
+  getComponents: (placement?: string, projectDir?: string, taskId?: string) => ExtensionUIComponent[] | undefined;
   getComponentData: (extensionId: string, componentId: string, projectDir?: string, taskId?: string) => unknown;
-  isLoadingComponents: (projectDir?: string, placement?: string) => boolean;
+  isDataLoaded: (extensionId: string, componentId: string, projectDir?: string, taskId?: string) => boolean;
+  isLoadingComponents: (placement?: string, projectDir?: string, taskId?: string) => boolean;
 }
 
 type ExtensionUIStore = ExtensionUIState & ExtensionUIActions;
@@ -48,12 +44,13 @@ export const useExtensionUIStore = createWithEqualityFn<ExtensionUIStore>(
   (set, get) => ({
     componentsMap: new Map(),
     dataMap: new Map(),
+    dataLoadedMap: new Map(),
     loadingComponents: new Set(),
     loadingData: new Set(),
     initialized: false,
 
-    loadComponents: async (api, projectDir, placement) => {
-      const cacheKey = getComponentsCacheKey(projectDir, placement);
+    loadComponents: async (api, placement, projectDir, taskId) => {
+      const cacheKey = getComponentsCacheKey(placement, projectDir, taskId);
       const state = get();
 
       // Return cached if available
@@ -84,7 +81,7 @@ export const useExtensionUIStore = createWithEqualityFn<ExtensionUIStore>(
       }));
 
       try {
-        const components = await api.getExtensionUIComponents(projectDir, placement);
+        const components = await api.getExtensionUIComponents(placement, projectDir, taskId);
 
         set((state) => {
           const newComponentsMap = new Map(state.componentsMap);
@@ -117,16 +114,17 @@ export const useExtensionUIStore = createWithEqualityFn<ExtensionUIStore>(
       const cacheKey = getDataCacheKey(extensionId, componentId, projectDir, taskId);
       const state = get();
       const hasCachedData = state.dataMap.has(cacheKey);
+      const isLoaded = state.dataLoadedMap.get(cacheKey) || false;
 
       // Return cached if available and not forcing refresh
-      if (hasCachedData && !forceRefresh) {
+      if (hasCachedData && isLoaded && !forceRefresh) {
         return state.dataMap.get(cacheKey);
       }
 
       // Prevent duplicate requests (only block if no cached data to show)
       if (state.loadingData.has(cacheKey)) {
         // If we have cached data, return it immediately (stale-while-revalidate)
-        if (hasCachedData) {
+        if (hasCachedData && isLoaded) {
           return state.dataMap.get(cacheKey);
         }
         // Otherwise wait for the pending request
@@ -154,10 +152,13 @@ export const useExtensionUIStore = createWithEqualityFn<ExtensionUIStore>(
         set((state) => {
           const newDataMap = new Map(state.dataMap);
           newDataMap.set(cacheKey, data);
+          const newDataLoadedMap = new Map(state.dataLoadedMap);
+          newDataLoadedMap.set(cacheKey, true);
           const newLoadingData = new Set(state.loadingData);
           newLoadingData.delete(cacheKey);
           return {
             dataMap: newDataMap,
+            dataLoadedMap: newDataLoadedMap,
             loadingData: newLoadingData,
           };
         });
@@ -178,15 +179,6 @@ export const useExtensionUIStore = createWithEqualityFn<ExtensionUIStore>(
       }
     },
 
-    loadAllComponentsData: async (api, components, projectDir, taskId, forceRefresh = false) => {
-      const componentsWithData = components.filter((comp) => comp.loadData);
-      if (componentsWithData.length === 0) {
-        return;
-      }
-
-      await Promise.all(componentsWithData.map((comp) => get().loadComponentData(api, comp.extensionId, comp.componentId, projectDir, taskId, forceRefresh)));
-    },
-
     handleRefreshEvent: (_api, data, currentProjectDir, _currentTaskId) => {
       // Only handle component reloads - data refresh is handled by forceRefresh in loadComponentData
       // We don't invalidate data cache to avoid flicker (stale-while-revalidate pattern)
@@ -201,9 +193,13 @@ export const useExtensionUIStore = createWithEqualityFn<ExtensionUIStore>(
       const state = get();
 
       // Find all matching component cache keys to invalidate
+      // Note: We invalidate keys even if they have empty arrays, because an extension
+      // might now return components after settings change (e.g., toggling a feature on)
       const keysToInvalidate: string[] = [];
       state.componentsMap.forEach((components, key) => {
-        if (data.extensionId !== undefined && !components.some((c) => c.extensionId === data.extensionId)) {
+        // Only filter by extensionId if the cache has components to check against
+        // Empty caches should still be invalidated since the extension may now return components
+        if (components.length > 0 && data.extensionId !== undefined && !components.some((c) => c.extensionId === data.extensionId)) {
           return;
         }
         keysToInvalidate.push(key);
@@ -218,14 +214,14 @@ export const useExtensionUIStore = createWithEqualityFn<ExtensionUIStore>(
       }
     },
 
-    invalidateComponents: (projectDir, placement) => {
-      if (projectDir === undefined && placement === undefined) {
+    invalidateComponents: (placement, projectDir, taskId) => {
+      if (placement === undefined && projectDir === undefined && taskId === undefined) {
         // Clear all
         set({ componentsMap: new Map() });
         return;
       }
 
-      const cacheKey = getComponentsCacheKey(projectDir, placement);
+      const cacheKey = getComponentsCacheKey(placement, projectDir, taskId);
       set((state) => {
         const newComponentsMap = new Map(state.componentsMap);
         newComponentsMap.delete(cacheKey);
@@ -236,39 +232,54 @@ export const useExtensionUIStore = createWithEqualityFn<ExtensionUIStore>(
     invalidateData: (extensionId, componentId, projectDir, taskId) => {
       if (extensionId === undefined && componentId === undefined && projectDir === undefined && taskId === undefined) {
         // Clear all
-        set({ dataMap: new Map() });
+        set({ dataMap: new Map(), dataLoadedMap: new Map() });
         return;
       }
 
       const cacheKey = getDataCacheKey(extensionId || '', componentId || '', projectDir, taskId);
       set((state) => {
         const newDataMap = new Map(state.dataMap);
+        const newDataLoadedMap = new Map(state.dataLoadedMap);
         // If partial key, find all matching
         if (!extensionId || !componentId) {
           newDataMap.forEach((_, key) => {
             if ((extensionId === undefined || key.startsWith(extensionId + ':')) && (componentId === undefined || key.includes(':' + componentId + ':'))) {
               newDataMap.delete(key);
+              newDataLoadedMap.delete(key);
             }
           });
         } else {
           newDataMap.delete(cacheKey);
+          newDataLoadedMap.delete(cacheKey);
         }
-        return { dataMap: newDataMap };
+        return { dataMap: newDataMap, dataLoadedMap: newDataLoadedMap };
       });
     },
 
-    getComponents: (projectDir, placement) => {
-      const cacheKey = getComponentsCacheKey(projectDir, placement);
-      return get().componentsMap.get(cacheKey) || [];
+    getComponents: (placement, projectDir, taskId) => {
+      const cacheKey = getComponentsCacheKey(placement, projectDir, taskId);
+      return get().componentsMap.get(cacheKey);
     },
 
     getComponentData: (extensionId, componentId, projectDir, taskId) => {
       const cacheKey = getDataCacheKey(extensionId, componentId, projectDir, taskId);
-      return get().dataMap.get(cacheKey);
+      const state = get();
+      const isLoaded = state.dataLoadedMap.get(cacheKey) || false;
+
+      if (!isLoaded) {
+        return undefined;
+      }
+
+      return state.dataMap.get(cacheKey);
     },
 
-    isLoadingComponents: (projectDir, placement) => {
-      const cacheKey = getComponentsCacheKey(projectDir, placement);
+    isDataLoaded: (extensionId, componentId, projectDir, taskId) => {
+      const cacheKey = getDataCacheKey(extensionId, componentId, projectDir, taskId);
+      return get().dataLoadedMap.get(cacheKey) || false;
+    },
+
+    isLoadingComponents: (placement, projectDir, taskId) => {
+      const cacheKey = getComponentsCacheKey(placement, projectDir, taskId);
       return get().loadingComponents.has(cacheKey);
     },
   }),
@@ -276,9 +287,9 @@ export const useExtensionUIStore = createWithEqualityFn<ExtensionUIStore>(
 );
 
 // Selector hooks for optimized re-renders
-export const useExtensionComponents = (projectDir?: string, placement?: string): ExtensionUIComponent[] => {
-  const cacheKey = getComponentsCacheKey(projectDir, placement);
-  return useExtensionUIStore(useShallow((state) => state.componentsMap.get(cacheKey) || []));
+export const useExtensionComponents = (placement?: string, projectDir?: string, taskId?: string): ExtensionUIComponent[] | undefined => {
+  const cacheKey = getComponentsCacheKey(placement, projectDir, taskId);
+  return useExtensionUIStore(useShallow((state) => state.componentsMap.get(cacheKey)));
 };
 
 export const useExtensionComponentData = (extensionId: string, componentId: string, projectDir?: string, taskId?: string): unknown => {
@@ -286,7 +297,7 @@ export const useExtensionComponentData = (extensionId: string, componentId: stri
   return useExtensionUIStore((state) => state.dataMap.get(cacheKey));
 };
 
-export const useIsLoadingComponents = (projectDir?: string, placement?: string): boolean => {
-  const cacheKey = getComponentsCacheKey(projectDir, placement);
+export const useIsLoadingComponents = (placement?: string, projectDir?: string, taskId?: string): boolean => {
+  const cacheKey = getComponentsCacheKey(placement, projectDir, taskId);
   return useExtensionUIStore((state) => state.loadingComponents.has(cacheKey));
 };

@@ -4,10 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { ReactNode, useState } from 'react';
 import { DefaultTaskState, Mode, TaskData } from '@common/types';
 
-import { ExtensionComponentWrapper } from '../extensions/ExtensionComponentWrapper';
+import { useExtensionComponentsWrapper } from '../extensions/useExtensionComponentsWrapper';
 
-import { BmadTaskActions } from '@/components/bmad/BmadTaskActions';
 import { Button } from '@/components/common/Button';
+import { ExtensionComponentWrapper } from '@/components/extensions/ExtensionComponentWrapper';
 
 type Props = {
   projectDir: string;
@@ -25,10 +25,8 @@ type Props = {
 };
 
 export const TaskStateActions = ({
-  projectDir,
   taskId,
   state,
-  mode,
   isArchived,
   task,
   onResumeTask,
@@ -40,6 +38,19 @@ export const TaskStateActions = ({
 }: Props) => {
   const { t } = useTranslation();
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const { isEmpty: isEmptyTaskActions, renderComponents: renderTaskActionsComponents } = useExtensionComponentsWrapper({
+    placement: 'task-state-actions-all',
+    additionalProps: {
+      task,
+      taskId,
+      onRunPrompt,
+    },
+  });
+
+  if (!isEmptyTaskActions) {
+    return renderTaskActionsComponents();
+  }
 
   const handleDeleteClick = () => {
     setIsDeleting(true);
@@ -78,11 +89,6 @@ export const TaskStateActions = ({
       </div>
     );
   };
-
-  // BMAD mode rendering
-  if (mode === 'bmad' && state !== DefaultTaskState.Todo) {
-    return <BmadTaskActions projectDir={projectDir} taskId={taskId} task={task} onRunPrompt={onRunPrompt} />;
-  }
 
   if (state === DefaultTaskState.Todo) {
     return renderSection(

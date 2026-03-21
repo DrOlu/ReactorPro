@@ -388,7 +388,7 @@ export class BmadManager {
       const commandParts = [
         'npx',
         '-y', // Auto-confirm npx
-        'bmad-method@latest',
+        'bmad-method@6.0.4',
         'install',
         `--directory ${this.projectDir}`,
         '--modules bmm',
