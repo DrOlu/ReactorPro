@@ -476,16 +476,16 @@
       "by": "by",
       "enabled": "Enabled",
       "active": "Active",
+      "disabled": "Disabled",
       "projectSpecific": "Project",
       "hasDependencies": "Has dependencies",
       "install": "Install",
       "installing": "Installing...",
       "uninstall": "Uninstall",
+      "uninstalling": "Uninstalling...",
       "success": {
         "install": "Successfully installed {{name}}",
-        "uninstall": "Successfully uninstalled {{name}}",
-        "addRepository": "Repository added successfully",
-        "removeRepository": "Repository removed successfully"
+        "uninstall": "Successfully uninstalled {{name}}"
       },
       "errors": {
         "loadInstalled": "Failed to load installed extensions",
@@ -583,7 +583,16 @@
       "noSymlinkFolders": "No symlink folders configured",
       "symlinkFolderPlaceholder": "Folder name (e.g. node_modules)",
       "addSymlinkFolder": "Add",
-      "removeSymlinkFolder": "Remove folder"
+      "removeSymlinkFolder": "Remove folder",
+      "auxiliaryModelsTitle": "Auxiliary Models",
+      "auxiliaryModelsDescription": "Configure models for background AI operations. Set to 'Inherit' to use the main agent model.",
+      "taskNameModel": "Task Name Model",
+      "taskNameModelTooltip": "Model used for auto-generating task names from prompts",
+      "taskStateModel": "Task State Model",
+      "taskStateModelTooltip": "Model used for determining task state (Ready for Review, More Info Needed, etc.)",
+      "commitMessageModel": "Commit Message",
+      "commitMessageModelTooltip": "Model used for generating commit messages",
+      "inheritModel": "Inherit"
     },
     "language": "Language",
     "notifications": {

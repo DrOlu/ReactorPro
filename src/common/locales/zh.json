@@ -474,16 +474,16 @@
       "by": "作者",
       "enabled": "启用",
       "active": "激活",
+      "disabled": "已禁用",
       "projectSpecific": "项目",
       "hasDependencies": "有依赖",
       "install": "安装",
       "installing": "安装中...",
       "uninstall": "卸载",
+      "uninstalling": "卸载中...",
       "success": {
         "install": "成功安装 {{name}}",
-        "uninstall": "成功卸载 {{name}}",
-        "addRepository": "仓库添加成功",
-        "removeRepository": "仓库移除成功"
+        "uninstall": "成功卸载 {{name}}"
       },
       "errors": {
         "loadInstalled": "加载已安装扩展失败",
@@ -581,7 +581,16 @@
       "noSymlinkFolders": "未配置符号链接文件夹",
       "symlinkFolderPlaceholder": "文件夹名称（例如 node_modules）",
       "addSymlinkFolder": "添加",
-      "removeSymlinkFolder": "移除文件夹"
+      "removeSymlinkFolder": "移除文件夹",
+      "auxiliaryModelsTitle": "辅助模型",
+      "auxiliaryModelsDescription": "配置后台 AI 操作的模型。设置为 '继承' 以使用主代理模型。",
+      "taskNameModel": "任务名称模型",
+      "taskNameModelTooltip": "用于从提示自动生成任务名称的模型",
+      "taskStateModel": "任务状态模型",
+      "taskStateModelTooltip": "用于确定任务状态（准备审查、需要更多信息等）的模型",
+      "commitMessageModel": "提交消息",
+      "commitMessageModelTooltip": "用于生成提交消息的模型",
+      "inheritModel": "继承"
     },
     "language": "语言",
     "notifications": {

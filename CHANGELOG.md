@@ -9,6 +9,9 @@
 - implemented virtualization for the task sidebar
 - added subagents quick toggle action to agent selector
 - added support for cancelling running subagents
+- properly handling added extension repositories
+- updated visuals for the extensions and added support for icons
+- added configurable auxiliary models for task name, task state, and commit message generation
 
 ## [0.57.0]
 
