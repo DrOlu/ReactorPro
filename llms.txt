@@ -31820,9 +31820,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "reactorpro",
-  "version": "0.58.0-dev",
-  "description": "ReactorPro - AI coding agent for software engineers",
+  "name": "aider-desk",
+  "version": "0.59.0-dev",
+  "description": "Aider desktop application wrapper",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
