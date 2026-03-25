@@ -22,7 +22,7 @@
       "description": "Adds /generate-tests command to generate unit tests for files",
       "file": "generate-tests.ts",
       "type": "single",
-      "capabilities": ["commands"]
+      "capabilities": ["commands", "example"]
     },
     {
       "id": "questions",
