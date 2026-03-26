@@ -598,6 +598,11 @@
     "notifications": {
       "title": "Notifications"
     },
+    "windowTitle": {
+      "title": "Window Title"
+    },
+    "windowTitleTemplateLabel": "Window title template",
+    "windowTitleTemplateTooltip": "Use {project} for project name and {task} for current task name. Example: 'AiderDesk - {project}' or '{project} - {task}'",
     "agent": {
       "mcpServers": "MCP Servers",
       "provider": "Provider",
@@ -1516,7 +1521,13 @@
     "paste": "Paste",
     "close": "Close",
     "closeOtherTabs": "Close other tabs",
-    "closeAllTabs": "Close all tabs"
+    "closeAllTabs": "Close all tabs",
+    "openInNewWindow": "Open in new window"
+  },
+  "menu": {
+    "file": {
+      "newWindow": "New Window"
+    }
   },
   "taskSidebar": {
     "title": "Tasks",

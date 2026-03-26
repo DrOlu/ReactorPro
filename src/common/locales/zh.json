@@ -596,6 +596,11 @@
     "notifications": {
       "title": "通知"
     },
+    "windowTitle": {
+      "title": "窗口标题"
+    },
+    "windowTitleTemplateLabel": "窗口标题模板",
+    "windowTitleTemplateTooltip": "使用 {project} 表示项目名称，{task} 表示当前任务名称。例如：'AiderDesk - {project}' 或 '{project} - {task}'",
     "agent": {
       "mcpServers": "MCP 服务器",
       "provider": "提供商",
@@ -1526,7 +1531,13 @@
     "paste": "粘贴",
     "close": "关闭",
     "closeOtherTabs": "关闭其他标签页",
-    "closeAllTabs": "关闭所有标签页"
+    "closeAllTabs": "关闭所有标签页",
+    "openInNewWindow": "在新窗口中打开"
+  },
+  "menu": {
+    "file": {
+      "newWindow": "新建窗口"
+    }
   },
   "taskSidebar": {
     "title": "任务",
