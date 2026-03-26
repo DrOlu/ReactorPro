@@ -63,7 +63,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   mcpServers: {},
   llmProviders: {},
   telemetryEnabled: true,
-  windowTitleTemplate: 'AiderDesk - {project}',
+  windowTitleTemplate: 'ReactorPro - {project}',
   promptBehavior: {
     suggestionMode: SuggestionMode.Automatically,
     suggestionDelay: 100,

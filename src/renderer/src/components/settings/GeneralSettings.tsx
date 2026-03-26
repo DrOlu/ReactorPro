@@ -223,7 +223,7 @@ export const GeneralSettings = ({ settings, setSettings, onLanguageChange, onZoo
             <span className="text-xs text-text-primary">{t('settings.windowTitleTemplateLabel')}</span>
             <InfoIcon tooltip={t('settings.windowTitleTemplateTooltip')} />
           </div>
-          <Input size="sm" value={settings.windowTitleTemplate ?? 'AiderDesk - {project}'} onChange={handleWindowTitleTemplateChange} />
+          <Input size="sm" value={settings.windowTitleTemplate ?? 'ReactorPro - {project}'} onChange={handleWindowTitleTemplateChange} />
         </div>
       </Section>
 

@@ -491,7 +491,7 @@ export const ProjectView = ({ projectDir, isProjectActive = false, showSettingsP
               {(() => {
                 const projectName = projectDir.split(/[\\/]/).pop() || '';
                 const taskName = activeTask?.name || '';
-                const template = settings?.windowTitleTemplate ?? 'AiderDesk - {project}';
+                const template = settings?.windowTitleTemplate ?? 'ReactorPro - {project}';
                 return template.replace('{project}', projectName).replace('{task}', taskName);
               })()}
             </title>
