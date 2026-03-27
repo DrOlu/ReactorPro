@@ -2,10 +2,17 @@
 
 ## [UNRELEASED]
 
-- correctly triggering auto-compacting as expected when threshold is reached
 - added support for multiple windows
 - added ability to customize window title
 - power edit tool now correctly handles files with \r\n line separators
+- added system logs viewer
+- properly focusing the terminal when it's activated
+- state of view all files mode in Updated Files is now remembered
+- updated files are now properly refreshed when using git actions
+
+## [0.58.1]
+
+- correctly triggering auto-compacting as expected when threshold is reached
 
 ## [0.58.0]
 
