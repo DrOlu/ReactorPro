@@ -2415,6 +2415,12 @@ export class Task {
     return removedIds;
   }
 
+  public sendTaskMessageRemoved(messageIds: string[]) {
+    if (messageIds.length > 0) {
+      this.eventManager.sendTaskMessageRemoved(this.project.baseDir, this.taskId, messageIds);
+    }
+  }
+
   public async redoLastUserPrompt(mode: Mode, updatedPrompt?: string) {
     logger.info('Redoing last user prompt:', {
       baseDir: this.project.baseDir,
@@ -2436,11 +2442,7 @@ export class Task {
         remainingMessagesCount: (await this.contextManager.getContextMessages()).length,
       });
 
-      this.eventManager.sendTaskMessageRemoved(
-        this.project.baseDir,
-        this.taskId,
-        removedMessages.slice(0, -1).map((msg) => msg.id),
-      );
+      this.sendTaskMessageRemoved(removedMessages.slice(0, -1).map((msg) => msg.id));
 
       await this.updateContextInfo();
 
@@ -3354,6 +3356,11 @@ ${error.stderr}`,
 
   private async sendUpdatedFilesUpdated() {
     const updatedFiles = await this.getUpdatedFiles();
+    logger.debug('Sending updated files', {
+      baseDir: this.project.baseDir,
+      taskId: this.taskId,
+      updatedFiles: updatedFiles.map((f) => f.path),
+    });
     this.eventManager.sendUpdatedFilesUpdated(this.project.baseDir, this.taskId, updatedFiles);
   }
 
@@ -3743,10 +3750,10 @@ ${error.stderr}`,
       logger.error('Failed to rebase worktree:', {
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      await this.sendWorktreeIntegrationStatusUpdated();
+      await this.sendUpdatedFilesUpdated();
     }
-
-    await this.sendUpdatedFilesUpdated();
-    await this.sendWorktreeIntegrationStatusUpdated();
   }
 
   public async abortWorktreeRebase(): Promise<void> {
