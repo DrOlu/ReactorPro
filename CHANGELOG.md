@@ -1,6 +1,6 @@
 # ReactorPro Changelog
 
-## [UNRELEASED]
+## [0.59.0]
 
 - added support for multiple windows
 - added ability to customize window title
