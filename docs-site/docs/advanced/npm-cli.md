@@ -1,17 +1,17 @@
 ---
-title: "Running AiderDesk via npm (CLI)"
+title: "Running ReactorPro via npm (CLI)"
 sidebar_label: "npm CLI"
 slug: "/advanced/npm-cli"
 ---
 
-# Running AiderDesk via npm (CLI)
+# Running ReactorPro via npm (CLI)
 
-AiderDesk can be installed and run as a global npm package. This runs **only the AiderDesk backend service** — there is no Electron desktop window. Instead, you access AiderDesk through your web browser, similar to [running with Docker](/docs/advanced/docker).
+ReactorPro can be installed and run as a global npm package. This runs **only the ReactorPro backend service** — there is no Electron desktop window. Instead, you access ReactorPro through your web browser, similar to [running with Docker](/docs/advanced/docker).
 
 This is useful when you:
 - Prefer a lightweight setup without the desktop app
-- Want to run AiderDesk on a remote server
-- Need to integrate AiderDesk into scripts or CI/CD pipelines
+- Want to run ReactorPro on a remote server
+- Need to integrate ReactorPro into scripts or CI/CD pipelines
 - Don't want to download a platform-specific installer
 
 ## Installation
@@ -82,7 +82,7 @@ http://localhost:<port>
 
 The default address is `http://localhost:24337`.
 
-From the browser, you get the full AiderDesk experience — project management, chat, context files, agent mode, and all other features work the same way as in the desktop app.
+From the browser, you get the full ReactorPro experience — project management, chat, context files, agent mode, and all other features work the same way as in the desktop app.
 
 ## Requirements
 

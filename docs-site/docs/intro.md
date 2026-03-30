@@ -15,7 +15,7 @@ ReactorPro supercharges your coding workflow by combining the power of [aider](h
 
 #### Option 1: Desktop Application
 
-1. **Download** the latest version for your operating system from our [Releases page](https://github.com/hotovo/aider-desk/releases)
+1. **Download** the latest version for your operating system from our [Releases page](https://github.com/hyperspace/reactorpro/releases)
 2. **Install** the application:
    - **Windows**: Run the `.exe` installer
    - **macOS**: Open the `.dmg` and drag ReactorPro to Applications
@@ -23,7 +23,7 @@ ReactorPro supercharges your coding workflow by combining the power of [aider](h
 
 #### Option 2: npm (Headless / Browser-Based)
 
-Install and run AiderDesk as a global npm package. This runs the AiderDesk backend service only — you access it through your web browser, similar to [using Docker](/docs/advanced/docker).
+Install and run ReactorPro as a global npm package. This runs the ReactorPro backend service only — you access it through your web browser, similar to [using Docker](/docs/advanced/docker).
 
 ```bash
 npm install -g @aiderdesk/aiderdesk

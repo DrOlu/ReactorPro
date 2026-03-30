@@ -97,7 +97,7 @@ const main = async (): Promise<void> => {
     // Check for AIDER_DESK_PROJECTS environment variable and add projects
     await addProjectsFromEnv(store, modelManager, agentProfileManager);
 
-    logger.info(`AiderDesk Runner is ready and running on port ${SERVER_PORT}. You can now open http://localhost:${SERVER_PORT} in your browser.`);
+    logger.info(`ReactorPro Runner is ready and running on port ${SERVER_PORT}. You can now open http://localhost:${SERVER_PORT} in your browser.`);
   } catch (error) {
     logger.error('Failed to start ReactorPro Node Runner:', error);
     process.exit(1);

@@ -230,7 +230,7 @@ ReactorPro provides multiple ways to optimize your AI spending:
 
 ### Option 2: npm (Headless / Browser-Based)
 
-Run AiderDesk as a headless backend service accessible through your browser — similar to [using Docker](https://aiderdesk.hotovo.com/docs/advanced/docker):
+Run ReactorPro as a headless backend service accessible through your browser — similar to [using Docker](https://reactorpro.ng/docs/advanced/docker):
 
 ```bash
 npm install -g @aiderdesk/aiderdesk
@@ -243,7 +243,7 @@ Or run directly without installing:
 npx @aiderdesk/aiderdesk
 ```
 
-Then open `http://localhost:24337` in your browser. Supports an interactive TUI mode (default) and a headless foreground mode (`aiderdesk start`). See the [npm CLI docs](https://aiderdesk.hotovo.com/docs/advanced/npm-cli) for details.
+Then open `http://localhost:24337` in your browser. Supports an interactive TUI mode (default) and a headless foreground mode (`aiderdesk start`). See the [npm CLI docs](https://reactorpro.ng/docs/advanced/npm-cli) for details.
 
 ### Recommended First Steps
 
