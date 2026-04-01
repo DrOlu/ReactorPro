@@ -21,7 +21,45 @@ ReactorPro supercharges your coding workflow by combining the power of [aider](h
    - **macOS**: Open the `.dmg` and drag ReactorPro to Applications
    - **Linux**: Extract the `.AppImage` and make it executable (`chmod +x`)
 
-#### Option 2: npm (Headless / Browser-Based)
+#### Option 2: Package Managers
+
+**Homebrew (macOS)**
+
+If you're on a Mac and prefer using [Homebrew](https://brew.sh/) for managing applications, you can install ReactorPro directly:
+
+```bash
+brew update
+brew install hyperspace-reactorpro
+```
+
+Updates are handled from within the ReactorPro application itself. The `brew upgrade` command will not update your installation.
+
+To uninstall:
+
+```bash
+brew uninstall hyperspace-reactorpro
+# optionally also remove all user-data:
+# brew uninstall --zap hyperspace-reactorpro
+```
+
+**Scoop (Windows)**
+
+If you're on Windows and prefer using [Scoop](https://scoop.sh/) for managing applications, you can install ReactorPro directly:
+
+```bash
+scoop bucket add extras
+scoop install extras/reactorpro
+```
+
+Updates are handled from within the ReactorPro application itself. The `scoop update` command will not update your installation.
+
+To uninstall:
+
+```bash
+scoop uninstall reactorpro
+```
+
+#### Option 3: npm (Headless / Browser-Based)
 
 Install and run ReactorPro as a global npm package. This runs the ReactorPro backend service only — you access it through your web browser, similar to [using Docker](/docs/advanced/docker).
 

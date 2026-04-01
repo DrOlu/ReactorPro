@@ -3,6 +3,13 @@
 ## [UNRELEASED]
 
 - added settings to configure default working mode for tasks
+- improved performance of expand/collapse of files in Updated Files modal
+- remembering state of Updated Files modal between opening/closing
+- remembering state of Files sections in the sidebar when switching between them
+- correctly using the worktree directory in terminal in subtasks
+- using merge-base for diff calculations in worktree mode to show only changed files since rebase
+- updating rule files after the agent finishes
+- removed deprecated hook manager
 
 ## [0.59.0]
 

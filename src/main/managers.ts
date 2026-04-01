@@ -19,7 +19,6 @@ import { Store } from '@/store';
 import { SERVER_PORT } from '@/constants';
 import logger, { initEventLogging } from '@/logger';
 import { EventsHandler } from '@/events-handler';
-import { HookManager } from '@/hooks/hook-manager';
 import { PromptsManager } from '@/prompts';
 
 export interface ManagersResult {
@@ -63,12 +62,6 @@ export const initManagers = async (store: Store, windowManager?: WindowManager):
     logger.error('[Memory] Memory system initialization failed, continuing without memories:', error);
   });
 
-  // Initialize hook manager (non-blocking - has lazy init in trigger method)
-  const hookManager = new HookManager();
-  hookManager.init().catch((error) => {
-    logger.error('[Hooks] Hook system initialization failed:', error);
-  });
-
   // Initialize extension manager (non-blocking - errors should not crash app)
   const extensionManager = new ExtensionManager(store, modelManager, eventManager, telemetryManager);
   extensionManager.init().catch((error) => {
@@ -100,13 +93,12 @@ export const initManagers = async (store: Store, windowManager?: WindowManager):
     worktreeManager,
     agentProfileManager,
     memoryManager,
-    hookManager,
     promptsManager,
     extensionManager,
   );
 
   // Initialize terminal manager
-  const terminalManager = new TerminalManager(eventManager, worktreeManager, telemetryManager);
+  const terminalManager = new TerminalManager(eventManager, telemetryManager);
 
   // Initialize Versions Manager
   const versionsManager = new VersionsManager(eventManager, store);
@@ -164,7 +156,6 @@ export const initManagers = async (store: Store, windowManager?: WindowManager):
         mcpManager.close(),
         telemetryManager.destroy(),
         agentProfileManager.dispose(),
-        hookManager.dispose(),
         promptsManager.dispose(),
         extensionManager.dispose(),
       ]);

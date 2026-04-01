@@ -65,7 +65,7 @@ The `~/.reactorpro` directory on your host machine contains global configuration
 - **Agent profiles** (`.reactorpro/agents/`) - Custom agent configurations
 - **Skills** (`.reactorpro/agents/`) - Reusable skills for agent mode
 - **Custom commands** (`.reactorpro/commands/`) - User-defined commands
-- **Hooks** (`.reactorpro/hooks/`) - Custom hooks for automation
+- **Extensions** (`.reactorpro/extensions/`) - Custom extensions for automation and integration
 - **Custom prompts** (`.reactorpro/prompts/`) - Custom prompt templates
 - **Rules** (`.reactorpro/rules/`) - Custom rules and guidelines
 

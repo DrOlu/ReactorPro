@@ -42,8 +42,6 @@ vi.mock('@/constants', () => ({
   AIDER_DESK_PROJECT_RULES_DIR: '.reactorpro/rules',
   AIDER_DESK_GLOBAL_RULES_DIR: '/home/.reactorpro/rules',
   AIDER_DESK_COMMANDS_DIR: '.reactorpro/commands',
-  AIDER_DESK_HOOKS_DIR: '.reactorpro/hooks',
-  AIDER_DESK_GLOBAL_HOOKS_DIR: '/home/.reactorpro/hooks',
   AIDER_DESK_PROMPTS_DIR: '.reactorpro/prompts',
   AIDER_DESK_DEFAULT_PROMPTS_DIR: '/resources/prompts',
   AIDER_DESK_GLOBAL_PROMPTS_DIR: '/home/.reactorpro/prompts',
@@ -69,13 +67,6 @@ vi.mock('@/task/aider-manager', () => ({
     start = vi.fn();
     stop = vi.fn();
     dispose = vi.fn();
-  },
-}));
-
-vi.mock('@/hooks/hook-manager', () => ({
-  HookManager: class {
-    trigger = vi.fn().mockResolvedValue({ event: {}, blocked: false });
-    stopWatchingProject = vi.fn();
   },
 }));
 
@@ -142,7 +133,6 @@ describe('Task - findSkillActivationMessages', () => {
   let mockModelManager: any;
   let mockWorktreeManager: any;
   let mockMemoryManager: any;
-  let mockHookManager: any;
   let mockPromptsManager: any;
   let mockExtensionManager: any;
 
@@ -188,9 +178,6 @@ describe('Task - findSkillActivationMessages', () => {
     mockModelManager = {};
     mockWorktreeManager = {};
     mockMemoryManager = {};
-    mockHookManager = {
-      trigger: vi.fn((_hookName: string, event: any) => Promise.resolve({ event, blocked: false })),
-    };
     mockPromptsManager = {};
     mockExtensionManager = {
       isInitialized: vi.fn(() => false),
@@ -210,7 +197,6 @@ describe('Task - findSkillActivationMessages', () => {
       mockModelManager,
       mockWorktreeManager,
       mockMemoryManager,
-      mockHookManager,
       mockPromptsManager,
       mockExtensionManager,
     );
