@@ -506,8 +506,8 @@ export class BrowserApi implements ApplicationAPI {
       filePath,
     });
   }
-  initProjectRulesFile(baseDir: string, taskId: string): Promise<void> {
-    return this.post('/project/init-rules', { projectDir: baseDir, taskId });
+  initProjectRulesFile(baseDir: string, taskId: string, args?: string): Promise<void> {
+    return this.post('/project/init-rules', { projectDir: baseDir, taskId, args });
   }
   getTodos(baseDir: string, taskId: string): Promise<TodoItem[]> {
     return this.get('/project/todos', { projectDir: baseDir, taskId });
@@ -1155,6 +1155,14 @@ export class BrowserApi implements ApplicationAPI {
   uninstallExtension(extensionId: string, projectDir?: string): Promise<boolean> {
     return this.post('/extensions/uninstall', {
       extensionId,
+      projectDir,
+    });
+  }
+
+  updateExtension(extensionId: string, repositoryUrl: string, projectDir?: string): Promise<boolean> {
+    return this.post('/extensions/update', {
+      extensionId,
+      repositoryUrl,
       projectDir,
     });
   }

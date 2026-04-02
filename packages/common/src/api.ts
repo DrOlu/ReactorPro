@@ -120,7 +120,7 @@ export interface ApplicationAPI {
   runCommand: (baseDir: string, taskId: string, command: string) => void;
   pasteImage: (baseDir: string, taskId: string, imageBuffer?: ArrayBuffer) => void;
   scrapeWeb: (baseDir: string, taskId: string, url: string, filePath?: string) => Promise<void>;
-  initProjectRulesFile: (baseDir: string, taskId: string) => Promise<void>;
+  initProjectRulesFile: (baseDir: string, taskId: string, args?: string) => Promise<void>;
 
   // Todo operations
   getTodos: (baseDir: string, taskId: string) => Promise<TodoItem[]>;
@@ -138,6 +138,7 @@ export interface ApplicationAPI {
   getAvailableExtensions: (repositories: string[], forceRefresh?: boolean, fetchOnly?: boolean) => Promise<AvailableExtension[]>;
   installExtension: (extensionId: string, repositoryUrl: string, projectDir?: string) => Promise<boolean>;
   uninstallExtension: (extensionId: string, projectDir?: string) => Promise<boolean>;
+  updateExtension: (extensionId: string, repositoryUrl: string, projectDir?: string) => Promise<boolean>;
   getExtensionUIComponents: (placement?: string, projectDir?: string, taskId?: string) => Promise<ExtensionUIComponent[]>;
   getUIExtensionData: (extensionId: string, componentId: string, projectDir?: string, taskId?: string) => Promise<unknown>;
   executeUIExtensionAction: (

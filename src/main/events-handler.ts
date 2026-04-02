@@ -963,8 +963,8 @@ export class EventsHandler {
     return (await this.projectManager.getProject(baseDir).getTask(taskId)?.clearAllTodos()) || [];
   }
 
-  async initProjectRulesFile(baseDir: string, taskId: string): Promise<void> {
-    return this.projectManager.getProject(baseDir).getTask(taskId)?.initProjectAgentsFile();
+  async initProjectRulesFile(baseDir: string, taskId: string, args?: string): Promise<void> {
+    return this.projectManager.getProject(baseDir).getTask(taskId)?.initProjectAgentsFile(args);
   }
 
   async enableServer(username?: string, password?: string): Promise<SettingsData> {
@@ -1106,6 +1106,18 @@ export class EventsHandler {
 
   async uninstallExtension(extensionId: string, projectDir?: string) {
     return await this.extensionManager.uninstallExtension(extensionId, projectDir);
+  }
+
+  async updateExtension(extensionId: string, repositoryUrl: string, projectDir?: string) {
+    let project: Project | undefined = undefined;
+    if (projectDir) {
+      project = this.projectManager.getProject(projectDir);
+      if (!project) {
+        throw new Error('Project not found');
+      }
+    }
+
+    return await this.extensionManager.updateExtension(extensionId, repositoryUrl, project);
   }
 
   getUIComponents(placement?: string, projectDir?: string, taskId?: string): ExtensionUIComponent[] {
