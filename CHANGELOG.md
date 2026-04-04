@@ -16,6 +16,8 @@
 - properly closing the project when currently selected and closed
 - added persistent caching for extension repositories
 - correctly reverting/deleting created file on revert action
+- added support for creating custom providers via extensions
+- updated response message filtering to correcly remove helper tool messages
 
 ## [0.59.0]
 

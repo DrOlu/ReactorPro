@@ -737,7 +737,7 @@ export class Agent {
     const projectProfiles = this.agentProfileManager.getProjectProfiles(task.project);
     let resultMessages: ContextMessage[] = userRequestMessage ? [userRequestMessage] : [];
 
-    const providers = this.store.getProviders();
+    const providers = this.modelManager.getProviders();
     let provider = providers.find((p) => p.id === profile.provider);
     let modelName = profile.model;
 
@@ -1389,23 +1389,49 @@ export class Agent {
   }
 
   private filterResultMessages(resultMessages: ContextMessage[]) {
-    return resultMessages.filter((message) => {
-      if (message.role === 'tool' && message.id.startsWith(`${HELPERS_TOOL_GROUP_NAME}${TOOL_GROUP_NAME_SEPARATOR}`)) {
-        return false;
-      }
-      if (message.role === 'assistant') {
-        if (
-          Array.isArray(message.content) &&
-          message.content.some(
-            (content) => content.type === 'tool-call' && content.toolName.startsWith(`${HELPERS_TOOL_GROUP_NAME}${TOOL_GROUP_NAME_SEPARATOR}`),
-          )
-        ) {
-          return false;
+    const helpersPrefix = `${HELPERS_TOOL_GROUP_NAME}${TOOL_GROUP_NAME_SEPARATOR}`;
+
+    return resultMessages.reduce<ContextMessage[]>((acc, message) => {
+      if (message.role === 'tool') {
+        const nonHelpersContent = message.content.filter((part) => !part.toolName.startsWith(helpersPrefix));
+        if (nonHelpersContent.length === 0) {
+          // All content parts are helpers — drop the message entirely
+          return acc;
         }
-        return true;
+        if (nonHelpersContent.length === message.content.length) {
+          // No helpers content — keep as-is
+          acc.push(message);
+        } else {
+          // Some helpers content — keep with non-helpers parts only
+          acc.push({ ...message, content: nonHelpersContent });
+        }
+        return acc;
       }
-      return true;
-    });
+
+      if (message.role === 'assistant') {
+        if (!Array.isArray(message.content)) {
+          acc.push(message);
+          return acc;
+        }
+        const hasHelpersToolCall = message.content.some((part) => part.type === 'tool-call' && part.toolName.startsWith(helpersPrefix));
+        if (!hasHelpersToolCall) {
+          acc.push(message);
+          return acc;
+        }
+        const nonHelpersContent = message.content.filter((part) => !(part.type === 'tool-call' && part.toolName.startsWith(helpersPrefix)));
+        if (nonHelpersContent.length === 0) {
+          // All parts are helpers tool calls — drop the message entirely
+          return acc;
+        }
+        // Keep with non-helpers parts only
+        acc.push({ ...message, content: nonHelpersContent });
+        return acc;
+      }
+
+      // User and other roles — pass through unchanged
+      acc.push(message);
+      return acc;
+    }, []);
   }
 
   private async getContextFilesAsToolCallMessages(task: Task, profile: AgentProfile, contextFiles: ContextFile[]): Promise<ModelMessage[]> {
@@ -1629,7 +1655,7 @@ export class Agent {
     abortSignal?: AbortSignal,
   ): Promise<string | undefined> {
     const [providerId, modelName] = extractProviderModel(modelId);
-    const providers = this.store.getProviders();
+    const providers = this.modelManager.getProviders();
     const provider = providers.find((p) => p.id === providerId);
     if (!provider) {
       throw new Error(`Provider ${providerId} not found`);
@@ -1689,7 +1715,7 @@ export class Agent {
 
   async estimateTokens(task: Task, profile: AgentProfile): Promise<number> {
     try {
-      const providers = this.store.getProviders();
+      const providers = this.modelManager.getProviders();
       const provider = providers.find((p) => p.id === profile.provider);
       if (!provider) {
         logger.warn(`Estimation failed: Provider ${profile.provider} not found`);

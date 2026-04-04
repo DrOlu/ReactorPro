@@ -10,6 +10,7 @@ import {
   CreateTaskParams,
   CustomCommand,
   InvocationMode,
+  JSONValue,
   Mode,
   ModeDefinition,
   Model,
@@ -26,7 +27,8 @@ import {
   ToolApprovalState,
   UpdatedFile,
   UsageReportData,
-} from '@common/types';
+  VoiceSession,
+} from "@common/types";
 
 export { ContextMemoryMode, InvocationMode, ToolApprovalState };
 
@@ -110,6 +112,69 @@ export interface ToolDefinition<TSchema extends z.ZodType = z.ZodType<Record<str
   inputSchema: TSchema;
   /** Execute function with type-safe args */
   execute: (input: z.infer<TSchema>, signal: AbortSignal | undefined, context: ExtensionContext, allTools: Record<string, Tool>) => Promise<unknown>;
+}
+
+/**
+ * Response from loading models for a provider
+ */
+export interface LoadModelsResponse {
+  models: Model[];
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Aider-compatible model mapping with environment variables
+ */
+export interface AiderModelMapping {
+  modelName: string;
+  environmentVariables: Record<string, string>;
+}
+
+export interface CacheControl {
+  providerOptions: Record<string, Record<string, JSONValue>>;
+  placement?: 'message' | 'message-part';
+}
+
+/**
+ * Simplified provider strategy for extensions.
+ * Only `createLlm` and `loadModels` are required.
+ * All other methods are optional and will use built-in defaults when omitted.
+ */
+export interface ExtensionProviderStrategy {
+  createLlm: (
+    profile: ProviderProfile,
+    model: Model,
+    settings: SettingsData,
+    projectDir: string,
+  ) => unknown | Promise<unknown>;
+  loadModels: (profile: ProviderProfile, settings: SettingsData) => Promise<LoadModelsResponse>;
+
+  getAiderMapping?: (provider: ProviderProfile, modelId: string, settings: SettingsData, projectDir: string) => AiderModelMapping;
+  getUsageReport?: (task: unknown, provider: ProviderProfile, model: Model, usage: unknown, providerMetadata?: unknown) => UsageReportData;
+  getProviderOptions?: (model: Model) => Record<string, Record<string, JSONValue>> | undefined;
+  getCacheControl?: (profile: AgentProfile) => CacheControl | undefined;
+  getProviderTools?: (model: Model) => Record<string, Tool> | Promise<Record<string, Tool>>;
+  getProviderParameters?: (model: Model) => Record<string, unknown>;
+  createVoiceSession?: (profile: ProviderProfile, settings: SettingsData) => Promise<VoiceSession>;
+  isRetryable?: (error: unknown) => boolean;
+}
+
+/**
+ * Definition of an LLM provider that can be registered by an extension.
+ * The extension fully owns the provider config — it is not UI-editable.
+ */
+export interface ProviderDefinition {
+  /** Unique provider identifier (e.g., 'my-provider') */
+  id: string;
+  /** Provider name — can be a new name or a built-in provider name to override it */
+  name: string;
+  /** Provider configuration (not UI-editable, extension-owned) */
+  provider: { name: string; [key: string]: unknown };
+  /** Provider strategy implementation */
+  strategy: ExtensionProviderStrategy;
+  /** Optional HTTP headers for API requests */
+  headers?: Record<string, string>;
 }
 
 /** Placement locations for extension UI components */
@@ -791,6 +856,17 @@ export interface Extension {
    * Extension-provided agents will be included in the list of all agents
    */
   getAgents?(context: ExtensionContext): AgentProfile[];
+
+  // Provider registration
+
+  /**
+   * Return array of LLM providers this extension provides
+   * Each provider includes a strategy for LLM creation and model loading,
+   * and a pre-configured provider profile.
+   * Extension providers appear as read-only in the UI — the extension owns the configuration.
+   * Provider names can override built-in providers (user responsibility to avoid conflicts between extensions).
+   */
+  getProviders?(context: ExtensionContext): ProviderDefinition[];
 
   /**
    * Called when a user updates an extension-provided agent profile
