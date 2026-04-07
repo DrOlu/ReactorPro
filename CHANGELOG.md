@@ -1,5 +1,13 @@
 # ReactorPro Changelog
 
+## [UNRELEASED]
+
+- updated project selection logic when closing or adding projects
+- replaced react-table library with custom implementation to avoid incompatibility with React Compiler
+- added Delegated task state when handing off the task to subtask
+- hide task state actions when no messages are present
+- converted task info message into a toggleable panel
+
 ## [0.60.0]
 
 - added settings to configure default working mode for tasks
