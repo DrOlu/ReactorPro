@@ -25506,9 +25506,9 @@ File: src/renderer/progress.html
     <video id="splash-video" autoplay muted loop></video>
     <div class="brand">
       <div class="brand-icon-wrapper">
-        <img class="brand-icon" id="brand-icon" src="" alt="AiderDesk">
+        <img class="brand-icon" id="brand-icon" src="" alt="ReactorPro">
       </div>
-      <span class="brand-name">AiderDesk</span>
+      <span class="brand-name">ReactorPro</span>
     </div>
 
     <div class="detail">
