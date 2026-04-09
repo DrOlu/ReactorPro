@@ -25,9 +25,11 @@ import {
   ModeDefinition,
   InstalledExtension,
   AvailableExtension,
+  ExtensionConfigComponent,
   ExtensionUIComponent,
   OpenDialogResult,
   SystemLogsResponse,
+  AiderConnectorStatus,
 } from '@common/types';
 
 /**
@@ -251,6 +253,11 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     getExtensionUIComponents: vi.fn((): Promise<ExtensionUIComponent[]> => Promise.resolve([])),
     getUIExtensionData: vi.fn((): Promise<unknown> => Promise.resolve({})),
     executeUIExtensionAction: vi.fn((): Promise<unknown> => Promise.resolve({})),
+
+    // Extension config operations (per-extension settings)
+    getExtensionConfigComponent: vi.fn((): Promise<ExtensionConfigComponent | null> => Promise.resolve(null)),
+    getExtensionConfig: vi.fn((): Promise<unknown> => Promise.resolve({})),
+    saveExtensionConfig: vi.fn((): Promise<unknown> => Promise.resolve({})),
     onExtensionUIRefresh: vi.fn(() => vi.fn()),
 
     // Memory operations
@@ -275,6 +282,10 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     getSystemLogs: vi.fn((): Promise<SystemLogsResponse> => Promise.resolve({ logs: [], hasMore: false })),
     clearSystemLogs: vi.fn((): Promise<void> => Promise.resolve()),
     addSystemLogListener: vi.fn(() => vi.fn()),
+
+    // Aider connector status (Python install + per-task connector lifecycle)
+    addAiderConnectorStatusListener: vi.fn(() => vi.fn()),
+    getAiderConnectorStatus: vi.fn((): Promise<AiderConnectorStatus> => Promise.resolve({ state: 'ready' })),
   };
 
   return vi.mocked<ApplicationAPI>({ ...defaultMock, ...overrides });

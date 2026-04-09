@@ -37,6 +37,7 @@ import {
   UserMessageData,
   VersionsInfo,
   WorktreeIntegrationStatusUpdatedData,
+  AiderConnectorStatus,
 } from '@common/types';
 import { electronAPI } from '@electron-toolkit/preload';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
@@ -144,6 +145,11 @@ const api: ApplicationAPI = {
       ipcRenderer.removeListener('modal-overlay-url', listener);
     };
   },
+  // Extension config operations (per-extension settings)
+  getExtensionConfigComponent: (extensionId: string, projectDir?: string) => ipcRenderer.invoke('get-extension-config-component', extensionId, projectDir),
+  getExtensionConfig: (extensionId: string, projectDir?: string) => ipcRenderer.invoke('get-extension-config', extensionId, projectDir),
+  saveExtensionConfig: (extensionId: string, configData: unknown, projectDir?: string) =>
+    ipcRenderer.invoke('save-extension-config', extensionId, configData, projectDir),
   isWebViewSupported: () => true,
 
   createNewTask: (baseDir, params?: CreateTaskParams) => ipcRenderer.invoke('create-new-task', baseDir, params),
@@ -695,6 +701,15 @@ const api: ApplicationAPI = {
     // notifications in Electron app are handled by the main process
     return () => {};
   },
+
+  // Aider connector status (Python install + per-task connector lifecycle)
+  addAiderConnectorStatusListener: (callback: (data: { baseDir?: string; taskId?: string; status: AiderConnectorStatus }) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, data: { baseDir?: string; taskId?: string; status: AiderConnectorStatus }) => callback(data);
+    ipcRenderer.on('aider-connector-status', listener);
+    return () => ipcRenderer.removeListener('aider-connector-status', listener);
+  },
+
+  getAiderConnectorStatus: (): Promise<AiderConnectorStatus> => ipcRenderer.invoke('get-aider-connector-status'),
 };
 
 if (process.contextIsolated) {

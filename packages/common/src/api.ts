@@ -61,9 +61,11 @@ import {
   UpdatedFilesUpdatedData,
   InstalledExtension,
   AvailableExtension,
+  ExtensionConfigComponent,
   ExtensionUIComponent,
   ExtensionUIRefreshData,
   ModalOverlayUrlData,
+  AiderConnectorStatus,
 } from '@common/types';
 
 export interface ApplicationAPI {
@@ -149,6 +151,10 @@ export interface ApplicationAPI {
     projectDir?: string,
     taskId?: string,
   ) => Promise<unknown>;
+  // Extension config operations (per-extension settings UI)
+  getExtensionConfigComponent: (extensionId: string, projectDir?: string) => Promise<ExtensionConfigComponent | null>;
+  getExtensionConfig: (extensionId: string, projectDir?: string) => Promise<unknown>;
+  saveExtensionConfig: (extensionId: string, configData: unknown, projectDir?: string) => Promise<unknown>;
   onExtensionUIRefresh: (callback: (data: ExtensionUIRefreshData) => void) => () => void;
   onModalOverlayUrl: (callback: (data: ModalOverlayUrlData) => void) => () => void;
   isWebViewSupported: () => boolean;
@@ -283,4 +289,9 @@ export interface ApplicationAPI {
   getSystemLogs: (fromId?: number, limit?: number, levels?: SystemLogLevel[]) => Promise<SystemLogsResponse>;
   clearSystemLogs: () => Promise<void>;
   addSystemLogListener: (callback: (data: SystemLogData) => void) => () => void;
+
+  // Aider connector status (Python install + per-task connector lifecycle)
+  addAiderConnectorStatusListener: (callback: (data: { baseDir?: string; taskId?: string; status: AiderConnectorStatus }) => void, baseDir?: string, taskId?: string) => () => void;
+  getAiderConnectorStatus: () => Promise<AiderConnectorStatus>;
+
 }

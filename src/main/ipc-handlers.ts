@@ -18,9 +18,10 @@ import { ipcMain, clipboard } from 'electron';
 
 import { EventsHandler } from './events-handler';
 
+import { PythonDependenciesInstaller } from '@/python-dependencies-installer';
 import { ServerController } from '@/server';
 
-export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController: ServerController) => {
+export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController: ServerController, pythonInstaller: PythonDependenciesInstaller) => {
   // Voice handlers
   ipcMain.handle('create-voice-session', async (_, provider: ProviderProfile) => {
     return await eventsHandler.createVoiceSession(provider);
@@ -315,6 +316,19 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     },
   );
 
+  // Extension config handlers (per-extension settings)
+  ipcMain.handle('get-extension-config-component', (_, extensionId: string, projectDir?: string) => {
+    return eventsHandler.getExtensionConfigComponent(extensionId, projectDir);
+  });
+
+  ipcMain.handle('get-extension-config', async (_, extensionId: string, projectDir?: string) => {
+    return await eventsHandler.getExtensionConfig(extensionId, projectDir);
+  });
+
+  ipcMain.handle('save-extension-config', async (_, extensionId: string, configData: unknown, projectDir?: string) => {
+    return await eventsHandler.saveExtensionConfig(extensionId, configData, projectDir);
+  });
+
   ipcMain.handle('export-task-to-markdown', async (_, baseDir: string, taskId: string, copyOnly: boolean = false) => {
     return await eventsHandler.exportTaskToMarkdown(baseDir, taskId, copyOnly);
   });
@@ -584,5 +598,10 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
 
   ipcMain.handle('clear-system-logs', async () => {
     return eventsHandler.clearSystemLogs();
+  });
+
+  // Aider connector status (Python install + per-task connector lifecycle)
+  ipcMain.handle('get-aider-connector-status', async () => {
+    return pythonInstaller.getStatus();
   });
 };
