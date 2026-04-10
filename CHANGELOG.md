@@ -8,6 +8,9 @@
 - hide task state actions when no messages are present
 - converted task info message into a toggleable panel
 - added support for extension config
+- added commit grouping and uncommitted changes display for updated files
+- added reordering and editing support for queued prompts
+- increased width of the tooltip in MPC tool description for better readability
 
 ## [0.60.0]
 
