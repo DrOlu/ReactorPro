@@ -67,7 +67,7 @@ export const performStartUp = async (pythonInstaller: PythonDependenciesInstalle
 
 const setupMcpServerInternal = async (): Promise<void> => {
   if (isDev()) {
-    logger.info('Skipping AiderDesk MCP server setup in dev mode');
+    logger.info('Skipping ReactorPro MCP server setup in dev mode');
     return;
   }
 

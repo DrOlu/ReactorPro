@@ -26,7 +26,7 @@ export const openUrl = async (url: string, target: 'external' | 'window' = 'wind
         const win = new BrowserWindow({
           width: 1200,
           height: 800,
-          title: title || 'AiderDesk',
+          title: title || 'ReactorPro',
           icon,
           webPreferences: {
             nodeIntegration: false,
