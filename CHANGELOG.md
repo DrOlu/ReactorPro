@@ -1,5 +1,13 @@
 # ReactorPro Changelog
 
+## [UNRELEASED]
+
+- added support for setting up proxy
+
+## [0.61.1]
+
+- correctly adding the built-in skills to apps
+
 ## [0.61.0]
 
 - updated project selection logic when closing or adding projects
