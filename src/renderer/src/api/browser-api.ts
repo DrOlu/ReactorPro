@@ -1037,13 +1037,6 @@ export class BrowserApi implements ApplicationAPI {
     });
   }
 
-  resolveConflictsWithAgent(baseDir: string, taskId: string): Promise<void> {
-    return this.post('/project/resolve-conflicts-with-agent', {
-      projectDir: baseDir,
-      taskId,
-    });
-  }
-
   // Memory operations
   listAllMemories(): Promise<MemoryEntry[]> {
     return this.get('/memories');
@@ -1248,7 +1241,6 @@ export class BrowserApi implements ApplicationAPI {
   }
 
   async getAiderConnectorStatus(): Promise<AiderConnectorStatus> {
-    const response = await this.apiClient.get('/api/aider-connector-status');
-    return response.data;
+    return this.get('/system/aider-connector-status');
   }
 }
