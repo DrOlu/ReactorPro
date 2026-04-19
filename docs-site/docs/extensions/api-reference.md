@@ -525,7 +525,7 @@ interface ToolResult {
 
 ## MemoryContext
 
-Provides access to AiderDesk's memory system — the same underlying vector store used by the built-in memory MCP tools. Available via `context.getMemoryContext()` in any extension lifecycle hook or method.
+Provides access to ReactorPro's memory system — the same underlying vector store used by the built-in memory MCP tools. Available via `context.getMemoryContext()` in any extension lifecycle hook or method.
 
 ```typescript
 interface MemoryContext {

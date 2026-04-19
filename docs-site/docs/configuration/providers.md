@@ -233,12 +233,12 @@ Gemini CLI uses the locally installed Gemini CLI tool for authentication, provid
 
 1. Install the [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 2. Authenticate with your Google account (`gemini` command will prompt you)
-3. Models are automatically available in AiderDesk when the Gemini CLI is detected in your PATH
+3. Models are automatically available in ReactorPro when the Gemini CLI is detected in your PATH
 
 ### Important Notes
 
 - **No API Key Required**: Authentication is handled by the Gemini CLI via OAuth
-- **Auto-Detection**: AiderDesk automatically detects the Gemini CLI installation
+- **Auto-Detection**: ReactorPro automatically detects the Gemini CLI installation
 - **Available Models**: Includes Gemini 2.5 and 3.x variants (e.g., `gemini-2.5-pro`, `gemini-3.1-pro-preview`)
 
 ---

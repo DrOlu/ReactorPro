@@ -509,7 +509,7 @@ export default class ProtectedPathsExtension implements Extension {
 
 ### Extension with Memory Integration
 
-Extensions can access AiderDesk's built-in memory system via `context.getMemoryContext()`. This enables storing and retrieving knowledge across tasks — useful for auto-extracting insights from agent interactions or building context-aware extensions.
+Extensions can access ReactorPro's built-in memory system via `context.getMemoryContext()`. This enables storing and retrieving knowledge across tasks — useful for auto-extracting insights from agent interactions or building context-aware extensions.
 
 ```typescript
 // memory-insights.ts
