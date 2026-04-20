@@ -363,24 +363,26 @@ export type LlmProvider =
   | MistralProvider
   | ExtensionLlmProvider;
 
-export const DEFAULT_MODEL_TEMPERATURE = 0.0;
 
 export const DEFAULT_PROVIDER_MODELS: Partial<Record<LlmProviderName, string>> = {
   'alibaba-plan': 'qwen3-coder-plus',
   anthropic: 'claude-sonnet-4-6',
+  auggie: 'gpt-5-4',
+  bedrock: 'global.anthropic.claude-sonnet-4-6',
   cerebras: 'qwen-3-235b-a22b-instruct-2507',
   'claude-agent-sdk': 'sonnet',
   deepseek: 'deepseek-chat',
   gemini: 'gemini-pro-latest',
-  'gemini-cli': 'gemini-2.5-flash',
+  'gemini-cli': 'gemini-2.5-pro',
   groq: 'moonshotai/kimi-k2-instruct-0905',
+  'kimi-plan': 'k2p5',
   openai: 'gpt-5.4',
   openrouter: 'anthropic/claude-sonnet-4.6',
   opencode: 'claude-sonnet-4-6',
   requesty: 'anthropic/claude-sonnet-4-6',
   synthetic: 'hf:zai-org/GLM-4.7',
-  'zai-plan': 'glm-5',
-  minimax: 'MiniMax-M2',
+  'zai-plan': 'glm-5.1',
+  minimax: 'MiniMax-M2.7',
   mistral: 'mistral-large-latest',
 };
 
