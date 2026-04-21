@@ -78,7 +78,7 @@ const expandTilde = (filePath: string): string => {
 
 const getTempFilePath = (): string => {
   const id = randomBytes(8).toString('hex');
-  return path.join(tmpdir(), `aider-desk-bash-${id}.log`);
+  return path.join(tmpdir(), `reactorpro-bash-${id}.log`);
 };
 
 /**
