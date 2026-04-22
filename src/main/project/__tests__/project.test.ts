@@ -109,7 +109,7 @@ describe('Project - createNewTask', () => {
               contextCompactingThreshold: 0,
               contextCompactionType: ContextCompactionType.Compact,
               defaultWorkingMode: 'local',
-              worktreeBranchPrefix: 'aider-desk/task/',
+              worktreeBranchPrefix: 'reactorpro/task/',
               renameBranchOnNameGeneration: true,
             },
             aider: {
@@ -479,7 +479,7 @@ describe('Project - deleteTask', () => {
               contextCompactingThreshold: 0,
               contextCompactionType: ContextCompactionType.Compact,
               defaultWorkingMode: 'local',
-              worktreeBranchPrefix: 'aider-desk/task/',
+              worktreeBranchPrefix: 'reactorpro/task/',
               renameBranchOnNameGeneration: true,
             },
             aider: {

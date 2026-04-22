@@ -97,7 +97,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     contextCompactingThreshold: 0,
     contextCompactionType: ContextCompactionType.Compact,
     defaultWorkingMode: 'local',
-    worktreeBranchPrefix: 'aider-desk/task/',
+    worktreeBranchPrefix: 'reactorpro/task/',
     renameBranchOnNameGeneration: true,
   },
   extensions: {
