@@ -6,6 +6,7 @@ import { PiNotebookFill } from 'react-icons/pi';
 import { useTranslation } from 'react-i18next';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useSearchParams } from 'react-router-dom';
+import { compareBaseDirs } from '@common/utils';
 
 import { useConfiguredHotkeys } from '@/hooks/useConfiguredHotkeys';
 import { UsageDashboard } from '@/components/usage/UsageDashboard';
@@ -219,30 +220,31 @@ export const Home = () => {
         return;
       }
 
-      const existingProject = optimisticOpenProjects.find((p) => p.baseDir === projectBaseDir);
+      const existingProject = optimisticOpenProjects.find((p) => compareBaseDirs(p.baseDir, projectBaseDir));
 
       // Only update initial task ID on first navigation or when task changes
       if (taskId && (!initialUrlNavigationDone || taskId !== initialTaskId)) {
         setInitialTaskId(taskId);
       }
-
-      if (existingProject) {
-        // Project exists, just update optimistic state (URL is already set)
-        if (activeProject !== projectBaseDir) {
-          setOptimisticActiveProject(projectBaseDir);
+      startProjectTransition(async () => {
+        if (existingProject) {
+          // Project exists, just update optimistic state (URL is already set)
+          if (!compareBaseDirs(activeProject, projectBaseDir)) {
+            setOptimisticActiveProject(projectBaseDir);
+          }
+        } else {
+          // Project doesn't exist, add it and update optimistic state
+          try {
+            await api.addOpenProject(projectBaseDir);
+            const updatedProjects = await api.getOpenProjects();
+            setOpenProjects(updatedProjects);
+            setOptimisticActiveProject(projectBaseDir);
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error('Failed to open project from URL:', error);
+          }
         }
-      } else {
-        // Project doesn't exist, add it and update optimistic state
-        try {
-          await api.addOpenProject(projectBaseDir);
-          const updatedProjects = await api.getOpenProjects();
-          setOpenProjects(updatedProjects);
-          setOptimisticActiveProject(projectBaseDir);
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error('Failed to open project from URL:', error);
-        }
-      }
+      });
     };
 
     void handleUrlNavigation();
