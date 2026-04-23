@@ -9,6 +9,9 @@
 - added support for renaming worktree branches either manually or automatically
 - added worktree branch prefix setting
 - updated project dir normalization for comparing to avoid infinite projects
+- added support for setting CORS allowed origins
+- added obsidian theme made by GLM-5.1's taste
+- updated generate text function to properly use cache control
 
 ## [0.62.0]
 
