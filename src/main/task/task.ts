@@ -280,8 +280,9 @@ export class Task {
       .replace(/-+/g, '-') // Replace multiple dashes with single dash
       .replace(/-$/, ''); // Remove trailing dash
 
-    // If result is empty, use taskId
-    return `${branchPrefix}${cleanBranchName || this.taskId}`;
+    // If result is empty, use shortened taskId (first segment of UUID)
+    const fallbackId = /^[0-9a-f]{8}-/i.test(this.taskId) ? this.taskId.split('-')[0] : this.taskId;
+    return `${branchPrefix}${cleanBranchName || fallbackId}`;
   }
 
   private async renameWorktreeBranchIfNeeded(): Promise<void> {
@@ -405,7 +406,11 @@ export class Task {
     } else if (workingMode === 'local') {
       // Check if worktree exists and set worktreeEnabled accordingly
       if (existingWorktree) {
-        await this.worktreeManager.removeWorktree(this.project.baseDir, existingWorktree);
+        // Only remove the worktree if no other tasks share it
+        const isShared = this.project.isWorktreeSharedWithOtherTasks(existingWorktree.path, this.taskId);
+        if (!isShared) {
+          await this.worktreeManager.removeWorktree(this.project.baseDir, existingWorktree);
+        }
         void this.sendUpdatedFilesUpdated();
         void this.sendWorktreeIntegrationStatusUpdated();
       }
@@ -1939,11 +1944,11 @@ export class Task {
     }
 
     const profile = await this.getTaskAgentProfile();
-    const ruleFiles = await this.getRuleFilesAsContextFiles(profile || undefined);
+    const ruleFiles = await this.getRuleFilesAsContextFiles(profile || undefined, true);
     return [...contextFiles, ...ruleFiles];
   }
 
-  public async getRuleFilesAsContextFiles(profile?: AgentProfile): Promise<ContextFile[]> {
+  public async getRuleFilesAsContextFiles(profile?: AgentProfile, includeDisabled = false): Promise<ContextFile[]> {
     const ruleFiles: ContextFile[] = [];
     const homeDir = homedir();
 
@@ -2027,8 +2032,12 @@ export class Task {
       }
     }
 
+    // Filter out disabled rule files
+    const disabledRuleFiles = this.project.getProjectSettings().disabledRuleFiles ?? [];
+    const enabledRuleFiles = includeDisabled ? ruleFiles : ruleFiles.filter((f) => !disabledRuleFiles.includes(f.path));
+
     // Dispatch extension event to allow modification of rule files
-    const extensionResult = await this.extensionManager.dispatchEvent('onRuleFilesRetrieved', { files: ruleFiles }, this.project, this);
+    const extensionResult = await this.extensionManager.dispatchEvent('onRuleFilesRetrieved', { files: enabledRuleFiles }, this.project, this);
     return extensionResult.files;
   }
 
@@ -3342,7 +3351,11 @@ ${error.stderr}`,
       this.task.workingMode = mode;
     } else if (mode === 'local') {
       if (currentWorktree) {
-        await this.worktreeManager.removeWorktree(this.project.baseDir, currentWorktree);
+        // Only remove the worktree if no other tasks share it
+        const isShared = this.project.isWorktreeSharedWithOtherTasks(currentWorktree.path, this.taskId);
+        if (!isShared) {
+          await this.worktreeManager.removeWorktree(this.project.baseDir, currentWorktree);
+        }
       }
       this.task.worktree = undefined;
       this.task.lastMergeState = undefined;
@@ -3463,6 +3476,72 @@ ${error.stderr}`,
 
     await this.sendUpdatedFilesUpdated();
     await this.sendWorktreeIntegrationStatusUpdated();
+  }
+
+  public async mergeAndSwitchToLocal(targetBranch?: string): Promise<void> {
+    if (!this.task.worktree) {
+      throw new Error('No worktree exists for this task');
+    }
+
+    logger.info('Merging worktree and switching to local mode', {
+      baseDir: this.project.baseDir,
+      taskId: this.taskId,
+    });
+
+    await this.waitForCurrentPromptToFinish();
+
+    try {
+      const effectiveTargetBranch = targetBranch || (await this.worktreeManager.getProjectMainBranch(this.project.baseDir));
+
+      this.addLogMessage('loading', `Merging worktree to ${effectiveTargetBranch} branch and switching to local mode...`);
+
+      const settings = this.store.getSettings();
+      const symlinkFolders = settings.taskSettings.worktreeSymlinkFolders || [];
+
+      // Perform the merge (will throw on failure, preventing the switch)
+      const mergeState = await this.worktreeManager.mergeWorktreeToMainWithUncommitted(
+        this.project.baseDir,
+        this.task.id,
+        this.task.worktree.path,
+        false,
+        this.task.name || `Task ${this.taskId} changes`,
+        targetBranch,
+        symlinkFolders,
+      );
+
+      // Store merge state for potential revert
+      await this.saveTask({ lastMergeState: mergeState });
+
+      this.addLogMessage('info', `Successfully merged worktree to ${effectiveTargetBranch} branch`, true);
+
+      // Now switch to local mode (same path as UI, handles save + events)
+      await this.updateTask({ workingMode: 'local' });
+    } catch (error) {
+      logger.error('Failed to merge worktree and switch to local:', { error });
+
+      const isConflict =
+        error instanceof GitError &&
+        (error.gitOutput?.toLowerCase().includes('resolve all conflicts') ||
+          error.message?.toLowerCase().includes('conflicts must be resolved first') ||
+          error.gitOutput?.toLowerCase().includes('conflicts must be resolved first'));
+
+      this.addLogMessage(
+        'error',
+        isConflict
+          ? 'worktree.mergeConflicts'
+          : error instanceof GitError
+            ? error.getErrorDetails()
+            : `Failed to merge worktree: ${error instanceof Error ? error.message : String(error)}`,
+        true,
+        undefined,
+        isConflict ? ['rebase-worktree'] : undefined,
+      );
+
+      await this.sendUpdatedFilesUpdated();
+      await this.sendWorktreeIntegrationStatusUpdated();
+
+      throw error;
+    }
   }
 
   public async applyUncommittedChanges(targetBranch?: string): Promise<void> {
