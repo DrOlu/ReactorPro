@@ -3,7 +3,6 @@
 ## [UNRELEASED]
 
 - correctly executing the probe semantic search tool in case of edge cases
-- added tool output truncation for bash, file_read, and grep power tools (50KB byte limit, 2000 line limit)
 - added cache and retry mechanism to model loading
 - updated bash tool execution abortion handling and process termination logic
 - added support for renaming worktree branches either manually or automatically
@@ -22,6 +21,7 @@
 - updated default models for Kimi Plan
 - added auto-reconnection in browser on server restart
 - added handling for unavailable MediaDevices API and microphone access
+- added Review changes task state action
 
 ## [0.62.0]
 
