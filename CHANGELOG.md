@@ -2,7 +2,14 @@
 
 ## [UNRELEASED]
 
+- added onBeforeCommit and onAfterCommit extension hooks for commit lifecycle
 - added support for extension-provided skills
+- using baseCommit when rebasing the worktree on different branch
+- added base branch name to the worktree merge button and improved rebasing
+- hide save prompt button when editing last message
+- added support for redoing any user prompt
+- initializing symlink folders on new task when worktree mode is set
+- changed order of the buttons in Switch To Local confirm dialog
 
 ## [0.63.0]
 

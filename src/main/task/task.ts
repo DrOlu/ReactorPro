@@ -286,7 +286,7 @@ export class Task {
   }
 
   private async renameWorktreeBranchIfNeeded(): Promise<void> {
-    if (this.task.workingMode !== 'worktree' || !this.task.worktree?.baseBranch) {
+    if (this.task.workingMode !== 'worktree' || !this.task.worktree?.branch) {
       return;
     }
 
@@ -295,7 +295,7 @@ export class Task {
       return;
     }
 
-    const oldBranch = this.task.worktree.baseBranch;
+    const oldBranch = this.task.worktree.branch;
     const newBranch = this.generateBranchName();
 
     if (oldBranch === newBranch) {
@@ -303,6 +303,38 @@ export class Task {
     }
 
     await this.renameWorktreeBranch(newBranch);
+  }
+
+  /**
+   * @deprecated This migration ensures older task data has the `branch` field
+   * and `baseBranch` stores the branch the worktree was created from.
+   * Can be removed once all users have migrated past v0.64.0.
+   */
+  private async migrateWorktreeData(): Promise<void> {
+    if (!this.task.worktree || this.task.worktree.branch) {
+      return;
+    }
+
+    const currentBranch = this.task.worktree.baseBranch;
+    this.task.worktree.branch = currentBranch;
+
+    let resolvedBase = '';
+    if (this.task.worktree.baseCommit) {
+      const branches = await this.worktreeManager.getBranchesContainingCommit(this.project.baseDir, this.task.worktree.baseCommit);
+      if (branches.length === 1) {
+        resolvedBase = branches[0];
+      }
+    }
+    if (!resolvedBase) {
+      try {
+        resolvedBase = await this.worktreeManager.getProjectMainBranch(this.project.baseDir);
+      } catch {
+        resolvedBase = '';
+      }
+    }
+    this.task.worktree.baseBranch = resolvedBase || undefined;
+
+    await this.saveTask({ worktree: this.task.worktree });
   }
 
   private isInternal() {
@@ -398,8 +430,7 @@ export class Task {
         });
       } else {
         // Create a default worktree for this task
-        const branchName = this.generateBranchName();
-        this.task.worktree = await this.worktreeManager.createWorktree(this.project.baseDir, this.taskId, branchName);
+        await this.initWorktree();
         void this.sendUpdatedFilesUpdated();
         void this.sendWorktreeIntegrationStatusUpdated();
       }
@@ -429,6 +460,9 @@ export class Task {
         this.task.workingMode = 'local';
       }
     }
+
+    await this.migrateWorktreeData();
+
     if (await fileExists(this.getTaskDir())) {
       this.git = simpleGit(this.getTaskDir());
     }
@@ -2436,33 +2470,34 @@ export class Task {
     }
   }
 
-  public async redoLastUserPrompt(mode: Mode, updatedPrompt?: string) {
-    logger.info('Redoing last user prompt:', {
+  public async redoUserPrompt(messageId: string, mode: Mode, updatedPrompt?: string) {
+    logger.info('Redoing user prompt:', {
       baseDir: this.project.baseDir,
+      messageId,
       mode,
       hasUpdatedPrompt: !!updatedPrompt,
     });
 
-    const removedMessages = this.contextManager.removeMessagesUpToLastUserMessage();
-    const originalLastUserMessage = removedMessages.findLast((msg) => msg.role === MessageRole.User);
-    if (!originalLastUserMessage) {
-      logger.warn('Could not find original last user message content to redo.');
+    const removedMessages = this.contextManager.removeMessagesUpToUserMessage(messageId);
+    const originalUserMessage = removedMessages[0];
+    if (!originalUserMessage || originalUserMessage.role !== MessageRole.User) {
+      logger.warn('Could not find the specified user message to redo.', { messageId });
       return;
     }
 
-    const promptToRun = updatedPrompt ?? (originalLastUserMessage.content as string);
+    const promptToRun = updatedPrompt ?? (originalUserMessage.content as string);
 
     if (promptToRun) {
       logger.info('Found message content to run, reloading and re-running prompt.', {
         remainingMessagesCount: (await this.contextManager.getContextMessages()).length,
       });
 
-      this.sendTaskMessageRemoved(removedMessages.slice(0, -1).map((msg) => msg.id));
+      this.sendTaskMessageRemoved(removedMessages.slice(1).map((msg) => msg.id));
 
       await this.updateContextInfo();
 
       // No need to await runPrompt here, let it run in the background
-      void this.runPrompt(promptToRun, mode, false, originalLastUserMessage.id);
+      void this.runPrompt(promptToRun, mode, false, originalUserMessage.id);
     } else {
       logger.warn('Could not find a previous user message to redo or an updated prompt to run.');
     }
@@ -2497,7 +2532,7 @@ export class Task {
         // Last message is from user, redo it
         logger.info('Last message is from user, redoing prompt');
         this.addLogMessage('loading', 'Resuming task...');
-        void this.redoLastUserPrompt(mode);
+        void this.redoUserPrompt(lastMessage.id, mode);
       } else {
         // Last message is not from user, send "Continue" to aider
         logger.info('Last message is not from user, sending Continue prompt');
@@ -3334,6 +3369,16 @@ ${error.stderr}`,
     this.eventManager.sendUpdatedFilesUpdated(this.project.baseDir, this.taskId, updatedFiles);
   }
 
+  private async initWorktree(): Promise<void> {
+    const branchName = this.generateBranchName();
+    this.task.worktree = await this.worktreeManager.createWorktree(this.project.baseDir, this.taskId, branchName);
+
+    const settings = this.store.getSettings();
+    if (settings.taskSettings.worktreeSymlinkFolders && settings.taskSettings.worktreeSymlinkFolders.length > 0) {
+      await this.worktreeManager.createSymlinks(this.project.baseDir, this.task.worktree.path, settings.taskSettings.worktreeSymlinkFolders);
+    }
+  }
+
   private async applyWorkingMode(mode: WorkingMode) {
     logger.info('Applying workingMode configuration', {
       baseDir: this.project.baseDir,
@@ -3346,13 +3391,7 @@ ${error.stderr}`,
     const currentWorktree = await this.worktreeManager.getTaskWorktree(this.project.baseDir, this.taskId);
     if (mode === 'worktree') {
       if (!currentWorktree) {
-        const branchName = this.generateBranchName();
-        this.task.worktree = await this.worktreeManager.createWorktree(this.project.baseDir, this.taskId, branchName);
-
-        const settings = this.store.getSettings();
-        if (settings.taskSettings.worktreeSymlinkFolders && settings.taskSettings.worktreeSymlinkFolders.length > 0) {
-          await this.worktreeManager.createSymlinks(this.project.baseDir, this.task.worktree.path, settings.taskSettings.worktreeSymlinkFolders);
-        }
+        await this.initWorktree();
       }
       this.task.workingMode = mode;
     } else if (mode === 'local') {
@@ -3446,6 +3485,7 @@ ${error.stderr}`,
         effectiveCommitMessage || this.task.name || `Task ${this.taskId} changes`,
         targetBranch,
         symlinkFolders,
+        this.task.worktree.baseCommit,
       );
 
       // Store merge state for potential revert
@@ -3716,10 +3756,20 @@ ${error.stderr}`,
       amend,
     });
 
+    const beforeResult = await this.extensionManager.dispatchEvent('onBeforeCommit', { message, amend }, this.project, this);
+    if (beforeResult.blocked) {
+      logger.debug('Commit blocked by extension');
+      return;
+    }
+    message = beforeResult.message;
+    amend = beforeResult.amend;
+
     const taskDir = this.getTaskDir();
     await this.worktreeManager.commitChanges(taskDir, message, amend);
     await this.sendUpdatedFilesUpdated();
     await this.sendWorktreeIntegrationStatusUpdated();
+
+    await this.extensionManager.dispatchEvent('onAfterCommit', { message, amend }, this.project, this);
   }
 
   public async getWorktreeIntegrationStatus(targetBranch?: string) {
@@ -3737,7 +3787,8 @@ ${error.stderr}`,
     ]);
 
     return {
-      currentBranch: this.task.worktree.baseBranch || '',
+      currentBranch: this.task.worktree.branch || '',
+      baseBranch: this.task.worktree.baseBranch || '',
       targetBranch: effectiveTargetBranch,
       aheadCommits: {
         count: unmergedWork.unmergedCommitCount,
@@ -3769,9 +3820,16 @@ ${error.stderr}`,
 
     try {
       this.addLogMessage('loading', `Rebasing worktree from ${effectiveFromBranch}...`);
-      const { success, error } = await this.worktreeManager.rebaseMainIntoWorktree(this.task.worktree.path, effectiveFromBranch);
+      const { success, error } = await this.worktreeManager.rebaseMainIntoWorktree(this.task.worktree.path, effectiveFromBranch, this.task.worktree.baseCommit);
 
       if (success) {
+        // Update baseCommit to the new HEAD after successful rebase
+        // This ensures subsequent rebases only replay commits made after this point
+        const newHead = await this.worktreeManager.getHeadCommit(this.task.worktree.path);
+        if (newHead) {
+          await this.saveTask({ worktree: { ...this.task.worktree, baseCommit: newHead, baseBranch: effectiveFromBranch } });
+        }
+
         this.addLogMessage('info', 'Worktree rebased successfully', true);
         return;
       }
@@ -3823,13 +3881,13 @@ ${error.stderr}`,
       throw new Error('No worktree exists for this task');
     }
 
-    const oldBranchName = this.task.worktree.baseBranch;
+    const oldBranchName = this.task.worktree.branch;
     if (!oldBranchName) {
       throw new Error('Cannot determine current branch name');
     }
 
     const actualBranchName = await this.worktreeManager.renameBranch(this.project.baseDir, oldBranchName, newBranchName);
-    this.task.worktree.baseBranch = actualBranchName;
+    this.task.worktree.branch = actualBranchName;
     await this.saveTask({ worktree: this.task.worktree });
     void this.sendWorktreeIntegrationStatusUpdated();
   }
