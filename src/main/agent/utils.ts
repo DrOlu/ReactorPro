@@ -106,7 +106,7 @@ export const truncateToolResult = async (content: string, maxLines = 1000, maxSi
   }
 
   const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
-  const tmpFileName = `aider-desk-tool-result-${id}.txt`;
+  const tmpFileName = `reactorpro-tool-result-${id}.txt`;
   const tmpFilePath = path.join(tmpdir(), tmpFileName);
 
   await fs.writeFile(tmpFilePath, content, 'utf8');
