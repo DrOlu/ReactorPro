@@ -1,0 +1,9 @@
+{
+  "name": "cursor-sdk",
+  "version": "1.0.0",
+  "main": "index.js",
+  "description": "Integrates the Cursor SDK as a provider, running Cursor agents for cursor/* models",
+  "dependencies": {
+    "@cursor/sdk": "^1.0.12"
+  }
+}
