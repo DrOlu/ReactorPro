@@ -30,6 +30,7 @@ import type {
   FilesDroppedEvent,
   HandleApprovalEvent,
   ImportantRemindersEvent,
+  InterruptedEvent,
   ModeDefinition,
   OptimizeMessagesEvent,
   ProjectStartedEvent,
@@ -146,6 +147,7 @@ export type ExtensionEventMap = {
   onCustomCommandExecuted: CustomCommandExecutedEvent;
   onBeforeCommit: BeforeCommitEvent;
   onAfterCommit: AfterCommitEvent;
+  onInterrupted: InterruptedEvent;
 };
 
 export class ExtensionManager {

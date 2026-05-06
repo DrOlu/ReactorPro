@@ -1,5 +1,9 @@
 # ReactorPro Changelog
 
+## [UNRELEASED]
+
+- added onInterrupted extension hook to allow blocking or customizing interrupt behavior
+
 ## [0.64.0]
 
 - added onBeforeCommit and onAfterCommit extension hooks for commit lifecycle

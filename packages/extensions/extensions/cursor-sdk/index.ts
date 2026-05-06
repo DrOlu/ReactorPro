@@ -1,0 +1,774 @@
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { Agent, Cursor } from '@cursor/sdk';
+import type { Run, SDKAgent, SDKMessage } from '@cursor/sdk';
+
+import type {
+  AgentStartedEvent,
+  ContextAssistantMessage,
+  ContextMessage,
+  ContextToolMessage,
+  Extension,
+  ExtensionContext,
+  InterruptedEvent,
+  LoadModelsResponse,
+  Model,
+  ProviderDefinition,
+  ReasoningPart,
+  TaskContext,
+  TextPart,
+  ToolCallPart,
+  ToolResultOutput,
+} from '@aiderdesk/extensions';
+
+interface CursorConfig {
+  apiKey: string;
+}
+
+const CURSOR_PROVIDER_NAME = 'cursor';
+const AGENT_ID_METADATA_KEY = 'cursorAgentId';
+const POWER_TOOL_SERVER_NAME = 'power';
+const CURSOR_SERVER_NAME = 'cursor';
+const TOOL_SEPARATOR = '---';
+
+const powerToolName = (name: string) => `${POWER_TOOL_SERVER_NAME}${TOOL_SEPARATOR}${name}`;
+const cursorToolId = (name: string) => `${CURSOR_SERVER_NAME}${TOOL_SEPARATOR}${name}`;
+
+type TransformedTool = {
+  serverName: string;
+  toolName: string;
+  fullToolName: string;
+  input: Record<string, unknown>;
+};
+
+type TransformedResult = {
+  resultStr: string | undefined;
+  output: ToolResultOutput;
+};
+
+type ParsedEdit = {
+  filePath: string;
+  searchTerm: string;
+  replacementText: string;
+};
+
+const HUNK_HEADER_RE = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+
+function parseUnifiedDiff(diffString: string, defaultFilePath: string): ParsedEdit[] {
+  const lines = diffString.split('\n');
+  const edits: ParsedEdit[] = [];
+  const fileHeaderRe = /^--- [ab]\/(.*)$/;
+  const nextFileHeaderRe = /^\+\+\+ [ab]\/(.*)$/;
+
+  let currentFilePath = defaultFilePath;
+  let pendingFromPath: string | null = null;
+  let inHunk = false;
+  let searchLines: string[] = [];
+  let replaceLines: string[] = [];
+
+  const finishHunk = () => {
+    if (!inHunk) return;
+    const searchTerm = searchLines.join('\n');
+    const replacementText = replaceLines.join('\n');
+    if (searchTerm !== replacementText) {
+      edits.push({ filePath: currentFilePath, searchTerm, replacementText });
+    }
+    inHunk = false;
+    searchLines = [];
+    replaceLines = [];
+  };
+
+  for (const line of lines) {
+    const fromMatch = fileHeaderRe.exec(line);
+    if (fromMatch) {
+      finishHunk();
+      pendingFromPath = fromMatch[1];
+      continue;
+    }
+
+    const toMatch = nextFileHeaderRe.exec(line);
+    if (toMatch) {
+      if (pendingFromPath) {
+        currentFilePath = toMatch[1] || pendingFromPath;
+        pendingFromPath = null;
+      }
+      continue;
+    }
+
+    const hunkMatch = HUNK_HEADER_RE.exec(line);
+    if (hunkMatch) {
+      finishHunk();
+      inHunk = true;
+      searchLines = [];
+      replaceLines = [];
+      continue;
+    }
+
+    if (!inHunk) continue;
+
+    if (line.startsWith('+')) {
+      replaceLines.push(line.slice(1));
+    } else if (line.startsWith('-')) {
+      searchLines.push(line.slice(1));
+    } else if (line.startsWith(' ')) {
+      searchLines.push(line.slice(1));
+      replaceLines.push(line.slice(1));
+    }
+  }
+
+  finishHunk();
+
+  return edits;
+}
+
+function transformCursorTool(cursorToolName: string, cursorArgs: Record<string, unknown>): TransformedTool {
+  switch (cursorToolName) {
+    case 'shell': {
+      const args = cursorArgs as { command: string; workingDirectory?: string; timeout?: number };
+      return {
+        serverName: POWER_TOOL_SERVER_NAME,
+        toolName: 'bash',
+        fullToolName: powerToolName('bash'),
+        input: { command: args.command, cwd: args.workingDirectory, timeout: args.timeout },
+      };
+    }
+    case 'read': {
+      const args = cursorArgs as { path: string };
+      return {
+        serverName: POWER_TOOL_SERVER_NAME,
+        toolName: 'file_read',
+        fullToolName: powerToolName('file_read'),
+        input: { filePath: args.path },
+      };
+    }
+    case 'write': {
+      const args = cursorArgs as { path: string; fileText: string; returnFileContentAfterWrite?: boolean };
+      return {
+        serverName: POWER_TOOL_SERVER_NAME,
+        toolName: 'file_write',
+        fullToolName: powerToolName('file_write'),
+        input: { filePath: args.path, content: args.fileText, mode: 'overwrite' },
+      };
+    }
+    case 'edit': {
+      const args = cursorArgs as { path: string };
+      return {
+        serverName: POWER_TOOL_SERVER_NAME,
+        toolName: 'file_edit',
+        fullToolName: powerToolName('file_edit'),
+        input: { filePath: args.path },
+      };
+    }
+    case 'glob': {
+      const args = cursorArgs as { globPattern: string; targetDirectory?: string };
+      return {
+        serverName: POWER_TOOL_SERVER_NAME,
+        toolName: 'glob',
+        fullToolName: powerToolName('glob'),
+        input: { pattern: args.globPattern, cwd: args.targetDirectory },
+      };
+    }
+    case 'grep': {
+      const args = cursorArgs as {
+        pattern: string;
+        path?: string;
+        glob?: string;
+        context?: number;
+        caseInsensitive?: boolean;
+        headLimit?: number;
+      };
+      return {
+        serverName: POWER_TOOL_SERVER_NAME,
+        toolName: 'grep',
+        fullToolName: powerToolName('grep'),
+        input: {
+          searchTerm: args.pattern,
+          filePattern: args.glob ?? '**/*',
+          contextLines: args.context ?? 0,
+          caseSensitive: !args.caseInsensitive,
+          maxResults: args.headLimit ?? 50,
+        },
+      };
+    }
+    default:
+      return {
+        serverName: CURSOR_SERVER_NAME,
+        toolName: cursorToolName,
+        fullToolName: cursorToolId(cursorToolName),
+        input: cursorArgs,
+      };
+  }
+}
+
+function extractResultValue(cursorResult: unknown): unknown {
+  if (cursorResult && typeof cursorResult === 'object' && 'value' in cursorResult) {
+    return (cursorResult as { value: unknown }).value;
+  }
+  return cursorResult;
+}
+
+function transformCursorResult(
+  cursorToolName: string,
+  cursorResult: unknown,
+  status: string,
+): TransformedResult {
+  if (status === 'error') {
+    const errorStr = cursorResult && typeof cursorResult === 'object' && 'error' in cursorResult
+      ? String((cursorResult as { error: unknown }).error)
+      : String(cursorResult ?? '');
+    return { resultStr: errorStr, output: { type: 'error-text', value: errorStr } };
+  }
+
+  const value = extractResultValue(cursorResult);
+
+  switch (cursorToolName) {
+    case 'shell': {
+      const v = value as { stdout: string; stderr: string; exitCode: number; executionTime: number };
+      const transformed = { stdout: v?.stdout ?? '', stderr: v?.stderr ?? '', exitCode: v?.exitCode ?? 0 };
+      const str = JSON.stringify(transformed);
+      return { resultStr: str, output: { type: 'json', value: str } };
+    }
+    case 'read': {
+      const v = value as { content: string; totalLines: number; fileSize: number } | undefined;
+      const content = typeof v === 'string' ? v : (v?.content ?? '');
+      return { resultStr: JSON.stringify(content), output: { type: 'text', value: content } };
+    }
+    case 'write': {
+      const v = value as { path: string; linesCreated: number; fileSize: number };
+      const str = v ? `Successfully wrote to '${v.path}' (${v.linesCreated} lines, ${v.fileSize} bytes)` : 'Write completed';
+      return { resultStr: JSON.stringify(str), output: { type: 'text', value: str } };
+    }
+    case 'edit': {
+      const v = value as { linesAdded?: number; linesRemoved?: number; diffString?: string };
+      const str = v?.diffString ?? JSON.stringify(v ?? {});
+      return { resultStr: str, output: { type: 'text', value: str } };
+    }
+    case 'glob': {
+      const v = value as { files: string[]; totalFiles: number };
+      const files = v?.files ?? [];
+      const str = files.join('\n');
+      return { resultStr: str, output: { type: 'text', value: str } };
+    }
+    case 'grep': {
+      const v = value as { workspaceResults?: Record<string, unknown> };
+      const str = JSON.stringify(v ?? {});
+      return { resultStr: str, output: { type: 'text', value: str } };
+    }
+    default: {
+      const str = cursorResult !== undefined
+        ? typeof cursorResult === 'string' ? cursorResult : JSON.stringify(cursorResult)
+        : undefined;
+      return {
+        resultStr: str,
+        output: str ? { type: 'text', value: str } : { type: 'text', value: '' },
+      };
+    }
+  }
+}
+
+const configComponentJsx = readFileSync(join(__dirname, './ConfigComponent.jsx'), 'utf-8');
+
+export default class CursorSdkExtension implements Extension {
+  static metadata = {
+    name: 'Cursor SDK',
+    version: '1.0.0',
+    description: 'Integrates the Cursor SDK as a provider with cursor/ prefix, overriding the agent loop',
+    author: 'wladimiiir',
+    icon: 'https://raw.githubusercontent.com/hotovo/aider-desk/refs/heads/main/packages/extensions/extensions/cursor-sdk/icon.png',
+    capabilities: ['providers', 'agent-loop'],
+  };
+
+  private configPath = join(__dirname, 'config.json');
+  private abortResolvers = new Map<string, () => void>();
+
+  private loadConfig(): CursorConfig {
+    try {
+      if (existsSync(this.configPath)) {
+        const data = readFileSync(this.configPath, 'utf-8');
+        return JSON.parse(data);
+      }
+    } catch {
+      // Ignore errors
+    }
+    return { apiKey: '' };
+  }
+
+  async onLoad(context: ExtensionContext): Promise<void> {
+    context.log('Cursor SDK extension loaded', 'info');
+  }
+
+  async onUnload(): Promise<void> {
+    for (const resolver of this.abortResolvers.values()) {
+      resolver();
+    }
+    this.abortResolvers.clear();
+  }
+
+  getProviders(_context: ExtensionContext): ProviderDefinition[] {
+    return [
+      {
+        id: CURSOR_PROVIDER_NAME,
+        name: CURSOR_PROVIDER_NAME,
+        provider: { name: CURSOR_PROVIDER_NAME },
+        strategy: {
+          createLlm: () => ({}),
+          loadModels: async (profile, _settings): Promise<LoadModelsResponse> => {
+            const config = this.loadConfig();
+            const apiKey = config.apiKey || process.env.CURSOR_API_KEY;
+            if (!apiKey) {
+              return { models: [], success: false, error: 'CURSOR_API_KEY not configured' };
+            }
+            try {
+              const cursorModels = await Cursor.models.list({ apiKey });
+              const models: Model[] = cursorModels.map((m) => ({
+                id: `${CURSOR_PROVIDER_NAME}/${m.id}`,
+                providerId: profile.id,
+              }));
+              return { models, success: true };
+            } catch (err) {
+              return {
+                models: [],
+                success: false,
+                error: err instanceof Error ? err.message : String(err),
+              };
+            }
+          },
+        },
+      },
+    ];
+  }
+
+  async onAgentStarted(
+    event: AgentStartedEvent,
+    context: ExtensionContext,
+  ): Promise<void | Partial<AgentStartedEvent>> {
+    if (!event.providerProfile.name.startsWith(CURSOR_PROVIDER_NAME)) {
+      return undefined;
+    }
+
+    const taskContext = context.getTaskContext();
+    if (!taskContext || !event.prompt) {
+      return undefined;
+    }
+
+    const config = this.loadConfig();
+    const apiKey = config.apiKey || process.env.CURSOR_API_KEY;
+    if (!apiKey) {
+      taskContext.addLogMessage(
+        'error',
+        'Cursor SDK: CURSOR_API_KEY not configured. Set it in extension settings or environment.',
+      );
+      return { blocked: true };
+    }
+
+    const taskId = taskContext.data.id;
+    const modelId = event.model.replace(`${CURSOR_PROVIDER_NAME}/`, '');
+    const projectDir = taskContext.getTaskDir();
+
+    const abortPromise = new Promise<void>((resolve) => {
+      this.abortResolvers.set(taskId, resolve);
+    });
+    let aborted = false;
+
+    const agentOptions = {
+      apiKey,
+      model: { id: modelId },
+      local: { cwd: projectDir },
+    };
+
+    let agent: SDKAgent | undefined;
+    const existingAgentId = taskContext.data.metadata?.[AGENT_ID_METADATA_KEY] as string | undefined;
+
+    try {
+      if (existingAgentId) {
+        context.log(`Resuming Cursor agent: ${existingAgentId}`, 'info');
+        agent = await Agent.resume(existingAgentId, agentOptions);
+      } else {
+        context.log('Creating new Cursor agent', 'info');
+        agent = await Agent.create(agentOptions);
+
+        await taskContext.updateTask({
+          metadata: { ...taskContext.data.metadata, [AGENT_ID_METADATA_KEY]: agent.agentId },
+        });
+      }
+
+      const run = await agent.send(event.prompt);
+      context.log(`Cursor run started: ${run.id}`, 'info');
+
+      taskContext.addLoadingMessage('Running Cursor agent...');
+
+      let contextMessages: ContextMessage[] = [];
+
+      const streamPromise = processStream(run, taskContext).then((messages) => {
+        contextMessages = messages;
+      });
+
+      await Promise.race([
+        streamPromise,
+        abortPromise.then(() => {
+          aborted = true;
+        }),
+      ]);
+
+      if (!aborted) {
+        const result = await run.wait();
+        context.log(`Cursor run finished: ${result.status}`, 'info');
+
+        for (const contextMessage of contextMessages) {
+          await taskContext.addContextMessage(contextMessage);
+        }
+
+        taskContext.addLoadingMessage(undefined, true);
+      }
+    } catch (err) {
+      if (!aborted) {
+        const message = err instanceof Error ? err.message : String(err);
+        context.log(`Cursor agent error: ${message}`, 'error');
+        taskContext.addLogMessage('error', `Cursor SDK error: ${message}`);
+        taskContext.addLoadingMessage(undefined, true);
+      }
+    } finally {
+      this.abortResolvers.delete(taskId);
+
+      if (agent) {
+        try {
+          await agent[Symbol.asyncDispose]();
+        } catch {
+          // Ignore disposal errors
+        }
+      }
+    }
+
+    return { blocked: true };
+  }
+
+  async onInterrupted(
+    event: InterruptedEvent,
+    context: ExtensionContext,
+  ): Promise<void | Partial<InterruptedEvent>> {
+    const taskContext = context.getTaskContext();
+    if (!taskContext) {
+      return undefined;
+    }
+
+    const taskId = taskContext.data.id;
+    const resolver = this.abortResolvers.get(taskId);
+    if (resolver) {
+      context.log(`Interrupting Cursor agent for task ${taskId}`, 'info');
+      resolver();
+      this.abortResolvers.delete(taskId);
+
+      await taskContext.updateTask({
+        metadata: { ...taskContext.data.metadata, [AGENT_ID_METADATA_KEY]: undefined },
+      });
+
+      return { blocked: true };
+    }
+
+    return undefined;
+  }
+
+  getConfigComponent(): string {
+    return configComponentJsx;
+  }
+
+  async getConfigData(): Promise<CursorConfig> {
+    return this.loadConfig();
+  }
+
+  async saveConfigData(configData: unknown): Promise<unknown> {
+    const config = configData as Partial<CursorConfig>;
+    const merged = { ...this.loadConfig(), ...config };
+    writeFileSync(this.configPath, JSON.stringify(merged, null, 2), 'utf-8');
+    return merged;
+  }
+}
+
+const THINKING_TAG = '---\n► **THINKING**\n';
+const ANSWER_TAG = '---\n► **ANSWER**\n';
+
+type AssistantContentPart = ReasoningPart | TextPart | ToolCallPart;
+
+async function processStream(run: Run, taskContext: TaskContext): Promise<ContextMessage[]> {
+  const contextMessages: ContextMessage[] = [];
+
+  let currentAssistantMessage: ContextAssistantMessage | null = null;
+  let hasActiveReasoning = false;
+  let responseCounter = 0;
+
+  const generateResponseId = () => `${run.id}-${responseCounter++}`;
+
+  const getParts = (msg: ContextAssistantMessage): AssistantContentPart[] =>
+    msg.content as AssistantContentPart[];
+
+  const hasToolCallParts = (msg: ContextAssistantMessage): boolean =>
+    getParts(msg).some((p): p is ToolCallPart => p.type === 'tool-call');
+
+  const hasToolCallPart = (msg: ContextAssistantMessage, callId: string): boolean =>
+    getParts(msg).some((p): p is ToolCallPart => p.type === 'tool-call' && p.toolCallId === callId);
+
+  const appendText = (msg: ContextAssistantMessage, text: string) => {
+    const parts = getParts(msg);
+    const last = parts[parts.length - 1];
+    if (last && last.type === 'text') {
+      last.text += text;
+    } else {
+      parts.push({ type: 'text', text });
+    }
+  };
+
+  const appendReasoning = (msg: ContextAssistantMessage, text: string) => {
+    const parts = getParts(msg);
+    const last = parts[parts.length - 1];
+    if (last && last.type === 'reasoning') {
+      last.text += text;
+    } else {
+      parts.push({ type: 'reasoning', text });
+    }
+  };
+
+  const extractReasoningText = (parts: AssistantContentPart[]): string =>
+    parts.filter((p): p is ReasoningPart => p.type === 'reasoning').map((p) => p.text).join('');
+
+  const extractText = (parts: AssistantContentPart[]): string =>
+    parts.filter((p): p is TextPart => p.type === 'text').map((p) => p.text).join('');
+
+  const ensureAssistantMessage = (): ContextAssistantMessage => {
+    if (!currentAssistantMessage) {
+      currentAssistantMessage = {
+        id: generateResponseId(),
+        role: 'assistant',
+        content: [],
+      };
+      contextMessages.push(currentAssistantMessage);
+    }
+    return currentAssistantMessage;
+  };
+
+  const finishCurrentMessage = async () => {
+    if (!currentAssistantMessage) return;
+
+    const parts = getParts(currentAssistantMessage);
+    if (parts.length === 0) {
+      const idx = contextMessages.lastIndexOf(currentAssistantMessage);
+      if (idx !== -1) contextMessages.splice(idx, 1);
+      currentAssistantMessage = null;
+      hasActiveReasoning = false;
+      return;
+    }
+
+    const reasoning = extractReasoningText(parts).trim();
+    const text = extractText(parts).trim();
+
+    if (reasoning || text) {
+      const finishedContent = reasoning && text
+        ? `${THINKING_TAG}${reasoning}${ANSWER_TAG}${text}`
+        : reasoning
+          ? `${THINKING_TAG}${reasoning}`
+          : text;
+
+      await taskContext.addResponseMessage({ id: currentAssistantMessage.id, content: finishedContent, finished: true }, true);
+    }
+
+    currentAssistantMessage = null;
+    hasActiveReasoning = false;
+  };
+
+  for await (const message of run.stream()) {
+    switch (message.type) {
+      case 'thinking': {
+        if (currentAssistantMessage) {
+          const text = extractText(getParts(currentAssistantMessage)).trim();
+          if (text || hasToolCallParts(currentAssistantMessage)) {
+            await finishCurrentMessage();
+          }
+        }
+
+        const msg = ensureAssistantMessage();
+        appendReasoning(msg, message.text);
+
+        if (!hasActiveReasoning) {
+          hasActiveReasoning = true;
+          await taskContext.addResponseMessage({
+            id: msg.id,
+            content: THINKING_TAG,
+            finished: false,
+          });
+        }
+
+        await taskContext.addResponseMessage({
+          id: msg.id,
+          content: message.text,
+          finished: false,
+        });
+        break;
+      }
+
+      case 'task': {
+        if (message.text) {
+          taskContext.addLogMessage('info', message.status ? `${message.status}: ${message.text}` : message.text);
+        }
+        break;
+      }
+
+      case 'assistant': {
+        for (const block of message.message.content) {
+          if (block.type === 'text') {
+            if (currentAssistantMessage && hasToolCallParts(currentAssistantMessage)) {
+              await finishCurrentMessage();
+            }
+
+            const msg = ensureAssistantMessage();
+
+            if (hasActiveReasoning) {
+              await taskContext.addResponseMessage({
+                id: msg.id,
+                content: ANSWER_TAG,
+                finished: false,
+              });
+              hasActiveReasoning = false;
+            }
+
+            appendText(msg, block.text);
+
+            await taskContext.addResponseMessage({
+              id: msg.id,
+              content: block.text,
+              finished: false,
+            });
+          } else if (block.type === 'tool_use') {
+            const msg = ensureAssistantMessage();
+            const transformed = transformCursorTool(block.name, block.input as Record<string, unknown>);
+            getParts(msg).push({
+              type: 'tool-call',
+              toolCallId: block.id,
+              toolName: transformed.fullToolName,
+              input: transformed.input,
+            });
+
+            taskContext.addToolMessage(block.id, transformed.serverName, transformed.toolName, transformed.input, undefined, undefined, undefined, false, false);
+          }
+        }
+        break;
+      }
+
+      case 'tool_call': {
+        ensureAssistantMessage();
+
+        const finished =
+          message.status === "completed" || message.status === "error";
+
+        if (message.name === 'edit' && finished) {
+          const diffResult = message.result as { value?: { diffString?: string } } | undefined;
+          const diffString = diffResult?.value?.diffString;
+          const editArgs = (message.args ?? {}) as { path: string };
+
+          if (diffString) {
+            const edits = parseUnifiedDiff(diffString, editArgs.path ?? '');
+
+            if (edits.length > 0) {
+              const parts = getParts(currentAssistantMessage);
+              const originalIdx = parts.findIndex(
+                (p): p is ToolCallPart => p.type === 'tool-call' && p.toolCallId === message.call_id,
+              );
+              if (originalIdx !== -1) {
+                parts.splice(originalIdx, 1);
+              }
+
+              const fileEditFullName = powerToolName('file_edit');
+
+              for (let i = 0; i < edits.length; i++) {
+                const edit = edits[i];
+                const editId = edits.length === 1 ? message.call_id : `${message.call_id}-${i}`;
+                const editInput = { filePath: edit.filePath, searchTerm: edit.searchTerm, replacementText: edit.replacementText };
+                const resultStr = `Successfully edited '${edit.filePath}'.`;
+
+                parts.push({
+                  type: "tool-call",
+                  toolCallId: editId,
+                  toolName: fileEditFullName,
+                  input: editInput,
+                });
+
+                taskContext.addToolMessage(
+                  editId,
+                  POWER_TOOL_SERVER_NAME,
+                  'file_edit',
+                  editInput,
+                  JSON.stringify(resultStr),
+                  undefined,
+                  undefined,
+                  true,
+                  true,
+                );
+
+                contextMessages.push({
+                  id: editId,
+                  role: "tool",
+                  content: [
+                    {
+                      type: "tool-result",
+                      toolCallId: editId,
+                      toolName: fileEditFullName,
+                      output: { type: "text", value: resultStr },
+                    },
+                  ],
+                } as ContextToolMessage);
+              }
+
+              break;
+            }
+          }
+        }
+
+        const transformed = transformCursorTool(message.name, (message.args ?? {}) as Record<string, unknown>);
+
+        if (!hasToolCallPart(currentAssistantMessage, message.call_id)) {
+          getParts(currentAssistantMessage).push({
+            type: "tool-call",
+            toolCallId: message.call_id,
+            toolName: transformed.fullToolName,
+            input: transformed.input,
+          });
+        }
+
+        const transformedResult = finished
+          ? transformCursorResult(message.name, message.result, message.status ?? 'success')
+          : null;
+
+        taskContext.addToolMessage(
+          message.call_id,
+          transformed.serverName,
+          transformed.toolName,
+          transformed.input,
+          transformedResult?.resultStr ?? undefined,
+          undefined,
+          undefined,
+          finished,
+          finished,
+        );
+
+        if (finished && transformedResult) {
+          contextMessages.push({
+            id: message.call_id,
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: message.call_id,
+                toolName: transformed.fullToolName,
+                output: transformedResult.output,
+              },
+            ],
+          } as ContextToolMessage);
+        }
+        break;
+      }
+    }
+  }
+
+  await finishCurrentMessage();
+
+  return contextMessages;
+}

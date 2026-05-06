@@ -2328,6 +2328,14 @@ export class Task {
   }
 
   public async interruptResponse(interruptId?: string) {
+    const extensionResult = await this.extensionManager.dispatchEvent('onInterrupted', { interruptId }, this.project, this);
+    if (extensionResult.blocked) {
+      logger.debug('Interrupt blocked by extension', { interruptId });
+      return;
+    }
+
+    interruptId = extensionResult.interruptId;
+
     if (interruptId) {
       // Check for subagent abort controller first
       const subagentAbortController = this.subagentAbortControllers[interruptId];
