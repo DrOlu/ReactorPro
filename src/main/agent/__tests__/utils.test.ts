@@ -133,7 +133,7 @@ describe('truncateToolResult', () => {
       expect(tmpPathMatch).not.toBeNull();
 
       const tmpFilePath = tmpPathMatch![1];
-      expect(tmpFilePath).toContain('aider-desk-tool-result-');
+      expect(tmpFilePath).toContain('reactorpro-tool-result-');
 
       const savedContent = await fs.readFile(tmpFilePath, 'utf8');
       expect(savedContent).toBe(content);
@@ -147,7 +147,7 @@ describe('truncateToolResult', () => {
 
       await truncateToolResult(content);
 
-      const tmpFileCalls = writeSpy.mock.calls.filter((call) => String(call[0]).includes('aider-desk-tool-result-'));
+      const tmpFileCalls = writeSpy.mock.calls.filter((call) => String(call[0]).includes('reactorpro-tool-result-'));
       expect(tmpFileCalls).toHaveLength(0);
 
       writeSpy.mockRestore();
