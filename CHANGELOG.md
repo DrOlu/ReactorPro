@@ -3,6 +3,10 @@
 ## [UNRELEASED]
 
 - added onInterrupted extension hook to allow blocking or customizing interrupt behavior
+- added token-based truncation to tool results
+- fixed 'process is not defined' error in renderer
+- added flexible agent profile resolution and improved task creation tool
+- added support for activating skills in custom commands
 
 ## [0.64.0]
 
