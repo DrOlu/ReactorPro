@@ -7,6 +7,9 @@
 - fixed 'process is not defined' error in renderer
 - added flexible agent profile resolution and improved task creation tool
 - added support for activating skills in custom commands
+- correctly using the partial file content when using read_file tool with offset and limit
+- added support for both percentage and token count thresholds for context compaction
+- added Smart context compation type
 
 ## [0.64.0]
 
