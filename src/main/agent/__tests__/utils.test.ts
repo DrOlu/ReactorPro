@@ -210,7 +210,7 @@ describe('truncateToolResult', () => {
 });
 
 describe('readFileContent', () => {
-  const tmpDir = path.join(os.tmpdir(), 'aider-desk-test-readFileContent');
+  const tmpDir = path.join(os.tmpdir(), 'reactorpro-test-readFileContent');
 
   const createTempFile = async (content: string, fileName = 'test.txt'): Promise<string> => {
     await fs.mkdir(tmpDir, { recursive: true });
