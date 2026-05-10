@@ -65,12 +65,12 @@ import {
   ANSWER_RESPONSE_START_TAG,
   extractPromptContextFromToolResult,
   findLastUserMessage,
+  isNetworkError,
   readFileContent,
   THINKING_RESPONSE_STAR_TAG,
   truncateToolResult,
 } from './utils';
 import { extractReasoningMiddleware } from './middlewares/extract-reasoning-middleware';
-import { smartCompactMessages } from './smart-compaction';
 
 import type { JSONSchema7Definition } from '@ai-sdk/provider';
 
@@ -1031,7 +1031,7 @@ export class Agent {
       };
 
       // Get the model to use its temperature and max output tokens settings
-      const modelSettings = this.modelManager.getModelSettings(provider.provider.name, modelName);
+      const modelSettings = this.modelManager.getModelSettings(provider.id, modelName);
       const effectiveTemperature = profile.temperature ?? modelSettings?.temperature;
       const effectiveMaxOutputTokens = profile.maxTokens ?? modelSettings?.maxOutputTokens;
 
@@ -1233,26 +1233,47 @@ export class Agent {
             experimental_repairToolCall: repairToolCall,
           });
 
-          for await (const chunk of result.fullStream) {
-            logger.debug('Chunk:', { chunk: chunk.type, responseMessageIndex });
+          try {
+            for await (const chunk of result.fullStream) {
+              logger.debug('Chunk:', { chunk: chunk.type, responseMessageIndex });
 
-            const responseMessageId = responseMessageIndex > 0 ? `${currentResponseId}-${responseMessageIndex}` : currentResponseId;
-            if (chunk.type === 'text-start') {
-              if (hasReasoning) {
+              const responseMessageId = responseMessageIndex > 0 ? `${currentResponseId}-${responseMessageIndex}` : currentResponseId;
+              if (chunk.type === 'text-start') {
+                if (hasReasoning) {
+                  streamingMessageIds.add(responseMessageId);
+                  await task.processResponseMessage({
+                    id: responseMessageId,
+                    action: 'response',
+                    content: ANSWER_RESPONSE_START_TAG,
+                    finished: false,
+                    promptContext,
+                  });
+                  hasReasoning = false;
+                }
+              } else if (chunk.type === 'text-end') {
+                responseMessageIndex++;
+              } else if (chunk.type === 'text-delta') {
+                if (chunk.text.trim()) {
+                  streamingMessageIds.add(responseMessageId);
+                  await task.processResponseMessage({
+                    id: responseMessageId,
+                    action: 'response',
+                    content: chunk.text,
+                    finished: false,
+                    promptContext,
+                  });
+                }
+              } else if (chunk.type === 'reasoning-start') {
                 streamingMessageIds.add(responseMessageId);
                 await task.processResponseMessage({
                   id: responseMessageId,
                   action: 'response',
-                  content: ANSWER_RESPONSE_START_TAG,
+                  content: THINKING_RESPONSE_STAR_TAG,
                   finished: false,
                   promptContext,
                 });
-                hasReasoning = false;
-              }
-            } else if (chunk.type === 'text-end') {
-              responseMessageIndex++;
-            } else if (chunk.type === 'text-delta') {
-              if (chunk.text.trim()) {
+                hasReasoning = true;
+              } else if (chunk.type === 'reasoning-delta') {
                 streamingMessageIds.add(responseMessageId);
                 await task.processResponseMessage({
                   id: responseMessageId,
@@ -1261,45 +1282,48 @@ export class Agent {
                   finished: false,
                   promptContext,
                 });
+              } else if (chunk.type === 'tool-input-start') {
+                task.addLogMessage('loading', 'Preparing tool...', false, promptContext);
+                streamingMessageIds.add(chunk.id);
+              } else if (chunk.type === 'tool-call') {
+                task.addLogMessage('loading', 'Executing tool...', false, promptContext);
+                streamingMessageIds.add(chunk.toolCallId);
+              } else if (chunk.type === 'tool-result') {
+                const [serverName, toolName] = extractServerNameToolName(chunk.toolName);
+                const toolPromptContext = extractPromptContextFromToolResult(chunk.output) ?? promptContext;
+                streamingMessageIds.add(chunk.toolCallId);
+                task.addToolMessage(chunk.toolCallId, serverName, toolName, chunk.input, JSON.stringify(chunk.output), undefined, toolPromptContext);
+                task.addLogMessage('loading', undefined, false, promptContext);
               }
-            } else if (chunk.type === 'reasoning-start') {
-              streamingMessageIds.add(responseMessageId);
-              await task.processResponseMessage({
-                id: responseMessageId,
-                action: 'response',
-                content: THINKING_RESPONSE_STAR_TAG,
-                finished: false,
-                promptContext,
-              });
-              hasReasoning = true;
-            } else if (chunk.type === 'reasoning-delta') {
-              streamingMessageIds.add(responseMessageId);
-              await task.processResponseMessage({
-                id: responseMessageId,
-                action: 'response',
-                content: chunk.text,
-                finished: false,
-                promptContext,
-              });
-            } else if (chunk.type === 'tool-input-start') {
-              task.addLogMessage('loading', 'Preparing tool...', false, promptContext);
-              streamingMessageIds.add(chunk.id);
-            } else if (chunk.type === 'tool-call') {
-              task.addLogMessage('loading', 'Executing tool...', false, promptContext);
-              streamingMessageIds.add(chunk.toolCallId);
-            } else if (chunk.type === 'tool-result') {
-              const [serverName, toolName] = extractServerNameToolName(chunk.toolName);
-              const toolPromptContext = extractPromptContextFromToolResult(chunk.output) ?? promptContext;
-              streamingMessageIds.add(chunk.toolCallId);
-              task.addToolMessage(chunk.toolCallId, serverName, toolName, chunk.input, JSON.stringify(chunk.output), undefined, toolPromptContext);
-              task.addLogMessage('loading', undefined, false, promptContext);
+            }
+          } catch (streamError) {
+            if (effectiveAbortSignal?.aborted) {
+              throw streamError;
+            }
+
+            if (isNetworkError(streamError) && retryCount < MAX_RETRIES) {
+              logger.warn(`Network error during streaming, retrying (${retryCount + 1}/${MAX_RETRIES})...`, { error: streamError });
+              iterationError = streamError;
+              this.removeUnfinishedStreamingMessages(task, streamingMessageIds);
+              task.addLogMessage('loading', 'Network error occured. Retrying...');
+            } else if (isNetworkError(streamError)) {
+              const error = streamError as Error;
+              const underlyingMessage = error.cause instanceof Error ? error.cause.message : error.message;
+              throw new Error(`Network error after ${MAX_RETRIES} retries (check your connection): ${underlyingMessage}`, { cause: streamError });
+            } else {
+              throw streamError;
             }
           }
         }
 
         if (iterationError) {
-          logger.error('Error during prompt:', iterationError);
-          if (
+          logger.error('Error during iteration:', iterationError);
+          if (isNetworkError(iterationError) && retryCount < MAX_RETRIES) {
+            logger.info(`Network error, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+            this.removeUnfinishedStreamingMessages(task, streamingMessageIds);
+            retryCount++;
+            continue;
+          } else if (
             iterationError instanceof APICallError &&
             iterationError.isRetryable &&
             this.modelManager.isRetryable(resolvedProvider, modelName, iterationError)
@@ -1417,6 +1441,9 @@ export class Agent {
       } else {
         task.addLogMessage('error', `${error instanceof Error ? error.message : String(error)}`, false, promptContext);
       }
+      await task.updateTask({
+        state: DefaultTaskState.Interrupted,
+      });
     } finally {
       // Clean up abort controller only if we created it
       if (controllerId) {
@@ -1951,14 +1978,39 @@ export class Agent {
     abortSignal?: AbortSignal,
   ) {
     const taskSettings = this.store.getSettings().taskSettings;
-    const thresholdConfig = taskSettings.contextCompactingThreshold;
+    const thresholdConfig = {
+      percentage: profile.autoCompactThresholdPercentage ?? taskSettings.contextCompactingThreshold.percentage,
+      tokens: profile.autoCompactThresholdTokens ?? taskSettings.contextCompactingThreshold.tokens,
+    };
     const taskTokensOverride = task.task.contextCompactingThresholdTokens;
-    const contextCompactionType = profile.isSubagent ? ContextCompactionType.Compact : (taskSettings.contextCompactionType ?? ContextCompactionType.Compact);
+    let contextCompactionType = profile.autoCompactionType ?? taskSettings.contextCompactionType ?? ContextCompactionType.Compact;
+    if (profile.isSubagent && contextCompactionType === ContextCompactionType.Handoff) {
+      // subagent cannot use Handoff, so we fallback to Compact
+      contextCompactionType = ContextCompactionType.Compact;
+    }
+
+    logger.debug('Compaction threshold', {
+      thresholdConfig,
+      profile: {
+        autoCompactThresholdPercentage: profile.autoCompactThresholdPercentage,
+        autoCompactThresholdTokens: profile.autoCompactThresholdTokens,
+      },
+      taskSettings: {
+        contextCompactingThreshold: taskSettings.contextCompactingThreshold,
+      },
+      taskTokensOverride,
+      contextCompactionType,
+    });
+
     const lastAssistantMessage = [...resultMessages].reverse().find((m) => m.role === 'assistant');
     const usageReport = lastAssistantMessage?.usageReport;
-    const maxTokens = this.modelManager.getModelSettings(provider.provider.name, model)?.maxInputTokens;
+    const maxTokens = this.modelManager.getModelSettings(provider.id, model)?.maxInputTokens;
 
     if (!usageReport || !maxTokens) {
+      logger.debug('No usageReport or maxTokens', {
+        usageReport,
+        maxTokens,
+      });
       return true;
     }
 
@@ -1982,6 +2034,12 @@ export class Agent {
       effectiveThreshold = Math.min(percentageThreshold, tokenThreshold);
       thresholdDescription = `percentage: ${percentageThreshold}, tokens: ${tokenThreshold}`;
     }
+
+    logger.debug('Checking total tokens vs effective threshold', {
+      totalTokens,
+      effectiveThreshold,
+      thresholdDescription,
+    });
 
     if (totalTokens > effectiveThreshold) {
       logger.info(
@@ -2013,13 +2071,7 @@ export class Agent {
         });
         messages.push(...resultMessages);
       } else if (contextCompactionType === ContextCompactionType.Smart) {
-        // backing up the current context before compacting for debugging purposes
-        await task.backupContext();
-
-        const compactedMessages = smartCompactMessages([...contextMessages, ...resultMessages]);
-        task.setContextMessages(compactedMessages);
-        await task.loadContextMessages(compactedMessages);
-        task.addLogMessage('info', 'Previous conversation has been compacted.');
+        const compactedMessages = await task.smartCompactConversation([...contextMessages, ...resultMessages], 'Previous conversation has been compacted.');
 
         messages.length = 0;
         resultMessages.length = 0;
