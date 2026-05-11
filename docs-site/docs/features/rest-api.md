@@ -189,7 +189,7 @@ Provides an answer to a question asked by the AI.
 
 ### Queued Prompts
 
-When a task is already processing a prompt, any new prompts submitted via `POST /api/run-prompt` are automatically queued for sequential execution. The queued prompts are visible in the AiderDesk UI and can be managed through the following endpoints.
+When a task is already processing a prompt, any new prompts submitted via `POST /api/run-prompt` are automatically queued for sequential execution. The queued prompts are visible in the ReactorPro UI and can be managed through the following endpoints.
 
 Queued prompts are useful for:
 - **Batch processing**: Submit multiple prompts that execute one after another
@@ -395,7 +395,7 @@ Pastes an image from clipboard into the project.
 
 ### Task Management
 
-Tasks are the primary unit of work in AiderDesk. Each task holds its own conversation context, mode, working mode (local or worktree), and agent configuration. Understanding the task lifecycle is important for automation use cases.
+Tasks are the primary unit of work in ReactorPro. Each task holds its own conversation context, mode, working mode (local or worktree), and agent configuration. Understanding the task lifecycle is important for automation use cases.
 
 #### Create Task
 Creates a new task within a project. The new task inherits model, mode, and other settings from the most recent task (or from the parent task if `parentId` is specified).
@@ -462,7 +462,7 @@ When `workingMode` is changed to `"worktree"`, the Git worktree is **synchronous
   "id": "a1b2c3d4",
   "workingMode": "worktree",
   "worktree": {
-    "path": "/path/to/project/.aider-desk/tasks/a1b2c3d4/worktree",
+    "path": "/path/to/project/.reactorpro/tasks/a1b2c3d4/worktree",
     "branch": "task/a1b2c3d4",
     "baseBranch": "main"
   },
@@ -799,7 +799,7 @@ Response:
   "id": "a1b2c3d4",
   "workingMode": "worktree",
   "worktree": {
-    "path": "/path/to/project/.aider-desk/tasks/a1b2c3d4/worktree",
+    "path": "/path/to/project/.reactorpro/tasks/a1b2c3d4/worktree",
     "branch": "task/a1b2c3d4",
     "baseBranch": "main"
   },
