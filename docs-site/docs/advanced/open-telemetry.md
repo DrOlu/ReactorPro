@@ -5,7 +5,7 @@ sidebar_label: "OpenTelemetry"
 
 # OpenTelemetry Integration Guide
 
-AiderDesk leverages OpenTelemetry to provide detailed tracing and telemetry for Agent and Aider messages, allowing users to gain deeper insights into their AI interactions. The system supports multiple tracing backends and is designed to be extensible to other OpenTelemetry-compatible providers.
+ReactorPro leverages OpenTelemetry to provide detailed tracing and telemetry for Agent and Aider messages, allowing users to gain deeper insights into their AI interactions. The system supports multiple tracing backends and is designed to be extensible to other OpenTelemetry-compatible providers.
 
 ## Langfuse Setup
 
@@ -61,7 +61,7 @@ To get your Langfuse API keys, you can [self-host Langfuse](https://langfuse.com
 
 [PostHog](https://posthog.com/) is an open source product analytics platform with LLM analytics capabilities. With the PostHog integration, you can track LLM usage alongside your product analytics to understand how AI features impact user behavior.
 
-To integrate AiderDesk with PostHog, you need to provide your PostHog API key and optionally a host URL. These can be set as environment variables in two ways:
+To integrate ReactorPro with PostHog, you need to provide your PostHog API key and optionally a host URL. These can be set as environment variables in two ways:
 
 ### 1. System-wide Environment Variables
 
@@ -84,11 +84,11 @@ $env:POSTHOG_API_KEY="phc_YOUR_API_KEY"
 $env:POSTHOG_HOST="https://us.i.posthog.com"
 ```
 
-Remember to restart AiderDesk (and your terminal if setting system-wide) after setting these variables for them to take effect.
+Remember to restart ReactorPro (and your terminal if setting system-wide) after setting these variables for them to take effect.
 
 ### 2. Project-specific `.env` file
 
-For more granular control, you can create a `.env` file in the root directory of your AiderDesk project. This method ensures that the environment variables are only applied to that specific project.
+For more granular control, you can create a `.env` file in the root directory of your ReactorPro project. This method ensures that the environment variables are only applied to that specific project.
 
 Create a file named `.env` in your project's root directory with the following content:
 
@@ -97,7 +97,7 @@ POSTHOG_API_KEY="phc_YOUR_API_KEY"
 POSTHOG_HOST="https://us.i.posthog.com"
 ```
 
-AiderDesk will automatically detect and load these variables when the project is opened.
+ReactorPro will automatically detect and load these variables when the project is opened.
 
 ### Obtaining PostHog API Key
 
@@ -105,6 +105,6 @@ To get your PostHog API key, you can [self-host PostHog](https://posthog.com/doc
 
 ## Extending Telemetry
 
-AiderDesk's telemetry system is built on OpenTelemetry, which is a vendor-neutral observability framework. This means there is ample room for implementing support for other OpenTelemetry-compatible tracing providers beyond Langfuse and PostHog.
+ReactorPro's telemetry system is built on OpenTelemetry, which is a vendor-neutral observability framework. This means there is ample room for implementing support for other OpenTelemetry-compatible tracing providers beyond Langfuse and PostHog.
 
 If you have a specific provider you'd like to integrate, feel free to create an issue or pull request with your proposed changes on our GitHub repository. Your contributions are welcome!

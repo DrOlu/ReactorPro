@@ -115,7 +115,7 @@ Once a server is configured globally, you must enable it within a specific **Age
 
 ## Authorization for Remote MCP Servers
 
-AiderDesk's MCP client does not currently support OAuth authorization for remote MCP servers. If your server requires authorization (e.g., Sentry), you can use [mcp-remote](https://github.com/geelen/mcp-remote) as a workaround.
+ReactorPro's MCP client does not currently support OAuth authorization for remote MCP servers. If your server requires authorization (e.g., Sentry), you can use [mcp-remote](https://github.com/geelen/mcp-remote) as a workaround.
 
 ### Step 1: Authorize in Your Terminal
 
@@ -125,7 +125,7 @@ Run `mcp-remote` in your terminal and complete the authorization flow:
 npx mcp-remote https://mcp.sentry.dev/mcp
 ```
 
-### Step 2: Configure AiderDesk
+### Step 2: Configure ReactorPro
 
 Use `mcp-remote` as a stdio-based proxy in your MCP server configuration instead of connecting directly:
 
