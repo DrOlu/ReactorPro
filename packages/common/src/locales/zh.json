@@ -14,6 +14,7 @@
     "close": "关闭",
     "confirm": "确认",
     "back": "返回",
+    "undo": "撤销",
     "next": "下一步",
     "previous": "上一个",
     "of": "共",
@@ -56,18 +57,18 @@
     "nextResult": "下一个结果 (F3)"
   },
   "onboarding": {
-    "title": "欢迎使用 ReactorPro",
-    "description": "ReactorPro 是您的专业 AI 平台。本应用将 Aider 的 AI 编程助手功能带到用户友好的界面中，帮助您：",
+    "title": "欢迎使用 AiderDesk",
+    "description": "面向专业软件工程师的透明、可操控的 AI 编排平台。不仅是 Aider 的图形界面——更是一个完整的编排层，帮助您：",
     "skipForNow": "暂时跳过",
     "finish": "完成设置",
     "features": {
-      "1": "管理多个编程项目",
-      "2": "跟踪您的 AI 使用情况和成本",
-      "3": "以结构化方式与 AI 模型交互",
-      "4": "可视化和管理您的代码文件",
-      "5": "使用代理流程进行自动化编码任务并连接到 MCP 服务器"
+      "1": "在隔离环境中管理项目、任务和 Git 工作树",
+      "2": "通过丰富的差异查看器和审批门控，在每次变更落地前进行审查",
+      "3": "通过工具审批门控、消息编辑和任务分叉来掌控 AI 行为",
+      "4": "利用语义搜索和向量嵌入实现智能上下文和记忆",
+      "5": "通过 MCP、自定义扩展和多模型子代理扩展一切"
     },
-    "getStarted": "让我们从配置您的 Aider 设置开始。",
+    "getStarted": "让我们从连接您的 AI 模型开始。",
     "steps": {
       "welcome": "欢迎",
       "connectModel": "连接AI模型",
@@ -137,7 +138,7 @@
     },
     "complete": {
       "title": "设置完成！",
-      "description": "恭喜！您已成功设置 ReactorPro。现在您可以开始使用 AI 辅助编程了。",
+      "description": "恭喜！您已成功设置 AiderDesk。现在您可以以完全透明和可控的方式驾驭 AI 辅助开发。",
       "ready": "点击'完成设置'开始您的编程之旅。",
       "success": "引导完成成功！欢迎使用 ReactorPro。"
     },
@@ -269,6 +270,8 @@
     },
     "disableStreaming": "禁用流式传输",
     "disableStreamingInfo": "禁用响应流式传输。当提供商或模型不支持流式传输时使用此选项。",
+    "trackTokenUsage": "跟踪 Token 使用量",
+    "trackTokenUsageInfo": "在流式响应中包含 Token 使用量信息。如果提供商不支持流式块中的 usage 字段，请禁用此选项。",
     "disable": "禁用",
     "enable": "启用",
     "providerDisabled": "此提供商已被禁用。其模型将不可用。"
@@ -1422,6 +1425,7 @@
     "stopResponse": "停止响应",
     "sendMessage": "发送消息(Enter)",
     "clearChat": "清除聊天",
+    "undoContextChange": "恢复消息至先前状态",
     "agentModeOnly": "仅在代理模式下可用",
     "handoffError": "交接失败：{{error}}",
     "taskInfo": "任务信息"

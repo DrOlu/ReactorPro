@@ -14,6 +14,7 @@
     "close": "Close",
     "confirm": "Confirm",
     "back": "Back",
+    "undo": "Undo",
     "next": "Next",
     "previous": "Previous",
     "of": "of",
@@ -56,18 +57,18 @@
     "nextResult": "Next result (F3)"
   },
   "onboarding": {
-    "title": "Welcome to ReactorPro",
-    "description": "ReactorPro is your AI platform for Professionals. This application brings the power of Aider's AI coding assistant to a user-friendly interface, helping you:",
+    "title": "Welcome to AiderDesk",
+    "description": "Transparent, steerable AI orchestration for professional software engineers. More than a GUI for Aider — a complete orchestration layer that helps you:",
     "skipForNow": "Skip for now",
     "finish": "Finish Setup",
     "features": {
-      "1": "Manage multiple coding projects",
-      "2": "Track your AI usage and costs",
-      "3": "Interact with AI models in a structured way",
-      "4": "Visualize and manage your code files",
-      "5": "Use agentic flow for automated coding tasks and connection to MCP servers"
+      "1": "Manage projects, tasks, and Git worktrees in isolated environments",
+      "2": "Review every change before it lands with rich diff viewers and approval gates",
+      "3": "Steer AI behavior with tool approval gates, message editing, and task forking",
+      "4": "Use smart context and memory with semantic search and vector embeddings",
+      "5": "Extend everything via MCP, custom extensions, and multi-model subagents"
     },
-    "getStarted": "Let's get started by configuring your Aider settings.",
+    "getStarted": "Let's get started by connecting your AI model.",
     "steps": {
       "welcome": "Welcome",
       "connectModel": "Connect AI Model",
@@ -137,7 +138,7 @@
     },
     "complete": {
       "title": "Setup Complete!",
-      "description": "Congratulations! You've successfully set up ReactorPro. You're now ready to start coding with AI assistance.",
+      "description": "Congratulations! You've successfully set up AiderDesk. You're now ready to steer AI-assisted development with full transparency and control.",
       "ready": "Click 'Finish Setup' to begin your coding journey.",
       "success": "Onboarding completed successfully! Welcome to ReactorPro."
     },
@@ -270,6 +271,8 @@
     },
     "disableStreaming": "Disable streaming",
     "disableStreamingInfo": "Disables response streaming. Use this when the provider or model does not support streaming responses.",
+    "trackTokenUsage": "Track token usage",
+    "trackTokenUsageInfo": "Include token usage information in streaming responses. Disable if the provider does not support the usage field in stream chunks.",
     "disable": "Disable",
     "enable": "Enable",
     "providerDisabled": "This provider is disabled. Its models will not be available."
@@ -1464,6 +1467,7 @@
     "stopResponse": "Stop response",
     "sendMessage": "Send message (Enter)",
     "clearChat": "Clear chat",
+    "undoContextChange": "Restore messages to previous state",
     "agentModeOnly": "Available in Agent mode only",
     "handoffError": "Handoff failed: {{error}}",
     "taskInfo": "Show task information"
