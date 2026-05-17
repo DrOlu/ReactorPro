@@ -13,6 +13,11 @@
 - added support for sending images within user messages in Agent mode
 - improved process termination on POSIX by using process groups
 - updated Requesty provider to use costs from the API response
+- improved handling of missing git configuration and empty repositories
+- integrated ripgrep for grep tool searches
+- correctly using the parent task when subtask agent creates subtask
+- sorting the list_task tool result tasks by descending updated date
+- added missing gap between messages in virtualized message rendering
 
 ## [0.65.0]
 
