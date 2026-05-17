@@ -117,7 +117,7 @@ export class WorktreeManager {
           try {
             await execWithShellPath('git commit -m "Initial commit" --allow-empty', { cwd: projectPath });
           } catch {
-            await execWithShellPath('git -c user.name="AiderDesk" -c user.email="aiderdesk@aiderdesk" commit -m "Initial commit" --allow-empty', {
+            await execWithShellPath('git -c user.name="ReactorPro" -c user.email="reactorpro@reactorpro" commit -m "Initial commit" --allow-empty', {
               cwd: projectPath,
             });
           }

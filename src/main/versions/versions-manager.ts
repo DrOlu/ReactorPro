@@ -38,7 +38,7 @@ export class VersionsManager {
     }
 
     logger.debug('Checking for version updates...');
-    // Get AiderDesk version using app.getVersion()
+    // Get ReactorPro version using app.getVersion()
     const aiderDeskCurrentVersion = app.getVersion();
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
