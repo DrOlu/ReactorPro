@@ -2,6 +2,10 @@
 
 ## [UNRELEASED]
 
+- correctly rendering the context around the match line in grep power tool output
+
+## [0.66.0]
+
 - added limit truncation to fetch tool result
 - added PostHog integration for telemetry
 - add context file properly handles existing files
