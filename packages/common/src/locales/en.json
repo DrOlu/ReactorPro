@@ -948,6 +948,16 @@
         "projectId": "projectId",
         "id": "id"
       }
+    },
+    "fileWatchMode": {
+      "label": "File watch mode",
+      "tooltip": "Controls how file changes are detected. Auto: uses polling in Docker and on network drives, native elsewhere. Native: uses OS file system events (faster). Polling: uses periodic scanning (more reliable in some environments).",
+      "auto": "Auto",
+      "native": "Native",
+      "polling": "Polling"
+    },
+    "notificationsAndFiles": {
+      "title": "Notifications & Files"
     }
   },
   "messages": {
@@ -1567,7 +1577,8 @@
     "tokens": "Report on the number of tokens used by the current chat context",
     "undo": "Undo the last git commit if it was done by Aider",
     "web": "Scrape a webpage and save it to a file. Use /web url [file] with optional [file].",
-    "handoff": "Handoff conversation to new task with focus"
+    "handoff": "Handoff conversation to new task with focus",
+    "subtask": "Create a new subtask of the current task and switch to it"
   },
   "telemetry": {
     "title": "Telemetry Information",
