@@ -11,6 +11,8 @@
 - added /subtask command to create and switch to a subtask
 - added file watch mode setting to configure file change detection method
 - properly focusing search input in task sidebar
+- added direct support for Neuralwatt provider
+- added getProviders to extension context to allow fetching the configured providers
 
 ## [0.66.0]
 
