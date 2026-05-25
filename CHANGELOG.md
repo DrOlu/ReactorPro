@@ -13,6 +13,11 @@
 - properly focusing search input in task sidebar
 - added direct support for Neuralwatt provider
 - added getProviders to extension context to allow fetching the configured providers
+- added truncateToolResult to extension context to allow extensions to use it to truncate the tool results
+- added truncation of non-power tool results on smart compaction
+- replaced sharp native dependency with empty stub to prevent SIGILL on older CPUs
+- added truncation of read file tool results on smart compaction
+- hide redundant task directory path in semantic search tool message
 
 ## [0.66.0]
 
