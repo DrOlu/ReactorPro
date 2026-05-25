@@ -78,6 +78,8 @@ jobs:
           cp -r .github/workflows/* /tmp/workflow-backup/ 2>/dev/null || true
           cp -r build/icon.* /tmp/icons-backup/ 2>/dev/null || true
           cp -r resources/icon.* /tmp/icons-backup/ 2>/dev/null || true
+          cp build/splash.mp4 /tmp/icons-backup/ 2>/dev/null || true
+          cp build/splash.png /tmp/icons-backup/ 2>/dev/null || true
           
           # Merge upstream, preferring upstream for conflicts in most files
           git merge upstream/${{ env.UPSTREAM_BRANCH }} \
@@ -335,6 +337,8 @@ jobs:
             echo "Restoring ReactorPro icons..."
             cp /tmp/icons-backup/icon.* build/ 2>/dev/null || true
             cp /tmp/icons-backup/icon.png resources/ 2>/dev/null || true
+            cp /tmp/icons-backup/splash.mp4 build/ 2>/dev/null || true
+            cp /tmp/icons-backup/splash.png build/ 2>/dev/null || true
           fi
 
       - name: Determine version
