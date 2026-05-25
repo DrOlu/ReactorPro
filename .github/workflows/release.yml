@@ -463,3 +463,46 @@ jobs:
             --ref main \
             -f tag="$RELEASE_TAG" || \
           echo "Note: AV scan trigger requires REPO_PAT secret with workflow scope. Run manually if needed."
+
+  publish-release:
+    name: Publish draft release
+    # Run after every platform has finished uploading its artifacts and the
+    # macOS latest.yml has been combined. The build jobs use
+    # `electron-builder -p always`, which leaves the GitHub Release in
+    # draft state. We flip it to a full published release here so:
+    #   * the `release: published` event fires
+    #   * the Notify Multica on Release workflow triggers
+    #   * users see the new version on the Releases page immediately
+    needs:
+      - release-linux
+      - release-linux-arm64
+      - release-win
+      - release-macos-x64
+      - release-macos-arm64
+      - combine-macos-yml
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          RELEASE_TAG=$(gh release list \
+            --repo "$REPO" \
+            --limit 10 \
+            --json tagName,isDraft \
+            --jq '.[] | select(.isDraft == true) | .tagName' \
+            | head -n 1)
+          if [ -z "${RELEASE_TAG:-}" ]; then
+            echo "No draft release found — nothing to publish."
+            exit 0
+          fi
+          echo "Publishing draft release: $RELEASE_TAG"
+          gh release edit "$RELEASE_TAG" \
+            --repo "$REPO" \
+            --draft=false \
+            --latest
+          echo "Done. Release $RELEASE_TAG is now published and marked latest."
