@@ -119,7 +119,7 @@ export const truncateToolResult = async (
 
   if (saveToFile) {
     const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
-    const tmpFileName = `aider-desk-tool-result-${id}.txt`;
+    const tmpFileName = `reactorpro-tool-result-${id}.txt`;
     tmpFilePath = path.join(tmpdir(), tmpFileName);
     await fs.writeFile(tmpFilePath, content, 'utf8');
   }
