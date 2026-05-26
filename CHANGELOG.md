@@ -3,6 +3,10 @@
 ## [UNRELEASED]
 
 - added progressive levels of smart compaction for better context management
+- added toolCallId to onToolCalled and onToolFinished extension hook events
+- rendering the task-message-above and task-message-below UI extension placements in compact display mode
+- added icons to archive/unarchive and delete buttons in task actions panel
+- correctly placing unmaximized app window on startup
 
 ## [0.67.0]
 
