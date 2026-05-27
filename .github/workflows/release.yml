@@ -76,44 +76,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          # Update latest-linux.yml with compat AppImage entry (uses Python — no js-yaml needed)
-          python3 - <<'PYEOF'
-import sys, re, copy
-try:
-    import yaml
-except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--quiet', 'pyyaml'])
-    import yaml
-
-yml_path = 'dist/latest-linux.yml'
-with open(yml_path) as f:
-    data = yaml.safe_load(f)
-
-files = data.get('files', [])
-if not isinstance(files, list):
-    sys.exit('files is not a list in latest-linux.yml')
-
-app_image = next((f for f in files if isinstance(f.get('url'), str) and f['url'].endswith('.AppImage')), None)
-if app_image is None:
-    sys.exit('Could not find AppImage entry in dist/latest-linux.yml')
-
-compat_url = re.sub(r'-(x64|x86_64)\.AppImage$', '.AppImage', app_image['url'])
-if compat_url == app_image['url']:
-    sys.exit(f"AppImage url did not match expected x64 suffix: {app_image['url']}")
-
-compat_entry = copy.copy(app_image)
-compat_entry['url'] = compat_url
-files.append(compat_entry)
-
-data['files'] = files
-data['path'] = compat_url
-data['sha512'] = app_image['sha512']
-
-with open(yml_path, 'w') as f:
-    yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
-print('Updated latest-linux.yml with compat AppImage entry (last)')
-PYEOF
+          # Update latest-linux.yml with compat AppImage entry.
+          # Uses node (always available in electronuserland/builder) and
+          # js-yaml installed via npm. Avoids shell heredocs which are
+          # invalid inside YAML run blocks (YAML treats << as merge key).
+          npm install --no-save js-yaml 2>/dev/null
+          node -e "
+            const fs = require('fs');
+            const yaml = require('js-yaml');
+            const ymlPath = 'dist/latest-linux.yml';
+            const data = yaml.load(fs.readFileSync(ymlPath, 'utf8'));
+            const files = data.files || [];
+            const appImage = files.find(f => f.url && f.url.endsWith('.AppImage'));
+            if (!appImage) { console.error('No AppImage entry found'); process.exit(1); }
+            const compatUrl = appImage.url.replace(/-(x64|x86_64)\.AppImage$/, '.AppImage');
+            if (compatUrl === appImage.url) { console.log('No x64 suffix to strip, skipping'); process.exit(0); }
+            files.push({ ...appImage, url: compatUrl });
+            data.files = files;
+            data.path = compatUrl;
+            data.sha512 = appImage.sha512;
+            fs.writeFileSync(ymlPath, yaml.dump(data));
+            console.log('Updated latest-linux.yml with compat AppImage entry');
+          " 
 
           # Upload updated latest-linux.yml to release
           REPO="${GITHUB_REPOSITORY}"
