@@ -4,6 +4,9 @@ on:
   workflow_dispatch: # Manual trigger
   workflow_call: # Called by sync-upstream workflow
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release-linux:
     name: Release Linux packages
@@ -73,36 +76,44 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          # Update latest-linux.yml with compat AppImage entry
-          node - <<'NODE'
-          const fs = require('fs');
-          const yaml = require('js-yaml');
+          # Update latest-linux.yml with compat AppImage entry (uses Python — no js-yaml needed)
+          python3 - <<'PYEOF'
+import sys, re, copy
+try:
+    import yaml
+except ImportError:
+    import subprocess
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--quiet', 'pyyaml'])
+    import yaml
 
-          const ymlPath = 'dist/latest-linux.yml';
-          const data = yaml.load(fs.readFileSync(ymlPath, 'utf8'));
+yml_path = 'dist/latest-linux.yml'
+with open(yml_path) as f:
+    data = yaml.safe_load(f)
 
-          const files = Array.isArray(data.files) ? data.files : [];
-          const appImageIdx = files.findIndex((f) => typeof f?.url === 'string' && f.url.endsWith('.AppImage'));
-          if (appImageIdx === -1) {
-            throw new Error('Could not find AppImage entry in dist/latest-linux.yml');
-          }
+files = data.get('files', [])
+if not isinstance(files, list):
+    sys.exit('files is not a list in latest-linux.yml')
 
-          const appImage = files[appImageIdx];
-          const compatUrl = appImage.url.replace(/-(x64|x86_64)\.AppImage$/, '.AppImage');
+app_image = next((f for f in files if isinstance(f.get('url'), str) and f['url'].endswith('.AppImage')), None)
+if app_image is None:
+    sys.exit('Could not find AppImage entry in dist/latest-linux.yml')
 
-          if (compatUrl === appImage.url) {
-            throw new Error(`AppImage url did not match expected x64 suffix: ${appImage.url}`);
-          }
+compat_url = re.sub(r'-(x64|x86_64)\.AppImage$', '.AppImage', app_image['url'])
+if compat_url == app_image['url']:
+    sys.exit(f"AppImage url did not match expected x64 suffix: {app_image['url']}")
 
-          files.push({ ...appImage, url: compatUrl });
+compat_entry = copy.copy(app_image)
+compat_entry['url'] = compat_url
+files.append(compat_entry)
 
-          data.files = files;
-          data.path = compatUrl;
-          data.sha512 = appImage.sha512;
+data['files'] = files
+data['path'] = compat_url
+data['sha512'] = app_image['sha512']
 
-          fs.writeFileSync(ymlPath, yaml.dump(data));
-          console.log('Updated latest-linux.yml with compat AppImage entry (last)');
-          NODE
+with open(yml_path, 'w') as f:
+    yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+print('Updated latest-linux.yml with compat AppImage entry (last)')
+PYEOF
 
           # Upload updated latest-linux.yml to release
           REPO="${GITHUB_REPOSITORY}"
