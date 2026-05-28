@@ -15637,6 +15637,7 @@ type Props = {
   allFiles: string[];
   renderMarkdown: boolean;
   compact?: boolean;
+  showThinking?: boolean;
   hideMessageBar?: boolean;
   remove?: () => void;
   redo?: () => void;
@@ -15654,6 +15655,7 @@ const MessageBlockComponent = ({
   renderMarkdown,
   compact = false,
   hideMessageBar = false,
+  showThinking = true,
   remove,
   redo,
   edit,
@@ -15824,12 +15826,25 @@ type Props = {
   allFiles: string[];
   renderMarkdown: boolean;
   compact?: boolean;
+  hideMessageBar?: boolean;
+  showThinking?: boolean;
   onRemove?: () => void;
   onFork?: () => void;
   onRemoveUpTo?: () => void;
 };
 ⋮----
-export const ResponseMessageBlock = (
+export const ResponseMessageBlock = ({
+  baseDir,
+  message,
+  allFiles,
+  renderMarkdown,
+  compact = false,
+  hideMessageBar = false,
+  showThinking = true,
+  onRemove,
+  onFork,
+  onRemoveUpTo,
+}: Props) =>
 ⋮----
 className=
 
