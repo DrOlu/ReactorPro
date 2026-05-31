@@ -11,53 +11,53 @@ type Replacer = (...args: string[]) => string;
 const MODULE_PATTERNS: { specifier: string; global: string; patterns: [RegExp, Replacer][] }[] = [
   {
     specifier: 'react-dom',
-    global: 'window.__AiderDeskLibs__.ReactDOM',
+    global: 'window.__ReactorProLibs__.ReactDOM',
     patterns: [
-      [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react-dom["'];?/g, (_match, name) => `const ${name} = window.__AiderDeskLibs__.ReactDOM;`],
-      [/import\s*\{([^}]+)\}\s*from\s*["']react-dom["'];?/g, (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__AiderDeskLibs__.ReactDOM;`],
+      [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react-dom["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactDOM;`],
+      [/import\s*\{([^}]+)\}\s*from\s*["']react-dom["'];?/g, (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__ReactorProLibs__.ReactDOM;`],
       [
         /import\s+(\w+)\s*,\s*\{([^}]+)\}\s*from\s*["']react-dom["'];?/g,
         (_match, def, exp) =>
-          `const ${def} = window.__AiderDeskLibs__.ReactDOM;\nconst { ${convertAsAliases(exp.trim())} } = window.__AiderDeskLibs__.ReactDOM;`,
+          `const ${def} = window.__ReactorProLibs__.ReactDOM;\nconst { ${convertAsAliases(exp.trim())} } = window.__ReactorProLibs__.ReactDOM;`,
       ],
-      [/import\s+(\w+)\s+from\s*["']react-dom["'];?/g, (_match, name) => `const ${name} = window.__AiderDeskLibs__.ReactDOM;`],
+      [/import\s+(\w+)\s+from\s*["']react-dom["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactDOM;`],
     ],
   },
   {
     specifier: 'react/jsx-dev-runtime',
-    global: 'window.__AiderDeskLibs__.ReactJsxDevRuntime',
+    global: 'window.__ReactorProLibs__.ReactJsxDevRuntime',
     patterns: [
       [
         /import\s*\{([^}]+)\}\s*from\s*["']react\/jsx-dev-runtime["'];?/g,
-        (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__AiderDeskLibs__.ReactJsxDevRuntime;`,
+        (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__ReactorProLibs__.ReactJsxDevRuntime;`,
       ],
-      [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react\/jsx-dev-runtime["'];?/g, (_match, name) => `const ${name} = window.__AiderDeskLibs__.ReactJsxDevRuntime;`],
-      [/import\s+(\w+)\s+from\s*["']react\/jsx-dev-runtime["'];?/g, (_match, name) => `const ${name} = window.__AiderDeskLibs__.ReactJsxDevRuntime;`],
+      [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react\/jsx-dev-runtime["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactJsxDevRuntime;`],
+      [/import\s+(\w+)\s+from\s*["']react\/jsx-dev-runtime["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactJsxDevRuntime;`],
     ],
   },
   {
     specifier: 'react/jsx-runtime',
-    global: 'window.__AiderDeskLibs__.ReactJsxRuntime',
+    global: 'window.__ReactorProLibs__.ReactJsxRuntime',
     patterns: [
       [
         /import\s*\{([^}]+)\}\s*from\s*["']react\/jsx-runtime["'];?/g,
-        (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__AiderDeskLibs__.ReactJsxRuntime;`,
+        (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__ReactorProLibs__.ReactJsxRuntime;`,
       ],
-      [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react\/jsx-runtime["'];?/g, (_match, name) => `const ${name} = window.__AiderDeskLibs__.ReactJsxRuntime;`],
-      [/import\s+(\w+)\s+from\s*["']react\/jsx-runtime["'];?/g, (_match, name) => `const ${name} = window.__AiderDeskLibs__.ReactJsxRuntime;`],
+      [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react\/jsx-runtime["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactJsxRuntime;`],
+      [/import\s+(\w+)\s+from\s*["']react\/jsx-runtime["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactJsxRuntime;`],
     ],
   },
   {
     specifier: 'react',
-    global: 'window.__AiderDeskLibs__.React',
+    global: 'window.__ReactorProLibs__.React',
     patterns: [
-      [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react["'];?/g, (_match, name) => `const ${name} = window.__AiderDeskLibs__.React;`],
-      [/import\s*\{([^}]+)\}\s*from\s*["']react["'];?/g, (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__AiderDeskLibs__.React;`],
+      [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.React;`],
+      [/import\s*\{([^}]+)\}\s*from\s*["']react["'];?/g, (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__ReactorProLibs__.React;`],
       [
         /import\s+(\w+)\s*,\s*\{([^}]+)\}\s*from\s*["']react["'];?/g,
-        (_match, def, exp) => `const ${def} = window.__AiderDeskLibs__.React;\nconst { ${convertAsAliases(exp.trim())} } = window.__AiderDeskLibs__.React;`,
+        (_match, def, exp) => `const ${def} = window.__ReactorProLibs__.React;\nconst { ${convertAsAliases(exp.trim())} } = window.__ReactorProLibs__.React;`,
       ],
-      [/import\s+(\w+)\s+from\s*["']react["'];?/g, (_match, name) => `const ${name} = window.__AiderDeskLibs__.React;`],
+      [/import\s+(\w+)\s+from\s*["']react["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.React;`],
     ],
   },
 ];
@@ -80,7 +80,7 @@ export const initExtensionLibraryLoader = async (): Promise<void> => {
     const ReactDOM = await import('react-dom');
     const ReactJsxRuntime = await import('react/jsx-runtime');
     const ReactJsxDevRuntime = await import('react/jsx-dev-runtime');
-    (window as unknown as Record<string, unknown>).__AiderDeskLibs__ = {
+    (window as unknown as Record<string, unknown>).__ReactorProLibs__ = {
       React,
       ReactDOM,
       ReactJsxRuntime,
