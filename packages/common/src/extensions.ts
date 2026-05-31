@@ -17,6 +17,7 @@ import {
   Mode,
   ModeDefinition,
   Model,
+  OS,
   ProjectSettings,
   PromptContext,
   SkillDefinition,
@@ -34,7 +35,7 @@ import {
   VoiceSession,
 } from "@common/types";
 
-export { AutonomyMode, ContextMemoryMode, InvocationMode, ToolApprovalState };
+export { AutonomyMode, ContextMemoryMode, InvocationMode, OS, ToolApprovalState };
 
 export type AgentStepResult = unknown;
 export type { ModeDefinition };
@@ -67,6 +68,8 @@ export interface ExtensionMetadata {
   capabilities?: string[];
   /** Optional URL to an icon image for the extension */
   iconUrl?: string;
+  /** Optional list of supported operating systems. If undefined, all OSes are supported. */
+  supportedOS?: OS[];
 }
 
 /**
@@ -196,6 +199,8 @@ export type UIComponentPlacement =
   | 'task-input-toolbar-right'
   | 'tasks-sidebar-header'
   | 'tasks-sidebar-bottom'
+  | 'tasks-sidebar-actions-left'
+  | 'tasks-sidebar-actions-right'
   | 'task-message-above'
   | 'task-message-below'
   | 'task-message-bar'
@@ -267,6 +272,7 @@ export interface UIComponents {
   Tooltip: UIComponent;
   LoadingOverlay: UIComponent;
   ConfirmDialog: UIComponent;
+  ModalOverlayLayout: UIComponent;
 }
 
 export interface UIComponentProps {
@@ -277,6 +283,7 @@ export interface UIComponentProps {
   providers: ProviderProfile[];
   ui: UIComponents;
   icons: Record<string, unknown>;
+  libraries: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -1503,6 +1510,23 @@ export interface Extension {
    * Called when extension is loaded and when components need to be refreshed
    */
   getUIComponents?(context: ExtensionContext): UIComponentDefinition[];
+
+  /**
+   * Return list of npm packages that this extension's UI components need.
+   * Libraries are resolved via esm.sh and cached to disk for offline reuse.
+   * Resolved libraries are passed to UI components as `props.libraries.<key>`.
+   *
+   * @example
+   * ```typescript
+   * getUIComponentsLibraries(): Record<string, string> {
+   *   return {
+   *     kanban: 'react-kanban-kit@^1.0.0',
+   *     lodash: 'lodash@^4.17.0',
+   *   };
+   * }
+   * ```
+   */
+  getUIComponentsLibraries?(): Record<string, string>;
 
   /**
    * Return data for a specific UI component
