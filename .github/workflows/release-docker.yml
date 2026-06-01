@@ -35,7 +35,7 @@ jobs:
 
       - name: Build and push multi-platform Docker images
         run: |
-          IMAGE_NAME=ghcr.io/${{ github.repository }}
+          IMAGE_NAME=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           VERSION=${{ steps.get-version.outputs.version }}
 
           docker buildx build --platform linux/amd64,linux/arm64 \
