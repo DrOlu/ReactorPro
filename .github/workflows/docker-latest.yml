@@ -3,12 +3,18 @@ name: Docker Latest Tag
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to tag as latest (e.g. v0.69.0-dev)'
+        required: false
+        type: string
 
 jobs:
   tag-latest:
     name: Tag Docker image as latest
     runs-on: ubuntu-latest
-    if: github.event.release.prerelease == false
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
 
     steps:
       - name: Log in to GitHub Container Registry
@@ -20,7 +26,11 @@ jobs:
       - name: Tag multi-platform image as latest
         run: |
           IMAGE_NAME=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          VERSION=${{ github.event.release.tag_name }}
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${{ github.event.release.tag_name }}"
+          fi
           VERSION=${VERSION#v}
           
           docker buildx imagetools create --tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${VERSION}
