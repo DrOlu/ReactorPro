@@ -1,5 +1,9 @@
 # ReactorPro Changelog
 
+## [Unreleased]
+
+- improved smart compaction for bash tools
+
 ## [0.68.0]
 
 - added progressive levels of smart compaction for better context management
