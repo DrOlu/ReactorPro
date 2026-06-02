@@ -194,7 +194,7 @@ export const createClaudeAgentSdkLlm = (
   systemPrompt?: string,
   providerMetadata?: unknown,
 ): LanguageModelV2 => {
-  const settings: ClaudeCodeSettings = {
+  const settings: ClaudeCodeSettings & { env?: Record<string, string | undefined>; aiSdkTools?: ToolSet } = {
     env: {
       // setting MAX_MCP_OUTPUT_TOKENS to a high number to avoid errors
       MAX_MCP_OUTPUT_TOKENS: '9999999',

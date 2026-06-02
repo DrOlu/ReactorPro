@@ -39,6 +39,7 @@ export type LlmProviderName =
   | 'auggie'
   | 'azure'
   | 'bedrock'
+  | 'claude-agent-sdk'
   | 'cerebras'
   | 'deepseek'
   | 'gemini'
@@ -88,6 +89,7 @@ export const AVAILABLE_PROVIDERS: LlmProviderName[] = [
   'auggie',
   'azure',
   'bedrock',
+  'claude-agent-sdk',
   'cerebras',
   'deepseek',
   'gemini',
@@ -238,6 +240,10 @@ export interface GeminiCliProvider extends LlmProviderBase {
   projectId?: string;
 }
 export const isGeminiCliProvider = (provider: LlmProviderBase): provider is GeminiCliProvider => provider.name === 'gemini-cli';
+export interface ClaudeAgentSdkProvider extends LlmProviderBase {
+  name: 'claude-agent-sdk';
+}
+export const isClaudeAgentSdkProvider = (provider: LlmProviderBase): provider is ClaudeAgentSdkProvider => provider.name === 'claude-agent-sdk';
 
 export interface BedrockProvider extends LlmProviderBase {
   name: 'bedrock';
@@ -345,6 +351,7 @@ export type LlmProvider =
   | AzureProvider
   | GeminiProvider
   | GeminiCliProvider
+  | ClaudeAgentSdkProvider
   | VertexAiProvider
   | LmStudioProvider
   | BedrockProvider
@@ -373,6 +380,7 @@ export const DEFAULT_PROVIDER_MODELS: Partial<Record<LlmProviderName, string>> =
   anthropic: 'claude-sonnet-4-6',
   auggie: 'gpt-5-4',
   bedrock: 'global.anthropic.claude-sonnet-4-6',
+  'claude-agent-sdk': 'sonnet',
   cerebras: 'qwen-3-235b-a22b-instruct-2507',
   deepseek: 'deepseek-v4-pro',
   gemini: 'gemini-pro-latest',
@@ -832,6 +840,11 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
         name: 'gemini-cli',
         projectId: '',
       } satisfies GeminiCliProvider;
+      break;
+    case 'claude-agent-sdk':
+      provider = {
+        name: 'claude-agent-sdk',
+      } satisfies ClaudeAgentSdkProvider;
       break;
     default:
       // For any other provider, create a base structure. This might need more specific handling if new providers are added.

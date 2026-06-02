@@ -7,6 +7,7 @@ import { Model, ModelInfo, ModelOverrides, ProviderModelsData, ProviderProfile, 
 import { extractProviderModel } from '@common/utils';
 
 import { anthropicProviderStrategy } from './providers/anthropic';
+import { claudeAgentSdkProviderStrategy } from './providers/claude-agent-sdk';
 import { anthropicCompatibleProviderStrategy } from './providers/anthropic-compatible';
 import { auggieProviderStrategy } from './providers/auggie';
 import { azureProviderStrategy } from './providers/azure';
@@ -94,6 +95,7 @@ export class ModelManager {
     auggie: auggieProviderStrategy,
     azure: azureProviderStrategy,
     bedrock: bedrockProviderStrategy,
+    'claude-agent-sdk': claudeAgentSdkProviderStrategy,
     cerebras: cerebrasProviderStrategy,
     deepseek: deepseekProviderStrategy,
     gemini: geminiProviderStrategy,

@@ -65,3 +65,5 @@ export const CLOUDFLARED_BINARY_PATH = path.join(
   'bin',
   process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared',
 );
+
+export const CLAUDE_CODE_EXECUTABLE_PATH = 'claude';
