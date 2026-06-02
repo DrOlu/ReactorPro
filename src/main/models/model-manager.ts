@@ -12,7 +12,6 @@ import { auggieProviderStrategy } from './providers/auggie';
 import { azureProviderStrategy } from './providers/azure';
 import { bedrockProviderStrategy } from './providers/bedrock';
 import { cerebrasProviderStrategy } from './providers/cerebras';
-import { claudeAgentSdkProviderStrategy } from './providers/claude-agent-sdk';
 import { deepseekProviderStrategy } from './providers/deepseek';
 import { geminiProviderStrategy } from './providers/gemini';
 import { geminiCliProviderStrategy } from './providers/gemini-cli';
@@ -96,7 +95,6 @@ export class ModelManager {
     azure: azureProviderStrategy,
     bedrock: bedrockProviderStrategy,
     cerebras: cerebrasProviderStrategy,
-    'claude-agent-sdk': claudeAgentSdkProviderStrategy,
     deepseek: deepseekProviderStrategy,
     gemini: geminiProviderStrategy,
     'gemini-cli': geminiCliProviderStrategy,
@@ -948,8 +946,10 @@ export class ModelManager {
 
       this.providerRegistry[provider.provider.name] = {
         ...provider.strategy,
-        createLlm: (profile, model, settings, projectDir) =>
-          provider.strategy.createLlm(profile, model, settings, projectDir) as LanguageModelV2 | Promise<LanguageModelV2>,
+        createLlm: (profile, model, settings, projectDir, toolSet, systemPrompt, providerMetadata) =>
+          provider.strategy.createLlm(profile, model, settings, projectDir, toolSet, systemPrompt, providerMetadata) as
+            | LanguageModelV2
+            | Promise<LanguageModelV2>,
         getUsageReport: provider.strategy.getUsageReport || getDefaultUsageReport,
         getProviderOptions: provider.strategy.getProviderOptions ? (_provider, model) => provider.strategy.getProviderOptions!(model) : undefined,
         getProviderTools: provider.strategy.getProviderTools
@@ -1025,7 +1025,11 @@ export class ModelManager {
   }
 
   getProviders(): ProviderProfile[] {
-    return [...this.store.getProviders(), ...this.getExtensionProviderProfiles()];
+    const providersById = new Map<string, ProviderProfile>(this.store.getProviders().map((p) => [p.id, p]));
+    for (const extensionProfile of this.getExtensionProviderProfiles()) {
+      providersById.set(extensionProfile.id, extensionProfile);
+    }
+    return [...providersById.values()];
   }
 
   getExtensionProviderProfiles(): ProviderProfile[] {
