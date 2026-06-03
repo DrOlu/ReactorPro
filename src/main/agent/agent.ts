@@ -338,15 +338,18 @@ export class Agent {
         logger.debug('Adding file list for non-image files', {
           files: nonImageFiles.map((f) => f.path),
         });
+        const hasReadOnlyFiles = nonImageFiles.some((file) => file.readOnly);
         const fileList = nonImageFiles
           .map((file) => {
-            return `- ${file.path}`;
+            return `- ${file.path}${file.readOnly ? ' (read-only)' : ''}`;
           })
           .join('\n');
 
+        const readOnlyNote = hasReadOnlyFiles ? '\n\nNote: Files marked as read-only must NOT be modified. Use them only for understanding context.' : '';
+
         messages.push({
           role: 'user',
-          content: `The following files are currently in the working context:\n\n${fileList}`,
+          content: `The following files are currently in the working context:\n\n${fileList}${readOnlyNote}`,
         });
         messages.push({
           role: 'assistant',
@@ -1927,7 +1930,7 @@ export class Agent {
       const toolPromptContext = extractPromptContextFromToolResult(toolResult.output) ?? promptContext;
 
       // Update the existing tool message with the result
-      task.addToolMessage(toolResult.toolCallId, serverName, toolName, toolResult.input, JSON.stringify(toolResult.output), undefined, toolPromptContext);
+      task.addToolMessage(toolResult.toolCallId, serverName, toolName, toolResult.input, JSON.stringify(toolResult.output), usageReport, toolPromptContext);
     };
 
     for (let i = 0; i < content.length; i++) {

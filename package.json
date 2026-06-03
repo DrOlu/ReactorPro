@@ -61,8 +61,6 @@
     "@ai-sdk/provider": "2.0.3",
     "ai-sdk-provider-claude-code": "2.3.0",
     "@aiderdesk/extensions": "workspace:*",
-    "@dmitryrechkin/json-schema-to-zod": "1.0.1",
-    "@augmentcode/auggie-sdk": "0.1.15",
     "@aws-crypto/sha256-js": "^5.2.0",
     "@aws-sdk/client-bedrock": "^3.1059.0",
     "@aws-sdk/credential-provider-node": "^3.972.49",
