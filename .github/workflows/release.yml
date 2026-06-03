@@ -31,6 +31,8 @@ jobs:
       - name: Release Linux
         run: npm run build:linux -- --x64 -p always
 
+      - name: Remove broken apt sources (packagecloud.io 403)
+        run: rm -f /etc/apt/sources.list.d/*git-lfs* /etc/apt/sources.list.d/*packagecloud* || true
       - name: Install GitHub CLI
         run: |
           apt-get update
