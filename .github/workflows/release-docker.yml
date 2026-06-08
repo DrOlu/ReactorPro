@@ -4,6 +4,10 @@ on:
   workflow_dispatch: # Manual trigger
   workflow_call: # Called by release workflow
 
+permissions:
+  packages: write
+  contents: read
+
 jobs:
   release-docker:
     name: Release Docker image
