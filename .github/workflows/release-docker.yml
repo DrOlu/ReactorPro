@@ -2,6 +2,7 @@ name: Release Docker
 
 on:
   workflow_dispatch: # Manual trigger
+  workflow_call: # Called by release workflow
 
 jobs:
   release-docker:

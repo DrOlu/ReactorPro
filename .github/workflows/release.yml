@@ -8,6 +8,11 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  release-docker:
+    name: Release Docker image
+    uses: ./.github/workflows/release-docker.yml
+    secrets: inherit
+
   release-linux:
     name: Release Linux packages
     runs-on: ubuntu-latest
@@ -477,6 +482,7 @@ jobs:
       - release-macos-x64
       - release-macos-arm64
       - combine-macos-yml
+      - release-docker
     runs-on: ubuntu-latest
     permissions:
       contents: write
