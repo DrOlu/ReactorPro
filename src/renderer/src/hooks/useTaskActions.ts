@@ -43,6 +43,7 @@ export const useTaskActions = ({ baseDir }: UseTaskActionsParams) => {
               id: message.messageId,
               type: 'response',
               content: message.content,
+              reasoning: message.reasoning,
               usageReport: message.usageReport,
               promptContext: message.promptContext,
               finished: true,
@@ -113,6 +114,13 @@ export const useTaskActions = ({ baseDir }: UseTaskActionsParams) => {
     [api, baseDir, clearSession, setMessages],
   );
 
+  const restartAiderConnector = useCallback(
+    (taskId: string) => {
+      api.restartAiderConnector(baseDir, taskId);
+    },
+    [api, baseDir],
+  );
+
   const answerQuestion = useCallback(
     (taskId: string, answer: string) => {
       api.answerQuestion(baseDir, taskId, answer);
@@ -154,6 +162,7 @@ export const useTaskActions = ({ baseDir }: UseTaskActionsParams) => {
     loadTask,
     clearSession,
     resetTask,
+    restartAiderConnector,
     answerQuestion,
     interruptResponse,
     updateTaskAgentProfile,
