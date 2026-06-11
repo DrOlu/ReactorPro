@@ -174,7 +174,7 @@ jobs:
 
   release-win:
     name: Release Windows packages
-    runs-on: windows-latest
+    runs-on: windows-2022
     outputs:
       release_tag: ${{ steps.get_tag.outputs.release_tag }}
 
