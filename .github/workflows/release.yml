@@ -190,6 +190,33 @@ jobs:
         with:
           node-version: '22.17.0'
 
+      - name: Configure node-gyp for Windows runner
+        shell: pwsh
+        run: |
+          # Help node-gyp find Visual Studio on newer runner images
+          # where node-gyp's built-in VS detection may not recognize the installed version.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            $vsPath = & $vswhere -latest -property installationPath 2>$null
+            if ($vsPath) {
+              echo "GYP_MSVS_OVERRIDE_PATH=$vsPath" >> $env:GITHUB_ENV
+              echo "Found VS at: $vsPath"
+            }
+            $vsYear = & $vswhere -latest -property catalog_productLineVersion 2>$null
+            if ($vsYear -match '^\d{4}') {
+              $msvsVersion = $vsYear.Substring(0, 4)
+              echo "GYP_MSVS_VERSION=$msvsVersion" >> $env:GITHUB_ENV
+              echo "Using MSVS version: $msvsVersion"
+            } else {
+              # Fallback: try common version identifiers
+              echo "GYP_MSVS_VERSION=2022" >> $env:GITHUB_ENV
+              echo "Using fallback MSVS version: 2022"
+            }
+          } else {
+            echo "vswhere not found, setting fallback values"
+            echo "GYP_MSVS_VERSION=2022" >> $env:GITHUB_ENV
+          }
+
       - run: npm install
 
       - name: Release Windows
