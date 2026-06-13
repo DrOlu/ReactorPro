@@ -10,6 +10,8 @@
 - added option to switch all tasks in a worktree to local mode and enhanced mode switch dialogs
 - deduplicated loaded Mistral models
 - added support for editing any user message not only the last one
+- breaking words for long bash commands to avoid horizontal scrolling
+- added lazy loading for heavy dependencies and optimized rendering performance
 
 ## [0.69.0]
 

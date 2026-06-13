@@ -209,13 +209,7 @@ export default class ClaudeAgentSdkExtension implements Extension {
                   providerId: profile.id,
                   maxInputTokens: 200000,
                   maxOutputTokensLimit: 64000,
-                },
-                {
-                  id: 'fable',
-                  providerId: profile.id,
-                  maxInputTokens: 200000,
-                  maxOutputTokensLimit: 64000,
-                },
+                }
               ];
 
               return { models, success: true };
