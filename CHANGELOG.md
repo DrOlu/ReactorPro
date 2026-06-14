@@ -15,6 +15,8 @@
 - added error boundary and crash fallback screen
 - added missing /settings/versions endpoint
 - added support for Playwright testing framework and initial test cases for onboarding
+- added support for configuring AIDER_DESK_DIR and AIDER_DESK_HOME_DIR via environment variables
+- updated usage report logic to avoid duplicate attachment
 
 ## [0.69.0]
 
