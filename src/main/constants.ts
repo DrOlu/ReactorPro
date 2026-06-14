@@ -21,7 +21,7 @@ export const RIPGREP_BINARY_PATH = process.platform === 'win32' ? path.join(AIDE
 export const SERVER_PORT = process.env.AIDER_DESK_PORT ? parseInt(process.env.AIDER_DESK_PORT) : 24337;
 export const PID_FILES_DIR = path.join(AIDER_DESK_DATA_DIR, 'aider-processes');
 // constants for project directory files
-export const AIDER_DESK_DIR = process.env.AIDER_DESK_DIR || '.aider-desk';
+export const AIDER_DESK_DIR = process.env.AIDER_DESK_DIR || '.reactorpro';
 export const AIDER_DESK_HOME_DIR = process.env.AIDER_DESK_HOME_DIR || path.join(homedir(), AIDER_DESK_DIR);
 export const AIDER_DESK_TASKS_DIR = path.join(AIDER_DESK_DIR, 'tasks');
 export const AIDER_DESK_TODOS_FILE = 'todos.json';
