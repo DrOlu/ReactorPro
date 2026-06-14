@@ -13476,7 +13476,7 @@ type Props = {
 // isLanguageRegistered triggers token recomputation once the lazily loaded grammar registers
 // eslint-disable-next-line react-hooks/exhaustive-deps
 ⋮----
-Please report an issue in https://github.com/hotovo/aider-desk/issues.
+Please report an issue in https://github.com/hyperspace/reactorpro/issues.
 ⋮----
 // No error, but no diff file (e.g., identical content)
 
