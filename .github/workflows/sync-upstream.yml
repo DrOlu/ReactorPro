@@ -389,6 +389,8 @@ jobs:
           fi
           
           git checkout main
+          git fetch origin main
+          git merge origin/main --no-edit || echo "Nothing to forward-merge"
           
           # Pull latest from origin to handle concurrent pushes
           git pull origin main --no-edit || true
