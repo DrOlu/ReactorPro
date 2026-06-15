@@ -390,6 +390,9 @@ jobs:
           
           git checkout main
           
+          # Pull latest from origin to handle concurrent pushes
+          git pull origin main --no-edit || true
+          
           mkdir -p /tmp/main-workflows
           cp -r .github/workflows/* /tmp/main-workflows/ 2>/dev/null || true
           
