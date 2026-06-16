@@ -260,6 +260,8 @@ src/
     python-dependencies-installer.ts
     start-up.ts
     window-manager.ts
+  mcp-server/
+    reactorpro-mcp-server.ts
   preload/
     index.d.ts
     index.ts
@@ -12560,6 +12562,38 @@ isMainWindow(window: BrowserWindow): boolean
    * @returns Number of windows
    */
 getWindowCount(): number
+
+================
+File: src/mcp-server/reactorpro-mcp-server.ts
+================
+/* eslint-disable func-style,@typescript-eslint/no-explicit-any */
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import axios from 'axios';
+import { z } from 'zod/v3';
+⋮----
+// Get project directory from command line arguments or use default
+⋮----
+// ReactorPro API configuration
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+// Create MCP server
+⋮----
+// Define tool schemas
+⋮----
+// Add tools to the server
+⋮----
+// Start the server
+export async function main()
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+// eslint-disable-next-line no-console
+⋮----
+// eslint-disable-next-line no-console
 
 ================
 File: src/preload/index.d.ts
@@ -28101,9 +28135,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "aider-desk",
+  "name": "reactorpro",
   "version": "0.71.0-dev",
-  "description": "Aider desktop application wrapper",
+  "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
