@@ -442,8 +442,11 @@ jobs:
           console.log('Combined yml file created successfully');
           EOF
 
-          npm install js-yaml
-          node combine-yml.js
+          # Install js-yaml in an isolated prefix so npm does NOT resolve the
+          # repo's package.json (which pulls electron/esbuild and fails the
+          # esbuild postinstall with ETXTBSY on the ubuntu runner).
+          npm install --prefix /tmp/combine js-yaml
+          NODE_PATH=/tmp/combine/node_modules node combine-yml.js
 
       - name: Find draft release tag
         id: find-release
