@@ -70,7 +70,7 @@ Runs the service in the foreground with logs printed to stdout. This is ideal fo
 aiderdesk run "Explain what closures are in JavaScript"
 ```
 
-Connects to a running AiderDesk server, sends the prompt, streams the AI response to your terminal, and exits when done. The current working directory is used as the project. If the project doesn't exist yet, it's automatically created.
+Connects to a running ReactorPro server, sends the prompt, streams the AI response to your terminal, and exits when done. The current working directory is used as the project. If the project doesn't exist yet, it's automatically created.
 
 You can also pipe input via stdin:
 

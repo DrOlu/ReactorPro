@@ -593,7 +593,7 @@ Retrieves usage data for a specific date range.
 ### System Integration
 
 #### Health Check
-Returns the server health status. Useful for checking if the AiderDesk server is running before making API calls.
+Returns the server health status. Useful for checking if the ReactorPro server is running before making API calls.
 
 - **Endpoint**: `GET /api/health`
 - **Response**: `200 OK`

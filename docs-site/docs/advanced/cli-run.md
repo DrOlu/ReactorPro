@@ -6,10 +6,10 @@ slug: "/advanced/cli-run"
 
 # CLI Run Command
 
-The `aiderdesk run` command lets you execute prompts non-interactively from the terminal. It connects to a running AiderDesk server, streams the AI response in real-time, and exits when the task completes. This is ideal for scripting, automation, and quickly getting answers without opening the UI.
+The `aiderdesk run` command lets you execute prompts non-interactively from the terminal. It connects to a running ReactorPro server, streams the AI response in real-time, and exits when the task completes. This is ideal for scripting, automation, and quickly getting answers without opening the UI.
 
 :::info Prerequisite
-AiderDesk must already be running (via the desktop app, `aiderdesk start`, or `aiderdesk tui`). The `run` command does not start a server — it connects to an existing one.
+ReactorPro must already be running (via the desktop app, `aiderdesk start`, or `aiderdesk tui`). The `run` command does not start a server — it connects to an existing one.
 :::
 
 ## Basic Usage
@@ -29,7 +29,7 @@ When stdin is piped, the content is appended to the prompt.
 
 ## How It Works
 
-1. **Health check** — Verifies the AiderDesk server is reachable at the configured host/port
+1. **Health check** — Verifies the ReactorPro server is reachable at the configured host/port
 2. **Project setup** — Uses the current working directory as the project. If the project doesn't exist yet, it's automatically created
 3. **Task creation** — A new task is created for each `run` invocation (unless `--task-id` is provided)
 4. **Prompt execution** — The prompt is sent to the AI agent and the response is streamed back in real-time
@@ -228,11 +228,11 @@ The stdin content is separated from the prompt text and included in the AI's con
 
 ## Error Handling
 
-If the AiderDesk server is not running:
+If the ReactorPro server is not running:
 
 ```bash
 aiderdesk run -p 99999 "test"
-# Error: AiderDesk server is not running on localhost:99999. Start it first with 'aiderdesk' or 'aiderdesk start'.
+# Error: ReactorPro server is not running on localhost:99999. Start it first with 'aiderdesk' or 'aiderdesk start'.
 ```
 
 The process exits with code `1` on any error (server unreachable, API failure, etc.).
