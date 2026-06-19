@@ -345,6 +345,7 @@ src/
           AssistantMessageBlock.tsx
           BashToolMessage.tsx
           CommandOutputMessageBlock.tsx
+          CompactionSnippetBlock.tsx
           CompactToolMessage.tsx
           CopyMessageButton.tsx
           CreateTaskToolMessage.tsx
@@ -3454,6 +3455,8 @@ export interface EventsConnector extends EventsConnectorConfig {
   socket: Socket;
 }
 ⋮----
+type EventListener = (event: { type: string; data: unknown }) => void;
+⋮----
 export class EventManager
 ⋮----
 constructor(private readonly windowManager?: WindowManager)
@@ -3576,6 +3579,12 @@ private broadcastToEventConnectors(eventType: string, data: unknown, log = true)
 ⋮----
 // Remove disconnected sockets
 ⋮----
+// Notify SSE listeners
+⋮----
+// ignore broken listeners
+⋮----
+// Buffer events for late-arriving SSE subscribers
+⋮----
 // Extension UI events
 sendExtensionUIRefresh(options:
 ⋮----
@@ -3584,6 +3593,15 @@ sendModalOverlayUrl(url: string): void
 ⋮----
 // Aider connector status events (Python install + per-task connector lifecycle)
 sendAiderConnectorStatus(status: import('@/python-dependencies-installer').PythonInstallStatus, baseDir?: string, taskId?: string): void
+⋮----
+// SSE event subscription for CLI streaming
+subscribeSSE(listenerId: string, listener: EventListener, replayBuffer = false): void
+⋮----
+// Replay buffered events to late-arriving subscribers
+⋮----
+// ignore broken listeners
+⋮----
+unsubscribeSSE(listenerId: string, listener: EventListener): void
 
 ================
 File: src/main/events/index.ts
@@ -7714,18 +7732,59 @@ registerRoutes(router: Router): void
 ================
 File: src/main/server/rest-api/prompt-api.ts
 ================
-import { Router } from 'express';
+import { Request, Response, Router } from 'express';
 import { z } from 'zod';
+import { v4 as uuidv4 } from 'uuid';
+import { CreateTaskParams } from '@common/types';
 ⋮----
 import { BaseApi } from './base-api';
 ⋮----
 import { EventsHandler } from '@/events-handler';
+import logger from '@/logger';
+⋮----
+const parseModelParam = (model?: string, agentProfileId?: string): CreateTaskParams | undefined =>
 ⋮----
 export class PromptApi extends BaseApi
 ⋮----
 constructor(private readonly eventsHandler: EventsHandler)
 ⋮----
 registerRoutes(router: Router): void
+⋮----
+private async handleRunPromptJSON(
+    res: Response,
+    projectDir: string,
+    prompt: string,
+    taskId?: string,
+    mode?: string,
+    images?: string[],
+    model?: string,
+    agentProfileId?: string,
+): Promise<void>
+⋮----
+private async handleRunPromptSSE(
+    res: Response,
+    projectDir: string,
+    prompt: string,
+    taskId?: string,
+    mode?: string,
+    images?: string[],
+    model?: string,
+    agentProfileId?: string,
+): Promise<void>
+⋮----
+// Set SSE headers
+⋮----
+// Send initial comment to establish connection
+⋮----
+const listener = (event:
+⋮----
+const cleanup = () =>
+⋮----
+// already closed
+⋮----
+// Client disconnected
+⋮----
+// Client disconnected
 
 ================
 File: src/main/server/rest-api/providers-api.ts
@@ -7835,6 +7894,8 @@ constructor(
 )
 ⋮----
 registerRoutes(router: Router): void
+⋮----
+// Health check
 ⋮----
 // Get system logs
 ⋮----
@@ -8053,11 +8114,15 @@ constructor(
     private readonly pythonInstaller: PythonDependenciesInstaller,
 )
 ⋮----
-private serverGuardMiddleware(_: Request, res: Response, next: NextFunction): void
+private serverGuardMiddleware(req: Request, res: Response, next: NextFunction): void
+⋮----
+// Always allow health check regardless of server.enabled setting
 ⋮----
 // In headless mode, always allow requests regardless of server.enabled setting
 ⋮----
 private timeoutMiddleware(req: Request, res: Response, next: NextFunction): void
+⋮----
+// Skip timeout for SSE responses (Accept: text/event-stream)
 ⋮----
 private basicAuthMiddleware(req: Request, res: Response, next: NextFunction): void
 ⋮----
@@ -8074,8 +8139,6 @@ private setupApiRoutes(): void
 private setupCors(): void
 ⋮----
 private init()
-⋮----
-// Configure Express
 ⋮----
 // Add server guard middleware as the first middleware
 ⋮----
@@ -9123,11 +9186,15 @@ private findMessageConnectors(action: MessageAction): Connector[]
 ⋮----
 private async waitForCurrentPromptToFinish()
 ⋮----
-private async waitForCurrentAgentToFinish()
+public async waitForCurrentAgentToFinish()
 ⋮----
 private resolveAgentRunPromises()
 ⋮----
-private isPromptRunning()
+public isPromptRunning()
+⋮----
+public hasQueuedPrompts(): boolean
+⋮----
+public async waitForIdle(): Promise<void>
 ⋮----
 public async runPrompt(
     prompt: string,
@@ -11378,6 +11445,7 @@ import fs from 'fs/promises';
 ⋮----
 import {
   AgentProfile,
+  AutonomyMode,
   CloudflareTunnelStatus,
   CommandsData,
   CreateTaskParams,
@@ -11443,6 +11511,8 @@ export class EventsHandler
 constructor(
 ⋮----
 loadSettings(): SettingsData
+⋮----
+getEventManager(): EventManager
 ⋮----
 async saveSettings(newSettings: SettingsData): Promise<SettingsData>
 ⋮----
@@ -11523,6 +11593,10 @@ async pasteImage(baseDir: string, taskId: string, imageBuffer?: Buffer): Promise
 applyEdits(baseDir: string, taskId: string, edits: FileEdit[]): void
 ⋮----
 async runPrompt(baseDir: string, taskId: string, prompt: string, mode?: Mode, images?: string[]): Promise<ResponseCompletedData[]>
+⋮----
+async waitForTaskIdle(baseDir: string, taskId: string): Promise<void>
+⋮----
+async ensureProjectAndCreateTask(projectDir: string, params?: CreateTaskParams): Promise<
 ⋮----
 async savePrompt(baseDir: string, taskId: string, prompt: string): Promise<void>
 ⋮----
@@ -15167,6 +15241,19 @@ type Props = {
 };
 
 ================
+File: src/renderer/src/components/message/CompactionSnippetBlock.tsx
+================
+import { RiFileEditLine } from 'react-icons/ri';
+import { useTranslation } from 'react-i18next';
+⋮----
+import { CodeInline } from '@/components/common/CodeInline';
+import { Tooltip } from '@/components/ui/Tooltip';
+⋮----
+type Props = {
+  filePath: string;
+};
+
+================
 File: src/renderer/src/components/message/CompactToolMessage.tsx
 ================
 import { ReactNode, memo } from 'react';
@@ -16621,6 +16708,7 @@ import {
   ToolMessage,
 } from '@common/types';
 ⋮----
+import { CompactionSnippetBlock } from './CompactionSnippetBlock';
 import { CustomCommandBashBlock } from './CustomCommandBashBlock';
 import { ThinkingAnswerBlock } from './ThinkingAnswerBlock';
 ⋮----
@@ -16651,8 +16739,6 @@ if (codeContent.length > 0)
 ⋮----
 // Check if line ends with a filepath
 ⋮----
-if (currentLine >= lines.length - 1)
-⋮----
 // Check if the next line is just a filepath
 ⋮----
 // Check if the next line starts with a filepath
@@ -16668,6 +16754,8 @@ if (line.trim() === '<custom-command-bash>')
 ⋮----
 // Skip to after the closing tag
 ⋮----
+// Check for <file-edited> compaction placeholder tags
+⋮----
 // Check if line starts a code block
 ⋮----
 // Try finding the file in the previous line first
@@ -16682,13 +16770,19 @@ if (line.trim() === '<custom-command-bash>')
 ⋮----
 // Handle inline code ticks
 ⋮----
-if (!isInSingleTick)
-⋮----
-if (isInSingleTick)
-⋮----
 // Check if line ends the code block
 ⋮----
 // Handle any remaining content
+⋮----
+processCodeBlock();
+⋮----
+export const parseThinkingAnswerFormat = (
+  content: string,
+  baseDir: string = '',
+  allFiles: string[] = [],
+  renderMarkdown = false,
+  renderThinking = true,
+): React.ReactNode | null =>
 ⋮----
 // Check for the thinking section first
 ⋮----
@@ -18254,6 +18348,8 @@ const handleBulkHide = () =>
 ⋮----
 const handleBulkUnhide = () =>
 ⋮----
+const provider = providers.find((p)
+⋮----
 onClick=
 ⋮----
 {/* Search and Info Header */}
@@ -18643,6 +18739,7 @@ type Props = {
   onUnarchiveTask: (taskId: string) => Promise<void>;
   onTogglePin: (taskId: string) => Promise<void>;
   onChangeState: (taskId: string, newState: string) => Promise<void>;
+  onMoveToTop?: (taskId: string) => Promise<void>;
   onCopyAsMarkdown?: (taskId: string) => void;
   onExportToMarkdown?: (taskId: string) => void;
   onExportToImage?: (taskId: string) => void;
@@ -18693,7 +18790,7 @@ import { HiOutlinePencil, HiOutlineTrash } from 'react-icons/hi';
 import { FaEllipsisVertical } from 'react-icons/fa6';
 import { IoLogoMarkdown } from 'react-icons/io';
 import { RiFlag2Line } from 'react-icons/ri';
-import { MdImage, MdPushPin, MdChevronRight } from 'react-icons/md';
+import { MdImage, MdPushPin, MdChevronRight, MdVerticalAlignTop } from 'react-icons/md';
 import { BiDuplicate, BiArchive, BiArchiveIn, BiCopy } from 'react-icons/bi';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
@@ -18713,6 +18810,7 @@ type Props = {
   onUnarchiveTask?: () => void;
   onTogglePin?: () => void;
   onChangeState?: (newState: string) => void;
+  onMoveToTop?: () => void;
   isPinned?: boolean;
 };
 ⋮----
@@ -18735,6 +18833,8 @@ const handleArchiveTaskClick = (e: MouseEvent) =>
 const handleUnarchiveTaskClick = (e: MouseEvent) =>
 ⋮----
 const handlePinClick = (e: MouseEvent) =>
+⋮----
+const handleMoveToTopClick = (e: MouseEvent) =>
 ⋮----
 const handleStateSubmenuToggle = () =>
 ⋮----
@@ -18838,6 +18938,8 @@ const handleCreateTask = () =>
 const handleSearchToggle = () =>
 ⋮----
 const handleSearchClose = () =>
+⋮----
+// eslint-disable-next-line no-console
 ⋮----
 // eslint-disable-next-line no-console
 ⋮----
