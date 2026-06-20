@@ -15,6 +15,14 @@ vi.mock('@/utils/ripgrep', () => ({
   ensureRipgrepBinary: vi.fn().mockResolvedValue(true),
 }));
 
+vi.mock('@/utils/shell', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/shell')>();
+  return {
+    ...actual,
+    getShellPath: vi.fn(() => process.env.PATH || '/usr/bin:/bin:/usr/local/bin'),
+  };
+});
+
 vi.mock('@/constants', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/constants')>();
   return {
