@@ -16,6 +16,8 @@
 - correctly placing skill messages after the user prompt when used from custom commands
 - added skillsToActivate to onAgentStarted extension event to allow activating skills
 - added noProxy support to network settings
+- replaced floating placement with task, project, and app-level floating placements in UI extensions
+- allowing colons in extension command names
 
 ## [0.70.0]
 
