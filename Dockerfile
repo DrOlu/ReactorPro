@@ -21,7 +21,16 @@ COPY package*.json ./
 COPY packages ./packages
 
 # Install dependencies
-RUN npm ci --ignore-scripts
+# Retry npm ci to survive transient registry ECONNRESET errors, which are
+# common under QEMU cross-architecture emulation where installs are slow.
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    for i in 1 2 3; do \
+        npm ci --ignore-scripts && break; \
+        echo "npm ci attempt $i failed, retrying in 10s..."; \
+        sleep 10; \
+    done
 
 # Copy source code
 COPY . .
