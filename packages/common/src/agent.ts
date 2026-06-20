@@ -149,6 +149,10 @@ export interface AnthropicCompatibleProvider extends LlmProviderBase {
   baseUrl?: string;
 }
 export const isAnthropicCompatibleProvider = (provider: LlmProviderBase): provider is AnthropicCompatibleProvider => provider.name === 'anthropic-compatible';
+export interface ClaudeAgentSdkProvider extends LlmProviderBase {
+  name: 'claude-agent-sdk';
+}
+export const isClaudeAgentSdkProvider = (provider: LlmProviderBase): provider is ClaudeAgentSdkProvider => provider.name === 'claude-agent-sdk';
 
 export interface KimiPlanProvider extends LlmProviderBase {
   name: 'kimi-plan';
@@ -326,6 +330,7 @@ export type LlmProvider =
   | OpenAiProvider
   | AnthropicProvider
   | AnthropicCompatibleProvider
+  | ClaudeAgentSdkProvider
   | AzureProvider
   | GeminiProvider
   | VertexAiProvider
