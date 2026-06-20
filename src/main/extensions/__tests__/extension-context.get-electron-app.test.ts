@@ -10,7 +10,7 @@ const { mockElectronApp, mockGetAppMetrics } = vi.hoisted(() => {
   const mockElectronApp = {
     getAppMetrics: mockGetAppMetrics,
     getVersion: vi.fn(() => '1.0.0'),
-    getName: vi.fn(() => 'AiderDesk'),
+    getName: vi.fn(() => 'ReactorPro'),
     isReady: vi.fn(() => true),
   };
   return { mockElectronApp, mockGetAppMetrics };
@@ -65,7 +65,7 @@ describe('ExtensionContextImpl.getElectronApp', () => {
     expect(result).not.toBeNull();
     expect(result?.getAppMetrics()).toHaveLength(2);
     expect(result?.getVersion()).toBe('1.0.0');
-    expect(result?.getName()).toBe('AiderDesk');
+    expect(result?.getName()).toBe('ReactorPro');
     expect(result?.isReady()).toBe(true);
   });
 
