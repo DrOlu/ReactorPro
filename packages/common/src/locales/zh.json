@@ -256,10 +256,6 @@
       "invalidTemperature": "温度必须在 0 到 2 之间",
       "duplicateId": "提供商 ID 已存在"
     },
-    "geminiCliAuthRequired": "此提供商需要安装和认证 Gemini CLI。请从 https://geminicli.com 安装并运行 `gemini` 进行认证。",
-    "geminiCliAgentOnly": "此提供商仅在代理模式下工作，不支持代码/询问/架构/上下文模式。",
-    "projectId": "项目 ID",
-    "projectIdPlaceholder": "可选。组织和企业账户需要此项。",
     "overrides": {
       "title": "提供商覆盖",
       "resetToDefaults": "清除覆盖",
@@ -407,7 +403,6 @@
     "cerebras": "Cerebras",
     "deepseek": "Deepseek",
     "gemini": "Gemini",
-    "gemini-cli": "Gemini CLI",
     "groq": "Groq",
     "kimi-plan": "Kimi Coding Plan",
     "gpustack": "GPUStack",
@@ -1580,7 +1575,10 @@
     "enableProxyDescription": "通过代理服务器路由所有 HTTP/HTTPS 流量。影响 LLM API 调用、扩展获取、更新检查和所有其他出站请求。",
     "proxyUrl": "代理 URL",
     "proxyUrlPlaceholder": "http://127.0.0.1:8888",
-    "proxyUrlDescription": "HTTP 或 SOCKS5 代理服务器地址"
+    "proxyUrlDescription": "HTTP 或 SOCKS5 代理服务器地址",
+    "noProxy": "不使用代理",
+    "noProxyPlaceholder": "localhost,127.0.0.1,.internal.example.com",
+    "noProxyDescription": "逗号分隔的应绕过代理的主机或域名列表。支持精确主机名、IP 地址和通配符域名（例如 .example.com）"
   },
   "server": {
     "description": "启用 服务器，允许您通过浏览器在端口 24337 访问 ReactorPro",
