@@ -295,6 +295,7 @@ export interface ZaiPlanProvider extends LlmProviderBase {
   name: 'zai-plan';
   apiKey: string;
   thinkingEnabled?: boolean;
+  reasoningEffort?: ReasoningEffort;
 }
 export const isZaiPlanProvider = (provider: LlmProviderBase): provider is ZaiPlanProvider => provider.name === 'zai-plan';
 
@@ -313,6 +314,7 @@ export const isMistralProvider = (provider: LlmProviderBase): provider is Mistra
 export interface NeuralwattProvider extends LlmProviderBase {
   name: 'neuralwatt';
   apiKey: string;
+  reasoningEffort?: ReasoningEffort;
 }
 export const isNeuralwattProvider = (provider: LlmProviderBase): provider is NeuralwattProvider => provider.name === 'neuralwatt';
 
@@ -787,6 +789,7 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
       provider = {
         name: 'zai-plan',
         apiKey: '',
+        reasoningEffort: ReasoningEffort.High,
       } satisfies ZaiPlanProvider;
       break;
     case 'minimax':
@@ -805,6 +808,7 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
       provider = {
         name: 'neuralwatt',
         apiKey: '',
+        reasoningEffort: ReasoningEffort.High,
       } satisfies NeuralwattProvider;
       break;
     default:
