@@ -789,7 +789,7 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
       provider = {
         name: 'zai-plan',
         apiKey: '',
-        reasoningEffort: ReasoningEffort.High,
+        reasoningEffort: ReasoningEffort.Max,
       } satisfies ZaiPlanProvider;
       break;
     case 'minimax':
