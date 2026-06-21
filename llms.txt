@@ -13492,7 +13492,7 @@ type Props = {
 ⋮----
 // eslint-disable-next-line no-console
 ⋮----
-Please report an issue in https://github.com/hotovo/aider-desk/issues.
+Please report an issue in https://github.com/hyperspace/reactorpro/issues.
 ⋮----
 // No error, but no diff file (e.g., identical content)
 
