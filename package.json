@@ -1,6 +1,6 @@
 {
   "name": "reactorpro",
-  "version": "0.72.0-dev",
+  "version": "0.73.0-dev",
   "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
