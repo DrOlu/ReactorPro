@@ -44,7 +44,7 @@ type ProviderParametersProps<T extends LlmProvider> = {
 };
 
 // @ts-expect-error using LlmProvider as type
-const PROVIDER_PARAMETERS_MAP: Record<LlmProviderName, ComponentType<ProviderParametersProps>> = {
+export const PROVIDER_PARAMETERS_MAP: Record<LlmProviderName, ComponentType<ProviderParametersProps>> = {
   anthropic: AnthropicParameters,
   'anthropic-compatible': AnthropicCompatibleParameters,
   azure: AzureParameters,
