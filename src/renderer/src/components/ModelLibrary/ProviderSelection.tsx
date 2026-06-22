@@ -34,7 +34,7 @@ import {
   ZaiPlanIcon,
 } from '@/icons';
 
-const PROVIDER_ICON_MAP: Record<LlmProviderName, ComponentType<{ width?: number; height?: number; className?: string }>> = {
+export const PROVIDER_ICON_MAP: Record<LlmProviderName, ComponentType<{ width?: number; height?: number; className?: string }>> = {
   'alibaba-plan': AlibabaPlanIcon,
   anthropic: AnthropicIcon,
   'anthropic-compatible': AnthropicCompatibleIcon,
