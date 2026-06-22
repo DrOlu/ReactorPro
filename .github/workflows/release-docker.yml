@@ -19,7 +19,9 @@ jobs:
       - name: Clear up space
         run: sudo rm -rf /usr/local/.ghcup /usr/local/lib/android /usr/share/dotnet /usr/share/swift
 
-      - uses: "actions/checkout@v1"
+      - uses: "actions/checkout@v4"
+        with:
+          ref: main
 
       - name: Get version from package.json
         id: get-version
