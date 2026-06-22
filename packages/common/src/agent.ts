@@ -86,7 +86,6 @@ export const AVAILABLE_PROVIDERS: LlmProviderName[] = [
   'anthropic-compatible',
   'azure',
   'bedrock',
-  'claude-agent-sdk',
   'cerebras',
   'deepseek',
   'gemini',
