@@ -1,5 +1,9 @@
 # ReactorPro Changelog
 
+## [Unreleased]
+
+- correctly selecting the input history item
+
 ## [0.71.0]
 
 - removed integrated MCP server and added it as separate package @aiderdesk/mcp-server
