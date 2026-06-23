@@ -18576,6 +18576,7 @@ import {
   AnthropicCompatibleParameters,
   AzureParameters,
   BedrockParameters,
+  CerebrasParameters,
   DeepseekParameters,
   GeminiParameters,
   GpustackParameters,
@@ -28286,9 +28287,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "aider-desk",
-  "version": "0.72.0-dev",
-  "description": "Aider desktop application wrapper",
+  "name": "reactorpro",
+  "version": "0.73.0-dev",
+  "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
