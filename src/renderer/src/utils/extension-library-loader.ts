@@ -14,7 +14,10 @@ const MODULE_PATTERNS: { specifier: string; global: string; patterns: [RegExp, R
     global: 'window.__ReactorProLibs__.ReactDOM',
     patterns: [
       [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react-dom["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactDOM;`],
-      [/import\s*\{([^}]+)\}\s*from\s*["']react-dom["'];?/g, (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__ReactorProLibs__.ReactDOM;`],
+      [
+        /import\s*\{([^}]+)\}\s*from\s*["']react-dom["'];?/g,
+        (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__ReactorProLibs__.ReactDOM;`,
+      ],
       [
         /import\s+(\w+)\s*,\s*\{([^}]+)\}\s*from\s*["']react-dom["'];?/g,
         (_match, def, exp) =>
@@ -31,7 +34,10 @@ const MODULE_PATTERNS: { specifier: string; global: string; patterns: [RegExp, R
         /import\s*\{([^}]+)\}\s*from\s*["']react\/jsx-dev-runtime["'];?/g,
         (_match, exp) => `const { ${convertAsAliases(exp.trim())} } = window.__ReactorProLibs__.ReactJsxDevRuntime;`,
       ],
-      [/import\s*\*\s*as\s+(\w+)\s*from\s*["']react\/jsx-dev-runtime["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactJsxDevRuntime;`],
+      [
+        /import\s*\*\s*as\s+(\w+)\s*from\s*["']react\/jsx-dev-runtime["'];?/g,
+        (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactJsxDevRuntime;`,
+      ],
       [/import\s+(\w+)\s+from\s*["']react\/jsx-dev-runtime["'];?/g, (_match, name) => `const ${name} = window.__ReactorProLibs__.ReactJsxDevRuntime;`],
     ],
   },

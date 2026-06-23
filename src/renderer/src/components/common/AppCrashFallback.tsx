@@ -44,7 +44,14 @@ export const AppCrashFallback = ({ error }: Props) => {
           i18nKey="errors.appCrash.reportIssue"
           defaults="Please, consider reporting an issue at <a>https://github.com/hyperspace/reactorpro/issues</a>. Thank you."
           components={{
-            a: <a href="https://github.com/hyperspace/reactorpro/issues" target="_blank" rel="noopener noreferrer" className="text-info-lighter hover:underline" />,
+            a: (
+              <a
+                href="https://github.com/hyperspace/reactorpro/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-info-lighter hover:underline"
+              />
+            ),
           }}
         />
       </p>
