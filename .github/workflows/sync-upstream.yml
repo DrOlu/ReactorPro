@@ -330,6 +330,43 @@ jobs:
             sed -i 's/AiderDesk/ReactorPro/g' src/common/locales/zh.json
           fi
 
+      - name: Verify provider UI maps cover AVAILABLE_PROVIDERS
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          set -euo pipefail
+          echo "Verifying every provider in AVAILABLE_PROVIDERS has an icon and parameters component..."
+          node -e "
+            const fs = require('fs');
+            function read(p) { return fs.readFileSync(p, 'utf8'); }
+
+            // Parse AVAILABLE_PROVIDERS array from agent.ts
+            const agentSrc = read('packages/common/src/agent.ts');
+            const m = agentSrc.match(/AVAILABLE_PROVIDERS[\s\S]*?=\s*\[([\s\S]*?)\];/);
+            if (!m) { console.error('Could not parse AVAILABLE_PROVIDERS'); process.exit(1); }
+            const providers = [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
+
+            // Parse keys from PROVIDER_ICON_MAP in ProviderSelection.tsx
+            const selSrc = read('src/renderer/src/components/ModelLibrary/ProviderSelection.tsx');
+            const iconBlock = selSrc.match(/PROVIDER_ICON_MAP[\s\S]*?\{([\s\S]*?)\};/);
+            const iconKeys = iconBlock ? [...iconBlock[1].matchAll(/'([^']+)'/g)].map(x => x[1]) : [];
+
+            // Parse keys from PROVIDER_PARAMETERS_MAP in ProviderProfileForm.tsx
+            const formSrc = read('src/renderer/src/components/ModelLibrary/ProviderProfileForm.tsx');
+            const paramBlock = formSrc.match(/PROVIDER_PARAMETERS_MAP[\s\S]*?\{([\s\S]*?)\};/);
+            const paramKeys = paramBlock ? [...paramBlock[1].matchAll(/'([^']+)'/g)].map(x => x[1]) : [];
+
+            const missingIcons = providers.filter(p => !iconKeys.includes(p));
+            const missingParams = providers.filter(p => !paramKeys.includes(p));
+            if (missingIcons.length || missingParams.length) {
+              console.error('Provider UI map coverage check FAILED.');
+              if (missingIcons.length) console.error('Missing from PROVIDER_ICON_MAP: ' + missingIcons.join(', '));
+              if (missingParams.length) console.error('Missing from PROVIDER_PARAMETERS_MAP: ' + missingParams.join(', '));
+              console.error('Add the missing icon/parameters components and locale strings, or remove the provider from AVAILABLE_PROVIDERS in packages/common/src/agent.ts. Otherwise the Add Provider screen will crash with React error #130.');
+              process.exit(1);
+            }
+            console.log('OK: all ' + providers.length + ' providers have icon + parameters components.');
+          "
+
       - name: Copy ReactorPro icons
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |

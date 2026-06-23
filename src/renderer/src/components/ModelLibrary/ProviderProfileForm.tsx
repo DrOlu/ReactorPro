@@ -12,6 +12,7 @@ import {
   AnthropicCompatibleParameters,
   AzureParameters,
   BedrockParameters,
+  CerebrasParameters,
   DeepseekParameters,
   GeminiParameters,
   GpustackParameters,
@@ -44,11 +45,12 @@ type ProviderParametersProps<T extends LlmProvider> = {
 };
 
 // @ts-expect-error using LlmProvider as type
-const PROVIDER_PARAMETERS_MAP: Record<LlmProviderName, ComponentType<ProviderParametersProps>> = {
+export const PROVIDER_PARAMETERS_MAP: Record<LlmProviderName, ComponentType<ProviderParametersProps>> = {
   anthropic: AnthropicParameters,
   'anthropic-compatible': AnthropicCompatibleParameters,
   azure: AzureParameters,
   bedrock: BedrockParameters,
+  cerebras: CerebrasParameters,
   deepseek: DeepseekParameters,
   gemini: GeminiParameters,
   gpustack: GpustackParameters,
