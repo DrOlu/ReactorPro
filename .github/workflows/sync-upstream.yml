@@ -348,12 +348,15 @@ jobs:
             // Parse keys from PROVIDER_ICON_MAP in ProviderSelection.tsx
             const selSrc = read('src/renderer/src/components/ModelLibrary/ProviderSelection.tsx');
             const iconBlock = selSrc.match(/PROVIDER_ICON_MAP[\s\S]*?\{([\s\S]*?)\};/);
-            const iconKeys = iconBlock ? [...iconBlock[1].matchAll(/'([^']+)'/g)].map(x => x[1]) : [];
+            // Match both single-quoted keys ('alibaba-plan') and unquoted identifier keys (anthropic).
+            // The previous /'([^']+)'/g only matched quoted keys and falsely reported every
+            // unquoted identifier (anthropic, azure, openai, ...) as missing on every sync.
+            const iconKeys = iconBlock ? [...iconBlock[1].matchAll(/^\s*(?:'([^']+)'|([A-Za-z][\w-]*))\s*:/gm)].map(m => m[1] || m[2]).filter(Boolean) : [];
 
             // Parse keys from PROVIDER_PARAMETERS_MAP in ProviderProfileForm.tsx
             const formSrc = read('src/renderer/src/components/ModelLibrary/ProviderProfileForm.tsx');
             const paramBlock = formSrc.match(/PROVIDER_PARAMETERS_MAP[\s\S]*?\{([\s\S]*?)\};/);
-            const paramKeys = paramBlock ? [...paramBlock[1].matchAll(/'([^']+)'/g)].map(x => x[1]) : [];
+            const paramKeys = paramBlock ? [...paramBlock[1].matchAll(/^\s*(?:'([^']+)'|([A-Za-z][\w-]*))\s*:/gm)].map(m => m[1] || m[2]).filter(Boolean) : [];
 
             const missingIcons = providers.filter(p => !iconKeys.includes(p));
             const missingParams = providers.filter(p => !paramKeys.includes(p));
