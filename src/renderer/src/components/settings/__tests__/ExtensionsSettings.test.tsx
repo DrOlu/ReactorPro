@@ -707,7 +707,7 @@ describe('ExtensionsSettings', () => {
       });
 
       // Expand the repository section
-      const repoSection = screen.getByText('hotovo/aider-desk');
+      const repoSection = screen.getByText('hyperspace/reactorpro');
       const repoHeader = repoSection.closest('div[class*="cursor-pointer"]');
 
       if (!repoHeader) {
