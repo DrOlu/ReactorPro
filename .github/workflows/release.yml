@@ -31,7 +31,15 @@ jobs:
         with:
           node-version: '22.17.0'
 
-      - run: npm install --arch=x64
+      - name: Install dependencies (retry on transient network errors)
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5; do
+            npm install --arch=x64 && exit 0
+            echo "::warning::npm install attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
+          exit 1
 
       - name: Release Linux
         run: npm run build:linux -- --x64 -p always
@@ -165,7 +173,15 @@ jobs:
           sudo apt-get install ruby ruby-dev build-essential
           sudo gem install --no-document fpm
 
-      - run: npm install --arch=arm64
+      - name: Install dependencies (retry on transient network errors)
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5; do
+            npm install --arch=arm64 && exit 0
+            echo "::warning::npm install attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
+          exit 1
 
       - name: Release Linux ARM64
         env:
@@ -217,7 +233,15 @@ jobs:
             echo "GYP_MSVS_VERSION=2022" >> $env:GITHUB_ENV
           }
 
-      - run: npm install
+      - name: Install dependencies (retry on transient network errors)
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5; do
+            npm install && exit 0
+            echo "::warning::npm install attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
+          exit 1
 
       - name: Release Windows
         env:
@@ -252,7 +276,15 @@ jobs:
         with:
           node-version: '22.17.0'
 
-      - run: npm install --arch=x64
+      - name: Install dependencies (retry on transient network errors)
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5; do
+            npm install --arch=x64 && exit 0
+            echo "::warning::npm install attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
+          exit 1
 
       - name: Setup macOS signing keychain
         env:
@@ -328,7 +360,15 @@ jobs:
         with:
           node-version: '22.17.0'
 
-      - run: npm install --arch=arm64
+      - name: Install dependencies (retry on transient network errors)
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5; do
+            npm install --arch=arm64 && exit 0
+            echo "::warning::npm install attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
+          exit 1
 
       - name: Setup macOS signing keychain
         env:
