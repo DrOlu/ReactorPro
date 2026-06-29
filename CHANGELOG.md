@@ -1,6 +1,6 @@
 # ReactorPro Changelog
 
-## [Unreleased]
+## [0.72.0]
 
 - correctly selecting the input history item
 - improved task memory management in renderer process
