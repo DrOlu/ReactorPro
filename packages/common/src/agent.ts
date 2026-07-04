@@ -242,6 +242,7 @@ export interface OpenAiCompatibleProvider extends LlmProviderBase {
   baseUrl?: string;
   reasoningEffort?: ReasoningEffort;
   trackTokenUsage?: boolean;
+  extraBody?: Record<string, unknown>;
 }
 export const isOpenAiCompatibleProvider = (provider: LlmProviderBase): provider is OpenAiCompatibleProvider => provider.name === 'openai-compatible';
 
