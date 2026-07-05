@@ -8,6 +8,8 @@
 - fixed usage report not attached to tool-only responses, preventing context compaction from triggering
 - using message virtualization to improve rendering performance as default
 - added extra body parameters support for OpenAI-compatible providers
+- ensure correct /v1 suffix in base URL for Anthropic-compatible providers
+- updated default models for providers to use latest versions
 
 ## [0.72.0]
 
