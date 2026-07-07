@@ -1853,7 +1853,7 @@ export class ExtensionManager {
 
         // Use temp dir for npm install to avoid triggering the watcher with
         // hundreds of node_modules file writes
-        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aider-desk-ext-'));
+        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'reactorpro-ext-'));
         const tempExtPath = path.join(tempDir, extension.folder);
 
         try {
@@ -2047,7 +2047,7 @@ export class ExtensionManager {
         }
 
         // Use temp dir for npm install to avoid triggering the watcher
-        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aider-desk-ext-'));
+        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'reactorpro-ext-'));
         const tempExtPath = path.join(tempDir, extension.folder);
 
         try {

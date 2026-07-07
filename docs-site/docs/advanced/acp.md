@@ -6,28 +6,28 @@ slug: "/advanced/acp"
 
 # Agent Client Protocol (ACP)
 
-AiderDesk supports the [Agent Client Protocol (ACP)](https://agentclientprotocol.com), a standardized protocol for communication between code editors/IDEs and AI coding agents. This means you can use AiderDesk as an AI agent inside any ACP-compatible editor or client — such as [Zed](https://zed.dev), [JetBrains AI Assistant](https://www.jetbrains.com/help/ai-assistant/acp.html), [VS Code](https://github.com/formulahendry/vscode-acp), [neovim](https://github.com/olimorris/codecompanion.nvim), and [many others](https://agentclientprotocol.com/get-started/clients).
+ReactorPro supports the [Agent Client Protocol (ACP)](https://agentclientprotocol.com), a standardized protocol for communication between code editors/IDEs and AI coding agents. This means you can use ReactorPro as an AI agent inside any ACP-compatible editor or client — such as [Zed](https://zed.dev), [JetBrains AI Assistant](https://www.jetbrains.com/help/ai-assistant/acp.html), [VS Code](https://github.com/formulahendry/vscode-acp), [neovim](https://github.com/olimorris/codecompanion.nvim), and [many others](https://agentclientprotocol.com/get-started/clients).
 
 ACP is similar to the [Language Server Protocol (LSP)](https://microsoft.github.io/language-server-protocol/), but for AI coding agents. Instead of each editor building a custom integration for every agent, ACP provides a single standard. Any ACP-compatible editor can use any ACP-compatible agent.
 
 ## How It Works
 
-AiderDesk's ACP server is a thin stdio bridge that connects an ACP client (your editor) to a running AiderDesk instance. When your editor launches the ACP agent, AiderDesk receives prompts over JSON-RPC, processes them through its existing task system (via the [REST API](../features/rest-api.md)), and streams back responses, tool calls, diffs, and reasoning in real time.
+ReactorPro's ACP server is a thin stdio bridge that connects an ACP client (your editor) to a running ReactorPro instance. When your editor launches the ACP agent, ReactorPro receives prompts over JSON-RPC, processes them through its existing task system (via the [REST API](../features/rest-api.md)), and streams back responses, tool calls, diffs, and reasoning in real time.
 
 ```
 ┌─────────┐     JSON-RPC (stdio)      ┌──────────────┐     HTTP/SSE      ┌─────────────────┐
-│  Editor  │ ◄──────────────────────► │  aiderdesk   │ ◄───────────────► │  AiderDesk Server │
+│  Editor  │ ◄──────────────────────► │  aiderdesk   │ ◄───────────────► │  ReactorPro Server │
 │ (ACP     │                          │  acp (CLI)   │                   │  (Electron /      │
 │  Client) │                          │              │                   │   Docker / npm)   │
 └─────────┘                          └──────────────┘                   └─────────────────┘
 ```
 
-The `aiderdesk acp` command does **not** start a server — it connects to an already-running AiderDesk instance and bridges ACP protocol messages to its REST API.
+The `aiderdesk acp` command does **not** start a server — it connects to an already-running ReactorPro instance and bridges ACP protocol messages to its REST API.
 
 ## Prerequisites
 
-:::info A running AiderDesk instance is required
-The ACP bridge connects to a running AiderDesk server. It does not start one. Make sure AiderDesk is running in one of the following ways:
+:::info A running ReactorPro instance is required
+The ACP bridge connects to a running ReactorPro server. It does not start one. Make sure ReactorPro is running in one of the following ways:
 :::
 
 ### 1. Electron Desktop App
@@ -36,30 +36,30 @@ If you have the desktop app installed and running, the ACP bridge will connect t
 
 ### 2. Docker
 
-Run AiderDesk in headless mode via Docker. See the [Docker guide](./docker.md) for full setup instructions.
+Run ReactorPro in headless mode via Docker. See the [Docker guide](./docker.md) for full setup instructions.
 
 ```bash
 docker run -d \
   --name aiderdesk \
   -p 24337:24337 \
   -v ~/aiderdesk-data:/app/data \
-  -v ~/.aider-desk:/root/.aider-desk \
+  -v ~/.reactorpro:/root/.reactorpro \
   -v ~/projects:/projects \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 ### 3. npm CLI
 
-Install and run AiderDesk as a global npm package. See the [npm CLI guide](./npm-cli.md) for details.
+Install and run ReactorPro as a global npm package. See the [npm CLI guide](./npm-cli.md) for details.
 
 ```bash
 npm install -g @aiderdesk/aiderdesk
 aiderdesk start
 ```
 
-### Verifying AiderDesk is Running
+### Verifying ReactorPro is Running
 
-Before configuring your editor, verify AiderDesk is reachable:
+Before configuring your editor, verify ReactorPro is reachable:
 
 ```bash
 curl http://localhost:24337/api/health
@@ -90,8 +90,8 @@ aiderdesk acp [options]
 
 | Option | Description |
 |--------|-------------|
-| `-p, --port <port>` | AiderDesk server port (default: `24337`, env: `AIDER_DESK_PORT`) |
-| `--host <host>` | AiderDesk server host (default: `localhost`) |
+| `-p, --port <port>` | ReactorPro server port (default: `24337`, env: `AIDER_DESK_PORT`) |
+| `--host <host>` | ReactorPro server host (default: `localhost`) |
 
 The command communicates over stdio using JSON-RPC with newline-delimited JSON (NDJSON), as defined by the ACP specification. You normally don't run this command directly — your editor launches it as a subprocess.
 
@@ -105,16 +105,16 @@ The port can be configured in three ways (highest priority first):
 
 ## Configuring ACP Clients
 
-To use AiderDesk as an ACP agent, register it in your editor's ACP/agent server configuration. The configuration tells the editor what command to run to start the agent.
+To use ReactorPro as an ACP agent, register it in your editor's ACP/agent server configuration. The configuration tells the editor what command to run to start the agent.
 
 ### Zed
 
-Add AiderDesk to your Zed [`agent_servers` configuration](https://zed.dev/docs/ai/external-agents) (`~/.config/zed/settings.json`):
+Add ReactorPro to your Zed [`agent_servers` configuration](https://zed.dev/docs/ai/external-agents) (`~/.config/zed/settings.json`):
 
 ```json
 {
   "agent_servers": {
-    "AiderDesk": {
+    "ReactorPro": {
       "command": "npx",
       "args": ["@aiderdesk/aiderdesk", "acp"]
     }
@@ -122,12 +122,12 @@ Add AiderDesk to your Zed [`agent_servers` configuration](https://zed.dev/docs/a
 }
 ```
 
-If you installed AiderDesk globally, you can use the `aiderdesk` command directly:
+If you installed ReactorPro globally, you can use the `aiderdesk` command directly:
 
 ```json
 {
   "agent_servers": {
-    "AiderDesk": {
+    "ReactorPro": {
       "command": "aiderdesk",
       "args": ["acp"]
     }
@@ -140,7 +140,7 @@ To connect to a non-default port, pass `--port`:
 ```json
 {
   "agent_servers": {
-    "AiderDesk": {
+    "ReactorPro": {
       "command": "aiderdesk",
       "args": ["acp", "--port", "8080"]
     }
@@ -150,19 +150,19 @@ To connect to a non-default port, pass `--port`:
 
 ### JetBrains IDEs
 
-JetBrains IDEs (IntelliJ IDEA, WebStorm, PyCharm, GoLand, etc.) support ACP via [AI Assistant](https://www.jetbrains.com/help/ai-assistant/acp.html). Configure AiderDesk as a custom agent server in JetBrains settings under **Settings → Tools → AI Assistant → Custom Agent Servers**:
+JetBrains IDEs (IntelliJ IDEA, WebStorm, PyCharm, GoLand, etc.) support ACP via [AI Assistant](https://www.jetbrains.com/help/ai-assistant/acp.html). Configure ReactorPro as a custom agent server in JetBrains settings under **Settings → Tools → AI Assistant → Custom Agent Servers**:
 
-- **Name**: AiderDesk
+- **Name**: ReactorPro
 - **Command**: `aiderdesk acp` (or `npx @aiderdesk/aiderdesk acp`)
 
 ### Visual Studio Code
 
-Install an ACP extension such as [ACP Client](https://github.com/formulahendry/vscode-acp) or [ACP Pro](https://marketplace.visualstudio.com/items?itemName=duclvz.acp-pro), then configure AiderDesk as an agent server:
+Install an ACP extension such as [ACP Client](https://github.com/formulahendry/vscode-acp) or [ACP Pro](https://marketplace.visualstudio.com/items?itemName=duclvz.acp-pro), then configure ReactorPro as an agent server:
 
 ```json
 {
   "acp.servers": {
-    "AiderDesk": {
+    "ReactorPro": {
       "command": "aiderdesk",
       "args": ["acp"]
     }
@@ -197,7 +197,7 @@ For any ACP-compatible client, the agent server definition follows this pattern:
 
 | Field | Value |
 |-------|-------|
-| **Name** | `AiderDesk` |
+| **Name** | `ReactorPro` |
 | **Command** | `aiderdesk` (or `npx @aiderdesk/aiderdesk`) |
 | **Args** | `["acp"]` |
 | **Working directory** | Your project directory |
@@ -208,7 +208,7 @@ See the full list of [ACP-compatible clients](https://agentclientprotocol.com/ge
 
 ## Session Configuration
 
-When you start a new ACP session, AiderDesk exposes several configurable options that the client may present as dropdowns or selectors. You can set these before or during a session.
+When you start a new ACP session, ReactorPro exposes several configurable options that the client may present as dropdowns or selectors. You can set these before or during a session.
 
 ### Chat Mode
 
@@ -240,7 +240,7 @@ Controls how much human oversight the agent has:
 
 ## What You Get
 
-When using AiderDesk through ACP, your editor receives rich, structured updates:
+When using ReactorPro through ACP, your editor receives rich, structured updates:
 
 - **Agent message streaming** — Responses stream in real time as the agent works
 - **Agent reasoning** — Thinking/reasoning steps are displayed as they occur
@@ -249,15 +249,15 @@ When using AiderDesk through ACP, your editor receives rich, structured updates:
 - **Terminal output** — Bash command results are surfaced as terminal content
 - **Usage and cost** — Token usage and cost information is reported after each response
 - **Session info** — Task names and metadata are synced with the editor
-- **Cancellation** — You can cancel in-progress prompts; the editor will notify AiderDesk to interrupt the task
+- **Cancellation** — You can cancel in-progress prompts; the editor will notify ReactorPro to interrupt the task
 
 ## Troubleshooting
 
-### "AiderDesk server is not running" error
+### "ReactorPro server is not running" error
 
-The ACP bridge connects to a running AiderDesk server. Make sure it's started:
+The ACP bridge connects to a running ReactorPro server. Make sure it's started:
 
-- **Desktop app**: Launch the AiderDesk application
+- **Desktop app**: Launch the ReactorPro application
 - **Docker**: `docker start aiderdesk` (or `docker run ...` — see [Docker guide](./docker.md))
 - **npm CLI**: Run `aiderdesk start` (see [npm CLI guide](./npm-cli.md))
 
@@ -269,7 +269,7 @@ curl http://localhost:24337/api/health
 
 ### Wrong port
 
-If AiderDesk is running on a non-default port, pass `--port` to the ACP command:
+If ReactorPro is running on a non-default port, pass `--port` to the ACP command:
 
 ```json
 {
@@ -288,9 +288,9 @@ Or set the `AIDER_DESK_PORT` environment variable in the agent server config:
 }
 ```
 
-### Remote AiderDesk instance
+### Remote ReactorPro instance
 
-If your AiderDesk server is running on a different host, use the `--host` flag:
+If your ReactorPro server is running on a different host, use the `--host` flag:
 
 ```json
 {
@@ -301,14 +301,14 @@ If your AiderDesk server is running on a different host, use the `--host` flag:
 
 ### Sessions not persisting
 
-ACP sessions map to AiderDesk tasks. Each new ACP session creates a new task. To resume a conversation, use your editor's session management features — AiderDesk will reuse the existing task if the session continues.
+ACP sessions map to ReactorPro tasks. Each new ACP session creates a new task. To resume a conversation, use your editor's session management features — ReactorPro will reuse the existing task if the session continues.
 
 ## Learn More
 
 - [Agent Client Protocol](https://agentclientprotocol.com) — Official protocol documentation
 - [ACP Clients](https://agentclientprotocol.com/get-started/clients) — Full list of compatible editors and tools
-- [Chat Modes](../features/chat-modes.md) — Learn about AiderDesk's chat modes
+- [Chat Modes](../features/chat-modes.md) — Learn about ReactorPro's chat modes
 - [Agent Profiles](../agent-mode/agent-profiles.md) — Configure agent behavior and tool access
 - [REST API](../features/rest-api.md) — The underlying API that the ACP bridge uses
-- [npm CLI](./npm-cli.md) — Running AiderDesk via npm
-- [Docker](./docker.md) — Running AiderDesk in Docker
+- [npm CLI](./npm-cli.md) — Running ReactorPro via npm
+- [Docker](./docker.md) — Running ReactorPro in Docker
