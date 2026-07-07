@@ -1,5 +1,13 @@
 # ReactorPro Changelog
 
+## [Unreleased]
+
+- added diff-based extension reloads and optimized dependency installation
+- updated Gemini voice model to gemini-3.1-flash-live-preview and improved session handling
+- redesigned agent settings UI
+- added customizable system prompt for Agent profiles
+- added subagent filters for Agent profiles
+
 ## [0.73.0]
 
 - showing correct compact threshold values from agent profile overrides

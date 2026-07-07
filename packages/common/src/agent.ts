@@ -168,7 +168,8 @@ export interface AlibabaPlanProvider extends LlmProviderBase {
 export const isAlibabaPlanProvider = (provider: LlmProviderBase): provider is AlibabaPlanProvider => provider.name === 'alibaba-plan';
 
 export enum GeminiVoiceModel {
-  GeminiLive25FlashNativeAudio = 'gemini-2.5-flash-native-audio-preview-12-2025',
+  Gemini31FlashLivePreview = 'gemini-3.1-flash-live-preview',
+  Gemini25FlashNativeAudio = 'gemini-2.5-flash-native-audio-preview-12-2025',
 }
 
 export interface GeminiVoiceControlSettings extends VoiceControlSettings {
@@ -659,7 +660,7 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
         voice: {
           idleTimeoutMs: 5000,
           systemInstructions: DEFAULT_VOICE_SYSTEM_INSTRUCTIONS,
-          model: GeminiVoiceModel.GeminiLive25FlashNativeAudio,
+          model: GeminiVoiceModel.Gemini31FlashLivePreview,
           temperature: 0.7,
         },
       } satisfies GeminiProvider;
@@ -820,8 +821,17 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
   return provider as T;
 };
 
-export const isSubagentEnabled = (agentProfile: AgentProfile, currentProfileId?: string): boolean => {
-  return Boolean(agentProfile.subagent.systemPrompt && agentProfile.subagent.enabled && (!currentProfileId || agentProfile.id !== currentProfileId));
+export const isSubagentEnabled = (agentProfile: AgentProfile, mainAgentProfile?: AgentProfile): boolean => {
+  if (!agentProfile.subagent.systemPrompt || !agentProfile.subagent.enabled) {
+    return false;
+  }
+  if (!mainAgentProfile) {
+    return true;
+  }
+  if (agentProfile.id === mainAgentProfile.id) {
+    return false;
+  }
+  return !mainAgentProfile.enabledSubagentIds || mainAgentProfile.enabledSubagentIds.includes(agentProfile.id);
 };
 
 export const getProviderModelId = (model: Model): string => {
