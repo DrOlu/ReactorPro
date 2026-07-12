@@ -330,6 +330,54 @@ jobs:
             sed -i 's/AiderDesk/ReactorPro/g' src/common/locales/zh.json
           fi
 
+      - name: Patch cerebras into PROVIDER_PARAMETERS_MAP
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Upstream has cerebras in AVAILABLE_PROVIDERS and PROVIDER_ICON_MAP but
+          # forgot it in PROVIDER_PARAMETERS_MAP. The -X theirs merge drops our fix
+          # every sync, so we re-inject it here before the verification check.
+          node -e "
+            const fs = require('fs');
+            const f = 'src/renderer/src/components/ModelLibrary/ProviderProfileForm.tsx';
+            let src = fs.readFileSync(f, 'utf8');
+            if (/cerebras:\s*CerebrasParameters/.test(src)) {
+              console.log('cerebras already in PROVIDER_PARAMETERS_MAP, skipping');
+              process.exit(0);
+            }
+            const lines = src.split('\\n');
+            const out = [];
+            let inImports = false;
+            let addedImport = false;
+            let addedMap = false;
+            for (const line of lines) {
+              out.push(line);
+              if (/^import\s*\{\s*$/.test(line.trim())) {
+                inImports = true;
+                continue;
+              }
+              if (inImports && !addedImport && /^\s+BedrockParameters,\s*$/.test(line)) {
+                out.push('  CerebrasParameters,');
+                addedImport = true;
+                console.log('Added CerebrasParameters to imports');
+              }
+              if (inImports && /^\}\s*from/.test(line.trim())) {
+                inImports = false;
+              }
+              if (!addedMap && /^\s+bedrock:\s*BedrockParameters,\s*$/.test(line)) {
+                out.push('  cerebras: CerebrasParameters,');
+                addedMap = true;
+                console.log('Added cerebras: CerebrasParameters to PROVIDER_PARAMETERS_MAP');
+              }
+            }
+            if (addedImport || addedMap) {
+              fs.writeFileSync(f, out.join('\\n'));
+              console.log('Patched ProviderProfileForm.tsx for cerebras provider');
+            } else {
+              console.error('WARNING: could not patch cerebras');
+              process.exit(1);
+            }
+          "
+
       - name: Verify provider UI maps cover AVAILABLE_PROVIDERS
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
