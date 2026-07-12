@@ -202,7 +202,7 @@ describe('Prompts with Handlebars', () => {
     });
 
     it('should set projectGitRootDirectory when taskDir differs from projectDir', async () => {
-      mockTask.getTaskDir = vi.fn().mockReturnValue('/test/project/.aider-desk/tasks/abc/worktree');
+      mockTask.getTaskDir = vi.fn().mockReturnValue('/test/project/.reactorpro/tasks/abc/worktree');
       mockTask.getProjectDir = vi.fn().mockReturnValue('/test/project');
 
       const compiled = await promptsManager.compileCustomSystemPrompt(mockTask, 'Git root: {{projectGitRootDirectory}}');
