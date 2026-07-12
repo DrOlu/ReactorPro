@@ -575,6 +575,10 @@ export class Task {
     return this.task.worktree ? this.task.worktree.path : this.project.baseDir;
   }
 
+  public compileCustomSystemPrompt(template: string): Promise<string> {
+    return this.promptsManager.compileCustomSystemPrompt(this, template);
+  }
+
   /**
    * Resolves a relative file path against taskDir first, then falls back to projectDir.
    * This handles git worktree cases where files may exist in the project directory
@@ -798,6 +802,10 @@ export class Task {
 
       if (!profile) {
         throw new Error('No active Agent profile found');
+      }
+
+      if (!this.task.agentProfileId) {
+        await this.saveTask({ agentProfileId: profile.id });
       }
 
       responses = await this.runPromptInAgent(profile, mode, prompt, promptContext, undefined, undefined, undefined, true, sendNotification, images);
@@ -2806,6 +2814,10 @@ export class Task {
         logger.error('No active Agent profile found for resume');
         this.addLogMessage('error', 'No active Agent profile found');
         return;
+      }
+
+      if (!this.task.agentProfileId) {
+        await this.saveTask({ agentProfileId: profile.id });
       }
 
       logger.info('Resuming agent task...');
