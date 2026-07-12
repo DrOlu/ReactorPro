@@ -17,6 +17,8 @@
 - storing agent profile to the task on the first run to preserve the agent profile in case default changes
 - correctly initializing open telementry in local development mode
 - added support for dynamic system prompt placeholders via editor
+- added /subagent command to manually invoke subagent from the prompt field
+- added support for removing group messages (subagent, aider) and Fork from here/Remove up to actions
 
 ## [0.73.0]
 
