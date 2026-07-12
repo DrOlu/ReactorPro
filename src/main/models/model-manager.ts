@@ -12,6 +12,7 @@ import { anthropicCompatibleProviderStrategy } from './providers/anthropic-compa
 import { azureProviderStrategy } from './providers/azure';
 import { bedrockProviderStrategy } from './providers/bedrock';
 import { cerebrasProviderStrategy } from './providers/cerebras';
+import { clinePassProviderStrategy } from './providers/clinepass';
 import { deepseekProviderStrategy } from './providers/deepseek';
 import { geminiProviderStrategy } from './providers/gemini';
 import { gpustackProviderStrategy } from './providers/gpustack';
@@ -95,6 +96,7 @@ export class ModelManager {
     bedrock: bedrockProviderStrategy,
     'claude-agent-sdk': claudeAgentSdkProviderStrategy,
     cerebras: cerebrasProviderStrategy,
+    clinepass: clinePassProviderStrategy,
     deepseek: deepseekProviderStrategy,
     gemini: geminiProviderStrategy,
     gpustack: gpustackProviderStrategy,

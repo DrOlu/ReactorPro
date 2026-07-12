@@ -45,12 +45,13 @@ Simple extensions designed for learning the extension API patterns.
 
 | Extension | Description | API Usage |
 |-----------|-------------|-----------|
-| [pirate.ts](https://github.com/hyperspace/reactorpro/blob/main/packages/extensions/extensions/pirate.ts) | Adds a Pirate agent that speaks like a swashbuckling sea dog | `onLoad`, `getAgents`, `onAgentProfileUpdated` |
-| [ui-placement-demo.ts](https://github.com/hyperspace/reactorpro/blob/main/packages/extensions/extensions/ui-placement-demo.ts) | Demonstrates all available UI component placement locations | `onLoad`, `getUIComponents` |
-| [chunkhound-on-semantic-search-tool](https://github.com/hyperspace/reactorpro/tree/main/packages/extensions/extensions/chunkhound-on-semantic-search-tool/) | Overrides `power---semantic_search` to use ChunkHound | `onToolCalled`, `onToolFinished`, `onProjectStarted` |
-| [theme.ts](https://github.com/hyperspace/reactorpro/blob/main/packages/extensions/extensions/theme.ts) | Adds `/theme` command to switch ReactorPro themes | `onLoad`, `getCommands`, `ExtensionContext.updateSettings` |
-| [generate-tests.ts](https://github.com/hyperspace/reactorpro/blob/main/packages/extensions/extensions/generate-tests.ts) | Adds `/generate-tests` command to generate unit tests for files | `onLoad`, `getCommands`, `TaskContext.runPrompt` |
-| [plan-mode.ts](https://github.com/hyperspace/reactorpro/blob/main/packages/extensions/extensions/plan-mode.ts) | Adds a Plan mode that enforces planning before coding | `onLoad`, `getModes`, `onAgentStarted` |
+| [pirate.ts](https://github.com/hotovo/aider-desk/blob/main/packages/extensions/extensions/pirate.ts) | Adds a Pirate agent that speaks like a swashbuckling sea dog | `onLoad`, `getAgents`, `onAgentProfileUpdated` |
+| [my-minions](https://github.com/hotovo/aider-desk/tree/main/packages/extensions/extensions/my-minions/) | Adds Orchestrator and Minion agent profiles — a coordinator that delegates all work to a focused execution subagent | `onLoad`, `getAgents`, `onAgentProfileUpdated` |
+| [ui-placement-demo.ts](https://github.com/hotovo/aider-desk/blob/main/packages/extensions/extensions/ui-placement-demo.ts) | Demonstrates all available UI component placement locations | `onLoad`, `getUIComponents` |
+| [chunkhound-on-semantic-search-tool](https://github.com/hotovo/aider-desk/tree/main/packages/extensions/extensions/chunkhound-on-semantic-search-tool/) | Overrides `power---semantic_search` to use ChunkHound | `onToolCalled`, `onToolFinished`, `onProjectStarted` |
+| [theme.ts](https://github.com/hotovo/aider-desk/blob/main/packages/extensions/extensions/theme.ts) | Adds `/theme` command to switch AiderDesk themes | `onLoad`, `getCommands`, `ExtensionContext.updateSettings` |
+| [generate-tests.ts](https://github.com/hotovo/aider-desk/blob/main/packages/extensions/extensions/generate-tests.ts) | Adds `/generate-tests` command to generate unit tests for files | `onLoad`, `getCommands`, `TaskContext.runPrompt` |
+| [plan-mode.ts](https://github.com/hotovo/aider-desk/blob/main/packages/extensions/extensions/plan-mode.ts) | Adds a Plan mode that enforces planning before coding | `onLoad`, `getModes`, `onAgentStarted` |
 ---
 
 ## UI Components
