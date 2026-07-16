@@ -174,9 +174,23 @@ jobs:
 
       - name: Install FPM
         run: |
-          sudo apt-get update
-          sudo apt-get install ruby ruby-dev build-essential
-          sudo gem install --no-document fpm
+          # ruby and ruby-dev ship on the ubuntu-22.04-arm runner image, and
+          # the build toolchain (gcc/make from build-essential) is normally
+          # present too. Only reach out to apt when the toolchain is actually
+          # missing: ports.ubuntu.com has sustained outages from GitHub's
+          # arm64 runners (IPv6 unreachable + IPv4 timeouts), so a bare
+          # apt-get here fails the whole job even when fpm could be installed
+          # via gem against the preinstalled toolchain.
+          if ! command -v gcc >/dev/null 2>&1 || ! command -v make >/dev/null 2>&1; then
+            for i in 1 2 3 4 5; do
+              sudo apt-get update && \
+              sudo apt-get install -y --no-install-recommends ruby ruby-dev build-essential && break
+              echo "::warning::apt install attempt $i failed, retrying in 20s..."
+              sleep 20
+            done
+          fi
+          command -v ruby >/dev/null 2>&1 || { echo "::error::ruby not available and apt mirror unreachable"; exit 1; }
+          command -v fpm >/dev/null 2>&1 || sudo gem install --no-document fpm
 
       - name: Install dependencies (retry on transient network errors)
         shell: bash
