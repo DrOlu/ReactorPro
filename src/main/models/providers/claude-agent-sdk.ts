@@ -6,7 +6,7 @@ import { AIDER_TOOL_GROUP_NAME, AIDER_TOOL_RUN_PROMPT, SUBAGENTS_TOOL_GROUP_NAME
 
 import type { ClaudeCodeSettings } from 'ai-sdk-provider-claude-code';
 import type { LanguageModelUsage, ToolSet } from 'ai';
-import type { LanguageModelV2, JSONSchema7 } from '@ai-sdk/provider';
+import type { LanguageModelV4, JSONSchema7 } from '@ai-sdk/provider';
 
 import logger from '@/logger';
 import { AiderModelMapping, LlmProviderStrategy, LoadModelsResponse } from '@/models';
@@ -193,7 +193,7 @@ export const createClaudeAgentSdkLlm = (
   toolSet?: ToolSet,
   systemPrompt?: string,
   providerMetadata?: unknown,
-): LanguageModelV2 => {
+): LanguageModelV4 => {
   const settings: ClaudeCodeSettings & { env?: Record<string, string | undefined>; aiSdkTools?: ToolSet } = {
     env: {
       // setting MAX_MCP_OUTPUT_TOKENS to a high number to avoid errors
