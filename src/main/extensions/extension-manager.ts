@@ -73,7 +73,7 @@ import type { ModelManager } from '@/models';
 import type { EventManager } from '@/events';
 import type { MemoryManager } from '@/memory/memory-manager';
 import type { TelemetryManager } from '@/telemetry';
-import type { ToolCallOptions, ToolSet } from 'ai';
+import type { ToolExecutionOptions, ToolSet } from 'ai';
 
 import { shouldUsePolling } from '@/utils/file-watch';
 import logger from '@/logger';
@@ -1014,7 +1014,7 @@ export class ExtensionManager {
       toolSet[toolId] = {
         description: tool.description,
         inputSchema: tool.inputSchema,
-        execute: async (input: Record<string, unknown>, options: ToolCallOptions) => {
+        execute: async (input: Record<string, unknown>, options: ToolExecutionOptions<unknown>) => {
           // --- Tool Approval Logic ---
           const toolApproval = profile.toolApprovals?.[fullToolId];
           logger.debug(
@@ -1044,6 +1044,7 @@ export class ExtensionManager {
                       toolCallId: '',
                       abortSignal: abortSignal || options.abortSignal,
                       messages: [],
+                      context: undefined as never,
                     });
                   } else {
                     return 'Tool does not have an execute function';

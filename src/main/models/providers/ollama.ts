@@ -1,15 +1,14 @@
-import { Model, ProviderProfile, SettingsData, UsageReportData } from '@common/types';
+import { Model, ProviderProfile, SettingsData } from '@common/types';
 import { isOllamaProvider, OllamaProvider } from '@common/agent';
 import { createOllama } from 'ollama-ai-provider-v2';
 import { simulateStreamingMiddleware, wrapLanguageModel } from 'ai';
 
-import type { LanguageModelUsage } from 'ai';
-import type { LanguageModelV2 } from '@ai-sdk/provider';
+import type { LanguageModel } from 'ai';
 
 import { AiderModelMapping, LlmProviderStrategy, LoadModelsResponse } from '@/models';
 import logger from '@/logger';
 import { getEffectiveEnvironmentVariable } from '@/utils';
-import { Task } from '@/task/task';
+import { getDefaultUsageReport } from '@/models/providers/default';
 
 export const loadOllamaModels = async (profile: ProviderProfile, settings: SettingsData): Promise<LoadModelsResponse> => {
   if (!isOllamaProvider(profile.provider)) {
@@ -74,7 +73,7 @@ export const getOllamaAiderMapping = (provider: ProviderProfile, modelId: string
 };
 
 // === LLM Creation Functions ===
-export const createOllamaLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModelV2 => {
+export const createOllamaLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModel => {
   const provider = profile.provider as OllamaProvider;
   let baseUrl = provider.baseUrl;
 
@@ -105,30 +104,11 @@ export const createOllamaLlm = (profile: ProviderProfile, model: Model, settings
   });
 };
 
-export const getOllamaUsageReport = (task: Task, provider: ProviderProfile, model: Model, usage: LanguageModelUsage): UsageReportData => {
-  const totalSentTokens = usage.inputTokens || 0;
-  const receivedTokens = usage.outputTokens || 0;
-  const cacheReadTokens = usage.cachedInputTokens || 0;
-  const sentTokens = totalSentTokens - cacheReadTokens;
-
-  // Cost is always 0 for Ollama
-  const messageCost = 0;
-
-  return {
-    model: `${provider.id}/${model.id}`,
-    sentTokens,
-    receivedTokens,
-    cacheReadTokens,
-    messageCost,
-    agentTotalCost: task.task.agentTotalCost + messageCost,
-  };
-};
-
 // === Complete Strategy Implementation ===
 export const ollamaProviderStrategy: LlmProviderStrategy = {
   // Core LLM functions
   createLlm: createOllamaLlm,
-  getUsageReport: getOllamaUsageReport,
+  getUsageReport: getDefaultUsageReport,
 
   // Model discovery functions
   loadModels: loadOllamaModels,

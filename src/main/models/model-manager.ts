@@ -35,8 +35,8 @@ import { vertexAiProviderStrategy } from './providers/vertex-ai';
 import { zaiPlanProviderStrategy } from './providers/zai-plan';
 
 import type { RegisteredProvider } from '@/extensions/extension-manager';
-import type { LanguageModelV2 } from '@ai-sdk/provider';
-import type { JSONValue, LanguageModelUsage, ModelMessage, ToolSet } from 'ai';
+import type { SharedV4ProviderOptions } from '@ai-sdk/provider';
+import type { LanguageModel, LanguageModelUsage, ModelMessage, ToolSet } from 'ai';
 
 import { getDefaultUsageReport } from '@/models/providers/default';
 import { AIDER_DESK_CACHE_DIR, AIDER_DESK_DATA_DIR } from '@/constants';
@@ -727,7 +727,7 @@ export class ModelManager {
     toolSet?: ToolSet,
     systemPrompt?: string,
     providerMetadata?: unknown,
-  ): LanguageModelV2 | Promise<LanguageModelV2> {
+  ): LanguageModel | Promise<LanguageModel> {
     const strategy = this.providerRegistry[provider.provider.name];
     if (!strategy) {
       throw new Error(`Unsupported LLM provider: ${provider.provider.name}`);
@@ -816,7 +816,7 @@ export class ModelManager {
       : (llmProvider.disableStreaming ?? false);
   }
 
-  getProviderOptions(provider: ProviderProfile, modelId: string): Record<string, Record<string, JSONValue>> | undefined {
+  getProviderOptions(provider: ProviderProfile, modelId: string): SharedV4ProviderOptions | undefined {
     const llmProvider = provider.provider;
     const strategy = this.providerRegistry[llmProvider.name];
     if (!strategy?.getProviderOptions) {
@@ -958,9 +958,7 @@ export class ModelManager {
       this.providerRegistry[provider.provider.name] = {
         ...provider.strategy,
         createLlm: (profile, model, settings, projectDir, toolSet, systemPrompt, providerMetadata) =>
-          provider.strategy.createLlm(profile, model, settings, projectDir, toolSet, systemPrompt, providerMetadata) as
-            | LanguageModelV2
-            | Promise<LanguageModelV2>,
+          provider.strategy.createLlm(profile, model, settings, projectDir, toolSet, systemPrompt, providerMetadata) as LanguageModel | Promise<LanguageModel>,
         getUsageReport: provider.strategy.getUsageReport || getDefaultUsageReport,
         getProviderOptions: provider.strategy.getProviderOptions ? (_provider, model) => provider.strategy.getProviderOptions!(model) : undefined,
         getProviderTools: provider.strategy.getProviderTools

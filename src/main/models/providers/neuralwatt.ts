@@ -1,15 +1,14 @@
-import { Model, ProviderProfile, SettingsData, UsageReportData } from '@common/types';
+import { Model, ProviderProfile, SettingsData } from '@common/types';
 import { isNeuralwattProvider, LlmProvider, NeuralwattProvider } from '@common/agent';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
-import type { LanguageModelUsage } from 'ai';
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider';
+import type { LanguageModel } from 'ai';
+import type { SharedV4ProviderOptions } from '@ai-sdk/provider';
 
 import { AiderModelMapping, LlmProviderStrategy, LoadModelsResponse } from '@/models';
 import logger from '@/logger';
 import { getEffectiveEnvironmentVariable } from '@/utils';
-import { getDefaultModelInfo, calculateCost } from '@/models/providers/default';
-import { Task } from '@/task/task';
+import { getDefaultModelInfo, getDefaultUsageReport } from '@/models/providers/default';
 
 const NEURALWATT_BASE_URL = 'https://api.neuralwatt.com/v1';
 
@@ -135,7 +134,7 @@ const getNeuralwattAiderMapping = (provider: ProviderProfile, modelId: string): 
   };
 };
 
-const createNeuralwattLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModelV2 => {
+const createNeuralwattLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModel => {
   const provider = profile.provider as NeuralwattProvider;
   let apiKey = provider.apiKey;
 
@@ -160,36 +159,7 @@ const createNeuralwattLlm = (profile: ProviderProfile, model: Model, settings: S
   return compatibleProvider(model.id);
 };
 
-const getNeuralwattUsageReport = (
-  task: Task,
-  provider: ProviderProfile,
-  model: Model,
-  usage: LanguageModelUsage,
-  providerMetadata?: unknown,
-): UsageReportData => {
-  const totalSentTokens = usage.inputTokens || 0;
-  const receivedTokens = usage.outputTokens || 0;
-  const cacheReadTokens = usage.cachedInputTokens || 0;
-  const sentTokens = totalSentTokens - cacheReadTokens;
-
-  logger.info('Neuralwatt usage report', {
-    providerMetadata,
-    usage,
-  });
-
-  const messageCost = calculateCost(model, sentTokens, receivedTokens, cacheReadTokens);
-
-  return {
-    model: `${provider.id}/${model.id}`,
-    sentTokens,
-    receivedTokens,
-    cacheReadTokens,
-    messageCost,
-    agentTotalCost: task.task.agentTotalCost + messageCost,
-  };
-};
-
-const getNeuralwattProviderOptions = (llmProvider: LlmProvider, model: Model): SharedV2ProviderOptions | undefined => {
+const getNeuralwattProviderOptions = (llmProvider: LlmProvider, model: Model): SharedV4ProviderOptions | undefined => {
   if (!isNeuralwattProvider(llmProvider)) {
     return undefined;
   }
@@ -209,7 +179,7 @@ const getNeuralwattProviderOptions = (llmProvider: LlmProvider, model: Model): S
       neuralwatt: {
         reasoningEffort: mappedReasoningEffort,
       },
-    } satisfies SharedV2ProviderOptions;
+    } satisfies SharedV4ProviderOptions;
   }
 
   return undefined;
@@ -217,7 +187,7 @@ const getNeuralwattProviderOptions = (llmProvider: LlmProvider, model: Model): S
 
 export const neuralwattProviderStrategy: LlmProviderStrategy = {
   createLlm: createNeuralwattLlm,
-  getUsageReport: getNeuralwattUsageReport,
+  getUsageReport: getDefaultUsageReport,
   loadModels: loadNeuralwattModels,
   hasEnvVars: hasNeuralwattEnvVars,
   getAiderMapping: getNeuralwattAiderMapping,

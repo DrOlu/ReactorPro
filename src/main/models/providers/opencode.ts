@@ -2,12 +2,12 @@ import { Model, ProviderProfile, SettingsData } from '@common/types';
 import { isOpenCodeProvider, OpenCodeProvider } from '@common/agent';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createGoogle } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
 import { getDefaultModelInfo, getDefaultUsageReport } from './default';
 
-import type { LanguageModelV2 } from '@ai-sdk/provider';
+import type { LanguageModel } from 'ai';
 
 import { AiderModelMapping, LlmProviderStrategy, LoadModelsResponse } from '@/models';
 import { getEffectiveEnvironmentVariable } from '@/utils';
@@ -129,7 +129,7 @@ export const getOpencodeAiderMapping = (provider: ProviderProfile, modelId: stri
 };
 
 // === LLM Creation Functions ===
-export const createOpencodeLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModelV2 => {
+export const createOpencodeLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModel => {
   const provider = profile.provider as OpenCodeProvider;
   let apiKey = provider.apiKey;
 
@@ -165,7 +165,7 @@ export const createOpencodeLlm = (profile: ProviderProfile, model: Model, settin
       return anthropic(modelId);
     }
     case 'gemini': {
-      const google = createGoogleGenerativeAI({
+      const google = createGoogle({
         apiKey,
         baseURL: ENDPOINT_BASE_URL,
         headers: profile.headers,

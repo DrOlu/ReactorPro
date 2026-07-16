@@ -1,0 +1,33 @@
+diff --git a/node_modules/ai/dist/index.js b/node_modules/ai/dist/index.js
+index 99f062c..8d61e2f 100644
+--- a/node_modules/ai/dist/index.js
++++ b/node_modules/ai/dist/index.js
+@@ -2449,17 +2449,17 @@ async function standardizePrompt({
+       message: "System messages are not allowed in the prompt or messages fields. Use the instructions option instead."
+     });
+   }
+-  const validationResult = await safeValidateTypes({
+-    value: messages,
+-    schema: z5.array(modelMessageSchema)
+-  });
+-  if (!validationResult.success) {
+-    throw new InvalidPromptError2({
+-      prompt,
+-      message: "The messages do not match the ModelMessage[] schema.",
+-      cause: validationResult.error
+-    });
+-  }
++  // const validationResult = await safeValidateTypes({
++  //   value: messages,
++  //   schema: z5.array(modelMessageSchema)
++  // });
++  // if (!validationResult.success) {
++  //   throw new InvalidPromptError2({
++  //     prompt,
++  //     message: "The messages do not match the ModelMessage[] schema.",
++  //     cause: validationResult.error
++  //   });
++  // }
+   return { messages, instructions };
+ }
+

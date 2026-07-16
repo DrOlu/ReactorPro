@@ -2,12 +2,13 @@ import { Model, ProviderProfile, SettingsData } from '@common/types';
 import { isKimiPlanProvider, KimiPlanProvider } from '@common/agent';
 import { createAnthropic } from '@ai-sdk/anthropic';
 
-import type { LanguageModelV2 } from '@ai-sdk/provider';
+import type { LanguageModel } from 'ai';
 
 import { AiderModelMapping, LlmProviderStrategy, LoadModelsResponse } from '@/models';
 import logger from '@/logger';
 import { getEffectiveEnvironmentVariable } from '@/utils';
-import { getAnthropicCacheControl, getAnthropicUsageReport } from '@/models/providers/anthropic';
+import { getAnthropicCacheControl } from '@/models/providers/anthropic';
+import { getDefaultUsageReport } from '@/models/providers/default';
 
 const KIMI_PLAN_BASE_URL = 'https://api.kimi.com/coding/v1';
 
@@ -82,7 +83,7 @@ const getKimiPlanAiderMapping = (provider: ProviderProfile, modelId: string, set
 };
 
 // === LLM Creation Functions ===
-const createKimiPlanLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModelV2 => {
+const createKimiPlanLlm = (profile: ProviderProfile, model: Model, settings: SettingsData, projectDir: string): LanguageModel => {
   const provider = profile.provider as KimiPlanProvider;
   let apiKey = provider.apiKey;
 
@@ -111,7 +112,7 @@ const createKimiPlanLlm = (profile: ProviderProfile, model: Model, settings: Set
 export const kimiPlanProviderStrategy: LlmProviderStrategy = {
   // Core LLM functions
   createLlm: createKimiPlanLlm,
-  getUsageReport: getAnthropicUsageReport,
+  getUsageReport: getDefaultUsageReport,
 
   // Model discovery functions
   loadModels: loadKimiPlanModels,
