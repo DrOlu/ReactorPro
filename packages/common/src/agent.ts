@@ -66,6 +66,7 @@ export type LlmProviderName =
 export interface LlmProviderBase {
   name: LlmProviderName;
   disableStreaming?: boolean;
+  disableToolCallStreaming?: boolean;
   voiceEnabled?: boolean;
 }
 
@@ -623,6 +624,7 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
   const baseConfig: LlmProviderBase = {
     name: providerName,
     disableStreaming: false,
+    disableToolCallStreaming: false,
   };
 
   switch (providerName) {

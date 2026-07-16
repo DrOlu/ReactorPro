@@ -264,6 +264,8 @@
     },
     "disableStreaming": "禁用流式传输",
     "disableStreamingInfo": "禁用响应流式传输。当提供商或模型不支持流式传输时使用此选项。",
+    "disableToolCallStreaming": "禁用工具调用流式传输",
+    "disableToolCallStreamingInfo": "禁用工具调用输入的流式传输。工具调用仍将执行，但其参数不会逐步显示。",
     "trackTokenUsage": "跟踪 Token 使用量",
     "trackTokenUsageInfo": "在流式响应中包含 Token 使用量信息。如果提供商不支持流式块中的 usage 字段，请禁用此选项。",
     "extraBody": "额外请求体参数",
@@ -1686,7 +1688,13 @@
       "tokens": "令牌",
       "cost": "成本",
       "share": "份额",
-      "moreItems": "+{{count}} 更多"
+      "moreItems": "+{{count}} 更多",
+      "cacheHitRateTrend": "缓存命中率趋势",
+      "cacheHitRate": "缓存命中率",
+      "cacheSavingsTrend": "缓存成本与节省",
+      "cacheSavings": "缓存节省",
+      "totalPaid": "已支付: {{amount}}",
+      "totalSaved": "总节省: {{amount}}"
     },
     "error": {
       "fetch": "获取使用数据失败。"
@@ -1699,6 +1707,7 @@
       "output": "输出",
       "cacheRead": "缓存读取",
       "cacheWrite": "缓存写入",
+      "cacheHitRate": "缓存命中率",
       "totalTokens": "总令牌数",
       "cost": "成本"
     }

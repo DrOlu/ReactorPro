@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { FaPlus, FaTrash } from 'react-icons/fa';
 
 import { DisableStreaming } from './DisableStreaming';
+import { DisableToolCallStreaming } from './DisableToolCallStreaming';
 
 import {
   AnthropicParameters,
@@ -137,6 +138,12 @@ export const ProviderProfileForm = forwardRef<ProviderProfileFormRef, Props>(
       }
     };
 
+    const handleDisableToolCallStreamingChange = (disableToolCallStreaming: boolean) => {
+      if (parameters) {
+        setParameters({ ...parameters, disableToolCallStreaming });
+      }
+    };
+
     const validateForm = (): boolean => {
       const newErrors: Record<string, string> = {};
 
@@ -257,8 +264,9 @@ export const ProviderProfileForm = forwardRef<ProviderProfileFormRef, Props>(
 
           {/* Disable streaming checkbox */}
           {parameters && (
-            <div className="mt-4 mx-2">
+            <div className="mt-4 mx-2 space-y-2">
               <DisableStreaming checked={parameters.disableStreaming ?? false} onChange={handleDisableStreamingChange} />
+              <DisableToolCallStreaming checked={parameters.disableToolCallStreaming ?? false} onChange={handleDisableToolCallStreamingChange} />
             </div>
           )}
 
