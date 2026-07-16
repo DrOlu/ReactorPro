@@ -18,6 +18,7 @@ WORKDIR /app
 
 # Copy package files and workspace packages
 COPY package*.json ./
+COPY .npmrc .npmrc
 COPY packages ./packages
 
 # Install dependencies
