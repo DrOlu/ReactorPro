@@ -219,6 +219,33 @@ jobs:
             }
           "
 
+      - name: Re-inject built-in claude-agent-sdk provider dependency
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # ReactorPro keeps a built-in `src/main/models/providers/claude-agent-sdk.ts`
+          # provider that upstream has moved into a standalone extension
+          # (packages/extensions/extensions/claude-agent-sdk). The extension declares
+          # `ai-sdk-provider-claude-code` in its own package.json, but that is NOT a
+          # workspace member, so it never lands in the root node_modules and the root
+          # `build:server` (incl. the Docker image) fails with:
+          #   Rollup failed to resolve import "ai-sdk-provider-claude-code".
+          # The -X theirs merge + rebrand regenerates package.json from upstream, which
+          # does not carry this dependency, so we re-inject it here on every sync.
+          node -e "
+            const fs = require('fs');
+            const pkg = require('./package.json');
+            const dep = 'ai-sdk-provider-claude-code';
+            const version = '4.0.1';
+            pkg.dependencies = pkg.dependencies || {};
+            if (pkg.dependencies[dep] !== version) {
+              console.log('Re-injecting ' + dep + '@' + version + ' (was: ' + pkg.dependencies[dep] + ')');
+              pkg.dependencies[dep] = version;
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            } else {
+              console.log(dep + '@' + version + ' already present');
+            }
+          "
+
       - name: Rename files for branding
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
@@ -449,7 +476,7 @@ jobs:
           echo "Updating package-lock.json to apply overrides..."
           # Use npm install with --package-lock-only and --ignore-scripts to update the lock file
           # --ignore-scripts prevents postinstall from running (which needs full build env)
-          npm install --package-lock-only --ignore-scripts || true
+          npm install --package-lock-only --ignore-scripts --legacy-peer-deps || true
 
       - name: Commit and push changes
         if: steps.check_changes.outputs.has_changes == 'true'
