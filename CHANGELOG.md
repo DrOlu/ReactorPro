@@ -1,5 +1,11 @@
 # ReactorPro Changelog
 
+## [Unreleased]
+
+- correcly showing full size image attached to user message when clicking on it
+- added support for tool call streaming
+- improved built-in extension creator skill to have better understanding of the capabilities
+
 ## [0.74.0]
 
 - added diff-based extension reloads and optimized dependency installation
