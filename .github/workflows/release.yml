@@ -147,25 +147,30 @@ jobs:
 
       - name: Install Linux build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libarchive-tools \
-            rpm \
-            libgtk-3-0 \
-            libnss3 \
-            libxss1 \
-            libasound2 \
-            libgbm1 \
-            libx11-xcb1 \
-            libdrm2 \
-            libxkbcommon0 \
-            libxrandr2 \
-            libxcomposite1 \
-            libxcursor1 \
-            libxdamage1 \
-            libxi6 \
-            libxtst6 \
-            xdg-utils
+          for i in 1 2 3 4 5; do
+            sudo apt-get update && \
+            sudo apt-get install -y --no-install-recommends \
+              libarchive-tools \
+              rpm \
+              libgtk-3-0 \
+              libnss3 \
+              libxss1 \
+              libasound2 \
+              libgbm1 \
+              libx11-xcb1 \
+              libdrm2 \
+              libxkbcommon0 \
+              libxrandr2 \
+              libxcomposite1 \
+              libxcursor1 \
+              libxdamage1 \
+              libxi6 \
+              libxtst6 \
+              xdg-utils && exit 0
+            echo "::warning::apt install attempt $i failed, retrying in 20s..."
+            sleep 20
+          done
+          exit 1
 
       - name: Install FPM
         run: |
