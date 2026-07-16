@@ -34,6 +34,8 @@ jobs:
             echo "No changes to llms.txt, skipping commit"
           else
             git add llms.txt
-            git commit -m "docs: updated llms.txt"
+            # --no-verify: skip the husky pre-commit hook (lint-staged + typecheck + test)
+            # this is an automated generated-docs commit; source-quality gates belong in pr-check.yml
+            git commit --no-verify -m "docs: updated llms.txt"
             git push
           fi
