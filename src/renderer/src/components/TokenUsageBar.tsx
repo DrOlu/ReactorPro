@@ -3,10 +3,12 @@ import { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent, useCallba
 import { useTranslation } from 'react-i18next';
 import { useDebounceFn } from '@reactuses/core';
 import { clsx } from 'clsx';
+import { FaExclamationTriangle } from 'react-icons/fa';
 
 import { useSettingsStore } from '@/stores/settingsStore';
 import { formatHumanReadable } from '@/utils/string-utils';
 import { useActiveAgentProfile } from '@/utils/agents';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 const DEFAULT_TRESHOLD_CONFIG = {
   percentage: 0,
@@ -14,14 +16,17 @@ const DEFAULT_TRESHOLD_CONFIG = {
 };
 
 const getDefaultThresholdTokens = (task: TaskData, thresholdConfig: { percentage: number; tokens: number }, maxInputTokens: number) => {
-  if (task.contextCompactingThresholdTokens !== undefined) {
+  if (task.contextCompactingThresholdTokens !== undefined && task.contextCompactingThresholdTokens > 0) {
     return task.contextCompactingThresholdTokens;
   }
   if (maxInputTokens <= 0) {
     return 0;
   }
   const percentageThreshold = (maxInputTokens * thresholdConfig.percentage) / 100;
-  return Math.round(Math.min(percentageThreshold, thresholdConfig.tokens));
+  if (thresholdConfig.tokens > 0) {
+    return Math.round(Math.min(percentageThreshold, thresholdConfig.tokens));
+  }
+  return Math.round(percentageThreshold);
 };
 
 type Props = {
@@ -274,6 +279,11 @@ export const TokenUsageBar = ({ task, tokensInfo, maxInputTokens = 0, mode, upda
           maxTokens: maxInputTokens ? formatHumanReadable(t, maxInputTokens) : '?',
         })}
       </div>
+      {!maxInputTokens && (
+        <Tooltip content={t('costInfo.contextWindowNotSet')} side="top">
+          <FaExclamationTriangle className="w-3 h-3 text-warning flex-shrink-0" />
+        </Tooltip>
+      )}
     </div>
   );
 };

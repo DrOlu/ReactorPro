@@ -1220,6 +1220,7 @@
     "contextCompactingThreshold": "自动压缩上下文阈值",
     "contextCompactingThresholdOff": "关闭",
     "contextCompactingThresholdTooltip": "当令牌使用量超过此阈值时，对话将自动压缩以节省空间。",
+    "contextWindowNotSet": "未设置此模型的上下文窗口，因此自动压缩将无法工作。您可以在模型库中手动设置上下文窗口值。",
     "thresholdTokens": "阈值令牌数"
   },
   "commandOutput": {
@@ -1250,6 +1251,8 @@
     "error": "执行工具时出错:",
     "denied": "拒绝访问",
     "deniedByReason": "用户拒绝: {{reason}}",
+    "images_one": "1 张图片",
+    "images_other": "{{count}} 张图片",
     "tasks": {
       "listTasks": "列出任务",
       "listTasksWithState": "列出状态为 {{state}} 的任务",

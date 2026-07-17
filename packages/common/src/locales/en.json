@@ -1262,6 +1262,7 @@
     "contextCompactingThreshold": "Auto-compact threshold",
     "contextCompactingThresholdOff": "Off",
     "contextCompactingThresholdTooltip": "When token usage exceeds this threshold, the conversation will be automatically compacted to save space.",
+    "contextWindowNotSet": "Context window is not set for this model, so auto-compaction won't work. You can set the context window value manually in the Model Library.",
     "thresholdTokens": "Threshold tokens"
   },
   "commandOutput": {
@@ -1292,6 +1293,8 @@
     "error": "Error while executing tool:",
     "denied": "Denied by user.",
     "deniedByReason": "Denied by user:\n{{reason}}",
+    "images_one": "1 image",
+    "images_other": "{{count}} images",
     "tasks": {
       "listTasks": "List tasks",
       "listTasksWithState": "List tasks with state: {{state}}",

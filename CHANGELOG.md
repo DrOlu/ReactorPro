@@ -2,11 +2,21 @@
 
 ## [Unreleased]
 
+- migrated to AI SDK v7
 - correcly showing full size image attached to user message when clicking on it
 - added support for tool call streaming
 - improved built-in extension creator skill to have better understanding of the capabilities
 - added missing OS and AutonomyMode enums to extension runtime to avoid undefined error
 - added cache hit rate and savings charts to usage dashboard
+- handle errors during the handoff action gracefully and provide feedback to the user
+- cancel action on some loading messages now works properly
+- showing images in the tool message that generate them
+- properly handle image content in the tool outputs
+- improved token threshold calculation to handle zero values correctly
+- added warning when context window is not set for a model
+- setting the task to Interrupted on agent error
+- making the task sidebar resizable
+- allow to collapse parent task in sideber when its subtask is selected
 
 ## [0.74.0]
 
