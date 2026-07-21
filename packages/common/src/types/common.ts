@@ -895,7 +895,7 @@ export const TaskDataSchema = z.object({
   lastMergeState: MergeStateSchema.optional(),
   aiderTotalCost: z.number(),
   agentTotalCost: z.number(),
-  autonomyMode: z.nativeEnum(AutonomyMode).optional(),
+  autonomyMode: z.enum(AutonomyMode).optional(),
   agentProfileId: z.string().optional(),
   provider: z.string().optional(),
   model: z.string().optional(),
@@ -946,6 +946,8 @@ export enum DefaultTaskState {
   ReadyForImplementation = 'READY_FOR_IMPLEMENTATION',
   Done = 'DONE',
 }
+
+export const DEFAULT_TASK_STATES = new Set<string>(Object.values(DefaultTaskState));
 
 export const TaskStateEmoji: Record<DefaultTaskState, string> = {
   [DefaultTaskState.Todo]: '📋',
