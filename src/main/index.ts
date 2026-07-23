@@ -288,7 +288,7 @@ app.whenReady().then(async () => {
       });
     }
 
-    logger.info('------------ Starting AiderDesk... ------------');
+    logger.info('------------ Starting ReactorPro... ------------');
     initPath();
 
     let progressBar: ProgressWindow | null = null;
