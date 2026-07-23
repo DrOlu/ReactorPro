@@ -497,10 +497,13 @@
       "updating": "Updating...",
       "uninstall": "Uninstall",
       "uninstalling": "Uninstalling...",
+      "reload": "Reload",
+      "reloading": "Reloading...",
       "success": {
         "install": "Successfully installed {{name}}",
         "update": "Successfully updated {{name}}",
         "uninstall": "Successfully uninstalled {{name}}",
+        "reload": "Successfully reloaded {{name}}",
         "saveSettings": "Successfully saved settings for {{name}}"
       },
       "errors": {
@@ -510,6 +513,7 @@
         "install": "Failed to install extension. Check logs for details.",
         "update": "Failed to update extension. Check logs for details.",
         "uninstall": "Failed to uninstall extension",
+        "reload": "Failed to reload extension",
         "saveSettings": "Failed to save extension settings",
         "settingsNotAvailable": "Extension settings are not available",
         "repositoryExists": "This repository is already added",
@@ -1772,6 +1776,8 @@
     "generatingName": "Generating name...",
     "changeState": "Change state",
     "createSubtask": "Create subtask",
+    "dropToRoot": "Drop here to move to top level",
+    "dropToSubtask": "Make subtask",
     "deleteConfirmWithSubtasks": "This task has {{count}} subtask(s). Delete anyway?"
   },
   "taskInfo": {

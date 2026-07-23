@@ -16,7 +16,7 @@ import { performStartUp, UpdateProgressData } from '@/start-up';
 import { Store } from '@/store';
 import logger, { eventTransport } from '@/logger';
 import { initManagers } from '@/managers';
-import { getDefaultProjectSettings } from '@/utils';
+import { getDefaultProjectSettings, initPath } from '@/utils';
 import { WindowManager } from '@/window-manager';
 
 // Global instances shared across all windows
@@ -288,9 +288,8 @@ app.whenReady().then(async () => {
       });
     }
 
-    logger.info('------------ Starting ReactorPro... ------------');
-    logger.info('Initializing fix-path...');
-    (await import('fix-path')).default();
+    logger.info('------------ Starting AiderDesk... ------------');
+    initPath();
 
     let progressBar: ProgressWindow | null = null;
     let updateProgress: ((data: UpdateProgressData) => void) | null;

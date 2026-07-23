@@ -8,6 +8,11 @@
 - added resumeTask method to TaskContext for extension API
 - added task-sidebar-item-badges UI component placement for extensions
 - prevent accidental task sidebar resize on click
+- added drag and drop support for tasks and subtasks
+- avoid showing password dialog on start up in some cases
+- added getOpenProjects to Extension Context API
+- correctly showing Updated Files in repos without any commits
+- added action to reload extension in case of error
 
 ## [0.75.0]
 
