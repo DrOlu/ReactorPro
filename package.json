@@ -185,7 +185,8 @@
     "yaml": "^2.8.0",
     "yaml-front-matter": "^4.1.1",
     "zod": "^4.1.11",
-    "zustand": "^5.0.9"
+    "zustand": "^5.0.9",
+    "ai-sdk-provider-claude-code": "4.0.1"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
