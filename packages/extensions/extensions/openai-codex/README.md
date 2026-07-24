@@ -12,6 +12,12 @@ It provides an OpenAI Codex provider using **ChatGPT Plus/Pro OAuth authenticati
 
 The access token is stored locally in `~/.aider-desk/extensions/openai-codex/auth-token.json` and will be automatically refreshed when it expires. You will not need to re-authenticate unless the refresh token becomes invalid.
 
+## Usage Quota
+
+When an OpenAI Codex agent profile is active, the task usage area shows the primary and secondary Codex quota windows, including their usage percentage and reset time. The display refreshes after every prompt and otherwise caches data for one minute.
+
+This information is retrieved from the ChatGPT backend used by the official Codex CLI. It is not a documented public OpenAI API and may change without notice.
+
 ## Available Models
 
 Since Codex OAuth tokens cannot access the `/v1/models` API, the available models are hardcoded in the extension based on the [official Codex models page](https://developers.openai.com/codex/models):
