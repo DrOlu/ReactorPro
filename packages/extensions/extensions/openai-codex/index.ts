@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { platform, release, arch } from 'node:os';
@@ -14,11 +15,12 @@ import type {
   LoadModelsResponse,
   ProviderProfile,
   Model,
-  SettingsData,
   AgentStartedEvent,
+  PromptFinishedEvent,
+  UIComponentDefinition,
 } from '@aiderdesk/extensions';
 
-// @ts-ignore
+// @ts-expect-error -- import.meta.url is supported in the extension runtime
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -31,6 +33,36 @@ const REDIRECT_URI = 'http://localhost:1455/auth/callback';
 const SCOPE = 'openid profile email offline_access';
 const JWT_CLAIM_PATH = 'https://api.openai.com/auth';
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
+const CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
+const CACHE_DURATION = 60_000;
+const STATUS_BAR_COMPONENT_ID = 'openai-codex-quota-indicator';
+
+interface CodexUsageWindow {
+  used_percent: number;
+  limit_window_seconds: number;
+  reset_at: number;
+}
+
+interface CodexUsageResponse {
+  plan_type?: string;
+  rate_limit?: {
+    primary_window?: CodexUsageWindow | null;
+    secondary_window?: CodexUsageWindow | null;
+  } | null;
+}
+
+interface CodexQuotaData {
+  planType?: string;
+  primary?: CodexUsageWindow;
+  secondary?: CodexUsageWindow;
+}
+
+interface CachedData<T> {
+  data: T | null;
+  lastFetchTime: number;
+}
+
+const quotaCache: CachedData<CodexQuotaData> = { data: null, lastFetchTime: 0 };
 
 // Token storage
 const TOKEN_FILE = join(__dirname, 'auth-token.json');
@@ -44,17 +76,78 @@ interface StoredTokens {
 // Hardcoded models from https://developers.openai.com/codex/models
 const CODEX_MODELS: Model[] = [
   // Recommended
-  { id: 'gpt-5.6-sol', providerId: '', maxInputTokens: 1050000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.6-terra', providerId: '', maxInputTokens: 1050000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.6-luna', providerId: '', maxInputTokens: 1050000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.5', providerId: '', maxInputTokens: 1050000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.4', providerId: '', maxInputTokens: 1050000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.4-mini', providerId: '', maxInputTokens: 400000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.3-codex', providerId: '', maxInputTokens: 400000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.2-codex', providerId: '', maxInputTokens: 400000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.2', providerId: '', maxInputTokens: 400000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.1-codex-max', providerId: '', maxInputTokens: 400000, maxOutputTokensLimit: 128000 },
-  { id: 'gpt-5.1-codex-mini', providerId: '', maxInputTokens: 400000, maxOutputTokensLimit: 128000 },
+  {
+    id: 'gpt-5.6-sol',
+    providerId: '',
+    maxInputTokens: 1050000,
+    maxOutputTokensLimit: 128000,
+    inputCostPerToken: 0.000005,
+    outputCostPerToken: 0.00003,
+    cacheReadInputTokenCost: 0.0000005,
+    cacheWriteInputTokenCost: 0.00000625,
+  },
+  {
+    id: 'gpt-5.6-terra',
+    providerId: '',
+    maxInputTokens: 1050000,
+    maxOutputTokensLimit: 128000,
+    inputCostPerToken: 0.0000025,
+    outputCostPerToken: 0.000015,
+    cacheReadInputTokenCost: 0.00000025,
+    cacheWriteInputTokenCost: 0.000003125,
+  },
+  {
+    id: 'gpt-5.6-luna',
+    providerId: '',
+    maxInputTokens: 1050000,
+    maxOutputTokensLimit: 128000,
+    inputCostPerToken: 0.000001,
+    outputCostPerToken: 0.000006,
+    cacheReadInputTokenCost: 0.0000001,
+    cacheWriteInputTokenCost: 0.00000125,
+  },
+  {
+    id: 'gpt-5.5',
+    providerId: '',
+    maxInputTokens: 1050000,
+    maxOutputTokensLimit: 128000,
+    inputCostPerToken: 0.000005,
+    outputCostPerToken: 0.00003,
+    cacheReadInputTokenCost: 0.0000005,
+  },
+  {
+    id: 'gpt-5.4',
+    providerId: '',
+    maxInputTokens: 1050000,
+    maxOutputTokensLimit: 128000,
+    inputCostPerToken: 0.0000025,
+    outputCostPerToken: 0.000015,
+    cacheReadInputTokenCost: 0.00000025,
+  },
+  {
+    id: 'gpt-5.4-mini',
+    providerId: '',
+    maxInputTokens: 400000,
+    maxOutputTokensLimit: 128000,
+    inputCostPerToken: 0.00000075,
+    outputCostPerToken: 0.0000045,
+    cacheReadInputTokenCost: 0.000000075,
+  },
+  {
+    id: 'gpt-5.3-codex',
+    providerId: '',
+    maxInputTokens: 400000,
+    maxOutputTokensLimit: 128000,
+    inputCostPerToken: 0.00000175,
+    outputCostPerToken: 0.000014,
+    cacheReadInputTokenCost: 0.000000175,
+  },
+  {
+    id: 'gpt-5.3-codex-spark',
+    providerId: '',
+    maxInputTokens: 400000,
+    maxOutputTokensLimit: 128000,
+  },
 ];
 
 // --- Token storage ---
@@ -327,6 +420,45 @@ const getValidAccessToken = async (context: ExtensionContext): Promise<{ accessT
   return { accessToken: newTokens.accessToken, accountId };
 };
 
+const fetchQuota = async (context: ExtensionContext): Promise<CodexQuotaData | null> => {
+  try {
+    const { accessToken, accountId } = await getValidAccessToken(context);
+    const response = await fetch(CODEX_USAGE_URL, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'ChatGPT-Account-Id': accountId,
+        'User-Agent': `aiderdesk (${platform()} ${release()}; ${arch()})`,
+      },
+    });
+
+    if (!response.ok) {
+      context.log(`Failed to fetch OpenAI Codex usage: ${response.status} ${response.statusText}`, 'warn');
+      return null;
+    }
+
+    const data = (await response.json()) as CodexUsageResponse;
+    return {
+      planType: data.plan_type,
+      primary: data.rate_limit?.primary_window ?? undefined,
+      secondary: data.rate_limit?.secondary_window ?? undefined,
+    };
+  } catch (error) {
+    context.log(`Failed to fetch OpenAI Codex usage: ${error instanceof Error ? error.message : error}`, 'warn');
+    return null;
+  }
+};
+
+const getQuota = async (context: ExtensionContext): Promise<CodexQuotaData | null> => {
+  const now = Date.now();
+  if (quotaCache.data && now - quotaCache.lastFetchTime < CACHE_DURATION) {
+    return quotaCache.data;
+  }
+
+  quotaCache.data = await fetchQuota(context);
+  quotaCache.lastFetchTime = now;
+  return quotaCache.data;
+};
+
 // --- Extension class ---
 
 const PROVIDER_ID = 'openai-codex';
@@ -334,10 +466,9 @@ const PROVIDER_ID = 'openai-codex';
 export default class OpenAICodexAuthExtension implements Extension {
   static metadata = {
     name: 'OpenAI Codex Auth',
-    version: '1.2.1',
-    description: 'OpenAI Codex provider using ChatGPT Plus/Pro OAuth authentication',
-    iconUrl:
-      'https://raw.githubusercontent.com/hotovo/aider-desk/refs/heads/main/packages/extensions/extensions/openai-codex/icon.png',
+    version: '1.3.0',
+    description: 'OpenAI Codex provider using ChatGPT Plus/Pro OAuth authentication with quota display',
+    iconUrl: 'https://raw.githubusercontent.com/hotovo/aider-desk/refs/heads/main/packages/extensions/extensions/openai-codex/icon.png',
     author: 'wladimiiir',
   };
 
@@ -356,6 +487,38 @@ export default class OpenAICodexAuthExtension implements Extension {
     if (event.providerProfile.provider.name !== PROVIDER_ID) {
       return undefined;
     }
+  }
+
+  async onPromptFinished(_event: PromptFinishedEvent, context: ExtensionContext): Promise<void> {
+    quotaCache.data = null;
+    quotaCache.lastFetchTime = 0;
+    context.triggerUIDataRefresh(STATUS_BAR_COMPONENT_ID);
+  }
+
+  getUIComponents(_context: ExtensionContext): UIComponentDefinition[] {
+    const jsx = readFileSync(join(__dirname, './StatusBarComponent.jsx'), 'utf-8');
+    return [
+      {
+        id: STATUS_BAR_COMPONENT_ID,
+        placement: 'task-usage-info-bottom',
+        jsx,
+        loadData: true,
+      },
+    ];
+  }
+
+  async getUIExtensionData(componentId: string, context: ExtensionContext): Promise<unknown> {
+    if (componentId !== STATUS_BAR_COMPONENT_ID) {
+      return undefined;
+    }
+
+    const taskContext = context.getTaskContext();
+    const agentProfile = await taskContext?.getTaskAgentProfile();
+    if (agentProfile?.provider !== PROVIDER_ID) {
+      return null;
+    }
+
+    return getQuota(context);
   }
 
   getProviders(context: ExtensionContext): ProviderDefinition[] {
