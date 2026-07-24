@@ -334,14 +334,12 @@ const PROVIDER_ID = 'openai-codex';
 export default class OpenAICodexAuthExtension implements Extension {
   static metadata = {
     name: 'OpenAI Codex Auth',
-    version: '1.2.0',
+    version: '1.2.1',
     description: 'OpenAI Codex provider using ChatGPT Plus/Pro OAuth authentication',
     iconUrl:
       'https://raw.githubusercontent.com/hotovo/aider-desk/refs/heads/main/packages/extensions/extensions/openai-codex/icon.png',
     author: 'wladimiiir',
   };
-
-  private currentSystemPrompt: string | undefined;
 
   async onLoad(context: ExtensionContext): Promise<void> {
     const tokens = await loadTokens();
@@ -358,11 +356,6 @@ export default class OpenAICodexAuthExtension implements Extension {
     if (event.providerProfile.provider.name !== PROVIDER_ID) {
       return undefined;
     }
-
-    this.currentSystemPrompt = event.systemPrompt ?? undefined;
-    return {
-      systemPrompt: '', // Clear system prompt since it's used as instructions for the provider instead,
-    };
   }
 
   getProviders(context: ExtensionContext): ProviderDefinition[] {
@@ -398,7 +391,6 @@ export default class OpenAICodexAuthExtension implements Extension {
       return {
         openai: {
           store: false,
-          instructions: this.currentSystemPrompt || '',
           reasoningSummary: 'detailed',
         },
       };
