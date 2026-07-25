@@ -5,6 +5,23 @@ import { SystemLogEntry, SystemLogsResponse, SystemLogLevel } from '@common/type
 const DEFAULT_PAGE_SIZE = 100;
 
 /**
+ * JSON.stringify replacement that handles circular references.
+ * Returns a string representation with "[Circular]" markers instead of throwing.
+ */
+const safeStringify = (obj: unknown): string => {
+  const seen = new WeakSet();
+  return JSON.stringify(obj, (_key, value) => {
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) {
+        return '[Circular]';
+      }
+      seen.add(value);
+    }
+    return value;
+  });
+};
+
+/**
  * SQLite-backed storage for system logs.
  * This is session-only storage that clears on app startup.
  */
@@ -49,8 +66,13 @@ export class LogBuffer {
       VALUES (?, ?, ?, ?, ?)
     `;
 
+    const metadata = entry.metadata ? safeStringify(entry.metadata) : null;
+    if (metadata) {
+      entry.metadata = JSON.parse(metadata) as Record<string, unknown>;
+    }
+
     const stmt = this.db.prepare(sql);
-    const result = stmt.run(entry.timestamp, entry.level, entry.message, entry.extension || null, entry.metadata ? JSON.stringify(entry.metadata) : null);
+    const result = stmt.run(entry.timestamp, entry.level, entry.message, entry.extension || null, metadata);
     return result.lastInsertRowid as number;
   }
 

@@ -13,6 +13,8 @@
 - added getOpenProjects to Extension Context API
 - correctly showing Updated Files in repos without any commits
 - added action to reload extension in case of error
+- added possibility to edit models coming from extension provider
+- prevent crash from circular references in error logging
 
 ## [0.75.0]
 
