@@ -4,16 +4,17 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import {
   AgentProfile,
-  ContextCompactionType,
   ContextAssistantMessage,
-  ContextToolMessage,
+  ContextCompactionType,
   ContextFile,
   ContextMessage,
+  ContextToolMessage,
   ContextUserMessage,
   DefaultTaskState,
   McpTool,
   McpToolInputSchema,
   Mode,
+  ModelCallSettings,
   PromptContext,
   ProviderProfile,
   ToolApprovalState,
@@ -21,13 +22,14 @@ import {
 } from '@common/types';
 import {
   APICallError,
+  type FilePart,
   type FinishReason,
   generateText,
-  type FilePart,
   InvalidToolInputError,
   jsonSchema,
   type ModelMessage,
   NoSuchToolError,
+  Output,
   smoothStream,
   type StepResult,
   streamText,
@@ -37,7 +39,6 @@ import {
   type ToolSet,
   type TypedToolResult,
   wrapLanguageModel,
-  Output,
 } from 'ai';
 import { delay, extractProviderModel, extractServerNameToolName, extractTextContent } from '@common/utils';
 import { LlmProviderName } from '@common/agent';
@@ -781,6 +782,10 @@ export class Agent {
 
     let provider = providers.find((p) => p.id === profile.provider);
     let modelName = profile.model;
+    let modelCallSettings: ModelCallSettings = {
+      maxRetries: MAX_RETRIES,
+      abortSignal,
+    };
 
     if (provider) {
       const extensionResult = await this.extensionManager.dispatchEvent(
@@ -797,6 +802,7 @@ export class Agent {
           systemPrompt,
           images,
           skillsToActivate,
+          modelCallSettings,
         },
         task.project,
         task,
@@ -815,6 +821,10 @@ export class Agent {
       systemPrompt = extensionResult.systemPrompt;
       images = extensionResult.images ?? images;
       skillsToActivate = extensionResult.skillsToActivate;
+      modelCallSettings = {
+        ...modelCallSettings,
+        ...extensionResult.modelCallSettings,
+      };
     }
 
     const userRequestMessage: ContextUserMessage | null = prompt
@@ -902,8 +912,7 @@ export class Agent {
       systemPrompt: systemPrompt?.substring(0, 100),
     });
 
-    // Create new abort controller for this run only if abortSignal is not provided
-    const shouldCreateAbortController = !abortSignal;
+    const shouldCreateAbortController = !modelCallSettings.abortSignal;
     let controllerId: string | null = null;
 
     if (shouldCreateAbortController) {
@@ -915,11 +924,10 @@ export class Agent {
       const newController = new AbortController();
       this.abortControllers.set(controllerId, newController);
     }
-    const effectiveAbortSignal = abortSignal || (controllerId ? this.abortControllers.get(controllerId)?.signal : undefined);
-
+    const effectiveAbortSignal = modelCallSettings.abortSignal || (controllerId ? this.abortControllers.get(controllerId)?.signal : undefined);
     const cacheControl = this.modelManager.getCacheControl(provider, modelName);
-    const providerOptions = this.modelManager.getProviderOptions(provider, modelName);
-    const providerParameters = this.modelManager.getProviderParameters(provider, modelName);
+    const providerParameters = this.modelManager.getProviderParameters(provider, modelName, modelCallSettings.reasoning);
+    const providerOptions = this.modelManager.getProviderOptions(provider, modelName, modelCallSettings?.reasoning);
 
     const firstUserMessage = contextMessages.length > 0 ? contextMessages[0] : null;
     let messages = await this.prepareMessages(task, profile, contextMessages, contextFiles);
@@ -1151,12 +1159,13 @@ export class Agent {
           instructions: systemPrompt,
           messages: optimizedMessages,
           tools: toolSet,
-          abortSignal: effectiveAbortSignal,
           maxOutputTokens: effectiveMaxOutputTokens,
-          maxRetries: 5,
+          maxRetries: MAX_RETRIES,
           temperature: effectiveTemperature,
           telemetry: this.getTelemetrySettings(),
+          ...modelCallSettings,
           ...providerParameters,
+          abortSignal: effectiveAbortSignal,
         };
       };
 
@@ -1196,7 +1205,7 @@ export class Agent {
             return;
           }
 
-          currentStepMessages = await this.processStep(currentResponseId, stepResult, task, provider, modelName, promptContext, abortSignal);
+          currentStepMessages = await this.processStep(currentResponseId, stepResult, task, provider, modelName, promptContext, effectiveAbortSignal);
           const extensionResult = await this.extensionManager.dispatchEvent(
             'onAgentStepFinished',
             {
@@ -1299,6 +1308,7 @@ export class Agent {
             experimental_repairToolCall: repairToolCall,
           });
 
+          let currentMessageHasReasoning = false;
           try {
             for await (const chunk of result.stream) {
               logger.debug('Chunk:', { chunk, responseMessageIndex });
@@ -1308,6 +1318,7 @@ export class Agent {
                 // no-op
               } else if (chunk.type === 'text-end') {
                 responseMessageIndex++;
+                currentMessageHasReasoning = false;
               } else if (chunk.type === 'text-delta') {
                 if (chunk.text.trim()) {
                   streamingMessageIds.add(responseMessageId);
@@ -1321,8 +1332,19 @@ export class Agent {
                 }
               } else if (chunk.type === 'reasoning-start') {
                 streamingMessageIds.add(responseMessageId);
+                if (currentMessageHasReasoning) {
+                  await task.processResponseMessage({
+                    id: responseMessageId,
+                    action: 'response',
+                    content: '',
+                    reasoning: '\n\n',
+                    finished: false,
+                    promptContext,
+                  });
+                }
               } else if (chunk.type === 'reasoning-delta') {
                 streamingMessageIds.add(responseMessageId);
+                currentMessageHasReasoning = true;
                 await task.processResponseMessage({
                   id: responseMessageId,
                   action: 'response',
@@ -2032,6 +2054,8 @@ export class Agent {
     const hasAssistantMessage = content.some((part) => (part.type === 'text' || part.type === 'reasoning') && part.text?.trim());
 
     let responseMessageIndex: number = 0;
+    let localReasoningText: string | undefined;
+    let localText: string | undefined;
 
     const processToolResult = (toolResult: TypedToolResult<TOOLS>, isLast: boolean) => {
       const [serverName, toolName] = extractServerNameToolName(toolResult.toolName);
@@ -2051,41 +2075,57 @@ export class Agent {
     };
 
     for (let i = 0; i < content.length; i++) {
-      let part = content[i];
+      const part = content[i];
       if (part.type === 'reasoning') {
-        reasoningText = part.text;
-        text = '';
-        // move to the next one right away
-        part = content[++i];
+        if (localReasoningText) {
+          localReasoningText += '\n\n' + part.text;
+        } else {
+          localReasoningText = part.text;
+        }
+        continue;
       }
-      if (part?.type === 'text') {
-        text = part.text;
+      if (part.type === 'text') {
+        localText = part.text;
       }
 
-      if (text || reasoningText) {
+      if (localText || localReasoningText) {
         const message: ResponseMessage = {
           id: responseMessageIndex > 0 ? `${currentResponseId}-${responseMessageIndex}` : currentResponseId,
           action: 'response',
-          content: text,
-          reasoning: reasoningText?.trim() || undefined,
+          content: localText || '',
+          reasoning: localReasoningText?.trim() || undefined,
           finished: true,
           usageReport: hasAssistantMessage ? usageReport : undefined,
           promptContext,
         };
         await task.processResponseMessage(message);
 
-        text = '';
-        reasoningText = undefined;
+        localText = undefined;
+        localReasoningText = undefined;
         responseMessageIndex++;
       }
 
-      if (part?.type === 'tool-result') {
+      if (part.type === 'tool-result') {
         const toolResult = toolResults.find((toolResult) => toolResult.toolCallId === part.toolCallId);
         if (toolResult) {
           toolResults = toolResults.filter((toolResult) => toolResult.toolCallId !== part.toolCallId);
           processToolResult(toolResult, i === content.length - 1 && toolResults.length === 0);
         }
       }
+    }
+
+    if (localReasoningText) {
+      const message: ResponseMessage = {
+        id: responseMessageIndex > 0 ? `${currentResponseId}-${responseMessageIndex}` : currentResponseId,
+        action: 'response',
+        content: '',
+        reasoning: localReasoningText.trim() || undefined,
+        finished: true,
+        usageReport: hasAssistantMessage ? usageReport : undefined,
+        promptContext,
+      };
+      await task.processResponseMessage(message);
+      localReasoningText = undefined;
     }
 
     // Process successful tool results *after* sending text/reasoning and handling errors
