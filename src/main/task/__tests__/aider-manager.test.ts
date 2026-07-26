@@ -6,8 +6,8 @@ type FakeAiderProcess = { pid?: number };
 
 const createManager = () => {
   const task = {
-    getProjectDir: () => '/tmp/aider-desk-test-project',
-    getTaskDir: () => '/tmp/aider-desk-test-project/task',
+    getProjectDir: () => '/tmp/reactorpro-test-project',
+    getTaskDir: () => '/tmp/reactorpro-test-project/task',
     task: { id: 'task-id' },
     taskId: 'task-id',
   };
@@ -42,7 +42,7 @@ describe('AiderManager process lifecycle', () => {
     expect(internals.currentCommand).toBeNull();
     expect(eventManager.sendAiderConnectorStatus).toHaveBeenCalledWith(
       { state: 'failed', error: 'Aider process exited before the connector became ready (code 0)' },
-      '/tmp/aider-desk-test-project',
+      '/tmp/reactorpro-test-project',
       'task-id',
     );
   });
