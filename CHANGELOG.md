@@ -1,5 +1,12 @@
 # ReactorPro Changelog
 
+## [Unreleased]
+
+- skip adding Todo tool messages when streaming the tools
+- inherit agent profile and selected model as defaults when using create task tool
+- optimized default system prompt and init prompt for latest models and to save tokens
+- added loading projects overlay instead of showing Open Project page while loading projects
+
 ## [0.76.0]
 
 - added shell initialization to bash tool for loading environment configs
