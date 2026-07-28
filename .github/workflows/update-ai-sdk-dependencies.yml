@@ -54,26 +54,44 @@ jobs:
           changelog="# AI SDK Dependencies Update\n\n| Package | From | To |\n|---------|------|----|"
           has_updates=false
 
+          # patch-package stores per-package patches as patches/<name>+<ver>.patch,
+          # where scoped names use '+' instead of '/' (e.g. @requesty+ai-sdk+3.5.0.patch).
+          # Auto-bumping a patched package leaves the stale patch unappliable and
+          # breaks the build, so such packages are skipped — regenerate the patch
+          # manually (bump, re-apply the edit, `npx patch-package <pkg>`) to upgrade.
+          has_patch() {
+            local patch_name
+            patch_name=$(echo "$1" | sed 's|/|+|g')
+            ls patches/${patch_name}+*.patch 2>/dev/null | head -1 || true
+          }
+
           # Update each package to latest stable version within the same major version
           for package in "${packages[@]}"; do
             echo "Checking $package..."
-            
+
+            # Skip packages carrying a local patch-package patch
+            existing_patch=$(has_patch "$package")
+            if [ -n "$existing_patch" ]; then
+              echo "$package has a local patch ($existing_patch); skipping auto-bump (regenerate the patch manually to upgrade)"
+              continue
+            fi
+
             # Get current version from package.json
             current_version=$(cat package.json | jq -r ".dependencies[\"$package\"] // empty")
             if [ -z "$current_version" ]; then
               echo "Package $package not found in dependencies, skipping..."
               continue
             fi
-            
+
             # Normalize current version (remove caret and leading v)
             current_clean=$(echo $current_version | sed 's/[\^v]//')
-            
+
             # Extract major version from current version
             current_major=$(echo $current_clean | cut -d. -f1)
-            
+
             # Get all versions for the package
             all_versions=$(npm view $package versions --json 2>/dev/null || echo "[]")
-            
+
             # Filter versions to get the latest within the same major version
             # Sort versions and find the latest matching current major
             latest_same_major=$(echo "$all_versions" | \
@@ -83,43 +101,45 @@ jobs:
                  map(select(.major == ($major | tonumber))) | 
                  sort_by(.major, .minor, .patch) | reverse | 
                  .[0].original // empty')
-            
+
             # If no versions found or parsing failed, fallback to current version
             if [ -z "$latest_same_major" ]; then
               latest_same_major=$current_clean
             fi
-            
+
             echo "Current: $current_version, Latest (same major $current_major): $latest_same_major"
-            
+
             # Normalize latest version for comparison (remove caret and leading v)
             latest_clean=$(echo $latest_same_major | sed 's/[\^v]//')
-            
+
             # Update if different
             if [ "$current_clean" != "$latest_clean" ]; then
-            echo "Updating $package from $current_version to $latest_same_major"
-
-            # Write the new version into package.json for BOTH the direct
-            # dependency and (if present) the overrides entry, then run
-            # `npm install` with no version spec to reconcile the lockfile.
-            # Using `npm install <pkg>@<ver>` directly aborts with EOVERRIDE
-            # ("Override for <pkg> conflicts with direct dependency") when the
-            # package is also pinned in overrides — the install spec acts as a
-            # conflicting override against the still-pinned direct dependency.
-            # Bumping both fields together keeps them in sync so npm resolves
-            # cleanly and updates package-lock.json in one pass.
-            tmp=$(mktemp)
-            jq --arg pkg "$package" --arg ver "$latest_same_major" \
-              '(.dependencies[$pkg] = $ver) | (if .overrides[$pkg] then .overrides[$pkg] = $ver else . end)' \
-              package.json > "$tmp" && mv "$tmp" package.json
-            npm install
-              
-              # Add to changelog
+              echo "Updating $package from $current_version to $latest_same_major"
+              # Write the new version into package.json for BOTH the direct
+              # dependency and (if present) the overrides entry. The lockfile is
+              # reconciled in a single `npm install --ignore-scripts` after the
+              # loop. We avoid `npm install <pkg>@<ver>` because it aborts with
+              # EOVERRIDE when the package is also pinned in overrides, and we
+              # avoid a bare `npm install` here because it runs the postinstall
+              # (patch-package), which breaks on stale per-version patches.
+              tmp=$(mktemp)
+              jq --arg pkg "$package" --arg ver "$latest_same_major" \
+                '(.dependencies[$pkg] = $ver) | (if .overrides[$pkg] then .overrides[$pkg] = $ver else . end)' \
+                package.json > "$tmp" && mv "$tmp" package.json
               changelog="$changelog\n| $package | $current_version | $latest_same_major |"
               has_updates=true
             else
               echo "$package is already up to date within major version $current_major"
             fi
           done
+
+          # Reconcile package-lock.json with the edited package.json in one pass.
+          # --ignore-scripts skips the postinstall (electron-builder + patch-package),
+          # which is unnecessary for a dependency bump and would fail on stale
+          # per-version patches.
+          if [ "$has_updates" = true ]; then
+            npm install --ignore-scripts
+          fi
 
           # Save changelog to environment variable for PR (only if there are updates)
           if [ "$has_updates" = true ]; then
