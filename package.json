@@ -247,14 +247,13 @@
     "vitest": "^4.1.8"
   },
   "overrides": {
-    "@ai-sdk/provider": "4.0.3",
+    "@tanstack/virtual-core": "3.13.12",
     "@ai-sdk/provider-utils": "5.0.10",
     "@huggingface/transformers": {
       "sharp": "npm:empty-npm-package@1.0.0"
     },
     "@tootallnate/once": "^3.0.1",
-    "jsondiffpatch": "^0.7.3",
-    "@tanstack/virtual-core": "3.13.12"
+    "jsondiffpatch": "^0.7.3"
   },
   "workspaces": [
     "packages/common",
