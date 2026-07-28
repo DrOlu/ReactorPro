@@ -96,8 +96,20 @@ jobs:
             
             # Update if different
             if [ "$current_clean" != "$latest_clean" ]; then
-              echo "Updating $package from $current_version to $latest_same_major"
-              npm install $package@$latest_same_major
+            echo "Updating $package from $current_version to $latest_same_major"
+
+            # If this package is pinned in package.json overrides, bump the
+            # override to match — otherwise npm aborts with EOVERRIDE
+            # ("Override for <pkg> conflicts with direct dependency").
+            override_version=$(jq -r ".overrides[\"$package\"] // empty" package.json)
+            if [ -n "$override_version" ]; then
+              echo "Bumping overrides[$package] from $override_version to $latest_same_major"
+              tmp=$(mktemp)
+              jq --arg pkg "$package" --arg ver "$latest_same_major" \
+                '.overrides[$pkg] = $ver' package.json > "$tmp" && mv "$tmp" package.json
+            fi
+
+            npm install $package@$latest_same_major
               
               # Add to changelog
               changelog="$changelog\n| $package | $current_version | $latest_same_major |"
