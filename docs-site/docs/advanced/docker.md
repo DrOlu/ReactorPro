@@ -89,6 +89,25 @@ This will:
 
 **Note:** The `~/.reactorpro` directory will be created on your host machine automatically the first time you run ReactorPro (outside of Docker), or you can create it manually before running the container.
 
+### Readonly browser deployments
+
+Set `AIDER_DESK_READONLY=true` together with `AIDER_DESK_PROJECTS` to expose a server-enforced readonly browser UI. All configured projects and their complete task traces are visible, including tool results, command output, embedded snippets, project paths, and task metadata. Do not enable this mode for projects containing private history.
+
+```bash
+docker run -d \
+  -p 24337:24337 \
+  -v ~/projects:/projects \
+  -e AIDER_DESK_READONLY=true \
+  -e AIDER_DESK_PROJECTS="/projects/public-app,/projects/public-api" \
+  ghcr.io/hotovo/aider-desk:latest
+```
+
+The setting is immutable for the process lifetime. Readonly mode requires at least one configured project, rejects the normal REST API and direct Socket.IO mutations, and automatically redirects browser routes to `/#/readonly`. Optional `AIDER_DESK_USERNAME` and `AIDER_DESK_PASSWORD` credentials continue to protect the deployment. Installed extension UI actions remain enabled and trusted; they can modify state by design.
+
+:::info Learn More
+See the [Readonly View Mode](../features/readonly-view.md) documentation for a complete guide covering use cases, extension-powered interactions, security considerations, and the full readonly API reference.
+:::
+
 ### Opening Projects
 
 You can open projects in ReactorPro using two methods:
@@ -349,7 +368,8 @@ docker exec -it aiderdesk /bin/bash
 | `AIDER_DESK_PORT` | Port for the web server | `24337` | No |
 | `AIDER_DESK_USERNAME` | Basic auth username | - | No |
 | `AIDER_DESK_PASSWORD` | Basic auth password | - | No |
-| `AIDER_DESK_PROJECTS` | Comma-separated list of project paths | - | No |
+| `AIDER_DESK_PROJECTS` | Comma-separated list of project paths | - | Required in readonly mode |
+| `AIDER_DESK_READONLY` | Set to `true` for the server-enforced readonly browser UI | `false` | No |
 | `AIDER_DESK_CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins. Overrides CORS settings and implicitly enables CORS. | - | No |
 
 ## Troubleshooting

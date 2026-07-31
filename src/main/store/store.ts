@@ -80,6 +80,8 @@ export const DEFAULT_SETTINGS: SettingsData = {
   },
   server: {
     enabled: false,
+    readonly: false,
+    readonlyExtensionUi: true,
     basicAuth: {
       enabled: false,
       username: '',

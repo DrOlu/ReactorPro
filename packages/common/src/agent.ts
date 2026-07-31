@@ -114,6 +114,7 @@ export const AVAILABLE_PROVIDERS: LlmProviderName[] = [
 export enum OpenAiVoiceModel {
   Gpt4oMiniTranscribe = 'gpt-4o-mini-transcribe',
   Gpt4oTranscribe = 'gpt-4o-transcribe',
+  GptLiveTranscribe = 'gpt-live-transcribe',
   GptRealtimeWhisper = 'gpt-realtime-whisper',
 }
 
@@ -636,7 +637,7 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
         voice: {
           idleTimeoutMs: 5000,
           systemInstructions: DEFAULT_VOICE_SYSTEM_INSTRUCTIONS,
-          model: OpenAiVoiceModel.GptRealtimeWhisper,
+          model: OpenAiVoiceModel.GptLiveTranscribe,
           language: 'en',
         },
       } satisfies OpenAiProvider;

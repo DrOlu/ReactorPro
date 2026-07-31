@@ -1,4 +1,4 @@
-import { ApplicationAPI } from '@common/api';
+import { ExtensionDisplayAPI } from '@common/api';
 
 const LIBRARY_CACHE = new Map<string, Record<string, unknown>>();
 
@@ -95,7 +95,7 @@ export const initExtensionLibraryLoader = async (): Promise<void> => {
   }
 };
 
-export const loadExtensionLibrary = async (api: ApplicationAPI, librarySpec: string): Promise<Record<string, unknown>> => {
+export const loadExtensionLibrary = async (api: ExtensionDisplayAPI, librarySpec: string): Promise<Record<string, unknown>> => {
   const cached = LIBRARY_CACHE.get(librarySpec);
   if (cached) {
     return cached;
@@ -118,7 +118,7 @@ export const loadExtensionLibrary = async (api: ApplicationAPI, librarySpec: str
   }
 };
 
-export const loadAllLibraries = async (api: ApplicationAPI, libraries: Record<string, string>): Promise<Record<string, Record<string, unknown>>> => {
+export const loadAllLibraries = async (api: ExtensionDisplayAPI, libraries: Record<string, string>): Promise<Record<string, Record<string, unknown>>> => {
   if (!libraries || Object.keys(libraries).length === 0) {
     return {};
   }

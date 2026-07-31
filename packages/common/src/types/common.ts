@@ -427,6 +427,35 @@ export interface ProjectData {
   settings: ProjectSettings;
 }
 
+export interface ReadonlyProjectData {
+  active: boolean;
+  baseDir: string;
+  name: string;
+}
+
+export interface ReadonlyDisplaySettings {
+  language: string;
+  theme: Theme;
+  font: Font;
+  fontSize: number;
+  renderMarkdown: boolean;
+  fullMessageRendering: boolean;
+  messageViewMode?: MessageViewMode;
+  enableExtensionUi: boolean;
+}
+
+export interface ReadonlyBootstrap {
+  mode: 'readonly';
+  projects: ReadonlyProjectData[];
+  display: ReadonlyDisplaySettings;
+}
+
+export interface StandardBootstrap {
+  mode: 'standard';
+}
+
+export type BrowserBootstrap = ReadonlyBootstrap | StandardBootstrap;
+
 export interface RawModelInfo {
   max_input_tokens: number;
   max_output_tokens: number;
@@ -750,6 +779,8 @@ export interface SettingsData {
   promptBehavior: PromptBehavior;
   server: {
     enabled: boolean;
+    readonly: boolean;
+    readonlyExtensionUi?: boolean;
     basicAuth: {
       enabled: boolean;
       username: string;
