@@ -36,6 +36,7 @@ jobs:
           packages=(
             "ai"
             "@ai-sdk/provider"
+            "@ai-sdk/provider-utils"
             "@ai-sdk/amazon-bedrock"
             "@ai-sdk/anthropic"
             "@ai-sdk/azure"
@@ -75,11 +76,13 @@ jobs:
               echo "$package has a local patch ($existing_patch); skipping auto-bump (regenerate the patch manually to upgrade)"
               continue
             fi
-
-            # Get current version from package.json
-            current_version=$(cat package.json | jq -r ".dependencies[\"$package\"] // empty")
+            # Get current version from package.json. Most packages live in
+            # "dependencies"; @ai-sdk/provider-utils is pinned only via the
+            # "overrides" block (it is a transitive dep of the @ai-sdk/*
+            # providers), so fall back to a string-valued override entry.
+            current_version=$(cat package.json | jq -r ".dependencies[\"$package\"] // (if (.overrides[\"$package\"] | type) == \"string\" then .overrides[\"$package\"] else empty end)")
             if [ -z "$current_version" ]; then
-              echo "Package $package not found in dependencies, skipping..."
+              echo "Package $package not found in dependencies or overrides, skipping..."
               continue
             fi
 
@@ -115,16 +118,20 @@ jobs:
             # Update if different
             if [ "$current_clean" != "$latest_clean" ]; then
               echo "Updating $package from $current_version to $latest_same_major"
-              # Write the new version into package.json for BOTH the direct
-              # dependency and (if present) the overrides entry. The lockfile is
-              # reconciled in a single `npm install --ignore-scripts` after the
-              # loop. We avoid `npm install <pkg>@<ver>` because it aborts with
-              # EOVERRIDE when the package is also pinned in overrides, and we
-              # avoid a bare `npm install` here because it runs the postinstall
+              # Write the new version into package.json for the direct
+              # dependency (if present) and the overrides entry (if present and
+              # a plain string — object overrides like the sharp redirect are
+              # left untouched). This keeps overrides-only transitive pins such
+              # as @ai-sdk/provider-utils in sync with the providers that need
+              # them. The lockfile is reconciled in a single
+              # `npm install --ignore-scripts` after the loop. We avoid
+              # `npm install <pkg>@<ver>` because it aborts with EOVERRIDE when
+              # the package is also pinned in overrides, and we avoid a bare
+              # `npm install` here because it runs the postinstall
               # (patch-package), which breaks on stale per-version patches.
               tmp=$(mktemp)
               jq --arg pkg "$package" --arg ver "$latest_same_major" \
-                '(.dependencies[$pkg] = $ver) | (if .overrides[$pkg] then .overrides[$pkg] = $ver else . end)' \
+                '(if .dependencies[$pkg] then .dependencies[$pkg] = $ver else . end) | (if (.overrides[$pkg] | type) == "string" then .overrides[$pkg] = $ver else . end)' \
                 package.json > "$tmp" && mv "$tmp" package.json
               changelog="$changelog\n| $package | $current_version | $latest_same_major |"
               has_updates=true

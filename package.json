@@ -248,7 +248,7 @@
   },
   "overrides": {
     "@ai-sdk/provider": "4.0.3",
-    "@ai-sdk/provider-utils": "5.0.10",
+    "@ai-sdk/provider-utils": "5.0.16",
     "@huggingface/transformers": {
       "sharp": "npm:empty-npm-package@1.0.0"
     },
