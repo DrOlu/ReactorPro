@@ -5,7 +5,7 @@ sidebar_label: "Readonly View Mode"
 
 # Readonly View Mode
 
-Readonly View Mode turns AiderDesk into a server-enforced, browser-accessible dashboard where visitors can browse projects and inspect complete task traces — messages, tool results, command output, and code — without being able to modify anything through the normal API surface.
+Readonly View Mode turns ReactorPro into a server-enforced, browser-accessible dashboard where visitors can browse projects and inspect complete task traces — messages, tool results, command output, and code — without being able to modify anything through the normal API surface.
 
 When enabled, every browser route is automatically redirected to `/#/readonly`, which serves a dedicated read-only UI shell. The standard REST API and direct Socket.IO mutations are blocked at the server level.
 
@@ -35,7 +35,7 @@ docker run -d \
   -v ~/projects:/projects \
   -e AIDER_DESK_READONLY=true \
   -e AIDER_DESK_PROJECTS="/projects/public-app,/projects/public-api" \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 This mode is **immutable** for the process lifetime — it cannot be toggled at runtime. All configured projects are started automatically before the readonly UI becomes available. See [Docker](../advanced/docker.md#readonly-browser-deployments) for the full environment variable reference.
@@ -122,7 +122,7 @@ See [Creating Extensions](../extensions/creating-extensions.md#available-placeme
 
 Share your AI-assisted development work with stakeholders, clients, or team members in real-time. They can watch tasks progress, see what the agent did, and review the full conversation — all without risk of accidentally modifying anything.
 
-**Setup**: Run AiderDesk in a Docker container with `AIDER_DESK_READONLY=true`, expose the port or use a [Cloudflare Tunnel](../configuration/settings.md), and share the URL.
+**Setup**: Run ReactorPro in a Docker container with `AIDER_DESK_READONLY=true`, expose the port or use a [Cloudflare Tunnel](../configuration/settings.md), and share the URL.
 
 ### Code Review & Audit Trail
 
@@ -134,7 +134,7 @@ Show live progress on a project to clients without giving them access to modify 
 
 ### Educational Sharing
 
-Instructors can share AiderDesk sessions with students, who can study the AI's approach, tool usage patterns, and code generation steps. Extension-powered interactivity (see below) can add Q&A or discussion capabilities.
+Instructors can share ReactorPro sessions with students, who can study the AI's approach, tool usage patterns, and code generation steps. Extension-powered interactivity (see below) can add Q&A or discussion capabilities.
 
 ## Extensions-Powered Public Interactions
 

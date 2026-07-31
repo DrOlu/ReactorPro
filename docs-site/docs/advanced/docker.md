@@ -99,7 +99,7 @@ docker run -d \
   -v ~/projects:/projects \
   -e AIDER_DESK_READONLY=true \
   -e AIDER_DESK_PROJECTS="/projects/public-app,/projects/public-api" \
-  ghcr.io/hotovo/aider-desk:latest
+  ghcr.io/hyperspace/reactorpro:latest
 ```
 
 The setting is immutable for the process lifetime. Readonly mode requires at least one configured project, rejects the normal REST API and direct Socket.IO mutations, and automatically redirects browser routes to `/#/readonly`. Optional `AIDER_DESK_USERNAME` and `AIDER_DESK_PASSWORD` credentials continue to protect the deployment. Installed extension UI actions remain enabled and trusted; they can modify state by design.
