@@ -25,7 +25,7 @@ describe('ContextManager - reloadFromDisk', () => {
   let manager: ContextManager;
 
   beforeEach(async () => {
-    projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aider-desk-context-'));
+    projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'reactorpro-context-'));
     task = {
       getProjectDir: () => projectDir,
       getTaskDir: () => projectDir,
@@ -40,7 +40,7 @@ describe('ContextManager - reloadFromDisk', () => {
   });
 
   it('reloads externally changed messages without saving over the file', async () => {
-    const contextPath = path.join(projectDir, '.aider-desk', 'tasks', 'task-1', 'context.json');
+    const contextPath = path.join(projectDir, '.reactorpro', 'tasks', 'task-1', 'context.json');
     const messages = [createMessage('message-1', 'External message')];
     await fs.mkdir(path.dirname(contextPath), { recursive: true });
     await fs.writeFile(contextPath, JSON.stringify({ version: 2, contextMessages: messages, contextFiles: [] }), 'utf8');
@@ -52,7 +52,7 @@ describe('ContextManager - reloadFromDisk', () => {
   });
 
   it('clears messages when context.json is deleted', async () => {
-    const contextPath = path.join(projectDir, '.aider-desk', 'tasks', 'task-1', 'context.json');
+    const contextPath = path.join(projectDir, '.reactorpro', 'tasks', 'task-1', 'context.json');
     const messages = [createMessage('message-1', 'Message')];
     await fs.mkdir(path.dirname(contextPath), { recursive: true });
     await fs.writeFile(contextPath, JSON.stringify({ version: 2, contextMessages: messages, contextFiles: [] }), 'utf8');
