@@ -67,6 +67,7 @@ const api: ApplicationAPI = {
   restartAiderConnector: (baseDir, taskId) => ipcRenderer.send('restart-aider-connector', baseDir, taskId),
   runPrompt: (baseDir, taskId, prompt, mode, images) => ipcRenderer.send('run-prompt', baseDir, taskId, prompt, mode, images),
   savePrompt: (baseDir, taskId, prompt) => ipcRenderer.invoke('save-prompt', baseDir, taskId, prompt),
+  saveEditedPrompt: (baseDir, taskId, messageId, prompt) => ipcRenderer.invoke('save-edited-prompt', baseDir, taskId, messageId, prompt),
   redoUserPrompt: (baseDir, taskId, messageId, mode, updatedPrompt?, updatedImages?) =>
     ipcRenderer.send('redo-user-prompt', baseDir, taskId, messageId, mode, updatedPrompt, updatedImages),
   resumeTask: (baseDir, taskId) => ipcRenderer.send('resume-task', baseDir, taskId),
@@ -101,6 +102,7 @@ const api: ApplicationAPI = {
   readFile: (baseDir, taskId, filePath) => ipcRenderer.invoke('read-file', baseDir, taskId, filePath),
   generateCommitMessage: (baseDir, taskId) => ipcRenderer.invoke('generate-commit-message', baseDir, taskId),
   commitChanges: (baseDir, taskId, message, amend) => ipcRenderer.invoke('commit-changes', baseDir, taskId, message, amend),
+  cancelCommitChanges: (baseDir, taskId) => ipcRenderer.invoke('cancel-commit-changes', baseDir, taskId),
   addFile: (baseDir, taskId, filePath, readOnly = false) => ipcRenderer.send('add-file', baseDir, taskId, filePath, readOnly),
   isValidPath: (baseDir, path) => ipcRenderer.invoke('is-valid-path', baseDir, path),
   isProjectPath: (path) => ipcRenderer.invoke('is-project-path', path),

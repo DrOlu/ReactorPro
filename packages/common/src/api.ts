@@ -102,6 +102,7 @@ export interface ApplicationAPI {
   restartAiderConnector: (baseDir: string, taskId: string) => void;
   runPrompt: (baseDir: string, taskId: string, prompt: string, mode?: Mode, images?: string[]) => void;
   savePrompt: (baseDir: string, taskId: string, prompt: string) => Promise<void>;
+  saveEditedPrompt: (baseDir: string, taskId: string, messageId: string, prompt: string) => Promise<void>;
   redoUserPrompt: (baseDir: string, taskId: string, messageId: string, mode: Mode, updatedPrompt?: string, updatedImages?: string[]) => void;
   resumeTask: (baseDir: string, taskId: string) => void;
   answerQuestion: (baseDir: string, taskId: string, answer: string) => void;
@@ -135,6 +136,7 @@ export interface ApplicationAPI {
   readFile: (baseDir: string, taskId: string, filePath: string) => Promise<string>;
   generateCommitMessage: (baseDir: string, taskId: string) => Promise<string>;
   commitChanges: (baseDir: string, taskId: string, message: string, amend: boolean) => Promise<void>;
+  cancelCommitChanges: (baseDir: string, taskId: string) => Promise<void>;
   addFile: (baseDir: string, taskId: string, filePath: string, readOnly?: boolean) => void;
   isValidPath: (baseDir: string, path: string) => Promise<boolean>;
   isProjectPath: (path: string) => Promise<boolean>;

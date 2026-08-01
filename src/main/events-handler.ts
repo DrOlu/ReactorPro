@@ -445,6 +445,10 @@ export class EventsHandler {
     return this.projectManager.getProject(baseDir).getTask(taskId)?.savePromptOnly(prompt);
   }
 
+  async saveEditedPrompt(baseDir: string, taskId: string, messageId: string, prompt: string): Promise<void> {
+    return this.projectManager.getProject(baseDir).getTask(taskId)?.saveEditedPrompt(messageId, prompt);
+  }
+
   async answerQuestion(baseDir: string, taskId: string, answer: string): Promise<void> {
     await this.projectManager.getProject(baseDir).getTask(taskId)?.answerQuestion(answer);
   }
@@ -709,6 +713,15 @@ export class EventsHandler {
     await task.commitChanges(message, amend);
   }
 
+  cancelCommitChanges(baseDir: string, taskId: string): void {
+    const task = this.projectManager.getProject(baseDir).getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    task.cancelCommitChanges();
+  }
+
   async listBranches(projectDir: string): Promise<Array<{ name: string; isCurrent: boolean; hasWorktree: boolean }>> {
     return await this.projectManager.worktreeManager.listBranches(projectDir);
   }
@@ -856,6 +869,10 @@ export class EventsHandler {
 
   async getTasks(baseDir: string): Promise<TaskData[]> {
     return this.projectManager.getProject(baseDir).getTasks();
+  }
+
+  async reloadTasks(baseDir: string): Promise<TaskData[]> {
+    return this.projectManager.getProject(baseDir).reloadTasks();
   }
 
   async loadTask(baseDir: string, taskId: string): Promise<TaskStateData> {

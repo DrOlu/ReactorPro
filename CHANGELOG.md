@@ -13,6 +13,12 @@
 - better auto scrolling control while streaming
 - added gpt-live-transcribe model to the OpenAI voice provider
 - added option to toggle extension UI components in readonly server mode
+- added reloadTasks function to Extension API for reloading tasks from disk
+- added support for saving edited prompts
+- added onTaskDeleted extension hook
+- added --clear flag to uv venv creation
+- added commit progress visibility and cancel action
+- properly using AIDER_DESK_TASKS_DIR constant when loading tasks in project
 
 ## [0.76.0]
 

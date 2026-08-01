@@ -33,6 +33,7 @@ interface Extension {
 
   // Event Handlers - See Events Reference for details
   onTaskCreated?(event, context): Promise<void | Partial<Event>>;
+  onTaskDeleted?(event, context): Promise<void | Partial<Event>>;
   onPromptTemplate?(event, context): Promise<void | Partial<PromptTemplateEvent>>;
   // ... and more event handlers
 }
@@ -236,6 +237,7 @@ interface ProjectContext {
   createTask(params: CreateTaskParams): Promise<TaskData>;
   getTask(taskId: string): TaskContext | null;
   getTasks(): Promise<TaskData[]>;
+  reloadTasks(): Promise<TaskData[]>;
   getMostRecentTask(): TaskContext | null;
   forkTask(taskId: string, messageId: string): Promise<TaskData>;
   duplicateTask(taskId: string): Promise<TaskData>;

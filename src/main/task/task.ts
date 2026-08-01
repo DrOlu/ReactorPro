@@ -182,6 +182,7 @@ export class Task {
   private smartCompactionLevel = CompactionLevel.One;
 
   private readonly taskDataPath: string;
+  private readonly taskDataLoadPromise: Promise<void>;
   private readonly contextManager: ContextManager;
   private readonly agent: Agent;
   private readonly aiderManager: AiderManager;
@@ -237,7 +238,11 @@ export class Task {
     };
     this.aiderManager = new AiderManager(this, this.store, this.modelManager, this.eventManager, () => this.connectors, this.pythonInstaller);
 
-    void this.loadTaskData();
+    this.taskDataLoadPromise = this.loadTaskData();
+  }
+
+  public async waitForTaskDataLoad(): Promise<void> {
+    await this.taskDataLoadPromise;
   }
 
   public async getTaskAgentProfile(): Promise<AgentProfile | null> {
@@ -285,22 +290,72 @@ export class Task {
       baseDir: this.project.baseDir,
       taskId: this.taskId,
     });
-    if (await fileExists(this.taskDataPath)) {
-      const content = await fs.readFile(this.taskDataPath, 'utf8');
-      const data = JSON.parse(content) as TaskData;
-
-      logger.debug('Loaded task data', {
-        baseDir: this.project.baseDir,
-        taskId: this.taskId,
-        data,
-      });
-
-      for (const key of Object.keys(data)) {
-        this.task[key] = data[key];
-      }
-      // make sure we always have the most recent project baseDir, in case the task was migrated from another path
-      this.task.baseDir = this.project.baseDir;
+    const data = await this.readTaskDataFromDisk();
+    if (data) {
+      this.applyTaskData(data);
     }
+  }
+
+  private async readTaskDataFromDisk(): Promise<Partial<TaskData> | null> {
+    if (!(await fileExists(this.taskDataPath))) {
+      return null;
+    }
+
+    const content = await fs.readFile(this.taskDataPath, 'utf8');
+    const data = JSON.parse(content) as Partial<TaskData>;
+
+    logger.debug('Loaded task data', {
+      baseDir: this.project.baseDir,
+      taskId: this.taskId,
+      data,
+    });
+
+    return data;
+  }
+
+  private applyTaskData(data: Partial<TaskData>) {
+    const nextTaskData = {
+      ...EMPTY_TASK_DATA,
+      ...data,
+      id: this.taskId,
+      baseDir: this.project.baseDir,
+    };
+
+    for (const key of Object.keys(this.task) as Array<keyof TaskData>) {
+      delete (this.task as Partial<TaskData>)[key];
+    }
+
+    Object.assign(this.task, nextTaskData);
+  }
+
+  public async reloadFromDisk(): Promise<{ taskDataChanged: boolean; contextChanged: boolean }> {
+    await this.waitForTaskDataLoad();
+
+    const previousTaskData = { ...this.task };
+    const data = await this.readTaskDataFromDisk();
+    const nextTaskData = {
+      ...EMPTY_TASK_DATA,
+      ...(data || {}),
+      id: this.taskId,
+      baseDir: this.project.baseDir,
+    };
+    const taskDataChanged = !isEqual(previousTaskData, nextTaskData);
+
+    if (taskDataChanged) {
+      this.applyTaskData(data || {});
+    }
+
+    const contextChanged = await this.contextManager.reloadFromDisk();
+    if (contextChanged && this.initialized) {
+      this.eventManager.sendClearTask(this.project.baseDir, this.taskId, true, false);
+      this.reloadGroupMessages(await this.contextManager.getContextMessages());
+      await this.reloadConnectorMessages();
+      await this.sendContextFilesUpdated();
+      await this.updateContextInfo();
+      void this.sendSkillsUpdated();
+    }
+
+    return { taskDataChanged, contextChanged };
   }
 
   /**
@@ -435,13 +490,16 @@ export class Task {
     return this.task;
   }
 
-  public async init() {
+  public async init(readonly = false) {
     if (this.initialized) {
       logger.debug('Task already initialized, skipping', {
         baseDir: this.project.baseDir,
         taskId: this.taskId,
       });
       this.eventManager.sendTaskInitialized(this.task);
+      if (readonly) {
+        return;
+      }
       this.aiderManager.sendUpdateAiderModels();
       await this.updateAutocompletionData(undefined, true);
       await this.updateContextInfo();
@@ -453,12 +511,26 @@ export class Task {
       return;
     }
 
-    this.initPromise = this.initInternal();
+    this.initPromise = this.initInternal(readonly);
     await this.initPromise;
     this.initPromise = null;
   }
 
-  private async initInternal() {
+  private async initInternal(readonly: boolean) {
+    if (readonly) {
+      // Readonly init must not mutate worktrees, spawn connectors, or run expensive scans
+      if (await fileExists(this.getTaskDir())) {
+        this.git = simpleGit(this.getTaskDir());
+      }
+
+      await this.loadContext();
+      this.eventManager.sendTaskInitialized(this.task);
+
+      this.initialized = true;
+      await this.extensionManager.dispatchEvent('onTaskInitialized', { task: this.task }, this.project, this);
+      return;
+    }
+
     // Check if worktree is enabled for this task
     const workingMode = this.task.workingMode;
     const existingWorktree = await this.worktreeManager.getTaskWorktree(this.project.baseDir, this.taskId);
@@ -529,13 +601,13 @@ export class Task {
     await this.extensionManager.dispatchEvent('onTaskInitialized', { task: this.task }, this.project, this);
   }
 
-  public async load(): Promise<TaskStateData> {
+  public async load(readonly = false): Promise<TaskStateData> {
     logger.info('Loading task', {
       baseDir: this.project.baseDir,
       taskId: this.taskId,
     });
 
-    await this.init();
+    await this.init(readonly);
 
     const mode = this.getCurrentMode();
     return {
@@ -890,6 +962,21 @@ export class Task {
       name: this.task.name || this.getTaskNameFromPrompt(prompt),
       state: DefaultTaskState.Todo,
     });
+  }
+
+  public async saveEditedPrompt(messageId: string, prompt: string): Promise<void> {
+    const contextMessages = await this.contextManager.getContextMessages();
+    const savedPrompt = contextMessages[0];
+
+    if (contextMessages.length !== 1 || savedPrompt?.id !== messageId || savedPrompt.role !== MessageRole.User) {
+      throw new Error('Only a task with a single saved prompt can be edited and saved.');
+    }
+
+    await this.project.addToInputHistory(prompt);
+    this.contextManager.setContextMessages([{ ...savedPrompt, content: prompt }]);
+    this.addUserMessage(savedPrompt.id, prompt, savedPrompt.promptContext);
+
+    await this.saveTask({ state: DefaultTaskState.Todo });
   }
 
   private async runNextQueuedPrompt(): Promise<ResponseCompletedData[]> {
@@ -4588,11 +4675,20 @@ ${error.stderr}`,
     amend = beforeResult.amend;
 
     const taskDir = this.getTaskDir();
-    await this.worktreeManager.commitChanges(taskDir, message, amend);
+    const committed = await this.worktreeManager.commitChanges(taskDir, message, amend);
     await this.sendUpdatedFilesUpdated();
     await this.sendWorktreeIntegrationStatusUpdated();
 
-    await this.extensionManager.dispatchEvent('onAfterCommit', { message, amend }, this.project, this);
+    if (committed) {
+      await this.extensionManager.dispatchEvent('onAfterCommit', { message, amend }, this.project, this);
+    } else {
+      logger.info('Commit cancelled by user', { baseDir: this.project.baseDir, taskId: this.taskId });
+    }
+  }
+
+  public cancelCommitChanges(): void {
+    const taskDir = this.getTaskDir();
+    this.worktreeManager.cancelCommitChanges(taskDir);
   }
 
   public async getWorktreeIntegrationStatus(targetBranch?: string) {

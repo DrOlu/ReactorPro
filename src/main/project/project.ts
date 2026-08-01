@@ -20,7 +20,7 @@ import { WorktreeManager } from '@/worktrees';
 import { MemoryManager } from '@/memory/memory-manager';
 import { PromptsManager } from '@/prompts';
 import { ExtensionManager } from '@/extensions/extension-manager';
-import { AIDER_DESK_WATCH_FILES_LOCK } from '@/constants';
+import { AIDER_DESK_TASKS_DIR, AIDER_DESK_WATCH_FILES_LOCK } from '@/constants';
 import { PythonDependenciesInstaller } from '@/python-dependencies-installer';
 import { determineMainModel, determineWeakModel } from '@/utils';
 
@@ -28,9 +28,11 @@ export class Project {
   private readonly customCommandManager: CustomCommandManager;
   private readonly tasksLoadingPromise: Promise<void> | null = null;
   private readonly tasks = new Map<string, Task>();
+  private tasksReloadingPromise: Promise<TaskData[]> | null = null;
 
   private connectors: Connector[] = [];
   private inputHistoryFile = '.aider.input.history';
+  private startPromise: Promise<void> | null = null;
 
   constructor(
     public readonly baseDir: string,
@@ -51,15 +53,20 @@ export class Project {
     this.tasksLoadingPromise = this.loadTasks();
   }
 
-  public async start() {
-    await this.customCommandManager.start();
-    await this.promptsManager.watchProject(this.baseDir);
-    await this.agentProfileManager.initializeForProject(this.baseDir);
-    await this.extensionManager.reloadProjectExtensions(this);
-    await this.sendInputHistoryUpdatedEvent();
+  public start(): Promise<void> {
+    if (!this.startPromise) {
+      this.startPromise = (async () => {
+        await this.customCommandManager.start();
+        await this.promptsManager.watchProject(this.baseDir);
+        await this.agentProfileManager.initializeForProject(this.baseDir);
+        await this.extensionManager.reloadProjectExtensions(this);
+        await this.sendInputHistoryUpdatedEvent();
 
-    await this.extensionManager.dispatchEvent('onProjectStarted', { baseDir: this.baseDir }, this);
-    this.eventManager.sendProjectStarted(this.baseDir);
+        await this.extensionManager.dispatchEvent('onProjectStarted', { baseDir: this.baseDir }, this);
+        this.eventManager.sendProjectStarted(this.baseDir);
+      })();
+    }
+    return this.startPromise;
   }
 
   private async prepareInternalTask() {
@@ -185,6 +192,7 @@ export class Project {
       this.pythonInstaller,
       initialTaskData,
     );
+    await task.waitForTaskDataLoad();
     this.tasks.set(taskId, task);
 
     // Allow extensions to modify task data after preparation
@@ -197,28 +205,29 @@ export class Project {
     return task;
   }
 
+  private async getTaskIdsFromDisk(): Promise<string[]> {
+    const tasksDir = path.join(this.baseDir, AIDER_DESK_TASKS_DIR);
+    if (!(await fileExists(tasksDir))) {
+      return [];
+    }
+
+    const taskFolders = await fs.readdir(tasksDir, { withFileTypes: true });
+    return taskFolders
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name)
+      .filter((taskId) => taskId !== INTERNAL_TASK_ID);
+  }
+
   private async loadTasks() {
     await this.prepareInternalTask();
 
     // Migrate sessions to tasks before starting
     await migrateSessionsToTasks(this);
 
-    const tasksDir = path.join(this.baseDir, '.reactorpro', 'tasks');
+    const tasksDir = path.join(this.baseDir, AIDER_DESK_TASKS_DIR);
 
     try {
-      if (!(await fileExists(tasksDir))) {
-        logger.debug('Tasks directory does not exist, skipping loadTasks', {
-          baseDir: this.baseDir,
-          tasksDir,
-        });
-        return;
-      }
-
-      const taskFolders = await fs.readdir(tasksDir, { withFileTypes: true });
-      const taskDirs = taskFolders
-        .filter((dirent) => dirent.isDirectory())
-        .map((dirent) => dirent.name)
-        .filter((taskId) => taskId !== INTERNAL_TASK_ID);
+      const taskDirs = await this.getTaskIdsFromDisk();
 
       logger.debug(`Loading ${taskDirs.length} tasks from directory`, {
         baseDir: this.baseDir,
@@ -393,33 +402,44 @@ export class Project {
     return false;
   }
 
+  private async removeTaskWorktree(taskId: string, taskData: TaskData | undefined): Promise<void> {
+    if (!taskData?.worktree || this.isWorktreeSharedWithOtherTasks(taskData.worktree.path, taskId)) {
+      return;
+    }
+
+    try {
+      await this.worktreeManager.removeWorktree(this.baseDir, taskData.worktree);
+    } catch (error) {
+      logger.warn('Failed to remove worktree during task deletion', {
+        baseDir: this.baseDir,
+        taskId,
+        worktreePath: taskData.worktree.path,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   private async deleteTaskInternal(taskId: string): Promise<void> {
-    const taskDir = path.join(this.baseDir, '.reactorpro', 'tasks', taskId);
-
-    // Close the task if it's loaded
+    const taskDir = path.join(this.baseDir, AIDER_DESK_TASKS_DIR, taskId);
     const task = this.tasks.get(taskId);
-    if (task) {
-      await task.close();
-      this.tasks.delete(taskId);
-      this.eventManager.sendTaskDeleted(task.task);
-    }
-
-    // Remove worktree if the task has one and no other task shares it
     const taskData = task?.task;
-    if (taskData?.worktree && !this.isWorktreeSharedWithOtherTasks(taskData.worktree.path, taskId)) {
-      try {
-        await this.worktreeManager.removeWorktree(this.baseDir, taskData.worktree);
-      } catch (error) {
-        logger.warn('Failed to remove worktree during task deletion', {
-          baseDir: this.baseDir,
-          taskId,
-          worktreePath: taskData.worktree.path,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+
+    if (!task) {
+      await fs.rm(taskDir, { recursive: true, force: true });
+      return;
     }
 
-    // Delete the task directory
+    const extResult = await this.extensionManager.dispatchEvent('onTaskDeleted', { task: task.task }, this, task);
+    if (extResult.blocked) {
+      throw new Error(`Task ${taskId} deletion was blocked by an extension`);
+    }
+
+    await task.close();
+    this.tasks.delete(taskId);
+    this.eventManager.sendTaskDeleted(task.task);
+
+    await this.removeTaskWorktree(taskId, taskData);
+
     await fs.rm(taskDir, { recursive: true, force: true });
   }
 
@@ -504,6 +524,59 @@ export class Project {
       .filter((task) => task.id !== INTERNAL_TASK_ID);
   }
 
+  async reloadTasks(): Promise<TaskData[]> {
+    await this.tasksLoadingPromise;
+
+    if (!this.tasksReloadingPromise) {
+      this.tasksReloadingPromise = this.reloadTasksInternal().finally(() => {
+        this.tasksReloadingPromise = null;
+      });
+    }
+
+    return this.tasksReloadingPromise;
+  }
+
+  private async reloadTasksInternal(): Promise<TaskData[]> {
+    const taskIdsOnDisk = await this.getTaskIdsFromDisk();
+    const taskIdsOnDiskSet = new Set(taskIdsOnDisk);
+
+    for (const [taskId, task] of this.tasks) {
+      if (taskId === INTERNAL_TASK_ID || taskIdsOnDiskSet.has(taskId)) {
+        continue;
+      }
+
+      if (task.task.state === DefaultTaskState.InProgress) {
+        continue;
+      }
+
+      const taskData = task.task;
+      await task.close(false, false);
+      this.tasks.delete(taskId);
+      await this.removeTaskWorktree(taskId, taskData);
+      this.eventManager.sendTaskDeleted(taskData);
+    }
+
+    for (const taskId of taskIdsOnDisk) {
+      const task = this.tasks.get(taskId);
+      if (!task) {
+        const newTask = await this.prepareTask(taskId);
+        this.eventManager.sendTaskCreated(newTask.task);
+        continue;
+      }
+
+      if (task.task.state === DefaultTaskState.InProgress) {
+        continue;
+      }
+
+      const { taskDataChanged } = await task.reloadFromDisk();
+      if (taskDataChanged) {
+        this.eventManager.sendTaskUpdated(task.task);
+      }
+    }
+
+    return this.getTasks();
+  }
+
   forEachTask(callback: (task: Task) => void, initializedOnly = true) {
     this.tasks
       .values()
@@ -526,6 +599,9 @@ export class Project {
   }
 
   async close() {
+    await this.startPromise;
+    this.startPromise = null;
+
     await this.extensionManager.dispatchEvent('onProjectStopped', { baseDir: this.baseDir }, this);
 
     this.customCommandManager.dispose();
