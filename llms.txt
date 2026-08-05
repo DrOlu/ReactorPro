@@ -7202,6 +7202,8 @@ constructor(
     private readonly pythonInstaller: PythonDependenciesInstaller,
 )
 ⋮----
+public isStarted(): boolean
+⋮----
 public start(): Promise<void>
 ⋮----
 private async prepareInternalTask()
@@ -13268,6 +13270,7 @@ File: src/renderer/public/sw.js
 // Claim clients immediately
 ⋮----
 // Pass through all fetch requests without caching
+// Skip socket.io requests to avoid interfering with long-polling transport
 
 ================
 File: src/renderer/src/api/browser-api.ts
@@ -13427,9 +13430,11 @@ constructor()
 ⋮----
 private ensureSocketConnected(): Promise<void>
 ⋮----
+const cleanup = () =>
+⋮----
 const onConnect = () =>
 ⋮----
-const cleanup = () =>
+const onDisconnect = () =>
 ⋮----
 private addListener<T extends keyof EventDataMap>(eventType: T, callback: EventCallback<EventDataMap[T]>, baseDir?: string, taskId?: string): () => void
 ⋮----
@@ -13761,6 +13766,8 @@ addAiderConnectorStatusListener(
 ): () => void
 ⋮----
 async getAiderConnectorStatus(): Promise<AiderConnectorStatus>
+⋮----
+destroy(): void
 
 ================
 File: src/renderer/src/api/readonly-browser-api.ts
@@ -17605,6 +17612,8 @@ type Props = {
   onForkFromMessage?: (message: Message) => void;
   onRemoveUpToMessage?: (message: Message) => void;
 };
+⋮----
+const isMoreThanThresholdFromBottom = () =>
 ⋮----
 const handleWheel = (e: WheelEvent) =>
 ⋮----
@@ -24364,7 +24373,7 @@ export const useAgents = (): AgentsContextType =>
 ================
 File: src/renderer/src/contexts/ApiContext.tsx
 ================
-import { createContext, useMemo, ReactNode, useContext } from 'react';
+import { createContext, useEffect, useMemo, ReactNode, useContext } from 'react';
 import { ApplicationAPI } from '@common/api';
 import { HotkeysProvider } from 'react-hotkeys-hook';
 ⋮----
@@ -29599,9 +29608,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "aider-desk",
+  "name": "reactorpro",
   "version": "0.78.0-dev",
-  "description": "Aider desktop application wrapper",
+  "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
