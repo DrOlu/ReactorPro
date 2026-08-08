@@ -610,7 +610,7 @@ export class McpManager {
       logger.debug(`Connecting to MCP server using STDIO: ${serverName}`);
       client = await createMCPClient({
         transport,
-        clientName: 'aider-desk-client',
+        clientName: 'reactorpro-client',
         version: '1.0.0',
       });
       logger.debug(`Connected to MCP server: ${serverName}`);
@@ -624,7 +624,7 @@ export class McpManager {
         logger.debug(`Connecting to MCP server using Streamable HTTP: ${serverName}`);
         client = await createMCPClient({
           transport,
-          clientName: 'aider-desk-client',
+          clientName: 'reactorpro-client',
           version: '1.0.0',
         });
         logger.debug(`Connected to MCP server: ${serverName}`);
@@ -634,7 +634,7 @@ export class McpManager {
         logger.debug(`Connecting to MCP server using SSE: ${serverName}`);
         client = await createMCPClient({
           transport: { type: 'sse', url: config.url, headers },
-          clientName: 'aider-desk-client',
+          clientName: 'reactorpro-client',
           version: '1.0.0',
         });
         logger.debug(`Connected to MCP server: ${serverName}`);
