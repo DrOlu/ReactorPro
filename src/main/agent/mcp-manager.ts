@@ -595,7 +595,7 @@ export class McpManager {
   private createClient(transport: McpClientTransport): Promise<MCPClient> {
     return createMCPClient({
       transport,
-      clientName: 'aider-desk-client',
+      clientName: 'reactorpro-client',
       version: '1.0.0',
     });
   }

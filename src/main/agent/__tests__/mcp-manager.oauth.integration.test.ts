@@ -120,7 +120,7 @@ afterEach(async () => {
 describe('McpManager OAuth integration', () => {
   it('discovers OAuth, completes authorization, and reconnects with the token', async () => {
     const testServer = await createOAuthMcpServer();
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'aider-desk-mcp-oauth-integration-'));
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'reactorpro-mcp-oauth-integration-'));
     temporaryDirectories.push(directory);
     const oauthManager = new McpOAuthManager(path.join(directory, 'credentials.json'));
     const manager = new McpManager(oauthManager);

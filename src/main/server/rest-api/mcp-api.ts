@@ -35,9 +35,9 @@ const OAuthCallbackSchema = z.object({
 });
 
 const OAUTH_SUCCESS_HTML =
-  '<!doctype html><html><head><meta charset="utf-8"><title>AiderDesk</title></head><body><h1>Authentication complete</h1><p>You can close this window and return to AiderDesk.</p></body></html>';
+  '<!doctype html><html><head><meta charset="utf-8"><title>ReactorPro</title></head><body><h1>Authentication complete</h1><p>You can close this window and return to ReactorPro.</p></body></html>';
 const OAUTH_ERROR_HTML =
-  '<!doctype html><html><head><meta charset="utf-8"><title>AiderDesk</title></head><body><h1>Authentication failed</h1><p>Return to AiderDesk and try connecting the MCP server again.</p></body></html>';
+  '<!doctype html><html><head><meta charset="utf-8"><title>ReactorPro</title></head><body><h1>Authentication failed</h1><p>Return to ReactorPro and try connecting the MCP server again.</p></body></html>';
 
 export class McpApi extends BaseApi {
   constructor(private readonly eventsHandler: EventsHandler) {

@@ -78,7 +78,7 @@ export class McpOAuthManager {
     this.ensureRecord(normalizedUrl);
 
     const clientMetadata: OAuthClientMetadata = {
-      client_name: 'AiderDesk',
+      client_name: 'ReactorPro',
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],

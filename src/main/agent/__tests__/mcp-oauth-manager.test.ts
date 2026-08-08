@@ -12,7 +12,7 @@ import { McpOAuthManager } from '../mcp-oauth-manager';
 const temporaryDirectories: string[] = [];
 
 const createManager = async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'aider-desk-mcp-oauth-'));
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'reactorpro-mcp-oauth-'));
   temporaryDirectories.push(directory);
   const storePath = path.join(directory, 'mcp-oauth.json');
   const manager = new McpOAuthManager(storePath);
