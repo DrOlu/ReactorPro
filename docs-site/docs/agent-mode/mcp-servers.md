@@ -29,8 +29,8 @@ You can also edit the entire server configuration of the current context in raw 
 
 MCP server configurations are stored in **JSON files** on disk rather than in the application settings:
 
-- **Global servers** — stored in `mcp-servers.json` inside the AiderDesk home directory (default: `~/.aider-desk/mcp-servers.json`, configurable via `AIDER_DESK_HOME_DIR`).
-- **Project servers** — stored in `<projectDir>/.aider-desk/mcp-servers.json`.
+- **Global servers** — stored in `mcp-servers.json` inside the ReactorPro home directory (default: `~/.reactorpro/mcp-servers.json`, configurable via `AIDER_DESK_HOME_DIR`).
+- **Project servers** — stored in `<projectDir>/.reactorpro/mcp-servers.json`.
 
 The file format is:
 
@@ -140,7 +140,7 @@ Configuring a server only defines its configuration — you must also enable it 
 
 ## Authorization for Remote MCP Servers
 
-AiderDesk supports **OAuth authorization** for remote MCP servers that require it (e.g., Sentry).
+ReactorPro supports **OAuth authorization** for remote MCP servers that require it (e.g., Sentry).
 
 ### Authorize a Server
 

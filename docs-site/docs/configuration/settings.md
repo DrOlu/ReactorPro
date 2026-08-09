@@ -40,7 +40,7 @@ See [Agent Mode](../agent-mode/agent-mode.md) for more information.
 
 Add and manage external tools via [MCP servers](../agent-mode/mcp-servers.md).
 - **Global vs. Project Scope**: Use the context switcher to configure servers globally (available to all projects) or per project.
-- **File-Based Storage**: Configurations are stored in `mcp-servers.json` files (global: `~/.aider-desk/mcp-servers.json`, project: `<projectDir>/.aider-desk/mcp-servers.json`) and are watched for external changes.
+- **File-Based Storage**: Configurations are stored in `mcp-servers.json` files (global: `~/.reactorpro/mcp-servers.json`, project: `<projectDir>/.reactorpro/mcp-servers.json`) and are watched for external changes.
 - **Tools & OAuth**: Inspect each server's tools, reload them, and connect OAuth-authorized remote servers.
 
 ### Memory
