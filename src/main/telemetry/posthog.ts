@@ -12,10 +12,23 @@ export const initializePostHogExporter = (): SpanExporter | undefined => {
 
   if (posthogApiKey) {
     logger.info('Initializing PostHog Trace Exporter...');
-    return new PostHogTraceExporter({
+    const exporter = new PostHogTraceExporter({
       projectToken: posthogApiKey.value,
       host: posthogHost?.value || 'https://us.i.posthog.com',
     });
+    // PostHogTraceExporter extends OTLPTraceExporter from
+    // @opentelemetry/exporter-trace-otlp-http 0.x, which doesn't satisfy the
+    // shutdown() requirement of SpanExporter from @opentelemetry/sdk-trace-base 2.x.
+    // Delegate export/shutdown to bridge the interface gap. The parent
+    // OTLPTraceExporter does have shutdown() at runtime; the type gap is from
+    // the 0.x → 2.x SDK version mismatch.
+    const delegate = exporter as unknown as { shutdown?: () => Promise<void> };
+    return {
+      export: exporter.export.bind(exporter),
+      shutdown: async () => {
+        await delegate.shutdown?.();
+      }
+    };
   }
 
   return undefined;
