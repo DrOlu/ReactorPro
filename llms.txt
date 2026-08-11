@@ -9736,6 +9736,8 @@ private getTaskNameFromPrompt(prompt: string): string
 ⋮----
 private async generateTaskNameInBackground(prompt: string): Promise<string | null>
 ⋮----
+private isWaitingForApproval(resultMessages: ContextMessage[]): boolean
+⋮----
 private async determineTaskState(resultMessages: ContextMessage[]): Promise<string | null>
 ⋮----
 // Find the last assistant message from result messages
@@ -10291,6 +10293,8 @@ public async revertLastMerge(): Promise<void>
 ⋮----
 // Clear merge state after successful revert
 ⋮----
+public async addFileToGit(filePath: string): Promise<void>
+⋮----
 public async restoreFile(filePath: string): Promise<void>
 ⋮----
 public async generateCommitMessage(): Promise<string>
@@ -10434,6 +10438,13 @@ import { getEffectiveEnvironmentVariable } from '@/utils/environment';
 import logger from '@/logger';
 ⋮----
 export const initializePostHogExporter = (): SpanExporter | undefined =>
+⋮----
+// PostHogTraceExporter extends OTLPTraceExporter from
+// @opentelemetry/exporter-trace-otlp-http 0.x, which doesn't satisfy the
+// shutdown() requirement of SpanExporter from @opentelemetry/sdk-trace-base 2.x.
+// Delegate export/shutdown to bridge the interface gap. The parent
+// OTLPTraceExporter does have shutdown() at runtime; the type gap is from
+// the 0.x → 2.x SDK version mismatch.
 ⋮----
 export const getPostHogAiderEnvironmentVariables = (baseDir: string, settings: SettingsData): Record<string, unknown> =>
 
@@ -11835,6 +11846,8 @@ private parseGitStatusEntries(stdout: string): string[]
 ⋮----
 private isSymlinkPath(cwd: string, filePath: string): boolean
 ⋮----
+private isDirectoryPath(cwd: string, filePath: string): boolean
+⋮----
 /**
    * Get updated files with per-commit and uncommitted diffs.
    *
@@ -11850,6 +11863,12 @@ async getUpdatedFiles(
     mainBranch?: string,
     groupMode: UpdatedFilesGroupMode = UpdatedFilesGroupMode.Grouped,
 ): Promise<UpdatedFile[]>
+⋮----
+private async includeUntrackedFiles(worktreePath: string, files: UpdatedFile[]): Promise<UpdatedFile[]>
+⋮----
+private async createUntrackedUpdatedFile(worktreePath: string, filePath: string): Promise<UpdatedFile>
+⋮----
+private formatDiffPath(filePath: string): string
 ⋮----
 /**
    * Worktree mode: separate committed (per-commit) and uncommitted file diffs.
@@ -11920,6 +11939,8 @@ private parseCommitDiff(patchOutput: string): Map<string, string>
 // Extract file path from "diff --git a/path b/path"
 ⋮----
 private async markConflictingFiles(worktreePath: string, files: UpdatedFile[]): Promise<UpdatedFile[]>
+⋮----
+async addFileToGit(worktreePath: string, filePath: string): Promise<void>
 ⋮----
 async restoreFile(worktreePath: string, filePath: string): Promise<void>
 ⋮----
@@ -12320,6 +12341,8 @@ async getLocalUncommittedFiles(baseDir: string, taskId: string): Promise<
 async applyUncommittedChanges(baseDir: string, taskId: string, targetBranch?: string): Promise<void>
 ⋮----
 async revertLastMerge(baseDir: string, taskId: string): Promise<void>
+⋮----
+async addFileToGit(baseDir: string, taskId: string, filePath: string): Promise<void>
 ⋮----
 async restoreFile(baseDir: string, taskId: string, filePath: string): Promise<void>
 ⋮----
@@ -13905,6 +13928,8 @@ getLocalUncommittedFiles(baseDir: string, taskId: string): Promise<WorktreeUncom
 applyUncommittedChanges(baseDir: string, taskId: string, targetBranch?: string): Promise<void>
 ⋮----
 revertLastMerge(baseDir: string, taskId: string): Promise<void>
+⋮----
+addFileToGit(baseDir: string, taskId: string, filePath: string): Promise<void>
 ⋮----
 restoreFile(baseDir: string, taskId: string, filePath: string): Promise<void>
 ⋮----
@@ -24108,6 +24133,8 @@ type Props = {
   onToggleRuleFile?: (filePaths: string[], disabled: boolean) => void;
   onFileDiffClick: (file: UpdatedFile) => void;
   onFilePreviewClick?: (filePath: string) => void;
+  onAddFileToGit?: (filePath: string) => void;
+  addingFilesToGit?: Set<string>;
   onRevertFile: (filePath: string) => void;
   onDropFile: (item: TreeItem) => (e: React.MouseEvent<HTMLButtonElement>) => void;
   onAddFile: (item: TreeItem) => (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -24204,6 +24231,8 @@ type Props = {
   onToggleRuleFile?: (filePaths: string[], disabled: boolean) => void;
   onFileDiffClick: (file: UpdatedFile) => void;
   onFilePreviewClick?: (filePath: string) => void;
+  onAddFileToGit?: (filePath: string) => void;
+  addingFilesToGit?: Set<string>;
   onRevertFile: (filePath: string) => void;
   onDropFile: (item: TreeItem) => (e: React.MouseEvent<HTMLButtonElement>) => void;
   onAddFile: (item: TreeItem) => (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -24399,6 +24428,8 @@ className=
 // Auto-expand folder items in each group's tree when tree data changes
 ⋮----
 // Auto-expand folders in flat tree when tree data changes
+⋮----
+// eslint-disable-next-line no-console
 ⋮----
 // eslint-disable-next-line no-console
 ⋮----
@@ -30057,7 +30088,7 @@ File: package.json
 ================
 {
   "name": "reactorpro",
-  "version": "0.78.0-dev",
+  "version": "0.79.0-dev",
   "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
@@ -30143,9 +30174,10 @@ File: package.json
     "@lancedb/lancedb": "^0.22.3",
     "@legendapp/list": "^3.3.3",
     "@openrouter/ai-sdk-provider": "3.0.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.77.0",
-    "@opentelemetry/sdk-node": "^0.219.0",
-    "@opentelemetry/sdk-trace-base": "^2.8.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.79.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/sdk-node": "^0.221.0",
+    "@opentelemetry/sdk-trace-base": "^2.10.0",
     "@pierre/diffs": "^1.2.12",
     "@posthog/ai": "^8.3.0",
     "@radix-ui/react-tooltip": "^1.2.8",
@@ -30213,6 +30245,7 @@ File: package.json
     "react-hotkeys-hook": "^4.6.2",
     "react-i18next": "^15.4.1",
     "react-icons": "^5.5.0",
+    "react-is": "^19.0.0",
     "react-markdown": "^10.1.0",
     "react-resizable": "^3.0.5",
     "react-rnd": "^10.5.3",
@@ -30230,7 +30263,7 @@ File: package.json
     "tmp": "^0.2.3",
     "tree-kill": "^1.2.2",
     "turndown": "^7.2.1",
-    "undici": "8.5.0",
+    "undici": "8.10.0",
     "unidiff": "^1.0.4",
     "unist-util-map": "^4.0.0",
     "use-sync-external-store": "^1.6.0",
@@ -30254,13 +30287,13 @@ File: package.json
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.1",
+    "@testing-library/react": "^16.3.2",
     "@types/handlebars": "^4.0.40",
     "@types/lodash": "^4.17.17",
     "@types/node": "^22.16.5",
     "@types/prismjs": "^1.26.5",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "@types/react-resizable": "^3.0.8",
     "@types/refractor": "^3.4.1",
     "@types/socket.io": "^3.0.1",
@@ -30271,10 +30304,10 @@ File: package.json
     "@vitest/ui": "^4.1.8",
     "adm-zip": "^0.6.0",
     "autoprefixer": "^10.4.20",
-    "concurrently": "^10.0.3",
+    "concurrently": "^10.0.4",
     "dts-bundle-generator": "^9.5.1",
-    "electron": "^39.8.5",
-    "electron-builder": "^26.8.1",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "encoding": "^0.1.13",
     "eslint": "^9.18.0",
@@ -30291,13 +30324,12 @@ File: package.json
     "lint-staged": "^15.4.1",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.3.2",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-is": "^19.2.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "sass-embedded": "^1.89.0",
     "tailwind-scrollbar": "^3.1.0",
     "tailwindcss": "^3.4.14",
-    "tar": "^7.5.13",
+    "tar": "^7.5.22",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.1",
     "vite": "^7.3.6",
