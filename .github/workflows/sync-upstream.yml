@@ -246,6 +246,32 @@ jobs:
             }
           "
 
+      - name: Re-inject json-schema-to-zod dependency
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # src/main/models/providers/claude-agent-sdk.ts imports
+          # @dmitryrechkin/json-schema-to-zod, which upstream package.json
+          # does not declare. The -X theirs merge + rebrand regenerates
+          # package.json from upstream, dropping the dependency, so the
+          # build typecheck fails with TS2307:
+          #   Cannot find module '@dmitryrechkin/json-schema-to-zod'.
+          # Re-inject it here on every sync, mirroring the
+          # ai-sdk-provider-claude-code re-inject step above.
+          node -e "
+            const fs = require('fs');
+            const pkg = require('./package.json');
+            const dep = '@dmitryrechkin/json-schema-to-zod';
+            const version = '^1.0.1';
+            pkg.dependencies = pkg.dependencies || {};
+            if (pkg.dependencies[dep] !== version) {
+              console.log('Re-injecting ' + dep + '@' + version + ' (was: ' + pkg.dependencies[dep] + ')');
+              pkg.dependencies[dep] = version;
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            } else {
+              console.log(dep + '@' + version + ' already present');
+            }
+          "
+
       - name: Rename files for branding
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |

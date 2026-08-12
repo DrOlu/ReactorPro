@@ -205,7 +205,19 @@ jobs:
       - name: Release Linux ARM64
         env:
           USE_SYSTEM_FPM: true
-        run: npm run build:linux -- --arm64 -p always
+        shell: bash
+        run: |
+          npm run build
+          # electron-builder downloads electron/app-builder binaries and runs
+          # code signing over the network; transient "socket hang up" errors
+          # are common (see run 31622034840). Retry the packaging step only —
+          # a real build failure fails fast, a network blip self-heals.
+          for i in 1 2 3; do
+            npx electron-builder --linux --arm64 -p always && exit 0
+            echo "::warning::electron-builder Linux ARM64 attempt $i failed (transient network error?), retrying in 30s..."
+            sleep 30
+          done
+          exit 1
 
   release-win:
     name: Release Windows packages
@@ -265,7 +277,19 @@ jobs:
       - name: Release Windows
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: npm run build && npx electron-builder --win -p always
+        shell: bash
+        run: |
+          npm run build
+          # electron-builder downloads electron/app-builder binaries and runs
+          # code signing over the network; transient "socket hang up" errors
+          # are common (see run 31622034840). Retry the packaging step only —
+          # a real build failure fails fast, a network blip self-heals.
+          for i in 1 2 3; do
+            npx electron-builder --win -p always && exit 0
+            echo "::warning::electron-builder Windows attempt $i failed (transient network error?), retrying in 30s..."
+            sleep 30
+          done
+          exit 1
 
       - name: Get release tag
         id: get_tag
