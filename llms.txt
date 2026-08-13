@@ -289,6 +289,10 @@ src/
           index.ts
           McpServerSelectorItem.tsx
         common/
+          CommandPalette/
+            CommandPalette.tsx
+            CommandPaletteContent.tsx
+            index.ts
           DiffViewer/
             CompactDiffViewer.tsx
             DiffLineCommentPanel.tsx
@@ -618,6 +622,7 @@ src/
       contexts/
         AgentsContext.tsx
         ApiContext.tsx
+        CommandPaletteContext.tsx
         ContextMenuContext.tsx
         DiffsWorkerPoolContext.tsx
         ExtensionApiContext.tsx
@@ -652,6 +657,7 @@ src/
         useAudioRecorder.ts
         useBooleanState.ts
         useClickOutside.ts
+        useCommandPaletteHotkeys.ts
         useCommands.ts
         useCommitChanges.ts
         useConfiguredHotkeys.ts
@@ -722,6 +728,7 @@ src/
         Settings.tsx
         UpdatedFilesDiff.tsx
       stores/
+        commandPaletteStore.ts
         commitStore.ts
         extensionUIStore.ts
         projectStore.ts
@@ -14168,6 +14175,56 @@ const loadTools = async () =>
 // eslint-disable-next-line no-console
 
 ================
+File: src/renderer/src/components/common/CommandPalette/CommandPalette.tsx
+================
+import { CommandPaletteContent } from './CommandPaletteContent';
+⋮----
+import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
+⋮----
+export const CommandPalette = () =>
+
+================
+File: src/renderer/src/components/common/CommandPalette/CommandPaletteContent.tsx
+================
+import { ChangeEvent, KeyboardEvent, MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { clsx } from 'clsx';
+⋮----
+import { TaskStateChip } from '@/components/common/TaskStateChip';
+import { PaletteItem, PaletteItemType, useCommandPaletteStore } from '@/stores/commandPaletteStore';
+⋮----
+enum PaletteTab {
+  All = 'all',
+  Files = 'file',
+  Actions = 'action',
+  Tasks = 'task',
+  Projects = 'project',
+}
+⋮----
+const fuzzyMatch = (query: string, text: string):
+⋮----
+const getTabForItem = (item: PaletteItem): PaletteTab =>
+⋮----
+const getMatches = (itemsToSearch: PaletteItem[])
+⋮----
+const handleEscape = (event: globalThis.KeyboardEvent) =>
+⋮----
+const handleListScroll = () =>
+⋮----
+const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) =>
+⋮----
+const handleBackdropClick = () =>
+⋮----
+const handleContentClick = (event: MouseEvent<HTMLDivElement>) =>
+⋮----
+onClick=
+
+================
+File: src/renderer/src/components/common/CommandPalette/index.ts
+================
+
+
+================
 File: src/renderer/src/components/common/DiffViewer/CompactDiffViewer.tsx
 ================
 import React, { useMemo, FC } from 'react';
@@ -20490,7 +20547,7 @@ import {
   useProjectStore,
 } from '@/stores/projectStore';
 import { unloadTasks } from '@/stores/taskStore';
-import { releaseTaskFiles } from '@/stores/taskFilesStore';
+import { releaseTaskFiles, useTaskAllFiles } from '@/stores/taskFilesStore';
 import { getTaskDir, getSortedVisibleTasks } from '@/utils/task-utils';
 import { cleanupProjectCache } from '@/stores/extensionUIStore';
 import { cleanupProcessingResponseMessage } from '@/hooks/useTaskResponseHandlers';
@@ -20508,12 +20565,19 @@ import { showInfoNotification } from '@/utils/notifications';
 import { ExtensionsProvider } from '@/contexts/ExtensionsContext';
 import { FloatingExtensionPanels } from '@/components/extensions/FloatingExtensionPanels';
 import { useActiveAgentProfile } from '@/utils/agents';
+import { PaletteItemType, useCommandPaletteStore } from '@/stores/commandPaletteStore';
+import { FileEditorModal } from '@/components/Workspace/FileEditorModal';
 ⋮----
 type Props = {
   projectDir: string;
   isProjectActive?: boolean;
   showSettingsPage?: (pageId?: string, options?: Record<string, unknown>) => void;
   initialTaskId?: string;
+};
+⋮----
+type PreviewFile = {
+  path: string;
+  taskId: string;
 };
 ⋮----
 // eslint-disable-next-line no-console
@@ -24933,6 +24997,11 @@ export const useOptionalApi = (): ApplicationAPI | undefined
 export const useApi = (): ApplicationAPI =>
 
 ================
+File: src/renderer/src/contexts/CommandPaletteContext.tsx
+================
+
+
+================
 File: src/renderer/src/contexts/ContextMenuContext.tsx
 ================
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -25324,6 +25393,16 @@ const listener = (event: MouseEvent) =>
 // Check if the click is outside all provided refs
 ⋮----
 // Ignore clicks on null refs or if the ref doesn't contain the target
+
+================
+File: src/renderer/src/hooks/useCommandPaletteHotkeys.ts
+================
+import { useHotkeys } from 'react-hotkeys-hook';
+⋮----
+import { useConfiguredHotkeys } from '@/hooks/useConfiguredHotkeys';
+import { useCommandPaletteStore } from '@/stores/commandPaletteStore';
+⋮----
+export const useCommandPaletteHotkeys = () =>
 
 ================
 File: src/renderer/src/hooks/useCommands.ts
@@ -26634,6 +26713,7 @@ import { showInfoNotification } from '@/utils/notifications';
 import { useApi } from '@/contexts/ApiContext';
 import { URL_PARAMS, encodeBaseDir, decodeBaseDir, ROUTES } from '@/utils/routes';
 import { useBooleanState } from '@/hooks/useBooleanState';
+import { PaletteItemType, useCommandPaletteStore } from '@/stores/commandPaletteStore';
 ⋮----
 type ShowSettingsInfo = {
   pageId: string;
@@ -26937,6 +27017,53 @@ import { URL_PARAMS, decodeBaseDir } from '@/utils/routes';
 const loadFiles = async () =>
 ⋮----
 // eslint-disable-next-line no-console
+
+================
+File: src/renderer/src/stores/commandPaletteStore.ts
+================
+import { devtools } from 'zustand/middleware';
+import { createWithEqualityFn } from 'zustand/traditional';
+⋮----
+export enum PaletteItemType {
+  Action = 'action',
+  File = 'file',
+  Task = 'task',
+  Project = 'project',
+}
+⋮----
+export type PaletteItem = {
+  id: string;
+  label: string;
+  description?: string;
+  state?: string;
+  archived?: boolean;
+  type: PaletteItemType;
+  shortcut?: string;
+  action: () => void;
+};
+⋮----
+type CommandPaletteStore = {
+  isOpen: boolean;
+  items: Map<string, PaletteItem>;
+  recentlyUsed: string[];
+  itemIdsByScope: Map<string, Set<string>>;
+  itemsByScope: Map<string, Map<string, PaletteItem>>;
+
+  openPalette: () => void;
+  closePalette: () => void;
+  togglePalette: () => void;
+  replaceItems: (scope: string, items: PaletteItem[]) => void;
+  clearItems: (scope: string) => void;
+  addRecentlyUsed: (itemId: string) => void;
+};
+⋮----
+const loadRecentlyUsed = (): string[] =>
+⋮----
+const saveRecentlyUsed = (ids: string[]) =>
+⋮----
+// Ignore storage errors.
+⋮----
+const hasSameMetadata = (first: PaletteItem, second: PaletteItem)
 
 ================
 File: src/renderer/src/stores/commitStore.ts
@@ -29742,6 +29869,8 @@ import { DiffsWorkerPoolProvider } from '@/contexts/DiffsWorkerPoolContext';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { ReadonlyApp } from '@/pages/ReadonlyApp';
 import { loadBrowserBootstrap } from '@/api/readonly-browser-api';
+import { CommandPalette } from '@/components/common/CommandPalette';
+import { useCommandPaletteHotkeys } from '@/hooks/useCommandPaletteHotkeys';
 ⋮----
 const ModalOverlayUrlHandler = () =>
 ⋮----
@@ -30210,9 +30339,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "reactorpro",
+  "name": "aider-desk",
   "version": "0.79.0-dev",
-  "description": "ReactorPro - AI coding agent for software engineers",
+  "description": "Aider desktop application wrapper",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
@@ -30284,7 +30413,6 @@ File: package.json
     "@codemirror/autocomplete": "^6.18.7",
     "@codemirror/language": "^6.12.2",
     "@codemirror/language-data": "^6.5.2",
-    "@dmitryrechkin/json-schema-to-zod": "^1.0.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dotenvx/dotenvx": "^1.24.5",
@@ -30299,7 +30427,7 @@ File: package.json
     "@legendapp/list": "^3.3.3",
     "@openrouter/ai-sdk-provider": "3.0.0",
     "@opentelemetry/auto-instrumentations-node": "^0.79.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
     "@opentelemetry/sdk-node": "^0.221.0",
     "@opentelemetry/sdk-trace-base": "^2.10.0",
     "@pierre/diffs": "^1.2.12",
@@ -30307,7 +30435,7 @@ File: package.json
     "@radix-ui/react-tooltip": "^1.2.8",
     "@reactuses/core": "^6.0.6",
     "@replit/codemirror-vim": "^6.3.0",
-    "@requesty/ai-sdk": "3.5.0",
+    "@requesty/ai-sdk": "3.6.0",
     "@smithy/eventstream-codec": "^2.0.0",
     "@smithy/protocol-http": "^3.3.0",
     "@smithy/signature-v4": "^2.0.0",
