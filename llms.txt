@@ -590,9 +590,12 @@ src/
           DiffFileItem.tsx
           DiffFilesSidebar.tsx
           EmptyContextInfo.tsx
-          FileViewerModal.tsx
+          fileEditorInlineRequests.tsx
+          FileEditorModal.tsx
+          fileEditorUtils.ts
           group-files.ts
           index.ts
+          InlineChangeRequest.tsx
           ProjectFilesSection.tsx
           RulesSection.tsx
           SectionContent.tsx
@@ -23839,7 +23842,7 @@ import { useTranslation } from 'react-i18next';
 ⋮----
 import { WorkspaceSection } from './WorkspaceSection';
 import { EmptyContextInfo } from './EmptyContextInfo';
-import { FileViewerModal } from './FileViewerModal';
+import { FileEditorModal } from './FileEditorModal';
 import { createFileTree } from './types';
 ⋮----
 import type { TreeItem } from './types';
@@ -23968,32 +23971,112 @@ type Props = {
 };
 
 ================
-File: src/renderer/src/components/Workspace/FileViewerModal.tsx
+File: src/renderer/src/components/Workspace/fileEditorInlineRequests.tsx
 ================
-import { type MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { Decoration, EditorView, WidgetType } from '@codemirror/view';
+import { StateField, type Text } from '@codemirror/state';
+⋮----
+import { InlineChangeRequest } from './InlineChangeRequest';
+⋮----
+import type { Extension } from '@uiw/react-codemirror';
+⋮----
+type ChangeRequest = {
+  id: string;
+  position: number;
+  comment: string;
+};
+⋮----
+type Options = {
+  changeRequests: ChangeRequest[];
+  editLabel: string;
+  deleteLabel: string;
+  onEdit: (id: string, rect: DOMRect) => void;
+  onRemove: (id: string) => void;
+};
+⋮----
+class InlineChangeRequestWidget extends WidgetType
+⋮----
+constructor(
+    private readonly changeRequest: ChangeRequest,
+    private readonly editLabel: string,
+    private readonly deleteLabel: string,
+    private readonly onEdit: Options['onEdit'],
+    private readonly onRemove: Options['onRemove'],
+)
+⋮----
+eq(other: WidgetType): boolean
+⋮----
+toDOM(): HTMLElement
+⋮----
+destroy(dom: HTMLElement): void
+⋮----
+ignoreEvent(): boolean
+⋮----
+const createDecorations = (document: Text, options: Options) =>
+⋮----
+export const createInlineChangeRequestsExtension = (options: Options): Extension =>
+
+================
+File: src/renderer/src/components/Workspace/FileEditorModal.tsx
+================
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
-import { HiOutlineExclamation, HiPencil, HiTrash } from 'react-icons/hi';
+import { HiOutlineExclamation } from 'react-icons/hi';
+import { MdSave } from 'react-icons/md';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { File, type FileProps, type LineAnnotation, type LineEventBaseProps } from '@pierre/diffs/react';
+import { LanguageDescription } from '@codemirror/language';
+import { languages } from '@codemirror/language-data';
+import { EditorView, GutterMarker, gutter, lineNumbers } from '@codemirror/view';
+import { githubDarkInit } from '@uiw/codemirror-theme-github';
+import CodeMirror, { type Extension } from '@uiw/react-codemirror';
 ⋮----
-import { ModalOverlayLayout } from '@/components/common/ModalOverlayLayout';
+import { remapLineAnchors } from './fileEditorUtils';
+import { createInlineChangeRequestsExtension } from './fileEditorInlineRequests';
+import { CommentsPanel } from './CommentsPanel';
+⋮----
+import { Button } from '@/components/common/Button';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { DiffLineCommentPanel } from '@/components/common/DiffViewer';
-import { CommentsPanel } from '@/components/Workspace/CommentsPanel';
+import { ModalOverlayLayout } from '@/components/common/ModalOverlayLayout';
 import { useApi } from '@/contexts/ApiContext';
+import { showErrorNotification, showSuccessNotification, showWarningNotification } from '@/utils/notifications';
 ⋮----
 type PendingComment = {
   id: string;
   filePath: string;
   lineNumber: number;
+  position: number;
   comment: string;
 };
 ⋮----
 type ActiveLineInfo = {
-  lineKey: string;
   lineNumber: number;
+  position: number;
   viewportRect: { top: number; left: number };
 };
+⋮----
+type EditCommentInfo = {
+  commentId: string;
+  viewportRect: { top: number; left: number };
+  initialText: string;
+};
+⋮----
+type LineSelectHandler = (lineNumber: number, position: number, rect: DOMRect) => void;
+⋮----
+class ChangeRequestGutterMarker extends GutterMarker
+⋮----
+constructor(
+    private readonly lineNumber: number,
+    private readonly position: number,
+    private readonly label: string,
+    private readonly onSelect: LineSelectHandler,
+)
+⋮----
+eq(other: GutterMarker): boolean
+⋮----
+toDOM(): HTMLElement
 ⋮----
 type Props = {
   filePath: string;
@@ -24004,12 +24087,8 @@ type Props = {
 ⋮----
 const fetchFileContent = async () =>
 ⋮----
-// eslint-disable-next-line no-console
-⋮----
-const handleEdit = (e: MouseEvent<HTMLButtonElement>) =>
-const handleRemove = ()
-⋮----
-onMouseDown=
+const getLineNumber = (position: number)
+const mapPosition = (position: number)
 ⋮----
 const renderLoading = () => (
     <div className="flex items-center justify-center h-full">
@@ -24018,6 +24097,22 @@ const renderLoading = () => (
   );
 ⋮----
 <ModalOverlayLayout title=
+⋮----
+title=
+
+================
+File: src/renderer/src/components/Workspace/fileEditorUtils.ts
+================
+type LineAnchor = {
+  position: number;
+  lineNumber: number;
+};
+⋮----
+export const remapLineAnchors = <T extends LineAnchor>(
+  anchors: T[],
+  mapPosition: (position: number) => number,
+  getLineNumber: (position: number) => number,
+): T[]
 
 ================
 File: src/renderer/src/components/Workspace/group-files.ts
@@ -24036,6 +24131,28 @@ File: src/renderer/src/components/Workspace/index.ts
 
 
 ================
+File: src/renderer/src/components/Workspace/InlineChangeRequest.tsx
+================
+import { type MouseEvent } from 'react';
+import { HiPencil, HiTrash } from 'react-icons/hi';
+⋮----
+type Props = {
+  comment: string;
+  editLabel: string;
+  deleteLabel: string;
+  onEdit: (rect: DOMRect) => void;
+  onRemove: () => void;
+};
+⋮----
+export const InlineChangeRequest = (
+⋮----
+const handleEdit = (event: MouseEvent<HTMLButtonElement>) =>
+⋮----
+const handleRemove = (event: MouseEvent<HTMLButtonElement>) =>
+⋮----
+const handleMouseDown = (event: MouseEvent<HTMLButtonElement>) =>
+
+================
 File: src/renderer/src/components/Workspace/ProjectFilesSection.tsx
 ================
 import { ContextFile, OS, TokensCost } from '@common/types';
@@ -24048,7 +24165,7 @@ import { useTranslation } from 'react-i18next';
 import { useDebounce, useLocalStorage } from '@reactuses/core';
 import { AnimatePresence, motion } from 'framer-motion';
 import { clsx } from 'clsx';
-import { FileViewerModal } from 'src/renderer/src/components/Workspace/FileViewerModal';
+import { FileEditorModal } from 'src/renderer/src/components/Workspace/FileEditorModal';
 ⋮----
 import { WorkspaceSection } from './WorkspaceSection';
 import { normalizePath, createFileTree } from './types';
@@ -24097,7 +24214,7 @@ import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 ⋮----
 import { SectionHeader } from './SectionHeader';
-import { FileViewerModal } from './FileViewerModal';
+import { FileEditorModal } from './FileEditorModal';
 ⋮----
 import { Tooltip } from '@/components/ui/Tooltip';
 import { TriStateCheckbox } from '@/components/common/TriStateCheckbox';
@@ -24185,7 +24302,7 @@ import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 ⋮----
 import { SectionHeader } from './SectionHeader';
-import { FileViewerModal } from './FileViewerModal';
+import { FileEditorModal } from './FileEditorModal';
 ⋮----
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useApi } from '@/contexts/ApiContext';
@@ -30166,6 +30283,7 @@ File: package.json
     "@aws-sdk/types": "^3.973.10",
     "@codemirror/autocomplete": "^6.18.7",
     "@codemirror/language": "^6.12.2",
+    "@codemirror/language-data": "^6.5.2",
     "@dmitryrechkin/json-schema-to-zod": "^1.0.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
