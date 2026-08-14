@@ -30339,9 +30339,9 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 File: package.json
 ================
 {
-  "name": "aider-desk",
+  "name": "reactorpro",
   "version": "0.79.0-dev",
-  "description": "Aider desktop application wrapper",
+  "description": "ReactorPro - AI coding agent for software engineers",
   "main": "./out/main/index.js",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
@@ -30413,6 +30413,7 @@ File: package.json
     "@codemirror/autocomplete": "^6.18.7",
     "@codemirror/language": "^6.12.2",
     "@codemirror/language-data": "^6.5.2",
+    "@dmitryrechkin/json-schema-to-zod": "^1.0.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dotenvx/dotenvx": "^1.24.5",
@@ -30435,7 +30436,7 @@ File: package.json
     "@radix-ui/react-tooltip": "^1.2.8",
     "@reactuses/core": "^6.0.6",
     "@replit/codemirror-vim": "^6.3.0",
-    "@requesty/ai-sdk": "3.6.0",
+    "@requesty/ai-sdk": "3.5.0",
     "@smithy/eventstream-codec": "^2.0.0",
     "@smithy/protocol-http": "^3.3.0",
     "@smithy/signature-v4": "^2.0.0",
