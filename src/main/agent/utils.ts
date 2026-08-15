@@ -118,7 +118,7 @@ export class BoundedOutputAccumulator {
 
   private startSpill(initialContent: string): void {
     const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
-    const spillPath = path.join(tmpdir(), `aider-desk-tool-output-${id}.log`);
+    const spillPath = path.join(tmpdir(), `reactorpro-tool-output-${id}.log`);
     try {
       const stream = createWriteStream(spillPath, { encoding: 'utf8' });
       stream.on('error', () => {

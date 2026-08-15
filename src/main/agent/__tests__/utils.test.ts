@@ -517,7 +517,7 @@ describe('stringifyWithBudget', () => {
 });
 
 describe('readFileContent large files', () => {
-  const largeTmpDir = path.join(os.tmpdir(), 'aider-desk-test-readFileContent-large');
+  const largeTmpDir = path.join(os.tmpdir(), 'reactorpro-test-readFileContent-large');
 
   afterEach(async () => {
     await fs.rm(largeTmpDir, { recursive: true, force: true });
