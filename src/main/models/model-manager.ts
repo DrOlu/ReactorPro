@@ -3,7 +3,18 @@ import path from 'path';
 
 import { AVAILABLE_PROVIDERS, getDefaultProviderParams, LlmProvider, LlmProviderName } from '@common/agent';
 import { ProviderDefinition } from '@common/extensions';
-import { Model, ModelInfo, ModelOverrides, ProviderModelsData, ProviderProfile, Reasoning, SettingsData, UsageReportData, VoiceSession } from '@common/types';
+import {
+  Model,
+  ModelInfo,
+  ModelOverrides,
+  ProviderModelsData,
+  ProviderProfile,
+  Reasoning,
+  SettingsData,
+  TlsPolicyRegistrar,
+  UsageReportData,
+  VoiceSession,
+} from '@common/types';
 import { extractProviderModel } from '@common/utils';
 
 import { anthropicProviderStrategy } from './providers/anthropic';
@@ -124,6 +135,7 @@ export class ModelManager {
   constructor(
     private store: Store,
     private eventManager: EventManager,
+    private readonly tlsRegistrar?: TlsPolicyRegistrar,
   ) {
     this.initPromise = this.init();
   }
@@ -319,7 +331,7 @@ export class ModelManager {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
 
-      lastResponse = await strategy.loadModels(profile, this.store.getSettings());
+      lastResponse = await strategy.loadModels(profile, this.store.getSettings(), this.tlsRegistrar);
       if (lastResponse.success) {
         return lastResponse;
       }
@@ -756,7 +768,7 @@ export class ModelManager {
       throw new Error(`Model not found: ${model}`);
     }
 
-    return strategy.createLlm(provider, modelObj, settings, projectDir, toolSet, systemPrompt, providerMetadata);
+    return strategy.createLlm(provider, modelObj, settings, projectDir, toolSet, systemPrompt, providerMetadata, this.tlsRegistrar);
   }
 
   getUsageReport(task: Task, provider: ProviderProfile, model: string | Model, usage: LanguageModelUsage, providerMetadata?: unknown): UsageReportData {
@@ -975,8 +987,10 @@ export class ModelManager {
 
       this.providerRegistry[provider.provider.name] = {
         ...provider.strategy,
-        createLlm: (profile, model, settings, projectDir, toolSet, systemPrompt, providerMetadata) =>
-          provider.strategy.createLlm(profile, model, settings, projectDir, toolSet, systemPrompt, providerMetadata) as LanguageModel | Promise<LanguageModel>,
+        createLlm: (profile, model, settings, projectDir, toolSet, systemPrompt, providerMetadata, tlsRegistrar) =>
+          provider.strategy.createLlm(profile, model, settings, projectDir, toolSet, systemPrompt, providerMetadata, tlsRegistrar) as
+            | LanguageModel
+            | Promise<LanguageModel>,
         getUsageReport: provider.strategy.getUsageReport || getDefaultUsageReport,
         getProviderOptions: provider.strategy.getProviderOptions
           ? (_provider, model, reasoning) => provider.strategy.getProviderOptions!(model, reasoning)

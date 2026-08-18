@@ -151,6 +151,8 @@ export interface AnthropicCompatibleProvider extends LlmProviderBase {
   name: 'anthropic-compatible';
   apiKey: string;
   baseUrl?: string;
+  sslVerify?: boolean;
+  caCertPath?: string;
 }
 export const isAnthropicCompatibleProvider = (provider: LlmProviderBase): provider is AnthropicCompatibleProvider => provider.name === 'anthropic-compatible';
 export interface ClaudeAgentSdkProvider extends LlmProviderBase {
@@ -255,6 +257,8 @@ export interface OpenAiCompatibleProvider extends LlmProviderBase {
   reasoningEffort?: ReasoningEffort;
   trackTokenUsage?: boolean;
   extraBody?: Record<string, unknown>;
+  sslVerify?: boolean;
+  caCertPath?: string;
 }
 export const isOpenAiCompatibleProvider = (provider: LlmProviderBase): provider is OpenAiCompatibleProvider => provider.name === 'openai-compatible';
 
