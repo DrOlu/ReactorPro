@@ -173,6 +173,13 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # --no-verify: skip the husky pre-commit hook (lint-staged + typecheck + test).
+          # This automated dependency-bump only stages package.json/package-lock.json,
+          # which don't match the *.{ts,tsx} lint-staged globs, so the hook errors with
+          # "No staged files match any configured task". The resulting PR is still gated
+          # by pr-check.yml (lint + typecheck + test), matching the convention in
+          # update-llms-txt.yml.
+          commit-options: '--no-verify'
           commit-message: "chore: update AI SDK dependencies to latest versions within same major version"
           title: "chore: update AI SDK dependencies"
           body: |
