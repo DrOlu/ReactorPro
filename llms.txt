@@ -31157,9 +31157,7 @@ File: package.json
     "yaml": "2.8.3",
     "yaml-front-matter": "4.1.1",
     "zod": "4.3.6",
-    "zustand": "5.0.11",
-    "ai-sdk-provider-claude-code": "4.0.1",
-    "@dmitryrechkin/json-schema-to-zod": "^1.0.1"
+    "zustand": "5.0.11"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "2.0.0",
