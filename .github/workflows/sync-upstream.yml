@@ -272,6 +272,33 @@ jobs:
             }
           "
 
+      - name: Re-inject @testing-library/dom peer dependency
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # @testing-library/react@16 re-exports screen/fireEvent/waitFor via
+          # `export * from '@testing-library/dom'`, but declares @testing-library/dom
+          # only as a peerDependency. Upstream has no .npmrc, so npm auto-installs
+          # the peer and the web typecheck passes. ReactorPro ships .npmrc with
+          # legacy-peer-deps=true (needed for the posthog/ai peer conflict), which
+          # disables peer auto-install — so the lockfile drops @testing-library/dom
+          # and `tsc -p tsconfig.web.json` fails with TS2305 on screen/fireEvent/waitEvent.
+          # The -X theirs merge + rebrand regenerates package.json from upstream, which
+          # does not declare this dependency, so re-inject it as a devDependency on every sync.
+          node -e "
+            const fs = require('fs');
+            const pkg = require('./package.json');
+            const dep = '@testing-library/dom';
+            const version = '10.4.1';
+            pkg.devDependencies = pkg.devDependencies || {};
+            if (pkg.devDependencies[dep] !== version) {
+              console.log('Re-injecting ' + dep + '@' + version + ' (was: ' + pkg.devDependencies[dep] + ')');
+              pkg.devDependencies[dep] = version;
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');
+            } else {
+              console.log(dep + '@' + version + ' already present');
+            }
+          "
+
       - name: Rename files for branding
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
