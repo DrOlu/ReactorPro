@@ -9,6 +9,11 @@
 - added validator script for extension UI component to be used by extension-creator skill
 - added responsive design for Settings
 - fixed providers API not returning data after update and added runtime array checks for provider data
+- fixed task loading state not being reset on error
+- disabled router transitions to prevent UI issues
+- fixed syntax highlighting during tool message streaming
+- added result limits to glob tool to prevent excessive output
+- fixed excessive bottom padding causing empty space under messages in virtualized list
 
 ## [0.79.0]
 
