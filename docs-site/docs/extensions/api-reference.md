@@ -91,6 +91,9 @@ Passed to all extension methods, providing access to ReactorPro APIs.
 
 ```typescript
 interface ExtensionContext {
+  // Disposable resource management
+  addDisposable(setup: () => (() => void | Promise<void>) | void): void;
+
   // Logging
   log(message: string, type?: 'info' | 'error' | 'warn' | 'debug'): void;
 
@@ -129,7 +132,8 @@ interface ExtensionContext {
 
 | Method | Description |
 |--------|-------------|
-| `log(message, type?)` | Log a message to ReactorPro console and log files |
+| `addDisposable(setup)` | Register a setup function whose returned cleanup function is called automatically on extension unload (LIFO order). Setup runs immediately. The cleanup may be synchronous or asynchronous (return a `Promise`) — async cleanups are awaited during unload, and errors are logged without blocking other cleanups. If it returns `void`, no cleanup is registered. |
+| `log(message, type?)` | Log a message to AiderDesk console and log files |
 | `getProjectDir()` | Get the current project directory path |
 | `getOpenProjectDirs()` | Get the base directories of all currently open projects |
 | `getTaskContext()` | Get the current task context (null if no task active) |
