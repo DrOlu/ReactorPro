@@ -474,7 +474,7 @@ describe('Extension Lifecycle', () => {
     });
 
     it('should preserve project context when re-initializing a project extension', async () => {
-      const filePath = '/proj/.aider-desk/extensions/ext.ts';
+      const filePath = '/proj/.reactorpro/extensions/ext.ts';
       vi.spyOn(mockDeps.store, 'getSettings').mockReturnValue(settingsWithDisabled([filePath]));
       let projectDir = '';
       const extension: Extension = {
