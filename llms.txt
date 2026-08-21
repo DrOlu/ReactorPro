@@ -1769,7 +1769,7 @@ import { ChildProcess } from 'node:child_process';
 import treeKill from 'tree-kill';
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
-import { glob } from 'glob';
+import { globIterate } from 'glob';
 import { AgentProfile, BashToolSettings, FileWriteMode, PromptContext, ToolApprovalState } from '@common/types';
 import {
   POWER_TOOL_BASH as TOOL_BASH,
@@ -15035,7 +15035,7 @@ import { DiffViewer, UDiffViewer, CompactDiffViewer } from '@/components/common/
 import { useApi } from '@/contexts/ApiContext';
 import { useSaveSettings, useSettingsStore } from '@/stores/settingsStore';
 import { useResponsive } from '@/hooks/useResponsive';
-import { highlightWithLowlight, lowlight } from '@/utils/highlighter';
+import { highlightWithLowlight } from '@/utils/highlighter';
 ⋮----
 const isCustomDiffContent = (content: string): boolean =>
 ⋮----
@@ -18189,8 +18189,6 @@ const handleTouchStart = (e: TouchEvent) =>
 const handleTouchMove = (e: TouchEvent) =>
 ⋮----
 const scrollToEndIfFollowing = () =>
-⋮----
-// when content no longer overflows the container (e.g. messages cleared), unpause follow-scroll
 ⋮----
 const exportToImage = async () =>
 ⋮----
@@ -31157,7 +31155,9 @@ File: package.json
     "yaml": "2.8.3",
     "yaml-front-matter": "4.1.1",
     "zod": "4.3.6",
-    "zustand": "5.0.11"
+    "zustand": "5.0.11",
+    "ai-sdk-provider-claude-code": "4.0.1",
+    "@dmitryrechkin/json-schema-to-zod": "^1.0.1"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "2.0.0",
@@ -31166,6 +31166,7 @@ File: package.json
     "@modelcontextprotocol/sdk": "1.30.0",
     "@playwright/test": "1.60.0",
     "@tailwindcss/typography": "0.5.19",
+    "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "@types/handlebars": "4.0.40",
