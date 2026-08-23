@@ -22,7 +22,7 @@ enum OpenProjectMode {
 
 const isValidRepositoryUrl = (url: string): boolean => /^https?:\/\/\S+\/\S+$/i.test(url.trim());
 
-const CLONE_DESTINATION_STORAGE_KEY = 'aider-desk-clone-destination';
+const CLONE_DESTINATION_STORAGE_KEY = 'reactorpro-clone-destination';
 
 type Props = {
   onClose: () => void;

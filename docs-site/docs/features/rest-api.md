@@ -416,7 +416,7 @@ Pastes an image from clipboard into the project.
   ```
 
 #### Clone Project
-Clones a git repository into the AiderDesk projects directory (`~/.aider-desk/projects`) by default. Set `targetDir` to clone into a different folder. Only full HTTP and HTTPS repository URLs are accepted.
+Clones a git repository into the ReactorPro projects directory (`~/.reactorpro/projects`) by default. Set `targetDir` to clone into a different folder. Only full HTTP and HTTPS repository URLs are accepted.
 
 - **Endpoint**: `POST /api/project/clone`
 - **Request Body**:
@@ -429,7 +429,7 @@ Clones a git repository into the AiderDesk projects directory (`~/.aider-desk/pr
   | Field | Type | Required | Description |
   |-------|------|----------|-------------|
   | `repositoryUrl` | string | Yes | Full HTTP or HTTPS repository URL |
-  | `targetDir` | string | No | Parent folder for the cloned repository; defaults to `~/.aider-desk/projects` |
+  | `targetDir` | string | No | Parent folder for the cloned repository; defaults to `~/.reactorpro/projects` |
 - **Response**: `200 OK`
   ```json
   {

@@ -15,7 +15,7 @@ vi.mock('@/logger', () => ({
 }));
 
 vi.mock('@/constants', () => ({
-  AIDER_DESK_PROJECTS_DIR: '/home/user/.aider-desk/projects',
+  AIDER_DESK_PROJECTS_DIR: '/home/user/.reactorpro/projects',
 }));
 
 vi.mock('fs', () => ({
@@ -83,7 +83,7 @@ describe('parseRepositoryUrl', () => {
 });
 
 describe('cloneProjectRepository', () => {
-  const targetDir = '/tmp/aider-desk-projects';
+  const targetDir = '/tmp/reactorpro-projects';
 
   const getMockClone = () => {
     const git = vi.mocked(simpleGit).mock.results[0]?.value as { clone: ReturnType<typeof vi.fn> };
@@ -103,23 +103,23 @@ describe('cloneProjectRepository', () => {
   it('uses the default directory when no target directory is provided', async () => {
     const result = await cloneProjectRepository('https://github.com/owner/my-repo.git');
 
-    expect(result).toBe('/home/user/.aider-desk/projects/my-repo');
-    expect(fs.promises.mkdir).toHaveBeenCalledWith('/home/user/.aider-desk/projects', { recursive: true });
+    expect(result).toBe('/home/user/.reactorpro/projects/my-repo');
+    expect(fs.promises.mkdir).toHaveBeenCalledWith('/home/user/.reactorpro/projects', { recursive: true });
   });
 
   it('uses the default directory when target directory is blank', async () => {
     const result = await cloneProjectRepository('https://github.com/owner/my-repo.git', '   ');
 
-    expect(result).toBe('/home/user/.aider-desk/projects/my-repo');
-    expect(fs.promises.mkdir).toHaveBeenCalledWith('/home/user/.aider-desk/projects', { recursive: true });
+    expect(result).toBe('/home/user/.reactorpro/projects/my-repo');
+    expect(fs.promises.mkdir).toHaveBeenCalledWith('/home/user/.reactorpro/projects', { recursive: true });
   });
 
   it('clones repository into target directory', async () => {
     const result = await cloneProjectRepository('https://github.com/owner/my-repo.git', targetDir);
 
-    expect(result).toBe('/tmp/aider-desk-projects/my-repo');
+    expect(result).toBe('/tmp/reactorpro-projects/my-repo');
     expect(fs.promises.mkdir).toHaveBeenCalledWith(targetDir, { recursive: true });
-    expect(getMockClone()).toHaveBeenCalledWith('https://github.com/owner/my-repo.git', '/tmp/aider-desk-projects/my-repo');
+    expect(getMockClone()).toHaveBeenCalledWith('https://github.com/owner/my-repo.git', '/tmp/reactorpro-projects/my-repo');
   });
 
   it('appends suffix when directory name already exists', async () => {
@@ -127,8 +127,8 @@ describe('cloneProjectRepository', () => {
 
     const result = await cloneProjectRepository('https://github.com/owner/my-repo.git', targetDir);
 
-    expect(result).toBe('/tmp/aider-desk-projects/my-repo-2');
-    expect(getMockClone()).toHaveBeenCalledWith('https://github.com/owner/my-repo.git', '/tmp/aider-desk-projects/my-repo-2');
+    expect(result).toBe('/tmp/reactorpro-projects/my-repo-2');
+    expect(getMockClone()).toHaveBeenCalledWith('https://github.com/owner/my-repo.git', '/tmp/reactorpro-projects/my-repo-2');
   });
 
   it('removes partial clone and rethrows on failure', async () => {
@@ -141,6 +141,6 @@ describe('cloneProjectRepository', () => {
     );
 
     await expect(cloneProjectRepository('https://github.com/owner/my-repo.git', targetDir)).rejects.toThrow('repository not found');
-    expect(fs.promises.rm).toHaveBeenCalledWith('/tmp/aider-desk-projects/my-repo', { recursive: true, force: true });
+    expect(fs.promises.rm).toHaveBeenCalledWith('/tmp/reactorpro-projects/my-repo', { recursive: true, force: true });
   });
 });

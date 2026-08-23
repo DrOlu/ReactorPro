@@ -129,7 +129,7 @@ describe('OpenProjectDialog', () => {
   });
 
   it('preloads and clears the saved clone destination', async () => {
-    localStorage.setItem('aider-desk-clone-destination', '/custom/projects');
+    localStorage.setItem('reactorpro-clone-destination', '/custom/projects');
     render(<OpenProjectDialog onClose={vi.fn()} onAddProject={vi.fn()} openProjects={[]} />);
 
     fireEvent.click(screen.getByText('dialogs.cloneFromGit'));
@@ -141,7 +141,7 @@ describe('OpenProjectDialog', () => {
     fireEvent.change(destinationInput, { target: { value: '' } });
 
     expect(destinationInput).toHaveValue('');
-    expect(localStorage.getItem('aider-desk-clone-destination')).toBeNull();
+    expect(localStorage.getItem('reactorpro-clone-destination')).toBeNull();
 
     fireEvent.change(screen.getByTestId('repository-url-input'), { target: { value: 'https://github.com/owner/repo.git' } });
     fireEvent.click(screen.getByText('common.clone'));
