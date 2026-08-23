@@ -56,6 +56,7 @@ export type LlmProviderName =
   | 'openai'
   | 'openai-compatible'
   | 'opencode'
+  | 'opencode-go'
   | 'openrouter'
   | 'requesty'
   | 'synthetic'
@@ -104,6 +105,7 @@ export const AVAILABLE_PROVIDERS: LlmProviderName[] = [
   'openai',
   'openai-compatible',
   'opencode',
+  'opencode-go',
   'openrouter',
   'requesty',
   'synthetic',
@@ -307,6 +309,12 @@ export interface OpenCodeProvider extends LlmProviderBase {
 }
 export const isOpenCodeProvider = (provider: LlmProviderBase): provider is OpenCodeProvider => provider.name === 'opencode';
 
+export interface OpenCodeGoProvider extends LlmProviderBase {
+  name: 'opencode-go';
+  apiKey: string;
+}
+export const isOpenCodeGoProvider = (provider: LlmProviderBase): provider is OpenCodeGoProvider => provider.name === 'opencode-go';
+
 export interface ZaiPlanProvider extends LlmProviderBase {
   name: 'zai-plan';
   apiKey: string;
@@ -365,6 +373,7 @@ export type LlmProvider =
   | LitellmProvider
   | OllamaProvider
   | OpenCodeProvider
+  | OpenCodeGoProvider
   | OpenRouterProvider
   | RequestyProvider
   | SyntheticProvider
@@ -387,6 +396,7 @@ export const DEFAULT_PROVIDER_MODELS: Partial<Record<LlmProviderName, string>> =
   openai: 'gpt-5.5',
   openrouter: 'anthropic/claude-sonnet-5',
   opencode: 'claude-sonnet-5',
+  'opencode-go': 'grok-4.5',
   requesty: 'anthropic/claude-sonnet-5',
   synthetic: 'hf:zai-org/GLM-5.2',
   'zai-plan': 'glm-5.2',
@@ -788,6 +798,12 @@ export const getDefaultProviderParams = <T extends LlmProvider>(providerName: Ll
         name: 'opencode',
         apiKey: '',
       } satisfies OpenCodeProvider;
+      break;
+    case 'opencode-go':
+      provider = {
+        name: 'opencode-go',
+        apiKey: '',
+      } satisfies OpenCodeGoProvider;
       break;
     case 'lmstudio':
       provider = {
