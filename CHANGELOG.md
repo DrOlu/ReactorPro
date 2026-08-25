@@ -3,6 +3,9 @@
 ## [UNRELEASED]
 
 - added support for nested subtasks
+- improved worktree pruning
+- workspace sidebar size is now stored on project level instead of task level
+- fixed MCP servers initialization loading message shown without prompt context
 
 ## [0.80.0]
 
