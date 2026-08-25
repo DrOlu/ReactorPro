@@ -44,13 +44,13 @@ describe('WorktreeManager - getTaskWorktree', () => {
   });
 
   it('returns the task worktree when it exists and is valid', async () => {
-    mockWorktreeList(`worktree ${taskWorktreePath}\nHEAD def456\nbranch refs/heads/aider-desk/task/t2`);
+    mockWorktreeList(`worktree ${taskWorktreePath}\nHEAD def456\nbranch refs/heads/reactorpro/task/t2`);
 
     const worktree = await worktreeManager.getTaskWorktree(projectPath, taskId);
 
     expect(worktree).toEqual({
       path: taskWorktreePath,
-      branch: 'aider-desk/task/t2',
+      branch: 'reactorpro/task/t2',
       baseCommit: 'def456',
     });
   });
