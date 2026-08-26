@@ -569,43 +569,63 @@ export class Agent {
     };
 
     if (provider) {
-      const extensionResult = await this.extensionManager.dispatchEvent(
-        'onAgentStarted',
-        {
-          mode,
-          prompt,
-          agentProfile: profile,
-          providerProfile: provider,
-          model: modelName,
-          promptContext,
-          contextMessages,
-          contextFiles,
-          systemPrompt,
-          images,
-          skillsToActivate,
-          modelCallSettings,
-        },
-        task.project,
-        task,
-      );
-      if (extensionResult.blocked) {
-        logger.debug('Agent execution blocked by extension');
-        return [];
+      // Register an abort controller for the duration of the onAgentStarted dispatch so that
+      // agent runs driven by extensions (which return blocked: true) are visible via isRunning().
+      // This way Task.isPromptRunning() reports busy while such a run is in progress and
+      // prompts sent during it get queued instead of starting a concurrent run.
+      const dispatchAbortControllerId = uuidv4();
+      const dispatchAbortController = new AbortController();
+      if (!modelCallSettings.abortSignal) {
+        this.abortControllers.set(dispatchAbortControllerId, dispatchAbortController);
+        modelCallSettings.abortSignal = dispatchAbortController.signal;
       }
-      profile = extensionResult.agentProfile;
-      provider = extensionResult.providerProfile;
-      modelName = extensionResult.model;
-      prompt = extensionResult.prompt;
-      promptContext = extensionResult.promptContext;
-      contextMessages = extensionResult.contextMessages;
-      contextFiles = extensionResult.contextFiles;
-      systemPrompt = extensionResult.systemPrompt;
-      images = extensionResult.images ?? images;
-      skillsToActivate = extensionResult.skillsToActivate;
-      modelCallSettings = {
-        ...modelCallSettings,
-        ...extensionResult.modelCallSettings,
-      };
+
+      try {
+        const extensionResult = await this.extensionManager.dispatchEvent(
+          'onAgentStarted',
+          {
+            mode,
+            prompt,
+            agentProfile: profile,
+            providerProfile: provider,
+            model: modelName,
+            promptContext,
+            contextMessages,
+            contextFiles,
+            systemPrompt,
+            images,
+            skillsToActivate,
+            modelCallSettings,
+          },
+          task.project,
+          task,
+        );
+        if (extensionResult.blocked) {
+          logger.debug('Agent execution blocked by extension');
+          return [];
+        }
+        profile = extensionResult.agentProfile;
+        provider = extensionResult.providerProfile;
+        modelName = extensionResult.model;
+        prompt = extensionResult.prompt;
+        promptContext = extensionResult.promptContext;
+        contextMessages = extensionResult.contextMessages;
+        contextFiles = extensionResult.contextFiles;
+        systemPrompt = extensionResult.systemPrompt;
+        images = extensionResult.images ?? images;
+        skillsToActivate = extensionResult.skillsToActivate;
+        modelCallSettings = {
+          ...modelCallSettings,
+          ...extensionResult.modelCallSettings,
+        };
+        // Reset the injected dispatch signal so the agent loop below creates its own abort
+        // controller as usual, but keep a signal explicitly set by an extension.
+        if (!abortSignal && modelCallSettings.abortSignal === dispatchAbortController.signal) {
+          modelCallSettings.abortSignal = undefined;
+        }
+      } finally {
+        this.abortControllers.delete(dispatchAbortControllerId);
+      }
     }
 
     const userRequestMessage: ContextUserMessage | null = prompt
