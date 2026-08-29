@@ -377,6 +377,7 @@ export interface QueuedPromptData {
   text: string;
   mode: Mode;
   timestamp: number;
+  images?: string[];
 }
 
 export interface QueuedPromptsUpdatedData {
@@ -1224,6 +1225,7 @@ export interface AvailableExtension {
   repositoryUrl: string;
   hasDependencies?: boolean;
   readmeContent?: string;
+  installCount?: number;
 }
 
 export interface ExtensionOperationResult {
