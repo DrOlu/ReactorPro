@@ -39,7 +39,7 @@ vi.mock('fs', async (importOriginal) => {
 import { execWithShellPath } from '@/utils';
 
 const projectPath = '/test/project';
-const worktreePath = '/test/project/.aider-desk/tasks/task-123/worktree';
+const worktreePath = '/test/project/.reactorpro/tasks/task-123/worktree';
 const rebaseMergeDir = '/test/worktree/.git/rebase-merge';
 
 const getCommands = (): string[] => (execWithShellPath as Mock).mock.calls.map((call: unknown[]) => call[0] as string);
