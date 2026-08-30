@@ -2,7 +2,7 @@ name: Sync Watchdog
 
 on:
   schedule:
-    # Check 30 */2 * * * — sync threshold is 300min
+    # Check 30 */2 * * * — sync threshold is 420min (sync runs every 4h but GitHub cron delays push actual interval to ~6h)
     - cron: "30 */2 * * *"
   workflow_dispatch:
 
@@ -20,7 +20,7 @@ jobs:
           REPO="DrOlu/ReactorPro"
           WORKFLOW_FILE="sync-upstream.yml"
           LABEL="ReactorPro"
-          MAX_AGE=300
+          MAX_AGE=420
           MULTICA_WEBHOOK="https://api.multica.ai/api/webhooks/autopilots/awt_azjpEQ-2NJYENF86fUIV8Zm6pWE7_0qanO76WOaG0kw"
 
           # Get last run time
