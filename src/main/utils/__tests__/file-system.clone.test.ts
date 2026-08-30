@@ -137,8 +137,8 @@ describe('cloneProjectRepository', () => {
   it('clones an SCP-style SSH repository', async () => {
     const result = await cloneProjectRepository('git@github.com:owner/my-repo.git', targetDir);
 
-    expect(result).toBe('/tmp/aider-desk-projects/my-repo');
-    expect(getMockClone()).toHaveBeenCalledWith('git@github.com:owner/my-repo.git', '/tmp/aider-desk-projects/my-repo');
+    expect(result).toBe('/tmp/reactorpro-projects/my-repo');
+    expect(getMockClone()).toHaveBeenCalledWith('git@github.com:owner/my-repo.git', '/tmp/reactorpro-projects/my-repo');
   });
 
   it('appends suffix when directory name already exists', async () => {
