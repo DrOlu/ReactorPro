@@ -28,8 +28,8 @@ jobs:
           const EXTENSIONS_JSON_PATH = 'packages/extensions/extensions.json';
 
           if (!POSTHOG_PROJECT_ID || !POSTHOG_PERSONAL_API_KEY) {
-            console.error('Error: POSTHOG_PROJECT_ID and POSTHOG_PERSONAL_API_KEY are required');
-            process.exit(1);
+            console.log('PostHog secrets not configured — skipping install count update.');
+            process.exit(0);
           }
 
           const query = `
