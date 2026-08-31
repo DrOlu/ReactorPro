@@ -1,6 +1,6 @@
 # ReactorPro Changelog
 
-## [UNRELEASED]
+## [0.81.0]
 
 - added support for nested subtasks
 - improved worktree pruning
