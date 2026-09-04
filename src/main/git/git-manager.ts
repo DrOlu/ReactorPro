@@ -1284,7 +1284,7 @@ export class GitManager {
           return;
         }
 
-        const commitMessageFile = join(os.tmpdir(), `aiderdesk-squash-message-${Date.now()}.txt`);
+        const commitMessageFile = join(os.tmpdir(), `reactorpro-squash-message-${Date.now()}.txt`);
         await fs.writeFile(commitMessageFile, commitMessage, 'utf-8');
         try {
           command = `git commit-tree ${treeHash} -p ${targetHeadHash} -F "${commitMessageFile}"`;

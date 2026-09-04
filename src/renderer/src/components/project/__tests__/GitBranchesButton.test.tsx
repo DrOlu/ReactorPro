@@ -76,14 +76,14 @@ describe('GitBranchesButton', () => {
       render(
         <GitBranchesButton
           {...defaultProps}
-          worktreePath="/project/.aider-desk/tasks/task-123/worktree"
+          worktreePath="/project/.reactorpro/tasks/task-123/worktree"
           status={mockStatus}
         />,
       );
 
       await waitFor(() => {
         expect(mockApi.getSyncCommits).toHaveBeenCalledWith(
-          '/project/.aider-desk/tasks/task-123/worktree',
+          '/project/.reactorpro/tasks/task-123/worktree',
           'main',
         );
       });
