@@ -73,10 +73,10 @@ describe('GitBranchesButton', () => {
 
   describe('worktree mode', () => {
     it('queries getSyncCommits with baseBranch and formats ahead/behind tooltips relative to base branch', async () => {
-      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.reactorpro/tasks/task-123/worktree" status={mockStatus} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project/.aider-desk/tasks/task-123/worktree', 'main');
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project/.reactorpro/tasks/task-123/worktree', 'main');
       });
 
       // Open branches menu to view rebase button
