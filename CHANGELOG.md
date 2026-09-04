@@ -4,6 +4,9 @@
 
 - improved create task tool description and worktree inheritance
 - added git branch management
+- added support for checkoutless merge/squash for worktree operations
+- added x-opencode-session header to OpenCode Go provider
+- fixed worktree commit tracking and operations to use base branch
 
 ## [0.81.0]
 

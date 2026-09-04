@@ -24,6 +24,19 @@ const WorktreeModeIcon = VscWorktreeSmall;
 const MAX_BRANCH_NAME_LENGTH = 50;
 const TRUNCATED_TAIL_LENGTH = 5;
 
+const slugifyBranchName = (name: string) => {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9._/-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/\.{2,}/g, '.');
+};
+
+const trimBranchNameSeparators = (name: string) => {
+  return name.replace(/^[.\-/]+/, '').replace(/[.\-/]+$/, '');
+};
+
 const truncateBranchName = (name: string) => {
   if (name.length <= MAX_BRANCH_NAME_LENGTH) {
     return name;
@@ -60,7 +73,7 @@ type Props = {
   willShowConfirmDialog?: boolean;
   onMerge: (targetBranch?: string) => void;
   onSquash: (targetBranch?: string, commitMessage?: string) => void;
-  onOnlyUncommitted: (targetBranch?: string) => void;
+  onOnlyUncommitted: () => void;
   onRebaseFromBranch: (fromBranch?: string) => void;
   onAbortRebase: () => void;
   onContinueRebase: () => void;
@@ -135,21 +148,29 @@ export const GitBranchesButton = ({
   const repoPath = worktreePath || baseDir;
   const currentBranch = branches.find((b) => b.isCurrent)?.name || status?.currentBranch || '';
   const isWorktree = Boolean(worktreePath);
+  const worktreeBaseBranch = isWorktree ? status?.baseBranch || status?.targetBranch : undefined;
 
   const incomingCount = syncCommits.incoming.count;
   const outgoingCount = syncCommits.outgoing.count;
   const commitChanges: string[] = [];
   if (outgoingCount > 0) {
-    commitChanges.push(buildCommitsTooltip(t('git.outgoingCommitsTooltip', { count: outgoingCount }), syncCommits.outgoing.commits));
+    const label = worktreeBaseBranch
+      ? t('worktree.aheadCommitsTooltip', { count: outgoingCount, branch: worktreeBaseBranch })
+      : t('git.outgoingCommitsTooltip', { count: outgoingCount });
+    commitChanges.push(buildCommitsTooltip(label, syncCommits.outgoing.commits));
   }
   if (incomingCount > 0) {
-    commitChanges.push(buildCommitsTooltip(t('git.incomingCommitsTooltip', { count: incomingCount }), syncCommits.incoming.commits));
+    const label = worktreeBaseBranch
+      ? t('worktree.behindCommitsTooltip', { count: incomingCount, branch: worktreeBaseBranch })
+      : t('git.incomingCommitsTooltip', { count: incomingCount });
+    commitChanges.push(buildCommitsTooltip(label, syncCommits.incoming.commits));
   }
   const branchesTooltip = `${t('git.gitBranchLabel', { branch: currentBranch || t('git.noCurrentBranch') })}\n${commitChanges.length > 0 ? `\n${commitChanges.join('\n\n')}` : t('git.upToDate')}`;
 
   const recentBranchesWithCurrent = currentBranch ? [currentBranch, ...recentBranches.filter((name) => name !== currentBranch)] : recentBranches;
 
   const [mainBranchName, setMainBranchName] = useState<string | null>(null);
+  const rebaseBranch = status?.baseBranch || mainBranchName;
 
   const loadBranches = useCallback(async () => {
     setLoading(true);
@@ -179,12 +200,12 @@ export const GitBranchesButton = ({
 
   const loadSyncCommits = useCallback(async () => {
     try {
-      const result = await api.getSyncCommits(repoPath, isWorktree ? status?.targetBranch : undefined);
+      const result = await api.getSyncCommits(repoPath, worktreeBaseBranch);
       setSyncCommits(result);
     } catch {
       setSyncCommits({ outgoing: { count: 0, commits: [] }, incoming: { count: 0, commits: [] } });
     }
-  }, [api, repoPath, isWorktree, status?.targetBranch]);
+  }, [api, repoPath, worktreeBaseBranch]);
 
   useEffect(() => {
     void loadBranches();
@@ -231,7 +252,7 @@ export const GitBranchesButton = ({
       return;
     }
 
-    const trimmedName = newBranchName.trim();
+    const trimmedName = trimBranchNameSeparators(slugifyBranchName(newBranchName));
     if (!trimmedName) {
       return;
     }
@@ -260,7 +281,7 @@ export const GitBranchesButton = ({
       return;
     }
 
-    const trimmedName = newBranchFromName.trim();
+    const trimmedName = trimBranchNameSeparators(slugifyBranchName(newBranchFromName));
     if (!trimmedName || !branchToBase) {
       return;
     }
@@ -553,27 +574,31 @@ export const GitBranchesButton = ({
                 </button>
               </Tooltip>
               <Tooltip content={t('worktree.applyUncommittedChangesTooltip')} side="left" delayDuration={700}>
-                <button onClick={() => handleShowWorktreeDialog(setShowOnlyUncommittedDialog)} className={menuItemClass} disabled={disabled}>
+                <button
+                  onClick={() => handleShowWorktreeDialog(setShowOnlyUncommittedDialog)}
+                  className={menuItemClass}
+                  disabled={disabled || !status || status.uncommittedFiles.count === 0}
+                >
                   <FaFileLines className="w-3 h-3 flex-shrink-0" />
                   {t('worktree.applyUncommittedChanges')}
                 </button>
               </Tooltip>
               <Tooltip
-                content={mainBranchName ? t('worktree.rebaseFromCurrentBranchTooltip', { branch: mainBranchName }) : t('worktree.confirmRebaseMessage')}
+                content={rebaseBranch ? t('worktree.rebaseFromCurrentBranchTooltip', { branch: rebaseBranch }) : t('worktree.confirmRebaseMessage')}
                 side="left"
                 delayDuration={700}
               >
                 <button
                   onClick={() => {
-                    if (mainBranchName) {
-                      onRebaseFromBranch(mainBranchName);
+                    if (rebaseBranch) {
+                      onRebaseFromBranch(rebaseBranch);
                     }
                   }}
                   className={menuItemClass}
-                  disabled={disabled || !mainBranchName}
+                  disabled={disabled || !rebaseBranch}
                 >
                   <FaArrowsRotate className="w-3 h-3 flex-shrink-0" />
-                  {mainBranchName ? t('worktree.rebaseFromCurrentBranch', { branch: mainBranchName }) : t('worktree.rebaseFromBranch')}
+                  {rebaseBranch ? t('worktree.rebaseFromCurrentBranch', { branch: rebaseBranch }) : t('worktree.rebaseFromBranch')}
                 </button>
               </Tooltip>
 
@@ -621,7 +646,7 @@ export const GitBranchesButton = ({
               {branchToBase && (
                 <InlineEditPanel
                   value={newBranchFromName}
-                  onChange={setNewBranchFromName}
+                  onChange={(value) => setNewBranchFromName(slugifyBranchName(value))}
                   onConfirm={() => void handleCreateBranchFromConfirm()}
                   onCancel={() => {
                     setBranchToBase(null);
@@ -633,7 +658,7 @@ export const GitBranchesButton = ({
               {showNewBranchInput && (
                 <InlineEditPanel
                   value={newBranchName}
-                  onChange={setNewBranchName}
+                  onChange={(value) => setNewBranchName(slugifyBranchName(value))}
                   onConfirm={() => void handleCreateBranchConfirm()}
                   onCancel={() => {
                     setShowNewBranchInput(false);
@@ -764,18 +789,18 @@ export const GitBranchesButton = ({
       )}
 
       {showOnlyUncommittedDialog && (
-        <WorktreeActionDialog
-          baseDir={baseDir}
+        <ConfirmDialog
           title={t('worktree.confirmOnlyUncommittedTitle')}
-          message={t('worktree.confirmOnlyUncommittedMessage')}
-          confirmButtonText={t('worktree.onlyUncommitted')}
-          defaultBranch={status?.targetBranch}
-          onCancel={() => setShowOnlyUncommittedDialog(false)}
-          onConfirm={(branch) => {
+          onConfirm={() => {
             setShowOnlyUncommittedDialog(false);
-            onOnlyUncommitted(branch);
+            onOnlyUncommitted();
           }}
-        />
+          onCancel={() => setShowOnlyUncommittedDialog(false)}
+          confirmButtonText={t('common.ok')}
+          closeOnEscape
+        >
+          <p className="text-sm mb-3">{t('worktree.confirmOnlyUncommittedMessage', { branch: mainBranchName || '' })}</p>
+        </ConfirmDialog>
       )}
 
       {showAbortRebaseConfirm && (

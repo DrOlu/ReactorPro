@@ -1237,6 +1237,8 @@ export class Task {
         this.getProjectDir(),
         undefined,
         false,
+        undefined,
+        this.task.id,
       );
       if (taskName) {
         logger.debug('Generated task name:', { taskName });
@@ -1305,7 +1307,16 @@ export class Task {
 
       this.addLogMessage('loading', 'Updating task state...');
 
-      const answer = await this.agent.generateText(modelId, await this.promptsManager.getUpdateTaskStatePrompt(this), wrappedMessage, this.getProjectDir());
+      const answer = await this.agent.generateText(
+        modelId,
+        await this.promptsManager.getUpdateTaskStatePrompt(this),
+        wrappedMessage,
+        this.getProjectDir(),
+        undefined,
+        true,
+        undefined,
+        this.task.id,
+      );
 
       this.addLogMessage('loading', undefined, true);
       if (!answer) {
@@ -2477,7 +2488,7 @@ export class Task {
   }
 
   public async getUpdatedFiles(): Promise<UpdatedFile[]> {
-    const mainBranch = this.task.worktree ? await this.gitManager.getProjectMainBranch(this.project.baseDir) : undefined;
+    const mainBranch = this.task.worktree ? this.task.worktree.baseBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir)) : undefined;
     const projectSettings = this.project.getProjectSettings();
     const groupMode = (projectSettings.updatedFilesGroupMode as UpdatedFilesGroupMode) || UpdatedFilesGroupMode.Grouped;
     return await this.gitManager.getUpdatedFiles(this.getTaskDir(), this.task.workingMode, mainBranch, groupMode);
@@ -3622,6 +3633,8 @@ export class Task {
           this.getProjectDir(),
           await this.contextManager.getContextMessages(),
           true,
+          undefined,
+          this.task.id,
         );
       } else {
         const responses = await this.sendPromptToAider(handoffPrompt, undefined, 'ask');
@@ -4257,7 +4270,7 @@ ${error.stderr}`,
     await this.waitForCurrentPromptToFinish();
 
     try {
-      const effectiveTargetBranch = targetBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
+      const effectiveTargetBranch = targetBranch || this.task.worktree.baseBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
 
       this.addLogMessage(
         'loading',
@@ -4268,7 +4281,7 @@ ${error.stderr}`,
       let effectiveCommitMessage = commitMessage;
       if (squash && !effectiveCommitMessage) {
         // Get changes information for AI generation
-        const changesDiff = await this.gitManager.getChangesDiff(this.project.baseDir, this.task.worktree.path, targetBranch);
+        const changesDiff = await this.gitManager.getChangesDiff(this.project.baseDir, this.task.worktree.path, effectiveTargetBranch);
 
         if (changesDiff) {
           // Try to generate commit message using AI
@@ -4284,6 +4297,8 @@ ${error.stderr}`,
                 this.getProjectDir(),
                 undefined,
                 false,
+                undefined,
+                this.task.id,
               );
               logger.info('Generated commit message:', {
                 commitMessage: effectiveCommitMessage,
@@ -4308,7 +4323,7 @@ ${error.stderr}`,
         this.task.worktree.path,
         squash,
         effectiveCommitMessage || this.task.name || `Task ${this.taskId} changes`,
-        targetBranch,
+        effectiveTargetBranch,
         symlinkFolders,
         this.task.worktree.baseCommit,
       );
@@ -4368,7 +4383,7 @@ ${error.stderr}`,
 
     if (options?.mergeBeforeSwitch && this.task.worktree) {
       try {
-        const effectiveTargetBranch = options.targetBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
+        const effectiveTargetBranch = options.targetBranch || this.task.worktree.baseBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
 
         this.addLogMessage('loading', `Merging worktree to ${effectiveTargetBranch} branch and switching to local mode...`);
 
@@ -4381,7 +4396,7 @@ ${error.stderr}`,
           this.task.worktree.path,
           false,
           this.task.name || `Task ${this.taskId} changes`,
-          options.targetBranch,
+          effectiveTargetBranch,
           symlinkFolders,
         );
 
@@ -4526,7 +4541,7 @@ ${error.stderr}`,
     return await this.gitManager.getUncommittedFiles(this.project.baseDir);
   }
 
-  public async applyUncommittedChanges(targetBranch?: string): Promise<void> {
+  public async applyUncommittedChanges(): Promise<void> {
     if (!this.task.worktree) {
       throw new Error('No worktree exists for this task');
     }
@@ -4539,16 +4554,16 @@ ${error.stderr}`,
     await this.waitForCurrentPromptToFinish();
 
     try {
-      const effectiveTargetBranch = targetBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
+      const targetBranch = this.task.worktree.baseBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
 
-      this.addLogMessage('loading', `Applying uncommitted changes to ${effectiveTargetBranch} branch...`);
+      this.addLogMessage('loading', `Applying uncommitted changes to ${targetBranch} branch...`);
 
       const settings = this.store.getSettings();
       const symlinkFolders = settings.taskSettings.worktreeSymlinkFolders || [];
 
-      await this.gitManager.applyUncommittedChangesToMain(this.project.baseDir, this.task.id, this.task.worktree.path, effectiveTargetBranch, symlinkFolders);
+      await this.gitManager.applyUncommittedChangesToMain(this.project.baseDir, this.task.id, this.task.worktree.path, symlinkFolders);
 
-      this.addLogMessage('info', `Successfully applied uncommitted changes to ${effectiveTargetBranch} branch`, true);
+      this.addLogMessage('info', `Successfully applied uncommitted changes to ${targetBranch} branch`, true);
     } catch (error) {
       logger.error('Failed to apply uncommitted changes:', error);
 
@@ -4696,6 +4711,8 @@ ${error.stderr}`,
       this.getProjectDir(),
       undefined,
       false,
+      undefined,
+      this.task.id,
     );
 
     if (!commitMessage) {
@@ -4775,7 +4792,7 @@ ${error.stderr}`,
       throw new Error('No worktree exists for this task');
     }
 
-    const effectiveFromBranch = fromBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
+    const effectiveFromBranch = fromBranch || this.task.worktree.baseBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
 
     logger.info('Rebasing worktree from branch', {
       baseDir: this.project.baseDir,
@@ -5196,11 +5213,11 @@ ${error.stderr}`,
   }
 
   public async generateText(modelId: string, systemPrompt: string, prompt: string): Promise<string | undefined> {
-    return this.agent.generateText(modelId, systemPrompt, prompt, this.getProjectDir());
+    return this.agent.generateText(modelId, systemPrompt, prompt, this.getProjectDir(), [], true, undefined, this.task.id);
   }
 
   public async generateObject<T>(modelId: string, systemPrompt: string, prompt: string, schema: z.ZodType<T>): Promise<T | undefined> {
-    return this.agent.generateObject(modelId, systemPrompt, prompt, schema, this.getProjectDir());
+    return this.agent.generateObject(modelId, systemPrompt, prompt, schema, this.getProjectDir(), [], true, undefined, this.task.id);
   }
 
   async runCodeChangeRequests(requests: ChangeRequestItem[], contextSize: number = 5, createNewTask?: boolean): Promise<void> {

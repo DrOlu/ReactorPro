@@ -169,6 +169,7 @@ export interface ExtensionProviderStrategy {
     systemPrompt?: string,
     providerMetadata?: unknown,
     tlsRegistrar?: TlsPolicyRegistrar,
+    sessionId?: string,
   ) => unknown | Promise<unknown>;
   loadModels: (profile: ProviderProfile, settings: SettingsData, tlsRegistrar?: TlsPolicyRegistrar) => Promise<LoadModelsResponse>;
 
@@ -1168,10 +1169,10 @@ export interface TaskContext {
   getLocalUncommittedFiles(): Promise<WorktreeUncommittedFiles>;
 
   /**
-   * Apply uncommitted changes from the task's worktree to a target branch in the main repository.
-   * @param targetBranch - Optional target branch name (defaults to the project's main branch)
+   * Apply uncommitted changes from the task's worktree to the branch currently checked out
+   * in the main repository, without merging commits or switching branches.
    */
-  applyUncommittedChanges(targetBranch?: string): Promise<void>;
+  applyUncommittedChanges(): Promise<void>;
 
   /**
    * Merge commits and optionally uncommitted changes from this task's worktree to a target worktree directory.
