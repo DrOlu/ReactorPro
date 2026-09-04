@@ -7,6 +7,9 @@
 - added support for checkoutless merge/squash for worktree operations
 - added x-opencode-session header to OpenCode Go provider
 - fixed worktree commit tracking and operations to use base branch
+- added confirmation dialog and force option for git push
+- fixed working mode switch dialog staying open and appearing frozen while switching
+- added ability to delete stored memories from the store memory tool message
 
 ## [0.81.0]
 
