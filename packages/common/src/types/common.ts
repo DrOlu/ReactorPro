@@ -27,6 +27,7 @@ export const WorktreeSchema = z.object({
   baseBranch: z.string().optional(),
   baseCommit: z.string().optional(),
   branch: z.string().optional(),
+  pendingRebaseFromBranch: z.string().optional(),
   prunable: z.boolean().optional(),
 });
 
