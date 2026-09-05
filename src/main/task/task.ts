@@ -19,6 +19,8 @@ import {
   DefaultTaskState,
   EditFormat,
   FileEdit,
+  BranchInfo,
+  GitSyncCommits,
   LogData,
   LogLevel,
   MessageRole,
@@ -427,8 +429,10 @@ export class Task {
     let resolvedBase = '';
     if (this.task.worktree.baseCommit) {
       const branches = await this.gitManager.getBranchesContainingCommit(this.project.baseDir, this.task.worktree.baseCommit);
-      if (branches.length === 1) {
-        resolvedBase = branches[0];
+      // The task branch itself always contains its base commit - never a valid base branch candidate
+      const candidates = branches.filter((branch) => branch !== this.task.worktree?.branch);
+      if (candidates.length === 1) {
+        resolvedBase = candidates[0];
       }
     }
     if (!resolvedBase) {
@@ -4766,6 +4770,10 @@ ${error.stderr}`,
 
     const effectiveTargetBranch = targetBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
     const worktreePath = this.task.worktree.path;
+    if (!(await isDirectory(worktreePath))) {
+      logger.debug(`Worktree ${worktreePath} no longer exists, skipping integration status check`);
+      return null;
+    }
     const settings = this.store.getSettings();
     const symlinkFolders = settings.taskSettings.worktreeSymlinkFolders || [];
 
@@ -4799,6 +4807,10 @@ ${error.stderr}`,
 
     const effectiveFromBranch = fromBranch || this.task.worktree.baseBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
 
+    if (effectiveFromBranch === this.task.worktree.branch) {
+      throw new Error(`Cannot rebase worktree onto its own branch '${effectiveFromBranch}'`);
+    }
+
     logger.info('Rebasing worktree from branch', {
       baseDir: this.project.baseDir,
       taskId: this.taskId,
@@ -4806,6 +4818,15 @@ ${error.stderr}`,
     });
 
     await this.waitForCurrentPromptToFinish();
+
+    // Remember the intended source branch before starting so the conflict-resolution
+    // flow (continue/abort rebase) can rely on it instead of guessing it from git state
+    await this.saveTask({
+      worktree: {
+        ...this.task.worktree,
+        pendingRebaseFromBranch: effectiveFromBranch,
+      },
+    });
 
     try {
       this.addLogMessage('loading', `Rebasing worktree from ${effectiveFromBranch}...`);
@@ -4825,8 +4846,11 @@ ${error.stderr}`,
               ...this.task.worktree,
               baseCommit: ontoCommit,
               baseBranch: effectiveFromBranch,
+              pendingRebaseFromBranch: undefined,
             },
           });
+        } else {
+          await this.saveTask({ worktree: { ...this.task.worktree, pendingRebaseFromBranch: undefined } });
         }
 
         this.addLogMessage('info', 'Worktree rebased successfully', true);
@@ -4840,6 +4864,11 @@ ${error.stderr}`,
           this.addLogMessage('error', 'worktree.rebasePausedDueToConflicts', true);
         } else {
           this.addLogMessage('error', error.getErrorDetails(), true);
+          // The rebase never started, so the pending marker is no longer needed
+          const { inProgress } = await this.gitManager.getRebaseState(this.task.worktree.path);
+          if (!inProgress) {
+            await this.saveTask({ worktree: { ...this.task.worktree, pendingRebaseFromBranch: undefined } });
+          }
         }
       }
     } catch (error) {
@@ -4847,6 +4876,15 @@ ${error.stderr}`,
       logger.error('Failed to rebase worktree:', {
         error: error instanceof Error ? error.message : String(error),
       });
+      // The rebase never started, so the pending marker is no longer needed
+      try {
+        const { inProgress } = await this.gitManager.getRebaseState(this.task.worktree.path);
+        if (!inProgress) {
+          await this.saveTask({ worktree: { ...this.task.worktree, pendingRebaseFromBranch: undefined } });
+        }
+      } catch {
+        // keep the marker if we cannot determine the rebase state
+      }
     } finally {
       await this.sendWorktreeIntegrationStatusUpdated();
       await this.sendUpdatedFilesUpdated();
@@ -4863,6 +4901,9 @@ ${error.stderr}`,
     try {
       this.addLogMessage('loading', 'Aborting rebase...');
       await this.gitManager.abortRebase(this.task.worktree.path);
+      if (this.task.worktree.pendingRebaseFromBranch) {
+        await this.saveTask({ worktree: { ...this.task.worktree, pendingRebaseFromBranch: undefined } });
+      }
       this.addLogMessage('info', 'Rebase aborted', true);
     } catch (error) {
       logger.error('Failed to abort rebase:', error);
@@ -4912,8 +4953,73 @@ ${error.stderr}`,
     }
   }
 
+  public async listGitBranches(includeRemote?: boolean): Promise<BranchInfo[]> {
+    return this.gitManager.listBranches(this.getTaskDir(), includeRemote);
+  }
+
+  public async getSyncCommits(targetBranch?: string): Promise<GitSyncCommits> {
+    return this.gitManager.getSyncCommits(this.getTaskDir(), targetBranch);
+  }
+
+  public async createGitBranch(name: string, startPoint?: string, checkout?: boolean): Promise<void> {
+    await this.runGitAction('create branch', () => this.gitManager.createBranch(this.getTaskDir(), name, startPoint, checkout));
+  }
+
+  public async checkoutGitBranch(branch: string, createTracking?: boolean, takeOver?: boolean): Promise<void> {
+    await this.runGitAction('checkout', () => this.gitManager.checkoutBranch(this.getTaskDir(), branch, createTracking, takeOver));
+  }
+
+  public async deleteGitBranch(branch: string, force?: boolean): Promise<void> {
+    await this.runGitAction(
+      'delete branch',
+      () => this.gitManager.deleteBranch(this.getTaskDir(), branch, force),
+      (error) => !force && error instanceof Error && error.message.includes('not fully merged'),
+    );
+  }
+
+  public async mergeIntoCurrentBranch(branch: string): Promise<{ conflictedFiles?: string[] }> {
+    return await this.runGitAction('merge', () => this.gitManager.mergeIntoCurrent(this.getTaskDir(), branch));
+  }
+
+  public async rebaseOntoBranch(branch: string): Promise<{ conflictedFiles?: string[] }> {
+    return await this.runGitAction('rebase', () => this.gitManager.rebaseOnto(this.getTaskDir(), branch));
+  }
+
+  public async updateGitBranch(branchName: string): Promise<{ output: string }> {
+    return await this.runGitAction('update branch', () => this.gitManager.updateBranch(this.getTaskDir(), branchName));
+  }
+
+  public async gitPull(rebase?: boolean): Promise<{ output: string }> {
+    return await this.runGitAction('pull', () => this.gitManager.gitPull(this.getTaskDir(), rebase));
+  }
+
+  public async gitPush(force?: boolean): Promise<{ output: string }> {
+    return await this.runGitAction(
+      'push',
+      () => this.gitManager.gitPush(this.getTaskDir(), force),
+      (error) => error instanceof Error && /fetch first|non-fast-forward|rejected because the tip|remote contains work/i.test(error.message),
+    );
+  }
+
+  public async renameGitBranch(newBranchName: string): Promise<void> {
+    await this.runGitAction('rename branch', () => this.renameBranch(newBranchName));
+  }
+
   public async renameWorktreeBranch(newBranchName: string): Promise<void> {
     await this.renameBranch(newBranchName);
+  }
+
+  private async runGitAction<T>(action: string, gitAction: () => Promise<T>, shouldSkipLogging?: (error: unknown) => boolean): Promise<T> {
+    try {
+      return await gitAction();
+    } catch (error) {
+      if (!shouldSkipLogging?.(error)) {
+        this.reportGitActionError(action, error);
+      }
+      throw error;
+    } finally {
+      void this.sendWorktreeIntegrationStatusUpdated();
+    }
   }
 
   private async executeConflictResolution(directoryPath: string, directoryName: string): Promise<void> {
@@ -5184,6 +5290,8 @@ ${error.stderr}`,
       throw new Error('No worktree exists for this task');
     }
 
+    const pendingFromBranch = this.task.worktree.pendingRebaseFromBranch;
+
     await this.waitForCurrentPromptToFinish();
 
     try {
@@ -5196,12 +5304,16 @@ ${error.stderr}`,
           worktree: {
             ...this.task.worktree,
             baseCommit: ontoCommit,
-            baseBranch: ontoBranch || this.task.worktree.baseBranch,
+            baseBranch: pendingFromBranch || ontoBranch || this.task.worktree.baseBranch,
+            pendingRebaseFromBranch: undefined,
           },
         });
       } else {
         // Clear any remaining merge state after successful rebase continuation
-        await this.saveTask({ lastMergeState: undefined });
+        await this.saveTask({
+          lastMergeState: undefined,
+          worktree: { ...this.task.worktree, pendingRebaseFromBranch: undefined },
+        });
       }
 
       this.addLogMessage('info', 'Rebase completed', true);

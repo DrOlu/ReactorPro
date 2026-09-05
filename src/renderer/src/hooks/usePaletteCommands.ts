@@ -20,6 +20,18 @@ const buildShortcuts = (hotkeys: ReturnType<typeof useConfiguredHotkeys>): Recor
   'task.new': hotkeys.TASK_HOTKEYS.NEW_TASK,
   'task.focusPrompt': hotkeys.TASK_HOTKEYS.FOCUS_PROMPT,
   'editor.open': hotkeys.PROJECT_HOTKEYS.OPEN_EDITOR,
+  'git.pull': hotkeys.GIT_HOTKEYS.PULL,
+  'git.push': hotkeys.GIT_HOTKEYS.PUSH,
+  'git.branches': hotkeys.GIT_HOTKEYS.BRANCHES,
+  'git.newBranch': hotkeys.GIT_HOTKEYS.NEW_BRANCH,
+  'git.renameBranch': hotkeys.GIT_HOTKEYS.RENAME_BRANCH,
+  'git.worktree.merge': hotkeys.GIT_HOTKEYS.WORKTREE_MERGE,
+  'git.worktree.squash': hotkeys.GIT_HOTKEYS.WORKTREE_SQUASH,
+  'git.worktree.applyUncommitted': hotkeys.GIT_HOTKEYS.WORKTREE_APPLY_UNCOMMITTED,
+  'git.worktree.rebase': hotkeys.GIT_HOTKEYS.WORKTREE_REBASE,
+  'git.worktree.abortRebase': hotkeys.GIT_HOTKEYS.WORKTREE_ABORT_REBASE,
+  'git.worktree.continueRebase': hotkeys.GIT_HOTKEYS.WORKTREE_CONTINUE_REBASE,
+  'git.worktree.resolveConflicts': hotkeys.GIT_HOTKEYS.WORKTREE_RESOLVE_CONFLICTS,
 });
 
 const MODULE_ACTIONS: Record<string, () => void> = {

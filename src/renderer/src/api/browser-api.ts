@@ -1199,86 +1199,88 @@ export class BrowserApi implements ApplicationAPI {
     });
   }
 
-  listGitBranches(repoPath: string, includeRemote?: boolean): Promise<BranchInfo[]> {
+  listGitBranches(baseDir: string, taskId: string, includeRemote?: boolean): Promise<BranchInfo[]> {
     return this.get('/project/git/branches', {
-      repoPath,
+      projectDir: baseDir,
+      taskId,
       includeRemote: includeRemote ? 'true' : undefined,
     });
   }
 
-  getSyncCommits(repoPath: string, targetBranch?: string): Promise<GitSyncCommits> {
+  getSyncCommits(baseDir: string, taskId: string, targetBranch?: string): Promise<GitSyncCommits> {
     return this.get('/project/git/sync-commits', {
-      repoPath,
+      projectDir: baseDir,
+      taskId,
       targetBranch: targetBranch || undefined,
     });
   }
 
-  async createGitBranch(repoPath: string, name: string, startPoint?: string, checkout?: boolean, taskId?: string): Promise<void> {
+  async createGitBranch(baseDir: string, taskId: string, name: string, startPoint?: string, checkout?: boolean): Promise<void> {
     await this.post('/project/git/branch/create', {
-      repoPath,
+      projectDir: baseDir,
+      taskId,
       name,
       startPoint,
       checkout,
-      taskId,
     });
   }
 
-  async checkoutGitBranch(repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean, taskId?: string): Promise<void> {
+  async checkoutGitBranch(baseDir: string, taskId: string, branch: string, createTracking?: boolean, takeOver?: boolean): Promise<void> {
     await this.post('/project/git/branch/checkout', {
-      repoPath,
+      projectDir: baseDir,
+      taskId,
       branch,
       createTracking,
       takeOver,
-      taskId,
     });
   }
 
-  async deleteGitBranch(repoPath: string, branch: string, force?: boolean, taskId?: string): Promise<void> {
+  async deleteGitBranch(baseDir: string, taskId: string, branch: string, force?: boolean): Promise<void> {
     await this.post('/project/git/branch/delete', {
-      repoPath,
+      projectDir: baseDir,
+      taskId,
       branch,
       force,
-      taskId,
     });
   }
 
-  mergeIntoCurrentBranch(repoPath: string, branch: string, taskId?: string): Promise<{ conflictedFiles?: string[] }> {
+  mergeIntoCurrentBranch(baseDir: string, taskId: string, branch: string): Promise<{ conflictedFiles?: string[] }> {
     return this.post('/project/git/merge', {
-      repoPath,
-      branch,
+      projectDir: baseDir,
       taskId,
+      branch,
     });
   }
 
-  rebaseOntoBranch(repoPath: string, branch: string, taskId?: string): Promise<{ conflictedFiles?: string[] }> {
+  rebaseOntoBranch(baseDir: string, taskId: string, branch: string): Promise<{ conflictedFiles?: string[] }> {
     return this.post('/project/git/rebase', {
-      repoPath,
+      projectDir: baseDir,
+      taskId,
       branch,
-      taskId,
     });
   }
 
-  updateGitBranch(repoPath: string, branchName: string, taskId?: string): Promise<{ output: string }> {
+  updateGitBranch(baseDir: string, taskId: string, branchName: string): Promise<{ output: string }> {
     return this.post('/project/git/branch/update', {
-      repoPath,
-      branchName,
+      projectDir: baseDir,
       taskId,
+      branchName,
     });
   }
 
-  gitPull(repoPath: string, taskId?: string, rebase?: boolean): Promise<{ output: string }> {
+  gitPull(baseDir: string, taskId: string, rebase?: boolean): Promise<{ output: string }> {
     return this.post('/project/git/pull', {
-      repoPath,
+      projectDir: baseDir,
       taskId,
       rebase,
     });
   }
 
-  gitPush(repoPath: string, force?: boolean, taskId?: string): Promise<{ output: string }> {
+  gitPush(baseDir: string, taskId: string, force?: boolean): Promise<{ output: string }> {
     return this.post('/project/git/push', {
-      repoPath,
-      force,
+      projectDir: baseDir,
       taskId,
+      force,
     });
   }
 

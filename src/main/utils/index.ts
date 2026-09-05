@@ -7,3 +7,4 @@ export * from './python';
 export * from './ripgrep';
 export * from './shell';
 export * from './web-scrapper';
+export * from './window-load-retry';

@@ -34,6 +34,20 @@ export const DEFAULT_HOTKEY_CONFIG: HotkeyConfig = {
     newTask: 'mod+shift+t',
     closeTask: 'mod+shift+w',
   },
+  gitHotkeys: {
+    pull: 'mod+shift+u',
+    push: 'mod+shift+k',
+    branches: 'ctrl+`',
+    newBranch: '',
+    renameBranch: '',
+    worktreeMerge: '',
+    worktreeSquash: '',
+    worktreeApplyUncommitted: '',
+    worktreeRebase: '',
+    worktreeAbortRebase: '',
+    worktreeContinueRebase: '',
+    worktreeResolveConflicts: '',
+  },
   dialogHotkeys: {
     browseFolder: 'mod+b',
     commandPalette: 'mod+shift+p',
@@ -52,6 +66,10 @@ export const getHotkeys = (config?: HotkeyConfig) => {
       ...DEFAULT_HOTKEY_CONFIG.taskHotkeys,
       ...(config?.taskHotkeys ?? {}),
     },
+    gitHotkeys: {
+      ...DEFAULT_HOTKEY_CONFIG.gitHotkeys,
+      ...(config?.gitHotkeys ?? {}),
+    },
     dialogHotkeys: {
       ...DEFAULT_HOTKEY_CONFIG.dialogHotkeys,
       ...(config?.dialogHotkeys ?? {}),
@@ -60,9 +78,11 @@ export const getHotkeys = (config?: HotkeyConfig) => {
 
   const pj = mergedConfig.projectHotkeys;
   const tk = mergedConfig.taskHotkeys;
+  const gh = mergedConfig.gitHotkeys;
   const dk = mergedConfig.dialogHotkeys;
   const pjDef = DEFAULT_HOTKEY_CONFIG.projectHotkeys;
   const tkDef = DEFAULT_HOTKEY_CONFIG.taskHotkeys;
+  const ghDef = DEFAULT_HOTKEY_CONFIG.gitHotkeys;
   const dkDef = DEFAULT_HOTKEY_CONFIG.dialogHotkeys;
 
   return {
@@ -98,6 +118,20 @@ export const getHotkeys = (config?: HotkeyConfig) => {
       FOCUS_PROMPT: tk.focusPrompt || tkDef.focusPrompt,
       NEW_TASK: tk.newTask || tkDef.newTask,
       CLOSE_TASK: tk.closeTask || tkDef.closeTask,
+    },
+    GIT_HOTKEYS: {
+      PULL: gh.pull || ghDef.pull,
+      PUSH: gh.push || ghDef.push,
+      BRANCHES: gh.branches || ghDef.branches,
+      NEW_BRANCH: gh.newBranch || ghDef.newBranch,
+      RENAME_BRANCH: gh.renameBranch || ghDef.renameBranch,
+      WORKTREE_MERGE: gh.worktreeMerge || ghDef.worktreeMerge,
+      WORKTREE_SQUASH: gh.worktreeSquash || ghDef.worktreeSquash,
+      WORKTREE_APPLY_UNCOMMITTED: gh.worktreeApplyUncommitted || ghDef.worktreeApplyUncommitted,
+      WORKTREE_REBASE: gh.worktreeRebase || ghDef.worktreeRebase,
+      WORKTREE_ABORT_REBASE: gh.worktreeAbortRebase || ghDef.worktreeAbortRebase,
+      WORKTREE_CONTINUE_REBASE: gh.worktreeContinueRebase || ghDef.worktreeContinueRebase,
+      WORKTREE_RESOLVE_CONFLICTS: gh.worktreeResolveConflicts || ghDef.worktreeResolveConflicts,
     },
     DIALOG_HOTKEYS: {
       BROWSE_FOLDER: dk.browseFolder || dkDef.browseFolder,

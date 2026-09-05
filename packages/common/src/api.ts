@@ -323,16 +323,16 @@ export interface ApplicationAPI {
   renameGitBranch: (baseDir: string, taskId: string, newBranchName: string) => Promise<void>;
 
   // Git branch operations
-  listGitBranches: (repoPath: string, includeRemote?: boolean) => Promise<BranchInfo[]>;
-  getSyncCommits: (repoPath: string, targetBranch?: string) => Promise<GitSyncCommits>;
-  createGitBranch: (repoPath: string, name: string, startPoint?: string, checkout?: boolean, taskId?: string) => Promise<void>;
-  checkoutGitBranch: (repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean, taskId?: string) => Promise<void>;
-  deleteGitBranch: (repoPath: string, branch: string, force?: boolean, taskId?: string) => Promise<void>;
-  mergeIntoCurrentBranch: (repoPath: string, branch: string, taskId?: string) => Promise<{ conflictedFiles?: string[] }>;
-  rebaseOntoBranch: (repoPath: string, branch: string, taskId?: string) => Promise<{ conflictedFiles?: string[] }>;
-  updateGitBranch: (repoPath: string, branchName: string, taskId?: string) => Promise<{ output: string }>;
-  gitPull: (repoPath: string, taskId?: string, rebase?: boolean) => Promise<{ output: string }>;
-  gitPush: (repoPath: string, force?: boolean, taskId?: string) => Promise<{ output: string }>;
+  listGitBranches: (baseDir: string, taskId: string, includeRemote?: boolean) => Promise<BranchInfo[]>;
+  getSyncCommits: (baseDir: string, taskId: string, targetBranch?: string) => Promise<GitSyncCommits>;
+  createGitBranch: (baseDir: string, taskId: string, name: string, startPoint?: string, checkout?: boolean) => Promise<void>;
+  checkoutGitBranch: (baseDir: string, taskId: string, branch: string, createTracking?: boolean, takeOver?: boolean) => Promise<void>;
+  deleteGitBranch: (baseDir: string, taskId: string, branch: string, force?: boolean) => Promise<void>;
+  mergeIntoCurrentBranch: (baseDir: string, taskId: string, branch: string) => Promise<{ conflictedFiles?: string[] }>;
+  rebaseOntoBranch: (baseDir: string, taskId: string, branch: string) => Promise<{ conflictedFiles?: string[] }>;
+  updateGitBranch: (baseDir: string, taskId: string, branchName: string) => Promise<{ output: string }>;
+  gitPull: (baseDir: string, taskId: string, rebase?: boolean) => Promise<{ output: string }>;
+  gitPush: (baseDir: string, taskId: string, force?: boolean) => Promise<{ output: string }>;
   resolveGitErrorWithAgent: (baseDir: string, taskId: string) => Promise<void>;
 
   // Agent profile operations

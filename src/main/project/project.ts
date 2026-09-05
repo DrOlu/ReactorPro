@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { AgentProfile, CreateTaskParams, DefaultTaskState, ModeDefinition, ProjectSettings, SettingsData, TaskData } from '@common/types';
+import { AgentProfile, BranchInfo, CreateTaskParams, DefaultTaskState, ModeDefinition, ProjectSettings, SettingsData, TaskData } from '@common/types';
 import { fileExists } from '@common/utils';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -633,6 +633,10 @@ export class Project {
     this.forEachTask((task) => {
       void task.projectSettingsChanged(oldSettings, newSettings);
     });
+  }
+
+  public listBranches(): Promise<BranchInfo[]> {
+    return this.gitManager.listBranches(this.baseDir);
   }
 
   async close() {

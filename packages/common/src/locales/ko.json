@@ -37,7 +37,9 @@
     "moveToTop": "맨 위로 이동",
     "switchToLocal": "로컬 모드로 전환",
     "switchToWorktree": "워크트리 모드로 전환",
-    "switchWorkingMode": "작업 모드 전환"
+    "switchWorkingMode": "작업 모드 전환",
+    "gitAction": "Git 작업",
+    "gitBranches": "Git 브랜치 표시"
   },
   "common": {
     "settings": "설정",
@@ -594,6 +596,7 @@
     "hotkeys": {
       "projectHotkeys": "프로젝트",
       "taskHotkeys": "작업",
+      "gitHotkeys": "Git",
       "dialogHotkeys": "대화 상자",
       "closeProject": "프로젝트 닫기",
       "newProject": "새 프로젝트",
@@ -1395,6 +1398,7 @@
       "getTask": "작업 가져오기",
       "getTaskMessage": "작업 메시지 가져오기",
       "createTask": "작업 생성",
+      "createSubtask": "하위 작업 생성",
       "deleteTask": "작업 삭제",
       "runPrompt": "작업에서 프롬프트 실행",
       "searchTask": "작업 검색:",

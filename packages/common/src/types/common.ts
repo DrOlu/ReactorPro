@@ -27,6 +27,7 @@ export const WorktreeSchema = z.object({
   baseBranch: z.string().optional(),
   baseCommit: z.string().optional(),
   branch: z.string().optional(),
+  pendingRebaseFromBranch: z.string().optional(),
   prunable: z.boolean().optional(),
 });
 
@@ -680,6 +681,20 @@ export interface HotkeyConfig {
     focusPrompt: string;
     newTask: string;
     closeTask: string;
+  };
+  gitHotkeys: {
+    pull: string;
+    push: string;
+    branches: string;
+    newBranch: string;
+    renameBranch: string;
+    worktreeMerge: string;
+    worktreeSquash: string;
+    worktreeApplyUncommitted: string;
+    worktreeRebase: string;
+    worktreeAbortRebase: string;
+    worktreeContinueRebase: string;
+    worktreeResolveConflicts: string;
   };
   dialogHotkeys: {
     browseFolder: string;

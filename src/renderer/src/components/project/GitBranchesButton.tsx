@@ -6,11 +6,14 @@ import { IoGitBranch } from 'react-icons/io5';
 import { VscWorktreeSmall } from 'react-icons/vsc';
 import { MdKeyboardArrowDown } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { useLocalStorage } from '@reactuses/core';
 import { BranchInfo, GitSyncCommits, WorktreeIntegrationStatus } from '@common/types';
 
 import { useApi } from '@/contexts/ApiContext';
 import { useClickOutside } from '@/hooks/useClickOutside';
+import { useConfiguredHotkeys } from '@/hooks/useConfiguredHotkeys';
+import { invokeAction, registerAction, unregisterAction } from '@/stores/actionsStore';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Checkbox } from '@/components/common/Checkbox';
 import { RadioButton } from '@/components/common/RadioButton';
@@ -31,6 +34,7 @@ enum PullStrategy {
 
 const MAX_BRANCH_NAME_LENGTH = 50;
 const TRUNCATED_TAIL_LENGTH = 5;
+const GIT_STATE_REFRESH_INTERVAL_MS = 30_000;
 
 const slugifyBranchName = (name: string) => {
   return name
@@ -117,6 +121,7 @@ export const GitBranchesButton = ({
 }: Props) => {
   const { t } = useTranslation();
   const api = useApi();
+  const { GIT_HOTKEYS } = useConfiguredHotkeys();
 
   const [isOpen, setIsOpen] = useState(false);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
@@ -159,7 +164,6 @@ export const GitBranchesButton = ({
 
   useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
 
-  const repoPath = worktreePath || baseDir;
   const currentBranch = branches.find((b) => b.isCurrent)?.name || status?.currentBranch || '';
   const isWorktree = Boolean(worktreePath);
   const worktreeBaseBranch = isWorktree ? status?.baseBranch || status?.targetBranch : undefined;
@@ -189,7 +193,7 @@ export const GitBranchesButton = ({
   const loadBranches = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await api.listGitBranches(repoPath, true);
+      const list = await api.listGitBranches(baseDir, taskId, true);
       setBranches(list);
     } catch (error) {
       showErrorNotification(error instanceof Error ? error.message : String(error));
@@ -197,7 +201,7 @@ export const GitBranchesButton = ({
     } finally {
       setLoading(false);
     }
-  }, [api, repoPath]);
+  }, [api, baseDir, taskId]);
 
   const loadMainBranch = useCallback(async () => {
     if (!worktreePath) {
@@ -205,7 +209,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      const list = await api.listGitBranches(baseDir, false);
+      const list = await api.listBranches(baseDir);
       setMainBranchName(list.find((b) => b.isCurrent)?.name || null);
     } catch {
       setMainBranchName(null);
@@ -214,12 +218,12 @@ export const GitBranchesButton = ({
 
   const loadSyncCommits = useCallback(async () => {
     try {
-      const result = await api.getSyncCommits(repoPath, worktreeBaseBranch);
+      const result = await api.getSyncCommits(baseDir, taskId, worktreeBaseBranch);
       setSyncCommits(result);
     } catch {
       setSyncCommits({ outgoing: { count: 0, commits: [] }, incoming: { count: 0, commits: [] } });
     }
-  }, [api, repoPath, worktreeBaseBranch]);
+  }, [api, baseDir, taskId, worktreeBaseBranch]);
 
   useEffect(() => {
     void loadBranches();
@@ -241,11 +245,33 @@ export const GitBranchesButton = ({
     }
   }, [isOpen, loadBranches, loadMainBranch, loadSyncCommits]);
 
-  const handleError = (error: unknown) => {
+  useEffect(() => {
+    const refreshOnVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void loadBranches();
+        void loadSyncCommits();
+      }
+    };
+
+    const interval = setInterval(() => {
+      void loadSyncCommits();
+    }, GIT_STATE_REFRESH_INTERVAL_MS);
+
+    window.addEventListener('focus', refreshOnVisible);
+    document.addEventListener('visibilitychange', refreshOnVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', refreshOnVisible);
+      document.removeEventListener('visibilitychange', refreshOnVisible);
+    };
+  }, [loadBranches, loadSyncCommits]);
+
+  const handleError = useCallback((error: unknown) => {
     // The error is already logged to the task chat by the backend with a 'Resolve with AI' action
     // eslint-disable-next-line no-console
     console.error('Git action failed:', error);
-  };
+  }, []);
 
   const handleToggle = () => {
     if (!disabled) {
@@ -253,7 +279,7 @@ export const GitBranchesButton = ({
     }
   };
 
-  const handleCloseDropdown = () => {
+  const handleCloseDropdown = useCallback(() => {
     setIsOpen(false);
     setShowNewBranchInput(false);
     setNewBranchName('');
@@ -262,7 +288,7 @@ export const GitBranchesButton = ({
     setNewBranchFromName('');
     setShowPushConfirm(false);
     setForcePush(false);
-  };
+  }, []);
 
   const handleCreateBranchConfirm = async () => {
     if (isWorktree) {
@@ -276,7 +302,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.createGitBranch(repoPath, trimmedName, undefined, true, taskId);
+      await api.createGitBranch(baseDir, taskId, trimmedName, undefined, true);
       showInfoNotification(t('git.branchCreated', { branch: trimmedName }));
       trackRecentBranch(trimmedName);
       setShowNewBranchInput(false);
@@ -305,7 +331,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.createGitBranch(repoPath, trimmedName, branchToBase.name, true, taskId);
+      await api.createGitBranch(baseDir, taskId, trimmedName, branchToBase.name, true);
       showInfoNotification(t('git.branchCreated', { branch: trimmedName }));
       trackRecentBranch(trimmedName);
       setBranchToBase(null);
@@ -351,7 +377,7 @@ export const GitBranchesButton = ({
 
     handleCloseDropdown();
     try {
-      await api.checkoutGitBranch(repoPath, branch.name, branch.isRemote, takeOver, taskId);
+      await api.checkoutGitBranch(baseDir, taskId, branch.name, branch.isRemote, takeOver);
       showInfoNotification(t('git.checkedOutBranch', { branch: branch.name }));
       trackRecentBranch(branch.name);
       await loadBranches();
@@ -363,7 +389,7 @@ export const GitBranchesButton = ({
 
   const performMerge = async (branch: BranchInfo) => {
     try {
-      const result = await api.mergeIntoCurrentBranch(repoPath, branch.name, taskId);
+      const result = await api.mergeIntoCurrentBranch(baseDir, taskId, branch.name);
       if (result.conflictedFiles && result.conflictedFiles.length > 0) {
         showErrorNotification(t('git.mergeConflicts', { files: result.conflictedFiles.join(', ') }));
       } else {
@@ -378,7 +404,7 @@ export const GitBranchesButton = ({
 
   const performRebase = async (branch: BranchInfo) => {
     try {
-      const result = await api.rebaseOntoBranch(repoPath, branch.name, taskId);
+      const result = await api.rebaseOntoBranch(baseDir, taskId, branch.name);
       if (result.conflictedFiles && result.conflictedFiles.length > 0) {
         showErrorNotification(t('git.rebaseConflicts', { files: result.conflictedFiles.join(', ') }));
       } else {
@@ -418,7 +444,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.deleteGitBranch(repoPath, branchToDelete.name, forceDelete, taskId);
+      await api.deleteGitBranch(baseDir, taskId, branchToDelete.name, forceDelete);
       showInfoNotification(t('git.branchDeleted', { branch: branchToDelete.name }));
       setBranchToDelete(null);
       await loadBranches();
@@ -434,25 +460,25 @@ export const GitBranchesButton = ({
     }
   };
 
-  const performPull = async () => {
+  const performPull = useCallback(async () => {
     try {
-      const result = await api.gitPull(repoPath, taskId, pullStrategy === PullStrategy.Rebase);
+      const result = await api.gitPull(baseDir, taskId, pullStrategy === PullStrategy.Rebase);
       const isUpToDate = /up to date/i.test(result.output);
       showInfoNotification(isUpToDate ? t('git.pullUpToDate') : t('git.pullSuccess'));
       await loadSyncCommits();
     } catch (error) {
       handleError(error);
     }
-  };
+  }, [api, baseDir, taskId, pullStrategy, t, loadSyncCommits, handleError]);
 
-  const handlePull = () => {
+  const handlePull = useCallback(() => {
     handleCloseDropdown();
     if (incomingCount > 0 && outgoingCount > 0) {
       setShowPullConfirm(true);
       return;
     }
     void performPull();
-  };
+  }, [handleCloseDropdown, incomingCount, outgoingCount, performPull]);
 
   const handlePullConfirm = () => {
     setShowPullConfirm(false);
@@ -466,7 +492,7 @@ export const GitBranchesButton = ({
   const handleUpdateBranch = async (branch: BranchInfo) => {
     handleCloseDropdown();
     try {
-      await api.updateGitBranch(repoPath, branch.name, taskId);
+      await api.updateGitBranch(baseDir, taskId, branch.name);
       showInfoNotification(t('git.branchUpdated', { branch: branch.name }));
       await loadBranches();
       await loadSyncCommits();
@@ -475,19 +501,19 @@ export const GitBranchesButton = ({
     }
   };
 
-  const handlePush = () => {
+  const handlePush = useCallback(() => {
     if (disabled || outgoingCount === 0) {
       return;
     }
     handleCloseDropdown();
     setForcePush(false);
     setShowPushConfirm(true);
-  };
+  }, [disabled, outgoingCount, handleCloseDropdown]);
 
   const handlePushConfirm = async () => {
     setShowPushConfirm(false);
     try {
-      await api.gitPush(repoPath, forcePush, taskId);
+      await api.gitPush(baseDir, taskId, forcePush);
       showInfoNotification(t('git.pushSuccess'));
       await loadSyncCommits();
     } catch (error) {
@@ -504,10 +530,10 @@ export const GitBranchesButton = ({
     setForcePush(false);
   };
 
-  const handleEditBranch = () => {
+  const handleEditBranch = useCallback(() => {
     setEditBranchName(currentBranch);
     setIsEditingBranch(true);
-  };
+  }, [currentBranch]);
 
   const handleBranchEditConfirm = async () => {
     const trimmedName = editBranchName.trim();
@@ -521,10 +547,13 @@ export const GitBranchesButton = ({
     setIsEditingBranch(false);
   };
 
-  const handleShowWorktreeDialog = (dialogSetter: (value: boolean) => void) => {
-    handleCloseDropdown();
-    dialogSetter(true);
-  };
+  const handleShowWorktreeDialog = useCallback(
+    (dialogSetter: (value: boolean) => void) => {
+      handleCloseDropdown();
+      dialogSetter(true);
+    },
+    [handleCloseDropdown],
+  );
 
   const handleSwitchToLocal = () => {
     if (!disabled) {
@@ -539,6 +568,200 @@ export const GitBranchesButton = ({
       onSwitchToWorktree();
     }
   };
+
+  useEffect(() => {
+    const actions: Record<string, () => void> = {
+      'git.pull': handlePull,
+      'git.push': handlePush,
+      'git.branches': () => setIsOpen(true),
+      'git.newBranch': () => {
+        if (isWorktree) {
+          showErrorNotification(t('git.actionNotAvailableInWorktree'));
+          return;
+        }
+        setIsOpen(true);
+        setShowNewBranchInput(true);
+      },
+      'git.renameBranch': () => {
+        setIsOpen(true);
+        handleEditBranch();
+      },
+      'git.worktree.merge': () => {
+        if (disabled) {
+          return;
+        }
+        handleShowWorktreeDialog(setShowMergeDialog);
+      },
+      'git.worktree.squash': () => {
+        if (disabled) {
+          return;
+        }
+        handleShowWorktreeDialog(setShowSquashDialog);
+      },
+      'git.worktree.applyUncommitted': () => {
+        if (disabled || !status || status.uncommittedFiles.count === 0) {
+          return;
+        }
+        handleShowWorktreeDialog(setShowOnlyUncommittedDialog);
+      },
+      'git.worktree.rebase': () => {
+        if (disabled || !rebaseBranch) {
+          return;
+        }
+        onRebaseFromBranch(rebaseBranch);
+      },
+      'git.worktree.abortRebase': () => {
+        if (!canAbortRebase) {
+          return;
+        }
+        handleShowWorktreeDialog(setShowAbortRebaseConfirm);
+      },
+      'git.worktree.continueRebase': () => {
+        if (!canContinueRebase) {
+          return;
+        }
+        handleShowWorktreeDialog(setShowContinueRebaseConfirm);
+      },
+      'git.worktree.resolveConflicts': () => {
+        if (!canResolveConflictsWithAgent) {
+          return;
+        }
+        handleShowWorktreeDialog(setShowResolveWithAgentConfirm);
+      },
+    };
+
+    for (const [id, handler] of Object.entries(actions)) {
+      registerAction(id, handler);
+    }
+    return () => {
+      for (const id of Object.keys(actions)) {
+        unregisterAction(id);
+      }
+    };
+  }, [
+    handlePull,
+    handlePush,
+    handleEditBranch,
+    handleShowWorktreeDialog,
+    isWorktree,
+    disabled,
+    status,
+    rebaseBranch,
+    onRebaseFromBranch,
+    canAbortRebase,
+    canContinueRebase,
+    canResolveConflictsWithAgent,
+    t,
+  ]);
+
+  useHotkeys(
+    GIT_HOTKEYS.PULL,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.pull');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.PULL) },
+    [GIT_HOTKEYS.PULL],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.PUSH,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.push');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.PUSH) },
+    [GIT_HOTKEYS.PUSH],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.BRANCHES,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.branches');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.BRANCHES) },
+    [GIT_HOTKEYS.BRANCHES],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.NEW_BRANCH,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.newBranch');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.NEW_BRANCH) },
+    [GIT_HOTKEYS.NEW_BRANCH],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.RENAME_BRANCH,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.renameBranch');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.RENAME_BRANCH) },
+    [GIT_HOTKEYS.RENAME_BRANCH],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.WORKTREE_MERGE,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.worktree.merge');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.WORKTREE_MERGE) },
+    [GIT_HOTKEYS.WORKTREE_MERGE],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.WORKTREE_SQUASH,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.worktree.squash');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.WORKTREE_SQUASH) },
+    [GIT_HOTKEYS.WORKTREE_SQUASH],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.WORKTREE_APPLY_UNCOMMITTED,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.worktree.applyUncommitted');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.WORKTREE_APPLY_UNCOMMITTED) },
+    [GIT_HOTKEYS.WORKTREE_APPLY_UNCOMMITTED],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.WORKTREE_REBASE,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.worktree.rebase');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.WORKTREE_REBASE) },
+    [GIT_HOTKEYS.WORKTREE_REBASE],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.WORKTREE_ABORT_REBASE,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.worktree.abortRebase');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.WORKTREE_ABORT_REBASE) },
+    [GIT_HOTKEYS.WORKTREE_ABORT_REBASE],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.WORKTREE_CONTINUE_REBASE,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.worktree.continueRebase');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.WORKTREE_CONTINUE_REBASE) },
+    [GIT_HOTKEYS.WORKTREE_CONTINUE_REBASE],
+  );
+  useHotkeys(
+    GIT_HOTKEYS.WORKTREE_RESOLVE_CONFLICTS,
+    (e) => {
+      e.preventDefault();
+      invokeAction('git.worktree.resolveConflicts');
+    },
+    { scopes: 'task', enableOnFormTags: true, enableOnContentEditable: true, enabled: Boolean(GIT_HOTKEYS.WORKTREE_RESOLVE_CONFLICTS) },
+    [GIT_HOTKEYS.WORKTREE_RESOLVE_CONFLICTS],
+  );
 
   const menuItemClass =
     'w-full px-3 py-1 text-left text-2xs text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -644,6 +867,7 @@ export const GitBranchesButton = ({
               >
                 <button
                   onClick={() => {
+                    handleCloseDropdown();
                     if (rebaseBranch) {
                       onRebaseFromBranch(rebaseBranch);
                     }

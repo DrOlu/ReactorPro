@@ -385,66 +385,68 @@ const ListBranchesSchema = z.object({
 
 // Git branch operations
 const ListGitBranchesSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   includeRemote: z.string().optional(),
 });
 
 const GetSyncCommitsSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   targetBranch: z.string().optional(),
 });
 
 const CreateGitBranchSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   name: z.string().min(1, 'Branch name is required'),
   startPoint: z.string().optional(),
   checkout: z.boolean().optional(),
-  taskId: z.string().optional(),
 });
 
 const CheckoutGitBranchSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   branch: z.string().min(1, 'Branch name is required'),
   createTracking: z.boolean().optional(),
   takeOver: z.boolean().optional(),
-  taskId: z.string().optional(),
 });
 
 const DeleteGitBranchSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   branch: z.string().min(1, 'Branch name is required'),
   force: z.boolean().optional(),
-  taskId: z.string().optional(),
 });
 
 const MergeIntoCurrentBranchSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   branch: z.string().min(1, 'Branch name is required'),
-  taskId: z.string().optional(),
 });
 
 const RebaseOntoBranchSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   branch: z.string().min(1, 'Branch name is required'),
-  taskId: z.string().optional(),
 });
 
 const GitPullSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
-  taskId: z.string().optional(),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   rebase: z.boolean().optional(),
 });
 
 const UpdateGitBranchSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   branchName: z.string().min(1, 'Branch name is required'),
-  taskId: z.string().optional(),
 });
 
 const GitPushSchema = z.object({
-  repoPath: z.string().min(1, 'Repository path is required'),
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
   force: z.boolean().optional(),
-  taskId: z.string().optional(),
 });
 
 const ResolveGitErrorSchema = z.object({
@@ -1230,8 +1232,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, includeRemote } = parsed;
-        const branches = await this.eventsHandler.listGitBranches(repoPath, includeRemote === 'true');
+        const { projectDir, taskId, includeRemote } = parsed;
+        const branches = await this.eventsHandler.listGitBranches(projectDir, taskId, includeRemote === 'true');
         res.status(200).json(branches);
       }),
     );
@@ -1245,8 +1247,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, targetBranch } = parsed;
-        const syncCommits = await this.eventsHandler.getSyncCommits(repoPath, targetBranch);
+        const { projectDir, taskId, targetBranch } = parsed;
+        const syncCommits = await this.eventsHandler.getSyncCommits(projectDir, taskId, targetBranch);
         res.status(200).json(syncCommits);
       }),
     );
@@ -1260,8 +1262,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, name, startPoint, checkout, taskId } = parsed;
-        await this.eventsHandler.createGitBranch(repoPath, name, startPoint, checkout, taskId);
+        const { projectDir, taskId, name, startPoint, checkout } = parsed;
+        await this.eventsHandler.createGitBranch(projectDir, taskId, name, startPoint, checkout);
         res.status(200).json({ message: 'Branch created' });
       }),
     );
@@ -1275,8 +1277,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branch, createTracking, takeOver, taskId } = parsed;
-        await this.eventsHandler.checkoutGitBranch(repoPath, branch, createTracking, takeOver, taskId);
+        const { projectDir, taskId, branch, createTracking, takeOver } = parsed;
+        await this.eventsHandler.checkoutGitBranch(projectDir, taskId, branch, createTracking, takeOver);
         res.status(200).json({ message: 'Branch checked out' });
       }),
     );
@@ -1290,8 +1292,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branch, force, taskId } = parsed;
-        await this.eventsHandler.deleteGitBranch(repoPath, branch, force, taskId);
+        const { projectDir, taskId, branch, force } = parsed;
+        await this.eventsHandler.deleteGitBranch(projectDir, taskId, branch, force);
         res.status(200).json({ message: 'Branch deleted' });
       }),
     );
@@ -1305,8 +1307,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branch, taskId } = parsed;
-        const result = await this.eventsHandler.mergeIntoCurrentBranch(repoPath, branch, taskId);
+        const { projectDir, taskId, branch } = parsed;
+        const result = await this.eventsHandler.mergeIntoCurrentBranch(projectDir, taskId, branch);
         res.status(200).json(result);
       }),
     );
@@ -1320,8 +1322,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branch, taskId } = parsed;
-        const result = await this.eventsHandler.rebaseOntoBranch(repoPath, branch, taskId);
+        const { projectDir, taskId, branch } = parsed;
+        const result = await this.eventsHandler.rebaseOntoBranch(projectDir, taskId, branch);
         res.status(200).json(result);
       }),
     );
@@ -1335,8 +1337,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branchName, taskId } = parsed;
-        const result = await this.eventsHandler.updateGitBranch(repoPath, branchName, taskId);
+        const { projectDir, taskId, branchName } = parsed;
+        const result = await this.eventsHandler.updateGitBranch(projectDir, taskId, branchName);
         res.status(200).json(result);
       }),
     );
@@ -1350,8 +1352,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, taskId, rebase } = parsed;
-        const result = await this.eventsHandler.gitPull(repoPath, taskId, rebase);
+        const { projectDir, taskId, rebase } = parsed;
+        const result = await this.eventsHandler.gitPull(projectDir, taskId, rebase);
         res.status(200).json(result);
       }),
     );
@@ -1365,8 +1367,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, force, taskId } = parsed;
-        const result = await this.eventsHandler.gitPush(repoPath, force, taskId);
+        const { projectDir, taskId, force } = parsed;
+        const result = await this.eventsHandler.gitPush(projectDir, taskId, force);
         res.status(200).json(result);
       }),
     );

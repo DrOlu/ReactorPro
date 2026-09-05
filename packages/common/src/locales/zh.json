@@ -37,7 +37,9 @@
     "moveToTop": "移至顶部",
     "switchToLocal": "切换到本地模式",
     "switchToWorktree": "切换到工作树模式",
-    "switchWorkingMode": "切换工作模式"
+    "switchWorkingMode": "切换工作模式",
+    "gitAction": "Git 操作",
+    "gitBranches": "显示 Git 分支"
   },
   "common": {
     "settings": "设置",
@@ -602,6 +604,7 @@
     "hotkeys": {
       "projectHotkeys": "项目快捷键",
       "taskHotkeys": "任务快捷键",
+      "gitHotkeys": "Git 快捷键",
       "dialogHotkeys": "对话框快捷键",
       "closeProject": "关闭项目",
       "newProject": "新建项目",
@@ -1378,6 +1381,7 @@
       "getTask": "获取任务",
       "getTaskMessage": "获取任务消息",
       "createTask": "创建任务",
+      "createSubtask": "创建子任务",
       "deleteTask": "删除任务",
       "runPrompt": "在任务上运行提示",
       "searchTask": "搜索任务:",

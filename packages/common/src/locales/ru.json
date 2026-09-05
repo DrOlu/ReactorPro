@@ -37,7 +37,9 @@
     "moveToTop": "Переместить наверх",
     "switchToLocal": "Переключить на локальный режим",
     "switchToWorktree": "Переключить на режим worktree",
-    "switchWorkingMode": "Переключить рабочий режим"
+    "switchWorkingMode": "Переключить рабочий режим",
+    "gitAction": "Действие Git",
+    "gitBranches": "Показать ветки Git"
   },
   "common": {
     "settings": "Настройки",
@@ -599,6 +601,7 @@
     "hotkeys": {
       "projectHotkeys": "Проект",
       "taskHotkeys": "Задача",
+      "gitHotkeys": "Git",
       "dialogHotkeys": "Диалоги",
       "closeProject": "Закрыть проект",
       "newProject": "Новый проект",
@@ -1417,6 +1420,7 @@
       "getTask": "Получить задачу",
       "getTaskMessage": "Получить сообщение задачи",
       "createTask": "Создать задачу",
+      "createSubtask": "Создать подзадачу",
       "deleteTask": "Удалить задачу",
       "searchTask": "Поиск задачи:",
       "inTask": "в",
