@@ -6,12 +6,14 @@ import { IoGitBranch } from 'react-icons/io5';
 import { VscWorktreeSmall } from 'react-icons/vsc';
 import { MdKeyboardArrowDown } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
+import { useLocalStorage } from '@reactuses/core';
 import { BranchInfo, GitSyncCommits, WorktreeIntegrationStatus } from '@common/types';
 
 import { useApi } from '@/contexts/ApiContext';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Checkbox } from '@/components/common/Checkbox';
+import { RadioButton } from '@/components/common/RadioButton';
 import { InlineEditPanel } from '@/components/common/InlineEditPanel';
 import { WorktreeActionDialog } from '@/components/project/WorktreeActionDialog';
 import { GitStatusBadges } from '@/components/project/GitStatusBadges';
@@ -21,6 +23,11 @@ import { showErrorNotification, showInfoNotification } from '@/utils/notificatio
 
 const LocalModeIcon = TbDeviceImacDown;
 const WorktreeModeIcon = VscWorktreeSmall;
+
+enum PullStrategy {
+  Merge = 'merge',
+  Rebase = 'rebase',
+}
 
 const MAX_BRANCH_NAME_LENGTH = 50;
 const TRUNCATED_TAIL_LENGTH = 5;
@@ -65,6 +72,7 @@ const buildCommitsTooltip = (label: string, commits: string[]) => {
 
 type Props = {
   baseDir: string;
+  taskId: string;
   worktreePath?: string;
   status?: WorktreeIntegrationStatus | null;
   taskName?: string;
@@ -87,6 +95,7 @@ type Props = {
 
 export const GitBranchesButton = ({
   baseDir,
+  taskId,
   worktreePath,
   status,
   taskName,
@@ -113,6 +122,7 @@ export const GitBranchesButton = ({
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncCommits, setSyncCommits] = useState<GitSyncCommits>({ outgoing: { count: 0, commits: [] }, incoming: { count: 0, commits: [] } });
+  const [pullStrategy, setPullStrategy] = useLocalStorage<PullStrategy>('git-pull-strategy', PullStrategy.Merge);
   const [recentBranches, setRecentBranches] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(`git-recent-branches-${baseDir}`) || '[]');
@@ -143,6 +153,7 @@ export const GitBranchesButton = ({
   const [showResolveWithAgentConfirm, setShowResolveWithAgentConfirm] = useState(false);
   const [showPushConfirm, setShowPushConfirm] = useState(false);
   const [forcePush, setForcePush] = useState(false);
+  const [showPullConfirm, setShowPullConfirm] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -231,7 +242,9 @@ export const GitBranchesButton = ({
   }, [isOpen, loadBranches, loadMainBranch, loadSyncCommits]);
 
   const handleError = (error: unknown) => {
-    showErrorNotification(error instanceof Error ? error.message : String(error));
+    // The error is already logged to the task chat by the backend with a 'Resolve with AI' action
+    // eslint-disable-next-line no-console
+    console.error('Git action failed:', error);
   };
 
   const handleToggle = () => {
@@ -263,7 +276,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.createGitBranch(repoPath, trimmedName, undefined, true);
+      await api.createGitBranch(repoPath, trimmedName, undefined, true, taskId);
       showInfoNotification(t('git.branchCreated', { branch: trimmedName }));
       trackRecentBranch(trimmedName);
       setShowNewBranchInput(false);
@@ -292,7 +305,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.createGitBranch(repoPath, trimmedName, branchToBase.name, true);
+      await api.createGitBranch(repoPath, trimmedName, branchToBase.name, true, taskId);
       showInfoNotification(t('git.branchCreated', { branch: trimmedName }));
       trackRecentBranch(trimmedName);
       setBranchToBase(null);
@@ -338,7 +351,7 @@ export const GitBranchesButton = ({
 
     handleCloseDropdown();
     try {
-      await api.checkoutGitBranch(repoPath, branch.name, branch.isRemote, takeOver);
+      await api.checkoutGitBranch(repoPath, branch.name, branch.isRemote, takeOver, taskId);
       showInfoNotification(t('git.checkedOutBranch', { branch: branch.name }));
       trackRecentBranch(branch.name);
       await loadBranches();
@@ -350,7 +363,7 @@ export const GitBranchesButton = ({
 
   const performMerge = async (branch: BranchInfo) => {
     try {
-      const result = await api.mergeIntoCurrentBranch(repoPath, branch.name);
+      const result = await api.mergeIntoCurrentBranch(repoPath, branch.name, taskId);
       if (result.conflictedFiles && result.conflictedFiles.length > 0) {
         showErrorNotification(t('git.mergeConflicts', { files: result.conflictedFiles.join(', ') }));
       } else {
@@ -365,7 +378,7 @@ export const GitBranchesButton = ({
 
   const performRebase = async (branch: BranchInfo) => {
     try {
-      const result = await api.rebaseOntoBranch(repoPath, branch.name);
+      const result = await api.rebaseOntoBranch(repoPath, branch.name, taskId);
       if (result.conflictedFiles && result.conflictedFiles.length > 0) {
         showErrorNotification(t('git.rebaseConflicts', { files: result.conflictedFiles.join(', ') }));
       } else {
@@ -405,7 +418,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.deleteGitBranch(repoPath, branchToDelete.name, forceDelete);
+      await api.deleteGitBranch(repoPath, branchToDelete.name, forceDelete, taskId);
       showInfoNotification(t('git.branchDeleted', { branch: branchToDelete.name }));
       setBranchToDelete(null);
       await loadBranches();
@@ -421,10 +434,9 @@ export const GitBranchesButton = ({
     }
   };
 
-  const handlePull = async () => {
-    handleCloseDropdown();
+  const performPull = async () => {
     try {
-      const result = await api.gitPull(repoPath);
+      const result = await api.gitPull(repoPath, taskId, pullStrategy === PullStrategy.Rebase);
       const isUpToDate = /up to date/i.test(result.output);
       showInfoNotification(isUpToDate ? t('git.pullUpToDate') : t('git.pullSuccess'));
       await loadSyncCommits();
@@ -433,10 +445,28 @@ export const GitBranchesButton = ({
     }
   };
 
+  const handlePull = () => {
+    handleCloseDropdown();
+    if (incomingCount > 0 && outgoingCount > 0) {
+      setShowPullConfirm(true);
+      return;
+    }
+    void performPull();
+  };
+
+  const handlePullConfirm = () => {
+    setShowPullConfirm(false);
+    void performPull();
+  };
+
+  const handlePullStrategyChange = (value: string) => {
+    setPullStrategy(value === PullStrategy.Rebase ? PullStrategy.Rebase : PullStrategy.Merge);
+  };
+
   const handleUpdateBranch = async (branch: BranchInfo) => {
     handleCloseDropdown();
     try {
-      await api.updateGitBranch(repoPath, branch.name);
+      await api.updateGitBranch(repoPath, branch.name, taskId);
       showInfoNotification(t('git.branchUpdated', { branch: branch.name }));
       await loadBranches();
       await loadSyncCommits();
@@ -457,11 +487,15 @@ export const GitBranchesButton = ({
   const handlePushConfirm = async () => {
     setShowPushConfirm(false);
     try {
-      await api.gitPush(repoPath, forcePush);
+      await api.gitPush(repoPath, forcePush, taskId);
       showInfoNotification(t('git.pushSuccess'));
       await loadSyncCommits();
     } catch (error) {
-      handleError(error);
+      if (error instanceof Error && /fetch first|non-fast-forward|rejected because the tip|remote contains work/i.test(error.message)) {
+        showErrorNotification(t('git.pushRejectedPullFirst'));
+      } else {
+        handleError(error);
+      }
     }
   };
 
@@ -688,9 +722,10 @@ export const GitBranchesButton = ({
                 />
               )}
 
-              <button onClick={() => void handlePull()} className={menuItemClass}>
+              <button onClick={handlePull} className={menuItemClass}>
                 <FaDownload className="w-3 h-3" />
                 {t('git.updateProject')}
+                {incomingCount > 0 && outgoingCount > 0 ? '...' : ''}
               </button>
               <button onClick={handlePush} className={menuItemClass} disabled={disabled || outgoingCount === 0}>
                 <FaUpload className="w-3 h-3" />
@@ -865,6 +900,39 @@ export const GitBranchesButton = ({
           closeOnEscape
         >
           <p className="text-sm mb-3">{t('worktree.confirmResolveConflictsWithAgentMessage')}</p>
+        </ConfirmDialog>
+      )}
+
+      {showPullConfirm && (
+        <ConfirmDialog
+          title={t('git.confirmPullTitle')}
+          onConfirm={handlePullConfirm}
+          onCancel={() => setShowPullConfirm(false)}
+          confirmButtonText={t('git.updateProject')}
+          closeOnEscape
+        >
+          <div className="flex flex-col gap-3">
+            <p className="text-sm">{t('git.confirmPullMessage', { outgoing: outgoingCount, incoming: incomingCount })}</p>
+            <div className="space-y-2 ml-0.5">
+              <RadioButton
+                id="pull-merge"
+                name="pull-strategy"
+                value={PullStrategy.Merge}
+                checked={pullStrategy === PullStrategy.Merge}
+                onChange={handlePullStrategyChange}
+                label={t('git.merge')}
+              />
+              <RadioButton
+                id="pull-rebase"
+                name="pull-strategy"
+                value={PullStrategy.Rebase}
+                checked={pullStrategy === PullStrategy.Rebase}
+                onChange={handlePullStrategyChange}
+                label={t('git.rebase')}
+              />
+            </div>
+            <p className="text-2xs text-text-muted">{t('git.pullRebaseAutostashHint')}</p>
+          </div>
         </ConfirmDialog>
       )}
 

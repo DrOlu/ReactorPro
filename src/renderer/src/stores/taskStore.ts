@@ -1,5 +1,5 @@
 import { useShallow } from 'zustand/react/shallow';
-import { ContextFile, ModelsData, QueuedPromptData, QuestionData, TodoItem, TokensInfoData, Message } from '@common/types';
+import { ContextFile, ModelsData, QueuedPromptData, QuestionData, TodoItem, TokensInfoData, Message, isLogMessage, isLoadingMessage } from '@common/types';
 import { createWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/vanilla/shallow';
 import { devtools } from 'zustand/middleware';
@@ -188,6 +188,15 @@ export const useTaskStore = createWithEqualityFn<TaskStore>()(
 export const updateTaskState = (taskId: string, updates: Partial<TaskState>) => useTaskStore.getState().updateTaskState(taskId, updates);
 
 export const setMessages = (taskId: string, updateMessages: (prev: Message[]) => Message[]) => useTaskStore.getState().setMessages(taskId, updateMessages);
+
+export const removeMessageActionId = (taskId: string, messageId: string, actionId: string) =>
+  setMessages(taskId, (prevMessages) =>
+    prevMessages.map((message) =>
+      message.id === messageId && (isLogMessage(message) || isLoadingMessage(message)) && message.actionIds
+        ? { ...message, actionIds: message.actionIds.filter((id) => id !== actionId) }
+        : message,
+    ),
+  );
 
 export const setTodoItems = (taskId: string, updateTodoItems: (prev: TodoItem[]) => TodoItem[]) =>
   useTaskStore.getState().setTodoItems(taskId, updateTodoItems);

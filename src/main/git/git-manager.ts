@@ -1558,9 +1558,10 @@ export class GitManager {
     ];
   }
 
-  async gitPull(worktreePath: string): Promise<{ output: string }> {
+  async gitPull(worktreePath: string, rebase?: boolean): Promise<{ output: string }> {
     try {
-      const { stdout, stderr } = await execWithShellPath('git pull', {
+      const command = rebase ? 'git pull --rebase --autostash' : 'git pull --no-rebase';
+      const { stdout, stderr } = await execWithShellPath(command, {
         cwd: worktreePath,
       });
       const output = stdout || stderr || 'Pull completed successfully';

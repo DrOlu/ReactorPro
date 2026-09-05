@@ -615,36 +615,40 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     return await eventsHandler.getSyncCommits(repoPath, targetBranch);
   });
 
-  ipcMain.handle('create-git-branch', async (_, repoPath: string, name: string, startPoint?: string, checkout?: boolean) => {
-    await eventsHandler.createGitBranch(repoPath, name, startPoint, checkout);
+  ipcMain.handle('create-git-branch', async (_, repoPath: string, name: string, startPoint?: string, checkout?: boolean, taskId?: string) => {
+    await eventsHandler.createGitBranch(repoPath, name, startPoint, checkout, taskId);
   });
 
-  ipcMain.handle('checkout-git-branch', async (_, repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean) => {
-    await eventsHandler.checkoutGitBranch(repoPath, branch, createTracking, takeOver);
+  ipcMain.handle('checkout-git-branch', async (_, repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean, taskId?: string) => {
+    await eventsHandler.checkoutGitBranch(repoPath, branch, createTracking, takeOver, taskId);
   });
 
-  ipcMain.handle('delete-git-branch', async (_, repoPath: string, branch: string, force?: boolean) => {
-    await eventsHandler.deleteGitBranch(repoPath, branch, force);
+  ipcMain.handle('delete-git-branch', async (_, repoPath: string, branch: string, force?: boolean, taskId?: string) => {
+    await eventsHandler.deleteGitBranch(repoPath, branch, force, taskId);
   });
 
-  ipcMain.handle('merge-into-current-branch', async (_, repoPath: string, branch: string) => {
-    return await eventsHandler.mergeIntoCurrentBranch(repoPath, branch);
+  ipcMain.handle('merge-into-current-branch', async (_, repoPath: string, branch: string, taskId?: string) => {
+    return await eventsHandler.mergeIntoCurrentBranch(repoPath, branch, taskId);
   });
 
-  ipcMain.handle('rebase-onto-branch', async (_, repoPath: string, branch: string) => {
-    return await eventsHandler.rebaseOntoBranch(repoPath, branch);
+  ipcMain.handle('rebase-onto-branch', async (_, repoPath: string, branch: string, taskId?: string) => {
+    return await eventsHandler.rebaseOntoBranch(repoPath, branch, taskId);
   });
 
-  ipcMain.handle('update-git-branch', async (_, repoPath: string, branchName: string) => {
-    return await eventsHandler.updateGitBranch(repoPath, branchName);
+  ipcMain.handle('update-git-branch', async (_, repoPath: string, branchName: string, taskId?: string) => {
+    return await eventsHandler.updateGitBranch(repoPath, branchName, taskId);
   });
 
-  ipcMain.handle('git-pull', async (_, repoPath: string) => {
-    return await eventsHandler.gitPull(repoPath);
+  ipcMain.handle('git-pull', async (_, repoPath: string, taskId?: string, rebase?: boolean) => {
+    return await eventsHandler.gitPull(repoPath, taskId, rebase);
   });
 
-  ipcMain.handle('git-push', async (_, repoPath: string, force?: boolean) => {
-    return await eventsHandler.gitPush(repoPath, force);
+  ipcMain.handle('git-push', async (_, repoPath: string, force?: boolean, taskId?: string) => {
+    return await eventsHandler.gitPush(repoPath, force, taskId);
+  });
+
+  ipcMain.handle('resolve-git-error-with-agent', async (_, baseDir: string, taskId: string) => {
+    await eventsHandler.resolveGitErrorWithAgent(baseDir, taskId);
   });
 
   ipcMain.handle('get-worktree-integration-status', async (_, baseDir: string, taskId: string, targetBranch?: string) => {

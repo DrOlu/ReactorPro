@@ -73,7 +73,7 @@ import {
   openUrl,
 } from '@/utils';
 import { expandTilde } from '@/agent/utils';
-import { AIDER_DESK_TMP_DIR, LOGS_DIR } from '@/constants';
+import { AIDER_DESK_TASKS_DIR, AIDER_DESK_TMP_DIR, LOGS_DIR } from '@/constants';
 import { EventManager } from '@/events';
 import { isElectron } from '@/app';
 import { NetworkManager } from '@/network-manager';
@@ -831,36 +831,79 @@ export class EventsHandler {
     return await this.projectManager.gitManager.getSyncCommits(repoPath, targetBranch);
   }
 
-  async createGitBranch(repoPath: string, name: string, startPoint?: string, checkout?: boolean): Promise<void> {
-    await this.projectManager.gitManager.createBranch(repoPath, name, startPoint, checkout);
+  private getBaseDirFromRepoPath(repoPath: string): string {
+    const tasksDirMarker = `${path.sep}${AIDER_DESK_TASKS_DIR}${path.sep}`;
+    const markerIndex = repoPath.indexOf(tasksDirMarker);
+    return markerIndex > 0 ? repoPath.substring(0, markerIndex) : repoPath;
   }
 
-  async checkoutGitBranch(repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean): Promise<void> {
-    await this.projectManager.gitManager.checkoutBranch(repoPath, branch, createTracking, takeOver);
+  private async runGitAction<T>(
+    baseDir: string,
+    taskId: string | undefined,
+    action: string,
+    gitAction: () => Promise<T>,
+    shouldSkipLogging?: (error: unknown) => boolean,
+  ): Promise<T> {
+    try {
+      return await gitAction();
+    } catch (error) {
+      if (taskId && !shouldSkipLogging?.(error)) {
+        this.projectManager.getOpenProject(baseDir)?.getTask(taskId)?.reportGitActionError(action, error);
+      }
+      throw error;
+    }
   }
 
-  async deleteGitBranch(repoPath: string, branch: string, force?: boolean): Promise<void> {
-    await this.projectManager.gitManager.deleteBranch(repoPath, branch, force);
+  async createGitBranch(repoPath: string, name: string, startPoint?: string, checkout?: boolean, taskId?: string): Promise<void> {
+    await this.runGitAction(this.getBaseDirFromRepoPath(repoPath), taskId, 'create branch', () =>
+      this.projectManager.gitManager.createBranch(repoPath, name, startPoint, checkout),
+    );
   }
 
-  async mergeIntoCurrentBranch(repoPath: string, branch: string): Promise<{ conflictedFiles?: string[] }> {
-    return await this.projectManager.gitManager.mergeIntoCurrent(repoPath, branch);
+  async checkoutGitBranch(repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean, taskId?: string): Promise<void> {
+    await this.runGitAction(this.getBaseDirFromRepoPath(repoPath), taskId, 'checkout', () =>
+      this.projectManager.gitManager.checkoutBranch(repoPath, branch, createTracking, takeOver),
+    );
   }
 
-  async rebaseOntoBranch(repoPath: string, branch: string): Promise<{ conflictedFiles?: string[] }> {
-    return await this.projectManager.gitManager.rebaseOnto(repoPath, branch);
+  async deleteGitBranch(repoPath: string, branch: string, force?: boolean, taskId?: string): Promise<void> {
+    await this.runGitAction(
+      this.getBaseDirFromRepoPath(repoPath),
+      taskId,
+      'delete branch',
+      () => this.projectManager.gitManager.deleteBranch(repoPath, branch, force),
+      (error) => !force && error instanceof Error && error.message.includes('not fully merged'),
+    );
   }
 
-  async updateGitBranch(repoPath: string, branchName: string): Promise<{ output: string }> {
-    return await this.projectManager.gitManager.updateBranch(repoPath, branchName);
+  async mergeIntoCurrentBranch(repoPath: string, branch: string, taskId?: string): Promise<{ conflictedFiles?: string[] }> {
+    return await this.runGitAction(this.getBaseDirFromRepoPath(repoPath), taskId, 'merge', () =>
+      this.projectManager.gitManager.mergeIntoCurrent(repoPath, branch),
+    );
   }
 
-  async gitPull(repoPath: string): Promise<{ output: string }> {
-    return await this.projectManager.gitManager.gitPull(repoPath);
+  async rebaseOntoBranch(repoPath: string, branch: string, taskId?: string): Promise<{ conflictedFiles?: string[] }> {
+    return await this.runGitAction(this.getBaseDirFromRepoPath(repoPath), taskId, 'rebase', () => this.projectManager.gitManager.rebaseOnto(repoPath, branch));
   }
 
-  async gitPush(repoPath: string, force?: boolean): Promise<{ output: string }> {
-    return await this.projectManager.gitManager.gitPush(repoPath, force);
+  async updateGitBranch(repoPath: string, branchName: string, taskId?: string): Promise<{ output: string }> {
+    return await this.runGitAction(this.getBaseDirFromRepoPath(repoPath), taskId, 'update branch', () =>
+      this.projectManager.gitManager.updateBranch(repoPath, branchName),
+    );
+  }
+
+  async gitPull(repoPath: string, taskId?: string, rebase?: boolean): Promise<{ output: string }> {
+    return await this.runGitAction(this.getBaseDirFromRepoPath(repoPath), taskId, 'pull', () => this.projectManager.gitManager.gitPull(repoPath, rebase));
+  }
+
+  async gitPush(repoPath: string, force?: boolean, taskId?: string): Promise<{ output: string }> {
+    return await this.runGitAction(
+      this.getBaseDirFromRepoPath(repoPath),
+      taskId,
+      'push',
+      () => this.projectManager.gitManager.gitPush(repoPath, force),
+      (error) => error instanceof Error && /fetch first|non-fast-forward|rejected because the tip|remote contains work/i.test(error.message),
+    );
   }
 
   async getWorktreeIntegrationStatus(baseDir: string, taskId: string, targetBranch?: string) {
@@ -908,13 +951,22 @@ export class EventsHandler {
     await task.resolveConflictsWithAgent();
   }
 
+  async resolveGitErrorWithAgent(baseDir: string, taskId: string): Promise<void> {
+    const task = this.projectManager.getProject(baseDir).getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    await task.resolveGitErrorWithAgent();
+  }
+
   async renameGitBranch(baseDir: string, taskId: string, newBranchName: string): Promise<void> {
     const task = this.projectManager.getProject(baseDir).getTask(taskId);
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
     }
 
-    await task.renameBranch(newBranchName);
+    await this.runGitAction(baseDir, taskId, 'rename branch', () => task.renameBranch(newBranchName));
   }
 
   async renameWorktreeBranch(baseDir: string, taskId: string, newBranchName: string): Promise<void> {

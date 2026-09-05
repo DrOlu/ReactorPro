@@ -10,6 +10,7 @@
 - added confirmation dialog and force option for git push
 - fixed working mode switch dialog staying open and appearing frozen while switching
 - added ability to delete stored memories from the store memory tool message
+- added Resolve with AI action for failed git operations to fix errors with agent assistance
 
 ## [0.81.0]
 

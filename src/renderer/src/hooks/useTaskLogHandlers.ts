@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
+import { isLogMessage } from '@common/types';
 
 import type { LogData, LogMessage, LoadingMessage, Message } from '@common/types';
 
@@ -10,6 +11,8 @@ import { setMessages, touchTaskActivity } from '@/stores/taskStore';
 const isLoadingMessage = (message: Message): message is LoadingMessage => {
   return message.type === 'loading';
 };
+
+const RESOLVE_GIT_ERROR_WITH_AGENT_ACTION_ID = 'resolve-git-error-with-agent';
 
 export const useTaskLogHandlers = (baseDir: string, taskId: string) => {
   const api = useApi();
@@ -78,7 +81,16 @@ export const useTaskLogHandlers = (baseDir: string, taskId: string) => {
           actionIds,
           timestamp,
         };
-        setMessages(taskId, (prevMessages) => [...prevMessages.filter((message) => message.type !== 'loading'), logMessage]);
+        setMessages(taskId, (prevMessages) => [
+          ...prevMessages
+            .map((msg) =>
+              isLogMessage(msg) && msg.actionIds?.includes(RESOLVE_GIT_ERROR_WITH_AGENT_ACTION_ID)
+                ? { ...msg, actionIds: msg.actionIds.filter((id) => id !== RESOLVE_GIT_ERROR_WITH_AGENT_ACTION_ID) }
+                : msg,
+            )
+            .filter((message) => !isLoadingMessage(message)),
+          logMessage,
+        ]);
       }
     },
     [taskId, t],

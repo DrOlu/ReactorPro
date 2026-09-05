@@ -1213,63 +1213,79 @@ export class BrowserApi implements ApplicationAPI {
     });
   }
 
-  async createGitBranch(repoPath: string, name: string, startPoint?: string, checkout?: boolean): Promise<void> {
+  async createGitBranch(repoPath: string, name: string, startPoint?: string, checkout?: boolean, taskId?: string): Promise<void> {
     await this.post('/project/git/branch/create', {
       repoPath,
       name,
       startPoint,
       checkout,
+      taskId,
     });
   }
 
-  async checkoutGitBranch(repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean): Promise<void> {
+  async checkoutGitBranch(repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean, taskId?: string): Promise<void> {
     await this.post('/project/git/branch/checkout', {
       repoPath,
       branch,
       createTracking,
       takeOver,
+      taskId,
     });
   }
 
-  async deleteGitBranch(repoPath: string, branch: string, force?: boolean): Promise<void> {
+  async deleteGitBranch(repoPath: string, branch: string, force?: boolean, taskId?: string): Promise<void> {
     await this.post('/project/git/branch/delete', {
       repoPath,
       branch,
       force,
+      taskId,
     });
   }
 
-  mergeIntoCurrentBranch(repoPath: string, branch: string): Promise<{ conflictedFiles?: string[] }> {
+  mergeIntoCurrentBranch(repoPath: string, branch: string, taskId?: string): Promise<{ conflictedFiles?: string[] }> {
     return this.post('/project/git/merge', {
       repoPath,
       branch,
+      taskId,
     });
   }
 
-  rebaseOntoBranch(repoPath: string, branch: string): Promise<{ conflictedFiles?: string[] }> {
+  rebaseOntoBranch(repoPath: string, branch: string, taskId?: string): Promise<{ conflictedFiles?: string[] }> {
     return this.post('/project/git/rebase', {
       repoPath,
       branch,
+      taskId,
     });
   }
 
-  updateGitBranch(repoPath: string, branchName: string): Promise<{ output: string }> {
+  updateGitBranch(repoPath: string, branchName: string, taskId?: string): Promise<{ output: string }> {
     return this.post('/project/git/branch/update', {
       repoPath,
       branchName,
+      taskId,
     });
   }
 
-  gitPull(repoPath: string): Promise<{ output: string }> {
+  gitPull(repoPath: string, taskId?: string, rebase?: boolean): Promise<{ output: string }> {
     return this.post('/project/git/pull', {
       repoPath,
+      taskId,
+      rebase,
     });
   }
 
-  gitPush(repoPath: string, force?: boolean): Promise<{ output: string }> {
+  gitPush(repoPath: string, force?: boolean, taskId?: string): Promise<{ output: string }> {
     return this.post('/project/git/push', {
       repoPath,
       force,
+      taskId,
+    });
+  }
+
+  resolveGitErrorWithAgent(baseDir: string, taskId: string): Promise<void> {
+    return this.post('/project/git/resolve-error-with-agent', {
+      projectDir: baseDir,
+      taskId,
     });
   }
 

@@ -752,14 +752,16 @@ const api: ApplicationAPI = {
   // Git branch operations
   listGitBranches: (repoPath, includeRemote) => ipcRenderer.invoke('list-git-branches', repoPath, includeRemote),
   getSyncCommits: (repoPath, targetBranch) => ipcRenderer.invoke('get-sync-commits', repoPath, targetBranch),
-  createGitBranch: (repoPath, name, startPoint, checkout) => ipcRenderer.invoke('create-git-branch', repoPath, name, startPoint, checkout),
-  checkoutGitBranch: (repoPath, branch, createTracking, takeOver) => ipcRenderer.invoke('checkout-git-branch', repoPath, branch, createTracking, takeOver),
-  deleteGitBranch: (repoPath, branch, force) => ipcRenderer.invoke('delete-git-branch', repoPath, branch, force),
-  mergeIntoCurrentBranch: (repoPath, branch) => ipcRenderer.invoke('merge-into-current-branch', repoPath, branch),
-  rebaseOntoBranch: (repoPath, branch) => ipcRenderer.invoke('rebase-onto-branch', repoPath, branch),
-  updateGitBranch: (repoPath, branchName) => ipcRenderer.invoke('update-git-branch', repoPath, branchName),
-  gitPull: (repoPath) => ipcRenderer.invoke('git-pull', repoPath),
-  gitPush: (repoPath, force) => ipcRenderer.invoke('git-push', repoPath, force),
+  createGitBranch: (repoPath, name, startPoint, checkout, taskId) => ipcRenderer.invoke('create-git-branch', repoPath, name, startPoint, checkout, taskId),
+  checkoutGitBranch: (repoPath, branch, createTracking, takeOver, taskId) =>
+    ipcRenderer.invoke('checkout-git-branch', repoPath, branch, createTracking, takeOver, taskId),
+  deleteGitBranch: (repoPath, branch, force, taskId) => ipcRenderer.invoke('delete-git-branch', repoPath, branch, force, taskId),
+  mergeIntoCurrentBranch: (repoPath, branch, taskId) => ipcRenderer.invoke('merge-into-current-branch', repoPath, branch, taskId),
+  rebaseOntoBranch: (repoPath, branch, taskId) => ipcRenderer.invoke('rebase-onto-branch', repoPath, branch, taskId),
+  updateGitBranch: (repoPath, branchName, taskId) => ipcRenderer.invoke('update-git-branch', repoPath, branchName, taskId),
+  gitPull: (repoPath, taskId, rebase) => ipcRenderer.invoke('git-pull', repoPath, taskId, rebase),
+  gitPush: (repoPath, force, taskId) => ipcRenderer.invoke('git-push', repoPath, force, taskId),
+  resolveGitErrorWithAgent: (baseDir, taskId) => ipcRenderer.invoke('resolve-git-error-with-agent', baseDir, taskId),
 
   // Agent profile operations
   getAllAgentProfiles: () => ipcRenderer.invoke('get-agent-profiles'),

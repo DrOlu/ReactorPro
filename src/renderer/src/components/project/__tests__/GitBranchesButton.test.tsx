@@ -4,6 +4,7 @@ import { WorktreeIntegrationStatus } from '@common/types';
 
 import { GitBranchesButton } from '../GitBranchesButton';
 
+import { showErrorNotification } from '@/utils/notifications';
 import { render } from '@/__tests__/render';
 import { useApi } from '@/contexts/ApiContext';
 import { createMockApi } from '@/__tests__/mocks/api';
@@ -29,6 +30,11 @@ vi.mock('@/contexts/ApiContext', () => ({
   useApi: vi.fn(),
 }));
 
+vi.mock('@/utils/notifications', () => ({
+  showErrorNotification: vi.fn(),
+  showInfoNotification: vi.fn(),
+}));
+
 const mockStatus: WorktreeIntegrationStatus = {
   currentBranch: 'task-123',
   baseBranch: 'main',
@@ -41,6 +47,7 @@ const mockStatus: WorktreeIntegrationStatus = {
 
 const defaultProps = {
   baseDir: '/project',
+  taskId: 'task-123',
   onSwitchToLocal: vi.fn(),
   onSwitchToWorktree: vi.fn(),
   onMerge: vi.fn(),
@@ -151,7 +158,7 @@ describe('GitBranchesButton', () => {
       fireEvent.click(screen.getByRole('button', { name: 'git.push' }));
 
       await waitFor(() => {
-        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', false);
+        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', false, 'task-123');
       });
       expect(screen.queryByText('git.confirmPushTitle')).not.toBeInTheDocument();
     });
@@ -180,8 +187,30 @@ describe('GitBranchesButton', () => {
       fireEvent.click(screen.getByRole('button', { name: 'git.push' }));
 
       await waitFor(() => {
-        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', true);
+        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', true, 'task-123');
       });
+    });
+
+    it('does not show an error notification when push fails (backend logs the error to the task chat)', async () => {
+      mockApi.listGitBranches = vi.fn().mockResolvedValue([{ name: 'main', isCurrent: true, hasWorktree: false, isRemote: false }]);
+      mockApi.gitPush = vi.fn().mockRejectedValue(new Error('push failed'));
+
+      render(<GitBranchesButton {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+      });
+
+      // Open menu and click push
+      fireEvent.click(screen.getByRole('button', { name: /main/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'git.push...' }));
+      fireEvent.click(screen.getByRole('button', { name: 'git.push' }));
+
+      await waitFor(() => {
+        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', false, 'task-123');
+      });
+
+      expect(showErrorNotification).not.toHaveBeenCalled();
     });
 
     it('cancels push dialog without calling gitPush', async () => {

@@ -279,6 +279,7 @@ export const createMockApi = (overrides: Partial<ApplicationAPI> = {}): MockedOb
     abortWorktreeRebase: vi.fn((): Promise<void> => Promise.resolve()),
     continueWorktreeRebase: vi.fn((): Promise<void> => Promise.resolve()),
     resolveWorktreeConflictsWithAgent: vi.fn((): Promise<void> => Promise.resolve()),
+    resolveGitErrorWithAgent: vi.fn((): Promise<void> => Promise.resolve()),
     renameWorktreeBranch: vi.fn((): Promise<void> => Promise.resolve()),
     renameGitBranch: vi.fn((): Promise<void> => Promise.resolve()),
 

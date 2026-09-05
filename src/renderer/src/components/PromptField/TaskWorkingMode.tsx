@@ -309,6 +309,7 @@ export const TaskWorkingMode = ({
           {task.workingMode === 'worktree' && task.lastMergeState && <WorktreeRevertButton onRevert={onRevert} disabled={isMerging} />}
           <GitBranchesButton
             baseDir={task.baseDir}
+            taskId={task.id}
             worktreePath={task.workingMode === 'worktree' ? task.worktree?.path : undefined}
             status={worktreeStatus}
             taskName={task.name}
