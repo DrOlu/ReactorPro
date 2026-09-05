@@ -19,6 +19,8 @@ import {
   DefaultTaskState,
   EditFormat,
   FileEdit,
+  BranchInfo,
+  GitSyncCommits,
   LogData,
   LogLevel,
   MessageRole,
@@ -4912,8 +4914,71 @@ ${error.stderr}`,
     }
   }
 
+  public async listGitBranches(includeRemote?: boolean): Promise<BranchInfo[]> {
+    return this.gitManager.listBranches(this.getTaskDir(), includeRemote);
+  }
+
+  public async getSyncCommits(targetBranch?: string): Promise<GitSyncCommits> {
+    return this.gitManager.getSyncCommits(this.getTaskDir(), targetBranch);
+  }
+
+  public async createGitBranch(name: string, startPoint?: string, checkout?: boolean): Promise<void> {
+    await this.runGitAction('create branch', () => this.gitManager.createBranch(this.getTaskDir(), name, startPoint, checkout));
+  }
+
+  public async checkoutGitBranch(branch: string, createTracking?: boolean, takeOver?: boolean): Promise<void> {
+    await this.runGitAction('checkout', () => this.gitManager.checkoutBranch(this.getTaskDir(), branch, createTracking, takeOver));
+  }
+
+  public async deleteGitBranch(branch: string, force?: boolean): Promise<void> {
+    await this.runGitAction(
+      'delete branch',
+      () => this.gitManager.deleteBranch(this.getTaskDir(), branch, force),
+      (error) => !force && error instanceof Error && error.message.includes('not fully merged'),
+    );
+  }
+
+  public async mergeIntoCurrentBranch(branch: string): Promise<{ conflictedFiles?: string[] }> {
+    return await this.runGitAction('merge', () => this.gitManager.mergeIntoCurrent(this.getTaskDir(), branch));
+  }
+
+  public async rebaseOntoBranch(branch: string): Promise<{ conflictedFiles?: string[] }> {
+    return await this.runGitAction('rebase', () => this.gitManager.rebaseOnto(this.getTaskDir(), branch));
+  }
+
+  public async updateGitBranch(branchName: string): Promise<{ output: string }> {
+    return await this.runGitAction('update branch', () => this.gitManager.updateBranch(this.getTaskDir(), branchName));
+  }
+
+  public async gitPull(rebase?: boolean): Promise<{ output: string }> {
+    return await this.runGitAction('pull', () => this.gitManager.gitPull(this.getTaskDir(), rebase));
+  }
+
+  public async gitPush(force?: boolean): Promise<{ output: string }> {
+    return await this.runGitAction(
+      'push',
+      () => this.gitManager.gitPush(this.getTaskDir(), force),
+      (error) => error instanceof Error && /fetch first|non-fast-forward|rejected because the tip|remote contains work/i.test(error.message),
+    );
+  }
+
+  public async renameGitBranch(newBranchName: string): Promise<void> {
+    await this.runGitAction('rename branch', () => this.renameBranch(newBranchName));
+  }
+
   public async renameWorktreeBranch(newBranchName: string): Promise<void> {
     await this.renameBranch(newBranchName);
+  }
+
+  private async runGitAction<T>(action: string, gitAction: () => Promise<T>, shouldSkipLogging?: (error: unknown) => boolean): Promise<T> {
+    try {
+      return await gitAction();
+    } catch (error) {
+      if (!shouldSkipLogging?.(error)) {
+        this.reportGitActionError(action, error);
+      }
+      throw error;
+    }
   }
 
   private async executeConflictResolution(directoryPath: string, directoryName: string): Promise<void> {

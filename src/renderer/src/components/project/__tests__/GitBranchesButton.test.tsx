@@ -84,7 +84,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project/.aider-desk/tasks/task-123/worktree', 'main');
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', 'main');
       });
 
       // Open branches menu to view rebase button
@@ -103,7 +103,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
     });
   });
@@ -119,7 +119,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       // Open menu
@@ -136,7 +136,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       // Open menu
@@ -159,7 +159,7 @@ describe('GitBranchesButton', () => {
       fireEvent.click(screen.getByRole('button', { name: 'git.push' }));
 
       await waitFor(() => {
-        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', false, 'task-123');
+        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', 'task-123', false);
       });
       expect(screen.queryByText('git.confirmPushTitle')).not.toBeInTheDocument();
     });
@@ -170,7 +170,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       // Open menu and click push
@@ -188,7 +188,7 @@ describe('GitBranchesButton', () => {
       fireEvent.click(screen.getByRole('button', { name: 'git.push' }));
 
       await waitFor(() => {
-        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', true, 'task-123');
+        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', 'task-123', true);
       });
     });
 
@@ -199,7 +199,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       // Open menu and click push
@@ -208,7 +208,7 @@ describe('GitBranchesButton', () => {
       fireEvent.click(screen.getByRole('button', { name: 'git.push' }));
 
       await waitFor(() => {
-        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', false, 'task-123');
+        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', 'task-123', false);
       });
 
       expect(showErrorNotification).not.toHaveBeenCalled();
@@ -220,7 +220,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       // Open menu and click push
@@ -250,7 +250,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       act(() => {
@@ -268,7 +268,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       act(() => {
@@ -285,7 +285,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       act(() => {
@@ -297,7 +297,7 @@ describe('GitBranchesButton', () => {
       fireEvent.click(screen.getByRole('button', { name: 'git.push' }));
 
       await waitFor(() => {
-        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', false, 'task-123');
+        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', 'task-123', false);
       });
     });
 
@@ -308,7 +308,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       act(() => {
@@ -326,7 +326,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       act(() => {
@@ -344,7 +344,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       act(() => {
@@ -376,7 +376,7 @@ describe('GitBranchesButton', () => {
       render(<GitBranchesButton {...defaultProps} />);
 
       await waitFor(() => {
-        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', 'task-123', undefined);
       });
 
       act(() => {

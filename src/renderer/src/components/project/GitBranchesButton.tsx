@@ -163,7 +163,6 @@ export const GitBranchesButton = ({
 
   useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
 
-  const repoPath = worktreePath || baseDir;
   const currentBranch = branches.find((b) => b.isCurrent)?.name || status?.currentBranch || '';
   const isWorktree = Boolean(worktreePath);
   const worktreeBaseBranch = isWorktree ? status?.baseBranch || status?.targetBranch : undefined;
@@ -193,7 +192,7 @@ export const GitBranchesButton = ({
   const loadBranches = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await api.listGitBranches(repoPath, true);
+      const list = await api.listGitBranches(baseDir, taskId, true);
       setBranches(list);
     } catch (error) {
       showErrorNotification(error instanceof Error ? error.message : String(error));
@@ -201,7 +200,7 @@ export const GitBranchesButton = ({
     } finally {
       setLoading(false);
     }
-  }, [api, repoPath]);
+  }, [api, baseDir, taskId]);
 
   const loadMainBranch = useCallback(async () => {
     if (!worktreePath) {
@@ -209,7 +208,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      const list = await api.listGitBranches(baseDir, false);
+      const list = await api.listBranches(baseDir);
       setMainBranchName(list.find((b) => b.isCurrent)?.name || null);
     } catch {
       setMainBranchName(null);
@@ -218,12 +217,12 @@ export const GitBranchesButton = ({
 
   const loadSyncCommits = useCallback(async () => {
     try {
-      const result = await api.getSyncCommits(repoPath, worktreeBaseBranch);
+      const result = await api.getSyncCommits(baseDir, taskId, worktreeBaseBranch);
       setSyncCommits(result);
     } catch {
       setSyncCommits({ outgoing: { count: 0, commits: [] }, incoming: { count: 0, commits: [] } });
     }
-  }, [api, repoPath, worktreeBaseBranch]);
+  }, [api, baseDir, taskId, worktreeBaseBranch]);
 
   useEffect(() => {
     void loadBranches();
@@ -280,7 +279,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.createGitBranch(repoPath, trimmedName, undefined, true, taskId);
+      await api.createGitBranch(baseDir, taskId, trimmedName, undefined, true);
       showInfoNotification(t('git.branchCreated', { branch: trimmedName }));
       trackRecentBranch(trimmedName);
       setShowNewBranchInput(false);
@@ -309,7 +308,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.createGitBranch(repoPath, trimmedName, branchToBase.name, true, taskId);
+      await api.createGitBranch(baseDir, taskId, trimmedName, branchToBase.name, true);
       showInfoNotification(t('git.branchCreated', { branch: trimmedName }));
       trackRecentBranch(trimmedName);
       setBranchToBase(null);
@@ -355,7 +354,7 @@ export const GitBranchesButton = ({
 
     handleCloseDropdown();
     try {
-      await api.checkoutGitBranch(repoPath, branch.name, branch.isRemote, takeOver, taskId);
+      await api.checkoutGitBranch(baseDir, taskId, branch.name, branch.isRemote, takeOver);
       showInfoNotification(t('git.checkedOutBranch', { branch: branch.name }));
       trackRecentBranch(branch.name);
       await loadBranches();
@@ -367,7 +366,7 @@ export const GitBranchesButton = ({
 
   const performMerge = async (branch: BranchInfo) => {
     try {
-      const result = await api.mergeIntoCurrentBranch(repoPath, branch.name, taskId);
+      const result = await api.mergeIntoCurrentBranch(baseDir, taskId, branch.name);
       if (result.conflictedFiles && result.conflictedFiles.length > 0) {
         showErrorNotification(t('git.mergeConflicts', { files: result.conflictedFiles.join(', ') }));
       } else {
@@ -382,7 +381,7 @@ export const GitBranchesButton = ({
 
   const performRebase = async (branch: BranchInfo) => {
     try {
-      const result = await api.rebaseOntoBranch(repoPath, branch.name, taskId);
+      const result = await api.rebaseOntoBranch(baseDir, taskId, branch.name);
       if (result.conflictedFiles && result.conflictedFiles.length > 0) {
         showErrorNotification(t('git.rebaseConflicts', { files: result.conflictedFiles.join(', ') }));
       } else {
@@ -422,7 +421,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.deleteGitBranch(repoPath, branchToDelete.name, forceDelete, taskId);
+      await api.deleteGitBranch(baseDir, taskId, branchToDelete.name, forceDelete);
       showInfoNotification(t('git.branchDeleted', { branch: branchToDelete.name }));
       setBranchToDelete(null);
       await loadBranches();
@@ -440,14 +439,14 @@ export const GitBranchesButton = ({
 
   const performPull = useCallback(async () => {
     try {
-      const result = await api.gitPull(repoPath, taskId, pullStrategy === PullStrategy.Rebase);
+      const result = await api.gitPull(baseDir, taskId, pullStrategy === PullStrategy.Rebase);
       const isUpToDate = /up to date/i.test(result.output);
       showInfoNotification(isUpToDate ? t('git.pullUpToDate') : t('git.pullSuccess'));
       await loadSyncCommits();
     } catch (error) {
       handleError(error);
     }
-  }, [api, repoPath, taskId, pullStrategy, t, loadSyncCommits, handleError]);
+  }, [api, baseDir, taskId, pullStrategy, t, loadSyncCommits, handleError]);
 
   const handlePull = useCallback(() => {
     handleCloseDropdown();
@@ -470,7 +469,7 @@ export const GitBranchesButton = ({
   const handleUpdateBranch = async (branch: BranchInfo) => {
     handleCloseDropdown();
     try {
-      await api.updateGitBranch(repoPath, branch.name, taskId);
+      await api.updateGitBranch(baseDir, taskId, branch.name);
       showInfoNotification(t('git.branchUpdated', { branch: branch.name }));
       await loadBranches();
       await loadSyncCommits();
@@ -491,7 +490,7 @@ export const GitBranchesButton = ({
   const handlePushConfirm = async () => {
     setShowPushConfirm(false);
     try {
-      await api.gitPush(repoPath, forcePush, taskId);
+      await api.gitPush(baseDir, taskId, forcePush);
       showInfoNotification(t('git.pushSuccess'));
       await loadSyncCommits();
     } catch (error) {

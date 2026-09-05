@@ -607,44 +607,44 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
   });
 
   // Git branch operations
-  ipcMain.handle('list-git-branches', async (_, repoPath: string, includeRemote?: boolean) => {
-    return await eventsHandler.listGitBranches(repoPath, includeRemote);
+  ipcMain.handle('list-git-branches', async (_, baseDir: string, taskId: string, includeRemote?: boolean) => {
+    return await eventsHandler.listGitBranches(baseDir, taskId, includeRemote);
   });
 
-  ipcMain.handle('get-sync-commits', async (_, repoPath: string, targetBranch?: string) => {
-    return await eventsHandler.getSyncCommits(repoPath, targetBranch);
+  ipcMain.handle('get-sync-commits', async (_, baseDir: string, taskId: string, targetBranch?: string) => {
+    return await eventsHandler.getSyncCommits(baseDir, taskId, targetBranch);
   });
 
-  ipcMain.handle('create-git-branch', async (_, repoPath: string, name: string, startPoint?: string, checkout?: boolean, taskId?: string) => {
-    await eventsHandler.createGitBranch(repoPath, name, startPoint, checkout, taskId);
+  ipcMain.handle('create-git-branch', async (_, baseDir: string, taskId: string, name: string, startPoint?: string, checkout?: boolean) => {
+    await eventsHandler.createGitBranch(baseDir, taskId, name, startPoint, checkout);
   });
 
-  ipcMain.handle('checkout-git-branch', async (_, repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean, taskId?: string) => {
-    await eventsHandler.checkoutGitBranch(repoPath, branch, createTracking, takeOver, taskId);
+  ipcMain.handle('checkout-git-branch', async (_, baseDir: string, taskId: string, branch: string, createTracking?: boolean, takeOver?: boolean) => {
+    await eventsHandler.checkoutGitBranch(baseDir, taskId, branch, createTracking, takeOver);
   });
 
-  ipcMain.handle('delete-git-branch', async (_, repoPath: string, branch: string, force?: boolean, taskId?: string) => {
-    await eventsHandler.deleteGitBranch(repoPath, branch, force, taskId);
+  ipcMain.handle('delete-git-branch', async (_, baseDir: string, taskId: string, branch: string, force?: boolean) => {
+    await eventsHandler.deleteGitBranch(baseDir, taskId, branch, force);
   });
 
-  ipcMain.handle('merge-into-current-branch', async (_, repoPath: string, branch: string, taskId?: string) => {
-    return await eventsHandler.mergeIntoCurrentBranch(repoPath, branch, taskId);
+  ipcMain.handle('merge-into-current-branch', async (_, baseDir: string, taskId: string, branch: string) => {
+    return await eventsHandler.mergeIntoCurrentBranch(baseDir, taskId, branch);
   });
 
-  ipcMain.handle('rebase-onto-branch', async (_, repoPath: string, branch: string, taskId?: string) => {
-    return await eventsHandler.rebaseOntoBranch(repoPath, branch, taskId);
+  ipcMain.handle('rebase-onto-branch', async (_, baseDir: string, taskId: string, branch: string) => {
+    return await eventsHandler.rebaseOntoBranch(baseDir, taskId, branch);
   });
 
-  ipcMain.handle('update-git-branch', async (_, repoPath: string, branchName: string, taskId?: string) => {
-    return await eventsHandler.updateGitBranch(repoPath, branchName, taskId);
+  ipcMain.handle('update-git-branch', async (_, baseDir: string, taskId: string, branchName: string) => {
+    return await eventsHandler.updateGitBranch(baseDir, taskId, branchName);
   });
 
-  ipcMain.handle('git-pull', async (_, repoPath: string, taskId?: string, rebase?: boolean) => {
-    return await eventsHandler.gitPull(repoPath, taskId, rebase);
+  ipcMain.handle('git-pull', async (_, baseDir: string, taskId: string, rebase?: boolean) => {
+    return await eventsHandler.gitPull(baseDir, taskId, rebase);
   });
 
-  ipcMain.handle('git-push', async (_, repoPath: string, force?: boolean, taskId?: string) => {
-    return await eventsHandler.gitPush(repoPath, force, taskId);
+  ipcMain.handle('git-push', async (_, baseDir: string, taskId: string, force?: boolean) => {
+    return await eventsHandler.gitPush(baseDir, taskId, force);
   });
 
   ipcMain.handle('resolve-git-error-with-agent', async (_, baseDir: string, taskId: string) => {

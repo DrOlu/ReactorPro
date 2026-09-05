@@ -750,17 +750,17 @@ const api: ApplicationAPI = {
   renameGitBranch: (baseDir, taskId, newBranchName) => ipcRenderer.invoke('rename-git-branch', baseDir, taskId, newBranchName),
 
   // Git branch operations
-  listGitBranches: (repoPath, includeRemote) => ipcRenderer.invoke('list-git-branches', repoPath, includeRemote),
-  getSyncCommits: (repoPath, targetBranch) => ipcRenderer.invoke('get-sync-commits', repoPath, targetBranch),
-  createGitBranch: (repoPath, name, startPoint, checkout, taskId) => ipcRenderer.invoke('create-git-branch', repoPath, name, startPoint, checkout, taskId),
-  checkoutGitBranch: (repoPath, branch, createTracking, takeOver, taskId) =>
-    ipcRenderer.invoke('checkout-git-branch', repoPath, branch, createTracking, takeOver, taskId),
-  deleteGitBranch: (repoPath, branch, force, taskId) => ipcRenderer.invoke('delete-git-branch', repoPath, branch, force, taskId),
-  mergeIntoCurrentBranch: (repoPath, branch, taskId) => ipcRenderer.invoke('merge-into-current-branch', repoPath, branch, taskId),
-  rebaseOntoBranch: (repoPath, branch, taskId) => ipcRenderer.invoke('rebase-onto-branch', repoPath, branch, taskId),
-  updateGitBranch: (repoPath, branchName, taskId) => ipcRenderer.invoke('update-git-branch', repoPath, branchName, taskId),
-  gitPull: (repoPath, taskId, rebase) => ipcRenderer.invoke('git-pull', repoPath, taskId, rebase),
-  gitPush: (repoPath, force, taskId) => ipcRenderer.invoke('git-push', repoPath, force, taskId),
+  listGitBranches: (baseDir, taskId, includeRemote) => ipcRenderer.invoke('list-git-branches', baseDir, taskId, includeRemote),
+  getSyncCommits: (baseDir, taskId, targetBranch) => ipcRenderer.invoke('get-sync-commits', baseDir, taskId, targetBranch),
+  createGitBranch: (baseDir, taskId, name, startPoint, checkout) => ipcRenderer.invoke('create-git-branch', baseDir, taskId, name, startPoint, checkout),
+  checkoutGitBranch: (baseDir, taskId, branch, createTracking, takeOver) =>
+    ipcRenderer.invoke('checkout-git-branch', baseDir, taskId, branch, createTracking, takeOver),
+  deleteGitBranch: (baseDir, taskId, branch, force) => ipcRenderer.invoke('delete-git-branch', baseDir, taskId, branch, force),
+  mergeIntoCurrentBranch: (baseDir, taskId, branch) => ipcRenderer.invoke('merge-into-current-branch', baseDir, taskId, branch),
+  rebaseOntoBranch: (baseDir, taskId, branch) => ipcRenderer.invoke('rebase-onto-branch', baseDir, taskId, branch),
+  updateGitBranch: (baseDir, taskId, branchName) => ipcRenderer.invoke('update-git-branch', baseDir, taskId, branchName),
+  gitPull: (baseDir, taskId, rebase) => ipcRenderer.invoke('git-pull', baseDir, taskId, rebase),
+  gitPush: (baseDir, taskId, force) => ipcRenderer.invoke('git-push', baseDir, taskId, force),
   resolveGitErrorWithAgent: (baseDir, taskId) => ipcRenderer.invoke('resolve-git-error-with-agent', baseDir, taskId),
 
   // Agent profile operations
