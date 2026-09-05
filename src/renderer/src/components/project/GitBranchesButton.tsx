@@ -34,6 +34,7 @@ enum PullStrategy {
 
 const MAX_BRANCH_NAME_LENGTH = 50;
 const TRUNCATED_TAIL_LENGTH = 5;
+const GIT_STATE_REFRESH_INTERVAL_MS = 30_000;
 
 const slugifyBranchName = (name: string) => {
   return name
@@ -243,6 +244,28 @@ export const GitBranchesButton = ({
       void loadSyncCommits();
     }
   }, [isOpen, loadBranches, loadMainBranch, loadSyncCommits]);
+
+  useEffect(() => {
+    const refreshOnVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void loadBranches();
+        void loadSyncCommits();
+      }
+    };
+
+    const interval = setInterval(() => {
+      void loadSyncCommits();
+    }, GIT_STATE_REFRESH_INTERVAL_MS);
+
+    window.addEventListener('focus', refreshOnVisible);
+    document.addEventListener('visibilitychange', refreshOnVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', refreshOnVisible);
+      document.removeEventListener('visibilitychange', refreshOnVisible);
+    };
+  }, [loadBranches, loadSyncCommits]);
 
   const handleError = useCallback((error: unknown) => {
     // The error is already logged to the task chat by the backend with a 'Resolve with AI' action
@@ -844,6 +867,7 @@ export const GitBranchesButton = ({
               >
                 <button
                   onClick={() => {
+                    handleCloseDropdown();
                     if (rebaseBranch) {
                       onRebaseFromBranch(rebaseBranch);
                     }

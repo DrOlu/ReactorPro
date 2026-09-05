@@ -488,4 +488,65 @@ describe('GitBranchesButton', () => {
       expect(screen.getByText('worktree.confirmResolveConflictsWithAgentTitle')).toBeInTheDocument();
     });
   });
+
+  describe('background refresh', () => {
+    it('refreshes sync commits on an interval', async () => {
+      vi.useFakeTimers();
+      try {
+        render(<GitBranchesButton {...defaultProps} />);
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(mockApi.getSyncCommits).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+        expect(mockApi.getSyncCommits).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('refreshes branches and sync commits when the window regains focus', async () => {
+      render(<GitBranchesButton {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledTimes(1);
+        expect(mockApi.listGitBranches).toHaveBeenCalledTimes(1);
+      });
+
+      act(() => {
+        fireEvent.focus(window);
+      });
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledTimes(2);
+        expect(mockApi.listGitBranches).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it('skips refresh on focus while the document is hidden', async () => {
+      const visibilitySpy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+
+      try {
+        render(<GitBranchesButton {...defaultProps} />);
+
+        await waitFor(() => {
+          expect(mockApi.getSyncCommits).toHaveBeenCalledTimes(1);
+          expect(mockApi.listGitBranches).toHaveBeenCalledTimes(1);
+        });
+
+        act(() => {
+          fireEvent.focus(window);
+        });
+
+        expect(mockApi.getSyncCommits).toHaveBeenCalledTimes(1);
+        expect(mockApi.listGitBranches).toHaveBeenCalledTimes(1);
+      } finally {
+        visibilitySpy.mockRestore();
+      }
+    });
+  });
 });

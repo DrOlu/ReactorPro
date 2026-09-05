@@ -130,6 +130,7 @@ describe('Task - git actions', () => {
   let task: Task;
   let mockProject: any;
   let mockGitManager: any;
+  let mockEventManager: any;
 
   const createTask = (workingMode?: 'local' | 'worktree') =>
     new Task(
@@ -142,7 +143,7 @@ describe('Task - git actions', () => {
       { getProfile: vi.fn(() => null) } as any,
       {} as any,
       {} as any,
-      { sendTaskUpdated: vi.fn(), sendTaskCreated: vi.fn(), sendTaskDeleted: vi.fn() } as any,
+      mockEventManager as any,
       {} as any,
       mockGitManager,
       {} as any,
@@ -169,6 +170,13 @@ describe('Task - git actions', () => {
         currentMode: 'agent',
         autonomyModeLocked: false,
       })),
+    };
+
+    mockEventManager = {
+      sendTaskUpdated: vi.fn(),
+      sendTaskCreated: vi.fn(),
+      sendTaskDeleted: vi.fn(),
+      sendWorktreeIntegrationStatusUpdated: vi.fn(),
     };
 
     mockGitManager = {
@@ -248,6 +256,27 @@ describe('Task - git actions', () => {
     it('deleteGitBranch delegates with task repo path and force flag', async () => {
       await task.deleteGitBranch('feature', true);
       expect(mockGitManager.deleteBranch).toHaveBeenCalledWith(baseDir, 'feature', true);
+    });
+  });
+
+  describe('worktree status refresh', () => {
+    it('sends worktree integration status update after a git action', async () => {
+      await task.gitPush(true);
+
+      await vi.waitFor(() => {
+        expect(mockEventManager.sendWorktreeIntegrationStatusUpdated).toHaveBeenCalledWith(baseDir, 'test-task-id', null);
+      });
+    });
+
+    it('sends worktree integration status update when the git action fails', async () => {
+      mockGitManager.gitPush.mockRejectedValue(new Error('push failed'));
+      vi.spyOn(task, 'reportGitActionError').mockImplementation(() => undefined);
+
+      await expect(task.gitPush(false)).rejects.toThrow('push failed');
+
+      await vi.waitFor(() => {
+        expect(mockEventManager.sendWorktreeIntegrationStatusUpdated).toHaveBeenCalledWith(baseDir, 'test-task-id', null);
+      });
     });
   });
 

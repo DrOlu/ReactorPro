@@ -5017,6 +5017,8 @@ ${error.stderr}`,
         this.reportGitActionError(action, error);
       }
       throw error;
+    } finally {
+      void this.sendWorktreeIntegrationStatusUpdated();
     }
   }
 
