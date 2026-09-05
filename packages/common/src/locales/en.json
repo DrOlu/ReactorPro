@@ -2116,6 +2116,7 @@
     "pullSuccess": "Project updated successfully",
     "push": "Push",
     "pushSuccess": "Changes have been successfully pushed",
+    "resolveWithAI": "Resolve with AI",
     "confirmPushTitle": "Push commits",
     "confirmPushMessage_one": "Push {{count}} commit to remote?",
     "confirmPushMessage_other": "Push {{count}} commits to remote?",

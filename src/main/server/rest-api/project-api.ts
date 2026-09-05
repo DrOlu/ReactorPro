@@ -399,6 +399,7 @@ const CreateGitBranchSchema = z.object({
   name: z.string().min(1, 'Branch name is required'),
   startPoint: z.string().optional(),
   checkout: z.boolean().optional(),
+  taskId: z.string().optional(),
 });
 
 const CheckoutGitBranchSchema = z.object({
@@ -406,36 +407,48 @@ const CheckoutGitBranchSchema = z.object({
   branch: z.string().min(1, 'Branch name is required'),
   createTracking: z.boolean().optional(),
   takeOver: z.boolean().optional(),
+  taskId: z.string().optional(),
 });
 
 const DeleteGitBranchSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
   branch: z.string().min(1, 'Branch name is required'),
   force: z.boolean().optional(),
+  taskId: z.string().optional(),
 });
 
 const MergeIntoCurrentBranchSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
   branch: z.string().min(1, 'Branch name is required'),
+  taskId: z.string().optional(),
 });
 
 const RebaseOntoBranchSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
   branch: z.string().min(1, 'Branch name is required'),
+  taskId: z.string().optional(),
 });
 
 const GitPullSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
+  taskId: z.string().optional(),
 });
 
 const UpdateGitBranchSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
   branchName: z.string().min(1, 'Branch name is required'),
+  taskId: z.string().optional(),
 });
 
 const GitPushSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
   force: z.boolean().optional(),
+  taskId: z.string().optional(),
+});
+
+const ResolveGitErrorSchema = z.object({
+  projectDir: z.string().min(1, 'Project directory is required'),
+  taskId: z.string().min(1, 'Task id is required'),
 });
 
 const WorktreeStatusSchema = z.object({
@@ -1246,8 +1259,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, name, startPoint, checkout } = parsed;
-        await this.eventsHandler.createGitBranch(repoPath, name, startPoint, checkout);
+        const { repoPath, name, startPoint, checkout, taskId } = parsed;
+        await this.eventsHandler.createGitBranch(repoPath, name, startPoint, checkout, taskId);
         res.status(200).json({ message: 'Branch created' });
       }),
     );
@@ -1261,8 +1274,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branch, createTracking, takeOver } = parsed;
-        await this.eventsHandler.checkoutGitBranch(repoPath, branch, createTracking, takeOver);
+        const { repoPath, branch, createTracking, takeOver, taskId } = parsed;
+        await this.eventsHandler.checkoutGitBranch(repoPath, branch, createTracking, takeOver, taskId);
         res.status(200).json({ message: 'Branch checked out' });
       }),
     );
@@ -1276,8 +1289,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branch, force } = parsed;
-        await this.eventsHandler.deleteGitBranch(repoPath, branch, force);
+        const { repoPath, branch, force, taskId } = parsed;
+        await this.eventsHandler.deleteGitBranch(repoPath, branch, force, taskId);
         res.status(200).json({ message: 'Branch deleted' });
       }),
     );
@@ -1291,8 +1304,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branch } = parsed;
-        const result = await this.eventsHandler.mergeIntoCurrentBranch(repoPath, branch);
+        const { repoPath, branch, taskId } = parsed;
+        const result = await this.eventsHandler.mergeIntoCurrentBranch(repoPath, branch, taskId);
         res.status(200).json(result);
       }),
     );
@@ -1306,8 +1319,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branch } = parsed;
-        const result = await this.eventsHandler.rebaseOntoBranch(repoPath, branch);
+        const { repoPath, branch, taskId } = parsed;
+        const result = await this.eventsHandler.rebaseOntoBranch(repoPath, branch, taskId);
         res.status(200).json(result);
       }),
     );
@@ -1321,8 +1334,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, branchName } = parsed;
-        const result = await this.eventsHandler.updateGitBranch(repoPath, branchName);
+        const { repoPath, branchName, taskId } = parsed;
+        const result = await this.eventsHandler.updateGitBranch(repoPath, branchName, taskId);
         res.status(200).json(result);
       }),
     );
@@ -1336,8 +1349,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath } = parsed;
-        const result = await this.eventsHandler.gitPull(repoPath);
+        const { repoPath, taskId } = parsed;
+        const result = await this.eventsHandler.gitPull(repoPath, taskId);
         res.status(200).json(result);
       }),
     );
@@ -1351,8 +1364,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, force } = parsed;
-        const result = await this.eventsHandler.gitPush(repoPath, force);
+        const { repoPath, force, taskId } = parsed;
+        const result = await this.eventsHandler.gitPush(repoPath, force, taskId);
         res.status(200).json(result);
       }),
     );
@@ -1429,6 +1442,21 @@ export class ProjectApi extends BaseApi {
         const { projectDir, taskId } = parsed;
         await this.eventsHandler.resolveConflictsWithAgent(projectDir, taskId);
         res.status(200).json({ message: 'Conflicts resolved' });
+      }),
+    );
+
+    // Resolve git error with agent
+    router.post(
+      '/project/git/resolve-error-with-agent',
+      this.handleRequest(async (req, res) => {
+        const parsed = this.validateRequest(ResolveGitErrorSchema, req.body, res);
+        if (!parsed) {
+          return;
+        }
+
+        const { projectDir, taskId } = parsed;
+        await this.eventsHandler.resolveGitErrorWithAgent(projectDir, taskId);
+        res.status(200).json({ message: 'Git error resolution started' });
       }),
     );
 

@@ -65,6 +65,7 @@ const buildCommitsTooltip = (label: string, commits: string[]) => {
 
 type Props = {
   baseDir: string;
+  taskId: string;
   worktreePath?: string;
   status?: WorktreeIntegrationStatus | null;
   taskName?: string;
@@ -87,6 +88,7 @@ type Props = {
 
 export const GitBranchesButton = ({
   baseDir,
+  taskId,
   worktreePath,
   status,
   taskName,
@@ -231,7 +233,9 @@ export const GitBranchesButton = ({
   }, [isOpen, loadBranches, loadMainBranch, loadSyncCommits]);
 
   const handleError = (error: unknown) => {
-    showErrorNotification(error instanceof Error ? error.message : String(error));
+    // The error is already logged to the task chat by the backend with a 'Resolve with AI' action
+    // eslint-disable-next-line no-console
+    console.error('Git action failed:', error);
   };
 
   const handleToggle = () => {
@@ -263,7 +267,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.createGitBranch(repoPath, trimmedName, undefined, true);
+      await api.createGitBranch(repoPath, trimmedName, undefined, true, taskId);
       showInfoNotification(t('git.branchCreated', { branch: trimmedName }));
       trackRecentBranch(trimmedName);
       setShowNewBranchInput(false);
@@ -292,7 +296,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.createGitBranch(repoPath, trimmedName, branchToBase.name, true);
+      await api.createGitBranch(repoPath, trimmedName, branchToBase.name, true, taskId);
       showInfoNotification(t('git.branchCreated', { branch: trimmedName }));
       trackRecentBranch(trimmedName);
       setBranchToBase(null);
@@ -338,7 +342,7 @@ export const GitBranchesButton = ({
 
     handleCloseDropdown();
     try {
-      await api.checkoutGitBranch(repoPath, branch.name, branch.isRemote, takeOver);
+      await api.checkoutGitBranch(repoPath, branch.name, branch.isRemote, takeOver, taskId);
       showInfoNotification(t('git.checkedOutBranch', { branch: branch.name }));
       trackRecentBranch(branch.name);
       await loadBranches();
@@ -350,7 +354,7 @@ export const GitBranchesButton = ({
 
   const performMerge = async (branch: BranchInfo) => {
     try {
-      const result = await api.mergeIntoCurrentBranch(repoPath, branch.name);
+      const result = await api.mergeIntoCurrentBranch(repoPath, branch.name, taskId);
       if (result.conflictedFiles && result.conflictedFiles.length > 0) {
         showErrorNotification(t('git.mergeConflicts', { files: result.conflictedFiles.join(', ') }));
       } else {
@@ -365,7 +369,7 @@ export const GitBranchesButton = ({
 
   const performRebase = async (branch: BranchInfo) => {
     try {
-      const result = await api.rebaseOntoBranch(repoPath, branch.name);
+      const result = await api.rebaseOntoBranch(repoPath, branch.name, taskId);
       if (result.conflictedFiles && result.conflictedFiles.length > 0) {
         showErrorNotification(t('git.rebaseConflicts', { files: result.conflictedFiles.join(', ') }));
       } else {
@@ -405,7 +409,7 @@ export const GitBranchesButton = ({
     }
 
     try {
-      await api.deleteGitBranch(repoPath, branchToDelete.name, forceDelete);
+      await api.deleteGitBranch(repoPath, branchToDelete.name, forceDelete, taskId);
       showInfoNotification(t('git.branchDeleted', { branch: branchToDelete.name }));
       setBranchToDelete(null);
       await loadBranches();
@@ -424,7 +428,7 @@ export const GitBranchesButton = ({
   const handlePull = async () => {
     handleCloseDropdown();
     try {
-      const result = await api.gitPull(repoPath);
+      const result = await api.gitPull(repoPath, taskId);
       const isUpToDate = /up to date/i.test(result.output);
       showInfoNotification(isUpToDate ? t('git.pullUpToDate') : t('git.pullSuccess'));
       await loadSyncCommits();
@@ -436,7 +440,7 @@ export const GitBranchesButton = ({
   const handleUpdateBranch = async (branch: BranchInfo) => {
     handleCloseDropdown();
     try {
-      await api.updateGitBranch(repoPath, branch.name);
+      await api.updateGitBranch(repoPath, branch.name, taskId);
       showInfoNotification(t('git.branchUpdated', { branch: branch.name }));
       await loadBranches();
       await loadSyncCommits();
@@ -457,7 +461,7 @@ export const GitBranchesButton = ({
   const handlePushConfirm = async () => {
     setShowPushConfirm(false);
     try {
-      await api.gitPush(repoPath, forcePush);
+      await api.gitPush(repoPath, forcePush, taskId);
       showInfoNotification(t('git.pushSuccess'));
       await loadSyncCommits();
     } catch (error) {

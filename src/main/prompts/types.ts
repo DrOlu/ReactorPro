@@ -90,6 +90,19 @@ export interface ConflictResolutionPromptData {
   theirsPath?: string;
 }
 
+export interface GitErrorResolutionSystemPromptData {
+  POWER_TOOL_GROUP_NAME: string;
+  TOOL_GROUP_NAME_SEPARATOR: string;
+  POWER_TOOL_BASH: string;
+  POWER_TOOL_FILE_READ: string;
+  POWER_TOOL_GREP: string;
+}
+
+export interface GitErrorResolutionPromptData {
+  action: string;
+  error: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface UpdateTaskStateData {
   // Static for now
@@ -104,6 +117,8 @@ export type PromptTemplateName =
   | 'task-name'
   | 'conflict-resolution'
   | 'conflict-resolution-system'
+  | 'git-error-resolution'
+  | 'git-error-resolution-system'
   | 'update-task-state'
   | 'handoff'
   | 'code-change-requests';

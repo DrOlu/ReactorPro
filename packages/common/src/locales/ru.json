@@ -1931,6 +1931,7 @@
     "pullUpToDate": "Проект уже актуален — нет изменений для загрузки",
     "pullSuccess": "Проект успешно обновлён",
     "pushSuccess": "Изменения успешно отправлены",
+    "resolveWithAI": "Решить с помощью ИИ",
     "outgoingCommitsTooltip": "Исходящие коммиты ({{count}}):",
     "incomingCommitsTooltip": "Входящие коммиты ({{count}}):"
   },

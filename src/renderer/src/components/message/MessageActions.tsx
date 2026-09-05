@@ -12,9 +12,10 @@ type Props = {
   baseDir: string;
   taskId: string;
   onInterrupt?: () => void;
+  removeActionId?: (actionId: string) => void;
 };
 
-export const MessageActions = ({ actionIds, baseDir, taskId, onInterrupt }: Props) => {
+export const MessageActions = ({ actionIds, baseDir, taskId, onInterrupt, removeActionId }: Props) => {
   const { t } = useTranslation();
   const [isExecuted, setIsExecuted] = useState(false);
   const api = useApi();
@@ -27,26 +28,37 @@ export const MessageActions = ({ actionIds, baseDir, taskId, onInterrupt }: Prop
 
   const handleAbortRebase = () => {
     setIsExecuted(true);
+    removeActionId?.('abort-rebase');
     void api.abortWorktreeRebase(baseDir, taskId);
   };
 
   const handleContinueRebase = () => {
     setIsExecuted(true);
+    removeActionId?.('continue-rebase');
     void api.continueWorktreeRebase(baseDir, taskId);
   };
 
   const handleResolveConflictsWithAgent = () => {
     setIsExecuted(true);
+    removeActionId?.('resolve-conflicts-with-agent');
     void api.resolveWorktreeConflictsWithAgent(baseDir, taskId);
+  };
+
+  const handleResolveGitErrorWithAgent = () => {
+    setIsExecuted(true);
+    removeActionId?.('resolve-git-error-with-agent');
+    void api.resolveGitErrorWithAgent(baseDir, taskId);
   };
 
   const handleRebaseWorktree = () => {
     setIsExecuted(true);
+    removeActionId?.('rebase-worktree');
     void api.rebaseWorktreeFromBranch(baseDir, taskId);
   };
 
   const handleUndoContextChange = () => {
     setIsExecuted(true);
+    removeActionId?.('undoContextChange');
     void api.undoContextChange(baseDir, taskId);
   };
 
@@ -74,6 +86,12 @@ export const MessageActions = ({ actionIds, baseDir, taskId, onInterrupt }: Prop
         return (
           <Button key={id} size="xs" variant="contained" color="primary" onClick={handleResolveConflictsWithAgent}>
             {t('worktree.resolveConflictsWithAgent')}
+          </Button>
+        );
+      case 'resolve-git-error-with-agent':
+        return (
+          <Button key={id} size="xs" variant="contained" color="primary" onClick={handleResolveGitErrorWithAgent}>
+            {t('git.resolveWithAI')}
           </Button>
         );
       case 'rebase-worktree':

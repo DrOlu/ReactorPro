@@ -38,6 +38,7 @@ import {
   TaskStateEmoji,
   TodoItem,
   TokensInfoData,
+  ToolApprovalState,
   ToolCallPart,
   ToolData,
   ToolInputChunkData,
@@ -70,6 +71,8 @@ import {
   getSubagentId,
 } from '@common/agent';
 import {
+  POWER_TOOL_BASH,
+  POWER_TOOL_GROUP_NAME,
   SKILLS_TOOL_ACTIVATE_SKILL,
   SKILLS_TOOL_GROUP_NAME,
   SUBAGENTS_TOOL_GROUP_NAME,
@@ -176,6 +179,7 @@ export class Task {
   > = new Map();
   private isDeterminingTaskState = false;
   private resolutionAbortControllers: Record<string, AbortController> = {};
+  private lastGitError: { action: string; message: string } | null = null;
   private subagentAbortControllers: Record<string, AbortController> = {};
   private tokensInfo: TokensInfoData;
   private queuedPrompts: QueuedPromptData[] = [];
@@ -5084,6 +5088,95 @@ ${error.stderr}`,
 
     // No conflicts found
     this.addLogMessage('info', 'No merge conflicts found in either worktree or main repository.', true);
+  }
+
+  public reportGitActionError(action: string, error: unknown): void {
+    const message = error instanceof GitError ? error.getErrorDetails() : error instanceof Error ? error.message : String(error);
+    this.lastGitError = { action, message };
+    this.addLogMessage('error', message, true, undefined, ['resolve-git-error-with-agent']);
+  }
+
+  public async resolveGitErrorWithAgent(): Promise<void> {
+    if (!this.lastGitError) {
+      this.addLogMessage('info', 'No Git error to resolve.', true);
+      return;
+    }
+
+    const { action, message } = this.lastGitError;
+    this.lastGitError = null;
+
+    const activeProfile = await this.getTaskAgentProfile();
+    if (!activeProfile) {
+      throw new Error('No active agent profile found');
+    }
+
+    const previousTaskState = this.task.state;
+    await this.saveTask({ state: DefaultTaskState.InProgress });
+
+    const interruptId = uuidv4();
+    const abortController = new AbortController();
+    this.resolutionAbortControllers[interruptId] = abortController;
+
+    const promptContext: PromptContext = {
+      id: uuidv4(),
+      group: {
+        id: uuidv4(),
+        color: 'var(--color-agent-conflict-resolution)',
+        name: 'Resolving Git error...',
+        finished: false,
+        interruptId,
+      },
+    };
+
+    this.addLogMessage('loading', 'Resolving Git error...', false, promptContext);
+
+    const systemPrompt = await this.promptsManager.getGitErrorResolutionSystemPrompt(this);
+    const prompt = await this.promptsManager.getGitErrorResolutionPrompt(this, action, message);
+
+    try {
+      await this.agent.runAgent(
+        this,
+        {
+          ...CONFLICT_RESOLUTION_PROFILE,
+          provider: activeProfile.provider,
+          model: activeProfile.model,
+          toolApprovals: {
+            ...CONFLICT_RESOLUTION_PROFILE.toolApprovals,
+            [`${POWER_TOOL_GROUP_NAME}${TOOL_GROUP_NAME_SEPARATOR}${POWER_TOOL_BASH}`]: ToolApprovalState.Ask,
+          },
+        },
+        prompt,
+        'conflict-resolution',
+        promptContext,
+        [],
+        [],
+        systemPrompt,
+        false,
+        abortController.signal,
+      );
+
+      if (promptContext.group) {
+        if (abortController.signal.aborted) {
+          promptContext.group.name = 'Git error resolution interrupted';
+          promptContext.group.finished = true;
+          this.addLogMessage('warning', 'Git error resolution interrupted', true, promptContext);
+        } else {
+          promptContext.group.name = 'Git error resolved';
+          promptContext.group.finished = true;
+          this.addLogMessage('info', 'Git error resolved', true, promptContext);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to resolve Git error with agent:', error);
+      if (promptContext.group) {
+        promptContext.group.name = 'Git error resolution failed';
+        promptContext.group.finished = true;
+      }
+      this.addLogMessage('error', `Failed to resolve Git error: ${error instanceof Error ? error.message : String(error)}`, true, promptContext);
+    } finally {
+      delete this.resolutionAbortControllers[interruptId];
+      await this.saveTask({ state: previousTaskState });
+    }
   }
 
   public async continueWorktreeRebase(): Promise<void> {

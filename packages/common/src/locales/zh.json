@@ -2124,6 +2124,7 @@
     "pullSuccess": "项目更新成功",
     "push": "推送",
     "pushSuccess": "更改已成功推送",
+    "resolveWithAI": "用 AI 解决",
     "confirmPushTitle": "推送提交",
     "confirmPushMessage_one": "推送 {{count}} 个提交到远程？",
     "confirmPushMessage_other": "推送 {{count}} 个提交到远程？",

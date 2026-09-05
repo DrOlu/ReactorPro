@@ -325,14 +325,15 @@ export interface ApplicationAPI {
   // Git branch operations
   listGitBranches: (repoPath: string, includeRemote?: boolean) => Promise<BranchInfo[]>;
   getSyncCommits: (repoPath: string, targetBranch?: string) => Promise<GitSyncCommits>;
-  createGitBranch: (repoPath: string, name: string, startPoint?: string, checkout?: boolean) => Promise<void>;
-  checkoutGitBranch: (repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean) => Promise<void>;
-  deleteGitBranch: (repoPath: string, branch: string, force?: boolean) => Promise<void>;
-  mergeIntoCurrentBranch: (repoPath: string, branch: string) => Promise<{ conflictedFiles?: string[] }>;
-  rebaseOntoBranch: (repoPath: string, branch: string) => Promise<{ conflictedFiles?: string[] }>;
-  updateGitBranch: (repoPath: string, branchName: string) => Promise<{ output: string }>;
-  gitPull: (repoPath: string) => Promise<{ output: string }>;
-  gitPush: (repoPath: string, force?: boolean) => Promise<{ output: string }>;
+  createGitBranch: (repoPath: string, name: string, startPoint?: string, checkout?: boolean, taskId?: string) => Promise<void>;
+  checkoutGitBranch: (repoPath: string, branch: string, createTracking?: boolean, takeOver?: boolean, taskId?: string) => Promise<void>;
+  deleteGitBranch: (repoPath: string, branch: string, force?: boolean, taskId?: string) => Promise<void>;
+  mergeIntoCurrentBranch: (repoPath: string, branch: string, taskId?: string) => Promise<{ conflictedFiles?: string[] }>;
+  rebaseOntoBranch: (repoPath: string, branch: string, taskId?: string) => Promise<{ conflictedFiles?: string[] }>;
+  updateGitBranch: (repoPath: string, branchName: string, taskId?: string) => Promise<{ output: string }>;
+  gitPull: (repoPath: string, taskId?: string) => Promise<{ output: string }>;
+  gitPush: (repoPath: string, force?: boolean, taskId?: string) => Promise<{ output: string }>;
+  resolveGitErrorWithAgent: (baseDir: string, taskId: string) => Promise<void>;
 
   // Agent profile operations
   getAllAgentProfiles: () => Promise<AgentProfile[]>;
