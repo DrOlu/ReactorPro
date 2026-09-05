@@ -355,7 +355,7 @@ describe('GitBranchesButton', () => {
     });
 
     it('shows a worktree availability error for new branch palette action in worktree mode', async () => {
-      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.reactorpro/tasks/task-123/worktree" status={mockStatus} />);
 
       await waitFor(() => {
         expect(mockApi.getSyncCommits).toHaveBeenCalled();
@@ -388,7 +388,7 @@ describe('GitBranchesButton', () => {
     });
 
     it('opens the worktree merge dialog from the palette action', async () => {
-      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.reactorpro/tasks/task-123/worktree" status={mockStatus} />);
 
       await waitFor(() => {
         expect(mockApi.getSyncCommits).toHaveBeenCalled();
@@ -402,7 +402,7 @@ describe('GitBranchesButton', () => {
     });
 
     it('rebases the worktree from the palette action using the base branch', async () => {
-      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.reactorpro/tasks/task-123/worktree" status={mockStatus} />);
 
       await waitFor(() => {
         expect(mockApi.getSyncCommits).toHaveBeenCalled();
@@ -417,7 +417,7 @@ describe('GitBranchesButton', () => {
 
     it('applies uncommitted changes from the palette action when there are uncommitted files', async () => {
       const statusWithUncommittedFiles = { ...mockStatus, uncommittedFiles: { count: 2, files: ['a.ts', 'b.ts'] } };
-      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={statusWithUncommittedFiles} />);
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.reactorpro/tasks/task-123/worktree" status={statusWithUncommittedFiles} />);
 
       await waitFor(() => {
         expect(mockApi.getSyncCommits).toHaveBeenCalled();
@@ -431,7 +431,7 @@ describe('GitBranchesButton', () => {
     });
 
     it('ignores the apply uncommitted changes palette action without uncommitted files', async () => {
-      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.reactorpro/tasks/task-123/worktree" status={mockStatus} />);
 
       await waitFor(() => {
         expect(mockApi.getSyncCommits).toHaveBeenCalled();
@@ -445,7 +445,7 @@ describe('GitBranchesButton', () => {
     });
 
     it('opens the abort rebase confirm from the palette action during a rebase', async () => {
-      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} canAbortRebase />);
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.reactorpro/tasks/task-123/worktree" status={mockStatus} canAbortRebase />);
 
       await waitFor(() => {
         expect(mockApi.getSyncCommits).toHaveBeenCalled();
@@ -459,7 +459,7 @@ describe('GitBranchesButton', () => {
     });
 
     it('ignores the abort rebase palette action when no rebase is in progress', async () => {
-      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.reactorpro/tasks/task-123/worktree" status={mockStatus} />);
 
       await waitFor(() => {
         expect(mockApi.getSyncCommits).toHaveBeenCalled();
@@ -474,7 +474,7 @@ describe('GitBranchesButton', () => {
 
     it('opens the resolve conflicts with agent confirm from the palette action when conflicts are resolvable', async () => {
       render(
-        <GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} canResolveConflictsWithAgent />,
+        <GitBranchesButton {...defaultProps} worktreePath="/project/.reactorpro/tasks/task-123/worktree" status={mockStatus} canResolveConflictsWithAgent />,
       );
 
       await waitFor(() => {
