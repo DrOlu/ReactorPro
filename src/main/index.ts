@@ -16,7 +16,7 @@ import { performStartUp, UpdateProgressData } from '@/start-up';
 import { Store } from '@/store';
 import logger, { eventTransport } from '@/logger';
 import { initManagers } from '@/managers';
-import { getDefaultProjectSettings, initPath } from '@/utils';
+import { createLoadRetryHandler, getDefaultProjectSettings, initPath } from '@/utils';
 import { WindowManager } from '@/window-manager';
 
 // Global instances shared across all windows
@@ -190,6 +190,18 @@ const initWindow = async (windowMgr: WindowManager, storeInstance: Store, projec
     return { action: 'deny' };
   });
 
+  // Retry transient network failures (e.g. ERR_NETWORK_CHANGED during dev server loading)
+  // so a network change doesn't leave a blank white window
+  const loadRetry = createLoadRetryHandler({
+    load: () => newWindow.webContents.reload(),
+    isDestroyed: () => newWindow.isDestroyed(),
+  });
+
+  newWindow.webContents.on('did-fail-load', (_event, errorCode, _errorDescription, validatedURL, isMainFrame) => {
+    void loadRetry.onDidFailLoad(errorCode, isMainFrame, validatedURL);
+  });
+  newWindow.webContents.on('did-finish-load', () => loadRetry.reset());
+
   newWindow.webContents.on('context-menu', (_event, params) => {
     const contextMenuParams: ContextMenuParams = {
       x: params.x,
@@ -236,14 +248,24 @@ const initWindow = async (windowMgr: WindowManager, storeInstance: Store, projec
     if (projectToActivate) {
       url += `#/home?project=${encodeURIComponent(projectToActivate)}`;
     }
-    await newWindow.loadURL(url);
+    try {
+      await newWindow.loadURL(url);
+    } catch (error) {
+      // transient failures (e.g. ERR_NETWORK_CHANGED) are retried by the did-fail-load handler
+      logger.warn(`Failed to load renderer URL: ${error instanceof Error ? error.message : String(error)}`);
+    }
   } else {
     // For production with HashRouter, append hash with query params
     let url = `file://${join(__dirname, '../renderer/index.html')}`;
     if (projectToActivate) {
       url += `#/home?project=${encodeURIComponent(projectToActivate)}`;
     }
-    await newWindow.loadURL(url);
+    try {
+      await newWindow.loadURL(url);
+    } catch (error) {
+      // transient failures (e.g. ERR_NETWORK_CHANGED) are retried by the did-fail-load handler
+      logger.warn(`Failed to load renderer: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // Apply saved zoom level

@@ -11,6 +11,7 @@
 - fixed working mode switch dialog staying open and appearing frozen while switching
 - added ability to delete stored memories from the store memory tool message
 - added Resolve with AI action for failed git operations to fix errors with agent assistance
+- added automatic retry for transient network errors during window load to prevent blank window
 
 ## [0.81.0]
 
