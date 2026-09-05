@@ -1424,6 +1424,7 @@
       "getTask": "Get task",
       "getTaskMessage": "Get task message",
       "createTask": "Create task",
+      "createSubtask": "Create subtask",
       "deleteTask": "Delete task",
       "runPrompt": "Run prompt on task",
       "searchTask": "Search task:",

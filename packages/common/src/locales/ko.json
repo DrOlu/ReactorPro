@@ -1395,6 +1395,7 @@
       "getTask": "작업 가져오기",
       "getTaskMessage": "작업 메시지 가져오기",
       "createTask": "작업 생성",
+      "createSubtask": "하위 작업 생성",
       "deleteTask": "작업 삭제",
       "runPrompt": "작업에서 프롬프트 실행",
       "searchTask": "작업 검색:",
