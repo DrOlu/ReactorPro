@@ -4768,6 +4768,10 @@ ${error.stderr}`,
 
     const effectiveTargetBranch = targetBranch || (await this.gitManager.getProjectMainBranch(this.project.baseDir));
     const worktreePath = this.task.worktree.path;
+    if (!(await isDirectory(worktreePath))) {
+      logger.debug(`Worktree ${worktreePath} no longer exists, skipping integration status check`);
+      return null;
+    }
     const settings = this.store.getSettings();
     const symlinkFolders = settings.taskSettings.worktreeSymlinkFolders || [];
 

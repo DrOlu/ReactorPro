@@ -14,6 +14,7 @@
 - added automatic retry for transient network errors during window load to prevent blank window
 - added distinct "Create subtask" label when creating subtasks in the create task tool message
 - added git actions to the command palette with configurable hotkeys
+- fixed worktree integration checks failing when worktree directory no longer exists
 
 ## [0.81.0]
 

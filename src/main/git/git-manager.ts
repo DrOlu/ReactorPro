@@ -2167,6 +2167,17 @@ export class GitManager {
     unmergedCommits: string[];
     uncommittedFiles?: string[];
   }> {
+    if (!existsSync(worktreePath)) {
+      logger.debug(`Worktree ${worktreePath} no longer exists, skipping unmerged work check`);
+      return {
+        hasUncommittedChanges: false,
+        hasUnmergedCommits: false,
+        unmergedCommitCount: 0,
+        unmergedCommits: [],
+        uncommittedFiles: [],
+      };
+    }
+
     try {
       // 1. Check for uncommitted changes
       const { files: uncommittedFiles } = await this.getUncommittedFiles(worktreePath);
