@@ -37,7 +37,9 @@
     "moveToTop": "Move Task to Top",
     "switchToLocal": "Switch to Local Mode",
     "switchToWorktree": "Switch to Worktree Mode",
-    "switchWorkingMode": "Switch the working mode"
+    "switchWorkingMode": "Switch the working mode",
+    "gitAction": "Git action",
+    "gitBranches": "Show Git Branches"
   },
   "common": {
     "settings": "Settings",
@@ -603,6 +605,7 @@
     "hotkeys": {
       "projectHotkeys": "Project",
       "taskHotkeys": "Task",
+      "gitHotkeys": "Git",
       "dialogHotkeys": "Dialogs",
       "closeProject": "Close Project",
       "newProject": "New Project",

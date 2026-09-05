@@ -681,6 +681,20 @@ export interface HotkeyConfig {
     newTask: string;
     closeTask: string;
   };
+  gitHotkeys: {
+    pull: string;
+    push: string;
+    branches: string;
+    newBranch: string;
+    renameBranch: string;
+    worktreeMerge: string;
+    worktreeSquash: string;
+    worktreeApplyUncommitted: string;
+    worktreeRebase: string;
+    worktreeAbortRebase: string;
+    worktreeContinueRebase: string;
+    worktreeResolveConflicts: string;
+  };
   dialogHotkeys: {
     browseFolder: string;
     commandPalette: string;

@@ -1,9 +1,10 @@
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WorktreeIntegrationStatus } from '@common/types';
 
 import { GitBranchesButton } from '../GitBranchesButton';
 
+import { invokeAction } from '@/stores/actionsStore';
 import { showErrorNotification } from '@/utils/notifications';
 import { render } from '@/__tests__/render';
 import { useApi } from '@/contexts/ApiContext';
@@ -233,6 +234,258 @@ describe('GitBranchesButton', () => {
 
       expect(screen.queryByText('git.confirmPushTitle')).not.toBeInTheDocument();
       expect(mockApi.gitPush).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('command palette actions', () => {
+    const mockNoSyncCommits = {
+      outgoing: { count: 0, commits: [] },
+      incoming: { count: 0, commits: [] },
+    };
+
+    it('invokes pull from the palette action', async () => {
+      mockApi.listGitBranches = vi.fn().mockResolvedValue([{ name: 'main', isCurrent: true, hasWorktree: false, isRemote: false }]);
+      mockApi.getSyncCommits = vi.fn().mockResolvedValue(mockNoSyncCommits);
+
+      render(<GitBranchesButton {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+      });
+
+      act(() => {
+        invokeAction('git.pull');
+      });
+
+      await waitFor(() => {
+        expect(mockApi.gitPull).toHaveBeenCalledWith('/project', 'task-123', false);
+      });
+    });
+
+    it('opens the pull confirm dialog from the palette action when there are incoming and outgoing commits', async () => {
+      mockApi.listGitBranches = vi.fn().mockResolvedValue([{ name: 'main', isCurrent: true, hasWorktree: false, isRemote: false }]);
+
+      render(<GitBranchesButton {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+      });
+
+      act(() => {
+        invokeAction('git.pull');
+      });
+
+      expect(screen.getByText('git.confirmPullTitle')).toBeInTheDocument();
+      expect(mockApi.gitPull).not.toHaveBeenCalled();
+    });
+
+    it('opens the push confirm dialog from the palette action and pushes on confirm', async () => {
+      mockApi.listGitBranches = vi.fn().mockResolvedValue([{ name: 'main', isCurrent: true, hasWorktree: false, isRemote: false }]);
+
+      render(<GitBranchesButton {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+      });
+
+      act(() => {
+        invokeAction('git.push');
+      });
+
+      expect(screen.getByText('git.confirmPushTitle')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'git.push' }));
+
+      await waitFor(() => {
+        expect(mockApi.gitPush).toHaveBeenCalledWith('/project', false, 'task-123');
+      });
+    });
+
+    it('does not push when outgoing count is 0', async () => {
+      mockApi.listGitBranches = vi.fn().mockResolvedValue([{ name: 'main', isCurrent: true, hasWorktree: false, isRemote: false }]);
+      mockApi.getSyncCommits = vi.fn().mockResolvedValue(mockNoSyncCommits);
+
+      render(<GitBranchesButton {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+      });
+
+      act(() => {
+        invokeAction('git.push');
+      });
+
+      expect(screen.queryByText('git.confirmPushTitle')).not.toBeInTheDocument();
+      expect(mockApi.gitPush).not.toHaveBeenCalled();
+    });
+
+    it('opens the branches dropdown from the palette action', async () => {
+      mockApi.listGitBranches = vi.fn().mockResolvedValue([{ name: 'main', isCurrent: true, hasWorktree: false, isRemote: false }]);
+      mockApi.getSyncCommits = vi.fn().mockResolvedValue(mockNoSyncCommits);
+
+      render(<GitBranchesButton {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+      });
+
+      act(() => {
+        invokeAction('git.branches');
+      });
+
+      expect(screen.getByText('git.newBranch')).toBeInTheDocument();
+      expect(screen.getByText('git.updateProject')).toBeInTheDocument();
+    });
+
+    it('opens the new branch input from the palette action', async () => {
+      mockApi.listGitBranches = vi.fn().mockResolvedValue([{ name: 'main', isCurrent: true, hasWorktree: false, isRemote: false }]);
+      mockApi.getSyncCommits = vi.fn().mockResolvedValue(mockNoSyncCommits);
+
+      render(<GitBranchesButton {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+      });
+
+      act(() => {
+        invokeAction('git.newBranch');
+      });
+
+      expect(screen.getByPlaceholderText('git.newBranchNamePlaceholder')).toBeInTheDocument();
+    });
+
+    it('shows a worktree availability error for new branch palette action in worktree mode', async () => {
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalled();
+      });
+
+      act(() => {
+        invokeAction('git.newBranch');
+      });
+
+      expect(showErrorNotification).toHaveBeenCalledWith('git.actionNotAvailableInWorktree');
+      expect(screen.queryByPlaceholderText('git.newBranchNamePlaceholder')).not.toBeInTheDocument();
+    });
+
+    it('opens the rename branch editor from the palette action', async () => {
+      mockApi.listGitBranches = vi.fn().mockResolvedValue([{ name: 'main', isCurrent: true, hasWorktree: false, isRemote: false }]);
+      mockApi.getSyncCommits = vi.fn().mockResolvedValue(mockNoSyncCommits);
+
+      render(<GitBranchesButton {...defaultProps} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalledWith('/project', undefined);
+      });
+
+      act(() => {
+        invokeAction('git.renameBranch');
+      });
+
+      const input = screen.getByPlaceholderText('worktree.branchNamePlaceholder') as HTMLInputElement;
+      expect(input.value).toBe('main');
+    });
+
+    it('opens the worktree merge dialog from the palette action', async () => {
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalled();
+      });
+
+      act(() => {
+        invokeAction('git.worktree.merge');
+      });
+
+      expect(screen.getByText('worktree.confirmMergeTitle')).toBeInTheDocument();
+    });
+
+    it('rebases the worktree from the palette action using the base branch', async () => {
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalled();
+      });
+
+      act(() => {
+        invokeAction('git.worktree.rebase');
+      });
+
+      expect(defaultProps.onRebaseFromBranch).toHaveBeenCalledWith('main');
+    });
+
+    it('applies uncommitted changes from the palette action when there are uncommitted files', async () => {
+      const statusWithUncommittedFiles = { ...mockStatus, uncommittedFiles: { count: 2, files: ['a.ts', 'b.ts'] } };
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={statusWithUncommittedFiles} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalled();
+      });
+
+      act(() => {
+        invokeAction('git.worktree.applyUncommitted');
+      });
+
+      expect(screen.getByText('worktree.confirmOnlyUncommittedTitle')).toBeInTheDocument();
+    });
+
+    it('ignores the apply uncommitted changes palette action without uncommitted files', async () => {
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalled();
+      });
+
+      act(() => {
+        invokeAction('git.worktree.applyUncommitted');
+      });
+
+      expect(screen.queryByText('worktree.confirmOnlyUncommittedTitle')).not.toBeInTheDocument();
+    });
+
+    it('opens the abort rebase confirm from the palette action during a rebase', async () => {
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} canAbortRebase />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalled();
+      });
+
+      act(() => {
+        invokeAction('git.worktree.abortRebase');
+      });
+
+      expect(screen.getByText('worktree.confirmAbortRebaseTitle')).toBeInTheDocument();
+    });
+
+    it('ignores the abort rebase palette action when no rebase is in progress', async () => {
+      render(<GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} />);
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalled();
+      });
+
+      act(() => {
+        invokeAction('git.worktree.abortRebase');
+      });
+
+      expect(screen.queryByText('worktree.confirmAbortRebaseTitle')).not.toBeInTheDocument();
+    });
+
+    it('opens the resolve conflicts with agent confirm from the palette action when conflicts are resolvable', async () => {
+      render(
+        <GitBranchesButton {...defaultProps} worktreePath="/project/.aider-desk/tasks/task-123/worktree" status={mockStatus} canResolveConflictsWithAgent />,
+      );
+
+      await waitFor(() => {
+        expect(mockApi.getSyncCommits).toHaveBeenCalled();
+      });
+
+      act(() => {
+        invokeAction('git.worktree.resolveConflicts');
+      });
+
+      expect(screen.getByText('worktree.confirmResolveConflictsWithAgentTitle')).toBeInTheDocument();
     });
   });
 });

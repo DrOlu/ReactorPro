@@ -55,6 +55,20 @@ export const UI_ACTIONS = [
   { id: 'task.workingMode.local', labelKey: 'uiActions.switchToLocal', descriptionKey: 'uiActions.switchWorkingMode' },
   { id: 'task.workingMode.worktree', labelKey: 'uiActions.switchToWorktree', descriptionKey: 'uiActions.switchWorkingMode' },
 
+  // Git
+  { id: 'git.pull', labelKey: 'git.updateProject', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.push', labelKey: 'git.push', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.branches', labelKey: 'uiActions.gitBranches', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.newBranch', labelKey: 'git.newBranch', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.renameBranch', labelKey: 'worktree.renameBranch', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.worktree.merge', labelKey: 'worktree.mergeIntoBranch', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.worktree.squash', labelKey: 'worktree.squashIntoBranch', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.worktree.applyUncommitted', labelKey: 'worktree.applyUncommittedChanges', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.worktree.rebase', labelKey: 'worktree.rebaseFromBranch', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.worktree.abortRebase', labelKey: 'worktree.abortRebase', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.worktree.continueRebase', labelKey: 'worktree.continueRebase', descriptionKey: 'uiActions.gitAction' },
+  { id: 'git.worktree.resolveConflicts', labelKey: 'worktree.resolveConflictsWithAgent', descriptionKey: 'uiActions.gitAction' },
+
   // Editor
   { id: 'editor.open', labelKey: 'settings.hotkeys.openEditor' },
 

@@ -27,6 +27,10 @@ export const HotkeysSettings = ({ settings, setSettings }: Props) => {
       ...DEFAULT_HOTKEY_CONFIG.taskHotkeys,
       ...(settings.hotkeyConfig?.taskHotkeys ?? {}),
     },
+    gitHotkeys: {
+      ...DEFAULT_HOTKEY_CONFIG.gitHotkeys,
+      ...(settings.hotkeyConfig?.gitHotkeys ?? {}),
+    },
     dialogHotkeys: {
       ...DEFAULT_HOTKEY_CONFIG.dialogHotkeys,
       ...(settings.hotkeyConfig?.dialogHotkeys ?? {}),
@@ -55,6 +59,7 @@ export const HotkeysSettings = ({ settings, setSettings }: Props) => {
         ...DEFAULT_HOTKEY_CONFIG,
         projectHotkeys: { ...DEFAULT_HOTKEY_CONFIG.projectHotkeys },
         taskHotkeys: { ...DEFAULT_HOTKEY_CONFIG.taskHotkeys },
+        gitHotkeys: { ...DEFAULT_HOTKEY_CONFIG.gitHotkeys },
         dialogHotkeys: { ...DEFAULT_HOTKEY_CONFIG.dialogHotkeys },
       },
     });
@@ -106,6 +111,23 @@ export const HotkeysSettings = ({ settings, setSettings }: Props) => {
             {renderHotkeyConfig('taskHotkeys', 'switchTask7', t('settings.hotkeys.switchTask', { number: 7 }))}
             {renderHotkeyConfig('taskHotkeys', 'switchTask8', t('settings.hotkeys.switchTask', { number: 8 }))}
             {renderHotkeyConfig('taskHotkeys', 'switchTask9', t('settings.hotkeys.switchTask', { number: 9 }))}
+          </div>
+        </Section>
+
+        <Section id="hotkeys-git" title={t('settings.hotkeys.gitHotkeys')}>
+          <div className="px-5 py-3 space-y-1">
+            {renderHotkeyConfig('gitHotkeys', 'pull', t('git.updateProject'))}
+            {renderHotkeyConfig('gitHotkeys', 'push', t('git.push'))}
+            {renderHotkeyConfig('gitHotkeys', 'branches', t('uiActions.gitBranches'))}
+            {renderHotkeyConfig('gitHotkeys', 'newBranch', t('git.newBranch'))}
+            {renderHotkeyConfig('gitHotkeys', 'renameBranch', t('worktree.renameBranch'))}
+            {renderHotkeyConfig('gitHotkeys', 'worktreeMerge', t('worktree.mergeIntoBranch'))}
+            {renderHotkeyConfig('gitHotkeys', 'worktreeSquash', t('worktree.squashIntoBranch'))}
+            {renderHotkeyConfig('gitHotkeys', 'worktreeApplyUncommitted', t('worktree.applyUncommittedChanges'))}
+            {renderHotkeyConfig('gitHotkeys', 'worktreeRebase', t('worktree.rebaseFromBranch'))}
+            {renderHotkeyConfig('gitHotkeys', 'worktreeAbortRebase', t('worktree.abortRebase'))}
+            {renderHotkeyConfig('gitHotkeys', 'worktreeContinueRebase', t('worktree.continueRebase'))}
+            {renderHotkeyConfig('gitHotkeys', 'worktreeResolveConflicts', t('worktree.resolveConflictsWithAgent'))}
           </div>
         </Section>
 

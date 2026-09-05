@@ -13,6 +13,7 @@
 - added Resolve with AI action for failed git operations to fix errors with agent assistance
 - added automatic retry for transient network errors during window load to prevent blank window
 - added distinct "Create subtask" label when creating subtasks in the create task tool message
+- added git actions to the command palette with configurable hotkeys
 
 ## [0.81.0]
 
