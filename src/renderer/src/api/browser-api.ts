@@ -1266,10 +1266,11 @@ export class BrowserApi implements ApplicationAPI {
     });
   }
 
-  gitPull(repoPath: string, taskId?: string): Promise<{ output: string }> {
+  gitPull(repoPath: string, taskId?: string, rebase?: boolean): Promise<{ output: string }> {
     return this.post('/project/git/pull', {
       repoPath,
       taskId,
+      rebase,
     });
   }
 

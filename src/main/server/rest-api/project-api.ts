@@ -432,6 +432,7 @@ const RebaseOntoBranchSchema = z.object({
 const GitPullSchema = z.object({
   repoPath: z.string().min(1, 'Repository path is required'),
   taskId: z.string().optional(),
+  rebase: z.boolean().optional(),
 });
 
 const UpdateGitBranchSchema = z.object({
@@ -1349,8 +1350,8 @@ export class ProjectApi extends BaseApi {
           return;
         }
 
-        const { repoPath, taskId } = parsed;
-        const result = await this.eventsHandler.gitPull(repoPath, taskId);
+        const { repoPath, taskId, rebase } = parsed;
+        const result = await this.eventsHandler.gitPull(repoPath, taskId, rebase);
         res.status(200).json(result);
       }),
     );

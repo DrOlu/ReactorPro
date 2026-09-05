@@ -6,12 +6,14 @@ import { IoGitBranch } from 'react-icons/io5';
 import { VscWorktreeSmall } from 'react-icons/vsc';
 import { MdKeyboardArrowDown } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
+import { useLocalStorage } from '@reactuses/core';
 import { BranchInfo, GitSyncCommits, WorktreeIntegrationStatus } from '@common/types';
 
 import { useApi } from '@/contexts/ApiContext';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Checkbox } from '@/components/common/Checkbox';
+import { RadioButton } from '@/components/common/RadioButton';
 import { InlineEditPanel } from '@/components/common/InlineEditPanel';
 import { WorktreeActionDialog } from '@/components/project/WorktreeActionDialog';
 import { GitStatusBadges } from '@/components/project/GitStatusBadges';
@@ -21,6 +23,11 @@ import { showErrorNotification, showInfoNotification } from '@/utils/notificatio
 
 const LocalModeIcon = TbDeviceImacDown;
 const WorktreeModeIcon = VscWorktreeSmall;
+
+enum PullStrategy {
+  Merge = 'merge',
+  Rebase = 'rebase',
+}
 
 const MAX_BRANCH_NAME_LENGTH = 50;
 const TRUNCATED_TAIL_LENGTH = 5;
@@ -115,6 +122,7 @@ export const GitBranchesButton = ({
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncCommits, setSyncCommits] = useState<GitSyncCommits>({ outgoing: { count: 0, commits: [] }, incoming: { count: 0, commits: [] } });
+  const [pullStrategy, setPullStrategy] = useLocalStorage<PullStrategy>('git-pull-strategy', PullStrategy.Merge);
   const [recentBranches, setRecentBranches] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(`git-recent-branches-${baseDir}`) || '[]');
@@ -145,6 +153,7 @@ export const GitBranchesButton = ({
   const [showResolveWithAgentConfirm, setShowResolveWithAgentConfirm] = useState(false);
   const [showPushConfirm, setShowPushConfirm] = useState(false);
   const [forcePush, setForcePush] = useState(false);
+  const [showPullConfirm, setShowPullConfirm] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -425,16 +434,33 @@ export const GitBranchesButton = ({
     }
   };
 
-  const handlePull = async () => {
-    handleCloseDropdown();
+  const performPull = async () => {
     try {
-      const result = await api.gitPull(repoPath, taskId);
+      const result = await api.gitPull(repoPath, taskId, pullStrategy === PullStrategy.Rebase);
       const isUpToDate = /up to date/i.test(result.output);
       showInfoNotification(isUpToDate ? t('git.pullUpToDate') : t('git.pullSuccess'));
       await loadSyncCommits();
     } catch (error) {
       handleError(error);
     }
+  };
+
+  const handlePull = () => {
+    handleCloseDropdown();
+    if (incomingCount > 0 && outgoingCount > 0) {
+      setShowPullConfirm(true);
+      return;
+    }
+    void performPull();
+  };
+
+  const handlePullConfirm = () => {
+    setShowPullConfirm(false);
+    void performPull();
+  };
+
+  const handlePullStrategyChange = (value: string) => {
+    setPullStrategy(value === PullStrategy.Rebase ? PullStrategy.Rebase : PullStrategy.Merge);
   };
 
   const handleUpdateBranch = async (branch: BranchInfo) => {
@@ -465,7 +491,11 @@ export const GitBranchesButton = ({
       showInfoNotification(t('git.pushSuccess'));
       await loadSyncCommits();
     } catch (error) {
-      handleError(error);
+      if (error instanceof Error && /fetch first|non-fast-forward|rejected because the tip|remote contains work/i.test(error.message)) {
+        showErrorNotification(t('git.pushRejectedPullFirst'));
+      } else {
+        handleError(error);
+      }
     }
   };
 
@@ -692,9 +722,10 @@ export const GitBranchesButton = ({
                 />
               )}
 
-              <button onClick={() => void handlePull()} className={menuItemClass}>
+              <button onClick={handlePull} className={menuItemClass}>
                 <FaDownload className="w-3 h-3" />
                 {t('git.updateProject')}
+                {incomingCount > 0 && outgoingCount > 0 ? '...' : ''}
               </button>
               <button onClick={handlePush} className={menuItemClass} disabled={disabled || outgoingCount === 0}>
                 <FaUpload className="w-3 h-3" />
@@ -869,6 +900,39 @@ export const GitBranchesButton = ({
           closeOnEscape
         >
           <p className="text-sm mb-3">{t('worktree.confirmResolveConflictsWithAgentMessage')}</p>
+        </ConfirmDialog>
+      )}
+
+      {showPullConfirm && (
+        <ConfirmDialog
+          title={t('git.confirmPullTitle')}
+          onConfirm={handlePullConfirm}
+          onCancel={() => setShowPullConfirm(false)}
+          confirmButtonText={t('git.updateProject')}
+          closeOnEscape
+        >
+          <div className="flex flex-col gap-3">
+            <p className="text-sm">{t('git.confirmPullMessage', { outgoing: outgoingCount, incoming: incomingCount })}</p>
+            <div className="space-y-2 ml-0.5">
+              <RadioButton
+                id="pull-merge"
+                name="pull-strategy"
+                value={PullStrategy.Merge}
+                checked={pullStrategy === PullStrategy.Merge}
+                onChange={handlePullStrategyChange}
+                label={t('git.merge')}
+              />
+              <RadioButton
+                id="pull-rebase"
+                name="pull-strategy"
+                value={PullStrategy.Rebase}
+                checked={pullStrategy === PullStrategy.Rebase}
+                onChange={handlePullStrategyChange}
+                label={t('git.rebase')}
+              />
+            </div>
+            <p className="text-2xs text-text-muted">{t('git.pullRebaseAutostashHint')}</p>
+          </div>
         </ConfirmDialog>
       )}
 

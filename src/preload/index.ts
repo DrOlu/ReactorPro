@@ -759,7 +759,7 @@ const api: ApplicationAPI = {
   mergeIntoCurrentBranch: (repoPath, branch, taskId) => ipcRenderer.invoke('merge-into-current-branch', repoPath, branch, taskId),
   rebaseOntoBranch: (repoPath, branch, taskId) => ipcRenderer.invoke('rebase-onto-branch', repoPath, branch, taskId),
   updateGitBranch: (repoPath, branchName, taskId) => ipcRenderer.invoke('update-git-branch', repoPath, branchName, taskId),
-  gitPull: (repoPath, taskId) => ipcRenderer.invoke('git-pull', repoPath, taskId),
+  gitPull: (repoPath, taskId, rebase) => ipcRenderer.invoke('git-pull', repoPath, taskId, rebase),
   gitPush: (repoPath, force, taskId) => ipcRenderer.invoke('git-push', repoPath, force, taskId),
   resolveGitErrorWithAgent: (baseDir, taskId) => ipcRenderer.invoke('resolve-git-error-with-agent', baseDir, taskId),
 

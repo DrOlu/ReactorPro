@@ -639,8 +639,8 @@ export const setupIpcHandlers = (eventsHandler: EventsHandler, serverController:
     return await eventsHandler.updateGitBranch(repoPath, branchName, taskId);
   });
 
-  ipcMain.handle('git-pull', async (_, repoPath: string, taskId?: string) => {
-    return await eventsHandler.gitPull(repoPath, taskId);
+  ipcMain.handle('git-pull', async (_, repoPath: string, taskId?: string, rebase?: boolean) => {
+    return await eventsHandler.gitPull(repoPath, taskId, rebase);
   });
 
   ipcMain.handle('git-push', async (_, repoPath: string, force?: boolean, taskId?: string) => {

@@ -892,12 +892,18 @@ export class EventsHandler {
     );
   }
 
-  async gitPull(repoPath: string, taskId?: string): Promise<{ output: string }> {
-    return await this.runGitAction(this.getBaseDirFromRepoPath(repoPath), taskId, 'pull', () => this.projectManager.gitManager.gitPull(repoPath));
+  async gitPull(repoPath: string, taskId?: string, rebase?: boolean): Promise<{ output: string }> {
+    return await this.runGitAction(this.getBaseDirFromRepoPath(repoPath), taskId, 'pull', () => this.projectManager.gitManager.gitPull(repoPath, rebase));
   }
 
   async gitPush(repoPath: string, force?: boolean, taskId?: string): Promise<{ output: string }> {
-    return await this.runGitAction(this.getBaseDirFromRepoPath(repoPath), taskId, 'push', () => this.projectManager.gitManager.gitPush(repoPath, force));
+    return await this.runGitAction(
+      this.getBaseDirFromRepoPath(repoPath),
+      taskId,
+      'push',
+      () => this.projectManager.gitManager.gitPush(repoPath, force),
+      (error) => error instanceof Error && /fetch first|non-fast-forward|rejected because the tip|remote contains work/i.test(error.message),
+    );
   }
 
   async getWorktreeIntegrationStatus(baseDir: string, taskId: string, targetBranch?: string) {
