@@ -26,7 +26,13 @@ const composerSource = readFileSync(
 test("composer 列与转录列读同一个宽度变量", () => {
   const layer = chatStyles.match(/\.gateway-composer-layer \{[\s\S]*?\n\}/);
   assert.ok(layer, ".gateway-composer-layer 规则存在");
-  assert.match(layer[0], /min\(var\(--chat-transcript-content-width, 768px\), 100%\)/);
+  // Same variable as the transcript shell — that is what this guard is for.
+  // The calc() wraps it because both columns give back the retired 40px avatar
+  // rail; see measurements-lru.test.mjs for that half of the invariant.
+  assert.match(
+    layer[0],
+    /min\(calc\(var\(--chat-transcript-content-width, 768px\) - 40px\), 100%\)/,
+  );
   assert.doesNotMatch(
     chatStyles,
     /--gateway-chat-column-width/,

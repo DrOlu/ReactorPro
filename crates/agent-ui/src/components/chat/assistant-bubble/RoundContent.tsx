@@ -35,13 +35,6 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
   /** Transcript-stable entry key; block ids alone repeat across rounds. */
   traceKey?: string;
   showTurnStatus?: boolean;
-  /**
-   * True when the block renders as its own transcript row outside the work
-   * trace (interaction cards, answer-layer results). Standalone rows get
-   * their vertical rhythm from the layout layer, so the operation wrapper
-   * must not stack its own my-1 on top of it.
-   */
-  standalone?: boolean;
   readOnly?: boolean;
   redactToolContent?: boolean;
   workdir?: string;
@@ -56,7 +49,6 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
     isLatestThinking,
     traceKey,
     showTurnStatus = false,
-    standalone = false,
     readOnly = false,
     redactToolContent = false,
     workdir,
@@ -145,7 +137,7 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
   const isOperationBlock = block.kind !== "text";
   return (
     <div
-      className={cn(!isLive && "w-full", isOperationBlock && !standalone && "my-1")}
+      className={cn(!isLive && "w-full")}
       data-assistant-operation={isOperationBlock ? "" : undefined}
     >
       {content}
@@ -252,7 +244,6 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
       isLatestThinking={entry.key === activeThinkingKey}
       traceKey={entry.key}
       showTurnStatus={insideWorkTrace && running && entry.key === latestToolGroupKey}
-      standalone={!insideWorkTrace}
       readOnly={readOnly}
       redactToolContent={redactToolContent}
       workdir={workdir}
