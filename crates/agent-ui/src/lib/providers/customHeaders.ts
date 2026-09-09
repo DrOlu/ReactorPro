@@ -55,8 +55,8 @@ export class CustomHeaderImportError extends Error {
 // 版本对不上本身就是破绽。
 // anthropic-beta 不在这里：它按请求内容逐次计算（comma 拼接的 beta 列表），写死一个
 // 值反而失真，因此列进 RESERVED_CUSTOM_HEADER_KEYS 由发请求那侧生成。
-// X-Stainless-OS/Arch/Runtime-Version 本为运行机实测值，这里固定成一台 macOS/arm64
-// 机器的成套取值。
+// X-Stainless-OS/Arch/Runtime-Version 与官方 SDK 默认值保持一致；平台相关的 CLI
+// User-Agent 由 buildCliUserAgent 按当前运行环境生成。
 export const ANTHROPIC_DEFAULT_REQUEST_HEADERS = {
   "x-app": "cli",
   "Content-Type": "application/json",
@@ -102,7 +102,7 @@ export const CODEX_THREAD_ID_HEADER = "thread-id";
 
 // 各官方 CLI 的版本号：UA 与随附的 version / client-version 头必须同源，二者对不上
 // 本身就是破绽。claude_code / xai 取自用户提供的官方源码（claude-code-source
-// package.json = 2.1.88；xai-grok-version/Cargo.toml = 1.0.6）；codex 源码树是占位
+// package.json = 2.1.88；Grok 当前发布版为 1.0.24；codex 源码树是占位
 // 0.0.0（release 才 bump），无法作真值，沿用当前发行号。
 const CLAUDE_CLI_VERSION = "2.1.88";
 const CODEX_CLI_VERSION = "0.151.0";
@@ -119,8 +119,8 @@ export const CODEX_VERSION_HEADER = "version";
 // grok-shell 除 UA 外恒发的静态客户端身份头（xai-grok-http/src/lib.rs 的
 // process_client_identifier / process_client_mode + xai-grok-shell
 // mvp_agent/mod.rs inject_proxy_headers）。client-identifier/version/mode 各端都发；
-// X-XAI-Token-Auth / x-authenticateresponse 仅走官方 cli-chat-proxy 时注入，属于 CLI
-// 默认（已登录）指纹的一部分，直连 api.x.ai 时服务端忽略未知头、无副作用。
+// 认证代理专用的 X-XAI-Token-Auth / x-authenticateresponse 不属于默认客户端身份，
+// 因此不在预设中注入。
 const GROK_IDENTITY_HEADERS: readonly CustomHeader[] = [
   { key: "x-grok-client-identifier", value: "grok-shell" },
   { key: "x-grok-client-version", value: GROK_CLI_VERSION },
@@ -190,7 +190,7 @@ export function isAnthropicOAuthApiKey(apiKey: string | undefined): boolean {
 // claude-code-source src/utils/http.ts、codex-rs login/src/auth/default_client.rs 的
 // get_codex_user_agent()、grok xai-grok-sampler/src/client.rs。版本号取自上面三个
 // *_CLI_VERSION 常量，保证 UA 与随附的 version / client-version 头同源。os/arch/终端
-// 段本为运行机实测值，这里固定成成套取值（codex 取 WSL Ubuntu；grok 取 linux）。
+// 段按当前运行机平台生成；静态预览值仅用于下拉菜单展示。
 // 这些值只在用户点按钮时写进自定义请求头，发请求那侧不含任何内置伪装。
 export const CLI_IDENTITY_USER_AGENTS = {
   claude_code: `claude-cli/${CLAUDE_CLI_VERSION} (external, cli)`,
