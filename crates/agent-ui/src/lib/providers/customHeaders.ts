@@ -74,6 +74,18 @@ export const ANTHROPIC_DEFAULT_REQUEST_HEADERS = {
   "anthropic-dangerous-direct-browser-access": "true",
 } as const;
 
+function runtimePlatform(): { os: string; arch: string } {
+  const nav = typeof navigator !== "undefined" ? navigator : undefined;
+  const ua = nav?.userAgent ?? "";
+  const os = /Windows/i.test(ua) ? "Windows" : /Macintosh|Mac OS/i.test(ua) ? "MacOS" : "Linux";
+  const arch = /arm|aarch/i.test(ua) ? "arm64" : "x86_64";
+  return { os, arch };
+}
+
+export function getCliRuntimePlatform(): { os: string; arch: string } {
+  return runtimePlatform();
+}
+
 // Claude Code 每会话头（claude-code-source src/services/api/client.ts:108 / :356）。
 // 取值是运行时 session UUID，一键模拟不写死；请求装配侧有 sessionId 时再填。
 export const CLAUDE_SESSION_ID_HEADER = "X-Claude-Code-Session-Id";
@@ -94,7 +106,8 @@ export const CODEX_THREAD_ID_HEADER = "thread-id";
 // 0.0.0（release 才 bump），无法作真值，沿用当前发行号。
 const CLAUDE_CLI_VERSION = "2.1.88";
 const CODEX_CLI_VERSION = "0.151.0";
-const GROK_CLI_VERSION = "1.0.6";
+// 当前 grok CLI 发布版；UA 与 x-grok-client-version 必须保持一致。
+const GROK_CLI_VERSION = "1.0.24";
 
 // Codex CLI 每次请求除 UA 外恒发的两个静态身份头：originator（codex-rs
 // login/src/auth/default_client.rs default_headers()，值 codex_cli_rs）与 version
@@ -112,8 +125,6 @@ const GROK_IDENTITY_HEADERS: readonly CustomHeader[] = [
   { key: "x-grok-client-identifier", value: "grok-shell" },
   { key: "x-grok-client-version", value: GROK_CLI_VERSION },
   { key: "x-grok-client-mode", value: "interactive" },
-  { key: "X-XAI-Token-Auth", value: "xai-grok-cli" },
-  { key: "x-authenticateresponse", value: "authenticate-response" },
 ];
 
 // grok-shell 每回合头（xai-grok-sampler/src/client.rs GrokRequestHeaders），取值随
@@ -187,6 +198,14 @@ export const CLI_IDENTITY_USER_AGENTS = {
   xai: `grok-shell/${GROK_CLI_VERSION} (linux; x86_64)`,
 } as const;
 
+export function buildCliUserAgent(type: CliIdentityProviderId): string {
+  const version = CLI_IDENTITY_USER_AGENTS[type].match(/\/([0-9][^ ]*)/)?.[1] ?? "0.0.0";
+  const { os, arch } = runtimePlatform();
+  if (type === "claude_code") return `claude-cli/${version} (external, cli)`;
+  if (type === "codex") return `codex_cli_rs/${version} (${os}; ${arch})`;
+  return `grok-shell/${version} (${os.toLowerCase()}; ${arch})`;
+}
+
 export type CliIdentityProviderId = keyof typeof CLI_IDENTITY_USER_AGENTS;
 
 export const CLI_IDENTITY_PROVIDER_IDS = Object.keys(
@@ -209,7 +228,7 @@ export function listCliIdentityProviderIds(preferred?: string): readonly CliIden
 // x-grok-conv-id/req-id/session-id/turn-idx）冒充成固定串反而比不带更可疑，一律留给
 // 请求装配侧按 sessionId 填，或用户自己填（键名已进各自预设）。
 export function buildCliIdentityHeaders(type: CliIdentityProviderId): CustomHeader[] {
-  const headers: CustomHeader[] = [{ key: "User-Agent", value: CLI_IDENTITY_USER_AGENTS[type] }];
+  const headers: CustomHeader[] = [{ key: "User-Agent", value: buildCliUserAgent(type) }];
   if (type === "claude_code") {
     // Anthropic SDK 指纹头整套写入（Content-Type 除外，见上）。
     for (const [key, value] of Object.entries(ANTHROPIC_DEFAULT_REQUEST_HEADERS)) {
