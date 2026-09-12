@@ -330,18 +330,22 @@ func TestReputationScoringAndClamp(t *testing.T) {
 		t.Fatalf("a success must raise the score, got %v", got)
 	}
 
-	// Many failures must clamp at MinScore, never go negative.
+	// Many failures must clamp at MinScore, never go negative. Reading a score
+	// applies time-based decay toward the initial score, and a few microseconds
+	// can elapse between writing and reading, so compare with a tolerance rather
+	// than for exact equality.
+	const tolerance = 1e-6
 	for i := 0; i < 100; i++ {
 		store.RecordFailure("bad")
 	}
-	if got := store.Score("bad"); got != config.MinScore {
+	if got := store.Score("bad"); got > config.MinScore+tolerance {
 		t.Fatalf("score = %v, want the minimum %v", got, config.MinScore)
 	}
 
 	for i := 0; i < 100; i++ {
 		store.RecordSuccess("great")
 	}
-	if got := store.Score("great"); got != config.MaxScore {
+	if got := store.Score("great"); got < config.MaxScore-tolerance {
 		t.Fatalf("score = %v, want the maximum %v", got, config.MaxScore)
 	}
 }
