@@ -64,9 +64,28 @@ jobs:
           version: v2.12.2
           working-directory: crates/agent-gateway
 
+      # The mesh integration tests start a private nats-server per test and skip
+      # when the binary is absent, so without this step they would silently not
+      # run and the wire behaviour would go uncovered.
+      - name: Install nats-server
+        run: |
+          set -euo pipefail
+          version=2.14.2
+          curl -fsSL -o nats.tar.gz \
+            "https://github.com/nats-io/nats-server/releases/download/v${version}/nats-server-v${version}-linux-amd64.tar.gz"
+          tar -xzf nats.tar.gz
+          sudo install -m 0755 "nats-server-v${version}-linux-amd64/nats-server" /usr/local/bin/nats-server
+          nats-server --version
+
       - name: Test gateway
         working-directory: crates/agent-gateway
         run: go test ./...
+
+      # The mesh guards a connection with a dedicated lifecycle mutex precisely
+      # because Start and Stop race each other; -race is what proves it holds.
+      - name: Test mesh under the race detector
+        working-directory: crates/agent-gateway
+        run: go test -race ./internal/mesh/...
 
   gateway-docker:
     name: Gateway Docker Smoke

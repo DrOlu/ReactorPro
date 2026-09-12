@@ -11,12 +11,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 // ErrIdentityTampered is returned when an identity file no longer matches the
 // fingerprint it was created with.
 var ErrIdentityTampered = errors.New("mesh identity fingerprint does not match: the agent id or key was modified")
+
+// ErrIdentityMismatch is returned when a signature verifies but the key does not
+// correspond to the agent id the envelope claims — a valid signature presented
+// under someone else's name.
+var ErrIdentityMismatch = errors.New("mesh identity does not match the claimed sender")
 
 // Identity is an agent's immutable mesh identity: an Ed25519 keypair bound to
 // an agent id.
@@ -157,11 +163,35 @@ func (i *Identity) PublicKey() ed25519.PublicKey { return i.publicKey }
 // SigningPayload is the deterministic byte string a signature covers. It is a
 // field-joined digest rather than re-serialised JSON so any language can
 // reproduce it.
+//
+// Every field that can change a message's meaning is covered. Leaving the error
+// object out would let an attacker turn a denial into an apparent success;
+// leaving the fingerprint out would make the identity binding below forgeable.
+// Each part is length-prefixed so a field containing a newline cannot be
+// re-split to collide with a different field layout.
 func SigningPayload(env *Envelope) []byte {
-	var builder strings.Builder
-	for _, part := range []string{
+	parts := []string{
 		env.Version, env.ID, string(env.Type), env.TS, env.From, env.To, env.TaskID,
-	} {
+		env.InReplyTo, env.Fingerprint,
+	}
+	// Optional fields contribute a fixed number of positions whether or not they
+	// are present, so "absent" and "empty" cannot collide.
+	if env.Trace != nil {
+		parts = append(parts, env.Trace.TraceID, env.Trace.SpanID)
+	} else {
+		parts = append(parts, "", "")
+	}
+	if env.Error != nil {
+		parts = append(parts, strconv.Itoa(env.Error.Code), env.Error.Message,
+			strconv.FormatBool(env.Error.Retryable))
+	} else {
+		parts = append(parts, "", "", "")
+	}
+
+	var builder strings.Builder
+	for _, part := range parts {
+		builder.WriteString(strconv.Itoa(len(part)))
+		builder.WriteByte(':')
 		builder.WriteString(part)
 		builder.WriteByte('\n')
 	}
@@ -170,18 +200,40 @@ func SigningPayload(env *Envelope) []byte {
 	return []byte(builder.String())
 }
 
-// Sign attaches the agent's signature and public key to an envelope.
+// Sign attaches the agent's signature, public key and fingerprint to an envelope.
 func (i *Identity) Sign(env *Envelope) error {
 	if i == nil || i.privateKey == nil {
 		return errors.New("mesh identity is not loaded")
 	}
-	env.Signature = hex.EncodeToString(ed25519.Sign(i.privateKey, SigningPayload(env)))
 	env.PublicKey = i.PublicKeyPEM
+	env.Fingerprint = i.Fingerprint
+	// Signed last: the payload covers the public key and fingerprint above.
+	env.Signature = hex.EncodeToString(ed25519.Sign(i.privateKey, SigningPayload(env)))
 	return nil
 }
 
-// VerifyEnvelope checks an envelope's signature against the embedded public key
-// and confirms the key hashes to the fingerprint the sender claims.
+// EnvelopeFingerprint derives the fingerprint that the envelope's embedded
+// public key proves for its claimed sender.
+func EnvelopeFingerprint(env *Envelope) (string, error) {
+	if env.PublicKey == "" {
+		return "", errors.New("envelope carries no public key")
+	}
+	publicKey, err := parsePublicKey(env.PublicKey)
+	if err != nil {
+		return "", err
+	}
+	return FingerprintFor(env.From, publicKey), nil
+}
+
+// VerifyEnvelope checks an envelope's signature and, when the sender states one,
+// that the stated fingerprint is the one its key actually proves.
+//
+// A valid signature on its own proves only that the sender holds *some* private
+// key — the matching public key travels in the same message, so anyone can mint
+// a pair and sign an envelope claiming to be a different agent. Binding the
+// fingerprint to From is what turns a signature into evidence about a specific
+// identity. The fingerprint is covered by the signature, so it cannot be
+// swapped in transit.
 func VerifyEnvelope(env *Envelope) error {
 	if env.Signature == "" || env.PublicKey == "" {
 		return errors.New("envelope is not signed")
@@ -195,12 +247,19 @@ func VerifyEnvelope(env *Envelope) error {
 		return fmt.Errorf("decode signature: %w", err)
 	}
 	// Verify against a copy without the signature fields so the payload digest
-	// matches what the sender signed.
+	// matches what the sender signed. Fingerprint is deliberately retained: it
+	// is part of the signed payload.
 	unsigned := *env
 	unsigned.Signature = ""
 	unsigned.PublicKey = ""
 	if !ed25519.Verify(publicKey, SigningPayload(&unsigned), signature) {
 		return errors.New("envelope signature is invalid")
+	}
+	if env.Fingerprint != "" {
+		if proved := FingerprintFor(env.From, publicKey); env.Fingerprint != proved {
+			return fmt.Errorf("%w: envelope claims %s but the key proves %s",
+				ErrIdentityMismatch, env.Fingerprint, proved)
+		}
 	}
 	return nil
 }

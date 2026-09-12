@@ -49,6 +49,30 @@ type Config struct {
 	// because it is also how long the caller waits.
 	DiscoveryWindow time.Duration `json:"-"`
 
+	// Trust controls how inbound envelopes are authenticated. See the Verify*
+	// constants; the modes exist so enforcement can be switched on without
+	// locking out peers that do not sign yet.
+	VerifyMode string `json:"verifyMode"`
+	// ClockSkew is how far an envelope's timestamp may drift from local time
+	// before it is treated as a replay or a broken clock.
+	ClockSkew time.Duration `json:"-"`
+	// TrustedPeers pins known peers by fingerprint ("sha256:<hex16>").
+	TrustedPeers []string `json:"trustedPeers"`
+	// TrustOnFirstUse records a peer's fingerprint on its first verified
+	// message. With it off, only TrustedPeers may be served.
+	TrustOnFirstUse bool `json:"trustOnFirstUse"`
+
+	// MaxEnvelopeBytes caps a single inbound envelope. Separate from the
+	// gateway's -max-message-bytes, which governs the desktop protocol.
+	MaxEnvelopeBytes int `json:"maxEnvelopeBytes"`
+	// MaxSeenIDs bounds the replay cache.
+	MaxSeenIDs int `json:"maxSeenIds"`
+	// MaxSenderStates bounds the per-sender rate-limiter map, so a flood from
+	// many distinct senders cannot grow memory without limit.
+	MaxSenderStates int `json:"maxSenderStates"`
+	// RateLimit throttles inbound traffic per sender.
+	RateLimit RateLimitConfig `json:"rateLimit"`
+
 	// Extensions
 	Reputation ReputationConfig `json:"reputation"`
 	Governance GovernanceConfig `json:"governance"`
@@ -56,6 +80,42 @@ type Config struct {
 	// Events to subscribe to automatically once connected.
 	EventSubscriptions []string `json:"eventSubscriptions"`
 }
+
+// Verification modes for inbound envelopes.
+const (
+	// VerifyOff accepts any envelope, signed or not. Signing stays decorative.
+	VerifyOff = "off"
+	// VerifyPrefer verifies envelopes that carry a signature and rejects ones
+	// that fail, but still accepts unsigned envelopes. This is the transitional
+	// mode: it closes the door on tampering and impersonation for peers that
+	// sign, without locking out peers that cannot sign yet.
+	VerifyPrefer = "prefer"
+	// VerifyRequire rejects any unsigned envelope. Correct for a closed fleet
+	// where every peer holds an identity.
+	VerifyRequire = "require"
+)
+
+// fingerprintPrefix is the only fingerprint shape accepted in TrustedPeers.
+const fingerprintPrefix = "sha256:"
+
+// RateLimitConfig throttles inbound mesh traffic per sender.
+type RateLimitConfig struct {
+	Enabled bool `json:"enabled"`
+	// PerSecond is the sustained rate allowed from one sender.
+	PerSecond float64 `json:"perSecond"`
+	// Burst is how many messages may arrive back to back before the sustained
+	// rate applies.
+	Burst int `json:"burst"`
+}
+
+// Default inbound limits. These are deliberately generous: they exist to stop a
+// runaway peer or a hostile flood, not to shape normal traffic.
+const (
+	DefaultMaxEnvelopeBytes = 1 << 20 // 1 MiB
+	DefaultMaxSeenIDs       = 32768
+	DefaultMaxSenderStates  = 4096
+	DefaultClockSkew        = 5 * time.Minute
+)
 
 // DefaultConfig returns a disabled configuration with sensible limits.
 func DefaultConfig() Config {
@@ -68,8 +128,44 @@ func DefaultConfig() Config {
 		HeartbeatInterval: 30 * time.Second,
 		RequestTimeout:    120 * time.Second,
 		DiscoveryWindow:   2 * time.Second,
-		Reputation:        DefaultReputationConfig(),
-		Governance:        DefaultGovernanceConfig(),
+		VerifyMode:        VerifyPrefer,
+		ClockSkew:         DefaultClockSkew,
+		TrustOnFirstUse:   true,
+		MaxEnvelopeBytes:  DefaultMaxEnvelopeBytes,
+		MaxSeenIDs:        DefaultMaxSeenIDs,
+		MaxSenderStates:   DefaultMaxSenderStates,
+		RateLimit: RateLimitConfig{
+			Enabled:   true,
+			PerSecond: 50,
+			Burst:     100,
+		},
+		Reputation: DefaultReputationConfig(),
+		Governance: DefaultGovernanceConfig(),
+	}
+}
+
+// normalize fills unset limits with their defaults. A Config built by literals
+// rather than DefaultConfig would otherwise enforce a zero-byte envelope cap and
+// refuse all traffic.
+func (c *Config) normalize() {
+	if c.VerifyMode == "" {
+		c.VerifyMode = VerifyPrefer
+	}
+	if c.ClockSkew <= 0 {
+		c.ClockSkew = DefaultClockSkew
+	}
+	if c.MaxEnvelopeBytes <= 0 {
+		c.MaxEnvelopeBytes = DefaultMaxEnvelopeBytes
+	}
+	if c.MaxSeenIDs <= 0 {
+		c.MaxSeenIDs = DefaultMaxSeenIDs
+	}
+	if c.MaxSenderStates <= 0 {
+		c.MaxSenderStates = DefaultMaxSenderStates
+	}
+	if c.RateLimit.Enabled && (c.RateLimit.PerSecond <= 0 || c.RateLimit.Burst <= 0) {
+		c.RateLimit.PerSecond = 50
+		c.RateLimit.Burst = 100
 	}
 }
 
@@ -91,6 +187,23 @@ func (c Config) Validate() error {
 	}
 	if c.HeartbeatInterval < 0 {
 		return errors.New("mesh heartbeat interval cannot be negative")
+	}
+	// An unrecognised mode is rejected rather than silently downgraded: a typo
+	// like "requre" must not quietly leave the mesh accepting unsigned traffic.
+	switch c.VerifyMode {
+	case "", VerifyOff, VerifyPrefer, VerifyRequire:
+	default:
+		return fmt.Errorf("mesh verify mode %q is not one of %q, %q, %q",
+			c.VerifyMode, VerifyOff, VerifyPrefer, VerifyRequire)
+	}
+	if !c.TrustOnFirstUse && len(c.TrustedPeers) == 0 && c.VerifyMode != VerifyOff {
+		return errors.New("mesh has trust-on-first-use disabled and no trusted peers configured: " +
+			"no peer could ever be authenticated")
+	}
+	for _, peer := range c.TrustedPeers {
+		if !strings.HasPrefix(strings.TrimSpace(peer), fingerprintPrefix) {
+			return fmt.Errorf("trusted peer %q is not a fingerprint (expected %s<hex>)", peer, fingerprintPrefix)
+		}
 	}
 	return nil
 }

@@ -35,9 +35,17 @@ type Agent struct {
 	identity *Identity
 	logger   *slog.Logger
 
-	conn *nats.Conn
+	// guard applies every inbound policy. It is built once and shared by the
+	// request handler and the event subscriber so neither can skip a check.
+	guard *inboundGuard
+
+	// lifecycle serializes Start and Stop. mu protects fields; it is
+	// deliberately not held across the network connect, so a slow or hanging
+	// dial cannot block readers of Connected().
+	lifecycle sync.Mutex
 
 	mu       sync.RWMutex
+	conn     *nats.Conn
 	handlers map[string]Handler
 	manifest Manifest
 	started  bool
@@ -50,6 +58,7 @@ func NewAgent(config Config, identity *Identity, logger *slog.Logger) *Agent {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	config.normalize()
 	agentID := config.AgentID
 	if identity != nil {
 		agentID = identity.AgentID
@@ -58,10 +67,17 @@ func NewAgent(config Config, identity *Identity, logger *slog.Logger) *Agent {
 		config:   config,
 		identity: identity,
 		logger:   logger,
+		guard:    newInboundGuard(config, agentID, logger),
 		handlers: map[string]Handler{},
 		agentID:  agentID,
 	}
 }
+
+// TrustPeers returns the identities this agent has accepted, ordered by agent id.
+func (a *Agent) TrustPeers() []PeerPin { return a.guard.trust.peers() }
+
+// SeedTrustedPeers installs previously persisted identity pins.
+func (a *Agent) SeedTrustedPeers(pins []PeerPin) { a.guard.trust.seed(pins) }
 
 // AgentID returns the immutable id this agent speaks as.
 func (a *Agent) AgentID() string { return a.agentID }
@@ -112,17 +128,21 @@ func (a *Agent) buildManifest() Manifest {
 		Endpoint:      AgentInboxSubject(a.agentID),
 		Availability:  AvailabilityOnline,
 		LastHeartbeat: timestamp(),
+		Fingerprint:   a.Fingerprint(),
 	}
 }
 
 // Start connects to NATS, registers, begins serving and starts heartbeating.
 func (a *Agent) Start(ctx context.Context) error {
-	a.mu.Lock()
-	if a.started {
-		a.mu.Unlock()
+	a.lifecycle.Lock()
+	defer a.lifecycle.Unlock()
+
+	a.mu.RLock()
+	alreadyStarted := a.started
+	a.mu.RUnlock()
+	if alreadyStarted {
 		return nil
 	}
-	a.mu.Unlock()
 
 	options, err := a.config.natsOptions()
 	if err != nil {
@@ -132,17 +152,36 @@ func (a *Agent) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("connect to NATS at %s: %w", a.config.URL, err)
 	}
+	// Publish the connection under the field lock. Assigning it unlocked raced
+	// Stop and Connected, and let publishReply dereference a nil connection.
+	a.mu.Lock()
 	a.conn = conn
+	a.mu.Unlock()
 
 	// Serve inbound skill requests.
 	inbox := AgentInboxSubject(a.agentID)
 	sub, err := conn.Subscribe(inbox, a.handleInboundRequest)
 	if err != nil {
+		a.mu.Lock()
+		a.conn = nil
+		a.mu.Unlock()
 		conn.Close()
 		return fmt.Errorf("subscribe to %s: %w", inbox, err)
 	}
+	// Answer discovery queries directly. The Synapse SDK's agents do this, and
+	// without it discovery only works when a separate registry service happens
+	// to be running — a two-agent mesh would silently see nobody.
+	discoverSub, err := conn.Subscribe(SubjectRegistryDiscover, a.handleDiscoverRequest)
+	if err != nil {
+		// Not fatal: an external registry may still serve discovery.
+		a.logger.Warn("mesh discovery subscription failed", "error", err)
+	}
+
 	a.mu.Lock()
 	a.subs = append(a.subs, sub)
+	if discoverSub != nil {
+		a.subs = append(a.subs, discoverSub)
+	}
 	a.started = true
 	a.mu.Unlock()
 
@@ -159,6 +198,9 @@ func (a *Agent) Start(ctx context.Context) error {
 
 // Stop deregisters and drains the connection. It is safe to call twice.
 func (a *Agent) Stop(ctx context.Context) error {
+	a.lifecycle.Lock()
+	defer a.lifecycle.Unlock()
+
 	a.mu.Lock()
 	conn := a.conn
 	subs := a.subs
@@ -283,7 +325,19 @@ func (a *Agent) Discover(ctx context.Context, filter DiscoverFilter) ([]Manifest
 			drainErr = err
 			break
 		}
-		for _, manifest := range manifestsFrom(message.Data) {
+		// Discovery replies are unauthenticated input like any other: a forged
+		// reply could otherwise inject a peer that does not exist.
+		if rejection := a.guard.checkBytes(len(message.Data)); rejection != nil {
+			continue
+		}
+		envelope, err := decodeEnvelope(message.Data)
+		if err != nil {
+			continue
+		}
+		if rejection := a.guard.check(envelope); rejection != nil {
+			continue
+		}
+		for _, manifest := range manifestsFrom(envelope) {
 			if !manifestMatches(manifest, filter) {
 				continue
 			}
@@ -377,9 +431,18 @@ func (a *Agent) Subscribe(ctx context.Context, subject string, handler EventHand
 		full = SubjectEventPrefix + subject
 	}
 	sub, err := conn.Subscribe(full, func(message *nats.Msg) {
+		// Events carry the same trust requirements as requests: an unsigned or
+		// replayed event is as dangerous as an unsigned request, and the
+		// subscriber used to accept either.
+		if rejection := a.guard.checkBytes(len(message.Data)); rejection != nil {
+			return
+		}
 		envelope, decodeErr := decodeEnvelope(message.Data)
 		if decodeErr != nil {
 			a.logger.Warn("discarding malformed mesh event", "subject", message.Subject, "error", decodeErr)
+			return
+		}
+		if rejection := a.guard.check(envelope); rejection != nil {
 			return
 		}
 		var event EventPayload
@@ -413,11 +476,70 @@ func (a *Agent) setManifest(manifest Manifest) {
 	a.manifest = manifest
 }
 
-// handleInboundRequest serves a request envelope arriving on the agent inbox.
-func (a *Agent) handleInboundRequest(message *nats.Msg) {
+// handleDiscoverRequest answers a discovery query with this agent's manifest
+// when it matches the filter. Replying is what makes discovery work between two
+// agents with no registry in the middle.
+func (a *Agent) handleDiscoverRequest(message *nats.Msg) {
+	if message.Reply == "" {
+		// A discovery query with no reply subject cannot be answered.
+		return
+	}
+	if rejection := a.guard.checkBytes(len(message.Data)); rejection != nil {
+		return
+	}
 	envelope, err := decodeEnvelope(message.Data)
 	if err != nil {
-		a.respondError(message, nil, CodeInvalidRequest, "malformed envelope", false)
+		return
+	}
+	if rejection := a.guard.check(envelope); rejection != nil {
+		return
+	}
+
+	var filter DiscoverFilter
+	if len(envelope.Payload) > 0 {
+		if err := json.Unmarshal(envelope.Payload, &filter); err != nil {
+			return
+		}
+	}
+	manifest := a.Manifest()
+	if manifest.ID == envelope.From || !manifestMatches(manifest, filter) {
+		// Do not answer our own query, and do not answer a filter we do not meet.
+		return
+	}
+
+	reply := a.replyEnvelope(envelope)
+	if err := a.attachPayload(reply, manifest); err != nil {
+		return
+	}
+	conn, err := a.connection()
+	if err != nil {
+		return
+	}
+	raw, err := a.marshal(reply)
+	if err != nil {
+		return
+	}
+	if err := conn.Publish(message.Reply, raw); err != nil {
+		a.logger.Warn("failed to publish discovery reply", "error", err)
+	}
+}
+
+// handleInboundRequest serves a request envelope arriving on the agent inbox.
+//
+// Every inbound policy is applied by the guard before anything is dispatched, so
+// an unauthenticated or replayed message never reaches a skill handler.
+func (a *Agent) handleInboundRequest(message *nats.Msg) {
+	if rejection := a.guard.checkBytes(len(message.Data)); rejection != nil {
+		// Undecodable by policy: there is no verified sender to answer.
+		return
+	}
+	envelope, err := decodeEnvelope(message.Data)
+	if err != nil {
+		a.respondError(message, nil, CodeInvalidEnvelope, "malformed envelope")
+		return
+	}
+	if rejection := a.guard.check(envelope); rejection != nil {
+		a.respondError(message, envelope, rejection.code, rejection.reason)
 		return
 	}
 	if envelope.Type != TypeRequest {
@@ -427,7 +549,7 @@ func (a *Agent) handleInboundRequest(message *nats.Msg) {
 	var payload RequestPayload
 	if len(envelope.Payload) > 0 {
 		if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
-			a.respondError(message, envelope, CodeInvalidRequest, "malformed request payload", false)
+			a.respondError(message, envelope, CodeInvalidEnvelope, "malformed request payload")
 			return
 		}
 	}
@@ -435,26 +557,28 @@ func (a *Agent) handleInboundRequest(message *nats.Msg) {
 	handler := a.handlers[payload.Skill]
 	a.mu.RUnlock()
 	if handler == nil {
-		a.respondError(message, envelope, CodeSkillNotFound, fmt.Sprintf("Skill %q not found", payload.Skill), false)
+		a.respondError(message, envelope, CodeSkillNotFound, fmt.Sprintf("Skill %q not found", payload.Skill))
 		return
 	}
 	meta := RequestMeta{TaskID: envelope.TaskID, From: envelope.From, Trace: envelope.Trace}
 	output, handlerErr := handler(context.Background(), payload.Input, meta)
 	if handlerErr != nil {
-		a.respondError(message, envelope, CodeHandlerFailed, handlerErr.Error(), true)
+		a.respondError(message, envelope, CodeInternalError, handlerErr.Error())
 		return
 	}
 	reply := a.replyEnvelope(envelope)
 	if err := a.attachPayload(reply, RespondPayload{Output: output}); err != nil {
-		a.respondError(message, envelope, CodeHandlerFailed, err.Error(), true)
+		a.respondError(message, envelope, CodeInternalError, err.Error())
 		return
 	}
 	a.publishReply(message, reply)
 }
 
-func (a *Agent) respondError(message *nats.Msg, request *Envelope, code int, reason string, retryable bool) {
+// respondError replies with a failure envelope. Whether the code is retryable is
+// derived from the code itself so the two can never disagree.
+func (a *Agent) respondError(message *nats.Msg, request *Envelope, code int, reason string) {
 	reply := a.replyEnvelope(request)
-	reply.Error = &Error{Code: code, Message: reason, Retryable: retryable}
+	reply.Error = &Error{Code: code, Message: reason, Retryable: retryableCode(code)}
 	a.publishReply(message, reply)
 }
 
@@ -462,12 +586,18 @@ func (a *Agent) publishReply(message *nats.Msg, reply *Envelope) {
 	if message.Reply == "" {
 		return
 	}
+	// Read the connection under the lock: Stop clears it concurrently, and
+	// dereferencing the field directly could panic on a reply during shutdown.
+	conn, err := a.connection()
+	if err != nil {
+		return
+	}
 	raw, err := a.marshal(reply)
 	if err != nil {
 		a.logger.Warn("failed to marshal mesh reply", "error", err)
 		return
 	}
-	if err := a.conn.Publish(message.Reply, raw); err != nil {
+	if err := conn.Publish(message.Reply, raw); err != nil {
 		a.logger.Warn("failed to publish mesh reply", "error", err)
 	}
 }
@@ -576,9 +706,8 @@ func (a *Agent) stopHeartbeat() {
 
 // manifestsFrom accepts both response shapes seen in the fleet: a registry
 // `{agents:[...]}` payload, and a single-agent manifest reply.
-func manifestsFrom(raw []byte) []Manifest {
-	envelope, err := decodeEnvelope(raw)
-	if err != nil || len(envelope.Payload) == 0 {
+func manifestsFrom(envelope *Envelope) []Manifest {
+	if envelope == nil || len(envelope.Payload) == 0 {
 		return nil
 	}
 	var response DiscoverResponse

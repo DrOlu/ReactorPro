@@ -20,6 +20,20 @@ type ProtoUsage struct {
 	ChatIngressFragmentRejectsTotal      atomic.Int64
 	WebSocketWriterClosesTotal           atomic.Int64
 	WebSocketQueueByteOverflowsTotal     atomic.Int64
+
+	// Mesh inbound policy. Refusals are counted separately by cause so an
+	// operator can distinguish a misconfigured peer from an attack without
+	// grepping logs.
+	MeshInboundTotal          atomic.Int64
+	MeshOutboundTotal         atomic.Int64
+	MeshVerifyFailedTotal     atomic.Int64
+	MeshReplayRejectedTotal   atomic.Int64
+	MeshRateLimitedTotal      atomic.Int64
+	MeshTrustMismatchTotal    atomic.Int64
+	MeshOversizedTotal        atomic.Int64
+	MeshDispatchTotal         atomic.Int64
+	MeshDispatchFailedTotal   atomic.Int64
+	MeshGovernanceDeniedTotal atomic.Int64
 }
 
 // Usage is a process-level singleton; each protocol layer increments it directly.
@@ -43,5 +57,15 @@ func (u *ProtoUsage) Snapshot() map[string]int64 {
 		"chat_ingress_fragment_rejects_total":      u.ChatIngressFragmentRejectsTotal.Load(),
 		"websocket_writer_closes_total":            u.WebSocketWriterClosesTotal.Load(),
 		"websocket_queue_byte_overflows_total":     u.WebSocketQueueByteOverflowsTotal.Load(),
+		"mesh_inbound_total":                       u.MeshInboundTotal.Load(),
+		"mesh_outbound_total":                      u.MeshOutboundTotal.Load(),
+		"mesh_verify_failed_total":                 u.MeshVerifyFailedTotal.Load(),
+		"mesh_replay_rejected_total":               u.MeshReplayRejectedTotal.Load(),
+		"mesh_rate_limited_total":                  u.MeshRateLimitedTotal.Load(),
+		"mesh_trust_mismatch_total":                u.MeshTrustMismatchTotal.Load(),
+		"mesh_oversized_total":                     u.MeshOversizedTotal.Load(),
+		"mesh_dispatch_total":                      u.MeshDispatchTotal.Load(),
+		"mesh_dispatch_failed_total":               u.MeshDispatchFailedTotal.Load(),
+		"mesh_governance_denied_total":             u.MeshGovernanceDeniedTotal.Load(),
 	}
 }

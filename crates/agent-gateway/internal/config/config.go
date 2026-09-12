@@ -56,6 +56,19 @@ type Config struct {
 	MeshUser         string
 	MeshPassword     string
 	MeshDisplayName  string
+	// MeshCredsFile points at a NATS credentials file (NKey/JWT). It takes
+	// precedence over token and user/password, and is the only way to use the
+	// stronger NATS auth modes.
+	MeshCredsFile string
+
+	// Mesh trust policy.
+	MeshVerifyMode       string
+	MeshClockSkew        time.Duration
+	MeshTrustedPeers     string // comma-separated fingerprints
+	MeshTrustOnFirstUse  bool
+	MeshMaxEnvelopeBytes int
+	MeshRateLimitPerSec  float64
+	MeshRateLimitBurst   int
 }
 
 func Load() *Config {
@@ -78,6 +91,14 @@ func Load() *Config {
 	flag.StringVar(&cfg.MeshUser, "mesh-user", getenv("LIVEAGENT_GATEWAY_MESH_USER", ""), "NATS user authentication")
 	flag.StringVar(&cfg.MeshPassword, "mesh-password", getenv("LIVEAGENT_GATEWAY_MESH_PASSWORD", ""), "NATS password authentication")
 	flag.StringVar(&cfg.MeshDisplayName, "mesh-name", getenv("LIVEAGENT_GATEWAY_MESH_NAME", "ReactorPro Gateway"), "mesh manifest display name")
+	flag.StringVar(&cfg.MeshCredsFile, "mesh-creds-file", getenv("LIVEAGENT_GATEWAY_MESH_CREDS_FILE", ""), "NATS credentials file for the mesh bridge (NKey/JWT; takes precedence over token and user/password)")
+	flag.StringVar(&cfg.MeshVerifyMode, "mesh-verify-mode", getenv("LIVEAGENT_GATEWAY_MESH_VERIFY_MODE", mesh.VerifyPrefer), "inbound envelope verification: off, prefer (verify when signed), or require (reject unsigned)")
+	flag.DurationVar(&cfg.MeshClockSkew, "mesh-clock-skew", getenvDuration("LIVEAGENT_GATEWAY_MESH_CLOCK_SKEW", mesh.DefaultClockSkew), "how far an envelope timestamp may drift before it is refused")
+	flag.StringVar(&cfg.MeshTrustedPeers, "mesh-trusted-peers", getenv("LIVEAGENT_GATEWAY_MESH_TRUSTED_PEERS", ""), "comma-separated fingerprints (sha256:<hex>) of peers to trust without first-use learning")
+	flag.BoolVar(&cfg.MeshTrustOnFirstUse, "mesh-trust-on-first-use", getenvBool("LIVEAGENT_GATEWAY_MESH_TRUST_ON_FIRST_USE", true), "record a peer's identity fingerprint on its first verified message")
+	flag.IntVar(&cfg.MeshMaxEnvelopeBytes, "mesh-max-envelope-bytes", getenvInt("LIVEAGENT_GATEWAY_MESH_MAX_ENVELOPE_BYTES", mesh.DefaultMaxEnvelopeBytes), "maximum size of a single inbound mesh envelope in bytes")
+	flag.Float64Var(&cfg.MeshRateLimitPerSec, "mesh-rate-limit-per-second", getenvFloat("LIVEAGENT_GATEWAY_MESH_RATE_LIMIT_PER_SECOND", 50), "sustained inbound mesh messages per second allowed from one sender (0 disables)")
+	flag.IntVar(&cfg.MeshRateLimitBurst, "mesh-rate-limit-burst", getenvInt("LIVEAGENT_GATEWAY_MESH_RATE_LIMIT_BURST", 100), "inbound mesh burst allowance per sender")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
 	flag.DurationVar(&cfg.ChatPrepareTimeout, "chat-prepare-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT", 2*time.Second), "timeout for the pre-submit desktop agent liveness probe")
 	flag.DurationVar(&cfg.ChatDeliveryTimeout, "chat-delivery-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT", 5*time.Second), "timeout delivering an accepted chat command to the desktop agent stream")
@@ -228,8 +249,28 @@ func (c *Config) MeshConfig() mesh.Config {
 	cfg.Token = c.MeshToken
 	cfg.User = c.MeshUser
 	cfg.Password = c.MeshPassword
+	cfg.CredsFile = c.MeshCredsFile
 	if strings.TrimSpace(c.MeshDisplayName) != "" {
 		cfg.Name = c.MeshDisplayName
+	}
+
+	if mode := strings.TrimSpace(c.MeshVerifyMode); mode != "" {
+		cfg.VerifyMode = mode
+	}
+	if c.MeshClockSkew > 0 {
+		cfg.ClockSkew = c.MeshClockSkew
+	}
+	cfg.TrustedPeers = splitList(c.MeshTrustedPeers)
+	cfg.TrustOnFirstUse = c.MeshTrustOnFirstUse
+	if c.MeshMaxEnvelopeBytes > 0 {
+		cfg.MaxEnvelopeBytes = c.MeshMaxEnvelopeBytes
+	}
+	// A zero rate means "no limit", which is why this is not guarded by > 0 the
+	// way the other numeric settings are.
+	cfg.RateLimit = mesh.RateLimitConfig{
+		Enabled:   c.MeshRateLimitPerSec > 0,
+		PerSecond: c.MeshRateLimitPerSec,
+		Burst:     c.MeshRateLimitBurst,
 	}
 	return cfg
 }
@@ -308,4 +349,35 @@ func getenvInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+// getenvFloat differs from getenvInt in one deliberate way: zero is a valid
+// value, not a signal to fall back. Rate limits use zero to mean "disabled", so
+// treating it as unset would silently re-enable the limit.
+func getenvFloat(key string, fallback float64) float64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+	return parsed
+}
+
+// splitList parses a comma-separated setting, dropping empty entries so a
+// trailing comma is not an error.
+func splitList(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

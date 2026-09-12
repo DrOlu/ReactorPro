@@ -252,31 +252,28 @@ func TestManifestMatchesRejectsIncomplete(t *testing.T) {
 }
 
 func TestManifestsFromAcceptsBothReplyShapes(t *testing.T) {
-	registryReply, err := json.Marshal(Envelope{
+	registryReply := &Envelope{
 		Version: ProtocolVersion,
 		Type:    TypeRespond,
 		Payload: json.RawMessage(`{"agents":[{"id":"a","name":"A"}]}`),
-	})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
 	}
 	if got := manifestsFrom(registryReply); len(got) != 1 || got[0].ID != "a" {
 		t.Fatalf("registry reply = %+v", got)
 	}
 
-	directReply, err := json.Marshal(Envelope{
+	directReply := &Envelope{
 		Version: ProtocolVersion,
 		Type:    TypeRegister,
 		Payload: json.RawMessage(`{"id":"b","name":"B"}`),
-	})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
 	}
 	if got := manifestsFrom(directReply); len(got) != 1 || got[0].ID != "b" {
 		t.Fatalf("direct reply = %+v", got)
 	}
 
-	if got := manifestsFrom([]byte("not json")); got != nil {
+	if got := manifestsFrom(nil); got != nil {
+		t.Fatalf("a nil envelope should yield nothing, got %+v", got)
+	}
+	if got := manifestsFrom(&Envelope{Payload: json.RawMessage(`not json`)}); got != nil {
 		t.Fatalf("garbage should yield nothing, got %+v", got)
 	}
 }

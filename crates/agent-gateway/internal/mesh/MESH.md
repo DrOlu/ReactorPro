@@ -1,86 +1,172 @@
 # NATS Event Mesh and Synapse Mesh Bridge
 
-ReactorPro can join the fleet's NATS event mesh and act as a full-duplex Synapse
-agent, mirroring the bridge wired into [RTerm](https://github.com/DrOlu/RTerm)
-(`plugins/synapse-bridge/` + `packages/backend/src/services/automation/`).
+ReactorPro can join the fleet's NATS event mesh and act as a full-duplex Synapse agent,
+speaking the same protocol as [RTerm](https://github.com/DrOlu/RTerm)'s
+`plugins/synapse-bridge/`.
 
-**Status: the protocol layer is implemented and tested; it is not yet wired into
-the gateway or exposed in the UI.** Nothing connects until that wiring lands and
-someone enables it — the shipping configuration is disabled and unconfigured.
+**Status: wired, exposed, and enforcing inbound trust.** The bridge runs inside the
+gateway (`cmd/gateway/main.go`), is configurable from flags and environment
+(`internal/config/config.go`), is driven from the HTTP API (`internal/handler/mesh.go`,
+`internal/server/http.go`), and is visible in Settings → Mesh. With the shipping default
+the mesh is **disabled** and nothing connects anywhere.
 
 ## What is here
 
 | File | Purpose |
 |---|---|
-| `envelope.go` | Envelope, manifest, message types, subjects, error codes |
-| `identity.go` | Immutable Ed25519 agent identity (see below) |
+| `envelope.go` | Envelope, manifest, message types, subjects, spec-aligned error codes |
+| `identity.go` | Immutable Ed25519 identity, signing payload, signature verification |
+| `trust.go` | Peer fingerprint pinning (trust-on-first-use and configured pins) |
+| `verify.go` | The inbound guard: size, version, addressee, clock skew, replay, signature, trust |
+| `ratelimit.go` | Per-sender token bucket with a bounded, fail-closed population |
 | `synapse.go` | The agent: register, discover, dispatch, serve, emit, subscribe |
 | `reputation.go` | EXT-REPUTATION scoring |
 | `governance.go` | EXT-GOVERNANCE approvals |
 | `manager.go` | Lifecycle, configuration, the tool surface, status snapshot |
-| `mesh_test.go` | 28 tests covering the above |
+| `mesh_test.go`, `verify_test.go` | Unit coverage of the protocol and the inbound policy |
+| `integration_test.go` | End-to-end tests against a private `nats-server` process |
 
-## Agent identity — an intentional divergence
+## Inbound trust
 
-RTerm has **no agent identity beyond a mutable config string**: `settings.synapse.agentId`
-defaults to `rterm-001`, is freely editable, and envelopes are never signed.
+Every inbound message — requests *and* events *and* discovery replies — passes through one
+`inboundGuard` (`verify.go`), so no call path can skip a check. In order:
 
-ReactorPro deliberately does better, because the requirement was an agent id
-that cannot be changed by anyone. The identity is an Ed25519 keypair whose
-fingerprint covers **both the id and the public key**:
+1. **Size.** Envelopes over `MaxEnvelopeBytes` (default 1 MiB) are dropped without a reply:
+   an unparsed message has no verified sender to answer.
+2. **Rate limit.** Per-sender token bucket. The tracked population is capped and the
+   limiter **fails closed** once the cap is reached, so a flood of distinct sender ids
+   cannot both exhaust memory and keep being served.
+3. **Protocol version.** A peer speaking a different version may mean something different
+   by the same field.
+4. **Addressee.** `To` must be empty (broadcast — events carry none), `SubjectRegistry`
+   (register/discover), or this agent. This check exists because register and discover
+   envelopes are addressed to the registry rather than to a named agent.
+5. **Clock skew.** The envelope timestamp must be within `ClockSkew` (default 5m) of local
+   time. This is the backstop that bounds how long a captured message stays replayable.
+6. **Replay.** Envelope ids are remembered for twice the skew window.
+7. **Signature and identity.** See below.
 
-- Editing the id in the identity file invalidates the fingerprint and the
-  identity refuses to load (`ErrIdentityTampered`).
-- Pointing the config at a different id than the file contains fails with
-  "cannot be reassigned".
-- Envelopes are signed (`sig` + `pub`) and verified against the embedded key.
+### What a signature actually proves
 
-The private key is written `0600`. The id is minted once on first start and
-persists.
+A valid signature on its own proves only that the sender holds the private key for the
+public key carried **in the same envelope**. Anyone can mint a keypair and sign an envelope
+claiming to be a different agent — the signature is valid, and it is valid for the
+attacker's key. Two things close that hole, and both are load-bearing:
 
-## Deltas from RTerm that still need a pass
+- The envelope carries a **fingerprint** (`fp`) covering the agent id and the public key,
+  and `VerifyEnvelope` rejects an envelope whose stated fingerprint is not the one its key
+  proves. The fingerprint is covered by the signature, so it cannot be swapped in transit.
+- The **trust store** remembers which fingerprint each agent id presented first and refuses
+  a different one afterwards. That is what detects impersonation and key substitution.
 
-These were found by reading RTerm's actual source; the first implementation was
-built from the older `synapse-demo` SDK, which differs. Reconciling them is
-required before the bridge can interoperate with a real mesh:
+Verification modes (`-mesh-verify-mode`):
 
-1. **Subject prefix is configurable in RTerm** (`settings.synapse.prefix`,
-   default `mesh`; the event bus defaults to `rterm`). Subjects are hardcoded
-   constants here and need to become prefix-aware.
-2. **`in_reply_to`** — RTerm sets it on `respond` and `approval_response`; the
-   envelope here has no such field.
-3. **No heartbeat or deregistration exists in RTerm.** This implementation adds
-   both (30 s heartbeat, explicit deregister). Harmless against a registry that
-   ignores them, but it is extra surface that upstream does not have.
-4. **Reputation formula.** RTerm scores
-   `(0.7*success_rate + 0.2*speed_score + 0.1*freshness) * lying_penalty * confidence`,
-   keyed by `agent_id::skill`, with `skill_not_found` counted separately and
-   three consecutive misses flagging `misleading_capabilities`. The scoring here
-   is a simpler per-agent success/failure model with half-life decay.
-5. **Governance transport.** RTerm negotiates approvals over
-   `${prefix}.approval.${taskId}.request|response` using `approval_request` /
-   `approval_response` envelope types, and it does **not** enforce approvals in
-   the dispatch path — the caller must ask. Here the governor gates dispatch
-   internally. Enforcement is stronger, but it is not wire-compatible.
-6. **Error codes.** RTerm defines only `3001 SKILL_NOT_FOUND` and
-   `5000` generic failure. This implementation uses a wider set
-   (`2002/3001/5001/4010/5003/4030`).
-7. **Manifest field naming.** RTerm uses `agent_id`; this uses `id`. Discovery
-   normalisation here tolerates both reply shapes, but registration emits `id`.
-8. **Tool count is 12, not 13** — `plugin.json` lists 12.
+| Mode | Signed | Unsigned | Use |
+|---|---|---|---|
+| `off` | accepted, signature not consulted | accepted | Only when another layer provides trust |
+| `prefer` **(default)** | verified, must be valid | accepted | Transitional: closes tampering for peers that sign without locking out peers that cannot |
+| `require` | verified, must be valid | refused `3004` | Closed fleets where every peer holds an identity |
+
+`prefer` is the default because RTerm's bridge does not sign at all. Note the consequence
+for `require`: an *unsigned registry* reply is refused, so discovery needs signed peers.
+
+Trust is seeded from `-mesh-trusted-peers` (fingerprints) and, with
+`-mesh-trust-on-first-use` (default on), learned on first verified contact.
+
+### What the signature covers
+
+`SigningPayload` field-joins `v, id, type, ts, from, to, task_id, in_reply_to, fingerprint`,
+the trace and error fields, and a digest of the payload. Each part is length-prefixed so a
+field containing a newline cannot be re-split to collide with a different layout. Leaving
+the error object out would let an attacker turn a denial into an apparent success; leaving
+the fingerprint out would make the identity binding forgeable.
+
+## Agent identity
+
+The identity is an Ed25519 keypair whose fingerprint covers **both the agent id and the
+public key**:
+
+- Editing the id in the identity file invalidates the fingerprint and the file refuses to
+  load (`ErrIdentityTampered`).
+- Pointing the config at a different id than the file contains fails with "cannot be
+  reassigned".
+- Every outbound envelope is signed (`sig` + `pub` + `fp`), and the manifest advertises the
+  fingerprint so a peer can pin this agent before it ever hears from it.
+
+The private key is written `0600`, minted once on first start, and never leaves the host.
+
+## Error codes
+
+Aligned with the Synapse protocol table, because a peer branches on these values:
+`2001 INVALID_ENVELOPE`, `2002 INVALID_MANIFEST`, `3001 SKILL_NOT_FOUND`,
+`3002 AGENT_UNAVAILABLE`, `3004 IDENTITY_MISMATCH`, `4001 OVERLOADED`, `4002 RATE_LIMITED`,
+`4003 GOVERNANCE_DENIED`, `4004 APPROVAL_REQUIRED`, `5001 INTERNAL_ERROR`.
+`retryableCode` is the single source of truth for the `retryable` flag, so a code can never
+be emitted with an inconsistent value. `verify_test.go` pins each value to the spec.
+
+## Interoperating with RTerm
+
+Verified against RTerm 3.8.4 source (`~/.work/RTerm/plugins/synapse-bridge/`). What matches
+today:
+
+| | RTerm | ReactorPro |
+|---|---|---|
+| Protocol version | `0.3.0` | `0.3.0` |
+| Subject prefix | `mesh` (default) | `mesh` (hardcoded — see below) |
+| Subjects | `mesh.registry.*`, `mesh.agent.<id>.inbox`, `mesh.event.*` | same |
+| Request payload | `{skill, input}` | same |
+| Reply mechanism | `msg.respond()` | NATS request/reply |
+| `SKILL_NOT_FOUND` | `3001` | `3001` |
+
+ReactorPro → RTerm dispatch works: RTerm's responder subscribes to
+`mesh.agent.<id>.inbox` and reads `payload.skill`, which is exactly what `Dispatch` sends.
+
+Known divergences:
+
+1. **Subject prefix is fixed at `mesh` here** but configurable in RTerm. Defaults align, so
+   this only bites if someone changes RTerm's prefix. Making it configurable is outstanding.
+2. **Reputation model.** RTerm keys on `agent_id::skill` with
+   `(0.7*success + 0.2*speed + 0.1*freshness) * lying_penalty * confidence`; this is still a
+   per-agent success/failure model with half-life decay. Scores are not comparable.
+3. **Governance transport.** RTerm negotiates approvals over
+   `${prefix}.approval.${taskId}.request|response` with `approval_request` /
+   `approval_response` types. Approvals here are in-process plus the local HTTP API, so they
+   cannot federate.
+4. **Error code `5000`.** RTerm returns `5000` for a generic handler failure where the spec
+   (and now this implementation) uses `5001`.
+5. **Manifest field naming.** RTerm registers `agent_id`; the spec and this implementation
+   use `id`. ReactorPro cannot see RTerm in discovery until that is fixed in RTerm.
+6. **Heartbeat and deregistration** exist here and not in RTerm. Harmless extra surface.
 
 ## Configuration
 
-`DefaultConfig()` returns a disabled configuration. `Validate()` explains why an
-enabled configuration cannot start. Auth precedence is creds file → token →
-user/password, matching the fleet convention.
+`DefaultConfig()` returns a disabled configuration. `Validate()` explains why an enabled
+configuration cannot start, and it **rejects an unrecognised verify mode** rather than
+silently downgrading the posture. NATS auth precedence is creds file → token → user/password;
+`-mesh-creds-file` is the only way to use NKey/JWT, and it takes precedence over both.
 
-## Remaining work to finish the feature
+## Known limits
 
-1. Reconcile the deltas above (subject prefix, `in_reply_to`, reputation and
-   governance wire formats).
-2. Wire `mesh.Manager` into `cmd/gateway` and the gateway's HTTP surface.
-3. Add protobuf messages so the desktop app and WebUI can read status and drive
-   the tools.
-4. Build the Settings section and the mesh-agents panel.
-5. Decide which skills ReactorPro itself serves over the mesh.
+Stated plainly so they are not mistaken for oversights:
+
+- **Replay protection is bounded.** The id cache evicts in insertion order once full, so a
+  determined flood within the remaining validity of a target envelope could evict it and
+  replay. The timestamp window and the rate limiter are what make that expensive. Bounded
+  memory that is occasionally imperfect beats unbounded memory that is not.
+- **`require` breaks unsigned registries.** Discovery replies are verified like any other
+  input, so a mode that refuses unsigned envelopes needs signed peers to discover.
+- **State is in-memory.** Reputation, approvals and trust pins are lost on restart except
+  the identity keypair. Persistence to SQLite is outstanding.
+- **The gateway serves no skills yet**, so an inbound dispatch gets `3001`. The mesh is
+  discoverable and dispatchable *to* — it cannot yet answer.
+
+## Remaining work
+
+1. Persist reputation, approvals and trust pins to SQLite; bound approval history.
+2. Optional JetStream: durable inboxes (stream `AGENT_INBOXES`, matching RTerm) and a
+   KV-backed registry for deterministic discovery.
+3. Configurable subject prefix, `trace` on every envelope type, `in_reply_to` on replies.
+4. Per-(agent, skill) reputation implementing Formula 11.5, and wire-level governance
+   subjects so approvals federate.
+5. Register the built-in introspection skills (`ping`, `describe`, `status`) so the gateway
+   can answer.
