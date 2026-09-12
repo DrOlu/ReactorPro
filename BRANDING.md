@@ -95,3 +95,15 @@ branding change and is therefore not re-applied by the rebrand script:
 
 If an upstream sync reverts this, the `chatUi-agent` tests fail — CI blocks the sync pull
 request, so the fix cannot be lost silently. Re-apply it as part of resolving that sync.
+
+- `.github/workflows/desktop-release.yml` — signing is optional. When
+  `APPLE_CERTIFICATE_P12_BASE64` or `TAURI_SIGNING_PRIVATE_KEY` is absent the workflow builds an
+  **unsigned** release: installers for all three platforms are produced and published, but they
+  are not code-signed/notarized and no updater manifest or `.sig` assets are emitted, so in-app
+  auto-update stays off. `crates/agent-gui/src-tauri/tauri.unsigned.conf.json` disables
+  `bundle.createUpdaterArtifacts` for that path. Add the signing secrets to switch to a fully
+  signed release with no further changes.
+
+  A sync merge would revert this workflow file. Unlike the sentence-boundary fix there is no test
+  that catches it — re-apply the `Detect signing configuration` gate and the
+  `tauri.unsigned.conf.json` overlays when resolving a sync, or the next unsigned release fails.

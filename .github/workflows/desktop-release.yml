@@ -24,6 +24,8 @@ jobs:
       app_version: ${{ steps.version.outputs.app_version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
       release_tag: ${{ steps.version.outputs.release_tag }}
+      apple_signing: ${{ steps.signing.outputs.apple_signing }}
+      updater_signing: ${{ steps.signing.outputs.updater_signing }}
     steps:
       - uses: actions/checkout@v6
 
@@ -36,6 +38,26 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: node scripts/release/prepare-app-version-from-tag.mjs "$RELEASE_TAG" --github-output "$GITHUB_OUTPUT" --json
+
+      # Signing is optional. When the signing secrets are absent the release is
+      # built unsigned: installers are produced as usual, but they are neither
+      # code-signed/notarized nor updater-signed, so in-app auto-update stays off.
+      - name: Detect signing configuration
+        id: signing
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "${APPLE_CERTIFICATE_P12_BASE64}" ]; then
+            echo "apple_signing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "apple_signing=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "updater_signing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "updater_signing=false" >> "$GITHUB_OUTPUT"
+          fi
 
   macos:
     name: macOS ${{ matrix.name }}
@@ -88,6 +110,7 @@ jobs:
         run: pnpm install --frozen-lockfile --filter liveagent...
 
       - name: Import Apple signing certificate
+        if: needs.release-metadata.outputs.apple_signing == 'true'
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -109,6 +132,7 @@ jobs:
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
       - name: Store notarization profile
+        if: needs.release-metadata.outputs.apple_signing == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -133,7 +157,7 @@ jobs:
             "dmgbuild==1.6.5"
           echo "$RUNNER_TEMP/dmgbuild-venv/bin" >> "$GITHUB_PATH"
 
-      - name: Build signed and notarized DMG
+      - name: Build macOS bundles
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           DESKTOP_MACOS_TARGET: ${{ matrix.target }}
@@ -141,20 +165,42 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           LIVEAGENT_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
           LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
-        run: make desktop-build-macos-release
+          APPLE_SIGNING: ${{ needs.release-metadata.outputs.apple_signing }}
+          UPDATER_SIGNING: ${{ needs.release-metadata.outputs.updater_signing }}
+        run: |
+          set -euo pipefail
+          if [ "${APPLE_SIGNING}" = "true" ]; then
+            make desktop-build-macos-release
+            exit 0
+          fi
+          echo "No Apple signing certificate configured; building an unsigned DMG."
+          args=(--config src-tauri/tauri.macos.release.conf.json)
+          if [ "${UPDATER_SIGNING}" != "true" ]; then
+            args+=(--config src-tauri/tauri.unsigned.conf.json)
+          fi
+          if [ -n "${LIVEAGENT_TAURI_VERSION_CONFIG:-}" ]; then
+            args+=(--config "${LIVEAGENT_TAURI_VERSION_CONFIG}")
+          fi
+          pnpm --dir crates/agent-gui tauri build "${args[@]}" --target "${DESKTOP_MACOS_TARGET}"
 
       - name: Stage macOS artifact
+        env:
+          UPDATER_SIGNING: ${{ needs.release-metadata.outputs.updater_signing }}
         run: |
           set -euo pipefail
           mkdir -p dist
           dmg_path="$(find "target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -name 'ReactorPro_*.dmg' -print -quit)"
-          updater_path="$(find "target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app.tar.gz' -print -quit)"
           test -n "$dmg_path"
-          test -n "$updater_path"
-          test -f "$updater_path.sig"
           cp "$dmg_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.dmg"
-          cp "$updater_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz"
-          cp "$updater_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz.sig"
+          if [ "${UPDATER_SIGNING}" = "true" ]; then
+            updater_path="$(find "target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app.tar.gz' -print -quit)"
+            test -n "$updater_path"
+            test -f "$updater_path.sig"
+            cp "$updater_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz"
+            cp "$updater_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz.sig"
+          else
+            echo "Updater signing is not configured; skipping updater artifacts."
+          fi
 
       - uses: actions/upload-artifact@v7
         with:
@@ -209,10 +255,21 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           LIVEAGENT_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
           LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
-        run: pnpm tauri build --config src-tauri/tauri.windows.release.conf.json --config "$LIVEAGENT_TAURI_VERSION_CONFIG" --target x86_64-pc-windows-msvc
+          UPDATER_SIGNING: ${{ needs.release-metadata.outputs.updater_signing }}
+        run: |
+          set -euo pipefail
+          args=(--config src-tauri/tauri.windows.release.conf.json)
+          if [ "${UPDATER_SIGNING}" != "true" ]; then
+            echo "Updater signing is not configured; building without updater artifacts."
+            args+=(--config src-tauri/tauri.unsigned.conf.json)
+          fi
+          args+=(--config "$LIVEAGENT_TAURI_VERSION_CONFIG")
+          pnpm tauri build "${args[@]}" --target x86_64-pc-windows-msvc
 
       - name: Stage Windows artifacts
         shell: bash
+        env:
+          UPDATER_SIGNING: ${{ needs.release-metadata.outputs.updater_signing }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -222,12 +279,16 @@ jobs:
           test -n "$msi_path"
           test -n "$exe_path"
           test -n "$portable_exe_path"
-          test -f "$msi_path.sig"
-          test -f "$exe_path.sig"
           cp "$msi_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64.msi"
-          cp "$msi_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64.msi.sig"
           cp "$exe_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64-Setup.exe"
-          cp "$exe_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64-Setup.exe.sig"
+          if [ "${UPDATER_SIGNING}" = "true" ]; then
+            test -f "$msi_path.sig"
+            test -f "$exe_path.sig"
+            cp "$msi_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64.msi.sig"
+            cp "$exe_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64-Setup.exe.sig"
+          else
+            echo "Updater signing is not configured; skipping signature assets."
+          fi
           mkdir -p dist/portable/ReactorPro
           cp "$portable_exe_path" dist/portable/ReactorPro/ReactorPro.exe
           portable_zip="dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64-portable.zip"
@@ -316,7 +377,16 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           LIVEAGENT_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
           LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
-        run: pnpm tauri build --config src-tauri/tauri.linux.release.conf.json --config "$LIVEAGENT_TAURI_VERSION_CONFIG" --target x86_64-unknown-linux-gnu --bundles appimage deb rpm
+          UPDATER_SIGNING: ${{ needs.release-metadata.outputs.updater_signing }}
+        run: |
+          set -euo pipefail
+          args=(--config src-tauri/tauri.linux.release.conf.json)
+          if [ "${UPDATER_SIGNING}" != "true" ]; then
+            echo "Updater signing is not configured; building without updater artifacts."
+            args+=(--config src-tauri/tauri.unsigned.conf.json)
+          fi
+          args+=(--config "$LIVEAGENT_TAURI_VERSION_CONFIG")
+          pnpm tauri build "${args[@]}" --target x86_64-unknown-linux-gnu --bundles appimage deb rpm
 
       - name: Verify glibc baseline
         run: bash scripts/release/verify-linux-glibc-baseline.sh
@@ -325,17 +395,24 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          UPDATER_SIGNING: ${{ needs.release-metadata.outputs.updater_signing }}
         run: |
           set -euo pipefail
           appimage_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.AppImage' -path '*bundle*' -print -quit 2>/dev/null || true)"
           test -n "$appimage_path"
           appimage_path="$(realpath "$appimage_path")"
           scripts/release/postprocess-linux-appimage.sh "$appimage_path"
-          test ! -e "$appimage_path.sig"
-          pnpm --dir crates/agent-gui tauri signer sign "$appimage_path"
-          test -s "$appimage_path.sig"
+          if [ "${UPDATER_SIGNING}" = "true" ]; then
+            test ! -e "$appimage_path.sig"
+            pnpm --dir crates/agent-gui tauri signer sign "$appimage_path"
+            test -s "$appimage_path.sig"
+          else
+            echo "Updater signing is not configured; skipping AppImage signature."
+          fi
 
       - name: Stage Linux artifacts
+        env:
+          UPDATER_SIGNING: ${{ needs.release-metadata.outputs.updater_signing }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -345,15 +422,19 @@ jobs:
           test -n "$appimage_path"
           test -n "$deb_path"
           test -n "$rpm_path"
-          test -f "$appimage_path.sig"
-          test -f "$deb_path.sig"
-          test -f "$rpm_path.sig"
           cp "$appimage_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.AppImage"
-          cp "$appimage_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.AppImage.sig"
           cp "$deb_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.deb"
-          cp "$deb_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.deb.sig"
           cp "$rpm_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.rpm"
-          cp "$rpm_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.rpm.sig"
+          if [ "${UPDATER_SIGNING}" = "true" ]; then
+            test -f "$appimage_path.sig"
+            test -f "$deb_path.sig"
+            test -f "$rpm_path.sig"
+            cp "$appimage_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.AppImage.sig"
+            cp "$deb_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.deb.sig"
+            cp "$rpm_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.rpm.sig"
+          else
+            echo "Updater signing is not configured; skipping signature assets."
+          fi
 
       - uses: actions/upload-artifact@v7
         with:
@@ -388,6 +469,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.release-metadata.outputs.release_tag }}
+          UPDATER_SIGNING: ${{ needs.release-metadata.outputs.updater_signing }}
           PACKYCODE_API_KEY: ${{ secrets.PACKYCODE_API_KEY }}
           AI_RELEASE_NOTES_API_KEY: ${{ secrets.AI_RELEASE_NOTES_API_KEY }}
           AI_RELEASE_NOTES_BASE_URL: ${{ vars.AI_RELEASE_NOTES_BASE_URL }}
@@ -445,5 +527,9 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" "${public_assets[@]}" --clobber
 
-          node scripts/release/create-tauri-updater-manifest.mjs release-artifacts release-artifacts/latest.json "$notes_path"
-          gh release upload "$RELEASE_TAG" release-artifacts/latest.json --clobber
+          if [ "${UPDATER_SIGNING}" = "true" ]; then
+            node scripts/release/create-tauri-updater-manifest.mjs release-artifacts release-artifacts/latest.json "$notes_path"
+            gh release upload "$RELEASE_TAG" release-artifacts/latest.json --clobber
+          else
+            echo "Updater signing is not configured; no updater manifest is published."
+          fi
