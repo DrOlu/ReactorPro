@@ -107,3 +107,22 @@ request, so the fix cannot be lost silently. Re-apply it as part of resolving th
   A sync merge would revert this workflow file. Unlike the sentence-boundary fix there is no test
   that catches it — re-apply the `Detect signing configuration` gate and the
   `tauri.unsigned.conf.json` overlays when resolving a sync, or the next unsigned release fails.
+
+## ReactorPro-only additions
+
+These do not exist upstream, so a sync merge keeps them; they are listed here so an upstream
+change that overlaps them is noticed.
+
+- `.github/workflows/gateway-release.yml` — publishes standalone `reactorpro-gateway-<os>-<arch>`
+  binaries (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64) plus a
+  `SHA256SUMS` file to the same GitHub release the desktop workflow publishes to, so a server can
+  be set up by downloading one file. The Docker image from `gateway-docker.yml` still exists as
+  the alternative path.
+
+  The gateway Go binary embeds the Web UI (`//go:embed all:web/dist`, see
+  `crates/agent-gateway/embed.go`), and `web/dist/` is **gitignored**. A stale bundle therefore
+  ships stale branding with nothing to catch it — the served gateway UI read "Live Agent" for
+  several releases after the rename. The `webui` job builds the bundle once, the `build` matrix
+  reuses that single artifact, and a `Verify the bundle is branded` step fails the release if the
+  bundle still contains the pre-rebrand name, contains Chinese text, or omits the product name.
+  Keep that guard: it is the only thing that catches this class of regression.

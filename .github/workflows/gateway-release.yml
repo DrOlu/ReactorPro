@@ -1,0 +1,188 @@
+name: Gateway Release
+
+# Publishes standalone gateway binaries so a server can be set up by downloading
+# one file — no Docker, no Go toolchain, no web build. The Docker image remains
+# available via gateway-docker.yml; this is the alternative path.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish, for example v1.3.9
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: 22.19.0
+
+jobs:
+  webui:
+    name: Build Web UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter @liveagent/gateway-webui...
+
+      - name: Build Web UI
+        run: pnpm --filter @liveagent/gateway-webui build
+
+      # The gateway embeds this bundle, so a stale one ships stale branding. That
+      # happened once: the served UI read "Live Agent" long after the rename, and
+      # nothing caught it because dist/ is gitignored and never diffed.
+      - name: Verify the bundle is branded
+        run: |
+          set -euo pipefail
+          dist=crates/agent-gateway/web/dist
+          test -f "$dist/index.html" || { echo "::error::$dist/index.html is missing; the web build produced nothing"; exit 1; }
+          if grep -rqI "Live Agent" "$dist"; then
+            echo "::error::the built web bundle still contains the pre-rebrand product name"
+            exit 1
+          fi
+          if grep -rqP "[\x{4e00}-\x{9fff}]" "$dist"; then
+            echo "::error::the built web bundle contains Chinese text"
+            exit 1
+          fi
+          if ! grep -rqI "ReactorPro" "$dist"; then
+            echo "::error::the built web bundle does not mention the product name"
+            exit 1
+          fi
+          echo "bundle is branded and free of Chinese text"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: webui-dist
+          path: crates/agent-gateway/web/dist
+          if-no-files-found: error
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: webui
+    runs-on: ubuntu-latest
+    strategy:
+      # One failing target must not hide the others: partial platform coverage is
+      # visible and fixable, a cancelled matrix is not.
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: crates/agent-gateway/go.mod
+          cache-dependency-path: crates/agent-gateway/go.sum
+
+      # The Go binary embeds the Web UI, so every target needs the one bundle the
+      # webui job built rather than five separate web builds.
+      - uses: actions/download-artifact@v5
+        with:
+          name: webui-dist
+          path: crates/agent-gateway/web/dist
+
+      - name: Build
+        working-directory: crates/agent-gateway
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          ext=""
+          [ "$GOOS" = "windows" ] && ext=".exe"
+          out="reactorpro-gateway-${GOOS}-${GOARCH}${ext}"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "$GITHUB_WORKSPACE/dist/$out" ./cmd/gateway
+          echo "built $out"
+
+      # A mislabeled asset is worse than a missing one: it fails on the server,
+      # far from the build. Check the header before publishing.
+      - name: Verify binary architecture
+        working-directory: dist
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          ext=""
+          [ "$GOOS" = "windows" ] && ext=".exe"
+          out="reactorpro-gateway-${GOOS}-${GOARCH}${ext}"
+          info="$(file -b "$out")"
+          echo "$out: $info"
+          case "${GOOS}/${GOARCH}" in
+            linux/amd64)   want="x86-64" ;;
+            linux/arm64)   want="aarch64" ;;
+            darwin/amd64)  want="x86_64" ;;
+            darwin/arm64)  want="arm64" ;;
+            windows/amd64) want="x86-64" ;;
+          esac
+          echo "$info" | grep -qi "$want" || { echo "::error::$out is not $want"; exit 1; }
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: gateway-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish Release Assets
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: gateway-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          ls -l
+          sha256sum reactorpro-gateway-* > SHA256SUMS
+          cat SHA256SUMS
+
+      # The desktop release workflow publishes to the same tag and may still be
+      # building, so the release might not exist yet. Both paths are handled and
+      # uploads are clobbered to stay re-runnable.
+      - name: Publish assets
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(dist/reactorpro-gateway-* dist/SHA256SUMS)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" --title "$RELEASE_TAG" --generate-notes
+          fi
