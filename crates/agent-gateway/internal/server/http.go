@@ -69,6 +69,8 @@ func NewHTTPServerWithMesh(cfg *config.Config, sm *session.Manager, tokens *agen
 		apiMux.HandleFunc("GET /api/mesh/reputation", handler.MeshReputation(meshManager))
 		apiMux.HandleFunc("GET /api/mesh/approvals", handler.MeshApprovals(meshManager))
 		apiMux.HandleFunc("POST /api/mesh/approvals", handler.MeshApprovals(meshManager))
+		apiMux.HandleFunc("GET /api/mesh/trust", handler.MeshTrust(meshManager))
+		apiMux.HandleFunc("GET /api/mesh/history", handler.MeshApprovalHistory(meshManager))
 		apiMux.HandleFunc("POST /api/mesh/approvals/{id}/decision", handler.MeshApprovalDecision(meshManager))
 	}
 	rootMux.Handle("/api/", auth.HTTPMiddleware(cfg.Token, apiMux))

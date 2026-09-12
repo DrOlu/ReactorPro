@@ -58,6 +58,9 @@ type Manager struct {
 	subs       map[string]*Subscription
 	events     []EventRecord
 	lastErr    string
+	// startedAt is when the current connection came up, for the served
+	// `status` skill. Zero while the bridge is not running.
+	startedAt time.Time
 }
 
 // NewManager builds a manager from configuration.
@@ -108,6 +111,12 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 
 	agent := NewAgent(config, identity, m.logger)
+	// Register skills before connecting so they appear in the manifest the first
+	// registration publishes. A peer that discovers this agent immediately knows
+	// what it can ask for.
+	if err := m.registerBuiltinSkills(agent); err != nil {
+		m.logger.Warn("mesh built-in skill registration failed", "error", err)
+	}
 	if err := agent.Start(ctx); err != nil {
 		m.setLastError(err.Error())
 		return err
@@ -117,6 +126,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.identity = identity
 	m.agent = agent
 	m.lastErr = ""
+	m.startedAt = time.Now().UTC()
 	m.mu.Unlock()
 
 	for _, subject := range config.EventSubscriptions {
@@ -132,6 +142,7 @@ func (m *Manager) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	agent := m.agent
 	m.agent = nil
+	m.startedAt = time.Time{}
 	m.mu.Unlock()
 	if agent == nil {
 		return nil
@@ -376,6 +387,28 @@ func (m *Manager) Serving() bool {
 	m.mu.RUnlock()
 	return agent != nil && agent.Connected()
 }
+
+// TrustPeers lists the identities this bridge has accepted, keyed by agent id.
+// Empty when the bridge is not running, since the store lives on the agent.
+func (m *Manager) TrustPeers() []PeerPin {
+	agent, err := m.requireAgent()
+	if err != nil {
+		return nil
+	}
+	return agent.TrustPeers()
+}
+
+// SeedTrustedPeers installs previously persisted identity pins. Called at
+// start-up so a peer trusted before a restart is not re-learned from scratch.
+func (m *Manager) SeedTrustedPeers(pins []PeerPin) {
+	if agent, err := m.requireAgent(); err == nil {
+		agent.SeedTrustedPeers(pins)
+	}
+}
+
+// ApprovalHistory returns decided approvals, oldest first: the audit trail for
+// who approved what, and why.
+func (m *Manager) ApprovalHistory() []Approval { return m.governor.History() }
 
 // RegisterSkill exposes a skill over the mesh.
 func (m *Manager) RegisterSkill(skillID string, handler Handler) error {

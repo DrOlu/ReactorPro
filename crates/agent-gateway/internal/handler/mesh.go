@@ -223,6 +223,31 @@ func MeshApprovalDecision(m *mesh.Manager) http.HandlerFunc {
 	}
 }
 
+// MeshTrust lists the peer identities this gateway has accepted, so an operator
+// can see who it will vouch for and spot an unexpected entry.
+func MeshTrust(m *mesh.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		peers := m.TrustPeers()
+		if peers == nil {
+			// Encode an empty list rather than null: the UI iterates the field.
+			peers = []mesh.PeerPin{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"count": len(peers), "peers": peers})
+	}
+}
+
+// MeshApprovalHistory returns decided approvals: the audit trail of who approved
+// or denied what, and why.
+func MeshApprovalHistory(m *mesh.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		history := m.ApprovalHistory()
+		if history == nil {
+			history = []mesh.Approval{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"count": len(history), "approvals": history})
+	}
+}
+
 // writeMeshError maps mesh failures onto HTTP status codes.
 func writeMeshError(w http.ResponseWriter, err error) {
 	switch {

@@ -96,6 +96,36 @@ func testAgent(t *testing.T, url, agentID string, mutate func(*Config)) *Agent {
 
 func uniqueID(prefix string) string { return prefix + "/" + nuid.Next()[:8] }
 
+// testManager builds and starts a Manager — the same path the gateway takes, so
+// tests cover the production wiring rather than a hand-built agent. The built-in
+// skills are registered by the Manager, so anything asserting on served skills
+// must use this rather than testAgent.
+func testManager(t *testing.T, url, agentID string, mutate func(*Config)) *Manager {
+	t.Helper()
+
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	cfg.URL = url
+	cfg.AgentID = agentID
+	cfg.IdentityPath = t.TempDir() + "/identity.json"
+	if mutate != nil {
+		mutate(&cfg)
+	}
+
+	manager := NewManager(cfg, nil)
+	if err := manager.Start(t.Context()); err != nil {
+		t.Fatalf("start mesh manager %s: %v", agentID, err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background()) })
+	return manager
+}
+
+// dispatcher is satisfied by both *Agent and *Manager, so the skill-call helper
+// works against either layer.
+type dispatcher interface {
+	Dispatch(ctx context.Context, targetAgent, skill string, input any, timeout time.Duration) (*Envelope, error)
+}
+
 func TestIntegrationDispatchRoundTrip(t *testing.T) {
 	url := startTestNATS(t)
 
@@ -355,6 +385,175 @@ func TestIntegrationConcurrentStartStop(t *testing.T) {
 			}()
 		}
 		wg.Wait()
+	}
+}
+
+// callSkill dispatches a built-in skill and returns the decoded output.
+func callSkill(t *testing.T, caller dispatcher, target, skill string) map[string]any {
+	t.Helper()
+	response, err := caller.Dispatch(t.Context(), target, skill, map[string]any{}, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dispatch %s: %v", skill, err)
+	}
+	if response.Error != nil {
+		t.Fatalf("skill %s returned an error: %+v", skill, response.Error)
+	}
+	var payload RespondPayload
+	if err := json.Unmarshal(response.Payload, &payload); err != nil {
+		t.Fatalf("decode %s response: %v", skill, err)
+	}
+	output, ok := payload.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("skill %s output = %#v, want an object", skill, payload.Output)
+	}
+	return output
+}
+
+// The gateway used to answer every dispatch with 3001 because nothing ever
+// registered a skill. This is the test that says that is no longer true.
+func TestIntegrationBuiltinSkillsAnswer(t *testing.T) {
+	url := startTestNATS(t)
+	peerID := uniqueID("test/peer")
+	peer := testManager(t, url, peerID, nil)
+	caller := testManager(t, url, uniqueID("test/caller"), nil)
+
+	t.Run("ping", func(t *testing.T) {
+		output := callSkill(t, caller, peerID, SkillPing)
+		if output["pong"] != true {
+			t.Fatalf("ping output = %#v, want pong true", output)
+		}
+	})
+
+	t.Run("describe", func(t *testing.T) {
+		output := callSkill(t, caller, peerID, SkillDescribe)
+		if output["id"] != peerID {
+			t.Fatalf("describe id = %v, want %s", output["id"], peerID)
+		}
+		if want := peer.Status().Fingerprint; output["fingerprint"] != want {
+			t.Fatalf("describe fingerprint = %v, want %s", output["fingerprint"], want)
+		}
+		skills, _ := output["skills"].([]any)
+		if len(skills) != len(BuiltinSkillIDs()) {
+			t.Fatalf("describe advertised %d skills, want %d", len(skills), len(BuiltinSkillIDs()))
+		}
+	})
+
+	t.Run("status", func(t *testing.T) {
+		output := callSkill(t, caller, peerID, SkillStatus)
+		if output["agent_id"] != peerID {
+			t.Fatalf("status agent_id = %v, want %s", output["agent_id"], peerID)
+		}
+		if _, ok := output["traffic"].(map[string]any); !ok {
+			t.Fatalf("status traffic = %#v, want an object of counters", output["traffic"])
+		}
+	})
+}
+
+// The served status skill must stay narrow. A mesh-invocable skill that leaks the
+// connected desktop agents, their tokens, or the local API surface would be worse
+// than serving nothing, so the payload is pinned to an exact key set: adding a
+// field has to be a deliberate act that updates this list.
+func TestIntegrationStatusSkillExposesNothingSensitive(t *testing.T) {
+	url := startTestNATS(t)
+	peerID := uniqueID("test/peer")
+	testManager(t, url, peerID, nil)
+	caller := testManager(t, url, uniqueID("test/caller"), nil)
+
+	output := callSkill(t, caller, peerID, SkillStatus)
+
+	allowed := map[string]bool{
+		"agent_id":       true,
+		"fingerprint":    true,
+		"connected":      true,
+		"skills":         true,
+		"uptime_seconds": true,
+		"traffic":        true,
+	}
+	for key := range output {
+		if !allowed[key] {
+			t.Errorf("status skill exposes unexpected field %q — if this is intended, add it to the allowlist in this test", key)
+		}
+	}
+	for key := range allowed {
+		if _, present := output[key]; !present {
+			t.Errorf("status skill is missing expected field %q", key)
+		}
+	}
+}
+
+// The manifest must advertise the skills, so a peer knows what it can ask for
+// without probing.
+func TestIntegrationManifestAdvertisesSkills(t *testing.T) {
+	url := startTestNATS(t)
+	agentID := uniqueID("test/peer")
+	testManager(t, url, agentID, nil)
+	watcher := testManager(t, url, uniqueID("test/watcher"), nil)
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		manifests, err := watcher.Discover(t.Context(), DiscoverFilter{})
+		if err != nil {
+			t.Fatalf("Discover: %v", err)
+		}
+		for _, manifest := range manifests {
+			if manifest.ID != agentID {
+				continue
+			}
+			advertised := map[string]bool{}
+			for _, skill := range manifest.Skills {
+				advertised[skill.ID] = true
+			}
+			for _, want := range BuiltinSkillIDs() {
+				if !advertised[want] {
+					t.Fatalf("manifest does not advertise %q: %+v", want, manifest.Skills)
+				}
+			}
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatal("peer never appeared in discovery")
+}
+
+func TestIntegrationSkillAllowlistRestrictsServing(t *testing.T) {
+	url := startTestNATS(t)
+	peerID := uniqueID("test/peer")
+	testManager(t, url, peerID, func(cfg *Config) {
+		cfg.SkillAllowlist = []string{SkillPing}
+	})
+	caller := testManager(t, url, uniqueID("test/caller"), nil)
+
+	output := callSkill(t, caller, peerID, SkillPing)
+	if output["pong"] != true {
+		t.Fatal("an allowlisted skill must still be served")
+	}
+
+	response, err := caller.Dispatch(t.Context(), peerID, SkillDescribe, map[string]any{}, 5*time.Second)
+	if err == nil {
+		t.Fatal("a skill outside the allowlist must not be served")
+	}
+	if response == nil || response.Error == nil || response.Error.Code != CodeSkillNotFound {
+		t.Fatalf("response = %+v, want code %d", response, CodeSkillNotFound)
+	}
+}
+
+func TestIntegrationSkillsCanBeDisabled(t *testing.T) {
+	url := startTestNATS(t)
+	peerID := uniqueID("test/peer")
+	peer := testManager(t, url, peerID, func(cfg *Config) {
+		cfg.SkillsEnabled = false
+	})
+	caller := testManager(t, url, uniqueID("test/caller"), nil)
+
+	if skills := peer.Status().Skills; len(skills) != 0 {
+		t.Fatalf("skills = %v, want none when disabled", skills)
+	}
+	response, err := caller.Dispatch(t.Context(), peerID, SkillPing, nil, 5*time.Second)
+	if err == nil {
+		t.Fatal("expected SKILL_NOT_FOUND when skills are disabled")
+	}
+	if response == nil || response.Error == nil || response.Error.Code != CodeSkillNotFound {
+		t.Fatalf("response = %+v, want code %d", response, CodeSkillNotFound)
 	}
 }
 

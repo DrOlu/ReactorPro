@@ -138,6 +138,32 @@ Known divergences:
    use `id`. ReactorPro cannot see RTerm in discovery until that is fixed in RTerm.
 6. **Heartbeat and deregistration** exist here and not in RTerm. Harmless extra surface.
 
+## Served skills
+
+The gateway answers a small, deliberately read-only surface, so a peer that discovers it
+gets a real response instead of `3001`:
+
+| Skill | Returns |
+|---|---|
+| `ping` | `{pong: true, ts}`. Touches no state, so it stays cheap under load. |
+| `describe` | This agent's manifest — what it is and what it serves. |
+| `status` | `agent_id`, `fingerprint`, `connected`, `skills`, `uptime_seconds`, and the mesh traffic counters. |
+
+Two properties are intentional and should survive future changes:
+
+- **Nothing here mutates state.** A mesh that can be asked to run a shell command or touch
+  the filesystem is a remote-code hole; the value of serving anything is that a peer can
+  see what you are, not that it can drive you. Anything stateful belongs behind its own
+  explicit, separately gated skill.
+- **`status` is narrow.** It reports this agent's own identity and counters — never the
+  desktop agents connected to it, their tokens, or the local API surface. A test pins the
+  payload to an exact key set so adding a field has to be a deliberate act.
+
+Skills are registered before the agent connects, so they appear in the manifest the first
+registration publishes. `-mesh-skills-enabled=false` serves none;
+`-mesh-skills=ping,status` serves a subset. An unknown id in that list is rejected at
+startup rather than silently unserved.
+
 ## Configuration
 
 `DefaultConfig()` returns a disabled configuration. `Validate()` explains why an enabled
@@ -157,8 +183,10 @@ Stated plainly so they are not mistaken for oversights:
   input, so a mode that refuses unsigned envelopes needs signed peers to discover.
 - **State is in-memory.** Reputation, approvals and trust pins are lost on restart except
   the identity keypair. Persistence to SQLite is outstanding.
-- **The gateway serves no skills yet**, so an inbound dispatch gets `3001`. The mesh is
-  discoverable and dispatchable *to* — it cannot yet answer.
+- **Trust pins do not survive a restart**, so after a restart the first verified message
+  from a known peer is re-learned rather than checked against the previous fingerprint. In
+  `prefer` mode that is benign; in `require` mode with first-use learning off it means
+  configured pins are the only durable trust. Persisting the pins is outstanding.
 
 ## Remaining work
 
@@ -168,5 +196,5 @@ Stated plainly so they are not mistaken for oversights:
 3. Configurable subject prefix, `trace` on every envelope type, `in_reply_to` on replies.
 4. Per-(agent, skill) reputation implementing Formula 11.5, and wire-level governance
    subjects so approvals federate.
-5. Register the built-in introspection skills (`ping`, `describe`, `status`) so the gateway
-   can answer.
+5. Surface trust pins and the approval audit trail in the Settings UI — both endpoints
+   exist (`/api/mesh/trust`, `/api/mesh/history`).

@@ -77,8 +77,32 @@ type Config struct {
 	Reputation ReputationConfig `json:"reputation"`
 	Governance GovernanceConfig `json:"governance"`
 
+	// SkillsEnabled exposes the built-in read-only introspection skills
+	// (ping, describe, status) so peers can call this agent instead of getting
+	// SKILL_NOT_FOUND. On by default: the bridge itself is off by default, so
+	// nothing is reachable until the mesh is enabled.
+	SkillsEnabled bool `json:"skillsEnabled"`
+	// SkillAllowlist, when non-empty, restricts which built-in skills are
+	// served. An unknown id is rejected at startup rather than silently
+	// disabling a skill the operator expected to be exposed.
+	SkillAllowlist []string `json:"skillAllowlist"`
+
 	// Events to subscribe to automatically once connected.
 	EventSubscriptions []string `json:"eventSubscriptions"`
+}
+
+// servesSkill reports whether a built-in skill may be served. An empty
+// allowlist means all of them.
+func (c Config) servesSkill(id string) bool {
+	if len(c.SkillAllowlist) == 0 {
+		return true
+	}
+	for _, allowed := range c.SkillAllowlist {
+		if strings.TrimSpace(allowed) == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Verification modes for inbound envelopes.
@@ -139,8 +163,9 @@ func DefaultConfig() Config {
 			PerSecond: 50,
 			Burst:     100,
 		},
-		Reputation: DefaultReputationConfig(),
-		Governance: DefaultGovernanceConfig(),
+		SkillsEnabled: true,
+		Reputation:    DefaultReputationConfig(),
+		Governance:    DefaultGovernanceConfig(),
 	}
 }
 
@@ -203,6 +228,26 @@ func (c Config) Validate() error {
 	for _, peer := range c.TrustedPeers {
 		if !strings.HasPrefix(strings.TrimSpace(peer), fingerprintPrefix) {
 			return fmt.Errorf("trusted peer %q is not a fingerprint (expected %s<hex>)", peer, fingerprintPrefix)
+		}
+	}
+	// Reject an unknown skill id rather than silently serving less than the
+	// operator asked for: a typo would otherwise look like a skill that simply
+	// never answers.
+	for _, id := range c.SkillAllowlist {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		known := false
+		for _, builtin := range builtinSkillIDs {
+			if builtin == trimmed {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return fmt.Errorf("mesh skill %q is not a built-in skill (known: %s)",
+				id, strings.Join(builtinSkillIDs, ", "))
 		}
 	}
 	return nil

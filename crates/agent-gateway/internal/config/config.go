@@ -69,6 +69,10 @@ type Config struct {
 	MeshMaxEnvelopeBytes int
 	MeshRateLimitPerSec  float64
 	MeshRateLimitBurst   int
+
+	// Mesh served skills.
+	MeshSkillsEnabled bool
+	MeshSkills        string // comma-separated built-in skill ids; empty means all
 }
 
 func Load() *Config {
@@ -99,6 +103,8 @@ func Load() *Config {
 	flag.IntVar(&cfg.MeshMaxEnvelopeBytes, "mesh-max-envelope-bytes", getenvInt("LIVEAGENT_GATEWAY_MESH_MAX_ENVELOPE_BYTES", mesh.DefaultMaxEnvelopeBytes), "maximum size of a single inbound mesh envelope in bytes")
 	flag.Float64Var(&cfg.MeshRateLimitPerSec, "mesh-rate-limit-per-second", getenvFloat("LIVEAGENT_GATEWAY_MESH_RATE_LIMIT_PER_SECOND", 50), "sustained inbound mesh messages per second allowed from one sender (0 disables)")
 	flag.IntVar(&cfg.MeshRateLimitBurst, "mesh-rate-limit-burst", getenvInt("LIVEAGENT_GATEWAY_MESH_RATE_LIMIT_BURST", 100), "inbound mesh burst allowance per sender")
+	flag.BoolVar(&cfg.MeshSkillsEnabled, "mesh-skills-enabled", getenvBool("LIVEAGENT_GATEWAY_MESH_SKILLS_ENABLED", true), "serve the built-in read-only mesh skills (ping, describe, status)")
+	flag.StringVar(&cfg.MeshSkills, "mesh-skills", getenv("LIVEAGENT_GATEWAY_MESH_SKILLS", ""), "comma-separated built-in mesh skills to serve; empty serves all of them")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
 	flag.DurationVar(&cfg.ChatPrepareTimeout, "chat-prepare-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT", 2*time.Second), "timeout for the pre-submit desktop agent liveness probe")
 	flag.DurationVar(&cfg.ChatDeliveryTimeout, "chat-delivery-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT", 5*time.Second), "timeout delivering an accepted chat command to the desktop agent stream")
@@ -272,6 +278,8 @@ func (c *Config) MeshConfig() mesh.Config {
 		PerSecond: c.MeshRateLimitPerSec,
 		Burst:     c.MeshRateLimitBurst,
 	}
+	cfg.SkillsEnabled = c.MeshSkillsEnabled
+	cfg.SkillAllowlist = splitList(c.MeshSkills)
 	return cfg
 }
 
