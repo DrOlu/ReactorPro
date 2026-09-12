@@ -41,7 +41,13 @@ type Config struct {
 
 	// Timing
 	HeartbeatInterval time.Duration `json:"-"`
-	RequestTimeout    time.Duration `json:"-"`
+	// RequestTimeout bounds a skill dispatch waiting for a peer's reply.
+	RequestTimeout time.Duration `json:"-"`
+	// DiscoveryWindow is how long discovery collects replies. Agents answer
+	// discovery individually as well as the registry, so the only way to know
+	// every peer has replied is to wait a fixed window — it must be short,
+	// because it is also how long the caller waits.
+	DiscoveryWindow time.Duration `json:"-"`
 
 	// Extensions
 	Reputation ReputationConfig `json:"reputation"`
@@ -61,6 +67,7 @@ func DefaultConfig() Config {
 		Capabilities:      []string{"agent", "reactorpro"},
 		HeartbeatInterval: 30 * time.Second,
 		RequestTimeout:    120 * time.Second,
+		DiscoveryWindow:   2 * time.Second,
 		Reputation:        DefaultReputationConfig(),
 		Governance:        DefaultGovernanceConfig(),
 	}

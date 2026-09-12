@@ -514,3 +514,23 @@ func TestHealthReportsDisabledState(t *testing.T) {
 		t.Fatalf("health = %+v", health)
 	}
 }
+
+// Discovery must not inherit the dispatch timeout. The caller waits the whole
+// window, so a long value stalls every UI refresh until the app's own HTTP
+// timeout fires.
+func TestDiscoveryWindowIsShort(t *testing.T) {
+	config := DefaultConfig()
+	if config.DiscoveryWindow <= 0 {
+		t.Fatal("DiscoveryWindow must default to a positive value")
+	}
+	if config.DiscoveryWindow > 5*time.Second {
+		t.Fatalf("DiscoveryWindow = %s, want a short window", config.DiscoveryWindow)
+	}
+	if config.DiscoveryWindow >= config.RequestTimeout {
+		t.Fatalf(
+			"DiscoveryWindow (%s) must be far below the dispatch timeout (%s)",
+			config.DiscoveryWindow,
+			config.RequestTimeout,
+		)
+	}
+}

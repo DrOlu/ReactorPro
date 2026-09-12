@@ -256,15 +256,19 @@ func (a *Agent) Discover(ctx context.Context, filter DiscoverFilter) ([]Manifest
 	}
 	defer func() { _ = sub.Unsubscribe() }()
 
-	timeout := a.config.RequestTimeout
-	if timeout <= 0 {
-		timeout = 2 * time.Second
+	// Discovery is a fixed collection window, not a per-reply timeout: peers
+	// answer individually as well as the registry, so the caller must wait the
+	// window out to be sure it saw everyone. Using the dispatch timeout here
+	// would stall the caller for minutes.
+	window := a.config.DiscoveryWindow
+	if window <= 0 {
+		window = 2 * time.Second
 	}
 	if err := conn.PublishRequest(SubjectRegistryDiscover, inbox, raw); err != nil {
 		return nil, fmt.Errorf("publish discovery: %w", err)
 	}
 
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(window)
 	seen := map[string]Manifest{}
 	var drainErr error
 	for {
