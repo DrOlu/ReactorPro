@@ -42,26 +42,41 @@ jobs:
         run: pnpm --filter @liveagent/gateway-webui build
 
       # The gateway embeds this bundle, so a stale one ships stale branding. That
-      # happened once: the served UI read "Live Agent" long after the rename, and
-      # nothing caught it because dist/ is gitignored and never diffed.
+      # happened once: the served UI still carried the pre-rebrand product name
+      # long after the rename, and nothing caught it because dist/ is gitignored
+      # and never diffed.
+      #
+      # The name is written as a case-sensitive pattern rather than a literal so
+      # that scripts/reactorpro-rebrand.mjs does not rewrite this guard itself —
+      # it walks .github/. Case matters too: the lowercase form appears
+      # legitimately in internal import paths and CSS classes, which are
+      # deliberately left as upstream has them.
+      #
+      # Only the product name is checked, not CJK in general. The bundle carries
+      # vendor language *data* — Monaco's zh-CN strings, SheetJS date-format
+      # masks, highlight.js language keywords — which is not UI copy, and a
+      # blanket scan fails on it. The repository-wide policy check below is the
+      # authority on text, and it skips dist/ by design.
       - name: Verify the bundle is branded
         run: |
           set -euo pipefail
           dist=crates/agent-gateway/web/dist
           test -f "$dist/index.html" || { echo "::error::$dist/index.html is missing; the web build produced nothing"; exit 1; }
-          if grep -rqI "Live Agent" "$dist"; then
+          if grep -rqIE 'Live[ _]?Agent' "$dist"; then
             echo "::error::the built web bundle still contains the pre-rebrand product name"
-            exit 1
-          fi
-          if grep -rqP "[\x{4e00}-\x{9fff}]" "$dist"; then
-            echo "::error::the built web bundle contains Chinese text"
             exit 1
           fi
           if ! grep -rqI "ReactorPro" "$dist"; then
             echo "::error::the built web bundle does not mention the product name"
             exit 1
           fi
-          echo "bundle is branded and free of Chinese text"
+          echo "bundle is branded"
+
+      # The repository's own branding and language policy. Nothing else runs this
+      # at release time — only upstream sync applies the rebrand — so drift could
+      # otherwise reach a published artifact unnoticed.
+      - name: Verify branding policy
+        run: node scripts/reactorpro-rebrand.mjs --check
 
       - uses: actions/upload-artifact@v5
         with:
