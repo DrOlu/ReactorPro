@@ -7,8 +7,9 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// SSH 本地端口转发动作必须走 SSH 终端门：漏加白名单会落入 default 分支、
-// 被本地终端开关（enableWebTerminal）错误放行/拦截。
+// SSH local port forwarding actions must go through the SSH terminal gate: missing from the
+// allowlist they fall into the default branch and are wrongly allowed/blocked by the local
+// terminal toggle (enableWebTerminal).
 func TestTerminalRequestAllowedGatesSshLocalForwardOnSshToggle(t *testing.T) {
 	actions := []string{
 		"ssh_local_forward_start",
@@ -37,8 +38,8 @@ func TestTerminalRequestAllowedGatesSshLocalForwardOnSshToggle(t *testing.T) {
 	}
 }
 
-// 转发事件不携带 session 载荷，门控必须直接按 kind 判 SSH 开关，
-// 不得回落到 session 缓存推断出的本地终端门。
+// Forwarding events carry no session payload, so gating must decide on the SSH toggle directly
+// from the kind, and must not fall back to the local terminal gate inferred from the session cache.
 func TestTerminalEventAllowedGatesSshLocalForwardKind(t *testing.T) {
 	event := &gatewayv2.TerminalEvent{
 		Kind:           "ssh_local_forward",

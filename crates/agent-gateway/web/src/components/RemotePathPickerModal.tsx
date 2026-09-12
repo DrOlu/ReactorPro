@@ -157,8 +157,9 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const didExpandInitialPathRef = useRef(false);
-  // Base UI 控制 open：先置 false 播放退场过渡，onOpenChangeComplete 再通知
-  // 调用方卸载（onSelect 已先行 resolve，onClose 的 resolve(null) 为 no-op）。
+  // Base UI controls open: set false first to play the exit transition, then
+  // onOpenChangeComplete notifies the caller to unmount (onSelect already resolved
+  // first, so onClose's resolve(null) is a no-op).
   const [open, setOpen] = useState(true);
 
   const modalTitle =

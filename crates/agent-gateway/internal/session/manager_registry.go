@@ -9,8 +9,9 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// RecordAuthentication 登记一次具名 Agent 的鉴权结果；同一 agent_id 的后续连接
-// 复用该登记项（entry 跨断线存活）。空 id 不会创建会话登记项。
+// RecordAuthentication records the authentication result for a named agent;
+// subsequent connections with the same agent_id reuse that entry (entries
+// survive disconnects). An empty id never creates a session entry.
 func (m *Manager) RecordAuthentication(agentID, agentVersion, sessionID string) AuthSnapshot {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
@@ -28,7 +29,8 @@ func (m *Manager) RecordAuthentication(agentID, agentVersion, sessionID string) 
 	return entry.lastAuth
 }
 
-// LatestAuthSnapshot 返回指定 agent_id 的最近鉴权快照；空或未知 id 返回空快照。
+// LatestAuthSnapshot returns the most recent auth snapshot for the given
+// agent_id; an empty or unknown id returns an empty snapshot.
 func (m *Manager) LatestAuthSnapshot(agentID string) AuthSnapshot {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
@@ -39,7 +41,8 @@ func (m *Manager) LatestAuthSnapshot(agentID string) AuthSnapshot {
 	return entry.lastAuth
 }
 
-// IsOnline 报告具名 agent_id 是否在线；空 id 一律返回 false。
+// IsOnline reports whether the named agent_id is online; an empty id always
+// returns false.
 func (m *Manager) IsOnline(agentID string) bool {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
@@ -51,7 +54,8 @@ func (m *Manager) IsOnline(agentID string) bool {
 	return entry != nil && entry.session != nil
 }
 
-// AnyAgentOnline 仅用于全局健康与后台存活判断，不承担 Agent 寻址。
+// AnyAgentOnline is used only for global health and background liveness checks;
+// it does not perform agent addressing.
 func (m *Manager) AnyAgentOnline() bool {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
@@ -63,14 +67,16 @@ func (m *Manager) AnyAgentOnline() bool {
 	return false
 }
 
-// SetSession 把会话登记到其 agent_id 的登记项，只顶掉该 id 的旧会话；
-// 不同 agent_id 的会话互不影响。
+// SetSession registers a session under its agent_id's entry, replacing only
+// that id's previous session; sessions of different agent_ids do not affect
+// each other.
 func (m *Manager) SetSession(s *AgentSession) {
 	m.setSession(s, nil, false)
 }
 
-// SetAuthenticatedSessionIfCurrent 把鉴权结果和会话作为一个注册动作提交。
-// isCurrent 在 registry 写锁内执行；返回 false 时不会创建离线登记项。
+// SetAuthenticatedSessionIfCurrent commits the auth result and the session as a
+// single registration action. isCurrent runs under the registry write lock; when
+// it returns false no offline entry is created.
 func (m *Manager) SetAuthenticatedSessionIfCurrent(
 	s *AgentSession,
 	isCurrent func() bool,
@@ -140,8 +146,9 @@ func (m *Manager) setSession(
 	return true
 }
 
-// clearSessionEntry 摘除 session 所属登记项的在线会话；session 已被顶替时无操作。
-// 返回登记项 id 与是否实际摘除。
+// clearSessionEntry removes the online session from the entry it belongs to; it
+// is a no-op when the session has already been replaced. It returns the entry id
+// and whether a removal actually happened.
 func (m *Manager) clearSessionEntry(session *AgentSession) (string, bool) {
 	m.registry.mu.Lock()
 	entry := m.registry.entryForSessionLocked(session)
@@ -197,8 +204,10 @@ func (m *Manager) ClearSessionIfHeartbeatStale(session *AgentSession, timeout ti
 	return true
 }
 
-// DisconnectAgent 在同一注册表临界区摘除 agent_id 的控制会话与终端数据面；
-// 返回是否有任一传输被断开。实际关闭在锁外执行，避免回调阻塞注册表。
+// DisconnectAgent removes agent_id's control session and terminal data plane
+// within the same registry critical section; it returns whether any transport
+// was disconnected. The actual close runs outside the lock so callbacks do not
+// block the registry.
 func (m *Manager) DisconnectAgent(agentID string) bool {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
@@ -234,8 +243,9 @@ func (m *Manager) DisconnectAgent(agentID string) bool {
 	return session != nil || terminalRevoke != nil
 }
 
-// ForgetAgent 从进程目录移除 agent_id，并关闭其当前会话。持久化目录删除后调用
-// 此方法，避免已删除客户端继续作为离线条目出现在 agent_list 中。
+// ForgetAgent removes agent_id from the process directory and closes its current
+// session. Call this method after the persisted directory is deleted so a removed
+// client does not keep showing up as an offline entry in agent_list.
 func (m *Manager) ForgetAgent(agentID string) bool {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
@@ -268,7 +278,8 @@ func (m *Manager) ForgetAgent(agentID string) bool {
 	return session != nil || terminalRevoke != nil
 }
 
-// Status 返回具名 agent_id 的状态；空或未知 id 返回零值。
+// Status returns the status for the named agent_id; an empty or unknown id
+// returns the zero value.
 func (m *Manager) Status(agentID string) Status {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
@@ -283,7 +294,8 @@ func (m *Manager) Status(agentID string) Status {
 	return statusLocked(entry, time.Now())
 }
 
-// AgentStatuses 返回全部登记项的状态（含离线项，供目录渲染），按 agent_id 排序。
+// AgentStatuses returns the statuses of all entries (including offline ones, for
+// directory rendering), sorted by agent_id.
 func (m *Manager) AgentStatuses() []Status {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
@@ -297,8 +309,9 @@ func (m *Manager) AgentStatuses() []Status {
 	return statuses
 }
 
-// AgentDirectoryStatusSnapshot 为管理目录查询生成同一时刻的状态索引和在线 ID。
-// 返回值无需排序，避免数据库分页请求额外执行全量 O(n log n) 排序。
+// AgentDirectoryStatusSnapshot produces a point-in-time status index and online
+// IDs for admin directory queries. The return values need no sorting, avoiding an
+// extra full O(n log n) sort for paged database requests.
 func (m *Manager) AgentDirectoryStatusSnapshot() (map[string]Status, []string) {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
@@ -316,7 +329,8 @@ func (m *Manager) AgentDirectoryStatusSnapshot() (map[string]Status, []string) {
 	return statuses, onlineAgentIDs
 }
 
-// ConnectedAgentIDs 返回当前在线的 agent_id 列表，按字典序。
+// ConnectedAgentIDs returns the list of currently online agent_ids, in
+// lexicographic order.
 func (m *Manager) ConnectedAgentIDs() []string {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
@@ -390,8 +404,9 @@ func (m *Manager) SupportsCapability(agentID string, capability string) bool {
 	return err == nil && entry.session.SupportsCapability(capability)
 }
 
-// ChatRuntimeProbeEpoch 返回目标 Agent 的会话 epoch；探活完成后以同一 agent_id +
-// epoch 调 RecordChatRuntimeProbe，把结果绑定到发起探活的那次连接。
+// ChatRuntimeProbeEpoch returns the session epoch of the target agent; after the
+// probe completes, call RecordChatRuntimeProbe with the same agent_id + epoch to
+// bind the result to the connection that initiated the probe.
 func (m *Manager) ChatRuntimeProbeEpoch(agentID string) (uint64, bool) {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
@@ -527,7 +542,7 @@ func normalizeRuntimeState(state string) string {
 	}
 }
 
-// resolveSession 按非空 agentID 精确解析在线会话。
+// resolveSession resolves the online session exactly by a non-empty agentID.
 func (m *Manager) resolveSession(agentID string) (*AgentSession, error) {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()

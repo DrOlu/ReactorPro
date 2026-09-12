@@ -172,15 +172,16 @@ test("surfaceIds exposes a stable snapshot including persisted bindings", () => 
 });
 
 test("get falls back to storage when the in-memory map misses (HMR split instances)", () => {
-  // dev HMR 下写入方与读取方可能持有不同的模块实例;storage 是唯一共享层。
-  // 写入方实例落盘后,读取方实例即便内存 miss 也必须能命中,否则宿主会误判
-  // "无绑定"并按 launchSpec 新建 PTY(拖入后冷启动新 shell、原会话留在 dock)。
+  // Under dev HMR the writer and reader may hold different module instances; storage is the only shared
+  // layer. After the writer instance persists, the reader instance must still hit even on an in-memory
+  // miss, otherwise the host would misjudge it as "no binding" and create a new PTY from launchSpec
+  // (a cold-start new shell after drag-in, with the original session left in the dock).
   const storage = createMemoryStorage();
   const writer = createTerminalPaneBindingStore({ storage });
   const reader = createTerminalPaneBindingStore({ storage });
   writer.set("surface-a", "session-1");
   assert.equal(reader.get("surface-a"), "session-1");
-  // 采纳后进入内存表,后续 surfaceIds 快照包含它。
+  // Once adopted it enters the in-memory table, and subsequent surfaceIds snapshots include it.
   assert.ok(reader.surfaceIds().includes("surface-a"));
 });
 
@@ -193,7 +194,7 @@ test("the storage fallback stays silent: no listener fires during a render-phase
   reader.subscribe(() => {
     notified += 1;
   });
-  // get 被 useSyncExternalStore 当 getSnapshot 在渲染期调用,不得触发订阅回调。
+  // get is called by useSyncExternalStore as getSnapshot during render and must not trigger subscription callbacks.
   assert.equal(reader.get("surface-a"), "session-1");
   assert.equal(notified, 0);
 });

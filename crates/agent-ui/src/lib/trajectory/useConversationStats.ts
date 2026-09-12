@@ -1,10 +1,15 @@
 /**
- * 会话累计统计的取数 hook。
+ * Data hook for cumulative conversation statistics.
  *
- * 首窗同步拿到读数，剩余段在空闲期向前分页补齐；实时事件与落盘事件用账本层的
- * 收敛身份去重，因此断线重放不会双算。重建节流到 1s，与运行中时长的心跳同频。
+ * The first window gets a reading synchronously, and the remaining segments are
+ * filled in by paging forward during idle time; live events and persisted events
+ * are deduplicated using the ledger layer's convergence identity, so a
+ * reconnect replay is never double-counted. Rebuilds are throttled to 1s,
+ * matching the heartbeat of the running duration.
  *
- * 模块级缓存让多 pane 打开同一会话共享一份事件与聚合快照——切走再切回不重新分页。
+ * The module-level cache lets multiple panes opening the same conversation share
+ * one set of events and aggregate snapshot -- switching away and back does not
+ * re-page.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,23 +24,23 @@ import {
 import { aggregateTrajectoryStats, type ConversationStats } from "./stats";
 import type { TrajectoryEvent } from "./types";
 
-/** 重建节流窗口，与状态栏运行中心跳同频。 */
+/** Rebuild throttle window, in step with the status bar's running heartbeat. */
 export const STATS_REBUILD_THROTTLE_MS = 1_000;
 
-/** 极端长会话的保险丝：累计事件数超过此值停止向前分页，读数保持 approximate。 */
+/** Fuse for extremely long conversations: stop paging forward once the cumulative event count exceeds this, keeping the reading approximate. */
 export const STATS_EVENT_CEILING = 50_000;
 
 const CACHE_LIMIT = 8;
 
 type CacheEntry = {
   events: readonly TrajectoryEvent[];
-  /** 已读到的最早 segment；0 表示读完，null 表示还没读过首窗。 */
+  /** The earliest segment read so far; 0 means fully read, null means the first window has not been read yet. */
   oldestSegmentIndex: number | null;
   truncated: boolean;
-  /** 向前分页是否已经走完（含触顶挡板的情况）。 */
+  /** Whether forward paging has finished (including the case where the fuse was hit). */
   complete: boolean;
   revision: number;
-  /** 事件集合的版本号，用于跳过无变化的重建。 */
+  /** Version number of the event set, used to skip rebuilds with no changes. */
   version: number;
 };
 
@@ -51,7 +56,7 @@ function touch(conversationId: string, entry: CacheEntry): void {
   }
 }
 
-/** 测试与会话删除用：丢掉某个会话（省略参数则全清）的缓存。 */
+/** For tests and conversation deletion: drop the cache for a conversation (omitting the argument clears everything). */
 export function clearConversationStatsCache(conversationId?: string): void {
   if (conversationId === undefined) {
     cache.clear();
@@ -76,17 +81,20 @@ function scheduleIdle(callback: () => void): () => void {
 export type UseConversationStatsOptions = {
   conversationId: string;
   host: Pick<TrajectoryHost, "loadWindow">;
-  /** `useSyncExternalStore` 产物，宿主传入。 */
+  /** The `useSyncExternalStore` product, passed in by the host. */
   liveEvents: readonly TrajectoryEvent[];
   /**
-   * live 事件为空时的中断收敛语义，沿用轨迹视图：
-   * - `authoritative`（桌面）：空集也是权威证据，持久化里仍 running 的条目收敛为 aborted；
-   * - `observed`（WebUI，默认）：仅在已观察到实时事件时收敛，避免页面刚重载时误判。
+   * Interruption convergence semantics when live events are empty, following
+   * the trajectory view:
+   * - `authoritative` (desktop): an empty set is also authoritative evidence,
+   *   so entries still running in persistence converge to aborted;
+   * - `observed` (WebUI, default): converge only once a live event has been
+   *   observed, avoiding a misjudgment right after a page reload.
    */
   liveOwnership?: "authoritative" | "observed";
-  /** edit-resend / rebase 后整体重载。 */
+  /** Full reload after edit-resend / rebase. */
   authoritativeRevision?: number;
-  /** 条为空或隐藏时不加载。 */
+  /** Do not load when the bar is empty or hidden. */
   enabled: boolean;
 };
 
@@ -102,7 +110,8 @@ export function useConversationStats(
   const conversationId = options.conversationId.trim();
 
   const [loading, setLoading] = useState(false);
-  // 事件集合的版本号；持久层分页与 live 事件都通过它触发重建。
+  // Version number of the event set; both persistence-layer paging and live
+  // events trigger rebuilds through it.
   const [eventVersion, setEventVersion] = useState(0);
 
   const hostRef = useRef(host);
@@ -126,7 +135,8 @@ export function useConversationStats(
     return fresh;
   }, [conversationId, authoritativeRevision]);
 
-  // 首窗 + 后台向前分页。整个链路一个 effect：conversationId 或权威版本变化即重来。
+  // First window + background forward paging. The whole chain is one effect:
+  // it restarts whenever conversationId or the authoritative revision changes.
   useEffect(() => {
     if (!enabled || conversationId === "") {
       setLoading(false);
@@ -146,7 +156,7 @@ export function useConversationStats(
         return;
       }
       if (current.events.length >= STATS_EVENT_CEILING) {
-        // 触顶挡板：停止分页，读数保持 approximate。
+        // Fuse hit: stop paging and keep the reading approximate.
         cache.set(conversationId, { ...current, complete: true });
         setLoading(false);
         setEventVersion((value) => value + 1);
@@ -186,7 +196,9 @@ export function useConversationStats(
         .catch((error) => {
           if (cancelled) return;
           console.warn("[trajectory] conversation stats window failed", error);
-          // 失败不重试：读数是诊断信息，宁可停在已有窗口也不打扰会话主链路。
+          // Do not retry on failure: the reading is diagnostic information, so it is
+          // better to stop at the existing window than to disturb the main
+          // conversation path.
           const latest = cache.get(conversationId);
           if (latest !== undefined && latest.revision === authoritativeRevision) {
             cache.set(conversationId, { ...latest, complete: true });
@@ -197,7 +209,8 @@ export function useConversationStats(
     };
 
     if (entry.complete) {
-      // 缓存已完整：直接用，不再打后端。
+      // The cache is already complete: use it directly without calling the backend
+      // again.
       setEventVersion((value) => value + 1);
       setLoading(false);
     } else {
@@ -210,7 +223,8 @@ export function useConversationStats(
     };
   }, [conversationId, authoritativeRevision, enabled, entryFor]);
 
-  // live 事件到达时节流 1s 再重建：流式期间事件密集，逐条重建账本没有意义。
+  // When a live event arrives, throttle 1s before rebuilding: events are dense
+  // during streaming and rebuilding the ledger per event is pointless.
   const [liveVersion, setLiveVersion] = useState(0);
   const liveEventsRef = useRef(liveEvents);
   liveEventsRef.current = liveEvents;
@@ -221,7 +235,8 @@ export function useConversationStats(
   useEffect(() => {
     if (!enabled || conversationId === "") return;
     if (liveTimerRef.current !== null) {
-      // 节流窗口内的后续通知合并进本次待处理，不额外排定时器。
+      // Subsequent notifications within the throttle window merge into this pending
+      // pass without scheduling another timer.
       pendingLiveRef.current = true;
       return;
     }
@@ -253,8 +268,11 @@ export function useConversationStats(
     if (persisted.length === 0 && live.length === 0) return null;
 
     const events = mergeTrajectoryEventWindows(persisted, live);
-    // 中断收敛沿用轨迹视图：authoritative 下空集也参与判定（进程重启的权威证据），
-    // observed 下只有观察到实时事件后才收敛，避免刚重载就把运行中的回合判成中断。
+    // Interruption convergence follows the trajectory view: under
+    // authoritative, an empty set also participates in the decision (authoritative
+    // evidence of a process restart); under observed, converge only after a live
+    // event has been seen, avoiding marking a running turn as interrupted right
+    // after a reload.
     const liveIdentities =
       liveOwnership === "authoritative" || live.length > 0
         ? trajectoryLiveEventIdentities(live)
@@ -266,7 +284,8 @@ export function useConversationStats(
       !entry.complete ||
       events.length >= STATS_EVENT_CEILING;
     return aggregateTrajectoryStats(ledger, { approximate });
-    // eventVersion / liveVersion 是重建触发器：前者跟随分页，后者被节流到 1s。
+    // eventVersion / liveVersion are rebuild triggers: the former follows paging,
+    // the latter is throttled to 1s.
   }, [conversationId, authoritativeRevision, enabled, liveOwnership, eventVersion, liveVersion]);
 
   return { stats, loading };

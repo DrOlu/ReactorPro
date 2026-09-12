@@ -160,8 +160,8 @@ test("request context omits silent memory extraction artifacts but transcript ke
   };
   const state = conversationState.createConversationStateFromContext({
     messages: [
-      user("以后请用陕西腔。", 1),
-      assistant("没问题。", 2),
+      user("From now on, please use a Shaanxi accent.", 1),
+      assistant("No problem.", 2),
       assistant("", 3, { content: [memoryToolCall], stopReason: "toolUse" }),
       {
         role: "toolResult",
@@ -172,13 +172,13 @@ test("request context omits silent memory extraction artifacts but transcript ke
         isError: false,
         timestamp: 4,
       },
-      assistant("记忆整理完成。", 5),
+      assistant("Memory organization complete.", 5),
     ],
   });
 
   assert.equal(state.segments[0].messages.length, 5);
   assert.match(JSON.stringify(timeline(state)), /MemoryManager/);
-  assert.match(JSON.stringify(timeline(state)), /记忆整理完成。/);
+  assert.match(JSON.stringify(timeline(state)), /Memory organization complete\./);
 
   const requestContext = conversationState.buildRequestContext(state);
   assert.deepEqual(
@@ -186,7 +186,7 @@ test("request context omits silent memory extraction artifacts but transcript ke
     ["user", "assistant"],
   );
   assert.doesNotMatch(JSON.stringify(requestContext.messages), /MemoryManager/);
-  assert.doesNotMatch(JSON.stringify(requestContext.messages), /记忆整理完成。/);
+  assert.doesNotMatch(JSON.stringify(requestContext.messages), /Memory organization complete\./);
 });
 
 test("direct MemoryManager conversations remain in model context", () => {
@@ -198,7 +198,7 @@ test("direct MemoryManager conversations remain in model context", () => {
   };
   const state = conversationState.createConversationStateFromContext({
     messages: [
-      user("请直接整理这条记忆。", 1),
+      user("Please organize this memory directly.", 1),
       assistant("", 2, { content: [memoryToolCall], stopReason: "toolUse" }),
       {
         role: "toolResult",
@@ -209,14 +209,14 @@ test("direct MemoryManager conversations remain in model context", () => {
         isError: false,
         timestamp: 3,
       },
-      assistant("记忆整理完成。", 4),
+      assistant("Memory organization complete.", 4),
     ],
   });
 
   const requestContext = conversationState.buildRequestContext(state);
   assert.equal(requestContext.messages.length, 4);
   assert.match(JSON.stringify(requestContext.messages), /MemoryManager/);
-  assert.match(JSON.stringify(requestContext.messages), /记忆整理完成。/);
+  assert.match(JSON.stringify(requestContext.messages), /Memory organization complete\./);
 });
 
 test("normalize accepts a direct transcript window without re-homing absolute segments", () => {
@@ -699,8 +699,9 @@ test("timeline summary cards expose the persisted contextTokensAfter for the usa
     base,
     checkpoint("checkpoint body", 3, "summary-usage"),
   );
-  // 压缩控制器在落定时把权威快照写进 stats.contextTokensAfter；投影必须原样
-  // 暴露成 contextUsageTokens，两端用量环才共享同一检查点锚点。
+  // The compaction controller writes the authoritative snapshot into
+  // stats.contextTokensAfter on settle; the projection must expose it as-is as
+  // contextUsageTokens so both usage rings share the same checkpoint anchor.
   const withStats = {
     ...compacted,
     segments: compacted.segments.map((segment) =>
@@ -725,7 +726,7 @@ test("timeline summary cards expose the persisted contextTokensAfter for the usa
   const summaryItem = items.find((item) => item.kind === "summary");
   assert.equal(summaryItem.contextUsageTokens, 43_210);
 
-  // 旧检查点没有该字段：不虚构读数，交由扫描器退回正文估算。
+  // Legacy checkpoints lack this field: do not fabricate a reading; let the scanner fall back to body-text estimation.
   const legacyItems = fullRuntimeTimeline(compacted);
   const legacySummary = legacyItems.find((item) => item.kind === "summary");
   assert.equal("contextUsageTokens" in legacySummary, false);

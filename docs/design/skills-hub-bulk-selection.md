@@ -1,104 +1,83 @@
-# Skills Hub 批量选择交互规格 v2
+# Skills Hub Bulk Selection Interaction Spec v2
 
-适用范围：`crates/agent-ui/src/pages/skills-hub/SkillsHubPage.tsx`。GUI/WebUI
-通过同一公共页面渲染，平台能力由各自 `src/agent-ui-adapters/` 提供。
+Scope: `crates/agent-ui/src/pages/skills-hub/SkillsHubPage.tsx`. GUI/WebUI render through the same shared page, and platform capabilities are provided by their respective `src/agent-ui-adapters/`.
 
-## 0. 核心原则
+## 0. Core Principles
 
-1. **选择（selection）与启用（enabled）是两个独立状态。**
-   - 启用状态 = `settings.skills.selected`，用卡片的绿色底/边框表达，任何模式下都保持可见（保留现状）。
-   - 批量选择状态 = 新增的临时 `bulkSelection: Set<string>`（组件内 state，不落盘），
-     用左上角复选框 + primary 色 ring 表达，与绿色启用样式可叠加、互不干扰。
-2. 批量模式下点卡片 **只改 bulkSelection，绝不直接改启用状态或触发预览**。
-3. 删除不可撤销，必须走确认；启用/禁用可撤销，走 Undo snackbar（复用现有 bulkUndo 机制）。
+1. **Selection and enabled are two independent states.**
+   - Enabled state = `settings.skills.selected`, expressed by the card's green background/border, kept visible in any mode (preserving the status quo).
+   - Bulk selection state = the newly added temporary `bulkSelection: Set<string>` (component-internal state, not persisted), expressed by the top-left checkbox + primary-color ring; it can overlay the green enabled style without the two interfering.
+2. In bulk mode, clicking a card **only changes bulkSelection, and never directly changes the enabled state or triggers preview**.
+3. Deletion is irreversible and must go through confirmation; enable/disable is reversible and goes through the Undo snackbar (reusing the existing bulkUndo mechanism).
 
-## 1. 进入 / 退出批量模式
+## 1. Entering / Exiting Bulk Mode
 
-- 保留顶部「批量选择」toggle 按钮作为显式入口。
-- 增加隐式入口（Google Photos 模式）：非批量模式下，卡片 hover 时左上角淡入一个圆形复选框；
-  点击复选框 = 自动进入批量模式并选中该卡片。触屏设备（no hover）复选框常驻半透明显示。
-- 退出：
-  - `Esc` 第一次：清空 bulkSelection（若非空）；第二次：退出批量模式。
-  - 切换视图（installed/store/import）或 bulkSelection 清空后点「完成」按钮退出。
-  - 退出时清空 bulkSelection 和 shift anchor。
+- Keep the top "Bulk Select" toggle button as the explicit entry point.
+- Add an implicit entry (Google Photos style): in non-bulk mode, when hovering a card a circular checkbox fades in at the top-left; clicking the checkbox automatically enters bulk mode and selects that card. On touch devices (no hover), the checkbox is always shown semi-transparent.
+- Exit:
+  - `Esc` first press: clear bulkSelection (if non-empty); second press: exit bulk mode.
+  - Switching views (installed/store/import) or clicking the "Done" button after bulkSelection is cleared exits.
+  - On exit, clear bulkSelection and the shift anchor.
 
-## 2. 卡片交互（批量模式下）
+## 2. Card Interaction (in bulk mode)
 
-- 整卡点击 = 切换选中；`Shift+点击` = 区间选择（保留现有 anchor 逻辑，作用于 bulkSelection）。
-- `Ctrl/Cmd+A`（焦点不在输入框时）= 全选当前筛选结果。仅已安装页有此语义；
-  其余视图不拦截浏览器默认的 Ctrl+A。
-- 选中样式：`ring-2 ring-primary` + 左上角复选框实心勾选；启用状态的绿色样式照常保留。
-- 批量模式下不打开预览抽屉；卡片右下角原单个删除按钮隐藏（避免与批量删除双通道混淆）。
-- 常驻启用类技能（alwaysEnabled）在批量模式下显示禁用态复选框（不可选中），并在 tooltip 说明原因。
+- Clicking the whole card = toggle selection; `Shift+click` = range selection (keep the existing anchor logic, applied to bulkSelection).
+- `Ctrl/Cmd+A` (when focus is not in an input) = select all current filter results. Only the installed page has this semantic; the other views do not intercept the browser default Ctrl+A.
+- Selected style: `ring-2 ring-primary` + a solid check in the top-left checkbox; the green enabled style is kept as usual.
+- In bulk mode the preview drawer is not opened; the original single delete button at the bottom-right of the card is hidden (to avoid confusion with the dual bulk delete channel).
+- Always-enabled skills (alwaysEnabled) show a disabled checkbox in bulk mode (not selectable), with a tooltip explaining the reason.
 
-## 3. 底部浮动操作栏（替代现有顶部三按钮组）
+## 3. Bottom Floating Action Bar (replacing the existing top three-button group)
 
-- bulkSelection.size > 0 时，从底部滑入浮动 bar（复用现有 bulkUndo snackbar 的容器样式）：
-  `已选 N │ 全选(当前筛选) · 清空 │ 启用 · 禁用 · 删除 │ ✕ 完成`
-- 各按钮语义（全部作用于 bulkSelection，而非启用集合）：
-  - **启用 / 禁用**：批量改 `settings.skills.selected`，完成后清空选择、弹 Undo snackbar
-    （"已更新 N 个技能 · 撤销"，复用现有 bulkUndo）。按钮旁显示将实际变化的数量，
-    如选中 5 个里 3 个已启用，则「启用 (2)」「禁用 (3)」；数量为 0 时对应按钮禁用。
-  - **删除**：ConfirmActionPopover 确认，描述里列出前 5 个技能名，超出部分用
-    i18n key `skillsHubBulkDeleteMore`（"{names} 及另外 {count} 个"）表达；
-    确认后串行删除（保留现有失败聚合提示），成功项从选择集中移除。
-  - 顶部「批量选择」按钮在模式中变为高亮态，仅作退出用（或直接隐藏，统一由浮动栏的「完成」退出）。
-- bulkSelection 为空但仍在批量模式时，浮动栏显示提示文案："点击卡片进行选择"（弱化样式）。
+- When bulkSelection.size > 0, a floating bar slides in from the bottom (reusing the existing bulkUndo snackbar container style):
+  `N selected │ Select all (current filter) · Clear │ Enable · Disable · Delete │ ✕ Done`
+- Button semantics (all act on bulkSelection, not the enabled set):
+  - **Enable / Disable**: bulk-modify `settings.skills.selected`, then clear the selection and show the Undo snackbar ("Updated N skills · Undo", reusing the existing bulkUndo). Next to the button, show the number that will actually change; e.g. if 3 of 5 selected are already enabled, then "Enable (2)" and "Disable (3)"; when the number is 0 the corresponding button is disabled.
+  - **Delete**: ConfirmActionPopover confirmation; the description lists the first 5 skill names, and the remainder is expressed with the i18n key `skillsHubBulkDeleteMore` ("{names} and {count} more"); after confirmation, delete serially (keeping the existing aggregated failure prompt), and remove successful items from the selection set.
+  - The top "Bulk Select" button becomes highlighted in the mode and is used only for exiting (or is hidden directly, with exit unified through the floating bar's "Done").
+- When bulkSelection is empty but still in bulk mode, the floating bar shows the hint text: "Click a card to select" (muted style).
 
-## 4. 筛选/搜索与选择集的关系
+## 4. Relationship Between Filter/Search and the Selection Set
 
-- 修改筛选词或分类时 **不清空** bulkSelection（用户可能分几次搜索凑一批）。
-- 浮动栏的「已选 N」为总数；若存在选中但当前不可见的项，追加提示 "(其中 M 个不在当前筛选中)"。
-- 「全选」只作用于当前筛选结果（追加进选择集）；「清空」清全部。
+- Changing the filter term or category does **not clear** bulkSelection (the user may build a batch across several searches).
+- The floating bar's "N selected" is the total; if there are selected items not currently visible, append the hint "(M of them are not in the current filter)".
+- "Select all" only acts on the current filter results (appended to the selection set); "Clear" clears everything.
 
-## 5. 本地导入（import）视图
+## 5. Local Import (import) View
 
-- 复用同一套：复选框 + 底部浮动栏，主操作换成「导入 (N)」。
-- 列表头部常驻「已选 X / Y」计数 + 「全部选中/取消全选」按钮（不依赖批量模式），
-  分子分母都只统计当前工具下可导入（未安装）的技能。
-- 已安装的外部技能：**不要**再显示为"锁定勾选"，改为复选框禁用 + 卡片角标「已安装」，
-  避免"会被重复导入"的误读。selectedExternal 中不再包含已安装项，也不计入任何计数。
-- 导入进行中：浮动栏内联显示进度（done/total），完成后清空选择并复用现有 importToast。
+- Reuse the same set: checkbox + bottom floating bar, with the primary action changed to "Import (N)".
+- The list header permanently shows the "X / Y selected" count + a "Select all/Deselect all" button (not dependent on bulk mode); both numerator and denominator count only the skills under the current tool that can be imported (not installed).
+- Installed external skills: **do not** show them as a "locked check" again; instead use a disabled checkbox + a card corner badge "Installed", to avoid the misreading that they "would be imported again". selectedExternal no longer contains installed items, and they are not counted in any count.
+- Import in progress: the floating bar shows progress inline (done/total); on completion, clear the selection and reuse the existing importToast.
 
-## 6. 需要同步清理的现状代码
+## 6. Current Code That Needs Synchronized Cleanup
 
-- `applyBulkInstalledSelection` / `handleBulkInstalledCardClick` 改为操作 bulkSelection，
-  不再直接写 `settings.skills.selected`。
-- `deleteBulkSelectedInstalledSkills` 的目标集合从 `selected`（启用集合）改为 bulkSelection。
-- 顶部工具栏的「全选/批量删除/退出」三按钮组移除，逻辑迁入底部浮动栏。
-- i18n：两端 `i18n/config.ts` 同步新增/调整 key（启用/禁用/清空/已选提示等），中英都要补。
+- `applyBulkInstalledSelection` / `handleBulkInstalledCardClick` change to operate on bulkSelection, no longer writing `settings.skills.selected` directly.
+- The target set of `deleteBulkSelectedInstalledSkills` changes from `selected` (the enabled set) to bulkSelection.
+- The top toolbar's "Select all/Bulk delete/Exit" three-button group is removed, and the logic moves into the bottom floating bar.
+- i18n: both ends' `i18n/config.ts` add/adjust keys synchronously (enable/disable/clear/selection hint, etc.), and both Chinese and English need to be filled in.
 
-## 7. 风险点自查（改完请逐条验证）
+## 7. Risk Self-Check (verify one by one after changes)
 
-1. 批量删除的确认文案与实际删除集合一致（不再是"已启用集合"）。
-2. Undo 只覆盖启用/禁用，不给删除提供伪撤销暗示。
-3. 触屏（webui 移动端）无 hover：复选框常驻可点，浮动栏不遮挡最后一行卡片（列表底部留 padding）。
-4. lockedByChatMode 时批量入口整体隐藏（保留现状）。
-5. 公共 SkillsHubPage 的行为与样式在两端一致，宿主适配器和各自 i18n 文案均已检查。
+1. The bulk delete confirmation text matches the actual delete set (no longer "the enabled set").
+2. Undo only covers enable/disable, and does not give a false undo implication for delete.
+3. Touch (webui mobile) has no hover: the checkbox is always tappable, and the floating bar does not cover the last row of cards (leave padding at the bottom of the list).
+4. When lockedByChatMode, the bulk entry is hidden entirely (preserving the status quo).
+5. The behavior and styles of the shared SkillsHubPage are consistent on both ends, and the host adapters and each end's i18n text have been checked.
 
-## 8. WebView2 渲染规约
+## 8. WebView2 Rendering Rules
 
-Skills Hub 在 Windows WebView2 中必须遵守以下合成约束：
+Skills Hub must follow these compositing constraints in Windows WebView2:
 
-1. **禁止对悬浮或覆盖在可滚动、可动画内容之上的元素使用 backdrop-filter。**
-   这包括 fixed、sticky、absolute 浮层，以及位于 FLIP 网格上方的操作栏、提示条、
-   搜索和排序控件、抽屉遮罩与抽屉面板。Tailwind 的 backdrop-blur-* 同样属于禁用范围。
-2. **上述元素统一使用高不透明度实色背景模拟毛玻璃层次。**
-   亮色模式优先使用 bg-background/95，暗色模式使用 dark:bg-popover/95，并保留原有
-   border 与 shadow；遮罩层使用不带模糊的实色半透明背景。
-3. **backdrop-filter 仅允许用于背后内容完全静态的场景。**
-   例如页面顶部 HubHeader 或仅覆盖静态 HubBackdrop 的面板。若调用方可能覆盖列表、
-   滚动区域或动画内容，应默认不用 backdrop-filter。
-4. **两端必须验证。**公共样式只修改 `agent-ui`，并同时检查 GUI 与 WebUI
-   的宿主样式和渲染结果，避免任一端通过局部覆盖重新引入独立合成层。
+1. **Do not use backdrop-filter on elements that float or overlay scrollable, animatable content.**
+   This includes fixed, sticky and absolute overlays, as well as action bars, hint bars, search and sort controls, drawer masks and drawer panels above a FLIP grid. Tailwind's backdrop-blur-* is likewise within the prohibited scope.
+2. **The above elements uniformly use a high-opacity solid background to simulate a frosted-glass layer.**
+   In light mode prefer bg-background/95, in dark mode use dark:bg-popover/95, and keep the original border and shadow; mask layers use a solid semi-transparent background without blur.
+3. **backdrop-filter is allowed only in scenes where the content behind is completely static.**
+   For example the top-of-page HubHeader or a panel that only covers the static HubBackdrop. If the caller may cover a list, a scroll area or animated content, backdrop-filter should not be used by default.
+4. **Both ends must be verified.** Shared styles modify only `agent-ui`, and simultaneously check the GUI and WebUI host styles and rendering results, to avoid either end reintroducing an independent compositing layer through local overrides.
 
-案例依据：
+Case evidence:
 
-- **技能卡 hover 光斑：**已安装页和商店页曾在每张卡片上使用 backdrop-blur-xl，
-  同时卡片 hover 会触发 translate 提层。60+ 卡片叠加 HubBackdrop 光晕后，部分
-  WebView2/GPU 组合会留下竖向绿色过期采样残带。修复方式是移除动态卡片根节点的
-  backdrop-filter，保留背景、边框、阴影、hover 位移与入场动画。
-- **FLIP 与底部浮动栏光斑：**排序功能让技能卡在底部多选操作栏或 Undo 条背后高频
-  重排，WebView2 的 backdrop-filter 采样缓存可能失效并在浮动栏上方形成残带。
-  修复方式是让操作栏、Undo、搜索、排序和覆盖动态页面的抽屉使用高不透明度实色背景，
-  不再采样其后的动画内容。
+- **Skill card hover halo:** The installed page and store page once used backdrop-blur-xl on every card, while card hover triggered translate layer promotion. After 60+ cards overlaid on the HubBackdrop glow, some WebView2/GPU combinations left vertical green stale-sampling residue bands. The fix was to remove the backdrop-filter from the dynamic card root node, keeping the background, border, shadow, hover displacement and entrance animation.
+- **FLIP and bottom floating bar halo:** The sorting feature caused skill cards to be reordered frequently behind the bottom multi-select action bar or Undo bar, and WebView2's backdrop-filter sampling cache could fail and form residue bands above the floating bar. The fix was to have the action bar, Undo, search, sort and drawers covering dynamic pages use a high-opacity solid background, no longer sampling the animated content behind them.

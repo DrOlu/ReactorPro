@@ -1,5 +1,5 @@
-// 平台传输适配层:WebUI 端用量查询经 Gateway WebSocket 桥接到桌面端执行(provider.usage.query)。
-// 共享的状态归约/协调器/hook 逻辑在 usageQueryCore.ts(两端字节镜像),本文件只放平台差异。
+// Platform transport adapter layer: WebUI-side usage queries are bridged via Gateway WebSocket to the desktop side for execution (provider.usage.query).
+// The shared state reduction/coordinator/hook logic lives in usageQueryCore.ts (mirrored byte-for-byte on both ends); this file only holds platform differences.
 
 import {
   type ProviderUsageResult,
@@ -22,8 +22,8 @@ export async function queryProviderUsage(
 }
 
 /**
- * 「测试查询」:按编辑器草稿配置试查询——忽略启用开关、不落库、不进缓存。
- * WebUI 草稿的秘密为脱敏空串,靠 *Configured 标志让桌面端沿用已存密钥。
+ * "Test query": trial query using the editor's draft config - ignores the enable switch, does not persist, and does not cache.
+ * The WebUI draft's secret is a masked empty string, and the *Configured flag lets the desktop side reuse the stored key.
  */
 export async function testProviderUsage(
   providerId: string,

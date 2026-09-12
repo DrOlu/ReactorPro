@@ -30,39 +30,39 @@ export const EXTRACTION_CONVERSATION_STATE_LIMIT = 128;
 /** Messages shorter than this (in graphemes) are skipped unless they answer a
  *  pending memory confirmation. */
 export const GATING_MIN_USER_TEXT_GRAPHEMES = 6;
-/** Greetings/acks longer than this still reach the LLM (e.g. "谢谢，以后默认用中文"). */
+/** Greetings/acks longer than this still reach the LLM (e.g. "thanks, use English by default from now on"). */
 export const GATING_SHORT_ACK_GRAPHEME_LIMIT = 24;
 
 /** Locale-keyed prefix lists; gating builds anchored patterns from these so
  *  adding a language never means touching code. */
 export const GATING_GREETING_PREFIXES: readonly string[] = [
-  "你好",
-  "您好",
-  "哈喽",
-  "早安",
-  "晚安",
-  "早上好",
-  "晚上好",
+  "hello there",
+  "good day",
+  "howdy",
+  "good morning",
+  "good night",
+  "morning",
+  "good evening",
   "hi",
   "hello",
   "hey",
 ];
 export const GATING_THANKS_PREFIXES: readonly string[] = [
-  "谢谢",
-  "多谢",
-  "感谢",
-  "辛苦了",
+  "thanks a lot",
+  "many thanks",
+  "much appreciated",
+  "good work",
   "thanks",
   "thank you",
   "ty",
   "thx",
 ];
 export const GATING_ACK_PREFIXES: readonly string[] = [
-  "好的",
-  "好",
-  "收到",
-  "明白了",
-  "明白",
+  "alright",
+  "okay",
+  "got it",
+  "understood",
+  "i see",
   "ok",
   "okay",
   "got it",
@@ -71,19 +71,19 @@ export const GATING_ACK_PREFIXES: readonly string[] = [
 ];
 /** Short yes/no style replies that may answer a memory confirmation question. */
 export const GATING_CONFIRMATION_WORDS: readonly string[] = [
-  "是",
-  "是的",
-  "对",
-  "对的",
-  "没错",
-  "正确",
-  "确认",
-  "是这样",
-  "不是",
-  "不是的",
-  "不对",
-  "否",
-  "没有",
+  "yes",
+  "yep",
+  "right",
+  "correct",
+  "exactly",
+  "true",
+  "confirmed",
+  "thats right",
+  "no",
+  "nope",
+  "wrong",
+  "negative",
+  "none",
   "yes",
   "y",
   "yep",

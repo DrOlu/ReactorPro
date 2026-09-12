@@ -1,66 +1,83 @@
-//! Windows 沙箱启动器(自我再执行模型,免管理员 / 免 UAC)。
+//! Windows sandbox launcher (self-reexec model, no admin / no UAC).
 //!
-//! `sandbox::wrap_command`(Windows)不直接返回真实命令,而是把它包成对本 exe 的再调用:
-//! `current_exe __sandbox_exec --write-root <root> --net on|off [--isolated] -- <program> <args...>`。
-//! 进程启动最早期(`lib::run` 首行)调用 `run_sandbox_launcher_if_requested`:若检出该
-//! 子命令,就地按 `--net` 选后端执行真实命令,等待其退出,以其退出码退出——绝不返回去
-//! 初始化 Tauri。
+//! `sandbox::wrap_command` (Windows) does not return the real command directly; instead it wraps it
+//! as a re-invocation of this exe:
+//! `current_exe __sandbox_exec --write-root <root> --net on|off [--isolated] -- <program> <args...>`.
+//! At the very start of process startup (the first line of `lib::run`) it calls
+//! `run_sandbox_launcher_if_requested`: if that subcommand is detected, it picks the backend
+//! according to `--net`, executes the real command in place, waits for it to exit, and exits with
+//! its exit code -- never returning to initialize Tauri.
 //!
-//! 双后端(均免管理员/免 UAC,见 memory `windows-sandbox-facts`,均已研究+对抗验证):
+//! Two backends (both without admin / without UAC; see memory `windows-sandbox-facts`, both
+//! researched and adversarially verified):
 //!
-//! A. 联网沙箱(`--net on`)= Low Integrity 主令牌(`DuplicateTokenEx` +
+//! A. Networked sandbox (`--net on`) = Low Integrity primary token (`DuplicateTokenEx` +
 //! `CreateProcessAsUserW`)
-//! - 复制当前用户主令牌,保留原登录会话和 SSPI/Schannel 凭据；不设置 WFP/AppContainer
-//!   网络限制,也不注入离线代理或 `*_OFFLINE` 环境变量。因此 HTTP(S)、DNS、loopback、
-//!   LAN 与监听端口的语义和无沙箱进程一致。
-//! - 子令牌降到 Low IL；工作区、围栏 TEMP 及 PowerShell 必需的窄运行时缓存同步标为
-//!   Low。Mandatory Integrity Control 的 NoWriteUp 拒绝写入 Medium 的 home、工作区
-//!   父目录和盘符根,从而保留 workspace-write 围栏。
-//! - Git Bash/PowerShell 的命名对象与标准句柄继续做 Low IL / BNO 兼容处理，避免
-//!   `STATUS_DLL_INIT_FAILED`；这些处理不改变网络策略。
-//! - 不能改回 `CreateRestrictedToken`：restricted token 会使 Schannel
-//!   `AcquireCredentialsHandle` 返回 `SEC_E_NO_CREDENTIALS`，表现为联网沙箱 HTTPS 断网。
+//! - Duplicates the current user's primary token, preserving the original logon session and
+//!   SSPI/Schannel credentials; it sets no WFP/AppContainer network restrictions and injects no
+//!   offline proxy or `*_OFFLINE` environment variables. Thus HTTP(S), DNS, loopback, LAN, and
+//!   listening-port semantics match those of a non-sandboxed process.
+//! - The child token is lowered to Low IL; the workspace, the fenced TEMP, and the narrow runtime
+//!   caches required by PowerShell are also labeled Low. Mandatory Integrity Control's NoWriteUp
+//!   denies writes to the Medium home, workspace parent directory, and drive roots, thereby
+//!   preserving the workspace-write fence.
+//! - Git Bash/PowerShell named objects and standard handles continue to receive Low IL / BNO
+//!   compatibility handling to avoid `STATUS_DLL_INIT_FAILED`; these adjustments do not change the
+//!   network policy.
+//! - Cannot revert to `CreateRestrictedToken`: a restricted token makes Schannel's
+//!   `AcquireCredentialsHandle` return `SEC_E_NO_CREDENTIALS`, which manifests as HTTPS failing in
+//!   the networked sandbox.
 //!
-//! B. 断网沙箱(`--net off`)= AppContainer(`CreateProcessW` + `SECURITY_CAPABILITIES`)
-//! - AppContainer 只携带按工作区派生的私有文件 capability,不携带任何网络 capability;
-//!   WFP 因而默认拒绝**全部**网络(含 loopback)⇒ 内核级强制断网,无需提权。对比
-//!   Codex:unelevated 仅 env 级软断网,强制断网须提权建专用账号 + 防火墙/WFP 规则。
-//! - AC 默认拒绝未授权“读”:系统目录靠自带的 `ALL APPLICATION PACKAGES` ACE 可读(工具链
-//!   可用),用户主目录默认不可读 ⇒ 断网变体顺带获得敏感目录读掩蔽(联网后端缺失项)。
-//! - 写围栏:对私有 capability SID 复用同一套授权写 ACE(工作区根 + 受围栏临时目录)。
-//!   不能直接给 package SID 授权:Windows 会把含具体 AppContainer SID 的对象视为
-//!   package 资源,随后普通 Low-IL 联网沙箱即使命中用户 ACE 也无法读取该对象。
-//! - env 叠加(防御纵深):`HTTP(S)_PROXY=http://127.0.0.1:9`、`CARGO_NET_OFFLINE` 等,让
-//!   工具在内核断网之上再快速明确失败(对齐 Codex `env.rs`)。
+//! B. Offline sandbox (`--net off`) = AppContainer (`CreateProcessW` + `SECURITY_CAPABILITIES`)
+//! - The AppContainer carries only a private file capability derived per workspace and no network
+//!   capability; WFP therefore denies **all** network by default (including loopback) => enforced
+//!   offline at the kernel level, with no elevation required. Compare Codex: unelevated only does
+//!   env-level soft offline; enforced offline requires elevation to create a dedicated account +
+//!   firewall/WFP rules.
+//! - The AC denies unauthorized "reads" by default: system directories are readable via their
+//!   built-in `ALL APPLICATION PACKAGES` ACE (the toolchain remains usable), while the user's home
+//!   directory is unreadable by default => the offline variant incidentally gains read masking for
+//!   sensitive directories (something the networked backend lacks).
+//! - Write fence: the same authorized write ACE is reused against the private capability SID
+//!   (workspace root + fenced temp directory). One cannot grant directly to the package SID:
+//!   Windows treats objects containing a concrete AppContainer SID as package resources, and a
+//!   plain Low-IL networked sandbox then cannot read that object even when it matches a user ACE.
+//! - env overlay (defense in depth): `HTTP(S)_PROXY=http://127.0.0.1:9`, `CARGO_NET_OFFLINE`, etc.,
+//!   making tools fail fast and explicitly on top of the kernel-level offline block (aligned with
+//!   Codex `env.rs`).
 //!
-//! 两后端共用启动尾:`STARTUPINFOEXW` + `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` 只继承 3 个
-//! std 句柄(取代 `bInheritHandles=TRUE` 的全句柄表继承,收敛句柄泄漏面);显式
-//! `lpDesktop = winsta0\default`(Low IL token/AC 启动必须显式设桌面,否则句柄站点解析歧义);
-//! Job Object `KILL_ON_JOB_CLOSE` 在非 isolated 时兜底级联杀,isolated 常驻进程则跳过
-//!(对齐 Linux bwrap 省略 `--die-with-parent`);启动失败退出码(0xC0000142/0135/0022
-//! 以及 CLR `0xE0434352` / HRESULT `0x80070005`)转可读中英诊断经既有管道上传。
-//! 盖章跳过等诊断默认不写子进程 stderr(会污染 ManagedProcess 日志);设置
-//! `LIVEAGENT_SANDBOX_LOG=1` 才回落到 stderr。
+//! Both backends share the launch tail: `STARTUPINFOEXW` + `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`
+//! inherits only 3 std handles (replacing the full handle-table inheritance of
+//! `bInheritHandles=TRUE`, narrowing the handle-leak surface); an explicit
+//! `lpDesktop = winsta0\default` (Low IL token/AC launches must set the desktop explicitly,
+//! otherwise handle-station resolution is ambiguous); a Job Object `KILL_ON_JOB_CLOSE` provides a
+//! fallback cascading kill when not isolated, while isolated long-lived processes skip it
+//! (aligned with Linux bwrap omitting `--die-with-parent`); launch-failure exit codes (0xC0000142/
+//! 0135/0022 as well as CLR `0xE0434352` / HRESULT `0x80070005`) are turned into readable
+//! diagnostics uploaded through the existing pipe. Diagnostics such as skipped
+//! stamps are not written to the child's stderr by default (which would pollute ManagedProcess
+//! logs); only when `LIVEAGENT_SANDBOX_LOG=1` is set do they fall back to stderr.
 
-/// 非 Windows:自我再执行启动器不存在,空操作。
+/// Non-Windows: there is no self-reexec launcher, so this is a no-op.
 #[cfg(not(windows))]
 pub fn run_sandbox_launcher_if_requested() {}
 
-/// 运行时探测两个 Windows 后端能否真的建出安全上下文(P1#4)。
-/// 返回 (联网 Low IL token 后端,断网 AppContainer 后端);非 Windows 平台不参与编译。
+/// Runtime probe for whether the two Windows backends can actually build a security context (P1#4).
+/// Returns (networked Low IL token backend, offline AppContainer backend); non-Windows platforms do
+/// not compile.
 #[cfg(windows)]
 pub(crate) fn probe_backends() -> (Result<(), String>, Result<(), String>) {
     (win::probe_networked_token(), win::probe_appcontainer())
 }
 
-/// Windows:若本次进程是 `__sandbox_exec` 启动器,执行真实命令并以其退出码退出;
-/// 否则原样返回,交由正常的 Tauri 启动流程继续。
+/// Windows: if this process is the `__sandbox_exec` launcher, execute the real command and exit
+/// with its exit code; otherwise return unchanged and let the normal Tauri startup flow continue.
 #[cfg(windows)]
 pub fn run_sandbox_launcher_if_requested() {
     use crate::runtime::sandbox::{parse_launcher_args, SANDBOX_EXEC_SUBCOMMAND};
 
     let raw: Vec<String> = std::env::args().collect();
-    // raw[0] = exe 自身;raw[1] = 子命令标记;raw[2..] = 启动器 payload。
+    // raw[0] = the exe itself; raw[1] = the subcommand marker; raw[2..] = the launcher payload.
     if raw.get(1).map(String::as_str) != Some(SANDBOX_EXEC_SUBCOMMAND) {
         return;
     }
@@ -76,8 +93,9 @@ pub fn run_sandbox_launcher_if_requested() {
             ) {
                 Ok(code) => code,
                 Err(err) => {
-                    // fail-closed:已进入沙箱启动器分支,任何建令牌/派生失败都必须让命令
-                    // 整体不执行,绝不回退到无沙箱运行。
+                    // fail-closed: we are already in the sandbox launcher branch, so any token
+                    // creation/derivation failure must prevent the command from executing at all;
+                    // never fall back to running without a sandbox.
                     eprintln!("liveagent sandbox launcher failed: {err}");
                     127
                 }
@@ -140,9 +158,10 @@ mod win {
         }
     }
 
-    // 以本地常量代替对 windows-sys 各 feature 常量导出的依赖:字段类型均为整型别名
-    // (windows-sys 用 type alias 而非 newtype),直接赋整型字面量即可,极大降低
-    // “某常量是否在某 feature 下导出”的编译风险。数值均取自 Win32 头文件。
+    // Local constants replace reliance on per-feature constant exports from windows-sys: the field
+    // types are all integer aliases (windows-sys uses type aliases rather than newtypes), so
+    // assigning integer literals directly works and greatly reduces the compile risk of "is this
+    // constant exported under this feature". Values are taken from the Win32 headers.
     const TOKEN_QUERY: u32 = 0x0008;
     const TOKEN_DUPLICATE: u32 = 0x0002;
     const TOKEN_ASSIGN_PRIMARY: u32 = 0x0001;
@@ -195,7 +214,8 @@ mod win {
     const GENERIC_ALL: u32 = 0x1000_0000;
     const SE_GROUP_ENABLED: u32 = 0x0000_0004;
 
-    // 文件访问权掩码(标准值);DELETE 本地定义以回避导入位置歧义。
+    // File access-rights masks (standard values); DELETE is defined locally to avoid import-site
+    // ambiguity.
     const FILE_GENERIC_READ: u32 = 0x0012_0089;
     const FILE_GENERIC_WRITE: u32 = 0x0012_0116;
     const FILE_GENERIC_EXECUTE: u32 = 0x0012_00A0;
@@ -211,12 +231,14 @@ mod win {
     const STD_OUTPUT_HANDLE: u32 = 0xFFFF_FFF5; // -11
     const STD_ERROR_HANDLE: u32 = 0xFFFF_FFF4; // -12
 
-    // ProcThreadAttribute 常量:低 16 位是序号,高位是标志(值取自 WinBase.h 的
-    // ProcThreadAttributeValue 宏展开)。HANDLE_LIST=0x00020002、SECURITY_CAPABILITIES=0x00020009。
+    // ProcThreadAttribute constants: the low 16 bits are the index, the high bits are flags
+    // (values taken from the ProcThreadAttributeValue macro expansion in WinBase.h).
+    // HANDLE_LIST=0x00020002, SECURITY_CAPABILITIES=0x00020009.
     const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x0002_0002;
     const PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES: usize = 0x0002_0009;
-    // ProcThreadAttributeBnoIsolation = 19, Input 标志 ⇒ 0x00020013。把 Win32
-    // Local\ 名字重定向到进程私有前缀;MSYS 直调 NtCreateDirectoryObject 不受影响。
+    // ProcThreadAttributeBnoIsolation = 19, Input flag => 0x00020013. Redirects Win32
+    // Local\ names to a process-private prefix; MSYS calling NtCreateDirectoryObject directly is
+    // unaffected.
     const PROC_THREAD_ATTRIBUTE_BNO_ISOLATION: usize = 0x0002_0013;
 
     #[repr(C)]
@@ -233,26 +255,31 @@ mod win {
     const LOW_INTEGRITY_SID: &str = "S-1-16-4096";
     const LOW_INTEGRITY_SDDL: &str = "S:(ML;OICI;NW;;;LW)";
 
-    // loader 早期失败的 NTSTATUS 退出码——子进程根本没进 main 就被内核/加载器杀死。
-    // 用于把裸退出码翻成可读诊断(见 loader_failure_hint)。
+    // NTSTATUS exit codes for early loader failures -- the child was killed by the kernel/loader
+    // before it even reached main. Used to turn raw exit codes into readable diagnostics (see
+    // loader_failure_hint).
     const STATUS_DLL_INIT_FAILED: u32 = 0xC000_0142;
     const STATUS_DLL_NOT_FOUND: u32 = 0xC000_0135;
     const STATUS_ACCESS_DENIED: u32 = 0xC000_0022;
-    // CLR 未处理异常:PowerShell 把 CNG `NTE_PROVIDER_DLL_FAIL` 包装成“BCrypt 加载失败”
-    // 后以此码退出。不是 NTSTATUS,shell 探测原先漏掉它,会把已崩溃的 pwsh 当成可用。
+    // CLR unhandled exception: PowerShell exits with this code after wrapping a CNG
+    // `NTE_PROVIDER_DLL_FAIL` as a "failed to load BCrypt". It is not an NTSTATUS, and shell
+    // probing previously missed it, treating a crashed pwsh as usable.
     const CLR_UNHANDLED_EXCEPTION: u32 = 0xE043_4352;
     const NTE_PROVIDER_DLL_FAIL: u32 = 0x8009_001D;
-    // HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED):Windows PowerShell / .NET Framework
-    // 写 CLR 用户缓存失败时的直接退出码,与上面的 CLR 包装码不是同一条路径。
+    // HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED): the direct exit code when Windows PowerShell /
+    // .NET Framework fails to write the CLR user cache; it is not the same path as the CLR wrapper
+    // code above.
     const E_ACCESSDENIED: u32 = 0x8007_0005;
-    // powershell.exe 宿主在 CLR 初始化失败时不回传 HRESULT,而是用这个包装码。
+    // The powershell.exe host does not return an HRESULT when CLR initialization fails; instead it
+    // uses this wrapper code.
     const POWERSHELL_CLR_INIT_FAILED: u32 = 0xFFFF_0000;
 
-    /// PSID 别名(windows-sys 里就是 `*mut c_void`),提升可读性。
+    /// PSID alias (it is just `*mut c_void` in windows-sys), for readability.
     type PSID = *mut c_void;
 
-    // windows-sys 0.61 的 FFI 布尔返回是 `windows_sys::core::BOOL`(= i32);此处直接
-    // 用 i32 作参数(透明别名,可接收所有这些函数的返回)。
+    // The FFI boolean return in windows-sys 0.61 is `windows_sys::core::BOOL` (= i32); here i32 is
+    // used directly as the parameter (a transparent alias that can accept the return of all these
+    // functions).
     #[inline]
     fn ok(b: i32) -> bool {
         b != 0
@@ -263,12 +290,12 @@ mod win {
         format!("{ctx} (GetLastError={code})")
     }
 
-    /// str → 以 NUL 结尾的 UTF-16。
+    /// str -> NUL-terminated UTF-16.
     fn to_wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
-    /// ConvertStringSidToSidW 分配的 SID,Drop 时 LocalFree。
+    /// A SID allocated by ConvertStringSidToSidW; LocalFree'd on Drop.
     struct LocalSid(PSID);
 
     impl Drop for LocalSid {
@@ -281,8 +308,9 @@ mod win {
         }
     }
 
-    /// `DeriveCapabilitySidsFromName` 同时分配 SID 指针数组和每个 SID；两层都须
-    /// `LocalFree`。只在派生期间持有，随后把目标 SID 复制进 Rust 自持缓冲。
+    /// `DeriveCapabilitySidsFromName` allocates both an array of SID pointers and each individual
+    /// SID; both layers must be `LocalFree`'d. It is held only during derivation, after which the
+    /// target SID is copied into a Rust-owned buffer.
     struct LocalSidArray {
         ptr: *mut PSID,
         count: u32,
@@ -359,8 +387,9 @@ mod win {
         result
     }
 
-    /// 联网子进程保留当前用户的完整网络/登录会话能力，因此用 Low IL + NoWriteUp
-    /// 拦住 Medium 的 home、盘符根和工作区父目录；工作区与围栏 TEMP 标 Low 后仍可写。
+    /// A networked child process retains the current user's full network/logon-session capability,
+    /// so Low IL + NoWriteUp blocks the Medium home, drive roots, and workspace parent directory;
+    /// the workspace and fenced TEMP remain writable after being labeled Low.
     fn set_token_low_integrity(token: HANDLE) -> Result<(), String> {
         let sid = string_to_sid(LOW_INTEGRITY_SID)?;
         let mut label = SID_AND_ATTRIBUTES {
@@ -396,10 +425,11 @@ mod win {
         })
     }
 
-    /// Mandatory Label 属于 SACL,但 `LABEL_SECURITY_INFORMATION` 的访问检查要求
-    /// `WRITE_OWNER`;对象 owner 只隐式拥有 READ_CONTROL/WRITE_DAC,普通的 Modify DACL
-    /// 因而会返回 ERROR_ACCESS_DENIED。只在该错误上给启动器用户补最小 WRITE_OWNER
-    /// ACE 后重试,无需管理员/UAC,也不把其它标签/API 错误误判成 ACL 问题。
+    /// The Mandatory Label belongs to the SACL, but the access check for `LABEL_SECURITY_INFORMATION`
+    /// requires `WRITE_OWNER`; the object owner only implicitly holds READ_CONTROL/WRITE_DAC, so an
+    /// ordinary Modify DACL therefore returns ERROR_ACCESS_DENIED. Only on that error, grant the
+    /// launcher user a minimal WRITE_OWNER ACE and retry, with no admin/UAC required, and without
+    /// misclassifying other label/API errors as ACL problems.
     fn ensure_low_integrity_label(
         object_type: i32,
         name: &str,
@@ -525,8 +555,8 @@ mod win {
         }
     }
 
-    /// 打开当前进程的主令牌；附带 DUPLICATE / ASSIGN_PRIMARY / ADJUST_DEFAULT，
-    /// 供联网后端复制主令牌并设置 Low IL。
+    /// Opens the current process's primary token; includes DUPLICATE / ASSIGN_PRIMARY /
+    /// ADJUST_DEFAULT so the networked backend can duplicate the primary token and set Low IL.
     fn open_process_token() -> Result<HANDLE, String> {
         let mut token: HANDLE = null_mut();
         let access = TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT;
@@ -537,15 +567,17 @@ mod win {
         Ok(token)
     }
 
-    /// 从令牌 TokenGroups 里读出登录 SID(SE_GROUP_LOGON_ID),复制成自持字节缓冲。
+    /// Reads the logon SID (SE_GROUP_LOGON_ID) from the token's TokenGroups and copies it into a
+    /// self-owned byte buffer.
     fn logon_sid_bytes(token: HANDLE) -> Result<Vec<u8>, String> {
         let mut len: u32 = 0;
-        // 首次调用取所需长度(预期失败并置 len)。
+        // First call fetches the required length (expected to fail and set len).
         unsafe { GetTokenInformation(token, TOKEN_GROUPS_CLASS, null_mut(), 0, &mut len) };
         if len == 0 {
             return Err(last_error("GetTokenInformation(TokenGroups) size probe"));
         }
-        // 用 u64 缓冲保证 8 字节对齐(TOKEN_GROUPS 含指针,Vec<u8> 不保证对齐)。
+        // Use a u64 buffer to guarantee 8-byte alignment (TOKEN_GROUPS contains pointers and
+        // Vec<u8> does not guarantee alignment).
         let mut buf: Vec<u64> = vec![0u64; ((len as usize) + 7) / 8];
         let r = unsafe {
             GetTokenInformation(
@@ -618,7 +650,8 @@ mod win {
         }
     }
 
-    /// 用 {登录 SID, S-1-5-33, 合成 SID} 作限制性 SID,建 WRITE_RESTRICTED 主令牌。
+    /// Uses {logon SID, S-1-5-33, synthetic SID} as restricting SIDs to create a WRITE_RESTRICTED
+    /// primary token.
     #[cfg(test)]
     fn create_restricted_token(base: HANDLE, restricting: &[PSID]) -> Result<HANDLE, String> {
         let mut sids: Vec<SID_AND_ATTRIBUTES> = restricting
@@ -678,13 +711,14 @@ mod win {
         Ok(token)
     }
 
-    /// 向令牌的 default DACL 追加「登录 SID 全权」ACE。
+    /// Appends a "logon SID full control" ACE to the token's default DACL.
     ///
-    /// 子进程新建的内核对象(msys/cygwin 共享内存、signal pipe、事件等)套用该 DACL；
-    /// 登录 SID 让同一登录会话稳定重开这些对象。GENERIC_ALL 只作用于“该进程自建”
-    /// 的对象,不放宽文件写围栏。
+    /// Kernel objects newly created by the child process (msys/cygwin shared memory, signal pipes,
+    /// events, etc.) inherit this DACL; the logon SID lets the same logon session reliably reopen
+    /// these objects. GENERIC_ALL applies only to objects the process creates itself, so it does not
+    /// loosen the file write fence.
     fn append_sid_to_default_dacl(token: HANDLE, sid: PSID) -> Result<(), String> {
-        const ACL_APPEND_AT_END: u32 = 0xFFFF_FFFF; // MAXDWORD ⇒ AddAce 追加到尾部
+        const ACL_APPEND_AT_END: u32 = 0xFFFF_FFFF; // MAXDWORD => AddAce appends to the end
         unsafe {
             let mut len: u32 = 0;
             GetTokenInformation(token, TOKEN_DEFAULT_DACL_CLASS, null_mut(), 0, &mut len);
@@ -704,7 +738,8 @@ mod win {
                 return Err(last_error("GetTokenInformation(TokenDefaultDacl)"));
             }
             let old_dacl = (*(buf.as_ptr() as *const TOKEN_DEFAULT_DACL)).DefaultDacl;
-            // NULL default DACL ⇒ 新对象无保护(everyone 全权),两遍判定天然皆过,无需追加。
+            // A NULL default DACL => new objects are unprotected (everyone full control), so both
+            // checks pass naturally and no append is needed.
             if old_dacl.is_null() {
                 return Ok(());
             }
@@ -726,8 +761,9 @@ mod win {
             if sid_len == 0 {
                 return Err(last_error("GetLengthSid(default DACL trustee)"));
             }
-            // ACCESS_ALLOWED_ACE 自带一个 u32 的 SidStart 占位,故净增 = 结构长 - 4 + SID 长;
-            // SID 长恒为 4 的倍数,天然满足 ACL 的 DWORD 对齐。
+            // ACCESS_ALLOWED_ACE includes a u32 SidStart placeholder, so the net increase is
+            // struct size - 4 + SID length; the SID length is always a multiple of 4, naturally
+            // satisfying the ACL's DWORD alignment.
             let ace_len = std::mem::size_of::<ACCESS_ALLOWED_ACE>() as u32 - 4 + sid_len;
             let new_len = ((info.AclBytesInUse + ace_len) + 3) & !3;
 
@@ -736,7 +772,8 @@ mod win {
             if !ok(InitializeAcl(new_acl, new_len, ACL_REVISION)) {
                 return Err(last_error("InitializeAcl(default DACL)"));
             }
-            // 原 ACE 顺序照抄(default DACL 全为 allow ACE,顺序无语义,仍保守保序)。
+            // Copy the original ACE order verbatim (the default DACL is all allow ACEs where order
+            // has no semantics, but order is conservatively preserved anyway).
             for i in 0..info.AceCount {
                 let mut ace: *mut c_void = null_mut();
                 if !ok(GetAce(old_dacl, i, &mut ace)) || ace.is_null() {
@@ -753,7 +790,8 @@ mod win {
             let tdd = TOKEN_DEFAULT_DACL {
                 DefaultDacl: new_acl,
             };
-            // SetTokenInformation 把 DACL 拷贝进令牌,new_buf 随后释放无碍。
+            // SetTokenInformation copies the DACL into the token, so freeing new_buf afterwards is
+            // fine.
             if !ok(SetTokenInformation(
                 token,
                 TOKEN_DEFAULT_DACL_CLASS,
@@ -766,7 +804,7 @@ mod win {
         Ok(())
     }
 
-    /// AppContainer SID(FreeSid 释放,区别于 LocalSid 的 LocalFree)。
+    /// AppContainer SID (freed with FreeSid, unlike LocalSid's LocalFree).
     struct AcSid(PSID);
 
     impl Drop for AcSid {
@@ -779,16 +817,18 @@ mod win {
         }
     }
 
-    /// AC profile 名:确定性、每工作区一个。硬限制 64 字符:前缀 18 + dir_key ≤ 43
-    /// (4 段 u32 十进制,下划线连接)= ≤ 61;字符集 [0-9A-Za-z._] 合法。
+    /// AC profile name: deterministic, one per workspace. Hard limit of 64 characters: prefix 18 +
+    /// dir_key <= 43 (4 decimal u32 segments joined by underscores) = <= 61; the character set
+    /// [0-9A-Za-z._] is valid.
     fn appcontainer_profile_name(dir_key: &str) -> String {
-        format!("LiveAgent.Sandbox.{dir_key}")
+        format!("ReactorPro.Sandbox.{dir_key}")
     }
 
-    /// 私有 capability 仅作为文件/注册表 ACL 的工作区身份,不对应任何 Windows
-    /// 网络 capability。名字与工作区确定性绑定,因此不同工作区互不可写。
+    /// The private capability serves only as a workspace identity in file/registry ACLs and does
+    /// not correspond to any Windows network capability. The name is deterministically bound to the
+    /// workspace, so different workspaces cannot write to each other.
     fn workspace_capability_name(dir_key: &str) -> String {
-        format!("LiveAgent.Workspace.{dir_key}")
+        format!("ReactorPro.Workspace.{dir_key}")
     }
 
     fn workspace_capability_sid(dir_key: &str) -> Result<Vec<u8>, String> {
@@ -857,23 +897,24 @@ mod win {
         }
     }
 
-    /// 取(必要时创建)工作区专属 AppContainer profile 的 SID。
+    /// Gets (creating if necessary) the SID of the workspace-specific AppContainer profile.
     ///
-    /// Profile 本身不注册任何 capability；启动时只注入私有工作区 capability,
-    /// 不注入网络 capability,所以 WFP 仍默认拒绝全部网络含 loopback。Create 失败
-    /// (典型:已存在)即走 Derive;二者都失败才报错(fail-closed)。Profile 留存不删。
+    /// The profile itself registers no capability; at launch only the private workspace capability
+    /// is injected, never a network capability, so WFP still denies all network by default including
+    /// loopback. If Create fails (typically because it already exists), fall back to Derive; only if
+    /// both fail does it error (fail-closed). The profile is kept and not deleted.
     fn appcontainer_profile_sid(dir_key: &str) -> Result<AcSid, String> {
         let name = appcontainer_profile_name(dir_key);
         let name_w = to_wide(&name);
-        let display_w = to_wide("LiveAgent Sandbox (offline)");
-        let desc_w = to_wide("LiveAgent per-workspace offline sandbox");
+        let display_w = to_wide("ReactorPro Sandbox (offline)");
+        let desc_w = to_wide("ReactorPro per-workspace offline sandbox");
         let mut sid: PSID = null_mut();
         let created = unsafe {
             CreateAppContainerProfile(
                 name_w.as_ptr(),
                 display_w.as_ptr(),
                 desc_w.as_ptr(),
-                null(), // 零 capability
+                null(), // zero capabilities
                 0,
                 &mut sid,
             )
@@ -904,7 +945,8 @@ mod win {
         ensure_write_ace(path, sid.0)
     }
 
-    /// 测试钩子:按名字纯派生 AC SID 并转成字符串形式(不创建 profile,无系统副作用)。
+    /// Test hook: purely derives an AC SID by name and converts it to string form (does not create a
+    /// profile, no system side effects).
     #[cfg(test)]
     pub(super) fn appcontainer_profile_sid_for_test(name: &str) -> Option<String> {
         use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
@@ -932,8 +974,9 @@ mod win {
         }
     }
 
-    /// 测试钩子(真机):建受限令牌 → 追加登录 SID 到 default DACL → 读回验证 ACE
-    /// 确实存在(0xC0000142 修复的可断言部分)。返回 (追加前含登录 SID, 追加后含)。
+    /// Test hook (real machine): create a restricted token -> append the logon SID to the default
+    /// DACL -> read back to verify the ACE really exists (the assertable part of the 0xC0000142 fix).
+    /// Returns (contains logon SID before append, contains after append).
     #[cfg(test)]
     pub(super) fn default_dacl_fix_roundtrip_for_test() -> Result<(bool, bool), String> {
         fn dacl_contains(token: HANDLE, sid: PSID) -> Result<bool, String> {
@@ -1000,7 +1043,7 @@ mod win {
         Ok((before, after))
     }
 
-    /// CloseHandle RAII:错误提前返回时不再需要手工逐支关闭。
+    /// CloseHandle RAII: no longer need to manually close each branch on an early error return.
     struct OwnedHandle(HANDLE);
 
     impl Drop for OwnedHandle {
@@ -1013,13 +1056,14 @@ mod win {
         }
     }
 
-    /// ProcThreadAttributeList RAII(两段式分配;Drop 时 Delete)。
+    /// ProcThreadAttributeList RAII (two-phase allocation; Delete on Drop).
     ///
-    /// 注意生命周期契约:经 `set` 挂上的 value 指针必须存活到本对象 Drop(MSDN 对
-    /// UpdateProcThreadAttribute 的要求)——调用方须把 value 声明在本对象**之前**
-    /// (Rust 局部量逆序析构 ⇒ 本对象先于 value 析构)。
+    /// Note the lifetime contract: a value pointer attached via `set` must stay alive until this
+    /// object is dropped (the MSDN requirement for UpdateProcThreadAttribute) -- the caller must
+    /// declare the value **before** this object (Rust locals drop in reverse order => this object
+    /// drops before the value).
     struct AttrList {
-        buf: Vec<u64>, // u64 保证 8 字节对齐
+        buf: Vec<u64>, // u64 guarantees 8-byte alignment
     }
 
     impl AttrList {
@@ -1071,57 +1115,64 @@ mod win {
         }
     }
 
-    /// 子进程 loader 早期死亡(未进 main)的 NTSTATUS 退出码 → 可读诊断(中英双语,
-    /// 经 stderr 走既有管道上传给模型/UI;裸退出码对用户与模型都不可行动)。
+    /// Maps early loader death of the child (before main) NTSTATUS exit codes to readable
+    /// diagnostics (uploaded through the existing pipe via stderr to the model/UI; raw exit codes
+    /// are not actionable for either users or models).
     fn loader_failure_hint(exit_code: u32) -> Option<&'static str> {
         match exit_code {
             STATUS_DLL_INIT_FAILED => Some(
                 "a DLL failed to initialize under the sandbox (STATUS_DLL_INIT_FAILED); \
                  MSYS/Cygwin-based tools (e.g. Git Bash) may be incompatible here and the shell \
-                 runner will try the next shell candidate / 沙箱内有 DLL 初始化失败(0xC0000142):\
-                 MSYS/Cygwin 系工具(如 Git Bash)可能与该沙箱不兼容,shell 将自动尝试下一候选",
+                 runner will try the next shell candidate (0xC0000142): MSYS/Cygwin-based tools \
+                 such as Git Bash may be incompatible with this sandbox, and the shell will \
+                 automatically try the next candidate",
             ),
             STATUS_DLL_NOT_FOUND => Some(
                 "a required DLL was not found under the sandbox (STATUS_DLL_NOT_FOUND); the tool's \
-                 install directory may be unreadable in this mode / 沙箱内找不到所需 DLL(0xC0000135):\
-                 该工具的安装目录在此模式下可能不可读",
+                 install directory may be unreadable in this mode (0xC0000135): the tool's install \
+                 directory may be unreadable in this mode",
             ),
             STATUS_ACCESS_DENIED => Some(
                 "the sandbox denied access while starting the process (STATUS_ACCESS_DENIED); the \
-                 program or its directory is not readable in this mode / 沙箱拒绝了进程启动所需的访问\
-                 (0xC0000022):该程序或其目录在此模式下不可读",
+                 program or its directory is not readable in this mode (0xC0000022): the program or \
+                 its directory is not readable in this mode",
             ),
             CLR_UNHANDLED_EXCEPTION | NTE_PROVIDER_DLL_FAIL => Some(
                 "the runtime failed during crypto provider init under the sandbox token \
                  (CLR 0xE0434352 / NTE_PROVIDER_DLL_FAIL); this is usually HKCU certificate-store \
                  or %APPDATA%\\Microsoft\\Crypto being unwritable, not a broken BCrypt.dll. The \
-                 shell runner will try the next candidate / 沙箱内加密提供程序初始化失败(0xE0434352):\
-                 通常是用户证书库或 Crypto 目录不可写,并非本机 pwsh/BCrypt.dll 损坏,shell 将尝试下一候选",
+                 shell runner will try the next candidate (0xE0434352): crypto provider \
+                 initialization failed under the sandbox, usually because the user certificate store \
+                 or Crypto directory is unwritable rather than a broken local pwsh/BCrypt.dll; the \
+                 shell will try the next candidate",
             ),
             E_ACCESSDENIED | POWERSHELL_CLR_INIT_FAILED => Some(
                 "the runtime was denied a write during CLR/PowerShell startup \
                  (HRESULT 0x80070005 E_ACCESSDENIED / exit 0xFFFF0000); this is usually \
                  the user CLR cache or PowerShell module-analysis directory being \
                   unwritable at Low Integrity, not a broken powershell.exe. \
-                 The shell runner will try the next candidate / 沙箱内 CLR/PowerShell \
-                 启动时写被拒绝(0x80070005 / 0xFFFF0000):通常是用户 CLR 缓存或 \
-                 PowerShell 模块分析目录不可写,并非本机 powershell.exe 损坏,shell 将尝试下一候选",
+                 The shell runner will try the next candidate (0x80070005 / 0xFFFF0000): a write \
+                 was denied during CLR/PowerShell startup under the sandbox, usually because the \
+                 user CLR cache or PowerShell module-analysis directory is unwritable rather than a \
+                 broken local powershell.exe; the shell will try the next candidate",
             ),
             _ => None,
         }
     }
 
-    /// 断网沙箱的 env 叠加(防御纵深,对齐 Codex):内核级 WFP 阻断之上,让常见工具
-    /// 不必等 TCP 失败,直接按各自的 offline/代理约定快速、明确地报错。黑洞代理指向
-    /// 127.0.0.1:9(discard 端口,无监听;AC 内 loopback 本就被拒)。
-    /// 设置在启动器自身环境上,经 lpEnvironment=NULL 的继承传给子进程(与 TEMP 重定向同路)。
+    /// env overlay for the offline sandbox (defense in depth, aligned with Codex): on top of the
+    /// kernel-level WFP block, it lets common tools fail fast and explicitly according to their own
+    /// offline/proxy conventions without waiting for a TCP failure. The blackhole proxy points at
+    /// 127.0.0.1:9 (the discard port, nothing listening; loopback is already denied inside the AC).
+    /// It is set on the launcher's own environment and passed to the child via lpEnvironment=NULL
+    /// inheritance (the same route as the TEMP redirect).
     fn set_offline_env() -> Result<(), String> {
         const BLACKHOLE: &str = "http://127.0.0.1:9";
         let pairs: &[(&str, &str)] = &[
             ("HTTP_PROXY", BLACKHOLE),
             ("HTTPS_PROXY", BLACKHOLE),
             ("ALL_PROXY", BLACKHOLE),
-            ("NO_PROXY", ""), // 清空例外表,黑洞代理不留旁路(Windows env 大小写不敏感,亦覆盖小写变体)
+            ("NO_PROXY", ""), // clear the exception list so the blackhole proxy leaves no bypass (Windows env is case-insensitive and also covers lowercase variants)
             ("CARGO_NET_OFFLINE", "true"),
             ("PIP_NO_INDEX", "1"),
             ("NPM_CONFIG_OFFLINE", "true"),
@@ -1138,9 +1189,10 @@ mod win {
         Ok(())
     }
 
-    /// 命名对象 DACL 上是否已有受托 SID 且权限位足够的 ACE。命中即认为已盖章
-    /// (可继承 ACE 会自动传播到后建的子对象),跳过昂贵的重新传播。任何探测失败
-    /// 按“未盖章”处理。
+    /// Whether the named object's DACL already has an ACE for the trustee SID with sufficient
+    /// access bits. A hit is considered already stamped (inheritable ACEs propagate automatically to
+    /// later-created child objects), skipping the expensive re-propagation. Any probe failure is
+    /// treated as "not stamped".
     fn named_has_ace(object_type: i32, path_wide: &[u16], sid: PSID, required_access: u32) -> bool {
         unsafe {
             let mut dacl: *mut ACL = null_mut();
@@ -1196,20 +1248,24 @@ mod win {
         }
     }
 
-    /// 在命名对象上盖“可继承(OI)(CI)”的授权写 ACE(不存在才盖)。
+    /// Stamps an inheritable (OI)(CI) authorized write ACE on a named object (only if absent).
     ///
-    /// 为何只授不撤(P3#8,已知取舍,非疏漏):
-    /// - 受托 SID 由工作区路径确定性推导 ⇒ 每个工作区**最多一条** ACE(`named_has_ace`
-    ///   幂等守卫),不随运行次数累积;
-    /// - 该 SID 不映射任何活跃主体,遗留 ACE 不授予任何真实用户额外权限(惰性无害);
-    /// - 同一工作区可能有多个沙箱进程并发存活(Bash + ManagedProcess + resumable
-    ///   session),按进程退出撤销会打断仍在运行的兄弟进程的写围栏;
-    /// - `SetNamedSecurityInfoW` 回写“撤销后的 DACL”还会踩空 DACL 陷阱(见上方
-    ///   `old_dacl.is_null()` 分支)。
+    /// Why grant-only, never revoke (P3#8, a known tradeoff, not an oversight):
+    /// - The trustee SID is deterministically derived from the workspace path => at most **one** ACE
+    ///   per workspace (the `named_has_ace` idempotency guard), so it does not accumulate across
+    ///   runs;
+    /// - That SID maps to no active principal, so the leftover ACE grants no real user extra
+    ///   permissions (inert and harmless);
+    /// - The same workspace may have several sandbox processes alive concurrently (Bash +
+    ///   ManagedProcess + resumable session), and revoking on process exit would break the write
+    ///   fence of sibling processes still running;
+    /// - Writing back the "post-revoke DACL" via `SetNamedSecurityInfoW` would also hit the empty
+    ///   DACL trap (see the `old_dacl.is_null()` branch above).
     ///
-    /// 代价是资源管理器/注册表权限页会显示一个无法解析的 S-1-5-21-* 项,且卸载不清理。
-    /// 若要提供清理,应做成显式的“清理沙箱 ACE”运维动作(遍历工作区列表按合成 SID
-    /// 精确删除),而不是塞进单次命令的生命周期里。
+    /// The cost is that Explorer/registry permission pages show an unresolvable S-1-5-21-* entry
+    /// and uninstall does not clean it up. If cleanup is desired, it should be an explicit "clean
+    /// sandbox ACEs" operational action (iterate the workspace list and delete the synthetic SIDs
+    /// precisely), not something stuffed into a single command's lifecycle.
     fn ensure_named_write_ace(
         object_type: i32,
         name: &str,
@@ -1237,9 +1293,10 @@ mod win {
                 return Err(format!("GetNamedSecurityInfoW({name}) failed (error={rc})"));
             }
 
-            // NULL DACL = 隐式“everyone 全权”:目标 SID 本就被授予写,无需盖章;
-            // 若仍用 SetEntriesInAclW(oldacl=NULL) 生成“仅目标 SID”的 DACL 再回写,反而把
-            // 正常(无沙箱)访问锁死。故此情形直接跳过。
+            // A NULL DACL = implicit "everyone full control": the target SID already has write
+            // access, so no stamp is needed; using SetEntriesInAclW(oldacl=NULL) to build a
+            // "target-SID-only" DACL and write it back would instead lock out normal
+            // (non-sandboxed) access. So this case is skipped.
             if old_dacl.is_null() {
                 if !psd.is_null() {
                     LocalFree(psd as _);
@@ -1288,8 +1345,9 @@ mod win {
         Ok(())
     }
 
-    /// 精确撤销旧版本写入的某个受托 SID。`REVOKE_ACCESS` 只移除该 SID 的 ACE,
-    /// 保留 owner、继承设置和其余 DACL；目录上的继承变化由 Windows 向下传播。
+    /// Precisely revokes a given trustee SID written by an older version. `REVOKE_ACCESS` removes
+    /// only that SID's ACE, preserving the owner, inheritance settings, and the rest of the DACL;
+    /// inheritance changes on the directory are propagated downward by Windows.
     fn remove_named_ace(object_type: i32, name: &str, sid: PSID) -> Result<(), String> {
         let mut path_wide = to_wide(name);
         if !named_has_ace(object_type, &path_wide, sid, 0) {
@@ -1467,11 +1525,12 @@ mod win {
         Ok(())
     }
 
-    /// 给 CAPI/CNG 用户证书库与密钥容器盖 fence_sid 写 ACE。
+    /// Stamps fence_sid write ACEs on the CAPI/CNG user certificate store and key containers.
     ///
-    /// 启动器此时仍持完整用户令牌,盖章发生在 `CreateProcessAsUserW` 之前。
-    /// 单项失败只告警:探测层会把仍然崩溃的 pwsh(0xE0434352)跳过,落到 cmd,
-    /// 不因证书库策略把整个沙箱判死。绝不 stamp HKLM(需管理员)。
+    /// The launcher still holds the full user token at this point; stamping happens before
+    /// `CreateProcessAsUserW`. A single failure only warns: the probing layer will skip a pwsh that
+    /// still crashes (0xE0434352) and fall through to cmd, rather than declaring the whole sandbox
+    /// dead because of certificate-store policy. Never stamp HKLM (requires admin).
     fn ensure_cng_user_write_surface(sid: PSID) {
         use crate::runtime::sandbox::{
             cng_named_registry_object, cng_user_file_dirs, CNG_USER_REGISTRY_SUBKEYS,
@@ -1503,13 +1562,15 @@ mod win {
         }
     }
 
-    /// 给 .NET Framework / Windows PowerShell 的用户运行时缓存盖 fence_sid 写 ACE。
+    /// Stamps fence_sid write ACEs on the .NET Framework / Windows PowerShell user runtime caches.
     ///
-    /// 与 CNG 证书库是独立失败面:这里被拒时 powershell.exe 以 `0x80070005` 崩,
-    /// 不是 `0xE0434352`。单项失败只告警,探测层会把仍然崩溃的 powershell 跳过。
-    /// `assembly`(Fusion)只盖目录本身——树可能很大,新文件靠(OI)(CI)继承;
-    /// CLR_v4.0 / PowerShell 缓存较小,首次盖章时向下传播到已有文件,否则
-    /// `UsageLogs\powershell.exe.log` 等既有文件仍无限制性 SID,写依旧被拒。
+    /// This is an independent failure surface from the CNG certificate store: when denied here,
+    /// powershell.exe crashes with `0x80070005`, not `0xE0434352`. A single failure only warns, and
+    /// the probing layer will skip a powershell that still crashes. `assembly` (Fusion) stamps only
+    /// the directory itself -- the tree may be large and new files rely on (OI)(CI) inheritance;
+    /// the CLR_v4.0 / PowerShell caches are smaller, so the first stamp propagates downward to
+    /// existing files, otherwise existing files such as `UsageLogs\powershell.exe.log` would still
+    /// lack the restricting SID and writes would still be denied.
     fn ensure_clr_user_write_surface(sid: PSID) {
         use crate::runtime::sandbox::{
             clr_user_file_dirs, cng_named_registry_object, CLR_USER_REGISTRY_SUBKEYS,
@@ -1545,9 +1606,10 @@ mod win {
         }
     }
 
-    /// v1.3 早期版本曾把具体 AppContainer profile SID 写进这些持久对象。
-    /// 该 ACE 会让普通 Low-IL 联网进程无法访问同一对象；迁移时只撤销本工作区
-    /// 的确定性 profile SID，其他用户/应用/工作区 ACE 均保持不变。
+    /// Early v1.3 versions wrote a concrete AppContainer profile SID into these persistent objects.
+    /// That ACE makes a plain Low-IL networked process unable to access the same object; migration
+    /// revokes only this workspace's deterministic profile SID, leaving other user/app/workspace
+    /// ACEs unchanged.
     fn remove_legacy_appcontainer_runtime_surface(sid: PSID) {
         use crate::runtime::sandbox::{
             clr_user_file_dirs, cng_named_registry_object, cng_user_file_dirs,
@@ -1587,9 +1649,11 @@ mod win {
         }
     }
 
-    /// 首次给目录盖写 ACE 后,把同一 ACE 推到已有子对象(最多 5 层)。
-    /// 目录上已有 fence SID 时仍扫子对象:历史盖章可能只盖了目录本身,UsageLogs
-    /// 里既有文件仍无限制性 SID,整棵跳过就会让 powershell 继续 0x80070005。
+    /// After the first write ACE is stamped on a directory, push the same ACE to existing child
+    /// objects (up to 5 levels deep). Even when the fence SID is already present on the directory,
+    /// still scan children: an earlier stamp may have covered only the directory itself, leaving
+    /// existing files under UsageLogs without the restricting SID, and skipping the whole tree
+    /// would let powershell keep failing with 0x80070005.
     fn ensure_write_ace_tree(path: &Path, sid: PSID) -> Result<(), String> {
         ensure_write_ace(path, sid)?;
         for entry in walkdir::WalkDir::new(path)
@@ -1779,7 +1843,7 @@ mod win {
     }
 
     /// cygwin `hash_path_name`: `hash = RtlUpcase(c) + (hash<<6) + (hash<<16) - hash`
-    /// (`ino_t` = u64).安装 key 是该哈希的 16 位小写十六进制。
+    /// (`ino_t` = u64). The install key is the 16-digit lowercase hex form of that hash.
     fn hash_path_name(nt_path: &str) -> u64 {
         let mut hash: u64 = 0;
         for ch in nt_path.encode_utf16() {
@@ -1858,9 +1922,9 @@ mod win {
         msys_object_dir_names(program)
     }
 
-    /// 真机钩子:盖章 msys 目录后,用 WRITE_RESTRICTED 令牌模拟打开
-    /// (DesiredAccess = cygwin CYG_SHARED_DIR_ACCESS)。用来把 DACL 问题与
-    /// bash DllMain 其它失败面分开。
+    /// Real-machine hook: after stamping the msys directory, simulate opening it with a
+    /// WRITE_RESTRICTED token (DesiredAccess = cygwin CYG_SHARED_DIR_ACCESS). Used to separate DACL
+    /// problems from other bash DllMain failure surfaces.
     #[cfg(test)]
     pub(super) fn restricted_token_can_open_msys_dir(program: &Path) -> Result<(), String> {
         use windows_sys::Win32::Security::{ImpersonateLoggedOnUser, RevertToSelf};
@@ -2044,8 +2108,9 @@ mod win {
     }
 
     fn stamp_directory_object(nt_path: &str, sids: &[PSID]) {
-        // 标准用户对 `\BaseNamedObjects` 没有 DIRECTORY_ALL_ACCESS;对自己创建的
-        // msys 子目录则有 WRITE_DAC。按“查询+写 DACL”打开,失败只告警。
+        // A standard user does not have DIRECTORY_ALL_ACCESS on `\BaseNamedObjects`; on msys
+        // subdirectories it created, it does have WRITE_DAC. Open with "query + write DACL", and
+        // only warn on failure.
         let access = DIRECTORY_QUERY | DIRECTORY_TRAVERSE | READ_CONTROL | WRITE_DAC;
         match open_directory_object(nt_path, access) {
             Ok(dir) => stamp_kernel_handle(
@@ -2085,8 +2150,9 @@ mod win {
             }
         };
         if let Some(dir) = handle.as_ref() {
-            // OBJ_OPENIF 命中已有对象时创建时的 SD 不会覆盖 everyone_sd;
-            // 必须再 NtSetSecurityObject 把限制性 SID 写进 DACL。
+            // When OBJ_OPENIF hits an existing object, the creation-time SD does not overwrite the
+            // everyone_sd; NtSetSecurityObject must be called again to write the restricting SID
+            // into the DACL.
             nt_set_dacl(dir.0, sd, nt_path);
             set_handle_low_integrity(dir.0, nt_path);
             stamp_kernel_handle(
@@ -2179,7 +2245,7 @@ mod win {
                     dir.0,
                     buf.as_mut_ptr() as *mut c_void,
                     buf.len() as u32,
-                    1, // ReturnSingleEntry:避免自己解析 packed 目录项
+                    1, // ReturnSingleEntry: avoid parsing packed directory entries ourselves
                     restart,
                     &mut context,
                     &mut ret_len,
@@ -2228,7 +2294,8 @@ mod win {
                 }
             }
             if ty == "Directory" {
-                // msys 目录内部的 section/event 全部盖章(这些才是 DllMain 要重开的对象)。
+                // Stamp every section/event inside the msys directory (these are the objects DllMain
+                // needs to reopen).
                 stamp_directory_children(&child, sids, false);
             }
         }
@@ -2268,9 +2335,10 @@ mod win {
                 .is_file()
     }
 
-    /// 对象目录默认不是 permanent:最后句柄关闭就会从命名空间消失。
-    /// 启动器必须把返回的句柄活到沙箱子进程退出,子进程的 OBJ_OPENIF 才能命中
-    /// 已有目录,而不去 `\BaseNamedObjects` 上做第二遍写检查。
+    /// Object directories are not permanent by default: once the last handle closes, they disappear
+    /// from the namespace. The launcher must keep the returned handles alive until the sandboxed
+    /// child exits, so the child's OBJ_OPENIF can hit the existing directory instead of performing a
+    /// second write check on `\BaseNamedObjects`.
     fn ensure_object_namespace_write_surface(
         sids: &[PSID],
         program: &Path,
@@ -2290,14 +2358,15 @@ mod win {
                 }
             }
         }
-        // Git Bash 信号管线是 `\\.\pipe\msys-<key>-<pid>-sigwait`,创建时要过
-        // `\Device\NamedPipe` 的第二遍写检查。盖不上只告警。
+        // The Git Bash signal pipe is `\\.\pipe\msys-<key>-<pid>-sigwait`, and creating it requires
+        // passing the second write check on `\Device\NamedPipe`. Only warn if it cannot be stamped.
         stamp_nt_path_dacl(r"\Device\NamedPipe", sids);
         held
     }
 
-    /// 创建并盖章一个受围栏的临时目录(系统 temp 下,按工作区确定性命名),把
-    /// TEMP/TMP/TMPDIR 指向它——否则沙箱进程写默认 %TEMP% 会被限制性判定拒绝。
+    /// Creates and stamps a fenced temp directory (under the system temp, deterministically named
+    /// per workspace) and points TEMP/TMP/TMPDIR at it -- otherwise sandboxed processes writing to
+    /// the default %TEMP% would be denied by the restricting check.
     fn setup_fenced_temp(
         write_root: &Path,
         sid: PSID,
@@ -2306,9 +2375,11 @@ mod win {
         extra_sids: &[PSID],
     ) -> Result<PathBuf, String> {
         let base = std::env::temp_dir().join(format!("liveagent-sandbox-{dir_key}"));
-        // 路径确定性且可预测 ⇒ 另一同用户进程可能抢先把它建成 junction/symlink 指向敏感
-        // 目录,使授权写 ACE 盖到目标、TEMP 重定向落进目标。拒绝 reparse point 以堵此路
-        //(残留 TOCTOU:盖章/使用之间的替换需另一恶意同用户进程,严重度低)。
+        // The path is deterministic and predictable => another process under the same user could
+        // race to make it a junction/symlink pointing at a sensitive directory, causing the
+        // authorized write ACE to land on the target and the TEMP redirect to fall into it.
+        // Rejecting reparse points closes that route (a residual TOCTOU remains: swapping
+        // between stamping and use requires another malicious same-user process, so severity is low).
         ensure_plain_directory(&base)?;
         remove_write_ace(&base, legacy_appcontainer_sid)?;
         ensure_write_ace(&base, sid)?;
@@ -2319,7 +2390,7 @@ mod win {
                 ));
             }
         }
-        let _ = write_root; // 保留签名清晰度;temp 独立于工作区。
+        let _ = write_root; // kept for signature clarity; temp is independent of the workspace.
         let base_wide = to_wide(&base.to_string_lossy());
         for name in ["TEMP", "TMP", "TMPDIR"] {
             let name_wide = to_wide(name);
@@ -2335,10 +2406,12 @@ mod win {
         Ok(base)
     }
 
-    /// 令三个标准句柄可继承,并作为 STARTF_USESTDHANDLES 传给子进程(stdin=NUL、
-    /// stdout/stderr=父层管道,均由 shell_runner 建好后经继承落到本启动器)。
+    /// Makes the three standard handles inheritable and passes them to the child as
+    /// STARTF_USESTDHANDLES (stdin=NUL, stdout/stderr=the parent's pipes, both created by
+    /// shell_runner and reaching this launcher via inheritance).
     fn inheritable_std_handles() -> Result<(HANDLE, HANDLE, HANDLE), String> {
-        // GetStdHandle 在句柄缺失时返回 INVALID_HANDLE_VALUE(-1)而非 null;两者都跳过。
+        // GetStdHandle returns INVALID_HANDLE_VALUE (-1) rather than null when a handle is missing;
+        // skip both.
         let invalid: HANDLE = usize::MAX as HANDLE;
         unsafe {
             let stdin = GetStdHandle(STD_INPUT_HANDLE);
@@ -2346,7 +2419,7 @@ mod win {
             let stderr = GetStdHandle(STD_ERROR_HANDLE);
             for h in [stdin, stdout, stderr] {
                 if !h.is_null() && h != invalid {
-                    // 失败不致命:句柄可能本就可继承;继续尝试。
+                    // Failure is not fatal: the handle may already be inheritable; keep trying.
                     SetHandleInformation(h, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
                 }
             }
@@ -2354,14 +2427,17 @@ mod win {
         }
     }
 
-    /// 运行时探测:联网后端(Low IL 主令牌副本)能否真的建起来。
+    /// Runtime probe: whether the networked backend (a Low IL primary token duplicate) can actually
+    /// be built.
     ///
-    /// 走与 `execute` 相同的令牌核心序列(打开主令牌 → DuplicateTokenEx → 降 Low IL),
-    /// 只是不启动进程、不修改任何文件系统标签。
-    /// 组策略、EDR hook、受限 SKU 会让其中任一步在真机失败;探测把失败提前反映到
-    /// `capability().supported`,从而让 `wrap_command` 的 fail-closed 守卫在 Windows
-    /// 上真正可达(此前硬编码 `supported: true`,该守卫恒不触发)。
-    /// 令牌句柄经 `OwnedHandle` 立即释放,无系统级副作用。
+    /// It runs the same core token sequence as `execute` (open primary token -> DuplicateTokenEx ->
+    /// lower to Low IL), except it starts no process and modifies no filesystem labels.
+    /// Group Policy, EDR hooks, and restricted SKUs can make any of these steps fail on a real
+    /// machine; the probe surfaces failure early in `capability().supported`, so `wrap_command`'s
+    /// fail-closed guard is genuinely reachable on Windows (previously `supported: true` was
+    /// hardcoded, so the guard never fired).
+    /// The token handle is released immediately via `OwnedHandle`, with no system-level side
+    /// effects.
     pub(super) fn probe_networked_token() -> Result<(), String> {
         let token = OwnedHandle(open_process_token()?);
         let networked = OwnedHandle(duplicate_primary_token(token.0)?);
@@ -2369,9 +2445,9 @@ mod win {
         Ok(())
     }
 
-    /// 运行时探测:断网后端能否派生 AppContainer profile SID 与私有 capability
-    /// SID。均为纯派生,不创建 profile、无系统副作用；任一步失败都不能宣称具备
-    /// 断网沙箱能力。
+    /// Runtime probe: whether the offline backend can derive the AppContainer profile SID and the
+    /// private capability SID. Both are pure derivations that create no profile and have no system
+    /// side effects; if either step fails, the offline sandbox capability must not be claimed.
     pub(super) fn probe_appcontainer() -> Result<(), String> {
         let name = appcontainer_profile_name("probe");
         let name_w = to_wide(&name);
@@ -2400,18 +2476,21 @@ mod win {
             synthetic_workspace_sid, validate_workspace,
         };
 
-        // P3#8:启动器是独立进程,不能依赖父进程侧 wrap_command 已做过校验——两个入口
-        // 必须共用同一套前置条件,否则任一侧演进就会漂移出 fail-closed 不对称。
-        // (幂等纯校验,重复执行无副作用。)
+        // P3#8: the launcher is a separate process and cannot rely on the parent-side
+        // wrap_command having already validated -- both entry points must share the same
+        // preconditions, otherwise either evolving independently will drift into fail-closed
+        // asymmetry. (An idempotent pure validation; running it twice has no side effects.)
         validate_workspace(write_root)?;
 
         let synthetic_str = synthetic_workspace_sid(write_root);
-        // temp 目录 / AC profile 名沿用合成 SID 的数值段,确定性且文件系统安全。
+        // The temp directory / AC profile name reuse the numeric segments of the synthetic SID, making
+        // them deterministic and filesystem-safe.
         let dir_key = synthetic_str
             .trim_start_matches("S-1-5-21-")
             .replace('-', "_");
 
-        // 先解析程序；绝不从模型可写的工作区按相对路径启动映像。
+        // Resolve the program first; never launch an image by relative path from the
+        // model-writable workspace.
         let path_env = std::env::var("PATH").unwrap_or_default();
         let pathext =
             std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
@@ -2430,10 +2509,11 @@ mod win {
                  powershell.exe / cmd.exe"
             ));
         }
-        // --- 后端安全上下文 ---
-        // fence_sid = 文件写 ACE 的受托 SID(联网=当前用户 SID,断网=工作区私有
-        // capability SID)。profile/capability/user/token 的自持内存全部声明在外层,
-        // 确保其 PSID 指针活到 CreateProcess* 返回之后。
+        // --- backend security context ---
+        // fence_sid = the trustee SID for file write ACEs (networked = current user SID, offline =
+        // workspace private capability SID). The self-owned memory for profile/capability/user/token
+        // is all declared in the outer scope to keep its PSID pointers alive past the return of
+        // CreateProcess*.
         let appcontainer_sid = if allow_network {
             derive_appcontainer_profile_sid(&dir_key)?
         } else {
@@ -2455,19 +2535,22 @@ mod win {
             let user = token_user_sid_bytes(token.0)?;
             let user_ptr = user.as_ptr() as PSID;
             let rt = OwnedHandle(duplicate_primary_token(token.0)?);
-            // 登录 SID 进入 default DACL，保证子进程自建的命名对象在同一登录会话可重开。
+            // The logon SID enters the default DACL, ensuring named objects the child creates
+            // itself can be reopened within the same logon session.
             append_sid_to_default_dacl(rt.0, logon_ptr)?;
-            // 联网模式不能使用 restricted token：SSPI/Schannel 会在 HTTPS 初始化时以
-            // SEC_E_NO_CREDENTIALS 失败。复制当前用户主令牌并降到 Low IL，网络语义
-            // 保持不变，NTFS 写围栏由 NoWriteUp + Low workspace/TEMP 强制执行。
+            // Networked mode cannot use a restricted token: SSPI/Schannel would fail HTTPS
+            // initialization with SEC_E_NO_CREDENTIALS. Duplicating the current user's primary token
+            // and lowering it to Low IL keeps network semantics unchanged, while the NTFS write
+            // fence is enforced by NoWriteUp + a Low workspace/TEMP.
             set_token_low_integrity(rt.0)?;
             network_token = Some(rt);
             fence_sid = user_ptr;
             logon_sid = Some(logon);
             user_sid = Some(user);
         } else {
-            // 私有 capability 只授权本工作区文件面，不是网络 capability；WFP 仍
-            // 对该 AppContainer 内核级全断网(含 loopback)。
+            // The private capability authorizes only this workspace's file surface, not a
+            // network capability; WFP still blocks all network at the kernel level for this
+            // AppContainer (including loopback).
             set_offline_env()?;
             network_token = None;
             fence_sid = workspace_capability
@@ -2478,9 +2561,10 @@ mod win {
             user_sid = None;
         }
 
-        // --- 文件系统写围栏(受托人 = fence_sid) ---
-        // 迁移旧版直接授给 package SID 的 ACE。该 ACE 与普通 Low-IL 联网令牌
-        // 不共存，必须先精确撤销，再授予用户 SID / 私有 capability SID。
+        // --- filesystem write fence (trustee = fence_sid) ---
+        // Migrate the ACE that older versions granted directly to the package SID. That ACE does
+        // not coexist with a plain Low-IL networked token, so it must first be revoked precisely,
+        // then the user SID / private capability SID granted.
         remove_write_ace(write_root, appcontainer_sid.0)?;
         ensure_write_ace(write_root, fence_sid)?;
         let extra_temp: Vec<PSID> = logon_sid
@@ -2500,7 +2584,8 @@ mod win {
                 .as_ref()
                 .map(|sid| sid.as_ptr() as PSID)
                 .ok_or_else(|| "sandbox launcher user SID is unavailable".to_string())?;
-            // 工作区根必须标上 Low,否则 Low 子进程连新建文件都会被 NoWriteUp 拒绝。
+            // The workspace root must be labeled Low, otherwise even newly created files would be
+            // denied to the Low child process by NoWriteUp.
             ensure_low_integrity_label(
                 SE_FILE_OBJECT,
                 &write_root.to_string_lossy(),
@@ -2513,7 +2598,8 @@ mod win {
                 launcher_user_sid,
             );
         }
-        // CNG/CLR:PowerShell 启动会写用户证书库和运行时缓存；只给这组窄路径补访问面。
+        // CNG/CLR: PowerShell startup writes the user certificate store and runtime caches; only
+        // this narrow set of paths gets an additional access surface.
         remove_legacy_appcontainer_runtime_surface(appcontainer_sid.0);
         let mut runtime_sids: Vec<PSID> = vec![fence_sid];
         if let Some(ref logon) = logon_sid {
@@ -2524,18 +2610,20 @@ mod win {
             ensure_clr_user_write_surface(sid);
         }
 
-        // --- 标准句柄 + 命令行 ---
+        // --- standard handles + command line ---
         let (h_in, h_out, h_err) = inheritable_std_handles()?;
         if allow_network {
-            // Low 子进程写 Medium 匿名管道会被 NoWriteUp 挡住;尽力把继承来的
-            // stdout/stderr 也标成 Low。没有 WRITE_OWNER 时只告警,多数匿名管道
-            // 实际仍可写(与 AppContainer 启动子进程重定向 stdout 同款路径)。
+            // A Low child writing to a Medium anonymous pipe would be blocked by NoWriteUp;
+            // best-effort label the inherited stdout/stderr as Low too. Without WRITE_OWNER this only
+            // warns, and most anonymous pipes remain writable in practice (the same path used when
+            // an AppContainer launches a child with redirected stdout).
             set_handle_low_integrity(h_in, "stdin");
             set_handle_low_integrity(h_out, "stdout");
             set_handle_low_integrity(h_err, "stderr");
         }
 
-        // NT 对象命名空间:须在 CreateProcess* 之前,且 SID 缓冲仍活着。
+        // NT object namespace: must happen before CreateProcess*, while the SID buffers are
+        // still alive.
         let mut namespace_sids: Vec<PSID> = Vec::with_capacity(4);
         if let Some(ref logon) = logon_sid {
             namespace_sids.push(logon.as_ptr() as PSID);
@@ -2544,22 +2632,22 @@ mod win {
             namespace_sids.push(user.as_ptr() as PSID);
         }
         namespace_sids.push(fence_sid);
-        let isolation_prefix = format!("LiveAgent.Sandbox.{dir_key}");
+        let isolation_prefix = format!("ReactorPro.Sandbox.{dir_key}");
         let _held_namespace =
             ensure_object_namespace_write_surface(&namespace_sids, &resolved, &isolation_prefix);
 
-        let program_str = program.to_string_lossy(); // argv[0] 保留原始名(对齐非沙箱路径)
-        let app_wide = to_wide(&resolved.to_string_lossy()); // lpApplicationName = 解析出的绝对路径
-        let mut cmdline = build_command_line(&program_str, args); // 已含结尾 NUL
+        let program_str = program.to_string_lossy(); // argv[0] keeps the original name (aligned with the non-sandbox path)
+        let app_wide = to_wide(&resolved.to_string_lossy()); // lpApplicationName = the resolved absolute path
+        let mut cmdline = build_command_line(&program_str, args); // already includes the trailing NUL
 
-        // --- STARTUPINFOEXW:显式桌面 + 白名单句柄继承(+ AC capabilities) ---
-        // Low IL token / AC 启动必须显式指定桌面:NULL 交由系统推断,在沙箱上下文下解析
-        // 歧义甚至失败(Codex 同款修复)。
+        // --- STARTUPINFOEXW: explicit desktop + whitelisted handle inheritance (+ AC capabilities) ---
+        // A Low IL token / AC launch must specify the desktop explicitly: NULL lets the system
+        // infer it, which is ambiguous or even fails in a sandbox context (the same fix as Codex).
         let mut desktop = to_wide("winsta0\\default");
 
-        // 句柄白名单:去重 + 滤掉 NULL/INVALID(列表含无效或重复句柄会让 CreateProcess*
-        // 直接 ERROR_INVALID_PARAMETER)。取代旧 bInheritHandles=TRUE 的全句柄表继承,
-        // 收敛句柄泄漏面。
+        // Handle whitelist: dedupe + filter out NULL/INVALID (a list containing invalid or duplicate
+        // handles makes CreateProcess* fail with ERROR_INVALID_PARAMETER). Replaces the old
+        // bInheritHandles=TRUE full handle-table inheritance, narrowing the handle-leak surface.
         let invalid: HANDLE = usize::MAX as HANDLE;
         let mut handle_list: Vec<HANDLE> = Vec::with_capacity(3);
         for h in [h_in, h_out, h_err] {
@@ -2569,8 +2657,9 @@ mod win {
         }
         let inherit = !handle_list.is_empty();
 
-        // AC capabilities:声明须早于 attrs(局部量逆序析构 ⇒ attrs 先亡),满足
-        // UpdateProcThreadAttribute 的 value 存活契约(见 AttrList 文档)。
+        // AC capabilities: must be declared before attrs (locals drop in reverse order => attrs dies
+        // first), satisfying UpdateProcThreadAttribute's value-lifetime contract (see the AttrList
+        // docs).
         let mut capability_attrs: Vec<SID_AND_ATTRIBUTES> = workspace_capability
             .as_ref()
             .map(|sid| SID_AND_ATTRIBUTES {
@@ -2586,8 +2675,9 @@ mod win {
             Reserved: 0,
         };
 
-        // AppContainer 已有独立命名空间，Windows 不支持再叠加 BNO isolation
-        // (CreateProcessW error 50)；联网 Low-IL 进程继续用 BNO 隔离命名对象。
+        // An AppContainer already has a separate namespace, and Windows does not support
+        // layering BNO isolation on top (CreateProcessW error 50); networked Low-IL processes
+        // continue to use BNO to isolate named objects.
         let attr_count = 2;
         let mut bno_attr = ProcessBnoIsolationAttribute {
             isolation_enabled: 1,
@@ -2624,7 +2714,8 @@ mod win {
             )?;
         }
 
-        // --- 启动子进程(挂起态,便于先入 Job 再放行) ---
+        // --- launch the child process (suspended, so it can be joined to the Job before
+        // being released) ---
         let result = unsafe {
             let mut si: STARTUPINFOEXW = std::mem::zeroed();
             si.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
@@ -2646,14 +2737,15 @@ mod win {
                     null(),
                     i32::from(inherit),
                     flags,
-                    null(), // lpEnvironment = NULL ⇒ 继承本启动器环境(含 temp 重定向)
-                    null(), // lpCurrentDirectory = NULL ⇒ 继承本启动器 cwd(= 实际工作目录)
+                    null(), // lpEnvironment = NULL => inherit this launcher's environment (including the temp redirect)
+                    null(), // lpCurrentDirectory = NULL => inherit this launcher's cwd (= the actual working directory)
                     &si as *const _ as *const STARTUPINFOW,
                     &mut pi,
                 )
             } else {
-                // AC:普通 CreateProcessW,内核按 SECURITY_CAPABILITIES 生成 lowbox 令牌;
-                // 环境额外携带 set_offline_env 的断网叠加。
+                // AC: ordinary CreateProcessW; the kernel creates a lowbox token from
+                // SECURITY_CAPABILITIES; the environment additionally carries the offline overlay
+                // from set_offline_env.
                 CreateProcessW(
                     app_wide.as_ptr(),
                     cmdline.as_mut_ptr(),
@@ -2675,10 +2767,11 @@ mod win {
                 }));
             }
 
-            // Job Object(KILL_ON_JOB_CLOSE):启动器意外死亡时连带杀子进程,为
-            // taskkill /T 之外的兜底。尽力而为,失败仅告警。isolated 常驻进程刻意
-            // 不入 Job:它必须在启动器/LiveAgent 亡后继续存活(对齐 Linux bwrap
-            // 省略 --die-with-parent)。
+            // Job Object (KILL_ON_JOB_CLOSE): kills the child along with the launcher if it dies
+            // unexpectedly, as a fallback beyond taskkill /T. Best-effort; failure only warns.
+            // Isolated long-lived processes are deliberately not placed in a Job: they must survive
+            // the death of the launcher/ReactorPro (aligned with Linux bwrap omitting
+            // --die-with-parent).
             let job = if isolated {
                 null_mut()
             } else {
@@ -2710,15 +2803,17 @@ mod win {
             let mut exit_code: u32 = 0;
             let got = GetExitCodeProcess(pi.hProcess, &mut exit_code);
             CloseHandle(pi.hProcess);
-            // job 句柄须保持打开直到子进程退出;此刻关闭即可(KILL_ON_JOB_CLOSE 无害)。
+            // The job handle must stay open until the child exits; closing it now is fine
+            // (KILL_ON_JOB_CLOSE is harmless at this point).
             if !job.is_null() {
                 CloseHandle(job);
             }
             if !ok(got) {
                 return Err(last_error("GetExitCodeProcess"));
             }
-            // loader 早期死亡(0xC0000142 等)只体现为裸退出码;补一条可读诊断,经
-            // stderr 走既有管道上传(shell_runner 的候选探测回退也依赖这个退出码)。
+            // Early loader death (0xC0000142 etc.) shows up only as a raw exit code; add a readable
+            // diagnostic uploaded through stderr via the existing pipe (shell_runner's
+            // candidate-probing fallback also relies on this exit code).
             if let Some(hint) = loader_failure_hint(exit_code) {
                 eprintln!("liveagent sandbox: process exited with {exit_code:#010X}: {hint}");
             }
@@ -2728,27 +2823,30 @@ mod win {
     }
 }
 
-// AC profile 名的确定性与硬约束校验只在 Windows 有意义(win 模块整体 cfg(windows)),
-// 但公式本身平台无关——为了让 mac/Linux 的开发机与 CI 也能守住它,这里用一份独立的
-// 纯逻辑镜像测试(与 win::appcontainer_profile_name 的实现保持字面一致)。
+// The determinism and hard-constraint checks of the AC profile name are meaningful only on Windows
+// (the whole win module is cfg(windows)), but the formula itself is platform-independent -- so that
+// mac/Linux dev machines and CI can also guard it, an independent pure-logic mirror test lives here
+// (kept literally consistent with the implementation of win::appcontainer_profile_name).
 #[cfg(test)]
 mod tests {
-    /// 镜像 `win::appcontainer_profile_name` + `execute` 里的 dir_key 推导:
-    /// AppContainer profile 名硬限制 64 字符,字符集须落在 [0-9A-Za-z._]。
+    /// Mirrors `win::appcontainer_profile_name` + the dir_key derivation in `execute`: the
+    /// AppContainer profile name has a hard limit of 64 characters and its character set must fall
+    /// within [0-9A-Za-z._].
     fn profile_name_for(synthetic_sid: &str) -> String {
         let dir_key = synthetic_sid
             .trim_start_matches("S-1-5-21-")
             .replace('-', "_");
-        format!("LiveAgent.Sandbox.{dir_key}")
+        format!("ReactorPro.Sandbox.{dir_key}")
     }
 
     #[test]
     fn appcontainer_profile_name_is_deterministic_and_within_limits() {
-        // 合成 SID 是 4 段 u32(Codex 形式 S-1-5-21-{4×u32}),取各段极值验证最坏长度。
+        // The synthetic SID is 4 u32 segments (Codex form S-1-5-21-{4×u32}); take each segment's
+        // extreme value to verify the worst-case length.
         let worst = profile_name_for("S-1-5-21-4294967295-4294967295-4294967295-4294967295");
         assert_eq!(
             worst,
-            "LiveAgent.Sandbox.4294967295_4294967295_4294967295_4294967295"
+            "ReactorPro.Sandbox.4294967295_4294967295_4294967295_4294967295"
         );
         assert!(
             worst.len() <= 64,
@@ -2758,14 +2856,15 @@ mod tests {
         assert!(worst
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_'));
-        // 同一 SID 恒得同一名(确定性 ⇒ profile 可跨次运行复用)。
+        // The same SID always yields the same name (determinism => the profile can be reused
+        // across runs).
         assert_eq!(
             profile_name_for("S-1-5-21-1-2-3-4"),
             profile_name_for("S-1-5-21-1-2-3-4")
         );
         assert_eq!(
             profile_name_for("S-1-5-21-1-2-3-4"),
-            "LiveAgent.Sandbox.1_2_3_4"
+            "ReactorPro.Sandbox.1_2_3_4"
         );
     }
 
@@ -2821,18 +2920,19 @@ mod tests {
             }
         }
 
-        // 真机(Windows)校验:实际 API 派生的 AC SID 确定性 —— 同名两次派生须相等。
-        // 该测试不创建 profile(仅 Derive 纯计算),无系统副作用。
+        // Real-machine (Windows) check: the AC SID derived by the actual API is deterministic --
+        // deriving the same name twice must be equal. This test creates no profile (Derive is a pure
+        // computation) and has no system side effects.
         #[test]
         fn derive_appcontainer_sid_is_deterministic() {
-            let a = win::appcontainer_profile_sid_for_test("LiveAgent.Sandbox.test_1_2_3_4");
-            let b = win::appcontainer_profile_sid_for_test("LiveAgent.Sandbox.test_1_2_3_4");
+            let a = win::appcontainer_profile_sid_for_test("ReactorPro.Sandbox.test_1_2_3_4");
+            let b = win::appcontainer_profile_sid_for_test("ReactorPro.Sandbox.test_1_2_3_4");
             assert!(
                 a.is_some(),
                 "DeriveAppContainerSidFromAppContainerName failed"
             );
             assert_eq!(a, b);
-            // AC SID 固定以 S-1-15-2- 开头(APPLICATION PACKAGE AUTHORITY)。
+            // The AC SID always starts with S-1-15-2- (APPLICATION PACKAGE AUTHORITY).
             assert!(a.unwrap().starts_with("S-1-15-2-"));
         }
 
@@ -2849,9 +2949,11 @@ mod tests {
             );
         }
 
-        // 真机(Windows)校验 0xC0000142 修复:append 后受限令牌的 default DACL 必须
-        // 含登录 SID(修复的可断言后置条件;是否“原本就含”因环境而异,不作断言,仅
-        // 打印供诊断)。只动测试自建的令牌副本,无系统副作用。
+        // Real-machine (Windows) check of the 0xC0000142 fix: after append, the restricted token's
+        // default DACL must contain the logon SID (the assertable postcondition of the fix; whether
+        // it "already contained" it varies by environment, so it is not asserted, only printed for
+        // diagnostics). It only touches the token copy created by the test itself, with no system
+        // side effects.
         #[test]
         fn default_dacl_append_adds_logon_sid() {
             let (before, after) =
@@ -2869,7 +2971,8 @@ mod tests {
             win::execute(dir.path(), true, false, program, args)
         }
 
-        /// 真机:cmd 不走 CLR,联网 Low IL token 下必须能作为沙箱 shell 兜底。
+        /// Real machine: cmd does not use the CLR and must be usable as the sandbox shell fallback
+        /// under a networked Low IL token.
         #[test]
         fn networked_sandbox_cmd_exit_zero() {
             let code = sandbox_exec(
@@ -2978,8 +3081,8 @@ mod tests {
             let _ = std::fs::remove_file(outside_path);
         }
 
-        /// 真机:从 Git for Windows 的 msys-2.0.dll 算出的对象目录名必须是
-        /// `\BaseNamedObjects\msys-2.0S5-` + 16 位 hex(与 cygwin hash_path_name 对齐)。
+        /// Real machine: the object directory name computed from Git for Windows' msys-2.0.dll must be
+        /// `\BaseNamedObjects\msys-2.0S5-` + 16 hex chars (aligned with cygwin hash_path_name).
         #[test]
         fn msys_object_dir_name_from_git_bash() {
             let bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
@@ -3012,7 +3115,7 @@ mod tests {
                 .expect("WRITE_RESTRICTED token should open stamped msys directory");
         }
 
-        /// 真机:Git Bash 在联网 Low IL token 沙箱内必须能启动。
+        /// Real machine: Git Bash must be able to start inside the networked Low IL token sandbox.
         #[test]
         fn networked_sandbox_git_bash_exit_zero() {
             let bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
@@ -3065,8 +3168,8 @@ mod tests {
             );
         }
 
-        /// 真机:Windows PowerShell 5.1 在联网 Low IL token 沙箱内必须能启动
-        /// (CLR/CNG 用户面 + 会话 BNO / BNO isolation)。
+        /// Real machine: Windows PowerShell 5.1 must be able to start inside the networked Low IL token
+        /// sandbox (CLR/CNG user surface + session BNO / BNO isolation).
         #[test]
         fn networked_sandbox_powershell_exit_zero() {
             let powershell =
@@ -3113,8 +3216,9 @@ mod tests {
             ))
         }
 
-        /// 真机:Git Bash 必须能写工作区,但不能写工作区父目录 / 用户 home / 盘符根。
-        /// 回归的是 TokenUser 限制性 SID 把“用户可写”路径全部重开的洞。
+        /// Real machine: Git Bash must be able to write the workspace but not the workspace parent
+        /// directory / user home / drive root. This regresses the hole where the TokenUser restricting
+        /// SID reopened all "user-writable" paths.
         #[test]
         fn networked_sandbox_git_bash_write_fence() {
             let bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
@@ -3174,7 +3278,7 @@ mod tests {
             );
         }
 
-        /// 真机:cmd 的三 SID 严令牌本来就应挡住工作区外写入。
+        /// Real machine: cmd's strict three-SID token should already block writes outside the workspace.
         #[test]
         fn networked_sandbox_cmd_write_fence() {
             let _guard = SandboxTestGuard::acquire();

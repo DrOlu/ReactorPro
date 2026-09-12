@@ -121,7 +121,7 @@ export type GatewayWebSocketClientLike = {
   terminalStream: TerminalStreamClient;
   getStatus(): Promise<AgentStatus>;
   prepareChatRuntime(reason?: string): Promise<AgentStatus>;
-  // 多 Agent 寻址：活跃 Agent 选择、目录查询与目录订阅。
+  // Multi-Agent addressing: active Agent selection, directory queries, and directory subscriptions.
   getActiveAgent(): string;
   setActiveAgent(agentId: string): void;
   listAgents(): Promise<AgentStatus[]>;
@@ -164,7 +164,7 @@ export type GatewayWebSocketClientLike = {
   chatQueueEditCancel(conversationId: string, itemId: string): Promise<ChatQueueResponse>;
   cronManage(payload: CronManagePayload): Promise<CronManageResponse>;
   memoryManage<T = unknown>(payload: MemoryManagePayload): Promise<T>;
-  /** 轨迹按需拉取：事件窗口、Prompt 分段和子代理 run 使用彼此独立的 ID 字段。 */
+  /** On-demand trajectory fetching: the event window, Prompt segments, and subagent runs use mutually independent ID fields. */
   trajectoryFetch<T = unknown>(payload: {
     conversation_id: string;
     section_ids?: readonly string[];

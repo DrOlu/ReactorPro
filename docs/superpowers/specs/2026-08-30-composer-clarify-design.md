@@ -1,139 +1,136 @@
-# 输入框提示词澄清功能设计
+# Composer Prompt Clarification Feature Design
 
-日期：2026-08-30
-状态：已批准
+Date: 2026-08-30
+Status: Approved
 
-## 背景与目标
+## Background and Goals
 
-很多用户提示词水平不佳，且经常不清楚自己要什么。目标：在聊天输入框旁提供
-一个「澄清」按钮，通过一个轻量 LLM 对话持续追问用户以澄清需求，最后产出
-优化后的提示词放回输入框。澄清逻辑从 superpowers 的 brainstorming 技能拆编。
+Many users write poor prompts and often are not clear about what they actually want. Goal: provide a "Clarify" button next to the chat input box that uses a lightweight LLM conversation to keep asking the user follow-up questions to clarify their needs, and finally produces an optimized prompt placed back into the input box. The clarification logic is extracted and adapted from superpowers' brainstorming skill.
 
-已确认的需求决策：
+Confirmed requirement decisions:
 
-- UI 形态：输入框上方内嵌面板
-- 模型：当前会话选中的主模型
-- 覆盖范围：桌面 GUI 与 Web（agent-gateway）两个 surface 同时
-- 结束时机：LLM 自行判定问够即出终稿；面板常驻「直接生成」按钮兜底
-- 草稿处理：产物只替换文本段，附件、文件/代码/commit 提及原样保留
-- 上下文感知：草稿 + 轻量工作区信息（workdir、git 分支），不含文件内容
+- UI form: an inline panel above the input box
+- Model: the primary model currently selected for the session
+- Coverage: both surfaces at once, the desktop GUI and Web (agent-gateway)
+- End timing: the LLM decides on its own when it has asked enough and produces the final draft; the panel has a persistent "Generate now" button as a fallback
+- Draft handling: the output replaces only the text segment; attachments and file/code/commit mentions are preserved as-is
+- Context awareness: draft + lightweight workspace info (workdir, git branch), without file contents
 
-## 架构
+## Architecture
 
-新增共享代码位于 `crates/agent-ui/src/components/chat/clarify/`：
+New shared code lives in `crates/agent-ui/src/components/chat/clarify/`:
 
 ```
 clarify/
-├── ClarifyPanel.tsx        # 内嵌面板 UI：消息气泡 + 输入行 + 操作按钮
-├── useClarifySession.ts     # 状态机：消息列表、轮次、加载态、终止
-├── clarifyProtocol.ts      # 终稿协议解析 + 系统提示词构建
-└── clarifyTypes.ts         # ClarifyMessage / RunClarifyTurn / ClarifyResult 类型
+├── ClarifyPanel.tsx        # Inline panel UI: message bubbles + input row + action buttons
+├── useClarifySession.ts     # State machine: message list, rounds, loading state, termination
+├── clarifyProtocol.ts      # Final-draft protocol parsing + system prompt construction
+└── clarifyTypes.ts         # ClarifyMessage / RunClarifyTurn / ClarifyResult types
 ```
 
-`useClarifySession` 状态机：
+`useClarifySession` state machine:
 
 ```
-idle → asking(流式) → asking(等待用户) → … → synthesizing(生成终稿) → done
+idle → asking(streaming) → asking(waiting for user) → … → synthesizing(generating final draft) → done
 ```
 
-- 持有完整消息数组（system + 交替 user/assistant），每轮整段发给 LLM，
-  无服务端会话状态。
-- 「直接生成」按钮：向消息末尾注入指令让 LLM 立即产出终稿。
-- AbortController 贯穿：面板关闭或切换会话即取消在途请求。
+- Holds the complete message array (system + alternating user/assistant); each round sends the whole thing to the LLM, with no server-side session state.
+- "Generate now" button: injects an instruction at the end of the messages so the LLM immediately produces the final draft.
+- AbortController throughout: closing the panel or switching sessions cancels in-flight requests.
 
-## 注入接口
+## Injection Interface
 
-`ChatComposerBarProps` 新增：
+`ChatComposerBarProps` additions:
 
 ```ts
 runClarifyTurn?: (messages: ClarifyMessage[], signal: AbortSignal) => Promise<string>;
 clarifyContext?: { workdir: string; gitBranch?: string };
 ```
 
-缺省不渲染按钮（与 `mentionApps` 等 props 同一门控模式）。
+When absent, the button is not rendered (the same gating pattern as props like `mentionApps`).
 
-GUI 宿主（`ConversationPaneHostEnvironment`）：包装现有
-`streamAssistantMessage`（`crates/agent-gui/src/lib/providers/runtime/textOnlyRuntime.ts`），
-模型取 `resolveEffectiveChatModelSelection` 当前值，`sessionId` 带 `clarify-`
-前缀以独立于主会话。
+GUI host (`ConversationPaneHostEnvironment`): wraps the existing
+`streamAssistantMessage` (`crates/agent-gui/src/lib/providers/runtime/textOnlyRuntime.ts`),
+takes the current value of `resolveEffectiveChatModelSelection` for the model, and
+prefixes `sessionId` with `clarify-` to keep it independent of the main session.
 
-Web 宿主（`GatewayAppView`）：新增 gateway RPC `clarify_prompt_turn`，
-复用现有 WebSocket 客户端与 protobuf envelope；服务端用当前 provider 配置
-执行一次文本补全并整段返回（澄清轮次短，无需流式）。
+Web host (`GatewayAppView`): adds a gateway RPC `clarify_prompt_turn`,
+reusing the existing WebSocket client and protobuf envelope; the server performs one
+text completion with the current provider configuration and returns the whole thing
+(clarification rounds are short, so streaming is unnecessary).
 
-## 交互
+## Interaction
 
-- 按钮位于输入框底部控制行（模型选择器旁），IconSet 现有「问号/气泡」类图标。
-- 点击取当前草稿文本为初始需求；草稿为空按钮禁用。
-- 面板打开期间输入框本体仍可编辑，但发送按钮禁用（避免中途发送半成品草稿）。
-- 产物落框后面板自动关闭，焦点回输入框，用户可继续编辑或直接发送。
+- The button sits in the bottom control row of the input box (next to the model selector), using an existing "question mark/bubble" style icon from IconSet.
+- Clicking takes the current draft text as the initial requirement; the button is disabled when the draft is empty.
+- While the panel is open the input box itself remains editable, but the send button is disabled (to avoid sending a half-finished draft mid-way).
+- After the output lands in the box, the panel closes automatically, focus returns to the input box, and the user can continue editing or send directly.
 
-## 提示词设计
+## Prompt Design
 
-系统提示词（`clarifyProtocol.ts` 常量，从 superpowers brainstorming 拆编）：
+System prompt (`clarifyProtocol.ts` constants, extracted and adapted from superpowers brainstorming):
 
-- 角色：提示词澄清助手，帮用户把模糊想法变成可直接执行的提示词。
-- 规则：
-  - 一次只问一个问题。
-  - 问题优先给 2-4 个选项（用户可直接选）或允许开放回答。
-  - 聚焦：目的（想达成什么）、约束（技术/范围/风格）、成功标准（怎样算完成）。
-  - 草稿已经清楚的部分不重复问；最多问 5 轮，够了就出终稿。
-  - 回复语言跟随用户草稿语言。
-- 附 `clarifyContext` 的轻量工作区信息。
+- Role: a prompt clarification assistant that helps users turn vague ideas into directly executable prompts.
+- Rules:
+  - Ask only one question at a time.
+  - Questions should preferably offer 2-4 options (which the user can select directly) or allow an open answer.
+  - Focus on: purpose (what they want to achieve), constraints (technical/scope/style), success criteria (what counts as done).
+  - Do not re-ask about parts the draft already makes clear; ask at most 5 rounds, then produce the final draft once enough is known.
+  - Reply language follows the language of the user's draft.
+- Include the lightweight workspace info from `clarifyContext`.
 
-## 终稿协议
+## Final Draft Protocol
 
-每轮 assistant 回复以单行标记开头：
+Each assistant reply starts with a single-line marker:
 
 ```
 [CLARIFY_QUESTION]
-本周期的提问文本……
+The question text for this round……
 
 [CLARIFY_FINAL]
-优化后的完整提示词……
+The optimized complete prompt……
 ```
 
-- 流式接收时按行检测标记：QUESTION 把后续文本渲染为气泡；FINAL 切换到
-  `synthesizing`，完成后走落框流程。
-- 选标记而非 JSON：问题文本流式展示给用户，JSON 需整体解析完才能渲染，
-  标记方案首 token 即可上屏；无需启用 `allowJsonOutput`。
-- 解析失败兜底：无标记回复整体当 QUESTION 处理，流程不中断。
+- During streaming, markers are detected line by line: QUESTION renders the following text as a bubble; FINAL switches to
+  `synthesizing`, and after completion the landing flow runs.
+- Markers rather than JSON: question text is streamed to the user for display, whereas JSON must be fully parsed before it can render; the marker approach can display from the first token, and no `allowJsonOutput` needs to be enabled.
+- Parse-failure fallback: a reply with no marker is treated entirely as a QUESTION, and the flow does not break.
 
-## 终稿落框
+## Final Draft Landing
 
-1. `final` 文本到手，面板显示完成态。
-2. 通过 `MentionComposerHandle` 写入：只替换 `type: "text"` 段，提及与
-   附件原样保留；以 `typeText` 打字机动画呈现。若现有 API 不足以保留
-   chips/附件，实现 `replaceTextSegments(text)`，原则不变。
-3. 面板关闭，焦点回输入框。
+1. Once the `final` text arrives, the panel shows a completion state.
+2. Written via `MentionComposerHandle`: only the `type: "text"` segment is replaced, with mentions and
+   attachments preserved as-is; presented with a `typeText` typewriter animation. If the existing API is insufficient to preserve
+   chips/attachments, implement `replaceTextSegments(text)` with the principle unchanged.
+3. The panel closes and focus returns to the input box.
 
-## 错误处理
+## Error Handling
 
-| 场景 | 行为 |
+| Scenario | Behavior |
 |---|---|
-| LLM 调用失败 | 面板内错误行 + 「重试」「关闭」；重试重发同一轮，历史保留 |
-| 面板关闭 / 切换会话 | AbortController 取消在途请求，会话丢弃（不持久化） |
-| 无标记回复 | 兜底当 QUESTION 渲染 |
-| 超过 5 轮仍提问 | 第 6 轮起前端自动注入终稿指令，强制收尾 |
-| 草稿为空 / 无模型配置 | 按钮禁用，title 提示原因（复用 `hasModels` 门控模式） |
-| agent 正在运行 | 澄清仍可用（独立于会话 runtime，不占会话上下文） |
-| Web RPC 失败 | 错误经 `onSttError` 同款 toast 通道上报 |
+| LLM call fails | In-panel error row + "Retry" "Close"; retry resends the same round with history preserved |
+| Panel closed / session switched | AbortController cancels in-flight requests, and the session is discarded (not persisted) |
+| Reply with no marker | Fallback: rendered as a QUESTION |
+| Still asking after 5 rounds | From round 6 the frontend automatically injects the final-draft instruction, forcing a wrap-up |
+| Empty draft / no model configured | Button disabled, with title explaining why (reusing the `hasModels` gating pattern) |
+| Agent is running | Clarification remains available (independent of the session runtime, does not occupy session context) |
+| Web RPC fails | Errors are reported through the same toast channel as `onSttError` |
 
 ## i18n
 
-全部文案走 `useLocale` 的 `chat.clarify.*` 键，中英两份。
+All copy goes through `useLocale`'s `chat.clarify.*` keys, in both Chinese and English.
 
-## 测试
+## Tests
 
-- `clarifyProtocol`：标记解析（QUESTION/FINAL/无标记/标记在流中间被切断）纯函数单测。
-- `useClarifySession`：假 `runClarifyTurn` 驱动全状态转换：提问、回答、强制收尾、取消、失败重试。
-- GUI 宿主包装器：mock `streamAssistantMessage`，断言参数映射（当前模型、sessionId 前缀、context 构造）。
-- Web RPC：对齐 `crates/agent-gateway/test/webui/gateway-socket-client.test.mjs` 现有模式加 envelope 用例。
-- 测试落 `crates/agent-gui/test/`（`.mjs`，现有惯例），不新建测试框架。
+- `clarifyProtocol`: pure-function unit tests for marker parsing (QUESTION/FINAL/no marker/marker cut off mid-stream).
+- `useClarifySession`: a fake `runClarifyTurn` drives all state transitions: asking, answering, forced wrap-up, cancel, failure retry.
+- GUI host wrapper: mock `streamAssistantMessage` and assert parameter mapping (current model, sessionId prefix, context construction).
+- Web RPC: add envelope cases following the existing pattern in `crates/agent-gateway/test/webui/gateway-socket-client.test.mjs`.
+- Tests live in `crates/agent-gui/test/` (`.mjs`, per existing convention), with no new test framework introduced.
 
-## 实施偏差记录（计划 1 落地后）
+## Implementation Deviation Log (after Plan 1 landed)
 
-- 无模型配置：按钮隐藏而非禁用（原表：禁用+title 提示）。GUI 零模型用户本就无法澄清，影响低；Web 接线（计划 2）时统一决定。
-- 面板打开期间发送：实现为 handleComposerSend 内守卫（Enter/点击静默无操作），发送按钮保持视觉启用。后续可改为视觉禁用。
-- clarifyRunner 未传 sessionId（与 conversationTitleJob 同惯例）；provider 代理若按 session 隔离需补 `clarify-` 前缀。
-- 计划 2（Web）应逐字复用 clarifyProtocol 标记协议；Web 宿主只需实现 RunClarifyTurn。
+- No model configured: the button is hidden rather than disabled (original table: disabled + title hint). GUI users with zero models cannot clarify anyway, so the impact is low; this will be decided uniformly when wiring up Web (Plan 2).
+- Sending while the panel is open: implemented as a guard inside handleComposerSend (Enter/click silently no-ops), with the send button kept visually enabled. This can later be changed to a visual disable.
+- clarifyRunner does not pass sessionId (same convention as conversationTitleJob); if the provider proxy isolates by session, a `clarify-` prefix must be added.
+- Plan 2 (Web) should reuse the clarifyProtocol marker protocol verbatim; the Web host only needs to implement RunClarifyTurn.

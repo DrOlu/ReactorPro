@@ -1,6 +1,6 @@
 fn parse_memory_file(path: &Path, archived: bool) -> Result<ParsedMemoryFile, String> {
     let raw = fs::read_to_string(path)
-        .map_err(|e| format!("读取记忆文件 {} 失败：{e}", path.display()))?;
+        .map_err(|e| format!("Failed to read memory file {}: {e}", path.display()))?;
     let (frontmatter, body) = split_frontmatter(&raw);
     let mut meta = parse_frontmatter(&frontmatter);
     if meta.name.is_empty() {

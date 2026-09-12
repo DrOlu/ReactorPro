@@ -46,8 +46,8 @@ test("no hardcoded status sentinels anywhere in the prompts", () => {
     workdir: "/w",
   });
   for (const text of [prompt, EXTRACTION_SYSTEM_PROMPT]) {
-    assert.ok(!text.includes("记忆整理完成"));
-    assert.ok(!text.includes("本轮无需更新记忆"));
+    assert.ok(!text.includes("Memory organization complete"));
+    assert.ok(!text.includes("No memory update needed this turn"));
   }
 });
 
@@ -74,7 +74,7 @@ test("context blocks render entries and (none) fallbacks", () => {
         slug: "user-editor",
         memoryType: "user",
         scope: "global",
-        description: "编辑器偏好",
+        description: "Editor preferences",
         unreviewed: true,
         confidence: "medium",
         updatedAt: Date.now() - 86_400_000,
@@ -87,10 +87,10 @@ test("context blocks render entries and (none) fallbacks", () => {
   assert.ok(candidates.includes("1d ago"));
 
   const rejections = buildRecentRejectionsBlock([
-    { slug: "user-noise", rejectedAt: Date.now(), reason: 'said "别记这个"' },
+    { slug: "user-noise", rejectedAt: Date.now(), reason: 'said "do not record this"' },
   ]);
   assert.ok(rejections.includes("user-noise"));
-  assert.ok(rejections.includes("别记这个"));
+  assert.ok(rejections.includes("do not record this"));
 
   assert.ok(buildAlreadyWrittenBlock(["a-slug"]).includes("- a-slug"));
   assert.ok(buildWorkspaceMutationsBlock([]).includes("- (none)"));

@@ -253,7 +253,7 @@ test("without failover params the stream goes straight to the primary", async ()
   assert.equal(streamCalls[0].model.baseUrl, "https://primary.example");
 });
 
-test("流内重试回调携带当前候选标签：failover 下备用供应商的重试可归属", async () => {
+test("in-stream retry callback carries the current candidate label: under failover a backup provider's retry can be attributed", async () => {
   streamImpl = (model) =>
     model.baseUrl === "https://primary.example"
       ? uncommittedErrorStream("503 service unavailable")
@@ -268,8 +268,9 @@ test("流内重试回调携带当前候选标签：failover 下备用供应商�
     }),
   );
 
-  // 两个候选各自的 options 必须把自己的标签绑进 streamRetry.onRetry——
-  // 直接触发装配好的回调，断言标签逐候选独立而非共享同一个通用回调。
+  // Each of the two candidates' options must bind its own label into streamRetry.onRetry -- fire
+  // the assembled callbacks directly and assert the labels are independent per candidate rather
+  // than sharing one generic callback.
   assert.equal(streamCalls.length, 2);
   streamCalls[0].options.streamRetry.onRetry(1, 5, "boom-primary", 200);
   streamCalls[1].options.streamRetry.onRetry(2, 5, "boom-fallback", 400);

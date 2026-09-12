@@ -1,18 +1,21 @@
-// AskUserQuestion 的共享纯逻辑：类型、流式参数容错解析与应答校验。
-// 该共享模块必须保持零依赖纯数据逻辑。
+// Shared pure logic for AskUserQuestion: types, fault-tolerant parsing of
+// streaming arguments, and answer validation.
+// This shared module must remain zero-dependency pure data logic.
 
 export const ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 
 export const ASK_USER_QUESTION_MAX_QUESTIONS = 4;
 export const ASK_USER_QUESTION_MIN_OPTIONS = 2;
 export const ASK_USER_QUESTION_MAX_OPTIONS = 6;
-/** 每轮提问的应答窗口：超时后按推荐项（缺省第一项）自动落定继续执行。 */
+/** Answer window per question round: after the timeout, the recommended option (first by default) is auto-selected and execution continues. */
 export const ASK_USER_QUESTION_TIMEOUT_MS = 3 * 60 * 1000;
-/** UI 合成"其他（自行输入）"应答的最大长度；超出部分截断。 */
+/** Max length of a UI-synthesized "Other (type your own)" answer; anything longer is truncated. */
 export const ASK_USER_QUESTION_CUSTOM_MAX_LENGTH = 2000;
 /**
- * 桌面端在网关上报的工具参数上附带的权威应答截止时间戳（毫秒）。
- * WebUI 卡片倒计时以它对齐桌面计时；模型参数里不存在该键（`__` 前缀防冲突）。
+ * Authoritative answer deadline timestamp (ms) the desktop attaches to the tool
+ * arguments reported by the gateway.
+ * The WebUI card countdown aligns to it to match desktop timing; the key does not
+ * exist in model arguments (the `__` prefix avoids collisions).
  */
 export const ASK_USER_QUESTION_DEADLINE_ARG = "__askUserQuestionDeadlineAt";
 
@@ -23,9 +26,9 @@ export type AskUserQuestionOption = {
 };
 
 export type AskUserQuestionItem = {
-  /** 稳定问题 id（缺省按序生成 q1..qN），应答按它对齐。 */
+  /** Stable question id (absent -> generated in order q1..qN); answers align by it. */
   id: string;
-  /** 顶部 tab 的短标签；缺省回退为“问题 N”。 */
+  /** Short label for the top tab; absent -> falls back to "Question N". */
   header?: string;
   prompt: string;
   options: AskUserQuestionOption[];
@@ -35,7 +38,7 @@ export type AskUserQuestionAnswer = {
   questionId: string;
   prompt: string;
   selectedLabel: string;
-  /** UI 合成"其他"项的自由输入应答：selectedLabel 即用户键入的原文。 */
+  /** Free-form answer for the UI-synthesized "Other" item: selectedLabel is the user's raw text. */
   custom?: boolean;
 };
 
@@ -44,7 +47,7 @@ export type AskUserQuestionResultDetails = {
   questions: AskUserQuestionItem[];
   answers: AskUserQuestionAnswer[];
   cancelled?: boolean;
-  /** 应答窗口超时、按推荐项自动落定时为 true。 */
+  /** True when the answer window timed out and the recommended option was auto-selected. */
   timedOut?: boolean;
 };
 
@@ -52,14 +55,14 @@ function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-/** 读取工具参数上附带的应答截止时间戳（毫秒）；缺失或非法返回 null。 */
+/** Reads the answer deadline timestamp (ms) attached to the tool arguments; returns null if absent or invalid. */
 export function readAskUserQuestionDeadlineAt(args: unknown): number | null {
   if (!args || typeof args !== "object") return null;
   const value = (args as Record<string, unknown>)[ASK_USER_QUESTION_DEADLINE_ARG];
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-/** 推荐项固定排在第一位展示；其余选项保持模型给出的顺序。 */
+/** The recommended option is always shown first; the rest keep the model's order. */
 function orderAskUserQuestionOptions(options: AskUserQuestionOption[]) {
   const index = options.findIndex((option) => option.recommended === true);
   if (index <= 0) return options;
@@ -68,8 +71,9 @@ function orderAskUserQuestionOptions(options: AskUserQuestionOption[]) {
 }
 
 /**
- * 流式渲染用的容错解析：tool_call 参数尚在增量拼装时，只保留已经成形的
- * 问题（prompt 非空且至少有一个带 label 的选项），供卡片渐进渲染。
+ * Fault-tolerant parsing for streaming rendering: while tool_call arguments are
+ * still being assembled incrementally, keep only fully formed questions (non-empty
+ * prompt with at least one labeled option) so the card can render progressively.
  */
 export function sanitizeAskUserQuestionItems(raw: unknown): AskUserQuestionItem[] {
   if (!Array.isArray(raw)) return [];
@@ -111,8 +115,9 @@ export function sanitizeAskUserQuestionItems(raw: unknown): AskUserQuestionItem[
 }
 
 /**
- * 工具执行侧的严格校验：参数完整后运行，不合法直接抛错（错误文本回给模型，
- * 引导其修正后重试）。
+ * Strict validation on the tool-execution side: runs once arguments are complete
+ * and throws directly when invalid (the error text goes back to the model to guide
+ * a corrected retry).
  */
 export function parseAskUserQuestionItems(raw: unknown): AskUserQuestionItem[] {
   if (!Array.isArray(raw) || raw.length === 0) {
@@ -197,7 +202,7 @@ export function parseAskUserQuestionItems(raw: unknown): AskUserQuestionItem[] {
   });
 }
 
-/** 超时兜底：每题取推荐项，无推荐项时取第一项。 */
+/** Timeout fallback: take the recommended option per question, or the first option when none is recommended. */
 export function buildDefaultAskUserQuestionAnswers(
   questions: AskUserQuestionItem[],
 ): AskUserQuestionAnswer[] {
@@ -212,7 +217,7 @@ export function buildDefaultAskUserQuestionAnswers(
   });
 }
 
-/** 解析用户应答（本地卡片提交或远端 request_json），并对齐到问题定义。 */
+/** Parse the user's answer (local card submit or remote request_json) and align it to the question definitions. */
 export function resolveAskUserQuestionAnswers(
   questions: AskUserQuestionItem[],
   raw: unknown,

@@ -8,8 +8,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const abs = (rel) => path.join(rootDir, rel);
 
-// React mock：hook 只用 useRef/useCallback/useSyncExternalStore，全部可空实现
-// （测试只直测 createClarifySessionCore，hook 部分由宿主手测）。
+// React mock: the hook only uses useRef/useCallback/useSyncExternalStore, all of which can be empty implementations
+// (the tests directly test only createClarifySessionCore; the hook part is manually tested by the host).
 const reactMock = {
   useState: (initial) => [initial, () => {}],
   useRef: (initial) => ({ current: initial }),
@@ -26,18 +26,18 @@ const QUESTIONS =
   "[CLARIFY_QUESTIONS]\n" +
   JSON.stringify({
     questions: [
-      { id: "q1", header: "范围", prompt: "要做什么功能？", options: [{ label: "A" }, { label: "B" }] },
-      { id: "q2", prompt: "目标平台？", options: [{ label: "Web" }], allowMultiple: true },
+      { id: "q1", header: "Scope", prompt: "What feature are we building?", options: [{ label: "A" }, { label: "B" }] },
+      { id: "q2", prompt: "Target platform?", options: [{ label: "Web" }], allowMultiple: true },
     ],
   });
-const FINAL = "[CLARIFY_FINAL]\n优化后的提示词";
+const FINAL = "[CLARIFY_FINAL]\nOptimized prompt";
 
 const answersFor = (round) =>
   round.questions.map((question, index) => ({
     questionId: question.id,
     prompt: question.prompt,
     selectedLabels: index === 0 ? ["A"] : [],
-    ...(index === 0 ? {} : { customText: "自由输入" }),
+    ...(index === 0 ? {} : { customText: "free input" }),
   }));
 
 test("happy path: structured questions round then final", async () => {
@@ -49,11 +49,11 @@ test("happy path: structured questions round then final", async () => {
   };
   const finals = [];
   const session = mod.createClarifySessionCore(runTurn, { onFinal: (t) => finals.push(t) });
-  await session.start("帮我写个脚本");
+  await session.start("Help me write a script");
   const afterStart = session.getState();
   assert.equal(afterStart.status, "awaitingInput");
   assert.equal(afterStart.roundCount, 1);
-  assert.equal(afterStart.draftText, "帮我写个脚本");
+  assert.equal(afterStart.draftText, "Help me write a script");
   assert.equal(afterStart.rounds.length, 1);
   assert.equal(afterStart.rounds[0].answers, null);
   assert.equal(afterStart.rounds[0].questions.length, 2);
@@ -62,11 +62,11 @@ test("happy path: structured questions round then final", async () => {
   await session.submitAnswers(answersFor(afterStart.rounds[0]));
   const done = session.getState();
   assert.equal(done.status, "done");
-  assert.deepEqual(finals, ["优化后的提示词"]);
-  // 已提交轮次落定为只读答案。
+  assert.deepEqual(finals, ["Optimized prompt"]);
+  // Committed rounds settle into read-only answers.
   assert.equal(done.rounds[0].answers.length, 2);
   assert.deepEqual(done.rounds[0].answers[0].selectedLabels, ["A"]);
-  // 第二轮输入应包含 system + 第一轮 assistant 原文 + 序列化答案消息。
+  // The second-round input should contain system + the first round's original assistant text + the serialized answers message.
   const second = seenInputs[1];
   assert.equal(second[0].role, "system");
   assert.equal(second.filter((m) => m.role === "assistant").length, 1);
@@ -74,7 +74,7 @@ test("happy path: structured questions round then final", async () => {
   assert.equal(answersMessage.role, "user");
   assert.ok(answersMessage.content.startsWith("[CLARIFY_ANSWERS]"));
   assert.match(answersMessage.content, /A1: A/);
-  assert.match(answersMessage.content, /A2: 自由输入/);
+  assert.match(answersMessage.content, /A2: free input/);
 });
 
 test("exceeding max rounds force-injects final instruction", async () => {
@@ -82,7 +82,7 @@ test("exceeding max rounds force-injects final instruction", async () => {
   const runTurn = async (messages) => {
     calls += 1;
     if (messages.at(-1).content.includes("CLARIFY_FINAL")) {
-      return FINAL; // 已是强制指令轮
+      return FINAL; // already the forced-instruction round
     }
     return QUESTIONS;
   };
@@ -92,7 +92,7 @@ test("exceeding max rounds force-injects final instruction", async () => {
     const pending = session.getState().rounds.at(-1);
     await session.submitAnswers(answersFor(pending));
   }
-  // 末轮提交：不再放行提问，答案连同终稿指令一起送出。
+  // Final-round submit: no more questions are allowed through; the answers are sent together with the final-instruction prompt.
   assert.equal(session.getState().status, "done");
   assert.ok(calls <= mod.CLARIFY_MAX_ROUNDS + 1);
 });
@@ -107,21 +107,21 @@ test("generateNow carries partial answers of the pending round", async () => {
   const session = mod.createClarifySessionCore(runTurn, { onFinal: (t) => finals.push(t) });
   await session.start("d");
   const pending = session.getState().rounds.at(-1);
-  // 只答了第一题就点「直接生成」。
+  // Only the first question was answered before clicking "Generate directly".
   await session.generateNow([
     { questionId: "q1", prompt: pending.questions[0].prompt, selectedLabels: ["B"] },
     { questionId: "q2", prompt: pending.questions[1].prompt, selectedLabels: [] },
   ]);
-  assert.deepEqual(finals, ["优化后的提示词"]);
+  assert.deepEqual(finals, ["Optimized prompt"]);
   const finalTurnInput = seenInputs[1];
   const contents = finalTurnInput.map((m) => m.content);
-  // 部分答案先入档，再跟强制终稿指令。
+  // Partial answers are filed first, then the forced final-instruction follows.
   const answersIndex = contents.findIndex((c) => c.startsWith("[CLARIFY_ANSWERS]"));
   assert.ok(answersIndex >= 0);
   assert.match(contents[answersIndex], /A1: B/);
   assert.match(contents[answersIndex], /A2: \(not answered\)/);
   assert.ok(contents.at(-1).includes("CLARIFY_FINAL"));
-  // 待作答轮已被落定。
+  // The awaiting-answer round has been settled.
   assert.notEqual(session.getState().rounds.at(-1).answers, null);
 });
 
@@ -153,18 +153,18 @@ test("error state keeps messages; retry resends", async () => {
   fail = false;
   await session.retry();
   assert.equal(session.getState().status, "done");
-  assert.deepEqual(finals, ["优化后的提示词"]);
+  assert.deepEqual(finals, ["Optimized prompt"]);
 });
 
 test("unparseable reply degrades to a single open question", async () => {
-  const runTurn = async () => "没有标记的一句话";
+  const runTurn = async () => "A sentence with no marker";
   const session = mod.createClarifySessionCore(runTurn, { onFinal: () => {} });
   await session.start("d");
   const state = session.getState();
   assert.equal(state.status, "awaitingInput");
   const round = state.rounds.at(-1);
   assert.equal(round.questions.length, 1);
-  assert.equal(round.questions[0].prompt, "没有标记的一句话");
+  assert.equal(round.questions[0].prompt, "A sentence with no marker");
   assert.deepEqual(round.questions[0].options, []);
 });
 
@@ -177,7 +177,7 @@ test("close() during in-flight ask leaves state idle and produces no error after
   const session = mod.createClarifySessionCore(runTurn, { onFinal: () => {} });
   const pending = session.start("d");
   session.close();
-  // close 之后 runTurn 才以 abort 类错误 reject：不得污染已重置的 idle 态。
+  // runTurn rejects with an abort-like error only after close: it must not pollute the already-reset idle state.
   const abortLike = new Error("The operation was aborted");
   abortLike.name = "AbortError";
   rejectTurn(abortLike);
@@ -201,7 +201,7 @@ test("close() then start() while old ask in flight: stale completion must not co
   const first = session.start("old");
   session.close();
   const second = session.start("new");
-  // 旧请求迟到返回一轮「问题」：不得写入新会话的轮次，也不得改状态。
+  // An old request returns a round of "questions" late: it must not write into the new session's rounds or change state.
   pending[0](QUESTIONS);
   await first;
   assert.equal(session.getState().status, "asking");
@@ -210,8 +210,8 @@ test("close() then start() while old ask in flight: stale completion must not co
   pending[1](FINAL);
   await second;
   assert.equal(session.getState().status, "done");
-  assert.equal(session.getState().finalText, "优化后的提示词");
-  assert.deepEqual(finals, ["优化后的提示词"]);
+  assert.equal(session.getState().finalText, "Optimized prompt");
+  assert.deepEqual(finals, ["Optimized prompt"]);
 });
 
 test("second start() without close() aborts the first request and discards its stale completion", async () => {
@@ -225,10 +225,10 @@ test("second start() without close() aborts the first request and discards its s
   const session = mod.createClarifySessionCore(runTurn, { onFinal: () => {} });
   const first = session.start("old");
   const second = session.start("new");
-  // start() 必须中止旧请求的 signal，而不是任由其自流。
+  // start() must abort the old request's signal rather than letting it run free.
   assert.equal(signals[0].aborted, true);
   assert.equal(signals[1].aborted, false);
-  pending[0](QUESTIONS); // 旧请求迟到返回
+  pending[0](QUESTIONS); // old request returns late
   await first;
   assert.equal(session.getState().status, "asking");
   assert.deepEqual(session.getState().rounds, []);
@@ -258,15 +258,15 @@ test("final turn streams preview text; question turn JSON stays hidden", async (
   const runTurn = async (messages, _signal, onDelta) => {
     call += 1;
     if (call === 1) {
-      // 问题轮：JSON 分片不得上屏。
+      // Question round: JSON fragments must not appear on screen.
       onDelta?.("[CLARIFY_QUESTIONS]");
       onDelta?.('\n{"questions":[');
       return QUESTIONS;
     }
-    // 终稿轮：标记后的文本逐字上屏。
+    // Final round: text after the marker streams to screen character by character.
     onDelta?.("[CLARIFY_FIN");
-    onDelta?.("AL]\n终稿");
-    onDelta?.("开头");
+    onDelta?.("AL]\nFinal");
+    onDelta?.("Start");
     return FINAL;
   };
   const session = mod.createClarifySessionCore(runTurn, { onFinal: () => {} });
@@ -277,8 +277,8 @@ test("final turn streams preview text; question turn JSON stays hidden", async (
     "question-round JSON must never reach streamingText",
   );
   await session.generateNow([]);
-  assert.ok(snapshots.includes("终稿"), "final preview should stream after the marker");
-  assert.ok(snapshots.includes("终稿开头"), "final preview should accumulate");
+  assert.ok(snapshots.includes("Final"), "final preview should stream after the marker");
+  assert.ok(snapshots.includes("FinalStart"), "final preview should accumulate");
   assert.equal(session.getState().streamingText, "", "streamingText cleared after turn end");
 });
 
@@ -294,14 +294,14 @@ test("generateNow while a question turn is in flight supersedes the stale turn",
   const session = mod.createClarifySessionCore(runTurn, { onFinal: (t) => finals.push(t) });
   const first = session.start("d");
   const forced = session.generateNow();
-  // 旧轮迟到的 delta 与完成结果：都不得污染强制终稿轮。
-  deltaCbs[0]("[CLARIFY_FINAL]\n旧流");
-  deltaCbs[1]("[CLARIFY_FINAL]\n新流");
-  assert.equal(session.getState().streamingText, "新流");
+  // A late delta and completion result from an old round: neither may pollute the forced final round.
+  deltaCbs[0]("[CLARIFY_FINAL]\nold stream");
+  deltaCbs[1]("[CLARIFY_FINAL]\nnew stream");
+  assert.equal(session.getState().streamingText, "new stream");
   pending[0](QUESTIONS);
   await first;
   assert.equal(session.getState().status, "asking", "stale completion must not flip status");
-  assert.equal(session.getState().streamingText, "新流");
+  assert.equal(session.getState().streamingText, "new stream");
   assert.equal(session.getState().roundCount, 0, "stale question round must not count");
   pending[1](FINAL);
   await forced;
@@ -309,7 +309,7 @@ test("generateNow while a question turn is in flight supersedes the stale turn",
   assert.equal(s.status, "done");
   assert.deepEqual(s.rounds, [], "stale question round must not be recorded");
   assert.equal(s.streamingText, "");
-  assert.deepEqual(finals, ["优化后的提示词"]);
+  assert.deepEqual(finals, ["Optimized prompt"]);
 });
 
 test("generateNow and submitAnswers after done are no-ops: no new turn, no second onFinal", async () => {
@@ -325,13 +325,13 @@ test("generateNow and submitAnswers after done are no-ops: no new turn, no secon
   await session.generateNow();
   await session.submitAnswers([]);
   assert.equal(calls, 1, "no second runTurn after done");
-  assert.deepEqual(finals, ["优化后的提示词"]);
+  assert.deepEqual(finals, ["Optimized prompt"]);
   assert.equal(session.getState().status, "done");
 });
 
 test("error turn clears streamingText", async () => {
   const runTurn = async (_messages, _signal, onDelta) => {
-    if (onDelta) onDelta("[CLARIFY_FINAL]\n部分输出");
+    if (onDelta) onDelta("[CLARIFY_FINAL]\npartial output");
     throw new Error("boom");
   };
   const session = mod.createClarifySessionCore(runTurn, { onFinal: () => {} });

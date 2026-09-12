@@ -1,16 +1,17 @@
-//! 网关控制器模块（拆分自原单文件 gateway.rs，代码逐字迁移，行为不变）。
+//! Gateway controller module (split from the original single-file gateway.rs;
+//! the code was moved verbatim with unchanged behavior).
 //!
-//! - [`types`]：对外事件 / DTO 类型与事件名常量
-//! - [`controller`]：`GatewayController` 生命周期与公开 API（new/start/apply_config/publish_*）
-//! - [`connection`]：WebSocket 连接主循环、出站通道与端点构建
-//! - [`envelope_handler`]：网关入站信封（`GatewayEnvelope`）分发
-//! - [`terminal`]：终端请求处理、终端流与 proto 转换
-//! - [`sftp`]：SFTP 请求处理与 proto 转换
-//! - [`chat`]：聊天命令、聊天队列与聊天事件信封构建
-//! - [`chat_inbox`]：远程聊天收件箱、租约管理与 chat run ledger 记账
-//! - [`settings_sync`]：设置同步快照合并与信封构建
-//! - [`history_sync`]：会话历史同步事件与信封构建
-//! - [`util`]：时间戳与 JSON 字段工具
+//! - [`types`]: outbound event / DTO types and event-name constants
+//! - [`controller`]: `GatewayController` lifecycle and public API (new/start/apply_config/publish_*)
+//! - [`connection`]: WebSocket connection main loop, outbound channel, and endpoint construction
+//! - [`envelope_handler`]: gateway inbound envelope (`GatewayEnvelope`) dispatch
+//! - [`terminal`]: terminal request handling, terminal streams, and proto conversion
+//! - [`sftp`]: SFTP request handling and proto conversion
+//! - [`chat`]: chat commands, chat queue, and chat event envelope construction
+//! - [`chat_inbox`]: remote chat inbox, lease management, and chat run ledger accounting
+//! - [`settings_sync`]: settings sync snapshot merging and envelope construction
+//! - [`history_sync`]: conversation history sync events and envelope construction
+//! - [`util`]: timestamp and JSON field utilities
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Once};
@@ -31,8 +32,9 @@ use crate::services::provider_usage::ProviderUsageService;
 use crate::services::tunnel::{TunnelProxy, TunnelStore};
 use crate::services::workspace_watch::WorkspaceWatchService;
 
-/// 网关 v2 protobuf 生成模块。业务消息与帧壳属于同一包。
-/// 仅生成消息，不生成客户端或服务端。
+/// Gateway v2 protobuf generation module. Business messages and the frame
+/// envelope belong to the same package. Generates messages only, not a client
+/// or server.
 pub mod gateway_proto {
     #[allow(clippy::large_enum_variant, dead_code)]
     pub mod v2 {
@@ -88,8 +90,9 @@ pub(crate) const GATEWAY_INBOUND_DISPATCH_QUEUE_DEPTH: usize = 512;
 pub(crate) const GATEWAY_RECONNECT_MIN: Duration = Duration::from_millis(250);
 pub(crate) const GATEWAY_RECONNECT_MAX: Duration = Duration::from_secs(5);
 pub(crate) const GATEWAY_RECONNECT_STABLE_AFTER: Duration = Duration::from_secs(30);
-// v2 主链路存活看门狗：ServerHello 未给心跳周期时的回退值，
-// 以及静默超 3×心跳周期发 WS Ping 探活后的宽限时长。
+// v2 main-link liveness watchdog: the fallback value used when ServerHello does
+// not provide a heartbeat period, and the grace duration after we send a WS Ping
+// probe once silence exceeds 3x the heartbeat period.
 pub(crate) const GATEWAY_WS_DEFAULT_HEARTBEAT_PERIOD: Duration = Duration::from_secs(30);
 pub(crate) const GATEWAY_WS_PROBE_GRACE: Duration = Duration::from_secs(10);
 pub(crate) const GATEWAY_POST_CONNECT_REPLAY_DELAY: Duration = Duration::from_millis(200);

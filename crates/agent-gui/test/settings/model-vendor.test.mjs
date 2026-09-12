@@ -21,11 +21,11 @@ test("resolveModelVendor covers supported model id prefixes", () => {
     ["qwq-32b", "Qwen"],
     ["qvq-max", "Qwen"],
     ["deepseek-r1", "DeepSeek"],
-    ["glm-4.5", "智谱"],
-    ["chatglm3-6b", "智谱"],
+    ["glm-4.5", "Zhipu"],
+    ["chatglm3-6b", "Zhipu"],
     ["kimi-k2", "Moonshot"],
     ["moonshot-v1-128k", "Moonshot"],
-    ["doubao-seed-1.6", "字节豆包"],
+    ["doubao-seed-1.6", "ByteDance Doubao"],
     ["llama-4-maverick", "Meta"],
     ["mistral-large", "Mistral"],
     ["mixtral-8x7b", "Mistral"],
@@ -33,9 +33,9 @@ test("resolveModelVendor covers supported model id prefixes", () => {
     ["grok-4", "xAI"],
     ["minimax-m2", "MiniMax"],
     ["abab6.5s-chat", "MiniMax"],
-    ["ernie-4.5", "百度"],
-    ["hunyuan-t1", "腾讯"],
-    ["yi-large", "零一万物"],
+    ["ernie-4.5", "Baidu"],
+    ["hunyuan-t1", "Tencent"],
+    ["yi-large", "01.AI"],
   ];
 
   for (const [id, expected] of cases) {
@@ -64,8 +64,8 @@ test("resolveModelVendor falls back to ownedBy and leaves unknown models in othe
     modelVendor.resolveModelVendor({ id: "relay-coder", ownedBy: "alibaba-cloud" }),
     "Qwen",
   );
-  assert.equal(modelVendor.resolveModelVendor({ id: "relay-unknown", ownedBy: "Acme" }), "其他");
-  assert.equal(modelVendor.resolveModelVendor({ id: "unknown-model" }), "其他");
+  assert.equal(modelVendor.resolveModelVendor({ id: "relay-unknown", ownedBy: "Acme" }), "Other");
+  assert.equal(modelVendor.resolveModelVendor({ id: "unknown-model" }), "Other");
 });
 
 test("sortModelsByVendor sorts groups by size, ids Z to A, and other last", () => {

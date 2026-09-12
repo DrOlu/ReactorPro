@@ -17,24 +17,25 @@ import {
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";
 import { LabelTooltip } from "../ui/label-tooltip";
 
-/** 心跳与 hook 的重建节流同频（docs/design/composer-context-stats-bar.md §4.2）。 */
+/** The heartbeat shares the same frequency as the hook's rebuild throttle (docs/design/composer-context-stats-bar.md §4.2). */
 const HEARTBEAT_MS = 1_000;
 
 type StatGroup = {
   key: string;
-  /** 收缩档位：undefined 恒显，否则按容器宽度分档显隐。 */
+  /** Shrink tier: undefined is always visible; otherwise shown/hidden by container-width tier. */
   minWidth?: "28rem" | "40rem" | "52rem";
   items: readonly string[];
 };
 
-/** 运行中每秒重渲染一次，把 *RunningSinceAt 折算进显示值；空闲时零定时器。 */
+/** While running, re-render once per second to fold *RunningSinceAt into the displayed value; zero timers when idle. */
 function useRunningHeartbeat(running: boolean): number {
   const hidden = useDocumentHidden();
   const [, setBeat] = useState(0);
   useEffect(() => {
-    // 窗口不可见时不起心跳：这些帧用户看不到，代价却是每秒重渲染一次统计条
-    // （连带重建其中的 formatter、以及在长会话里重排可见行邻域）。重新可见时
-    // hidden 翻转会重启 effect，读数立刻回到当前值。
+    // No heartbeat while the window is hidden: the user cannot see those frames, yet the cost is a stats-bar
+    // re-render every second (rebuilding its formatters and reflowing the visible-row neighborhood in long
+    // sessions). When it becomes visible again, the hidden flip restarts the effect and the reading instantly
+    // returns to the current value.
     if (!running || hidden) return;
     const timer = setInterval(() => setBeat((beat) => beat + 1), HEARTBEAT_MS);
     return () => clearInterval(timer);
@@ -43,26 +44,30 @@ function useRunningHeartbeat(running: boolean): number {
 }
 
 /**
- * 输入卡片正下方的全会话累计统计单行（上下文占用 ｜ 会话规模 ｜ 时间开销 ｜ token 开销 ｜ 响应性能）。
+ * The all-conversation cumulative stats single row directly below the input card (context usage | session size | time cost | token cost | response performance).
  *
- * 纯展示：数据经 useConversationStats 聚合后由宿主注入。宽度分档收缩依赖自身的
- * `@container`——它与玻璃卡片同宽，档位阈值因此与卡片一致。上下文占用组与
- * 「规模」组同属恒显档：移动端容器宽度撑不到第一个断点（28rem），此前只剩
- * 轮·步，用量环又在低占用时隐身（hideBelowWarn），导致窄屏完全看不到上下文
- * 信息——故把占用百分比也放进这里恒显，与用量环的瞬时读数同源、不互斥
- * （原 §4.5 语义分工里「状态栏不含上下文占用」的决定按此反馈调整）。恒定
- * 高度占位（见下方空态分支），不随首条统计到达/消失而改变 composer 总高度。
+ * Display only: data is aggregated by useConversationStats and injected by the host. The width-based tiered
+ * shrinking relies on its own `@container`---it is the same width as the glass card, so the tier thresholds
+ * match the card. The context-usage group and the "scale" group are both always-visible tiers: a mobile
+ * container width cannot reach the first breakpoint (28rem), previously leaving only turns·steps, and the
+ * usage ring hides itself at low usage (hideBelowWarn), so narrow screens could not see any context
+ * information at all---therefore the usage percentage is also placed here as always-visible, sharing the same
+ * source as the usage ring's instantaneous reading and not mutually exclusive (the original §4.5 semantic
+ * split decision that "the status bar does not include context usage" was adjusted per this feedback).
+ * Constant-height placeholder (see the empty-state branch below) so the composer's total height does not
+ * change as the first stats arrive/disappear.
  */
 export function ConversationStatsBar(props: {
   stats: ConversationStats | null;
   /**
-   * 提供且当前上下文占用 ≥50%（canManualCompact）时整条可点击，弹出确认后
-   * 触发手动压缩，门槛与 ContextUsageRing 同源；不满足条件时纯展示。
+   * When provided and the current context usage is ≥50% (canManualCompact) the whole row is clickable;
+   * after a confirmation it triggers manual compaction, with the same threshold as ContextUsageRing; when
+   * the condition is not met it is display only.
    */
   onManualCompactConfirm?: (() => void) | (() => Promise<unknown>);
-  /** 压缩正在进行等场景下临时关闭点击入口，即使占用达标也不可点。 */
+  /** Temporarily disables the click entry in scenarios such as compaction in progress, even if usage meets the threshold. */
   manualCompactBlocked?: boolean;
-  /** 当前会话上下文占用 token（与用量环同源）；与 contextWindow 一并提供时才显示。 */
+  /** Current conversation context usage tokens (same source as the usage ring); shown only when provided together with contextWindow. */
   contextUsageTokens?: number;
   contextWindow?: number;
 }) {
@@ -76,16 +81,18 @@ export function ConversationStatsBar(props: {
   const ratio = contextUsageRatio(contextUsageTokens, contextWindow);
   const compactAvailable =
     canManualCompact(ratio) && !manualCompactBlocked && Boolean(onManualCompactConfirm);
-  // 确认弹层只在可压缩分支渲染；可压缩状态可能在弹层打开期间翻回 false
-  //（他端开始压缩、占用回落阈值下），渲染期归位避免残留 true 导致状态恢复
-  // 后弹层无操作自动弹开（与 ContextUsageRing 同一处理，见该文件注释）。
+  // The confirmation popover renders only on the compactable branch; the compactable state may flip back to
+  // false while the popover is open (another client starts compacting, usage falls below the threshold), so
+  // resetting during render avoids a leftover true causing the popover to auto-open with no action after state
+  // recovery (same handling as ContextUsageRing; see the comments in that file).
   if (!compactAvailable && confirmOpen) {
     setConfirmOpen(false);
   }
 
-  // 占位容器：暂无可展示数据时也保留同样高度，不返回 null。首条消息发送前
-  // 统计恒为空，若此时不占位，assistant 回复落地统计浮现的那一刻 composer/
-  // transcript 会整体位移一次，观感是布局"跳了一下"；常驻占位换来的是零跳动。
+  // Placeholder container: keep the same height even when there is nothing to display, instead of returning
+  // null. Before the first message is sent, stats are always empty; without a placeholder here, the moment
+  // the assistant reply lands and the stats appear the composer/transcript would shift once, which reads as
+  // the layout "jumping"; a permanent placeholder buys zero jitter.
   if (!hasConversationStats(stats) || stats === null) {
     return (
       <div
@@ -98,7 +105,7 @@ export function ConversationStatsBar(props: {
   const durations = resolveStatDurations(stats, now);
   const fill = (key: string, token: string, value: string) => t(key).replace(token, value);
 
-  // token 类指标只算有 usage 的 step；全都没有时对应分组隐藏（§7）。
+  // Token-type metrics count only steps with usage; when there are none, that group is hidden (§7).
   const tokenItems = [
     ...(stats.inputTokens > 0
       ? [fill("chat.stats.inputTokens", "{n}", formatStatTokens(stats.inputTokens, locale))]
@@ -118,13 +125,13 @@ export function ConversationStatsBar(props: {
       ? [fill("chat.stats.cacheHit", "{p}", formatStatPercent(stats.cacheHitRatio))]
       : []),
   ];
-  // 与用量环用同一个 contextWindow 判空口径：没有模型上下文窗口信息（老会话/
-  // text 模式）时该分组整个不存在，而不是显示一个假的 0%。
+  // Uses the same contextWindow emptiness rule as the usage ring: when there is no model context-window
+  // information (old sessions / text mode) the whole group is absent rather than showing a fake 0%.
   const contextUsageItems =
     typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0
       ? [fill("chat.stats.contextUsage", "{p}", formatStatPercent(ratio))]
       : [];
-  // 注解写在字面量上：写在 .filter() 结果上会让 minWidth 先宽化成 string。
+  // The annotation goes on the literals: putting it on the .filter() result would widen minWidth to string first.
   const allGroups: StatGroup[] = [
     {
       key: "scale",
@@ -133,8 +140,8 @@ export function ConversationStatsBar(props: {
         fill("chat.stats.steps", "{n}", String(stats.steps)),
       ],
     },
-    // 恒显档，与 scale 同级：移动端容器宽度到不了 28rem 断点，这是窄屏下
-    // 除轮·步外唯一还能露出的分组。
+    // Always-visible tier, at the same level as scale: a mobile container width cannot reach the 28rem
+    // breakpoint, so this is the only group besides turns·steps that can still show on narrow screens.
     { key: "context", items: contextUsageItems },
     {
       key: "time",
@@ -152,7 +159,7 @@ export function ConversationStatsBar(props: {
   const prefix = stats.approximate ? `${t("chat.stats.approximate")} ` : "";
   const fullText = prefix + groups.map((group) => group.items.join(" · ")).join(" ｜ ");
 
-  // tooltip 给出被容器查询收缩掉的分组，外加只在此处露出的压缩次数与 ≈ 释义。
+  // The tooltip gives the groups shrunk away by container queries, plus the compaction count and the ≈ explanation that appear only here.
   const tooltipLines = [
     ...groups.map((group) => ({ key: group.key, text: group.items.join(" · ") })),
     ...(stats.compactions > 0
@@ -178,8 +185,8 @@ export function ConversationStatsBar(props: {
     </span>
   );
 
-  // 读数经外层 role="status" 的 aria-label 播报，这里对辅助技术整体隐藏，
-  // 避免同一串数字被读两遍。
+  // The reading is announced via the outer role="status" aria-label, so it is hidden from assistive technology
+  // here to avoid reading the same set of numbers twice.
   const row = (
     <div
       aria-hidden="true"
@@ -206,17 +213,19 @@ export function ConversationStatsBar(props: {
   );
 
   return (
-    // role="status" 提供语义；数字变化不做 aria-live 播报（流式期间会刷屏）。
+    // role="status" provides semantics; number changes are not announced via aria-live (it would spam during streaming).
     <div role="status" aria-live="off" aria-label={fullText} className="relative h-5 w-full">
-      {/* 毛玻璃裙边：读数浮在会滚动的正文上方，正文滚进输入区下面时会和底下的
-          文字重叠到难以辨认，输入卡片圆角外侧的弧形缺口也会漏出正文。裙边与
-          卡片同宽，上探 2rem（= 卡片 rounded-4xl 的半径）藏到卡片身后，把弧形
-          缺口一并盖住；-z-10 让它压在卡片之下、正文之上。空态占位分支不带这层。 */}
+      {/* Frosted-glass skirt: the reading floats above scrollable body text; when the body scrolls under the
+          input area it overlaps the text below until it is hard to read, and the arc-shaped gap outside the
+          input card's rounded corner would also leak body text. The skirt is the same width as the card,
+          reaches up 2rem (= the card's rounded-4xl radius) to hide behind the card, and covers the arc-shaped
+          gap as well; -z-10 puts it below the card and above the body. The empty-state placeholder branch does
+          not have this layer. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 -top-8 bottom-0 -z-10 bg-background/70 backdrop-blur-md"
       />
-      {/* overflow-hidden 兜底：tooltip trigger 是 shrink-0，极窄时宁可裁剪也不撑破布局。 */}
+      {/* overflow-hidden fallback: the tooltip trigger is shrink-0, so at extremely narrow widths it is better to clip than to break the layout. */}
       <div className="@container flex h-5 w-full items-center justify-center overflow-hidden">
         <LabelTooltip label={tooltip}>
           {compactAvailable ? (

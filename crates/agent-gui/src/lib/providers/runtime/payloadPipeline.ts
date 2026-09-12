@@ -89,11 +89,12 @@ export function attachPayloadDebugLogging(
 }
 
 /**
- * 现有 10 个中间件的具名默认拦截器（PR-3 注册化）。顺序与注册化前的
- * finalizePayloadMiddlewares 数组逐项一致——顺序即协议正确性的一部分
- * （如 native attachments 必须先于 gemini thought guard），由顺序快照
- * 测试锁定。payload-debug-logging 是钉住的链尾：自定义拦截器插入在默认
- * 拦截器之后、它之前，保证自定义改动仍被调试日志观测到。
+ * Named default interceptors for the existing 10 middlewares (PR-3 registration). The order
+ * matches the pre-registration finalizePayloadMiddlewares array item by item -- order is part of
+ * protocol correctness (e.g. native attachments must precede the gemini thought guard), and is
+ * locked down by an order snapshot test. payload-debug-logging is the pinned tail of the chain:
+ * custom interceptors are inserted after the default interceptors and before it, ensuring custom
+ * changes are still observed by the debug log.
  */
 const DEFAULT_PAYLOAD_INTERCEPTORS: readonly PayloadInterceptor[] = [
   {

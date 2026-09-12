@@ -18,13 +18,15 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// 终端数据面（/ws/v2/terminal）：两端共用一条路径，角色由 hello 区分。浏览器
-// 角色维护 attach/detach 订阅并校验 input/resize；Agent 角色登记数据通道并广播
-// 入站帧。两端直接传输 proto TerminalStreamFrame。
+// Terminal data plane (/ws/v2/terminal): both ends share one path, and the
+// role is distinguished by hello. The browser role maintains attach/detach
+// subscriptions and validates input/resize; the Agent role registers a data
+// channel and broadcasts inbound frames. Both ends exchange proto
+// TerminalStreamFrame directly.
 
 const terminalWriteQueueSize = 1024
 
-// TerminalHandler 返回 /ws/v2/terminal 的 HTTP 处理器。
+// TerminalHandler returns the HTTP handler for /ws/v2/terminal.
 func (s *Server) TerminalHandler() http.Handler {
 	upgrader := s.upgrader()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +41,8 @@ func (s *Server) TerminalHandler() http.Handler {
 			return
 		}
 		defer release()
-		// 角色未知前先按浏览器（更严）限额；hello 判定为 Agent 角色后再放宽。
+		// Before the role is known, apply the stricter browser limit; relax
+		// it once hello identifies the Agent role.
 		conn.SetReadLimit(terminalBrowserReadLimit)
 		s.serveTerminal(conn)
 	})
@@ -53,7 +56,8 @@ func (s *Server) serveTerminal(conn *websocket.Conn) {
 		return
 	}
 	hello := frame.GetHello()
-	// 终端路径两端共用：按 hello 声明的角色校验（未声明按浏览器处理）。
+	// The terminal path is shared by both ends: validate against the role
+	// declared in hello (treat an unspecified role as browser).
 	wantRole := hello.GetRole()
 	if wantRole == gatewayv2.ClientRole_CLIENT_ROLE_UNSPECIFIED {
 		wantRole = gatewayv2.ClientRole_CLIENT_ROLE_BROWSER
@@ -127,7 +131,8 @@ func (s *Server) serveTerminal(conn *websocket.Conn) {
 		defer cleanup()
 	}
 
-	// 角色确定后按链路调整读限额并在 hello 中报告实际值。
+	// Once the role is known, adjust the read limit per link and report
+	// the actual value in hello.
 	roleReadLimit := int64(terminalBrowserReadLimit)
 	if wantRole == gatewayv2.ClientRole_CLIENT_ROLE_AGENT {
 		roleReadLimit = terminalAgentReadLimit
@@ -168,7 +173,7 @@ func readTerminalFrame(conn *websocket.Conn) (*gatewayv2.TerminalClientFrame, bo
 }
 
 // ---------------------------------------------------------------------------
-// Agent 角色
+// Agent role
 // ---------------------------------------------------------------------------
 
 func (s *Server) serveTerminalAgent(
@@ -224,15 +229,16 @@ func (s *Server) writeTerminalFrame(conn *websocket.Conn, frame *gatewayv2.Termi
 }
 
 // ---------------------------------------------------------------------------
-// 浏览器角色
+// Browser role
 // ---------------------------------------------------------------------------
 
 type terminalBrowserConn struct {
 	srv  *Server
 	sm   *session.Manager
 	conn *websocket.Conn
-	// agentID 是连接通过 hello.agent_id 显式绑定的目标 Agent；出站按它路由，
-	// 入站只放行同源帧。
+	// agentID is the target Agent this connection explicitly binds to via
+	// hello.agent_id; outbound is routed by it, and inbound only admits
+	// same-origin frames.
 	agentID string
 
 	out  chan []byte
@@ -344,7 +350,8 @@ func (c *terminalBrowserConn) startForwarder() {
 	}()
 }
 
-// fromBoundAgent 判断帧来源是否为本连接显式绑定的 Agent。
+// fromBoundAgent reports whether the frame originates from the Agent
+// explicitly bound to this connection.
 func (c *terminalBrowserConn) fromBoundAgent(frameAgentID string) bool {
 	return frameAgentID == c.agentID
 }
@@ -417,8 +424,9 @@ func (c *terminalBrowserConn) knowsStream(streamID string) bool {
 	return ok
 }
 
-// enqueueFrame 在队列满时关闭连接（终端输出无可容忍的丢帧语义，
-// 客户端重连后 attach + snapshot 恢复）。
+// enqueueFrame closes the connection when the queue is full (terminal
+// output tolerates no dropped frames; the client recovers after reconnect
+// via attach + snapshot).
 func (c *terminalBrowserConn) enqueueFrame(frame *gatewayv2.TerminalStreamFrame) {
 	data, err := proto.Marshal(&gatewayv2.TerminalServerFrame{
 		Payload: &gatewayv2.TerminalServerFrame_Frame{Frame: frame},

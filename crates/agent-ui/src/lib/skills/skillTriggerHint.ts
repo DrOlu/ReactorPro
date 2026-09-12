@@ -1,17 +1,17 @@
 export const MAX_SKILL_TRIGGER_HINT_LENGTH = 96;
 
-const CHINESE_TRIGGER_PATTERN = /触发\s*[:：]\s*([^。；;.!！？!?\r\n]+)/u;
+const CHINESE_TRIGGER_PATTERN = /\u89E6\u53D1\s*[:\uFF1A]\s*([^\u3002\uFF1B;.!\uFF01\uFF1F\r\n]+)/u;
 const ENGLISH_TRIGGER_PATTERNS = [
-  /\buse\s+when\b\s*[:：-]?\s*([^。；;.!！？!?\r\n]+)/iu,
-  /\btriggers?\s+on\b\s*[:：-]?\s*([^。；;.!！？!?\r\n]+)/iu,
-  /\btrigger\s*[:：]\s*([^。；;.!！？!?\r\n]+)/iu,
+  /\buse\s+when\b\s*[:\uFF1A-]?\s*([^\u3002\uFF1B;.!\uFF01\uFF1F\r\n]+)/iu,
+  /\btriggers?\s+on\b\s*[:\uFF1A-]?\s*([^\u3002\uFF1B;.!\uFF01\uFF1F\r\n]+)/iu,
+  /\btrigger\s*[:\uFF1A]\s*([^\u3002\uFF1B;.!\uFF01\uFF1F\r\n]+)/iu,
 ];
 
 function normalizeHint(value: string): string | null {
   const normalized = value
     .replace(/\s+/gu, " ")
-    .replace(/^[\s,，、:：—–-]+/u, "")
-    .replace(/[\s,，、。；;！？!?]+$/u, "")
+    .replace(/^[\s,\uFF0C\u3001:\uFF1A—–-]+/u, "")
+    .replace(/[\s,\uFF0C\u3001\u3002\uFF1B;\uFF01\uFF1F!?]+$/u, "")
     .trim();
 
   if (!normalized) return null;

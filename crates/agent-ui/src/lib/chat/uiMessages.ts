@@ -53,7 +53,7 @@ export type UiRoundContentBlock =
       // shifted by later inserts, unlike an array index.
       id: string;
       text: string;
-      // OpenAI Responses 重放的 reasoning item 估算；UI 仍只渲染 text 摘要。
+      // Estimate for reasoning items replayed by OpenAI Responses; the UI still renders only the text summary.
       replayTokenUnits?: number;
     }
   | {
@@ -543,17 +543,18 @@ function displayFileToolScopeEntry(source: unknown) {
   return displayScope ? { scope: displayScope } : {};
 }
 
-/** 动态挂载的 MCP 业务工具(命名约定 `mcp_<server>_<tool>`,见 mcpTools)。 */
+/** Dynamically mounted MCP business tools (naming convention `mcp_<server>_<tool>`, see mcpTools). */
 export function isDynamicMcpToolName(name: string) {
   return name.trim().startsWith("mcp_");
 }
 
-// 展示投影里单个字符串字段的上限。远超实际核对需要(展开区可完整查看数万字
-// 符的命令),同时防止把几兆的参数原样序列化进 DOM(#444)。
+// Upper limit for a single string field in the display projection. Far beyond what verification actually needs
+// (the expanded area can show commands tens of thousands of characters long), while preventing multi-megabyte
+// arguments from being serialized verbatim into the DOM (#444).
 const TOOL_ARG_DISPLAY_MAX_CHARS = 20_000;
 const TOOL_ARG_DISPLAY_MAX_TOTAL_CHARS = 50_000;
 const TOOL_ARG_DISPLAY_MAX_NODES = 2_000;
-const TOOL_ARG_DISPLAY_TRUNCATION_MARKER = "...（展示已截断，超出参数显示预算）";
+const TOOL_ARG_DISPLAY_TRUNCATION_MARKER = "...(display truncated, exceeded the argument display budget)";
 const DISPLAY_SYNTHETIC_ARG_KEYS = new Set([
   LIVE_TOOL_PREVIEW_META_KEY,
   TOOL_APPROVAL_PENDING_ARG,
@@ -564,8 +565,9 @@ const DISPLAY_SYNTHETIC_ARG_KEYS = new Set([
   EXIT_PLAN_MODE_APPROVED_ARG,
 ]);
 
-// 深度截断超大字符串:MCP 参数可能把超长内容嵌在数组/对象里(如批量写文件),
-// 只截顶层挡不住。截断必须显式标注原始长度,不允许静默丢内容。
+// Deep-truncates oversized strings: MCP arguments may embed very long content inside arrays/objects (e.g. batch
+// file writes), which top-level truncation alone cannot stop. Truncation must explicitly mark the original
+// length and must not silently drop content.
 type DisplayBudget = {
   remainingChars: number;
   remainingNodes: number;
@@ -603,7 +605,7 @@ function capDisplayString(value: string, budget: DisplayBudget) {
     return value;
   }
 
-  const suffix = `...（已截断，len=${value.length}）`;
+  const suffix = `...(truncated, len=${value.length})`;
   const availablePrefixLength = Math.max(0, budget.remainingChars - suffix.length);
   const prefixLength = Math.min(fieldLimit, availablePrefixLength);
   const output = `${value.slice(0, prefixLength)}${suffix}`;
@@ -790,7 +792,7 @@ function redactMcpManagerArgsForDisplay(args: Record<string, unknown>) {
 export function previewText(input: string, maxChars = 1200) {
   const text = input || "";
   if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars)}\n...（已截断预览，len=${text.length}）...`;
+  return `${text.slice(0, maxChars)}\n...(truncated preview, len=${text.length})...`;
 }
 
 // Deterministic next id for a text-like block: one more than the highest
@@ -859,8 +861,8 @@ export function appendThinkingBlockFromAssistant(
 }
 
 function rebalanceHostedSearchTextBoundaries(blocks: UiRoundContentBlock[]): UiRoundContentBlock[] {
-  // 绝大多数回复里没有任何 hosted-search 块：直接返回同一数组。否则每次文本增量
-  // 都会重建整个块数组（长会话里等价于每 delta 一次全量分配 + 数组拷贝）。
+  // The vast majority of replies contain no hosted-search block: return the same array directly. Otherwise every
+  // text increment would rebuild the entire block array (equivalent to a full allocation + array copy per delta in long sessions).
   if (!blocks.some((block) => block.kind === "hostedSearch")) return blocks;
   const out: UiRoundContentBlock[] = [];
   for (let index = 0; index < blocks.length; index += 1) {
@@ -903,7 +905,7 @@ function isParentAgentToolCall(toolCall: ToolCall) {
   return toolCall.name === "Agent" && !isSubagentCardToolCall(toolCall);
 }
 
-// 与 agent-gui lib/providers/nativeWebSearch.ts 的同名判定保持一致（手动同步）。
+// Kept consistent with the same-named check in agent-gui lib/providers/nativeWebSearch.ts (manually synced).
 function isProviderNativeWebSearchToolName(toolName: string | undefined) {
   const normalized = toolName?.trim().toLowerCase() ?? "";
   return (
@@ -922,7 +924,7 @@ function isProviderNativeWebSearchToolName(toolName: string | undefined) {
   );
 }
 
-// 与 agent-gui lib/providers/nativeWebSearch.ts 的同名判定保持一致（手动同步）。
+// Kept consistent with the same-named check in agent-gui lib/providers/nativeWebSearch.ts (manually synced).
 function isProviderNativeWebFetchToolName(toolName: string | undefined) {
   const normalized = toolName?.trim().toLowerCase() ?? "";
   return (

@@ -1,5 +1,5 @@
 /**
- * 轨迹视图的桌面端宿主：把共享实现接到真实的 Tauri invoke 上。
+ * Desktop host for the trajectory view: wires the shared implementation to the real Tauri invoke.
  */
 
 import type { TrajectoryHost } from "@liveagent/ui/contracts/trajectory";
@@ -8,10 +8,10 @@ import { createInvokeTrajectoryHost } from "@liveagent/ui/lib/trajectory/host";
 import { invoke } from "../shims/tauriCore";
 
 /**
- * 构造桌面端宿主。
+ * Constructs the desktop host.
  *
- * @param openFileLink - 打开工作区文件的回调；缺省则详情面板不提供跳转。
- * @returns 轨迹视图宿主。
+ * @param openFileLink - callback for opening a workspace file; when omitted, the detail panel offers no navigation.
+ * @returns the trajectory view host.
  */
 export function createTauriTrajectoryHost(
   openFileLink?: (link: ChatFileLink) => void,

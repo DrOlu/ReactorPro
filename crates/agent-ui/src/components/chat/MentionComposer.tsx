@@ -237,11 +237,6 @@ export const MentionComposer = memo(
     }, []);
 
     const lastEditorSelectionRef = useRef<Range | null>(null);
-    const transientTextRef = useRef<{
-      textNode: Text;
-      start: HTMLElement;
-      end: HTMLElement;
-    } | null>(null);
     const rememberEditorSelection = useCallback(() => {
       const editor = editorRef.current;
       if (!editor) return;
@@ -558,7 +553,7 @@ export const MentionComposer = memo(
       }
 
       if (mentionMenuMode === "root") {
-        // 根级只展示引用类别，候选实体全部收进各自的二级菜单。
+        // The root level only shows reference categories; all candidate entities are tucked into their respective submenus.
         const categories: MentionSuggestion[] = [
           ...(availableMentionApps.length > 0
             ? ([{ type: "category", category: "apps" }] satisfies MentionSuggestion[])
@@ -623,7 +618,7 @@ export const MentionComposer = memo(
         return next;
       }
 
-      // files 子菜单只承载工作区文件与文件夹。
+      // The files submenu only carries workspace files and folders.
       const next: MentionSuggestion[] = [];
       let fileCount = 0;
       for (const item of mentionSessionSearchIndex) {
@@ -708,19 +703,6 @@ export const MentionComposer = memo(
       applyEmptyState(editorTextIsEmpty(el), editorHasNoContent(el));
     }, [applyEmptyState]);
 
-    const clearTransientText = useCallback(
-      (preserveLastText: boolean) => {
-        const active = transientTextRef.current;
-        transientTextRef.current = null;
-        if (!active) return;
-        if (!preserveLastText) active.textNode.remove();
-        active.start.remove();
-        active.end.remove();
-        refreshEmptyState();
-      },
-      [refreshEmptyState],
-    );
-
     useEffect(() => {
       return () => {
         mentionSessionRequestSeqRef.current += 1;
@@ -730,10 +712,9 @@ export const MentionComposer = memo(
         if (busyReleaseTimerRef.current !== null) {
           window.clearTimeout(busyReleaseTimerRef.current);
         }
-        clearTransientText(false);
         setBusy(false);
       };
-    }, [clearTransientText, setBusy]);
+    }, [setBusy]);
 
     // ---- Typewriter (typeText) ----
     // While a run is active the editor drops contentEditable so keyboard and
@@ -1121,74 +1102,9 @@ export const MentionComposer = memo(
           closeMentionSession();
           refreshEmptyState();
         },
-        beginTransientText: () => {
-          const el = editorRef.current;
-          if (!el || disabled || isTypewriting) return false;
-          clearTransientText(false);
-          finishTypewriter();
-          resetPromptHistoryRecall();
-          focusEditorAtSavedSelection();
-          const selection = window.getSelection();
-          const range =
-            selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
-          if (!range || !editorRangeIsInsideRoot(el, range)) {
-            const fallback = document.createRange();
-            fallback.selectNodeContents(el);
-            fallback.collapse(false);
-            if (!selection) return false;
-            selection.removeAllRanges();
-            selection.addRange(fallback);
-          }
-          const activeRange = selection?.getRangeAt(0);
-          if (!activeRange) return false;
-          activeRange.collapse(true);
-          const start = document.createElement("span");
-          const end = document.createElement("span");
-          start.dataset.sttMarker = "start";
-          end.dataset.sttMarker = "end";
-          start.contentEditable = "false";
-          end.contentEditable = "false";
-          start.setAttribute("aria-hidden", "true");
-          end.setAttribute("aria-hidden", "true");
-          start.style.display = "none";
-          end.style.display = "none";
-          const textNode = document.createTextNode("");
-          activeRange.insertNode(end);
-          activeRange.insertNode(textNode);
-          activeRange.insertNode(start);
-          transientTextRef.current = { textNode, start, end };
-          refreshEmptyState();
-          return true;
-        },
-        updateTransientText: (text: string) => {
-          const active = transientTextRef.current;
-          if (!active?.textNode.isConnected) return;
-          active.textNode.data = normalizeLogicalLineEndings(text);
-          refreshEmptyState();
-        },
-        commitTransientText: (text?: string) => {
-          const active = transientTextRef.current;
-          if (text !== undefined) {
-            if (active?.textNode.isConnected)
-              active.textNode.data = normalizeLogicalLineEndings(text);
-          }
-          if (active?.end.isConnected) {
-            const range = document.createRange();
-            range.setStartAfter(active.end);
-            range.collapse(true);
-            const selection = window.getSelection();
-            selection?.removeAllRanges();
-            selection?.addRange(range);
-          }
-          clearTransientText(true);
-        },
-        cancelTransientText: (options?: { preserveLastText?: boolean }) => {
-          clearTransientText(options?.preserveLastText === true);
-        },
         clear: () => {
           const el = editorRef.current;
           if (!el) return;
-          clearTransientText(false);
           cancelTypewriter();
           resetPromptHistoryRecall();
           el.innerHTML = "";
@@ -1286,7 +1202,6 @@ export const MentionComposer = memo(
       [
         buildDraft,
         cancelTypewriter,
-        clearTransientText,
         closeCommitTooltip,
         closeComposerContextMenu,
         closeMentionSession,
@@ -1360,7 +1275,7 @@ export const MentionComposer = memo(
             return;
           }
           insertAppMentionChip(mentionCtx, suggestion.app);
-          // 记入最近使用榜单：下次 @ 弹层把该应用排到应用分组最前。
+          // Record it in the recent list: the next time the @ popup opens, that app is ranked first in the app group.
           recordAppMentionUse(suggestion.app);
         } else {
           insertMentionChip(mentionCtx, suggestion.entry.path, suggestion.entry.kind);
@@ -1408,10 +1323,10 @@ export const MentionComposer = memo(
             selectAll: "Select all",
           }
         : {
-            cut: "剪切",
-            copy: "复制",
-            paste: "粘贴",
-            selectAll: "全选",
+            cut: "Cut",
+            copy: "Copy",
+            paste: "Paste",
+            selectAll: "Select all",
           };
     const contextMenuHasSelection = Boolean(composerContextMenu?.selectedText.length);
     const contextMenuCanMutate = !disabled;

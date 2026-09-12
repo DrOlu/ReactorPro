@@ -38,7 +38,7 @@ const GATEWAY_WRITE_BYTES_PER_SECOND: f64 = 8.0 * 1024.0;
 const GATEWAY_WRITE_TIMEOUT_MIN: Duration = Duration::from_secs(10);
 const GATEWAY_WRITE_TIMEOUT_MAX: Duration = Duration::from_secs(60);
 
-/// 后台任务句柄的 RAII 中止器。
+/// RAII abort guard for a background task handle.
 struct AbortTaskOnDrop(tauri::async_runtime::JoinHandle<()>);
 
 impl Drop for AbortTaskOnDrop {
@@ -368,9 +368,12 @@ impl GatewayController {
         }
     }
 
-    /// v2 主链路：hello 握手完成鉴权与会话登记后双向收发
-    /// 信封（双通道合并、状态迁移、对账、分发），外加传输层存活看门狗。任何失败（网关不可达、
-    /// 握手失败、鉴权被拒、链路中断）一律上抛错误消息，由外层 run 循环统一退避重连。
+    /// v2 main link: after the hello handshake completes authentication and
+    /// session registration, exchange envelopes bidirectionally (dual-channel
+    /// merge, state transitions, reconciliation, dispatch), plus a transport-layer
+    /// liveness watchdog. Any failure (gateway unreachable, handshake failure,
+    /// authentication rejected, link dropped) is surfaced as an error message, and
+    /// the outer run loop handles backoff and reconnection uniformly.
     pub(crate) async fn connect_and_serve(
         self: &Arc<Self>,
         config: RemoteSettingsPayload,
@@ -506,7 +509,7 @@ impl GatewayController {
                                             Ok(frame) => frame,
                                             Err(error) => break Err(error),
                                         };
-                                        // 重复 hello 或空帧：忽略（服务端同样宽容）。
+                                        // Duplicate hello or an empty frame: ignore (the server is equally lenient).
                                         if let Some(v2::agent_server_frame::Payload::Envelope(envelope)) = frame.payload {
                                             self.touch_heartbeat();
                                             if dispatch_tx.try_send(envelope).is_err() {
@@ -524,7 +527,7 @@ impl GatewayController {
                                             None => "gateway ws closed".to_string(),
                                         });
                                     }
-                                    // v2 链路不允许文本帧，视为协议错误。
+                                    // The v2 link does not allow text frames; treat it as a protocol error.
                                     WsMessage::Text(_) => {
                                         break Err("gateway ws sent unexpected text frame".to_string());
                                     }
@@ -882,7 +885,7 @@ pub(crate) fn is_remote_configured(config: &RemoteSettingsPayload) -> bool {
 pub(crate) fn effective_agent_id(config: &RemoteSettingsPayload) -> Result<String, String> {
     let agent_id = config.agent_id.trim();
     if agent_id.is_empty() {
-        return Err("Agent ID 尚未初始化".to_string());
+        return Err("Agent ID has not been initialized yet".to_string());
     }
     Ok(agent_id.to_string())
 }

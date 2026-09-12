@@ -1,118 +1,118 @@
-# 桌面 GUI 与 Tauri 架构
+# Desktop GUI and Tauri Architecture
 
-## 模块边界
+## Module Boundaries
 
-| 模块 | 路径 | 职责 |
+| Module | Path | Responsibility |
 |---|---|---|
-| React app shell | `crates/agent-gui/src/App.tsx` | 设置 hydration/save、主题/i18n、Settings overlay、ChatPage、CronPromptRunner、MemoryOrganizerRunner、全局 toast。 |
-| Chat 页面 | `crates/agent-gui/src/pages/ChatPage.tsx` | 会话状态、消息发送/取消、历史、上传、模型选择、Gateway bridge、Skills/Memory prompt、压缩与运行态编排。 |
-| Chat 子模块 | `crates/agent-gui/src/pages/chat/*` | transcript 数据控制器、agent/text turn、history actions、uploads、上下文构造和 live transcript store；公共 composer/header/视觉组件来自 `crates/agent-ui`。 |
-| Settings | `crates/agent-ui/src/pages/settings/*`、`crates/agent-gui/src/pages/settings/*` | 公共 Settings 页面位于 `agent-ui`；GUI 目录只保留快捷键、关于页和 Memory 平台适配器等桌面扩展。 |
-| Hub 页面 | `crates/agent-ui/src/pages/skills-hub/*`、`crates/agent-ui/src/pages/mcp-hub/*`、`crates/agent-ui/src/components/hub/*` | Skills Hub、MCP Hub、store/registry 浏览与公共 Hub 外壳。 |
-| UI 组件 | `crates/agent-ui/src/components/*`、`crates/agent-gui/src/components/*` | 公共 Sidebar、Markdown、ImagePreview 和基础组件位于 `agent-ui`；GUI 目录保留桌面独有组件。 |
-| 前端设置库 | `src/lib/settings/*` | 默认值、normalize、storage、Gateway sync snapshot、provider redaction。 |
-| 模型层 | `src/lib/providers/llm.ts` | provider 到具体模型 API 的映射、headers、Responses/Anthropic/Gemini stream、thinking/cache/search。 |
-| 工具层 | `src/lib/tools/*`、`src/lib/subagents/*` | builtin tool registry、FS、Shell、MCP、Skills、Cron、Memory、custom system tools；subagents 域提供 `Agent`/`SendMessage` 委托工具。 |
-| Tauri 后端 | `src-tauri/src` | 系统命令、SQLite、MCP runtime、MemoryStore、GatewayController、CronManager、代理服务。 |
+| React app shell | `crates/agent-gui/src/App.tsx` | Settings hydration/save, theme/i18n, Settings overlay, ChatPage, CronPromptRunner, MemoryOrganizerRunner, global toast. |
+| Chat page | `crates/agent-gui/src/pages/ChatPage.tsx` | Session state, message send/cancel, history, uploads, model selection, Gateway bridge, Skills/Memory prompt, compaction and runtime orchestration. |
+| Chat submodules | `crates/agent-gui/src/pages/chat/*` | transcript data controller, agent/text turn, history actions, uploads, context construction and live transcript store; shared composer/header/visual components come from `crates/agent-ui`. |
+| Settings | `crates/agent-ui/src/pages/settings/*`, `crates/agent-gui/src/pages/settings/*` | Shared Settings pages live in `agent-ui`; the GUI directory keeps only desktop extensions such as shortcuts, the about page, and the Memory platform adapter. |
+| Hub pages | `crates/agent-ui/src/pages/skills-hub/*`, `crates/agent-ui/src/pages/mcp-hub/*`, `crates/agent-ui/src/components/hub/*` | Skills Hub, MCP Hub, store/registry browsing and the shared Hub shell. |
+| UI components | `crates/agent-ui/src/components/*`, `crates/agent-gui/src/components/*` | Shared Sidebar, Markdown, ImagePreview and base components live in `agent-ui`; the GUI directory keeps desktop-only components. |
+| Frontend settings library | `src/lib/settings/*` | Defaults, normalize, storage, Gateway sync snapshot, provider redaction. |
+| Model layer | `src/lib/providers/llm.ts` | provider-to-concrete-model API mapping, headers, Responses/Anthropic/Gemini stream, thinking/cache/search. |
+| Tool layer | `src/lib/tools/*`, `src/lib/subagents/*` | builtin tool registry, FS, Shell, MCP, Skills, Cron, Memory, custom system tools; the subagents domain provides the `Agent`/`SendMessage` delegation tools. |
+| Tauri backend | `src-tauri/src` | System commands, SQLite, MCP runtime, MemoryStore, GatewayController, CronManager, proxy service. |
 
 ## App Shell
 
-| 责任 | 当前实现 |
+| Responsibility | Current Implementation |
 |---|---|
-| 初始设置 | 通过 settings API 读取 providers/system/mcp/agents/hooks/cron/remote/memory，并与前端默认值合并。 |
-| 设置保存 | Settings 页修改后按配置域保存到 Tauri SQLite，并在需要时 publish settings sync 到 Gateway。 |
-| 主题与语言 | `theme` 写入 document root，`LocaleProvider` 提供翻译。 |
-| 页面布局 | 主视图以 ChatPage 为中心，Settings 使用 overlay/modal 风格进入。 |
-| 后台 runner | `CronPromptRunner` 接管 prompt 类型 cron；`MemoryOrganizerRunner` 接管自动整理记忆。 |
-| 远程桥接 | Remote settings 启用时，Tauri GatewayController 连接 Go Gateway，并把 settings/history/chat event 发布出去。 |
+| Initial settings | Reads providers/system/mcp/agents/hooks/cron/remote/memory via the settings API and merges them with frontend defaults. |
+| Settings save | After edits on the Settings page, saves by config domain to Tauri SQLite and publishes settings sync to the Gateway when needed. |
+| Theme and language | `theme` is written to the document root, and `LocaleProvider` provides translations. |
+| Page layout | The main view centers on ChatPage, and Settings opens in an overlay/modal style. |
+| Background runners | `CronPromptRunner` handles prompt-type cron; `MemoryOrganizerRunner` handles automatic memory organization. |
+| Remote bridging | When Remote settings are enabled, the Tauri GatewayController connects to the Go Gateway and publishes settings/history/chat events. |
 
-## 本机快捷键偏好
+## Local Shortcut Preferences
 
-桌面端「设置 → 快捷键」中的偏好保存在本机 WebView 的 localStorage，不进入设置同步或 Gateway 配置。
+Desktop "Settings → Shortcuts" preferences are stored in the local WebView's localStorage and do not enter settings sync or Gateway configuration.
 
-- **发送消息**：行内切换 Enter 与 Ctrl+Enter（macOS 显示 ⌘+Enter，兼容 Ctrl+Enter）。选择组合键发送时，普通 Enter 换行；Shift+Enter 始终换行。发送键只在当前消息输入框中生效，保留输入法选词保护。默认使用 Enter 发送。
-- **生效范围**：每个已绑定的应用动作可切换「全局 / 应用」。全局绑定通过 Tauri 系统热键注册；应用绑定仅在 LiveAgent 窗口有焦点时派发，并在 Rust 端再次检查窗口焦点。未带范围字段的旧绑定继续按全局处理。
-- **录制与切换**：录制期间同时暂停全局注册和应用内监听；全量注册请求串行执行，切到应用范围时撤销原有系统热键。应用范围的无修饰字符键不会抢占输入框的正常输入，托盘菜单只回显全局范围的快捷键。
+- **Send message**: toggles inline between Enter and Ctrl+Enter (macOS shows ⌘+Enter, with Ctrl+Enter also supported). When the chord-send option is selected, plain Enter inserts a newline; Shift+Enter always inserts a newline. The send key only takes effect in the current message input box, preserving IME candidate-selection protection. Enter-to-send is the default.
+- **Effective scope**: each bound app action can toggle between "Global / App". Global bindings are registered via Tauri system hotkeys; app bindings are dispatched only when the ReactorPro window has focus, with window focus checked again on the Rust side. Legacy bindings without a scope field continue to be treated as global.
+- **Recording and switching**: recording simultaneously pauses global registration and in-app listening; full registration requests execute serially, and switching to app scope revokes the original system hotkeys. Unmodified character keys in app scope will not preempt normal input in the input box, and the tray menu only echoes global-scope shortcuts.
 
-主要入口为 `src/lib/shortcuts/globalShortcuts.ts`、`src/pages/settings/GlobalShortcutsSection.tsx`、`src-tauri/src/commands/app/app.rs`；共享消息输入框读取 `agent-ui/src/lib/chat/sendShortcut.ts`。
+The main entry points are `src/lib/shortcuts/globalShortcuts.ts`, `src/pages/settings/GlobalShortcutsSection.tsx`, `src-tauri/src/commands/app/app.rs`; the shared message input box reads `agent-ui/src/lib/chat/sendShortcut.ts`.
 
-## ChatPage 编排
+## ChatPage Orchestration
 
-| 子系统 | 说明 | 关键路径 |
+| Subsystem | Notes | Key Paths |
 |---|---|---|
-| 会话运行态 | 当前 conversation、session、message list、live stream、tool status、running/canceling 状态。 | `ChatPage.tsx`、`pages/chat/hooks/useChatPageRuntimeStore.ts`、`lib/chat/conversation/liveTranscriptStore.ts` |
-| 发送入口 | 将用户文本、附件、选中模型、execution mode、workdir、system tools 等合并为 turn request。 | `ChatPage.tsx` |
-| text 模式 | 只做模型文本流式，不注入本地工具。 | `pages/chat/turns/runTextConversationTurn.ts`、`lib/providers/llm.ts` |
-| tools/agent-dev 模式 | 构造 builtin tools，执行模型 tool loop，写工具 trace，并同步 Gateway chat event。 | `pages/chat/turns/runAgentConversationTurn.ts`、`lib/chat/conversation/run/*` |
-| 历史持久化 | V3 segment 写入 Tauri SQLite，支持 append segment、active segment update、rename/delete/pin/share。 | `lib/chat/conversation/conversationState.ts`、`src-tauri/src/commands/history/chat_history/*` |
-| 上下文压缩 | 在 pre-send、mid-stream、post-tool 等阶段生成 summary checkpoint，避免超上下文。 | `pages/chat/runtime/conversationContextBuilders.ts`、`lib/chat/compaction/*` |
-| 记忆注入 | 每轮根据 workdir 读取 memory overview，并附加到 system prompt。 | `lib/chat/memory/*`、`src-tauri/src/services/memory/*` |
-| Skills 注入 | 根据 Settings Skills 选择与 always-on builtin skills 生成 skills prompt。 | `crates/agent-ui/src/lib/skills/index.ts`、`crates/agent-ui/src/lib/skills/useChatSkills.ts` |
-| 上传 | GUI 直接调用 Tauri import readable files/image preview；工作区外文件复制到 `~/.liveagent/uploads` 暂存区（不污染工作区），工作区内文件原地引用。 | `pages/chat/hooks/usePendingUploads.ts`、`src-tauri/src/commands/app/system.rs` |
-| 外部目录 | Composer 可选择工作区外目录并将其挂载为当前项目的只读 workspace root；活动 root 会显示在 File Tree 中，但不加入工作区 activity watcher。 | `ChatPage.tsx`、`pages/chat/hooks/useUploadZoneDrop.ts`、`crates/agent-ui/src/components/project-tools/file-tree/*` |
-| Gateway bridge | 本地运行时接收远程 command，把 token/thinking/tool/done/error 等事件发布给 Gateway；listener 与 worker id 在组件生命周期内保持稳定。 | `pages/chat/gateway/useGatewayBridgeListeners.ts`、`lib/chat/conversation/run/gatewayBridgeEvents.ts` |
+| Session runtime state | Current conversation, session, message list, live stream, tool status, running/canceling state. | `ChatPage.tsx`, `pages/chat/hooks/useChatPageRuntimeStore.ts`, `lib/chat/conversation/liveTranscriptStore.ts` |
+| Send entry | Merges user text, attachments, selected model, execution mode, workdir, system tools, etc. into a turn request. | `ChatPage.tsx` |
+| text mode | Only streams model text, without injecting local tools. | `pages/chat/turns/runTextConversationTurn.ts`, `lib/providers/llm.ts` |
+| tools/agent-dev mode | Builds builtin tools, runs the model tool loop, writes tool traces, and syncs Gateway chat events. | `pages/chat/turns/runAgentConversationTurn.ts`, `lib/chat/conversation/run/*` |
+| History persistence | V3 segments are written to Tauri SQLite, supporting append segment, active segment update, rename/delete/pin/share. | `lib/chat/conversation/conversationState.ts`, `src-tauri/src/commands/history/chat_history/*` |
+| Context compaction | Generates summary checkpoints at pre-send, mid-stream, post-tool stages to avoid exceeding context. | `pages/chat/runtime/conversationContextBuilders.ts`, `lib/chat/compaction/*` |
+| Memory injection | Reads the memory overview each turn based on workdir and appends it to the system prompt. | `lib/chat/memory/*`, `src-tauri/src/services/memory/*` |
+| Skills injection | Generates the skills prompt from Settings Skills selections and always-on builtin skills. | `crates/agent-ui/src/lib/skills/index.ts`, `crates/agent-ui/src/lib/skills/useChatSkills.ts` |
+| Uploads | The GUI directly calls Tauri import readable files/image preview; files outside the workspace are copied to the `~/.liveagent/uploads` staging area (without polluting the workspace), while files inside the workspace are referenced in place. | `pages/chat/hooks/usePendingUploads.ts`, `src-tauri/src/commands/app/system.rs` |
+| External directories | The Composer can select a directory outside the workspace and mount it as a read-only workspace root for the current project; the active root is shown in the File Tree but is not added to the workspace activity watcher. | `ChatPage.tsx`, `pages/chat/hooks/useUploadZoneDrop.ts`, `crates/agent-ui/src/components/project-tools/file-tree/*` |
+| Gateway bridge | The local runtime receives remote commands and publishes events such as token/thinking/tool/done/error to the Gateway; the listener and worker id remain stable across the component lifecycle. | `pages/chat/gateway/useGatewayBridgeListeners.ts`, `lib/chat/conversation/run/gatewayBridgeEvents.ts` |
 
 ## Tauri Invoke Surface
 
-`src-tauri/src/lib.rs` 用 `tauri::generate_handler!` 注册桌面端所有命令。按领域可归纳为：
+`src-tauri/src/lib.rs` registers all desktop commands with `tauri::generate_handler!`. By domain they can be summarized as:
 
-| 领域 | 命令族 |
+| Domain | Command Family |
 |---|---|
 | Chat history | `chat_history_list/search/get/upsert/upsert_active_segment/append_segment/rename/set_pinned/share_get/share_set/delete` |
-| Subagent store | `subagent_identity_upsert/list`、`subagent_run_save/list/load/prune`、`subagent_message_append/list` |
+| Subagent store | `subagent_identity_upsert/list`, `subagent_run_save/list/load/prune`, `subagent_message_append/list` |
 | File system | `fs_read_text/read_image_source/write_text/edit_text/delete/list/glob/grep/mention_list` |
 | Subagent worktree | `subagent_worktree_create/status/apply/cleanup` |
 | MCP runtime | `mcp_list_tools/call_tool/runtime_status/stop_server/test_server/restart_server` |
 | Memory | `memory_list/read/search/write/update/delete/accept/apply_batch/organize_* /index_overview/paths_info/recent_rejections/today_daily/wipe_all` |
 | Settings | `settings_load_all/save_providers/save_system/save_mcp/save_agents/save_hooks/save_cron/save_remote/save_memory` |
-| Hooks/Cron | `hook_run_script/run_http_requests`、`cron_validate_expression/list_logs/clear_logs/take_pending_prompt_runs/complete_prompt_run` |
-| Shell/process | `shell_run/cancel`、`managed_process_start/status/stop/read_log` |
-| System | folder/file picker、uploads、skill metadata/text/manage、debug jsonl、power activity、cron task manage |
+| Hooks/Cron | `hook_run_script/run_http_requests`, `cron_validate_expression/list_logs/clear_logs/take_pending_prompt_runs/complete_prompt_run` |
+| Shell/process | `shell_run/cancel`, `managed_process_start/status/stop/read_log` |
+| System | folder/file picker, uploads, skill metadata/text/manage, debug jsonl, power activity, cron task manage |
 | Gateway | `gateway_connect/disconnect/status/nudge_connection/send_chat_event/publish_conversation_activity/publish_settings_sync` |
 | Proxy | `proxy_get_server_info` |
 
-## Rust Services 与 Runtime
+## Rust Services and Runtime
 
-| 路径 | 作用 |
+| Path | Role |
 |---|---|
-| `src-tauri/src/services/gateway/*` | GatewayController，维护桌面端到 Gateway 的连接、原生唤醒、inbox、状态同步与重连。 |
-| `src-tauri/src/services/gateway_bridge.rs` | 将 Gateway 请求转成前端/Tauri 能处理的操作，处理 settings/history/chat 等桥接。 |
-| `src-tauri/src/services/memory/*` | MemoryStore，负责 Markdown 记忆文件、SQLite FTS 索引、quota、daily、organizer。 |
-| `src-tauri/src/services/skills/*` | Skills root、builtin seed、install/create/validate/package、ClawHub。 |
-| `src-tauri/src/services/automation/*` | 自动化调度与存储，覆盖 bash/http/prompt task 和运行记录。 |
-| `src-tauri/src/services/proxy.rs` | 本地 proxy server，用于 provider proxy 和上游访问。 |
-| `src-tauri/src/runtime/shell_runner.rs` | Shell 脚本执行抽象。 |
-| `src-tauri/src/runtime/managed_process.rs` | 长任务/后台进程管理。 |
-| `src-tauri/src/runtime/task_runner.rs` | 通用异步任务运行辅助。 |
+| `src-tauri/src/services/gateway/*` | GatewayController, maintaining the desktop-to-Gateway connection, native wakeup, inbox, state sync, and reconnection. |
+| `src-tauri/src/services/gateway_bridge.rs` | Translates Gateway requests into operations the frontend/Tauri can handle, handling settings/history/chat bridging. |
+| `src-tauri/src/services/memory/*` | MemoryStore, responsible for Markdown memory files, SQLite FTS index, quota, daily, organizer. |
+| `src-tauri/src/services/skills/*` | Skills root, builtin seed, install/create/validate/package, ClawHub. |
+| `src-tauri/src/services/automation/*` | Automation scheduling and storage, covering bash/http/prompt tasks and run records. |
+| `src-tauri/src/services/proxy.rs` | Local proxy server, used for provider proxy and upstream access. |
+| `src-tauri/src/runtime/shell_runner.rs` | Shell script execution abstraction. |
+| `src-tauri/src/runtime/managed_process.rs` | Long-running task/background process management. |
+| `src-tauri/src/runtime/task_runner.rs` | Generic async task-running helper. |
 
-## Gateway 连接与 Runtime 唤醒
+## Gateway Connection and Runtime Wakeup
 
-| 机制 | 当前实现 |
+| Mechanism | Current Implementation |
 |---|---|
-| 稳定 WebView listener | `useGatewayBridgeListeners` 用 ref 保存 worker id 和最新回调，effect 只在组件挂载/卸载时注册或销毁；普通 React render 不再重建 listener、制造接收空窗或重复上报 `suspended`。 |
-| 原生往返唤醒 | Rust 收到 `chat-runtime-wake-` 前缀的关联 Ping 后 emit `gateway:chat-runtime-wake`；所有 Pong（唤醒与心跳）经专用出站控制通道（64 深，与数据队列 merge 进同一信封流（v2 WebSocket））`try_send` 返回，token 流打满数据队列时探测仍可被应答，且绝不阻塞 inbound receive loop。 |
-| 生命周期 nudge | `online`、`focus`、`pageshow`、`visibilitychange`、WebView `resume` 与 Tauri `RunEvent::Resumed` 会唤醒 runtime；`online`/focus 类事件经 `gateway_nudge_connection` 走 offline/stale-heartbeat 健康检查后才重建连接（不强制），仅 `RunEvent::Resumed` 保留强制重连。 |
-| 快速重连 | 信封流自动重连从 250ms 指数退避到 5s（v2 `/ws/v2/agent`），稳定连接 30s 后重置；stale 判断使用 heartbeat interval 加 20s（最多 60s）。 |
-| inbound 优先 | 信封流（`/ws/v2/agent`）建立后立即进入 inbound receive loop。Runtime status 先恢复，settings、terminal、tunnel、process 与 run ledger 延迟 200ms 后在可中止后台任务中低优先级 replay，并在批次间 yield。 |
-| 启动空窗消除 | WebView 在 Tauri listener 异步注册完成前就先 heartbeat + drain 一次；native wake、request-ready 与 Gateway online 事件都会继续触发 drain。 |
+| Stable WebView listener | `useGatewayBridgeListeners` stores the worker id and latest callbacks in refs, and the effect only registers/destroys on component mount/unmount; ordinary React renders no longer rebuild the listener, creating a receive gap or duplicate `suspended` reports. |
+| Native round-trip wakeup | After Rust receives a correlated Ping with the `chat-runtime-wake-` prefix, it emits `gateway:chat-runtime-wake`; all Pongs (wakeup and heartbeat) are returned via `try_send` over a dedicated outbound control channel (depth 64, merged with the data queue into the same envelope stream (v2 WebSocket)), so probes can still be answered when the token stream saturates the data queue, and the inbound receive loop is never blocked. |
+| Lifecycle nudge | `online`, `focus`, `pageshow`, `visibilitychange`, WebView `resume`, and Tauri `RunEvent::Resumed` wake the runtime; `online`/focus-type events go through `gateway_nudge_connection` and rebuild the connection only after an offline/stale-heartbeat health check (not forced), while only `RunEvent::Resumed` retains forced reconnection. |
+| Fast reconnection | The envelope stream auto-reconnects with exponential backoff from 250ms to 5s (v2 `/ws/v2/agent`), resetting after 30s of stable connection; staleness is determined using the heartbeat interval plus 20s (at most 60s). |
+| inbound priority | Once the envelope stream (`/ws/v2/agent`) is established, it immediately enters the inbound receive loop. Runtime status recovers first; settings, terminal, tunnel, process and run ledger are replayed at low priority in an abortable background task after a 200ms delay, yielding between batches. |
+| Startup gap elimination | The WebView performs one heartbeat + drain before the Tauri listener's async registration completes; native wake, request-ready, and Gateway online events all continue to trigger drains. |
 
-## 本地持久化模型
+## Local Persistence Model
 
-| 数据域 | Rust 命令/服务 | 表或文件 |
+| Data Domain | Rust Command/Service | Table or File |
 |---|---|---|
-| Providers/System/MCP/Agents/Hooks/Cron/Remote/Memory settings | `commands/config/settings/*` | `~/.liveagent/config.sqlite` 内多张 settings 表 |
-| Chat history | `commands/history/chat_history/*`、`commands/history/history_db.rs` | `~/.liveagent/chat-history.sqlite3` 的 `chatHistory`、`chatHistorySegment`、`chatHistoryShare`、FTS |
+| Providers/System/MCP/Agents/Hooks/Cron/Remote/Memory settings | `commands/config/settings/*` | Multiple settings tables inside `~/.liveagent/config.sqlite` |
+| Chat history | `commands/history/chat_history/*`, `commands/history/history_db.rs` | `chatHistory`, `chatHistorySegment`, `chatHistoryShare`, FTS in `~/.liveagent/chat-history.sqlite3` |
 | Memory | `services/memory/*` | `~/.liveagent/memory/**/*.md` + `memory-index.sqlite3` |
 | Skills | `services/skills/*` | `~/.liveagent/skills` |
-| Cron logs | `commands/config/settings/*`、`services/automation/*` | `cron_execution_logs` |
-| Subagent identity/run/message | `commands/history/subagent_store.rs` | chat history 库内 `subagentMeta` 版本标记 + `subagentIdentity`/`subagentRun`/`subagentRunSegment`/`subagentMessage`（schema v2，版本不符即 drop-and-recreate，无 event 表） |
+| Cron logs | `commands/config/settings/*`, `services/automation/*` | `cron_execution_logs` |
+| Subagent identity/run/message | `commands/history/subagent_store.rs` | `subagentMeta` version marker in the chat history DB + `subagentIdentity`/`subagentRun`/`subagentRunSegment`/`subagentMessage` (schema v2, drop-and-recreate on version mismatch, no event table) |
 
-## GUI 的设计取舍
+## GUI Design Trade-offs
 
-| 取舍 | 原因 |
+| Trade-off | Reason |
 |---|---|
-| ChatPage 仍是总编排层 | 对话运行时跨模型、工具、历史、压缩、记忆、Gateway、上传和 UI 状态，保留一个编排中心能减少跨模块隐式状态。 |
-| 高权限能力放 Rust | 文件系统、Shell、MCP 进程、SQLite、Gateway 连接、Cron 更适合在 Tauri 后端做权限与生命周期控制。 |
-| GUI 与 WebUI 共享应用 UI | Settings、Hub、聊天侧边栏、输入栏和公共视觉只在 `crates/agent-ui` 保留一份；GUI 通过宿主适配器接入 Tauri 能力。 |
-| Settings 按域保存 | provider secret、remote、cron、memory 等域有不同验证和同步策略，分域保存便于限制泄露与减少误覆盖。 |
-| Gateway 控制面优先 | 远程首条 Chat command 与 Ping/Pong 必须先于大体积状态 reconciliation；后台 snapshot replay 只负责最终一致性，不阻塞 inbound。 |
+| ChatPage remains the top orchestration layer | Chat runtime spans models, tools, history, compaction, memory, Gateway, uploads and UI state; keeping a single orchestration hub reduces implicit cross-module state. |
+| High-privilege capabilities in Rust | File system, Shell, MCP processes, SQLite, Gateway connections, and Cron are better suited to permission and lifecycle control in the Tauri backend. |
+| GUI and WebUI share application UI | Settings, Hub, chat sidebar, input bar and shared visuals are kept in a single copy in `crates/agent-ui`; the GUI accesses Tauri capabilities through host adapters. |
+| Settings saved by domain | Domains such as provider secret, remote, cron, and memory have different validation and sync policies; saving by domain helps limit leakage and reduce accidental overwrites. |
+| Gateway control plane first | The first remote Chat command and Ping/Pong must precede bulky state reconciliation; background snapshot replay is only responsible for eventual consistency and does not block inbound. |

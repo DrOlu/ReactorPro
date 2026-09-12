@@ -88,17 +88,19 @@ export function RightDockContent(props: RightDockContentProps) {
             </div>
           ) : null}
           <div className="relative min-h-0 flex-1">
-            {/* 懒挂载：仅活跃 tab 真实挂载 XTermViewport。非活跃 tab 卸载以释放
-                attach 流与渲染开销（画板 Pane + dock 多 tab 叠加后 attach 数量
-                可观）。attach 协议带 offset 快照，切回 tab 时一次快照加载即可
-                无损重建 scrollback；焦点/滚动位置丢失可接受。key 用 session.id
-                保证切 tab 走完整卸载/重挂而不是复用实例。 */}
+            {/* Lazy mount: only the active tab actually mounts XTermViewport. Inactive tabs
+                unmount to release the attach stream and rendering cost (the number of attaches
+                becomes significant once canvas Panes and multiple dock tabs stack up). The attach
+                protocol carries an offset snapshot, so switching back to a tab rebuilds scrollback
+                losslessly with a single snapshot load; losing focus/scroll position is acceptable.
+                The key uses session.id to guarantee a tab switch does a full unmount/remount rather
+                than reusing the instance. */}
             {localSessions.map((session) => {
               const isActiveTerminal =
                 currentActiveTab === "terminal" && activeSession?.id === session.id;
               if (!isActiveTerminal) return null;
-              // 拖入画板(持有租约)的会话已从 localSessions 隐藏,这里挂载的
-              // 视口必然是该会话的唯一消费者。
+              // Sessions dragged into the canvas (holding a lease) are already hidden from
+              // localSessions, so the viewport mounted here is necessarily that session's only consumer.
               return (
                 <div key={session.id} className="absolute inset-0 min-h-0">
                   <XTermViewport

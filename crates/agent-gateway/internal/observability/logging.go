@@ -1,4 +1,4 @@
-// Package observability 汇集网关的可观测性基础设施（slog 初始化与 v2 协议打点）。
+// Package observability gathers the gateway's observability infrastructure (slog initialization and v2 protocol instrumentation).
 package observability
 
 import (
@@ -6,8 +6,8 @@ import (
 	"os"
 )
 
-// SetupLogging 安装进程级默认 slog logger：单行 key=value 输出到 stderr，
-// 对容器/journald 日志采集友好，结构化字段便于检索与告警。
+// SetupLogging installs the process-wide default slog logger: single-line key=value output to stderr,
+// friendly to container/journald log collection, with structured fields that ease searching and alerting.
 func SetupLogging() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 }

@@ -6,7 +6,7 @@
 // the request failed outright. pi-ai's isRetryableAssistantError covers the
 // common codes 429/500/502/503/504/524, but not the Cloudflare 5xx relays emit.
 //
-// This section exposes the "retry-error extension" LiveAgent layers on top of
+// This section exposes the "retry-error extension" ReactorPro layers on top of
 // pi-ai for the user to configure:
 //   1. Preset status code toggles (Cloudflare 520-527) — all on by default, so
 //      #608 is fixed out of the box;

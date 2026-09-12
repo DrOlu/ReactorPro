@@ -1,12 +1,14 @@
-// 配置备份的本地导入/导出命令。
+// Local import/export commands for configuration backups.
 //
-// 文件对话框走 rfd（与 system_pick_file 同一范式），不引入
-// tauri-plugin-dialog / plugin-fs —— 仓库未安装这两个插件。
+// File dialogs go through rfd (the same pattern as system_pick_file) rather than
+// pulling in tauri-plugin-dialog / plugin-fs -- the repository does not have
+// either plugin installed.
 //
-// 导出与写入在同一个命令内完成（用户选路径后立即落盘），因此不需要
-// system_prepare_preview_file_save_sync 那种一次性 save_token 机制。
+// Export and write happen within the same command (the file is written to disk
+// immediately after the user picks a path), so the one-shot save_token mechanism
+// used by system_prepare_preview_file_save_sync is not needed.
 
-/// 导出：弹保存对话框并写入文件。用户取消返回 None。
+/// Export: opens a save dialog and writes the file. Returns None if the user cancels.
 #[tauri::command]
 pub async fn settings_backup_export() -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -18,23 +20,24 @@ pub async fn settings_backup_export() -> Result<Option<String>, String> {
         let default_name = format!("liveagent-config-{}.json", now_ms());
         let Some(target) = rfd::FileDialog::new()
             .set_file_name(&default_name)
-            .add_filter("LiveAgent 配置", &["json"])
+            .add_filter("ReactorPro configuration", &["json"])
             .save_file()
         else {
             return Ok(None);
         };
 
-        fs::write(&target, document).map_err(|e| format!("写入备份文件失败：{e}"))?;
+        fs::write(&target, document).map_err(|e| format!("Failed to write backup file: {e}"))?;
         Ok(Some(target.to_string_lossy().into_owned()))
     })
     .await
-    .map_err(|e| format!("settings_backup_export join 失败：{e}"))?
+    .map_err(|e| format!("settings_backup_export join failed: {e}"))?
 }
 
-/// 导入预检：选文件 → 解析 → 校验，但**不写库**。
+/// Import pre-check: pick a file -> parse -> validate, but do **not write to the database**.
 ///
-/// 拆成 peek/apply 两步是为了让用户在覆盖本地配置前看到来源摘要并确认。
-/// path 为空时弹选择对话框；用户取消返回 None。
+/// Splitting this into peek/apply lets the user see the source summary and confirm
+/// before overwriting their local configuration.
+/// When path is empty, a pick dialog is shown; returns None if the user cancels.
 #[tauri::command]
 pub async fn settings_backup_peek_import(
     path: Option<String>,
@@ -44,7 +47,7 @@ pub async fn settings_backup_peek_import(
             Some(value) => PathBuf::from(value),
             None => {
                 let Some(picked) = rfd::FileDialog::new()
-                    .add_filter("LiveAgent 配置", &["json"])
+                    .add_filter("ReactorPro configuration", &["json"])
                     .pick_file()
                 else {
                     return Ok(None);
@@ -61,19 +64,25 @@ pub async fn settings_backup_peek_import(
         }))
     })
     .await
-    .map_err(|e| format!("settings_backup_peek_import join 失败：{e}"))?
+    .map_err(|e| format!("settings_backup_peek_import join failed: {e}"))?
 }
 
-/// 导入应用：真正写库。写入前自动备份当前配置。
+/// Import apply: actually writes to the database. The current configuration is
+/// automatically backed up before writing.
 ///
-/// **与 WebDAV 共用全局锁。** 导入跨多个配置域分别写库，中间态不自洽；
-/// 不加锁的话一次自动上传可以正好在写到一半时采集快照，把半旧半新的配置
-/// 推上远端，而它会带着自洽的 sha256 通过下载侧所有校验。
-/// 与 `upload_backup_snapshot` 里把锁提到采集之前所堵的是同一个窗口。
+/// **Shares the global lock with WebDAV.** Import writes to several configuration
+/// domains separately, and the intermediate state is not self-consistent; without
+/// the lock, an automatic upload could take its snapshot exactly halfway through
+/// and push a half-old, half-new configuration to the remote, where it would pass
+/// all the download-side checks with a self-consistent sha256.
+/// This closes the same window as hoisting the lock before collection in
+/// `upload_backup_snapshot`.
 ///
-/// 抑制守卫则**有意不加**：导入是用户明确要求把这份配置变成当前配置，
-/// 随后自动同步上去正是预期行为（与 WebDAV 下载相反 —— 那边数据本就来自
-/// 远端，推回去纯属回声）。
+/// The suppression guard is **deliberately omitted** here: an import is the user
+/// explicitly asking for this configuration to become the current one, and having
+/// it automatically sync up afterwards is exactly the expected behavior (the
+/// opposite of a WebDAV download -- there the data already came from the remote,
+/// so pushing it back is pure echo).
 #[tauri::command]
 pub async fn settings_backup_apply_import(path: String) -> Result<BackupApplyOutcome, String> {
     let _guard = backup_sync_mutex().lock().await;
@@ -85,5 +94,5 @@ pub async fn settings_backup_apply_import(path: String) -> Result<BackupApplyOut
         apply_backup_snapshot(&mut conn, snapshot)
     })
     .await
-    .map_err(|e| format!("settings_backup_apply_import join 失败：{e}"))?
+    .map_err(|e| format!("settings_backup_apply_import join failed: {e}"))?
 }

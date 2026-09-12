@@ -26,8 +26,9 @@ function createProvider(overrides = {}) {
   };
 }
 
-// 工厂是 ProviderRuntimeConfig 的唯一构造点，所以“工厂自己漏字段”是唯一还能
-// 复现旧 bug 的路径。这里把必须落到 runtime 上的字段逐一锁死。
+// The factory is the only construction point for ProviderRuntimeConfig, so "the
+// factory itself dropping a field" is the only remaining path that could reproduce the
+// old bug. Here every field that must land on the runtime is locked down one by one.
 test("createProviderRuntimeConfig carries every provider transport field", () => {
   const runtime = createProviderRuntimeConfig(
     createProvider(),
@@ -38,7 +39,7 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
   assert.equal(runtime.baseUrl, "https://relay.example/v1");
   assert.equal(runtime.isFullUrl, true);
   assert.equal(runtime.apiKey, "test-key");
-  // 用户自定义头原样透传，工厂不再注入任何内置身份头。
+  // User custom headers pass through verbatim; the factory no longer injects any built-in identity headers.
   assert.deepEqual(runtime.customHeaders, [{ key: "X-Trace-Id", value: "abc" }]);
   assert.equal(runtime.promptCachingEnabled, true);
   assert.equal(runtime.promptCacheRetention, "long");
@@ -73,8 +74,9 @@ test("createProviderRuntimeConfig gates reasoning on model support", () => {
   );
   assert.equal(thinkingOff.reasoning, "off");
 
-  // 不支持思考的模型一律拿到 undefined，绝不下发无效档位（Cron / 记忆整理
-  // 以前绕过工厂手搓 runtime，正是会踩到这里）。
+  // Models that do not support thinking always get undefined, never an invalid level
+  // sent downstream (Cron / memory maintenance used to bypass the factory and hand-roll
+  // the runtime, and that is exactly where this was hit).
   const unsupported = createProviderRuntimeConfig(
     createProvider({ type: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta" }),
     "gemini-embedding-001",

@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::services::tray::{apply_tray_menu, TrayMenuHandles, TrayMenuModel};
 
-/// 前端推送托盘菜单模型（已本地化文案 + 动态列表 + 状态）。
-/// 唯一的托盘内容写入口；apply 内部经菜单句柄代理到主线程执行。
+/// Push the tray menu model from the frontend (localized labels + dynamic list + state).
+/// The single write entry point for tray content; apply internally proxies to the
+/// main thread through the menu handles.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn app_tray_menu_sync(
     app: tauri::AppHandle,

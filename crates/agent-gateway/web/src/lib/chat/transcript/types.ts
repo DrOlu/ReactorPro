@@ -10,7 +10,7 @@ export type UserChatEntry = Extract<ChatEntry, { kind: "user" }>;
 // One failed-and-retried network attempt of the live run's model request,
 // mirrored from the desktop's stream-retry layer over the tool_status event.
 // attempt/maxAttempts are retry ordinals (1..5 of 5), not total attempts.
-// 类型真源在共享包 lib/chat/retryAttempts；此处 re-export 供既有导入路径。
+// The source of truth for the type is the shared package lib/chat/retryAttempts; re-exported here for existing import paths.
 export type { RetryAttemptRecord } from "@liveagent/ui/lib/chat/retryAttempts";
 
 // A turn is one prompt/response exchange of the live stream: the user bubble

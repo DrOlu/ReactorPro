@@ -24,7 +24,6 @@ import {
   subscribeToSystemThemePreference,
 } from "@/lib/settings";
 import { loadToken } from "@/lib/storage";
-import { webSttSettingsService } from "@/lib/stt/webSttSettingsService";
 import { loadWebSettings, persistWebSettings, type WebSettingsSaveState } from "@/lib/webSettings";
 
 import { asErrorMessage } from "../chatEventUtils";
@@ -188,7 +187,7 @@ export function useGatewaySettingsSync(params: {
     } catch (error) {
       setSettingsSaveState({
         status: "error",
-        message: asErrorMessage(error, "缓存桌面端设置失败。"),
+        message: asErrorMessage(error, "Failed to cache desktop settings."),
       });
     }
   }, []);
@@ -239,20 +238,6 @@ export function useGatewaySettingsSync(params: {
           // A live WS push that arrived while GET was in flight is newer.
           if (liveSyncEpochRef.current === 0) {
             applySyncedSettings(payload);
-          }
-          // The Gateway STT store is the WebUI runtime authority for whether
-          // redacted credentials are configured. A cached desktop snapshot may
-          // contain an older configured=false value even though Gateway still
-          // has the credentials, so hydrate this once before the app is ready.
-          // Skip the HTTP result if a newer settings push landed during fetch.
-          try {
-            const sttEpoch = liveSyncEpochRef.current;
-            const stt = await webSttSettingsService.get();
-            if (!cancelled && liveSyncEpochRef.current === sttEpoch) {
-              applyGatewaySettings({ stt });
-            }
-          } catch {
-            // General settings sync remains usable when STT is unavailable.
           }
         }
         if (!cancelled) {

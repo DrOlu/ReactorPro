@@ -13,13 +13,14 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// Agent 目录与凭证管理 API（挂在管理 token 中间件下）：
-//   GET    /api/agents?page=&page_size=&status=all|online|offline — Agent 筛选分页目录
-//   POST   /api/agents/{id}/token         — 签发/轮换凭证并立即踢下线（明文仅出现在本次响应）
-//   PATCH  /api/agents/{id}               — 修改可选名称
-//   DELETE /api/agents/{id}               — 删除整条记录并断开活跃会话
+// Agent directory and credential management API (mounted under the admin token middleware):
+//   GET    /api/agents?page=&page_size=&status=all|online|offline — paginated, filtered Agent directory
+//   POST   /api/agents/{id}/token         — issue/rotate credentials and immediately kick the agent offline (the plaintext appears only in this response)
+//   PATCH  /api/agents/{id}               — change the optional name
+//   DELETE /api/agents/{id}               — delete the whole record and disconnect active sessions
 
-// agentDirectoryEntry 合并持久化登记、独立凭证信息与实时会话状态。
+// agentDirectoryEntry merges the persisted registration, standalone credential info, and live session
+// state.
 type agentDirectoryEntry struct {
 	AgentID        string `json:"agent_id"`
 	Online         bool   `json:"online"`
@@ -32,7 +33,8 @@ type agentDirectoryEntry struct {
 	ConnectedSince int64  `json:"connected_since,omitempty"`
 }
 
-// ListAgents 按状态筛选并分页返回持久化 Agent 目录，同时合并当前页实时状态。
+// ListAgents returns the persisted Agent directory filtered by status and paginated, while merging
+// the current page's live state.
 func ListAgents(sm *session.Manager, tokens *agenttoken.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		statusFilter, err := agenttoken.ParseStatusFilter(r.URL.Query().Get("status"))
@@ -41,7 +43,8 @@ func ListAgents(sm *session.Manager, tokens *agenttoken.Store) http.HandlerFunc 
 			return
 		}
 
-		// 同一次状态快照同时用于数据库筛选和当前页状态合并，避免两次读取间的竞态。
+		// The same status snapshot is used both for database filtering and current-page state merging,
+		// avoiding a race between two reads.
 		statusesByAgentID, onlineAgentIDs := sm.AgentDirectoryStatusSnapshot()
 
 		page, err := tokens.List(agenttoken.PageParams{
@@ -84,7 +87,8 @@ func ListAgents(sm *session.Manager, tokens *agenttoken.Store) http.HandlerFunc 
 	}
 }
 
-// atoiDefault 解析非负整数查询参数，非法/缺省回落到 fallback（钳制交给 Store）。
+// atoiDefault parses a non-negative integer query parameter, falling back to fallback when invalid/
+// absent (clamping is left to the Store).
 func atoiDefault(raw string, fallback int) int {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -114,7 +118,8 @@ func IssueAgentToken(sm *session.Manager, tokens *agenttoken.Store) http.Handler
 			return
 		}
 		disconnected := sm != nil && sm.DisconnectAgent(agentID)
-		// 明文只出现在本次响应；轮换后旧凭证立即不可用于下一次连接。
+		// The plaintext appears only in this response; after rotation the old credential is immediately
+		// unusable for the next connection.
 		writeJSON(w, http.StatusOK, map[string]any{
 			"agent_id":     agentID,
 			"token":        token,

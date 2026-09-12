@@ -28,7 +28,7 @@ func TestNewHTTPServerServesRootWithoutRedirect(t *testing.T) {
 	if location := rec.Header().Get("Location"); location != "" {
 		t.Fatalf("expected no redirect location, got %q", location)
 	}
-	if !strings.Contains(rec.Body.String(), "<title>LiveAgent Gateway</title>") {
+	if !strings.Contains(rec.Body.String(), "<title>ReactorPro Gateway</title>") {
 		t.Fatalf("expected WebUI index.html, got body %q", rec.Body.String())
 	}
 	if cacheControl := rec.Header().Get("Cache-Control"); !strings.Contains(cacheControl, "no-store") {
@@ -49,7 +49,7 @@ func TestNewHTTPServerServesSpaFallbackWithoutRedirect(t *testing.T) {
 	if location := rec.Header().Get("Location"); location != "" {
 		t.Fatalf("expected no redirect location, got %q", location)
 	}
-	if !strings.Contains(rec.Body.String(), "<title>LiveAgent Gateway</title>") {
+	if !strings.Contains(rec.Body.String(), "<title>ReactorPro Gateway</title>") {
 		t.Fatalf("expected WebUI index.html, got body %q", rec.Body.String())
 	}
 }
@@ -69,7 +69,7 @@ func TestNewHTTPServerDoesNotFallbackMissingStaticAssetsToIndex(t *testing.T) {
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("%s status = %d, want %d", target, rec.Code, http.StatusNotFound)
 		}
-		if strings.Contains(rec.Body.String(), "<title>LiveAgent Gateway</title>") {
+		if strings.Contains(rec.Body.String(), "<title>ReactorPro Gateway</title>") {
 			t.Fatalf("%s returned SPA index fallback for a missing static asset", target)
 		}
 		if contentType := rec.Header().Get("Content-Type"); strings.Contains(contentType, "text/html") {
@@ -173,21 +173,21 @@ func TestPublicHistoryShareResolvesWithoutAuthorization(t *testing.T) {
 }
 
 func TestPublicHistoryShareReturnsNotFoundForDisabledToken(t *testing.T) {
-	status := publicHistoryShareErrorStatusForTest(t, http.StatusNotFound, "分享链接不存在或已关闭")
+	status := publicHistoryShareErrorStatusForTest(t, http.StatusNotFound, "share link does not exist or has been closed")
 	if status != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, status)
 	}
 }
 
 func TestPublicHistoryShareReturnsBadRequestFromAgentCode(t *testing.T) {
-	status := publicHistoryShareErrorStatusForTest(t, http.StatusBadRequest, "分享 token 不能为空")
+	status := publicHistoryShareErrorStatusForTest(t, http.StatusBadRequest, "share token cannot be empty")
 	if status != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, status)
 	}
 }
 
 func TestPublicHistoryShareDoesNotInferStatusFromLegacyMessage(t *testing.T) {
-	status := publicHistoryShareErrorStatusForTest(t, http.StatusInternalServerError, "分享链接不存在或已关闭")
+	status := publicHistoryShareErrorStatusForTest(t, http.StatusInternalServerError, "share link does not exist or has been closed")
 	if status != http.StatusBadGateway {
 		t.Fatalf("expected status %d, got %d", http.StatusBadGateway, status)
 	}

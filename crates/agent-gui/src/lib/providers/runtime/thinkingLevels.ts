@@ -26,8 +26,9 @@ function anthropicCompat(model: Model<Api>) {
   return (model as Model<"anthropic-messages">).compat;
 }
 
-// 与 pi-ai streamAnthropic 内部判定同源：目录 compat.forceAdaptiveThinking 决定
-// adaptive 还是 budget 档；自定义模型没有 compat，一律按 budget 处理。
+// Same source as pi-ai streamAnthropic's internal decision: the catalog's
+// compat.forceAdaptiveThinking decides adaptive vs. budget levels; custom models
+// have no compat and are always handled as budget.
 export function supportsAdaptiveAnthropicThinking(model: Model<Api>): boolean {
   return anthropicCompat(model)?.forceAdaptiveThinking ?? false;
 }
@@ -45,8 +46,10 @@ export function mapReasoningToAnthropicEffort(
   reasoning: ReasoningInput,
   model: Model<Api>,
 ): AnthropicEffort {
-  // 目录 thinkingLevelMap 显式声明的档位优先（如 opus-4-6 的 xhigh→max），
-  // 与 pi-ai mapThinkingLevelToEffort 同语义；未声明则按标准档位直通。
+  // Levels explicitly declared in the catalog's thinkingLevelMap take priority
+  // (e.g. opus-4-6's xhigh→max), same semantics as pi-ai
+  // mapThinkingLevelToEffort; when undeclared, the standard level passes
+  // through unchanged.
   const mapped = reasoning ? model.thinkingLevelMap?.[reasoning] : undefined;
   if (typeof mapped === "string") return mapped as AnthropicEffort;
 
@@ -99,12 +102,14 @@ export function resolveAnthropicThinkingRuntime(
 }
 
 // ---------------------------------------------------------------------------
-// OpenAI（codex 供应商的两种请求格式共用）
+// OpenAI (shared by the codex provider's two request formats)
 // ---------------------------------------------------------------------------
 
-// 与 pi-ai streamSimple(OpenAI) 同源：按目录 thinkingLevelMap 裁剪到该模型支持的最近
-// 档位；未声明覆盖时，pi-ai 底层 stream() 会把裁剪后的档位字符串原样透传给
-// reasoning_effort，此处无需再做一次模型族 id 判定。
+// Same source as pi-ai streamSimple(OpenAI): clamp to the nearest level the
+// model supports according to the catalog's thinkingLevelMap; when no override
+// is declared, pi-ai's underlying stream() passes the clamped level string
+// through to reasoning_effort verbatim, so no model-family id check is needed
+// here.
 export function clampOpenAIReasoningEffort(
   model: Model<Api>,
   reasoning: ReasoningInput,
@@ -121,9 +126,11 @@ export function clampOpenAIReasoningEffort(
 export type GeminiThinkingLevel = "MINIMAL" | "LOW" | "MEDIUM" | "HIGH";
 type GeminiEffort = "minimal" | "low" | "medium" | "high";
 
-// pi-ai 未把「档位字段 vs 预算字段」这个派发方式收进目录数据，其自身 streamSimple(Gemini)
-// 内部也是靠这三个 id 正则判定——此处逐字镜像，与档位可用性（走目录 thinkingLevelMap /
-// clampThinkingLevel）是两回事，不可替代。
+// pi-ai does not put the "level field vs. budget field" dispatch into the
+// catalog data, and its own streamSimple(Gemini) internally decides via these
+// three id regexes too — mirrored verbatim here; it is a separate matter from
+// level availability (which goes through the catalog thinkingLevelMap /
+// clampThinkingLevel) and cannot be substituted for it.
 function isGemini3ProModel(modelId: string) {
   return /gemini-3(?:\.\d+)?-pro/.test(modelId.toLowerCase());
 }
@@ -145,8 +152,9 @@ function usesGeminiThinkingLevelField(modelId: string) {
   return isGemini3ProModel(modelId) || isGemini3FlashModel(modelId) || isGemma4Model(modelId);
 }
 
-// 与 pi-ai getThinkingLevel 同源：Gemini 3 Pro 只有 LOW/HIGH 两档，Gemma 4 只有
-// MINIMAL/HIGH 两档，其余（含 Gemini 3 Flash）为完整四档。
+// Same source as pi-ai getThinkingLevel: Gemini 3 Pro has only two levels,
+// LOW/HIGH; Gemma 4 has only two, MINIMAL/HIGH; everything else (including
+// Gemini 3 Flash) has the full four.
 function mapGeminiThinkingLevel(modelId: string, effort: GeminiEffort): GeminiThinkingLevel {
   if (isGemini3ProModel(modelId)) {
     return effort === "minimal" || effort === "low" ? "LOW" : "HIGH";
@@ -166,7 +174,8 @@ function mapGeminiThinkingLevel(modelId: string, effort: GeminiEffort): GeminiTh
   }
 }
 
-// 与 pi-ai getGoogleBudget 同源；未匹配到已知系列时返回 -1，交由上游 API 使用模型默认值。
+// Same source as pi-ai getGoogleBudget; returns -1 when no known series
+// matches, leaving the upstream API to use the model default.
 function mapGeminiThinkingBudget(modelId: string, effort: GeminiEffort) {
   const id = modelId.toLowerCase();
   if (id.includes("2.5-pro")) {
@@ -187,8 +196,10 @@ export function resolveGeminiThinkingRuntime(
 ): GoogleOptions["thinking"] {
   if (!reasoning) return { enabled: false };
 
-  // 档位可用性交给目录 thinkingLevelMap（clampThinkingLevel）决定，例如 gemini-3-pro-preview
-  // 会被裁剪到只剩 low/high；xhigh/max 目前没有任何 Gemini 目录条目声明支持，一律降到 high。
+  // Level availability is decided by the catalog thinkingLevelMap
+  // (clampThinkingLevel): gemini-3-pro-preview, for example, is clamped to only
+  // low/high; no Gemini catalog entry currently declares support for xhigh/max,
+  // so they are always lowered to high.
   const clamped = clampThinkingLevel(model, reasoning);
   const effort: GeminiEffort =
     clamped === "minimal" || clamped === "low" || clamped === "medium" ? clamped : "high";

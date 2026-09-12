@@ -1,6 +1,7 @@
-// AskUserQuestion 的聊天卡片：逐题切换、每题单选，推荐项排在首位；
-// 纯展示组件，提交动作由调用方注入（GUI 直连工具挂起表，WebUI 走网关）。
-// 两端直接复用本组件，端差异一律留在各端的 ToolCallItem。
+// Chat card for AskUserQuestion: question-by-question switching, single choice per question,
+// recommended options first; a pure presentational component, with the submit action injected by
+// the caller (GUI talks directly to the tool pending table, WebUI goes through the gateway).
+// Both clients reuse this component directly; all client differences stay in each client's ToolCallItem.
 
 import { Check, ChevronDown, ChevronUp } from "@liveagent/ui/components/IconSet";
 
@@ -108,16 +109,19 @@ function RollingDigits({ value }: { value: string }) {
 }
 
 /**
- * 倒计时提示：优先使用调用方传入的权威截止时间（GUI 读工具挂起表，WebUI 读
- * 网关参数上的 deadline 盖章），两端与桌面计时同源；缺失时（历史/降级数据）
- * 回退为挂载时刻近似。倒计时归零立即禁止交互，随后 tool_result 把卡片
- * 切到只读态。
+ * Countdown hint: prefer the authoritative deadline passed in by the caller (GUI reads the tool
+ * pending table, WebUI reads the deadline stamp on the gateway parameters), so both clients share
+ * the desktop's clock; when missing (historical/degraded data) fall back to an approximation from
+ * the mount time. When the countdown reaches zero interaction is immediately disabled, and the
+ * subsequent tool_result switches the card to a read-only state.
  *
- * 盖章用的是桌面时钟，而倒计时读本机时钟：远端浏览器时钟偏移足够大时，
- * 一个仍在挂起的提问会在挂载瞬间就显示过期（或远超完整窗口）。因此仅当
- * 截止时间落在“挂载时刻（不含）～挂载时刻 + 完整应答窗口（含）”内才采信，
- * 否则视为时钟不可比、回退挂载近似，避免把可作答的卡片锁死；真正过期的
- * 提交仍由桌面挂起表权威拒绝。
+ * The stamp uses the desktop clock while the countdown reads the local clock: when a remote
+ * browser's clock skew is large enough, a still-pending question would appear expired the moment
+ * it mounts (or far beyond the full window). Therefore the deadline is trusted only when it falls
+ * within "mount time (exclusive) ~ mount time + full answer window (inclusive)"; otherwise the
+ * clocks are considered incomparable and it falls back to the mount approximation, so an
+ * answerable card is not locked out. A genuinely expired submission is still authoritatively
+ * rejected by the desktop pending table.
  */
 function useAnswerCountdown(active: boolean, deadlineAt?: number) {
   const [mountedAt] = useState(() => Date.now());
@@ -161,24 +165,26 @@ export function AskUserQuestionCard({
   onSubmit,
 }: {
   questions: AskUserQuestionItem[];
-  /** 已落定的应答（工具结果）；提供后卡片只读展示选择结果。 */
+  /** Settled answers (tool result); once provided the card shows the selection read-only. */
   answers?: AskUserQuestionAnswer[];
   cancelled?: boolean;
-  /** 应答窗口超时、按推荐项自动落定。 */
+  /** The answer window timed out and the recommended options were auto-settled. */
   timedOut?: boolean;
-  /** 工具执行中且当前端可应答时为 true。 */
+  /** True while the tool is executing and this client can answer. */
   interactive: boolean;
-  /** 权威应答截止时间戳（毫秒）；缺省以挂载时刻近似。 */
+  /** Authoritative answer deadline timestamp (ms); defaults to an approximation from the mount time. */
   deadlineAt?: number;
   onSubmit?: (answers: AskUserQuestionAnswer[]) => Promise<AskUserQuestionSubmitOutcome>;
 }) {
   const { t } = useLocale();
   const [activeIndex, setActiveIndex] = useState(0);
-  // 切题方向（首次渲染为 null 不播动画）；keyed 内容区据此选滑入方向。
+  // Question-switch direction (null on first render, so no animation plays); the keyed content
+  // area uses it to pick the slide-in direction.
   const [switchDirection, setSwitchDirection] = useState<"forward" | "backward" | null>(null);
   const [draftSelections, setDraftSelections] = useState<Record<string, string>>({});
-  // “其他（自行输入）”合成项：选中态与输入文本按 questionId 各自持久，
-  // 与 draftSelections 并列（不用哨兵 label，避免与真实选项 label 撞车）。
+  // The synthetic "Other (type your own)" item: its selected state and input text persist
+  // separately per questionId, alongside draftSelections (no sentinel label, to avoid colliding
+  // with a real option's label).
   const [customSelected, setCustomSelected] = useState<Record<string, boolean>>({});
   const [customTexts, setCustomTexts] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -202,7 +208,7 @@ export function AskUserQuestionCard({
   const canInteract = countdownActive && remainingMs > 0 && !submitting;
   const safeActiveIndex = Math.min(activeIndex, Math.max(questions.length - 1, 0));
 
-  // 该题是否已作答：普通选项已选，或“其他”选中且文本非空。
+  // Whether this question is answered: a normal option is selected, or "Other" is selected with non-empty text.
   const isQuestionAnswered = (questionId: string) => {
     if (isSettled) return Boolean(settledSelections[questionId]);
     if (customSelected[questionId]) return Boolean(customTexts[questionId]?.trim());
@@ -214,7 +220,7 @@ export function AskUserQuestionCard({
   const activeQuestion = questions[safeActiveIndex];
   const answeredCount = questions.filter((question) => isQuestionAnswered(question.id)).length;
   const allAnswered = answeredCount === questions.length;
-  // 带方向切题：内容轨道纵向滑动，当前题再附一层轻量方向过渡。
+  // Direction-aware question switch: the content track slides vertically, with a light direction transition on the current question.
   const goToQuestion = (index: number) => {
     if (index === safeActiveIndex || index < 0 || index >= questions.length) return;
     setSwitchDirection(index > safeActiveIndex ? "forward" : "backward");
@@ -230,12 +236,13 @@ export function AskUserQuestionCard({
       delete next[questionId];
       return next;
     });
-    // 选中不跳题：翻页一律由用户点「继续」/上下箭头决定，避免选错后
-    // 画面已经滑走、找不回来。与下方「其他」行的行为保持一致。
+    // Selecting does not advance: paging is always decided by the user clicking "Continue" or the
+    // up/down arrows, so a wrong pick does not leave the view already slid away and unrecoverable.
+    // Consistent with the behavior of the "Other" row below.
     setDraftSelections((current) => ({ ...current, [questionId]: label }));
   };
 
-  // 选中“其他”行：清掉该题的普通选项，等待用户输入（不自动跳题）。
+  // Selecting the "Other" row: clear this question's normal option and wait for user input (does not auto-advance).
   const selectCustom = (questionId: string) => {
     if (!canInteract) return;
     setErrorText("");
@@ -287,10 +294,11 @@ export function AskUserQuestionCard({
     <div className="tool-expand w-full max-w-[min(100%,36rem)]">
       <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
         <div className="px-4 pb-3 pt-4">
-          {/* 只渲染当前题、高度自然撑开。此前用「固定高度视口 + transform
-              轨道 + offsetTop 测量」实现纵向滑动，但 offsetTop 依赖
-              offsetParent，而这条链上没有定位祖先，会算出错误偏移并留下
-              大片空白；方向滑入改由下方 CSS 动画类承担。 */}
+          {/* Renders only the current question and grows to its natural height. Vertical sliding
+              previously used "fixed-height viewport + transform track + offsetTop measurement", but
+              offsetTop depends on offsetParent and this chain has no positioned ancestor, so it
+              computed a wrong offset and left a large blank area; the directional slide-in is now
+              handled by the CSS animation classes below. */}
           <div aria-live="polite">
             {questions.map((question, questionIndex) => {
               const active = questionIndex === safeActiveIndex;
@@ -385,10 +393,12 @@ export function AskUserQuestionCard({
                       );
                     })}
 
-                    {/* 自定义回答：保留单选圆使左缘与上方选项对齐，输入框直接
-                        占据标签位置。切换到本项只由「真正输入」或点单选圆触发，
-                        不能用 onFocus：输入框常驻且排在选项之后，键盘 Tab 路过
-                        它就会清掉已选选项，使该题变回未作答、提交按钮禁用。 */}
+                    {/* Custom answer: keep the radio circle so the left edge aligns with the options
+                        above, and let the input take the label's place directly. Switching to this
+                        item is triggered only by actual input or clicking the radio circle, not by
+                        onFocus: the input is always present and ordered after the options, so a
+                        keyboard Tab passing through it would clear the selected option, making the
+                        question unanswered again and disabling the submit button. */}
                     {interactive && !isSettled && !cancelled ? (
                       <div
                         className={cn(

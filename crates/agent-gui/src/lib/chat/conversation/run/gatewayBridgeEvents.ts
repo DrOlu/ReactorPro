@@ -222,9 +222,10 @@ export function createGatewayBridgeEventController(
       });
     },
     queueManualCompactionResult(operationId, status, message) {
-      // 终态结果事件经可靠 ingress 送达；queueEvent 可能返回投递 Promise，
-      // 丢弃它会让 ingress 失败无人捕获。对 Promise 显式 catch，同步返回值
-      // （enabled=false 或同步 sink）自然跳过。
+      // Terminal result events are delivered via the reliable ingress; queueEvent may
+      // return a delivery Promise, and discarding it would leave an ingress failure
+      // uncaptured. Explicitly catch the Promise; a synchronous return value
+      // (enabled=false or a sync sink) skips it naturally.
       const sendResult = queueEvent({
         type: "manual_compaction_result",
         operationId: operationId.trim(),

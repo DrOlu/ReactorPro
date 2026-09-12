@@ -170,8 +170,9 @@ export type ChatEvent = (
     }
   | { type: "error"; message: string; round?: number; conversation_id?: string }
   | {
-      // 轨迹骨架：`event` 是一条紧凑 TrajectoryEvent。转录区忽略它，只有轨迹页
-      // 消费；分段全文不在这里，由 trajectory.fetch 按需拉。
+      // Trajectory skeleton: `event` is a compact TrajectoryEvent. The transcript area
+      // ignores it; only the trajectory page consumes it. Segment full text is not here;
+      // trajectory.fetch pulls it on demand.
       type: "trajectory";
       event: TrajectoryEvent;
       conversation_id?: string;

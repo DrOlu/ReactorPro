@@ -51,9 +51,9 @@ function releaseAssetUrl(filename) {
 }
 
 function releaseNotes() {
-  if (!notesPath) return `LiveAgent ${releaseTag}`;
+  if (!notesPath) return `ReactorPro ${releaseTag}`;
   const notes = readFileSync(notesPath, "utf8").trim();
-  return notes || `LiveAgent ${releaseTag}`;
+  return notes || `ReactorPro ${releaseTag}`;
 }
 
 for (const file of files) {

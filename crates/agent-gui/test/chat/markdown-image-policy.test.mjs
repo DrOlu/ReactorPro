@@ -123,19 +123,19 @@ const agentRunnerModule = loader.loadModule("src/lib/chat/runner/agentRunner.ts"
 
 test("markdown image syntax falls back to alt text instead of rendering a real image", () => {
   const node = markdownModule.markdownComponents.img({
-    alt: "东门老街",
-    title: "深圳夜景",
+    alt: "Dongmen Old Street",
+    title: "Shenzhen Night View",
   });
 
   assert.ok(node);
   assert.equal(node.type, "span");
   assert.equal(node.props["data-liveagent-markdown-image"], "text-fallback");
-  assert.equal(node.props.title, "东门老街");
-  assert.equal(node.props.children, "东门老街");
+  assert.equal(node.props.title, "Dongmen Old Street");
+  assert.equal(node.props.children, "Dongmen Old Street");
 
-  const titleOnly = markdownModule.markdownComponents.img({ title: "南头古城" });
+  const titleOnly = markdownModule.markdownComponents.img({ title: "Nantou Ancient City" });
   assert.ok(titleOnly);
-  assert.equal(titleOnly.props.children, "南头古城");
+  assert.equal(titleOnly.props.children, "Nantou Ancient City");
 
   const empty = markdownModule.markdownComponents.img({});
   assert.equal(empty, null);
@@ -579,10 +579,10 @@ test("plan-mode tool rules require ExitPlanMode and do not allow a direct final 
     "ExitPlanMode",
   ]);
   assert.match(suffix, /Plan mode is ACTIVE/);
-  // 规则唯一权威在 <plan-mode> system 段;toolsSuffix 只声明工具面差异并指回。
+  // The rules have a single authority in the <plan-mode> system section; toolsSuffix only declares tool-surface differences and points back to it.
   assert.match(suffix, /Follow the <plan-mode> rules above/);
   assert.match(suffix, /submit the complete deliverable via ExitPlanMode instead of plain assistant text/);
-  // 细节决策指引:AskUserQuestion 可用时提示积极提问。
+  // Detailed decision guidance: when AskUserQuestion is available, prompt for proactive questions.
   assert.match(suffix, /go through AskUserQuestion during research — ask proactively instead of guessing/);
   assert.match(suffix, /Call ExitPlanMode instead; the plan card is what the user reviews/);
   assert.match(suffix, /plan submission \(ExitPlanMode\)/);
@@ -595,7 +595,7 @@ test("plan-mode tool rules require ExitPlanMode and do not allow a direct final 
   assert.match(suffix, /resumable command waiting \(ProcessWait\)/);
   assert.match(suffix, /Submit the plan via ExitPlanMode; TaskCreate happens after approval/);
 
-  // AskUserQuestion 不在工具表时,plan 段不产生提问指引。
+  // When AskUserQuestion is not in the tool table, the plan section produces no question guidance.
   const suffixWithoutAsk = agentRunnerModule.buildToolsSuffix("/workspace", [
     "Read",
     "ExitPlanMode",
@@ -653,5 +653,5 @@ test("fs tool descriptions keep Image as the only display path for images", () =
     source,
     /The structured, tracked way to intentionally delete a file\/directory in the workspace, a writable root:\/\/ project directory, or an enabled writable Skill/,
   );
-  assert.match(source, /Delete results feed LiveAgent's Edited Files and file-ledger tracking/);
+  assert.match(source, /Delete results feed ReactorPro's Edited Files and file-ledger tracking/);
 });

@@ -36,7 +36,8 @@ export type UiRoundContentBlock =
       // shifted by later inserts, unlike an array index.
       id: string;
       text: string;
-      // OpenAI Responses 重放的 reasoning item 估算；UI 仍只渲染 text 摘要。
+      // Estimate for the reasoning item replayed by OpenAI Responses; the UI still renders only the
+      // text summary.
       replayTokenUnits?: number;
     }
   | {
@@ -81,7 +82,7 @@ export type UiMessage = {
   attachments?: PendingUploadedFile[];
   rounds?: UiRound[];
   messageIndex?: number;
-  /** 助手分组：本组最后一条 assistant 消息的时间戳（回复时间） */
+  /** Assistant group: timestamp of the last assistant message in this group (the reply time) */
   timestamp?: number;
 };
 

@@ -14,11 +14,11 @@ type SettingsShellProps<Context> = {
   hiddenSections?: readonly string[];
 };
 
-// 文档隐藏时 WebKit/Chromium 会暂停 CSS keyframe 动画，`.settings-section-enter`
-// 与 `.settings-section-title-enter` 因此停在 from 态（opacity:0 + 位移缩放），
-// 整个设置页看起来是空白。useSettingsOverlay 只兜底了外层浮层容器，内层区块
-// 需要这一份。可见性判定（含 Tauri/WKWebView 的 hidden/visibilityState 不同步
-// 组合）与其它按可见性收敛的定时器共用 lib/shared/documentVisibility。
+// When the document is hidden, WebKit/Chromium pauses CSS keyframe animations, so `.settings-section-enter`
+// and `.settings-section-title-enter` stay in the from state (opacity:0 + translate/scale), and
+// the whole settings page looks blank. useSettingsOverlay only covered the outer overlay container; the inner sections
+// need this one. Visibility determination (including Tauri/WKWebView's unsynchronized hidden/visibilityState
+// combinations) shares lib/shared/documentVisibility with other timers that converge by visibility.
 
 function getSaveIndicator(state: SettingsSaveState, t: (key: string) => string) {
   switch (state.status) {

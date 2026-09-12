@@ -16,11 +16,11 @@ pub(crate) async fn trajectory_get_subagent_runs_inner(
             &run_ids,
         )?;
         let runs_json =
-            serde_json::to_string(&states).map_err(|e| format!("序列化轨迹子代理运行失败：{e}"))?;
+            serde_json::to_string(&states).map_err(|e| format!("Failed to serialize trajectory subagent runs: {e}"))?;
         Ok(TrajectorySubagentRunsResponse { runs_json })
     })
     .await
-    .map_err(|e| format!("trajectory_get_subagent_runs join 失败：{e}"))?
+    .map_err(|e| format!("trajectory_get_subagent_runs join failed: {e}"))?
 }
 
 #[tauri::command]

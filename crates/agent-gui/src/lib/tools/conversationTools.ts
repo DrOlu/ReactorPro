@@ -402,7 +402,7 @@ Only conversation IDs selected through the structured @ menu are allowed. Call t
           error instanceof Error ? error.message : "Failed to read the referenced conversation.";
         return toolError(
           toolCall,
-          /revision|changed|版本|已变化/i.test(message)
+          /revision|changed/i.test(message)
             ? "Conversation history changed since the cursor was issued. Restart from the newest window."
             : message,
         );

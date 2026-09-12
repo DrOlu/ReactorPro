@@ -41,9 +41,9 @@ export type NativeDisplayImageSourceState = {
 
 type ToolImageLoadState = "loading" | "loaded" | "error";
 
-// data URL = `data:...;base64,` + 完整 payload 的巨串（内联 SVG 可达 MB 级）。
-// 按 ImageContent 对象缓存，保证全生命周期只拼一次、引用恒定——否则转录区
-// 每次渲染都重新物化一份，流式/缩放期间分配速率可达每秒数百 MB。
+// data URL = `data:...;base64,` + the huge string of the full payload (inlined SVG can reach MB scale).
+// Cached by the ImageContent object, guaranteeing it is assembled only once over the whole lifecycle with a constant reference — otherwise the transcript area
+// would re-materialize a copy on every render, and during streaming/zooming the allocation rate could reach hundreds of MB per second.
 const imageDataUrlCache = new WeakMap<ImageContent, string>();
 
 function getImageDataUrl(image: ImageContent) {
@@ -213,8 +213,8 @@ function useNativeDisplayImageSources(entries: NativeDisplayImageEntry[]) {
     };
   }, [proxyKey]);
 
-  // memo：返回数组的身份决定下游 slides/ImagePreview 的 memo 是否生效。
-  // 每渲染重建会让整条预览链在转录区任何一次渲染时全量重算（含重拼 data URL）。
+  // memo: the identity of the returned array determines whether the downstream slides/ImagePreview memo takes effect.
+  // Rebuilding on every render would make the entire preview chain fully recompute on any render of the transcript area (including re-assembling data URLs).
   return useMemo(
     () =>
       entries.map((entry, index) => {
@@ -473,10 +473,10 @@ export function ToolResultImagePreview(props: {
   );
 }
 
-// RoundContent 每次渲染都会调用本函数（含流式期间的高频渲染）。entries 数组
-// 的身份是下游 useNativeDisplayImageSources/slides memo 的输入，每次重建会让
-// 整条 memo 链失效，所以按 toolResult 引用缓存——toolResult 落定后引用稳定
-// （uiMessages 增量更新只在结果变化时才换引用）。
+// RoundContent calls this function on every render (including high-frequency renders during streaming). The identity of the entries array
+// is the input to the downstream useNativeDisplayImageSources/slides memo; rebuilding it every time would invalidate
+// the whole memo chain, so it is cached by the toolResult reference — once toolResult settles, the reference is stable
+// (incremental uiMessages updates only swap the reference when the result changes).
 const displayImagePayloadCache = new WeakMap<
   ToolResultMessage,
   { details: DisplayImageResultDetails; entries: NativeDisplayImageEntry[] } | null
@@ -631,8 +631,8 @@ function NativeDisplayImageTile(props: {
   );
 }
 
-// memo：payload 经 WeakMap 缓存后引用稳定，转录区高频渲染（流式增量、状态
-// 心跳）不再穿透到图片块——巨型 data URL 的 slides 重算由此被整体short-circuit。
+// memo: the payload reference is stable after WeakMap caching, so high-frequency renders of the transcript area (streaming increments, status
+// heartbeats) no longer penetrate into the image blocks — the slides recomputation for the giant data URL is thus short-circuited entirely.
 export const NativeDisplayImageBlock = memo(function NativeDisplayImageBlock(props: {
   payload: NonNullable<ReturnType<typeof getNativeDisplayImagePayload>>;
   readOnly?: boolean;

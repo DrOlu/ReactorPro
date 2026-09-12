@@ -33,16 +33,16 @@ test("font family normalizer keeps freeform stacks and rejects unsafe values", (
   );
   assert.equal(fontFamily.normalizeFontFamily("rounded"), "rounded");
   assert.equal(fontFamily.normalizeFontFamily("serif"), "serif");
-  assert.equal(fontFamily.normalizeFontFamily("微软雅黑"), "微软雅黑");
+  assert.equal(fontFamily.normalizeFontFamily("Microsoft YaHei"), "Microsoft YaHei");
   assert.equal(
-    fontFamily.normalizeFontFamily('苹方-简, "Microsoft YaHei", sans-serif'),
-    '苹方-简, "Microsoft YaHei", sans-serif',
+    fontFamily.normalizeFontFamily('PingFang SC, "Microsoft YaHei", sans-serif'),
+    'PingFang SC, "Microsoft YaHei", sans-serif',
   );
   assert.equal(fontFamily.normalizeFontFamily("맑은 고딕"), "맑은 고딕");
   assert.equal(fontFamily.normalizeFontFamily("My_Custom_Font"), "My_Custom_Font");
   assert.equal(fontFamily.normalizeFontFamily('Inter; background: red'), "");
-  assert.equal(fontFamily.normalizeFontFamily("微软雅黑; color: red"), "");
-  assert.equal(fontFamily.normalizeFontFamily("url(微软雅黑)"), "");
+  assert.equal(fontFamily.normalizeFontFamily("Microsoft YaHei; color: red"), "");
+  assert.equal(fontFamily.normalizeFontFamily("url(Microsoft YaHei)"), "");
   assert.equal(fontFamily.normalizeFontFamily("url(https://evil.example/font.woff2)"), "");
   assert.equal(fontFamily.normalizeFontFamily("x".repeat(201)), "");
 });

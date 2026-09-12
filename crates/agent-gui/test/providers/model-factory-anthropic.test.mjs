@@ -3,8 +3,9 @@ import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 走真实 pi-ai anthropic stream()，用 onPayload 截获请求体后中断，
-// 断言的是最终线格式（thinking/output_config），不是中间结构。
+// Uses the real pi-ai anthropic stream(), captures the request body via onPayload
+// and then aborts; the assertions are about the final wire format
+// (thinking/output_config), not the intermediate structure.
 const realAnthropic = await import(
   new URL(
     "../../node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
@@ -46,13 +47,13 @@ async function captureWirePayload(modelId, reasoning, baseUrl = RELAY_BASE_URL) 
   try {
     await stream.result();
   } catch {
-    // onPayload 抛错中断请求属预期。
+    // Throwing in onPayload to abort the request is expected.
   }
   assert.ok(captured, `expected payload capture for ${modelId}`);
   return captured;
 }
 
-test("anthropic: 装饰过的目录模型 id（日期后缀/大小写/@版本）继承目录 adaptive 元数据", () => {
+test("anthropic: decorated catalog model ids (date suffix/casing/@version) inherit catalog adaptive metadata", () => {
   for (const [modelId, baseId] of [
     ["claude-opus-4-8-20260213", "claude-opus-4-8"],
     ["Claude-Fable-5", "claude-fable-5"],
@@ -62,7 +63,7 @@ test("anthropic: 装饰过的目录模型 id（日期后缀/大小写/@版本）
   ]) {
     const model = createModelFromConfig("claude_code", modelId, RELAY_BASE_URL);
     const base = createModelFromConfig("claude_code", baseId, "https://api.anthropic.com");
-    // 兼容中转保留用户配置的原始 id，供其识别日期/@版本/[1m] 装饰。
+    // The compatibility relay keeps the user-configured raw id so it can recognize the date/@version/[1m] decorations.
     assert.equal(model.id, modelId);
     assert.equal(model.baseUrl, RELAY_BASE_URL);
     assert.equal(
@@ -74,8 +75,8 @@ test("anthropic: 装饰过的目录模型 id（日期后缀/大小写/@版本）
   }
 });
 
-test("anthropic: 装饰 id 的可选档位与目录基础模型一致（xhigh/max 不丢失）", () => {
-  // 档位来自生成目录（models.dev）：adaptive 世代无 minimal 档。
+test("anthropic: a decorated id's optional levels match the catalog base model (xhigh/max not lost)", () => {
+  // Levels come from the generated catalog (models.dev): the adaptive generation has no minimal level.
   assert.deepEqual(levelsFor("claude-opus-4-8-20260213"), [
     "low",
     "medium",
@@ -86,15 +87,15 @@ test("anthropic: 装饰 id 的可选档位与目录基础模型一致（xhigh/ma
   assert.deepEqual(levelsFor("claude-sonnet-4-6-20251114"), ["low", "medium", "high", "max"]);
 });
 
-test("anthropic: 目录未命中的三方改名 id 走启发式识别 adaptive 家族", () => {
-  // Opus 4.7+/Claude 5 家族：xhigh 直通；adaptive 世代无 minimal 档（目录同形）。
+test("anthropic: third-party renamed ids with no catalog hit are heuristically detected as the adaptive family", () => {
+  // Opus 4.7+/Claude 5 family: xhigh passes through; the adaptive generation has no minimal level (same shape as the catalog).
   for (const modelId of ["claude-4.7-opus", "claude-5-sonnet", "custom-fable-5-relay"]) {
     const model = createModelFromConfig("claude_code", modelId, RELAY_BASE_URL);
     assert.equal(model.compat?.forceAdaptiveThinking, true, `${modelId} should be adaptive`);
     assert.equal(model.contextWindow, 1_000_000, `${modelId} should expose the 1M window`);
     assert.deepEqual(model.thinkingLevelMap, { minimal: null, xhigh: "xhigh", max: "max" });
   }
-  // Opus 4.6/Sonnet 4.6/Mythos Preview：只到 max。
+  // Opus 4.6/Sonnet 4.6/Mythos Preview: only up to max.
   for (const modelId of ["claude-4.6-sonnet", "claude-mythos-preview"]) {
     const model = createModelFromConfig("claude_code", modelId, RELAY_BASE_URL);
     assert.equal(model.compat?.forceAdaptiveThinking, true, `${modelId} should be adaptive`);
@@ -103,7 +104,7 @@ test("anthropic: 目录未命中的三方改名 id 走启发式识别 adaptive �
   }
 });
 
-test("anthropic: 旧世代/歧义 id 不误判为 adaptive，保持 budget 语义", () => {
+test("anthropic: legacy/ambiguous ids are not misdetected as adaptive and keep budget semantics", () => {
   for (const modelId of [
     "claude-3-5-sonnet-20241022",
     "claude-3-7-sonnet-20250219",
@@ -120,7 +121,7 @@ test("anthropic: 旧世代/歧义 id 不误判为 adaptive，保持 budget 语�
   }
 });
 
-test("anthropic wire: 装饰 id 发送 adaptive + output_config.effort，档位随选择变化", async () => {
+test("anthropic wire: a decorated id sends adaptive + output_config.effort, and the level follows the selection", async () => {
   const high = await captureWirePayload("claude-opus-4-8-20260213", "high");
   assert.equal(high.thinking?.type, "adaptive");
   assert.equal(high.output_config?.effort, "high");
@@ -134,14 +135,14 @@ test("anthropic wire: 装饰 id 发送 adaptive + output_config.effort，档位�
   assert.equal(low.output_config?.effort, "low");
 });
 
-test("anthropic wire: 旧世代 id 仍发送 budget_tokens 且不带 output_config", async () => {
+test("anthropic wire: a legacy-generation id still sends budget_tokens and no output_config", async () => {
   const payload = await captureWirePayload("claude-3-7-sonnet-20250219", "high");
   assert.equal(payload.thinking?.type, "enabled");
   assert.equal(payload.thinking?.budget_tokens, 16_384);
   assert.equal(payload.output_config, undefined);
 });
 
-test("anthropic wire: [1m] suffix 按端点策略生成真实 request model id", async () => {
+test("anthropic wire: the [1m] suffix produces a real request model id per endpoint policy", async () => {
   const relayPayload = await captureWirePayload("claude-sonnet-4-5[1m]", undefined);
   assert.equal(relayPayload.model, "claude-sonnet-4-5[1m]");
 

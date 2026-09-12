@@ -54,7 +54,7 @@ export function useEditResend(params: UseEditResendParams) {
           conversationIdOverride: conversationId,
           editResendBaseMessageRef: messageRef,
         });
-        if (!accepted) throw new Error("编辑重发未启动，原历史保持不变。");
+        if (!accepted) throw new Error("Edit-resend did not start; the original history is unchanged.");
       } catch (error) {
         onError(error);
       } finally {

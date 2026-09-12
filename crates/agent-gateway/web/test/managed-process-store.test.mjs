@@ -49,8 +49,8 @@ const loader = createWebModuleLoader({
 });
 const store = loader.loadModule("@liveagent/ui/lib/managed-process/store.ts");
 
-test("managed-process store 镜像语义与 refresh 自愈", async () => {
-  // 失败的初始化不留僵尸订阅,refresh 兼作重试补齐。
+test("managed-process store mirror semantics and refresh self-healing", async () => {
+  // A failed initialization leaves no zombie subscription; refresh doubles as the retry catch-up.
   backend.failNextFetch = true;
   await assert.rejects(store.ensureManagedProcessInit(), /fetch failed/);
   assert.equal(store.getManagedProcessState().ready, false);
@@ -61,11 +61,11 @@ test("managed-process store 镜像语义与 refresh 自愈", async () => {
   assert.equal(store.getManagedProcessState().revision, 5);
   assert.equal(listeners.size, 1);
 
-  // 后端推送直接喂入镜像。
+  // Backend pushes feed the mirror directly.
   backend.push(snapshot(6));
   assert.equal(store.getManagedProcessState().revision, 6);
 
-  // 陈旧修订丢弃列表但采纳 agentOnline;等修订放行(在线位翻转不递增修订)。
+  // A stale revision drops the list but adopts agentOnline; equal revisions pass (flipping the online flag does not increment the revision).
   backend.push(snapshot(3, { agentOnline: false, processes: [] }));
   const stale = store.getManagedProcessState();
   assert.equal(stale.revision, 6);
@@ -74,7 +74,7 @@ test("managed-process store 镜像语义与 refresh 自愈", async () => {
   backend.push(snapshot(6, { agentOnline: true }));
   assert.equal(store.getManagedProcessState().agentOnline, true);
 
-  // refresh 拉取新快照对账。
+  // refresh pulls a new snapshot to reconcile.
   backend.nextState = snapshot(9);
   await store.refreshManagedProcessState();
   assert.equal(store.getManagedProcessState().revision, 9);

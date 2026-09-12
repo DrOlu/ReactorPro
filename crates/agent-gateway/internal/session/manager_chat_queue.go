@@ -13,8 +13,9 @@ type chatQueueSnapshotRecord struct {
 	sessionEpoch uint64
 }
 
-// SubscribeChatQueueEvents 订阅提示队列事件并回放全部 Agent 的现存快照
-// （快照按 Agent 存于各自 entry，回放帧携带来源标签）。
+// SubscribeChatQueueEvents subscribes to prompt queue events and replays all
+// existing snapshots for every Agent (snapshots are stored per Agent in their own
+// entry; replayed frames carry a source label).
 func (m *Manager) SubscribeChatQueueEvents() (<-chan Tagged[*gatewayv2.ChatQueueEvent], func()) {
 	replay := make([]Tagged[*gatewayv2.ChatQueueEvent], 0)
 	for _, agentID := range m.knownAgentIDs() {
@@ -57,7 +58,8 @@ func (m *Manager) SubscribeChatQueueEvents() (<-chan Tagged[*gatewayv2.ChatQueue
 	return ch, cleanup
 }
 
-// knownAgentIDs 返回全部登记项 id（含离线），按字典序。
+// knownAgentIDs returns all registered entry ids (including offline ones), in
+// lexicographic order.
 func (m *Manager) knownAgentIDs() []string {
 	m.registry.mu.RLock()
 	ids := make([]string, 0, len(m.registry.agents))
@@ -136,7 +138,7 @@ func (m *Manager) broadcastChatQueueEvent(agentID string, event *gatewayv2.ChatQ
 	}
 }
 
-// sessionEpochOf 返回 agent_id 当前会话的 epoch；离线为 0。
+// sessionEpochOf returns the epoch of the current session for agent_id; 0 when offline.
 func (m *Manager) sessionEpochOf(agentID string) uint64 {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()

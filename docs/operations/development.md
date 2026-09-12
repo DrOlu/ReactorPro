@@ -1,61 +1,61 @@
-# 开发与运行
+# Development and Running
 
-## 根目录命令
+## Root Directory Commands
 
-| 命令 | 作用 |
+| Command | Purpose |
 |---|---|
-| `make dev` | 启动桌面 GUI 开发模式。 |
-| `make build` | 构建桌面 GUI。 |
-| `make desktop-build-macos` | macOS 普通桌面打包。 |
-| `make desktop-build-macos-release` | macOS Developer ID 签名、公证相关 release 打包。 |
-| `make desktop-build-macos-intel` | Intel macOS 目标构建。 |
-| `make desktop-build-macos-m` | Apple Silicon macOS 目标构建。 |
-| `make desktop-build-windows` | Windows 桌面目标构建。 |
-| `make desktop-build-linux` | Linux 桌面目标构建。 |
-| `make dev-gateway` | 本地启动 Go Gateway 开发服务。 |
-| `make dev-webui` | 本地启动 Gateway WebUI Vite 开发服务。 |
-| `make dev-stack` | 后台一键启动 Gateway、WebUI、桌面 LiveAgent 三端。 |
-| `make dev-stack-status` | 检查三端和 MCP Bridge 状态。 |
-| `make dev-stack-logs` | 查看三端最近日志。 |
-| `make dev-stack-stop` | 停止由三端脚本管理的进程。 |
-| `make check-fast` | 编译、lint、基础测试与错误检查。 |
-| `make check-all` | 执行 fast、完整测试与 Proto 契约检查。 |
-| `make check-strict` | 执行 all，并将 Biome/Rust warning 视为错误。 |
-| `make proto` | 生成 Gateway proto。 |
-| `make webui` | 构建 Gateway WebUI 静态资源。 |
-| `make gateway-build` | proto + webui + Gateway 构建。 |
+| `make dev` | Start desktop GUI development mode. |
+| `make build` | Build the desktop GUI. |
+| `make desktop-build-macos` | Ordinary macOS desktop packaging. |
+| `make desktop-build-macos-release` | macOS Developer ID signing and notarization-related release packaging. |
+| `make desktop-build-macos-intel` | Build for the Intel macOS target. |
+| `make desktop-build-macos-m` | Build for the Apple Silicon macOS target. |
+| `make desktop-build-windows` | Build for the Windows desktop target. |
+| `make desktop-build-linux` | Build for the Linux desktop target. |
+| `make dev-gateway` | Start the Go Gateway development service locally. |
+| `make dev-webui` | Start the Gateway WebUI Vite development service locally. |
+| `make dev-stack` | Start all three — Gateway, WebUI, and desktop ReactorPro — in the background with one command. |
+| `make dev-stack-status` | Check the status of all three and MCP Bridge. |
+| `make dev-stack-logs` | View recent logs from all three. |
+| `make dev-stack-stop` | Stop processes managed by the three-end script. |
+| `make check-fast` | Compile, lint, run basic tests, and check errors. |
+| `make check-all` | Run fast, full tests, and Proto contract checks. |
+| `make check-strict` | Run all, and treat Biome/Rust warnings as errors. |
+| `make proto` | Generate Gateway proto. |
+| `make webui` | Build Gateway WebUI static assets. |
+| `make gateway-build` | proto + webui + Gateway build. |
 
-## 包管理与子项目
+## Package Management and Subprojects
 
-| 子项目 | Manifest | 说明 |
+| Subproject | Manifest | Description |
 |---|---|---|
-| Rust workspace | `Cargo.toml` | 根工作区，包含 Tauri/Rust crate。 |
-| 共享 UI | `crates/agent-ui/package.json` | GUI/WebUI 共用的 React 应用 UI 与领域逻辑。 |
-| GUI frontend | `crates/agent-gui/package.json` | 桌面 React/Tauri 前端依赖与脚本。 |
-| Gateway | `crates/agent-gateway/go.mod` | Go Gateway 依赖。 |
-| Gateway WebUI | `crates/agent-gateway/web/package.json` | 浏览器 WebUI 依赖与构建脚本。 |
+| Rust workspace | `Cargo.toml` | Root workspace containing Tauri/Rust crates. |
+| Shared UI | `crates/agent-ui/package.json` | React application UI and domain logic shared by GUI/WebUI. |
+| GUI frontend | `crates/agent-gui/package.json` | Desktop React/Tauri frontend dependencies and scripts. |
+| Gateway | `crates/agent-gateway/go.mod` | Go Gateway dependencies. |
+| Gateway WebUI | `crates/agent-gateway/web/package.json` | Browser WebUI dependencies and build scripts. |
 
-## 常用检查命令
+## Common Check Commands
 
-| 场景 | 命令 |
+| Scenario | Command |
 |---|---|
 | GUI build | `pnpm -C crates/agent-gui build` |
 | WebUI build | `pnpm -C crates/agent-gateway/web build` |
 | Gateway tests | `cd crates/agent-gateway && go test ./...` |
 | Gateway lint | `cd crates/agent-gateway && golangci-lint run ./...` |
-| Proto 检查 | `make proto-check`（buf lint + 对 origin/main 的 breaking 检查） |
+| Proto check | `make proto-check` (buf lint + breaking check against origin/main) |
 | Tauri/Rust tests | `cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml` |
-| 前端专项测试 | `pnpm -C crates/agent-gui test:frontend` |
-| diff 空白检查 | `git diff --check` |
-| 当前改动 | `git status --short` |
+| Frontend targeted tests | `pnpm -C crates/agent-gui test:frontend` |
+| diff whitespace check | `git diff --check` |
+| Current changes | `git status --short` |
 
-工具链版本由根 `mise.toml` 固定（git 跟踪），`mise install` 一键对齐，CI 使用相同版本。
+Toolchain versions are pinned by the root `mise.toml` (git-tracked), aligned with one command via `mise install`, and CI uses the same versions.
 
-实际脚本名称可能随 package.json 调整，运行前以当前 manifest 为准。
+Actual script names may change with package.json; consult the current manifest before running.
 
-## 一键启动三端
+## One-Command Three-End Startup
 
-跨平台脚本 `scripts/dev-stack.mjs` 统一管理 Gateway、Gateway WebUI 和桌面 LiveAgent：
+The cross-platform script `scripts/dev-stack.mjs` uniformly manages Gateway, Gateway WebUI, and desktop ReactorPro:
 
 ```bash
 make dev-stack
@@ -64,7 +64,7 @@ make dev-stack-logs
 make dev-stack-stop
 ```
 
-也可以在 macOS、Linux 和 Windows 直接通过 pnpm 调用：
+On macOS, Linux, and Windows you can also invoke it directly via pnpm:
 
 ```bash
 pnpm dev:stack
@@ -73,14 +73,11 @@ pnpm dev:stack:logs
 pnpm dev:stack:stop
 ```
 
-默认端口为 Gateway `50052`、WebUI `5173`、桌面前端 `1420`、MCP Bridge `9223`，默认本地
-Gateway token 为 `dev-token`。脚本遇到已由外部进程占用且健康的端口时只复用，不会在 stop 时
-终止该外部进程。进程检测、HTTP 健康检查、日志和状态文件均由 Node 实现；Windows 停止托管进程
-时调用系统自带的 `taskkill`，macOS/Linux 使用进程组信号。
+The default ports are Gateway `50052`, WebUI `5173`, desktop frontend `1420`, and MCP Bridge `9223`; the default local Gateway token is `dev-token`. When the script encounters a port already occupied by an external process and healthy, it only reuses it and will not terminate that external process on stop. Process detection, HTTP health checks, logs, and state files are all implemented in Node; stopping managed processes on Windows invokes the system-provided `taskkill`, while macOS/Linux use process-group signals.
 
-## 统一编译与检查
+## Unified Compilation and Checks
 
-跨平台主入口为 `scripts/check.mjs`，macOS、Linux 和 Windows 推荐通过 pnpm 调用：
+The cross-platform main entry point is `scripts/check.mjs`; macOS, Linux, and Windows are recommended to invoke it via pnpm:
 
 ```bash
 pnpm check:fast
@@ -88,71 +85,63 @@ pnpm check:all
 pnpm check:strict
 ```
 
-也可以在提供 Make 的环境中运行 `make check-fast`、`make check-all`、`make check-strict`。
+You can also run `make check-fast`, `make check-all`, and `make check-strict` in environments that provide Make.
 
-| 级别 | 检查范围 |
+| Level | Check Scope |
 |---|---|
-| `fast` | diff、脚本测试、Shared UI 边界/typecheck、GUI/WebUI build、三端完整 lint 诊断、Rust check、golangci-lint、Go tests。 |
-| `all` | `fast` + 自动发现的 GUI/WebUI/release 测试、Rust all-target/doc tests、Proto lint/breaking。 |
-| `strict` | `all` + rustfmt、Clippy、三端完整 Biome 诊断，并将相对基线变更文件中的 Biome warning 视为错误。 |
+| `fast` | diff, script tests, Shared UI boundaries/typecheck, GUI/WebUI build, full lint diagnostics for all three, Rust check, golangci-lint, Go tests. |
+| `all` | `fast` + auto-discovered GUI/WebUI/release tests, Rust all-target/doc tests, Proto lint/breaking. |
+| `strict` | `all` + rustfmt, Clippy, full Biome diagnostics for all three, and Biome warnings in files changed relative to the baseline are treated as errors. |
 
-所有级别都会执行检查脚本单测、Shared UI 边界和独立 TypeScript typecheck；Biome 使用
-`--max-diagnostics=none`，不会隐藏超出默认上限的诊断。`strict` 仍输出三端全量诊断，但只把
-相对 `LIVEAGENT_CHECK_BASE_REF`（默认依次选择 `origin/main`、`main`）新增或修改源码中的 warning
-升级为失败，避免通过关闭规则掩盖历史诊断。GUI 与 WebUI 测试文件由
-`scripts/run-node-tests.mjs` 递归发现，避免手写目录列表或依赖 shell glob。
+All levels run the check-script unit tests, Shared UI boundaries, and standalone TypeScript typecheck; Biome uses `--max-diagnostics=none` and does not hide diagnostics beyond the default cap. `strict` still outputs full diagnostics for all three, but only upgrades to failure warnings newly added or modified relative to `LIVEAGENT_CHECK_BASE_REF` (which defaults to selecting `origin/main`, then `main`) in source code, avoiding masking historical diagnostics by turning rules off. GUI and WebUI test files are discovered recursively by `scripts/run-node-tests.mjs`, avoiding hand-written directory lists or reliance on shell globs.
 
-完整文本日志和结构化 JSON 报告默认写入操作系统临时目录下的
-`liveagent-check-<user>/<timestamp>-<profile>-<pid>/check.log` 与 `report.json`。JSON 包含运行元数据、
-汇总计数及每一步的命令、工作目录、状态、退出码和耗时。需要失败后继续执行其他检查时设置
-`LIVEAGENT_CHECK_KEEP_GOING=1`；需要固定报告位置时设置 `LIVEAGENT_CHECK_REPORT_PATH`。当前已在
-macOS ARM64 实跑验证；Windows/Linux 仍应在对应机器或 CI 上完成平台验证。
+Full text logs and structured JSON reports are written by default to `liveagent-check-<user>/<timestamp>-<profile>-<pid>/check.log` and `report.json` under the operating system temp directory. The JSON contains run metadata, summary counts, and each step's command, working directory, status, exit code, and elapsed time. Set `LIVEAGENT_CHECK_KEEP_GOING=1` to continue running other checks after a failure; set `LIVEAGENT_CHECK_REPORT_PATH` to pin the report location. It has currently been verified in a real run on macOS ARM64; Windows/Linux should still complete platform verification on the corresponding machine or CI.
 
-## 运行时路径
+## Runtime Paths
 
-| 路径 | 说明 |
+| Path | Description |
 |---|---|
-| `~/.liveagent/config.sqlite` | 桌面端 settings 数据库。 |
-| `~/.liveagent/chat-history.sqlite3` | Chat history 数据库。 |
-| `~/.liveagent/memory/` | Memory Markdown 根目录与 `memory-index.sqlite3`。 |
-| `~/.liveagent/skills` | Skills runtime root。 |
-| `~/.liveagent/default-project` | 首次安装/空 workdir 时的默认项目目录。 |
-| `~/.liveagent/debug/*.jsonl` | debug JSONL 日志。 |
+| `~/.liveagent/config.sqlite` | Desktop settings database. |
+| `~/.liveagent/chat-history.sqlite3` | Chat history database. |
+| `~/.liveagent/memory/` | Memory Markdown root directory and `memory-index.sqlite3`. |
+| `~/.liveagent/skills` | Skills runtime root. |
+| `~/.liveagent/default-project` | Default project directory on first install / when workdir is empty. |
+| `~/.liveagent/debug/*.jsonl` | debug JSONL logs. |
 
-## Gateway 开发关注点
+## Gateway Development Concerns
 
-| 项 | 说明 |
+| Item | Description |
 |---|---|
-| HTTP | `internal/server/http.go` 注册 `/ws/v2*` 三链路、`/api/status`、`/api/files/import`、public share 和静态资源。 |
-| Proto | 改 `proto/v2/*.proto` 后执行 `make proto`（buf 生成 Go+TS），生成物随源同 PR 提交；`make proto-check` 把关破坏性变更。 |
-| Shutdown | `make dev-gateway` 应支持 Ctrl+C 后 HTTP 干净退出。 |
-| WebUI embed | Gateway build 通常依赖 `make webui` 先产出静态资源。 |
-| 新增桌面端能力 | `proto/v2/gateway.proto` 加信封臂（编号只增不改）→ `make proto` → v2 直通白名单（`internal/protocol/pbws/guard.go`）放行 → 各端生成物随源同 PR 提交；新增网关本地操作则在 v2 帧（`proto/v2/gateway_ws.proto`）加臂。 |
-| 弃用惯例 | Go `// Deprecated: <原因；替代物；删除条件>`、Rust `#[deprecated]`、TS `@deprecated`、proto `option deprecated`；弃用代码原地保留只修 bug，删除前先经使用打点观察。 |
+| HTTP | `internal/server/http.go` registers the three `/ws/v2*` links, `/api/status`, `/api/files/import`, public share, and static assets. |
+| Proto | After changing `proto/v2/*.proto`, run `make proto` (buf generates Go+TS), and commit generated artifacts in the same PR as the source; `make proto-check` guards against breaking changes. |
+| Shutdown | `make dev-gateway` should support clean HTTP exit after Ctrl+C. |
+| WebUI embed | Gateway build usually depends on `make webui` producing static assets first. |
+| Adding desktop capabilities | Add an envelope arm in `proto/v2/gateway.proto` (numbers only increase, never change) → `make proto` → allowlist the v2 pass-through (`internal/protocol/pbws/guard.go`) → commit each side's generated artifacts in the same PR as the source; to add a gateway-local operation, add an arm in the v2 frame (`proto/v2/gateway_ws.proto`). |
+| Deprecation conventions | Go `// Deprecated: <reason; replacement; removal condition>`, Rust `#[deprecated]`, TS `@deprecated`, proto `option deprecated`; deprecated code is kept in place and only bug-fixed, observed via usage instrumentation before removal. |
 
-## Gateway 分层（新代码放哪里）
+## Gateway Layering (Where New Code Goes)
 
-| 代码类型 | 位置 |
+| Code type | Location |
 |---|---|
-| 传输机制（写泵/背压/心跳，帧格式无关） | `internal/transport/wscore` |
-| v2 协议编解码/握手/直通/扇出 | `internal/protocol/pbws` |
-| 跨协议域逻辑（终端门控、Origin 校验等） | `internal/protocol/shared` |
-| chat 命令编排 | `internal/chatcmd` |
-| 会话状态与关联路由（transport 无关） | `internal/session` |
-| 日志装置与协议使用打点 | `internal/observability` |
-| HTTP 入口与 public share | `internal/server` |
+| Transport mechanism (write pump/backpressure/heartbeat, frame-format agnostic) | `internal/transport/wscore` |
+| v2 protocol codec/handshake/pass-through/fan-out | `internal/protocol/pbws` |
+| Cross-protocol domain logic (terminal gating, Origin validation, etc.) | `internal/protocol/shared` |
+| chat command orchestration | `internal/chatcmd` |
+| Session state and correlated routing (transport-agnostic) | `internal/session` |
+| Logging facilities and protocol usage instrumentation | `internal/observability` |
+| HTTP entry points and public share | `internal/server` |
 
-## GUI/WebUI 共享 UI 改造检查
+## GUI/WebUI Shared UI Change Checklist
 
-| 改动类型 | 代码位置与检查范围 |
+| Change type | Code location and check scope |
 |---|---|
-| Settings、Skills Hub、MCP Hub | 公共页面只修改 `crates/agent-ui`；平台差异放各宿主 `src/agent-ui-adapters/*` 或页面扩展注册表，并在两端验证。 |
-| Chat 侧边栏、输入栏、公共消息视觉 | 公共 JSX/CSS 只修改 `crates/agent-ui`；GUI/WebUI 各自数据控制器、流式状态和虚拟列表仍分别检查。 |
-| 上传、剪贴板、目录选择 | 公共交互契约位于 `agent-ui`，Tauri/Gateway/browser 实现位于各宿主适配器。 |
-| Provider 设置 | 公共 Settings UI、两端 provider 适配器、Rust settings、Gateway redaction 和模型请求层。 |
-| Memory | Rust MemoryStore、共享 Memory 页面、两端 `agent-ui-adapters/memoryOrganizer.ts`、Gateway memory.manage 和 MemoryManager tool。 |
-| 边界检查 | 执行 `pnpm check:ui-boundaries`，防止应用目录重新出现公共页面副本或共享层直接依赖具体宿主。 |
+| Settings, Skills Hub, MCP Hub | Shared pages modify only `crates/agent-ui`; platform differences go in each host's `src/agent-ui-adapters/*` or the page extension registry, and must be verified on both ends. |
+| Chat sidebar, composer, shared message visuals | Shared JSX/CSS modifies only `crates/agent-ui`; GUI/WebUI data controllers, streaming state, and virtual lists are still checked separately. |
+| Upload, clipboard, directory selection | Shared interaction contracts live in `agent-ui`; Tauri/Gateway/browser implementations live in each host's adapters. |
+| Provider settings | Shared Settings UI, both ends' provider adapters, Rust settings, Gateway redaction, and the model request layer. |
+| Memory | Rust MemoryStore, shared Memory pages, both ends' `agent-ui-adapters/memoryOrganizer.ts`, Gateway memory.manage, and the MemoryManager tool. |
+| Boundary checks | Run `pnpm check:ui-boundaries` to prevent public page duplicates from reappearing in app directories or the shared layer from directly depending on a specific host. |
 
-## 文档任务边界
+## Documentation Task Boundaries
 
-本文档树只描述当前架构，不要求启动 dev server 或跑 build。若后续文档改动伴随代码改动，应按触达模块补充对应 build/test。
+This documentation tree describes only the current architecture and does not require starting a dev server or running a build. If future documentation changes accompany code changes, the corresponding build/test should be added for the touched modules.

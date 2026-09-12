@@ -128,8 +128,9 @@ export function useTimelineGestures(params: {
 }
 
 /**
- * Minimap 手势：点击把视口平移到点击处，按住拖动连续平移，双击重置回全图。
- * 视口已覆盖全图时平移无意义，全部变成 no-op。
+ * Minimap gestures: a click pans the viewport to the clicked spot, press-and-drag pans
+ * continuously, and a double-click resets to the full view. When the viewport already covers the
+ * full view, panning is meaningless and everything becomes a no-op.
  */
 export function useMinimapGestures(params: {
   minimapRef: RefObject<HTMLButtonElement | null>;
@@ -164,13 +165,13 @@ export function useMinimapGestures(params: {
     if (event.button !== 0) return;
     panRef.current = { pointerId: event.pointerId };
     event.currentTarget.setPointerCapture(event.pointerId);
-    // 点击即跳转：拖动只是在跳转后的视口上继续平移。
+    // A click jumps immediately: dragging merely continues panning on the jumped-to viewport.
     panTo(domainAt(fractionAt(event.clientX)));
   };
 
   const onPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (panRef.current === null || panRef.current.pointerId !== event.pointerId) return;
-    // minimap 的域是全模型，指针的域位置就是想要的视口中心。
+    // The minimap's domain is the whole model, so the pointer's domain position is the desired viewport center.
     panTo(domainAt(fractionAt(event.clientX)));
   };
 

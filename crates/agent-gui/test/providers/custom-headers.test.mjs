@@ -12,11 +12,11 @@ function errorHasCode(code) {
 test("parses JSON objects and arrays", () => {
   assert.deepEqual(
     customHeaders.parseCustomHeadersImport(
-      '{"X-Title":"LiveAgent","X-Environment":"production"}',
+      '{"X-Title":"ReactorPro","X-Environment":"production"}',
     ),
     {
       headers: [
-        { key: "X-Title", value: "LiveAgent" },
+        { key: "X-Title", value: "ReactorPro" },
         { key: "X-Environment", value: "production" },
       ],
       issues: [],
@@ -25,10 +25,10 @@ test("parses JSON objects and arrays", () => {
 
   assert.deepEqual(
     customHeaders.parseCustomHeadersImport(
-      '[{"key":"X-Title","value":"LiveAgent"}]',
+      '[{"key":"X-Title","value":"ReactorPro"}]',
     ),
     {
-      headers: [{ key: "X-Title", value: "LiveAgent" }],
+      headers: [{ key: "X-Title", value: "ReactorPro" }],
       issues: [],
     },
   );
@@ -222,9 +222,9 @@ test("buildCliIdentityHeaders(claude_code) writes UA plus the Anthropic fingerpr
     value: customHeaders.CLI_IDENTITY_USER_AGENTS.claude_code,
   });
   const map = new Map(headers.map((header) => [header.key, header.value]));
-  // Content-Type 不写入（发请求侧按 body 决定）。
+  // Content-Type is not written (the request-sending side decides it from the body).
   assert.equal(map.has("Content-Type"), false);
-  // 其余 Anthropic 指纹头逐条写入且取值一致。
+  // The remaining Anthropic fingerprint headers are each written with matching values.
   for (const [key, value] of Object.entries(customHeaders.ANTHROPIC_DEFAULT_REQUEST_HEADERS)) {
     if (key.toLowerCase() === "content-type") continue;
     assert.equal(map.get(key), value);
@@ -297,7 +297,7 @@ test("applyCliIdentity replaces the previous CLI's whole fingerprint instead of 
     1 + customHeaders.buildCliIdentityHeaders("claude_code").length,
   );
 
-  // 用户手填了 Claude 的会话头，然后切到 Codex。
+  // The user manually filled in Claude's session header, then switched to Codex.
   const withDynamic = [
     ...claude.headers,
     { key: customHeaders.CLAUDE_SESSION_ID_HEADER, value: "sess-1" },
@@ -305,25 +305,27 @@ test("applyCliIdentity replaces the previous CLI's whole fingerprint instead of 
   const codex = customHeaders.applyCliIdentity(withDynamic, "codex");
   const keys = codex.headers.map((header) => header.key.toLowerCase());
 
-  // Anthropic 家族整套消失，包括手填的会话头。
+  // The entire Anthropic family disappears, including the manually filled session header.
   assert.ok(!keys.includes("x-app"));
   assert.ok(!keys.some((key) => key.startsWith("x-stainless-")));
   assert.ok(!keys.includes("anthropic-version"));
   assert.ok(!keys.includes("anthropic-dangerous-direct-browser-access"));
   assert.ok(!keys.includes(customHeaders.CLAUDE_SESSION_ID_HEADER.toLowerCase()));
 
-  // 业务头原样保留在原位；UA 就地换成 Codex。
+  // Business headers are kept in place as-is; the UA is swapped to Codex in place.
   assert.deepEqual(codex.headers[0], { key: "X-Relay-Channel", value: "vip" });
   const map = new Map(codex.headers.map((header) => [header.key, header.value]));
   assert.equal(map.get("User-Agent"), customHeaders.buildCliUserAgent("codex"));
   assert.equal(map.get("originator"), "codex_cli_rs");
 
-  // 结果恰好 = 业务头 + Codex 整套身份头，没有残留。
+  // The result is exactly = business headers + the full Codex identity header set, with nothing left
+  // over.
   assert.equal(codex.headers.length, 1 + customHeaders.buildCliIdentityHeaders("codex").length);
   assert.equal(codex.overwrittenCount, 1);
-  // 只有业务头和共享的 User-Agent 留下，其余都是被剥掉的 Anthropic 头。
+  // Only the business headers and the shared User-Agent remain; the rest are stripped Anthropic
+  // headers.
   assert.equal(codex.removedCount, withDynamic.length - 2);
-  // 输入未被改动。
+  // The input was not modified.
   assert.equal(withDynamic.length, claude.headers.length + 1);
 });
 

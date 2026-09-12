@@ -470,8 +470,9 @@ export const ImagePreview = memo(function ImagePreview(props: ImagePreviewProps)
 
   const clampedIndex = clampImagePreviewIndex(activeIndex, slides.length);
   const slide = slides[clampedIndex];
-  // 紧凑指纹而非整串 src/dataBase64：内联图的 payload 是 MB 级巨串，进 deps
-  // 会让缩放/拖拽的每帧重渲染都重新物化+全量比较一次（内存churn 主因）。
+  // A compact fingerprint instead of the whole src/dataBase64 string: an inline image's
+  // payload is a multi-MB string, and putting it in deps would re-materialize and fully
+  // compare it on every frame of zoom/drag re-render (the main cause of memory churn).
   const activeSlideKey = slide ? getImagePreviewSlideKey(slide) : null;
   const imageSource = useMemo(() => (slide ? getImagePreviewDisplaySource(slide) : ""), [slide]);
   const hasInlineImageData = Boolean(slide?.dataBase64?.trim() || imageSource.startsWith("data:"));

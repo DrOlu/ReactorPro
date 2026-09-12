@@ -5,19 +5,23 @@ import {
 } from "@liveagent/ui/lib/providers/proxy";
 
 /**
- * 一次实际出站尝试的传输装配摘要，供轨迹账本审计逐候选独立性
- * （主选带 use-system-proxy 头、备选不带，互不泄漏）。
+ * Transport assembly summary for one actual outbound attempt, used by the
+ * trajectory ledger to audit per-candidate independence (the primary carries the
+ * use-system-proxy header while the fallback does not, and they do not leak into
+ * each other).
  *
- * 脱敏不变量：只读头**名**与路由标记，绝不读头值——鉴权头（authorization/
- * x-api-key/x-goog-api-key）、代理 token、base64 覆盖包的取值全部不进快照。
- * upstream origin 是 scheme+host（与 step_end 已落盘的 provider/model 同
- * 敏感级），fullUrl 模式下完整 URL 可能含 query 凭据，因此只记布尔标记。
+ * Redaction invariant: only header *names* and routing markers are read, never
+ * header values — auth headers (authorization/x-api-key/x-goog-api-key), proxy
+ * tokens, and base64 override payload values never enter the snapshot. The
+ * upstream origin is scheme+host (the same sensitivity level as the provider/
+ * model already persisted by step_end), and in fullUrl mode the full URL may
+ * contain query credentials, so only a boolean marker is recorded.
  */
 export type TransportSnapshot = {
   upstreamOrigin?: string;
   useSystemProxy: boolean;
   fullUrl: boolean;
-  /** 全部头名，小写去重后按字典序；值一律不采集。 */
+  /** All header names, lowercased and deduplicated in lexicographic order; values are never collected. */
   headerNames: readonly string[];
 };
 
@@ -26,7 +30,7 @@ export function captureTransportSnapshot(
 ): TransportSnapshot {
   const byLowerName = new Map<string, string>();
   for (const [name, value] of Object.entries(headers ?? {})) {
-    // null 是"删除该头"标记（pi-ai ProviderHeaders 语义），不会出现在出站请求里。
+    // null is the "delete this header" marker (pi-ai ProviderHeaders semantics) and never appears in the outbound request.
     if (value === null) continue;
     byLowerName.set(name.toLowerCase(), value);
   }

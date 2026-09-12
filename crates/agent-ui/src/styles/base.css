@@ -628,7 +628,7 @@
        background-tinted glass panels read as elevated surfaces. */
     --hub-canvas: var(--background);
 
-    /* Chip / pill buttons (MCP, Skills, 新对话) */
+    /* Chip / pill buttons (MCP, Skills, new chat) */
     --chip-bg: 220 13% 91%;
     --chip-bg-hover: 220 13% 86%;
     /* Send button disabled */

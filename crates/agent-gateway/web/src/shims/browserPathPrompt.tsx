@@ -31,7 +31,7 @@ function BrowserPathPromptDialog(props: {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onResolve(null)}>
-      <DialogContent className="max-w-md p-0" closeLabel="取消" showCloseButton>
+      <DialogContent className="max-w-md p-0" closeLabel="Cancel" showCloseButton>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -57,10 +57,10 @@ function BrowserPathPromptDialog(props: {
           <DialogFooter className="bg-muted/20">
             <DialogActions>
               <Button type="button" variant="outline" onClick={() => onResolve(null)}>
-                取消
+                Cancel
               </Button>
               <Button type="submit" disabled={!value.trim()}>
-                确认
+                Confirm
               </Button>
             </DialogActions>
           </DialogFooter>

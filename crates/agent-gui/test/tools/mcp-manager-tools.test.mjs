@@ -841,7 +841,7 @@ test("McpManager abort after commit skips remaining runtime cleanup with a warni
   );
   assert.match(result.content[0].text, /cancelled before runtime cleanup for other/);
 });
-// P1#1:沙箱模式下 McpManager 不得成为无围栏的 stdio 进程 spawn 入口。
+// P1#1: under sandbox mode, McpManager must not become an unfenced entry point for spawning stdio processes.
 test("McpManager refuses stdio runtime probes while the OS sandbox is active", async () => {
   for (const action of ["test", "tools", "restart", "diagnose"]) {
     const { bundle, invocations } = createMcpBundle({
@@ -859,7 +859,7 @@ test("McpManager refuses stdio runtime probes while the OS sandbox is active", a
     const persisted = await callMcpManager(bundle, { action, server_id: "demo" });
     assert.equal(persisted.isError, true, `${action} on a persisted stdio server must be refused`);
 
-    // 拒绝发生在任何 IPC 之前:没有任何进程被拉起。
+    // The refusal happens before any IPC: no process is ever spawned.
     assert.deepEqual(
       invocations.filter((call) => call.command !== "mcp_runtime_status"),
       [],

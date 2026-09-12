@@ -264,7 +264,7 @@ test("buildDecisions merges via synthesized body and bins rejections", () => {
               riskLevel: "low",
               confidence: 0.95,
               reason: "duplicate",
-              preservedEvidence: ["原话引用"],
+              preservedEvidence: ["verbatim quote"],
             },
             {
               action: "mark_review",

@@ -6,8 +6,9 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// AgentView 是绑定到单个非空 agent_id 的只读适配视图：以统一的门控/快照方法
-// 暴露已按 Agent 作用域化的状态，协议层与 shared 域逻辑经它访问。
+// AgentView is a read-only adapter view bound to a single non-empty agent_id:
+// it exposes Agent-scoped state through unified gating/snapshot methods, and
+// the protocol layer and shared domain logic access it through this view.
 type AgentView struct {
 	m       *Manager
 	agentID string
@@ -23,7 +24,7 @@ func (v AgentView) resolvedID() string {
 
 func (v AgentView) AgentID() string { return v.agentID }
 
-// ResolvedAgentID 返回视图绑定的 agent_id。
+// ResolvedAgentID returns the agent_id the view is bound to.
 func (v AgentView) ResolvedAgentID() string { return v.resolvedID() }
 
 func (v AgentView) WebTerminalEnabled() bool {

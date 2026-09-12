@@ -179,8 +179,9 @@ function BackgroundTaskLogDialog(props: {
     >
       <DialogContent
         layout="bottom-sheet-mobile"
-        // 显式声明宽度：这是唯一依赖 primitive 默认值的调用点，默认值从
-        // max-w-lg 收到 max-w-md 后它会被动变窄 64px，而它承载等宽终端日志。
+        // Explicitly declare the width: this is the only call site relying on the
+        // primitive's default value; when the default narrowed from max-w-lg to
+        // max-w-md it would shrink by 64px, and this hosts monospace terminal logs.
         className="flex h-[85dvh] max-w-lg flex-col p-0 sm:h-[min(80dvh,36rem)]"
         closeLabel={t("projectTools.close")}
         showCloseButton
@@ -495,7 +496,7 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
 
   useEffect(() => {
     if (!active || !hasRunning) return;
-    // 与面板的 30s reconcile 同一口径：窗口不可见时这一秒一跳只是白烧 CPU。
+    // Same basis as the panel's 30s reconcile: when the window is invisible, this once-per-second tick just burns CPU for nothing.
     const timer = window.setInterval(() => {
       if (isDocumentHidden()) return;
       setNow(Date.now());

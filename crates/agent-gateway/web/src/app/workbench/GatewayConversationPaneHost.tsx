@@ -1,8 +1,12 @@
-// 会话 Pane 的统一宿主——复刻桌面端 RestorableConversationPaneHost:
-// 每个 Pane 始终挂同一组件,焦点切换只换 primary/background 绑定,不拆宿主。
-// 发送/停止/排队/上传/审批按本 Pane 的 conversationId 路由;选模型、编辑队列
-// 项、由正文重发等页面级操作在背景 Pane 上先走 focusGuard。Primary 把自己的
-// 输入框挂到页面 composerRef,卸载时把未发送草稿写回缓存。
+// Unified host for conversation Panes — mirrors the desktop
+// RestorableConversationPaneHost:
+// Every Pane always mounts the same component; a focus change only swaps the
+// primary/background binding, never tearing down the host.
+// Send/stop/queue/upload/approval are routed by this Pane's conversationId;
+// page-level operations such as model selection, queue item editing and
+// resend-from-body go through focusGuard first on a background Pane. Primary
+// attaches its own input box to the page composerRef and writes unsent drafts
+// back to the cache on unmount.
 
 import {
   type ChangedFilesActions,
@@ -96,10 +100,13 @@ type ChatQueueSnapshotLike = Parameters<
 >[0];
 
 /**
- * 页面级共享上下文:所有背景会话 Pane 共用一份,在 GatewayAppView 渲染体内
- * 逐帧重建(未 memo 化——宿主经 contextRef 读取最新值,不依赖引用稳定;
- * 真正的稳定化需要先把上游 handler 链整体 useCallback 化,留待性能收敛)。
- * 函数字段一律按 conversationId 显式路由,不依赖"当前展示会话"。
+ * Page-level shared context: one instance shared by all background conversation
+ * Panes, rebuilt every frame inside the GatewayAppView render body (not memoized
+ * — the host reads the latest value through contextRef and does not depend on
+ * reference stability; true stabilization would first require converting the
+ * whole upstream handler chain to useCallback, deferred until performance
+ * convergence). Function fields are always explicitly routed by conversationId
+ * and never rely on the "currently displayed conversation".
  */
 export type GatewayConversationPaneHostContext = {
   api: GatewayWebSocketClient;
@@ -107,9 +114,9 @@ export type GatewayConversationPaneHostContext = {
   settings: AppSettings;
   hasModels: boolean;
   showUsage: boolean;
-  /** 页面级输入禁用(历史加载/压缩中)——只作用于 primary Pane。 */
+  /** Page-level input disabled (history loading/compaction) — applies only to the primary Pane. */
   isInputDisabled: boolean;
-  /** 传输层禁用(离线/协议不兼容)——背景 Pane 也要挡住发送。 */
+  /** Transport-level disabled (offline/incompatible protocol) — background Panes must block sending too. */
   transportInputDisabled: boolean;
   inputPlaceholder: string;
   modelOptions: ChatComposerBarProps["modelOptions"];
@@ -120,10 +127,6 @@ export type GatewayConversationPaneHostContext = {
   contextDisplayMode: ChatComposerBarProps["contextDisplayMode"];
   commandSafetyMode: ChatComposerBarProps["commandSafetyMode"];
   onCommandSafetyModeChange: ChatComposerBarProps["onCommandSafetyModeChange"];
-  sttProvider: ChatComposerBarProps["sttProvider"];
-  sttProviderConfigured: boolean | undefined;
-  sttTransport: ChatComposerBarProps["sttTransport"];
-  onSttError: (message: string) => void;
   gitClient: ChatComposerBarProps["gitClient"];
   gitWriteEnabled: boolean;
   gitDisabledMessage: string | undefined;
@@ -149,7 +152,7 @@ export type GatewayConversationPaneHostContext = {
     uploadedFiles: PendingUploadedFile[];
     referencedConversations: ConversationMentionReference[];
   }>;
-  /** 在途导入归属的会话 id:上传禁用/动画只作用在目标会话的 Pane 上。 */
+  /** Conversation id owning an in-flight import: upload disabling/animation applies only to the target conversation's Pane. */
   uploadingConversationId: string | null;
   getPendingUploads: (conversationId: string) => PendingUploadedFile[];
   subscribePendingUploads: (listener: () => void) => () => void;
@@ -229,15 +232,15 @@ export type GatewayConversationPaneHostProps = {
   paneId: string;
   conversationId: string;
   context: GatewayConversationPaneHostContext;
-  /** 本 Pane 是否承载页面当前会话(primary 绑定)。焦点切换不拆宿主。 */
+  /** Whether this Pane carries the page's current conversation (primary binding). A focus change does not tear down the host. */
   isPrimary: boolean;
-  /** focusGuard 出口:页面级操作先聚焦本 Pane。 */
+  /** focusGuard exit: page-level operations focus this Pane first. */
   onFocusPane: () => void;
-  /** 页面 composerRef:primary Pane 把自己的输入框挂上去。 */
+  /** Page composerRef: the primary Pane attaches its own input box to it. */
   pageComposerRef?: MutableRefObject<MentionComposerHandle | null>;
   primary?: GatewayConversationPrimarySurface;
   blockedMessage?: string | null;
-  /** 本 Pane 独立的会话/轨迹视图（每个会话一份，后台 Pane 也能保持）。 */
+  /** This Pane's independent conversation/trajectory view (one per conversation, so background Panes keep theirs too). */
   trajectoryActive?: boolean;
 };
 
@@ -254,17 +257,20 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     trajectoryActive = false,
   } = props;
   const { api, registry } = context;
-  // context 里的部分函数(sendChat 等)每次渲染都是新引用;凡按 conversationId
-  // 维度运行的 effect 一律经 ref 读取,避免身份抖动触发误重置。
+  // Some functions in context (sendChat, etc.) are new references on every
+  // render; any effect that runs per conversationId reads through a ref to
+  // avoid identity churn triggering spurious resets.
   const contextRef = useRef(context);
   contextRef.current = context;
   const { t } = useLocale();
   const isDraft = isLocalDraftConversationId(conversationId);
   const store = registry.get(conversationId);
 
-  // ---- 数据层:独立流订阅 + 一次性尾窗水合 --------------------------------
-  // Primary 的流由页面级 useConversationChat 占用同一 store;背景 Pane 自己订
-  // 阅。isPrimary 翻转时 effect 重跑,保证「后订阅替换先订阅」后背景能把流接回。
+  // ---- Data layer: independent stream subscription + one-shot tail hydration
+  // The primary's stream is held in the same store by the page-level
+  // useConversationChat; background Panes subscribe on their own. When isPrimary
+  // flips the effect reruns, ensuring that after "a later subscription replaces
+  // the earlier one" a background Pane can reconnect its stream.
   useEffect(() => {
     if (isDraft || isPrimary) return;
     return api.subscribeConversationStream(conversationId, {
@@ -307,7 +313,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         store.applyHistorySnapshot(entries, { mode });
         setHasMoreHistory(detail.has_more === true);
       } catch {
-        // 历史读取失败时退化为纯实时视图;聚焦后主视图会重新拉取。
+        // On history read failure, degrade to a live-only view; once focused,
+        // the main view re-fetches.
       } finally {
         if (!cancelled) setHydrated(true);
       }
@@ -336,7 +343,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
         loadedMaxMessagesRef.current = nextMax;
         setHasMoreHistory(detail.has_more === true);
       } catch {
-        // 拉取失败保持现状,按钮可重试。
+        // On fetch failure keep the current state; the button allows a retry.
       } finally {
         if (historyConversationIdRef.current === requestedConversationId) {
           loadingEarlierRef.current = false;
@@ -369,7 +376,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     liveTrajectoryAuthoritativeRevision(conversationId),
   );
 
-  // ---- 每会话队列:订阅网关中继的队列快照,revision 单调递增去旧 ----------
+  // ---- Per-conversation queue: subscribe to queue snapshots relayed by the
+  // gateway, using a monotonically increasing revision to drop stale ones ----
   const [queuedTurns, setQueuedTurns] = useState<ChatQueueTurnPreview[]>([]);
   const queuedTurnsRef = useRef<ChatQueueTurnPreview[]>([]);
   const queueRevisionRef = useRef(0);
@@ -408,8 +416,10 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     };
   }, [api, applyQueueSnapshot, conversationId, isDraft]);
 
-  // 队列操作直接以本会话 id 走网关 RPC(等价桌面端按会话路由);编辑队列项
-  // 需要页面级编辑会话,与桌面端一致先聚焦本 Pane。
+  // Queue operations go straight to the gateway RPC with this conversation id
+  // (equivalent to the desktop's per-conversation routing); editing a queue item
+  // needs the page-level editing conversation, so as on the desktop this Pane is
+  // focused first.
   const handleRunQueuedTurnNow = useCallback(
     (id: string) => {
       void api
@@ -438,16 +448,18 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     [api, applyQueueSnapshot, conversationId],
   );
 
-  // ---- 每会话待发附件:直接订阅页面级 per-conversation 存储 ----------------
-  // 文档级 paste/drop 可以写入背景会话；订阅保证 chip 与发送读取同一份
-  // 权威快照，不再依赖 Pane 自己动作后的手动镜像刷新。
+  // ---- Per-conversation pending attachments: subscribe directly to the
+  // page-level per-conversation store ----
+  // Document-level paste/drop can write into a background conversation; the
+  // subscription ensures chips and sending read the same authoritative snapshot,
+  // no longer relying on a manual mirror refresh after the Pane's own actions.
   const pendingUploads = useSyncExternalStore(
     context.subscribePendingUploads,
     () => context.getPendingUploads(conversationId),
     () => context.getPendingUploads(conversationId),
   );
 
-  // ---- 发送/停止:严格按本 Pane 的 conversationId 路由(桌面端口径) --------
+  // ---- Send/stop: routed strictly by this Pane's conversationId (desktop semantics) ----
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const sendInFlightRef = useRef(false);
   const workdir = context.workdirForConversation(conversationId);
@@ -485,9 +497,11 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     [selectedProvider?.type, selection?.model],
   );
 
-  // 提示词澄清执行器（桌面端背景 Pane 口径）：模型覆盖/回退/错误拍平在
-  // executeClarifyPromptTurn（两宿主共用），fallback 按本 Pane 会话解析。
-  // runTurn 在 useClarifySession 内走 latest-ref，依赖变化只换身份不打断会话。
+  // Prompt clarification executor (desktop background Pane semantics): model
+  // override/fallback/error flattening lives in executeClarifyPromptTurn (shared
+  // by both hosts), with the fallback resolved by this Pane's conversation.
+  // runTurn uses a latest-ref inside useClarifySession, so dependency changes
+  // only swap identity without interrupting the session.
   const runClarifyTurn = useCallback<RunClarifyTurn>(
     (messages, _signal, onTextDelta) =>
       executeClarifyPromptTurn(
@@ -503,7 +517,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       ),
     [context, selection, selectedProvider, paneRuntimeControls],
   );
-  // 与桌面端口径一致：会话无 workdir 时不传空串，避免系统提示词带噪音。
+  // Consistent with the desktop: when the conversation has no workdir, pass no
+  // empty string, avoiding noise in the system prompt.
   const clarifyContext = useMemo<ClarifyContext | undefined>(
     () => (workdir ? { workdir } : undefined),
     [workdir],
@@ -515,8 +530,10 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
 
   const handleSend = useCallback(() => {
     if (sendInFlightRef.current || context.transportInputDisabled) return;
-    // 本会话的附件导入尚未落账时不得发送:此刻 getPendingUploads 读到的
-    // 是空列表,消息会丢附件(与主 Pane 的上传中禁用同一边界)。
+    // Do not send while this conversation's attachment import has not yet been
+    // committed: at that moment getPendingUploads reads an empty list and the
+    // message would lose its attachments (same boundary as the main Pane's
+    // uploading-disable).
     if (context.uploadingConversationId === conversationId) return;
     const composer = composerRef.current;
     const draft = composer?.getDraft() ?? null;
@@ -540,14 +557,15 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           uploadedFiles = materialized.uploadedFiles;
           referencedConversations = materialized.referencedConversations;
         } catch (error) {
-          context.notifyError(error instanceof Error ? error.message : "大段粘贴内容导入失败");
+          context.notifyError(error instanceof Error ? error.message : "Failed to import large pasted content");
           return;
         }
         if (!text && uploadedFiles.length === 0) return;
         composerRef.current?.clear();
         context.updatePendingUploads(conversationId, () => []);
-        // 忙时入队(与桌面端背景 Pane enqueue 一致):队列面板持有提示词,
-        // 不做转录乐观回显;闲时直发。
+        // Enqueue when busy (consistent with the desktop background Pane's
+        // enqueue): the queue panel holds the prompt and no optimistic
+        // transcript echo is made; when idle, send directly.
         const busy = isRunningRef.current || queuedTurnsRef.current.length > 0;
         const restore = () => {
           context.updatePendingUploads(conversationId, (current) =>
@@ -577,7 +595,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   }, [context, conversationId, paneRuntimeControls]);
 
   const handleStop = useCallback(() => {
-    // 与桌面端/聚焦舞台一致:有排队回合先"停当前、跑下一条",否则纯停止。
+    // Consistent with the desktop/focused stage: with queued turns, first
+    // "stop the current one and run the next", otherwise just stop.
     const nextQueuedTurn = queuedTurnsRef.current[0];
     if (nextQueuedTurn) {
       handleRunQueuedTurnNow(nextQueuedTurn.id);
@@ -586,9 +605,12 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     void context.cancelChat(conversationId);
   }, [context, conversationId, handleRunQueuedTurnNow]);
 
-  // ---- 草稿:挂载恢复缓存,卸载(聚焦切换/关 Pane)写回缓存(桌面端口径) --
-  // hydrated 必须参与触发:背景 Pane 冷启动时先渲染加载占位,composer 尚未
-  // 挂载,恢复会被无声跳过;水合完成后重跑一次才能把缓存草稿真正写进输入框。
+  // ---- Draft: restore the cache on mount, write back to the cache on unmount
+  // (focus change / Pane close) (desktop semantics) ----
+  // hydrated must participate in the trigger: on a background Pane's cold start
+  // a loading placeholder renders first, the composer is not yet mounted, and
+  // the restore would be silently skipped; rerunning once after hydration
+  // actually writes the cached draft into the input box.
   useLayoutEffect(() => {
     if (!hydrated) return;
     const composer = composerRef.current;
@@ -599,8 +621,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
       composer?.clear();
     }
     return () => {
-      // 只写回非空草稿:空输入框不得删除缓存里的草稿(聚焦舞台的恢复
-      // 通路仍需要它),与桌面端 ConversationPaneHost 的卸载语义一致。
+      // Only write back non-empty drafts: an empty input box must not delete the
+      // cached draft (the focused stage's restore path still needs it),
+      // consistent with the desktop ConversationPaneHost unmount semantics.
       const nextDraft = composerRef.current?.getDraft();
       if (!nextDraft || nextDraft.isEmpty || !nextDraft.text.trim()) return;
       contextRef.current.setCachedComposerDraft(conversationId, nextDraft);
@@ -616,7 +639,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     if (composerRef.current) pageComposerRef.current = composerRef.current;
   });
 
-  // ---- 转录滚动跟随:贴底自动跟进,用户上滚即释放,支持一键回底 ------------
+  // ---- Transcript scroll following: auto-follow when pinned to the bottom,
+  // released when the user scrolls up, with one-click return to bottom ----
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const followingRef = useRef(true);
   const [following, setFollowing] = useState(true);
@@ -637,7 +661,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   }, []);
   useEffect(() => () => detachScrollRef.current?.(), []);
   const rowCount = transcript.rows.length;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 行数/修订变化时按跟随态贴底,效果体不直接读取它们。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pin to bottom according to follow state when row count/revision changes; the effect body does not read them directly.
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || !followingRef.current) return;
@@ -652,7 +676,7 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
   }, []);
   const isViewportFollowing = useCallback(() => followingRef.current, []);
 
-  // ---- 每会话模型/用量/进度/审批 -------------------------------------------
+  // ---- Per-conversation model/usage/progress/approval ----
   const selectedValue = selection
     ? toModelValue(selection.customProviderId, selection.model)
     : undefined;
@@ -709,7 +733,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     }
     return result;
   }, [transcript.rows]);
-  // 审批决定显式携带本 Pane 的会话 id,绝不落到聚焦会话上。
+  // Approval decisions explicitly carry this Pane's conversation id and never
+  // fall onto the focused conversation.
   const approvalBar =
     pendingToolApprovals.length > 0 ? (
       <ToolApprovalBar
@@ -789,9 +814,10 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
     />
   );
 
-  // 嵌套一层 .gateway-chat-frame:ChatComposerBar(surface="web")把输入框
-  // 高度写到最近的 chat-frame CSS 变量上,这里让变量按 Pane 独立作用,多个
-  // 输入框互不干扰;DOM 结构与桌面端 ConversationSurface 一致。
+  // Nest a .gateway-chat-frame layer: ChatComposerBar(surface="web") writes the
+  // input box height to the nearest chat-frame CSS variable, and this makes the
+  // variable scoped per Pane so multiple input boxes do not interfere with each
+  // other; the DOM structure matches the desktop ConversationSurface.
   return (
     <div
       data-workbench-pane-id={paneId}
@@ -869,8 +895,8 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
                   type="button"
                   className="gateway-scroll-to-bottom"
                   onClick={handleJumpToBottom}
-                  aria-label="滚动到底部"
-                  title="滚动到底部"
+                  aria-label="Scroll to bottom"
+                  title="Scroll to bottom"
                 >
                   <ChevronDown className="h-4 w-4" />
                 </button>
@@ -898,11 +924,6 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
               transportInputDisabled: context.transportInputDisabled,
               conversationIsCompacting: transcript.toolStatusIsCompaction === true,
             })}
-            sttSessionKey={conversationId}
-            sttProvider={context.sttProvider}
-            sttProviderConfigured={context.sttProviderConfigured}
-            sttTransport={context.sttTransport}
-            onSttError={context.onSttError}
             inputPlaceholder={context.inputPlaceholder}
             workdir={workdir}
             enabledSkills={context.enabledSkills}

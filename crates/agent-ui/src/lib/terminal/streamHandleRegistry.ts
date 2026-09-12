@@ -1,14 +1,18 @@
 import type { TerminalStreamChunk } from "./types";
 
 /**
- * 终端输出流句柄注册表：按 sessionId 分桶派发。
+ * Registry of terminal output stream handles: dispatch is bucketed by
+ * sessionId.
  *
- * 旧实现把所有 handle 放在一个 Set 里，每个输出事件遍历全部 handle 再按
- * sessionId 过滤（O(N)）。画板多终端 Pane 并列后同时存活的 handle 变多，
- * 高频输出下改为 Map<sessionId, Set> 桶内 O(1) 派发。
+ * The old implementation kept all handles in one Set and iterated every handle
+ * for each output event before filtering by sessionId (O(N)). With multiple
+ * terminal panes side by side on the canvas, more handles are alive at once, so
+ * under high-frequency output this was changed to Map<sessionId, Set> for O(1)
+ * in-bucket dispatch.
  *
- * 同一 session 理论上被 View Lease 限制为单 handle，但数据结构上仍允许
- * 多 handle 共存（防御：租约转移瞬间新旧 handle 可能短暂交叠）。
+ * A single session is theoretically limited to one handle by the view lease,
+ * but the data structure still allows multiple handles to coexist (defensive:
+ * old and new handles may briefly overlap at the moment the lease transfers).
  */
 export type TerminalStreamDispatchTarget = {
   accept(chunk: TerminalStreamChunk): void;
@@ -40,7 +44,8 @@ export function createTerminalStreamHandleRegistry<Handle extends TerminalStream
     dispatch(chunk: TerminalStreamChunk) {
       const bucket = handlesBySession.get(chunk.sessionId);
       if (!bucket) return;
-      // 快照遍历：accept 内部可能触发 dispose → remove，避免遍历中修改集合。
+      // Snapshot the iteration: accept may internally trigger dispose -> remove, so
+      // avoid mutating the set during iteration.
       for (const handle of Array.from(bucket)) {
         handle.accept(chunk);
       }

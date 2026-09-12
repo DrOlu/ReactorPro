@@ -12,7 +12,7 @@ func TestEventPayloadPreservesHostedSearch(t *testing.T) {
 	payload := EventPayload(&gatewayv2.ChatEvent{
 		Type:           gatewayv2.ChatEvent_HOSTED_SEARCH,
 		ConversationId: "conversation-1",
-		Data:           `{"id":"search-1","provider":"codex","status":"completed","queries":["设计模式定义"],"sources":[{"url":"https://example.com/pattern","title":"设计模式"}],"round":2}`,
+		Data:           `{"id":"search-1","provider":"codex","status":"completed","queries":["design pattern definition"],"sources":[{"url":"https://example.com/pattern","title":"design pattern"}],"round":2}`,
 	}, 7)
 
 	if payload["type"] != "hosted_search" {
@@ -117,7 +117,7 @@ func TestTrimLargeToolResultContentTruncatesToolResult(t *testing.T) {
 }
 
 func TestTrimLargeToolResultContentIsRuneSafe(t *testing.T) {
-	longText := strings.Repeat("汉", 100) // 300 bytes, 100 runes
+	longText := strings.Repeat("€", 100) // 300 bytes, 100 runes
 	payload := map[string]any{
 		"type":    "tool_result",
 		"content": longText,

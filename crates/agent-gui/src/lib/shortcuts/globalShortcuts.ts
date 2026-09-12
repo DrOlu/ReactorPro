@@ -2,10 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { wasBrowserKeyDefaultBlocked } from "../system/webviewNavigationGuard";
 
 /**
- * 桌面快捷键：系统全局注册与仅软件内的键盘监听共用绑定。
- * 绑定只存本机 localStorage —— 快捷键是设备偏好，不进入设置同步/网关。
- * accelerator 采用 `Ctrl+Shift+KeyA` 形式：修饰键用 Ctrl/Shift/Alt/Super，
- * 主键用 W3C KeyboardEvent.code 名称，两端（前端录制 & Rust global_hotkey 解析）天然一致。
+ * Desktop shortcuts: system-global registration and in-app-only keyboard listening share the same
+ * bindings. Bindings are stored only in the local localStorage -- shortcuts are device preferences
+ * and do not enter settings sync/gateway.
+ * Accelerators use the form `Ctrl+Shift+KeyA`: modifiers are Ctrl/Shift/Alt/Super, and the main key
+ * uses the W3C KeyboardEvent.code name, naturally consistent between both ends (frontend recording &
+ * Rust global_hotkey parsing).
  */
 
 export type GlobalShortcutAction = "summon" | "toggle" | "newChat" | "searchConversations" | "pin";
@@ -21,7 +23,7 @@ export const GLOBAL_SHORTCUT_ACTIONS: readonly GlobalShortcutAction[] = [
 export type ShortcutScope = "global" | "app";
 
 export interface GlobalShortcutBinding {
-  /** 缺省为 global，兼容已有本机配置。 */
+  /** Defaults to global, compatible with existing local configs. */
   scope?: ShortcutScope;
   accelerator: string;
   enabled: boolean;
@@ -115,7 +117,7 @@ export function globalShortcutDisplayToken(token: string, isMac: boolean): strin
   return globalShortcutKeyDisplayLabel(token);
 }
 
-/** KeyboardEvent.code -> 修饰键 token；非修饰键返回 null。 */
+/** KeyboardEvent.code -> modifier token; returns null for non-modifier keys. */
 export function modifierFromEventCode(code: string): ShortcutModifier | null {
   switch (code) {
     case "ControlLeft":
@@ -144,7 +146,8 @@ export function readGlobalShortcutBindings(): GlobalShortcutBindings {
     const bindings: GlobalShortcutBindings = {};
     for (const action of GLOBAL_SHORTCUT_ACTIONS) {
       const value = (parsed as Record<string, unknown>)[action];
-      // 早期版本直接存 accelerator 字符串，读取时迁移为 {accelerator, enabled}。
+      // Early versions stored the accelerator as a raw string; on read it is migrated to
+      // {accelerator, enabled}.
       if (typeof value === "string" && value.trim()) {
         bindings[action] = { accelerator: value.trim(), enabled: true };
         continue;
@@ -172,13 +175,14 @@ export function writeGlobalShortcutBindings(bindings: GlobalShortcutBindings): v
   try {
     window.localStorage.setItem(GLOBAL_SHORTCUT_STORAGE_KEY, JSON.stringify(bindings));
   } catch {
-    // localStorage 不可用时静默忽略（例如隐私模式）。
+    // Silently ignore when localStorage is unavailable (e.g. private mode).
   }
 }
 
 /**
- * 把绑定应用到 Tauri 端（全量替换式注册，仅注册已启用的绑定）。
- * 返回注册失败的条目；非 Tauri 环境（纯浏览器 dev）返回空数组。
+ * Applies bindings to the Tauri side (full-replacement registration, registering only enabled
+ * bindings). Returns the entries that failed to register; returns an empty array in a non-Tauri
+ * environment (pure browser dev).
  */
 async function replaceGlobalShortcuts(
   bindings: GlobalShortcutBindings,
@@ -196,12 +200,13 @@ async function replaceGlobalShortcuts(
     });
     return Array.isArray(failures) ? failures : [];
   } catch {
-    // 非 Tauri 环境或旧版桌面壳：忽略。
+    // Non-Tauri environment or an old desktop shell: ignore.
     return [];
   }
 }
 
-// 全量替换必须串行执行，避免快速切换范围后旧请求重新注册系统热键。
+// Full replacement must be executed serially, to avoid an old request re-registering system hotkeys
+// after a rapid scope switch.
 let registrationQueue: Promise<unknown> = Promise.resolve();
 export function applyGlobalShortcuts(
   bindings: GlobalShortcutBindings,
@@ -211,7 +216,7 @@ export function applyGlobalShortcuts(
   return next;
 }
 
-/** 应用启动时恢复本机保存的全局快捷键。 */
+/** Restores locally saved global shortcuts at app startup. */
 export async function applyStoredGlobalShortcuts(): Promise<void> {
   const bindings = readGlobalShortcutBindings();
   if (GLOBAL_SHORTCUT_ACTIONS.every((action) => !bindings[action])) return;
@@ -220,7 +225,7 @@ export async function applyStoredGlobalShortcuts(): Promise<void> {
 
 let shortcutsSuspended = false;
 
-/** 录制时同时挂起系统注册与软件内监听。 */
+/** Suspends both system registration and in-app listening during recording. */
 export function setShortcutsSuspended(suspended: boolean): void {
   shortcutsSuspended = suspended;
 }
@@ -238,7 +243,8 @@ export function matchesShortcutEvent(event: KeyboardEvent, accelerator: string):
   );
 }
 
-/** 仅窗口有焦点时派发 app 绑定，不向操作系统占用组合键。 */
+/** Dispatches app bindings only while the window has focus, without reserving the key combination
+ * from the OS. */
 export function installAppShortcutListener(): () => void {
   const onKeyDown = (event: KeyboardEvent) => {
     if (
@@ -259,7 +265,8 @@ export function installAppShortcutListener(): () => void {
       );
     });
     if (!action) return;
-    // 无修饰字符键不能抢走文本输入；带修饰组合与功能键仍可使用。
+    // An unmodified character key must not steal text input; modified combinations and function keys
+    // remain usable.
     const target = event.target instanceof Element ? event.target : null;
     if (
       !event.ctrlKey &&

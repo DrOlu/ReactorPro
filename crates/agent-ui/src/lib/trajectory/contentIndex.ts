@@ -1,8 +1,10 @@
 /**
- * 从已加载的 `UiMessage` 构建正文索引。
+ * Build the body index from the loaded `UiMessage`s.
  *
- * 事件流只保存时序与结构；完整正文复用宿主已经加载的转录窗口。稳定 messageId 是
- * 新轨迹的主连接键，conversation-global messageIndex 与窗口顺序只作为兼容回退。
+ * The event stream only stores ordering and structure; the full body reuses the transcript
+ * window the host has already loaded. The stable messageId is the primary join key for new
+ * trajectories, while conversation-global messageIndex and window order serve only as
+ * compatibility fallbacks.
  */
 
 import type { UiMessage, UiRound } from "../chat/uiMessages";
@@ -99,7 +101,7 @@ function userSourceBlocks(message: UiMessage): readonly TrajectorySourceBlock[] 
   return blocks.length === 0 ? undefined : blocks;
 }
 
-/** 一个 turn 在消息序列里的组成：一条用户消息加其后的助手消息。 */
+/** A turn's composition within the message sequence: one user message plus the assistant messages after it. */
 export type TrajectoryTurnWalkEntry = {
   turn: number;
   user?: UiMessage;
@@ -136,8 +138,9 @@ export function trajectoryTurnByMessageIndex(
 }
 
 /**
- * 按用户消息边界切分 turn，并用已记录的 messageId 把局部历史窗口映射到绝对 turn。
- * 一个锚点足以向前回填和向后递增；无锚点时保持传统的 1..N 降级编号。
+ * Split turns by user-message boundaries, and use recorded messageIds to map a local history
+ * window onto absolute turns. One anchor suffices to backfill before and increment after; with no
+ * anchor it keeps the traditional 1..N degraded numbering.
  */
 export function walkTrajectoryTurns(
   messages: readonly UiMessage[],

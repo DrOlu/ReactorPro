@@ -1,6 +1,14 @@
 {
   "name": "liveagent-workspace",
   "private": true,
+  "description": "ReactorPro - AI Agent desktop client with WebUI access, built and maintained by Hyperspace Technologies.",
+  "author": "Hyperspace Technologies <agent@reactorpro.ng>",
+  "license": "MIT",
+  "homepage": "https://reactorpro.ng",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DrOlu/ReactorPro.git"
+  },
   "packageManager": "pnpm@10.32.1",
   "scripts": {
     "build:gui": "pnpm --filter liveagent build",

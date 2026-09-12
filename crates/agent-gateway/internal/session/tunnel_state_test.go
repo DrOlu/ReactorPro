@@ -260,7 +260,8 @@ func TestForgetAgentPurgesOfflineTunnelRecordsAndRoutes(t *testing.T) {
 	))
 	slug := m.TunnelStateSnapshot("test-agent").GetTunnels()[0].GetSlug()
 
-	// 普通断线保留 spec；随后永久删除即使 Agent 已离线，也必须删除公开路由。
+	// An ordinary disconnect preserves the spec; a subsequent permanent deletion
+	// must remove the public route even if the Agent is already offline.
 	m.ClearSession(mustCurrentSession(t, m))
 	if got := len(m.TunnelStateSnapshot("test-agent").GetTunnels()); got != 1 {
 		t.Fatalf("offline tunnel count = %d, want preserved spec", got)

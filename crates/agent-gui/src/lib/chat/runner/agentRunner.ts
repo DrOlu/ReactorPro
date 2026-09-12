@@ -338,12 +338,12 @@ function getParallelToolBatch(
 
 function getParallelToolBatchStatus(batch: ParallelToolBatch) {
   if (batch.toolName === "Bash") {
-    return `正在并行执行 ${batch.toolCalls.length} 个 Bash 命令...`;
+    return `Running ${batch.toolCalls.length} Bash commands in parallel...`;
   }
   if (batch.toolName === "Agent") {
-    return `正在并行执行 ${batch.toolCalls.length} 个 Agent 调用...`;
+    return `Running ${batch.toolCalls.length} Agent calls in parallel...`;
   }
-  return `正在并行执行 ${batch.toolCalls.length} 个 ${batch.toolName} 调用...`;
+  return `Running ${batch.toolCalls.length} ${batch.toolName} calls in parallel...`;
 }
 
 function toMessageToolResult(message: Message, toolCall: ToolCall): ToolResultMessage {
@@ -363,9 +363,10 @@ type TurnContextOverride = {
   context: Context;
   emittedMessages: Message[];
   /**
-   * 只随出站请求投递的尾部文本（bus 增量、roster 运行状态等易变内容）。
-   * 不写入 agent.state.messages：写进去会经 emittedMessages 泄漏到持久化、
-   * UI 与记忆抽取。runner 逐次累积并在每次出站请求上重挂。
+   * Tail text delivered only with outbound requests (volatile content such as bus deltas and
+   * roster running status). Not written into agent.state.messages: doing so would leak through
+   * emittedMessages into persistence, the UI, and memory extraction. The runner accumulates it and
+   * re-attaches it on every outbound request.
    */
   wireTailText?: string;
 } | null;
@@ -468,7 +469,7 @@ export async function runAssistantWithTools(params: {
   } | null>;
   onToolStatus?: (status: string | null) => void;
   onRetryAttempts?: (round: number, attempts: RetryAttemptRecord[]) => void;
-  /** 每次跨供应商切换（含跳过熔断打开的主选）。targetIndex 是稳定候选下标（0 = 主选）。 */
+  /** On every cross-provider switch (including skipping a primary whose circuit breaker is open). targetIndex is the stable candidate index (0 = primary). */
   onFailoverAttempt?: (
     round: number,
     event: {
@@ -479,7 +480,7 @@ export async function runAssistantWithTools(params: {
       errorMessage: string;
     },
   ) => void;
-  /** 每个实际尝试的候选各fire一次：脱敏后的传输装配快照（只含头名，不含值）。 */
+  /** Fires once per candidate actually attempted: a redacted transport assembly snapshot (header names only, no values). */
   onTransportAttempt?: (
     round: number,
     snapshot: TransportSnapshot & { providerLabel: string },
@@ -489,37 +490,47 @@ export async function runAssistantWithTools(params: {
   subagentScheduler?: SubagentScheduler;
   allowEmptyWorkdir?: boolean;
   /**
-   * 工具审批门:每次工具执行前(截断校验之后)对规范化后的调用调用一次。
-   * 返回 allow:false 时该调用被拦截,reason 作为 toolResult 交给模型(与截断
-   * 拒绝同渲染路径)。回调可 await(交互式审批),被 turn 中止时应 reject/拒绝。
-   * 与策略/元数据实现解耦:runner 只认这个结果,不感知 toolPolicies 细节。
+   * Tool approval gate: called once per tool execution (after truncation validation) on the
+   * normalized call. When it returns allow:false the call is blocked, and reason is handed to the
+   * model as the toolResult (the same render path as a truncation rejection). The callback may be
+   * awaited (interactive approval) and should reject/deny when the turn is aborted. Decoupled from
+   * policy/metadata implementations: the runner recognizes only this result and is unaware of
+   * toolPolicies details.
    */
   resolveToolGate?: (
     toolCall: ToolCall,
     signal?: AbortSignal,
   ) => Promise<{ allow: true } | { allow: false; reason: string }>;
   /**
-   * 请求层工具可见性谓词(MCP 懒加载):返回 false 的工具不进发给模型的请求,
-   * 但保留在执行层(loop 快照)——已发生的调用照常校验与执行。每轮请求前重新
-   * 评估,ToolSearch 激活后下一轮立即可见。与隐藏的 provider 原生搜索桥同机制。
+   * Request-layer tool visibility predicate (MCP lazy loading): tools returning false do not go
+   * into the request sent to the model but remain in the execution layer (loop snapshot) --
+   * already-issued calls are validated and executed as usual. Re-evaluated before each round's
+   * request, so a tool becomes visible in the next round once ToolSearch activates it. Same
+   * mechanism as the hidden provider-native search bridge.
    */
   requestToolFilter?: (toolName: string) => boolean;
   /**
-   * 工具级终止谓词:某批调用里任一调用命中即在该批执行完后结束本轮 run,不再
-   * 跑后续模型轮(pi-agent-core afterToolCall terminate,批内全部标记 terminate
-   * 才生效,故谓词按批铺展——同批的并行调用照常执行,结果保留在历史)。计划
-   * 提交用它跳过无意义的"收尾话"轮——批准事实由卡片展示,执行由续轮承接。
+   * Tool-level termination predicate: if any call in a batch matches, the run for this turn ends
+   * after that batch finishes and no further model rounds run (pi-agent-core afterToolCall
+   * terminate only takes effect when all calls in the batch are marked terminate, so the predicate
+   * is spread per batch -- parallel calls in the same batch still execute and their results stay
+   * in history). Plan submission uses this to skip a meaningless "wrap-up" round -- the approval
+   * fact is shown on the card and execution is taken up by the next turn.
    */
   resolveToolTermination?: (toolCall: ToolCall) => boolean;
   /**
-   * 每轮出站请求的 tool_choice 裁决钩子(编排层策略,runner 不感知具体模式)。
-   * 返回 undefined 走缺省(有工具则 "auto")。定向强制({type:"tool"})只应
-   * 由调用方在有界场景使用——无界强制会剥夺模型的文本收尾能力,导致失控循环。
+   * tool_choice decision hook for each round's outbound request (orchestration-layer policy; the
+   * runner is unaware of specific modes). Returning undefined uses the default ("auto" when tools
+   * are present). Targeted forcing ({type:"tool"}) should only be used by the caller in bounded
+   * scenarios -- unbounded forcing would strip the model's ability to wrap up with text and cause
+   * a runaway loop.
    */
   resolveToolChoice?: (round: number) => ToolChoice | undefined;
   /**
-   * 模型轮数上限(含):达到后当前工具批执行完即优雅终止本轮 run(不抛错,
-   * 结果保留在历史),由编排层决定后续(如 plan mode 的补提交/兜底)。缺省无上限。
+   * Maximum number of model rounds (inclusive): once reached, the current tool batch finishes
+   * and the turn's run terminates gracefully (no throw; results stay in history), leaving
+   * subsequent handling to the orchestration layer (such as plan mode's supplementary
+   * submission/fallback). No limit by default.
    */
   maxRounds?: number;
 }) {
@@ -893,12 +904,14 @@ export async function runAssistantWithTools(params: {
     let currentSystemPrompt = params.context.systemPrompt;
     let emittedBaselineIndex = params.context.messages.length;
     let latestAgentEndMessages: Message[] = [];
-    // 尾部投递内容的累积器：只进出站请求，永不进 agent.state.messages。
-    // 每个块连同它首次挂上的锚点 toolCallId 一起记住——锚点必须钉死，重新搜索
-    // 会让块随工具循环推进从旧消息搬到新消息，旧消息字节变回去、前缀就断了。
-    // 语义：带 wireTailText 的 override 追加（按到达顺序）；不带 wireTailText 的
-    // override 清空——不带的只有压缩/重冻结分支，此时快照已重算进 systemPrompt，
-    // 旧尾部内容已被快照覆盖，继续挂只会重复投递。
+    // Accumulator for tail-delivered content: goes only into outbound requests, never into
+    // agent.state.messages. Each block is remembered along with the anchor toolCallId it was first
+    // attached to -- the anchor must be pinned down; re-searching would move the block from an old
+    // message to a new one as the tool loop advances, reverting the old message's bytes and thus
+    // breaking the prefix. Semantics: overrides carrying wireTailText append (in arrival order);
+    // overrides without wireTailText clear -- only the compaction/re-freeze branch omits it, and at
+    // that point the snapshot has been recomputed into systemPrompt, so the old tail content is
+    // already covered by the snapshot and keeping it attached would only deliver it twice.
     let accumulatedWireTailBlocks: PinnedTailBlock[] = [];
     let agentTools: AgentTool[] = [];
     const pendingRecoveredSeedTurnRef: {
@@ -1095,10 +1108,12 @@ export async function runAssistantWithTools(params: {
     ): AgentContext | undefined {
       if (!agent) return undefined;
       if (override.wireTailText) {
-        // 锚点在这里解析一次就钉死：override.context.messages 是本轮出站请求
-        // 的消息列表，此刻的“最后一条安全工具结果”就是这个块该长期附着的位置。
-        // 解析不出锚点时丢弃本块——调用方在探锚阶段已确认过可挂，走到这里为空
-        // 只可能是压缩改写了消息列表，此时游标也不会推进，下一轮重投。
+        // The anchor is resolved once here and pinned down: override.context.messages is this
+        // round's outbound request message list, and the "last safe tool result" at this moment is
+        // where this block should attach long-term. Discard the block if no anchor can be resolved
+        // -- the caller already confirmed it can be attached during the anchor-probing stage, so
+        // arriving here empty can only mean compaction rewrote the message list; in that case the
+        // cursor does not advance either and it is re-delivered next round.
         const anchorToolCallId = resolveTailBlockAnchorId(override.context.messages);
         if (anchorToolCallId) {
           accumulatedWireTailBlocks = [
@@ -1107,8 +1122,9 @@ export async function runAssistantWithTools(params: {
           ];
         }
       } else {
-        // 见 accumulatedWireTailBlocks 声明处的语义说明：压缩/重冻结分支不带
-        // wireTailText，旧尾部内容已并入重算后的快照，累积必须清空。
+        // See the semantics note where accumulatedWireTailBlocks is declared: the compaction/
+        // re-freeze branch carries no wireTailText, and the old tail content has been merged into
+        // the recomputed snapshot, so the accumulation must be cleared.
         accumulatedWireTailBlocks = [];
       }
       currentSystemPrompt = override.context.systemPrompt;
@@ -1226,10 +1242,10 @@ export async function runAssistantWithTools(params: {
       params.onRetryAttempts?.(round, retryAttemptsForRound);
       const streamTools =
         streamContext.tools ?? (agent?.state.tools as Context["tools"] | undefined) ?? llmTools;
-      // 尾部投递内容只存在于出站请求：每次请求在此重挂到各自钉死的锚点（与记忆
-      // 增量的逐请求重建同口径），agent.state.messages 始终不含它。挂在 sanitize
-      // 之前、capturePrefixShape 之后读取 effectiveContext，归因看到的就是真实
-      // 出站字节。
+      // Tail-delivered content exists only in outbound requests: on each request it is re-attached
+      // here to its pinned-down anchor (the same policy as per-request rebuild of memory deltas),
+      // and agent.state.messages never contains it. Attached before sanitize and reading
+      // effectiveContext after capturePrefixShape means attribution sees the real outbound bytes.
       const outboundMessages =
         accumulatedWireTailBlocks.length > 0
           ? attachPinnedTailBlocks(streamContext.messages.slice(), accumulatedWireTailBlocks)
@@ -1254,13 +1270,17 @@ export async function runAssistantWithTools(params: {
       const primaryRoundTarget: PreparedFailoverTarget =
         streamModel === model ? primaryTarget : { ...primaryTarget, model: streamModel };
 
-      // 哈希只在请求边界算一次:同一轮内的 failover / 重试复用同一份归因,
-      // 更不能进流式回调 —— 那会让开销随 token 数放大。
+      // The hash is computed once at the request boundary: failover/retry within the same round
+      // reuse the same attribution, and it must not go into streaming callbacks -- that would
+      // scale the overhead with token count.
       //
-      // 缓存参数按主目标口径入账:TTL 或断点策略变化会真实作废缓存,而 system 与
-      // tools 的字节可以一模一样,不单独记这一维就会在真出事时报 unchanged。
-      // 协议族分发在 providers 层的 describeProviderCacheShape 里收敛,这里只
-      // 负责把与注入侧同源的输入(含请求头,x-session-id 已有则以头值为准)递进去。
+      // Cache parameters are recorded under the primary target: a TTL or breakpoint-policy change
+      // genuinely invalidates the cache, whereas the system and tools bytes can be identical, so
+      // not tracking this dimension separately would report "unchanged" when something actually
+      // went wrong.
+      // Protocol-family dispatch converges in the providers layer's describeProviderCacheShape;
+      // this only forwards input from the same source as the injection side (including request
+      // headers; if x-session-id is already present, its header value wins).
       const roundCacheRetention =
         options?.cacheRetention ??
         resolveProviderCacheRetention(
@@ -1282,7 +1302,7 @@ export async function runAssistantWithTools(params: {
           modelApi: primaryRoundTarget.model.api,
           sessionId: roundSessionId,
           cacheRetention: roundCacheRetention,
-          // 与下方 streamOptions 的 headers 合并口径一致:注入侧看到的就是这份。
+          // Consistent with the header merge policy of streamOptions below: this is exactly what the injection side sees.
           headers: {
             ...(options?.headers ?? {}),
             ...primaryRoundTarget.proxyRequest.headers,
@@ -1350,7 +1370,7 @@ export async function runAssistantWithTools(params: {
             ...resolveStreamRetryConfig(target.runtime.retryPolicy),
             onRetry: (attempt, maxAttempts, errorMessage, plannedDelayMs) => {
               params.onToolStatus?.(
-                `第 ${round} 轮：连接已断开，正在重试 (${attempt}/${maxAttempts})...`,
+                `Round ${round}: connection lost, retrying (${attempt}/${maxAttempts})...`,
               );
               retryAttemptsForRound.push({
                 attempt,
@@ -1362,7 +1382,7 @@ export async function runAssistantWithTools(params: {
               params.onRetryAttempts?.(round, retryAttemptsForRound.slice());
             },
             onRetryRecovered: () => {
-              params.onToolStatus?.(`第 ${round} 轮：模型生成中...`);
+              params.onToolStatus?.(`Round ${round}: model is generating...`);
             },
           },
         };
@@ -1385,8 +1405,9 @@ export async function runAssistantWithTools(params: {
         });
 
         try {
-          // 逐候选独立采样：failover 各目标的装配头集互不泄漏是核心正确性
-          // 要求，快照按实际尝试的目标各记一份，观察失败不影响请求。
+          // Sample independently per candidate: keeping each failover target's assembly header
+          // set from leaking into others is a core correctness requirement; a snapshot is recorded
+          // per actually-attempted target, and an observation failure does not affect the request.
           params.onTransportAttempt?.(round, {
             ...captureTransportSnapshot(streamOptions.headers),
             providerLabel: target.label,
@@ -1505,12 +1526,13 @@ export async function runAssistantWithTools(params: {
             attempt: failoverAttemptsForRound,
             fromLabel,
             toLabel,
-            // toIndex 是本轮 candidates 数组下标；映射回稳定候选下标（0 = 主选），
-            // sticky 重排后账本里的目标身份才不随轮次漂移。
+            // toIndex is this round's candidates array index; map it back to the stable candidate
+            // index (0 = primary) so that after sticky reordering the target identity in the ledger
+            // does not drift with the round.
             targetIndex: targetOrder[toIndex] ?? toIndex,
             errorMessage,
           });
-          params.onToolStatus?.(`第 ${round} 轮：${fromLabel} 不可用，正在切换到 ${toLabel}...`);
+          params.onToolStatus?.(`Round ${round}: ${fromLabel} unavailable, switching to ${toLabel}...`);
         },
         onCommitted: (candidateIndex) => {
           const targetIndex = targetOrder[candidateIndex] ?? activeFailoverTargetIndex;
@@ -1598,9 +1620,10 @@ export async function runAssistantWithTools(params: {
             reason: buildTruncatedToolCallText(effectiveToolCall.name, truncationReason),
           };
         }
-        // 审批门:对每个工具调用(含 Bash/Agent 批处理成员,均先逐个过此处)在
-        // 执行前裁决。deny/未批准 → block,reason 成为该调用的 toolResult。
-        // 传入 turn 信号:ask 策略下的挂起审批在 turn 停止时应被中止。
+        // Approval gate: adjudicate each tool call (including Bash/Agent batch members, all of
+        // which pass through here individually first) before execution. deny/not approved ->
+        // block, and reason becomes that call's toolResult. The turn signal is passed in: a
+        // suspended approval under the ask policy should be aborted when the turn stops.
         if (params.resolveToolGate) {
           const gate = await params.resolveToolGate(effectiveToolCall, params.signal);
           if (!gate.allow) {
@@ -1642,18 +1665,20 @@ export async function runAssistantWithTools(params: {
         }
         return undefined;
       },
-      // 0.84 起 pi-agent-core 用 prepareNextTurnWithContext 取代了原先靠
-      // transformContext 顺带做的 turn 间改写。二者的关键差异:transformContext
-      // 拿不到 loop 的 context,只能读回 agent.state.messages;而 loop 的
-      // currentContext.messages 是 createContextSnapshot() 切出的**另一个数组**,
-      // agent.state 上的改写不会自动回流。所以这里必须显式把改写后的消息作为
-      // context 返回,否则 message_end 里对 assistant 的规范化(工具名归一、
-      // hostedSearch 块回填、seed 工具调用去重)和截断结果重写全部只活在
-      // agent.state,下一轮请求仍按旧快照发出。
+      // Since 0.84, pi-agent-core uses prepareNextTurnWithContext instead of the inter-turn
+      // rewrite that transformContext used to do incidentally. The key difference: transformContext
+      // cannot access the loop's context and can only read back agent.state.messages, whereas the
+      // loop's currentContext.messages is a **different array** sliced out by
+      // createContextSnapshot(), so rewrites on agent.state do not automatically flow back.
+      // Therefore the rewritten messages must be returned explicitly as context here; otherwise
+      // the assistant normalization in message_end (tool-name canonicalization, hostedSearch block
+      // backfill, seed tool-call dedup) and the truncation-result rewrite all live only in
+      // agent.state, and the next round's request is still sent with the old snapshot.
       prepareNextTurnWithContext: async ({ message, toolResults, context }, signal) => {
         const reconciled = reconcileTruncatedToolResults();
-        // agent.state 是 message_end 规范化后的权威副本;只要它与 loop 快照长度
-        // 一致,就以它为准(内容可能已被就地替换,长度相同不代表内容相同)。
+        // agent.state is the authoritative copy after message_end normalization; as long as its
+        // length matches the loop snapshot, use it (content may have been replaced in place, and
+        // equal length does not mean equal content).
         const stateMessages = getAgentMessages(agent);
         const currentContext: AgentContext =
           agent && stateMessages.length === context.messages.length
@@ -1701,7 +1726,7 @@ export async function runAssistantWithTools(params: {
         case "turn_start":
           currentRound += 1;
           params.onTurnStart?.(currentRound);
-          params.onToolStatus?.(`第 ${currentRound} 轮：模型生成中...`);
+          params.onToolStatus?.(`Round ${currentRound}: model is generating...`);
           break;
         case "message_update": {
           const streamEvent = event.assistantMessageEvent;
@@ -1841,7 +1866,7 @@ export async function runAssistantWithTools(params: {
             ).length;
             if (toolCallCount > 0) {
               nativeWebSearchStatusController.pause();
-              params.onToolStatus?.(`第 ${currentRound} 轮：准备执行 ${toolCallCount} 个工具...`);
+              params.onToolStatus?.(`Round ${currentRound}: preparing to run ${toolCallCount} tools...`);
             }
             params.onAssistantMessage?.(assistantMessage, currentRound);
           } else if (event.message.role === "toolResult") {
@@ -1877,7 +1902,7 @@ export async function runAssistantWithTools(params: {
           if (parallelBatch && parallelBatch.toolCalls.length > 1) {
             params.onToolStatus?.(getParallelToolBatchStatus(parallelBatch));
           } else {
-            params.onToolStatus?.(`正在执行：${summarizeToolCall(toolCall)}`);
+            params.onToolStatus?.(`Running: ${summarizeToolCall(toolCall)}`);
           }
           params.onToolExecutionStart?.(toolCall, currentRound);
           break;
@@ -1933,7 +1958,7 @@ export async function runAssistantWithTools(params: {
         );
         if (visibleRecoveredSeedToolCalls.length > 0) {
           params.onToolStatus?.(
-            `第 ${recoveredSeedRound} 轮：恢复执行 ${visibleRecoveredSeedToolCalls.length} 个工具...`,
+            `Round ${recoveredSeedRound}: resuming execution of ${visibleRecoveredSeedToolCalls.length} tools...`,
           );
         }
 
@@ -1944,7 +1969,7 @@ export async function runAssistantWithTools(params: {
           const shouldSilenceToolCall = shouldSilenceProviderNativeToolCall(toolCall);
           if (!shouldSilenceToolCall) {
             params.onToolCall?.(toolCall, recoveredSeedRound);
-            params.onToolStatus?.(`正在执行：${summarizeToolCall(toolCall)}`);
+            params.onToolStatus?.(`Running: ${summarizeToolCall(toolCall)}`);
             params.onToolExecutionStart?.(toolCall, recoveredSeedRound);
           }
 

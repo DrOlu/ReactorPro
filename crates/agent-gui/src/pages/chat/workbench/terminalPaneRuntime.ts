@@ -25,8 +25,8 @@ export {
 } from "@liveagent/ui/lib/workbench/terminalPaneRuntime";
 
 /**
- * 终端 Pane 的窗口级运行时单例:租约(View Lease)与绑定(Runtime Binding)
- * 必须全窗口共享,ChatPage、TerminalPaneHost 与测试引用同一实例。
+ * Window-level runtime singleton for the terminal Pane: the lease (View Lease) and the binding
+ * (Runtime Binding) must be shared across the whole window; ChatPage, TerminalPaneHost, and the tests reference the same instance.
  */
 export const terminalPaneLease = createTerminalPaneLeaseStore();
 export const terminalPaneBindings = createTerminalPaneBindingStore();

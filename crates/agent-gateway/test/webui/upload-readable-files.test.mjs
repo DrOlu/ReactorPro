@@ -42,7 +42,7 @@ test("importReadableFiles validates token, agent id, and workdir before network 
   await assert.rejects(
     () =>
       upload.importReadableFiles("token", "desktop-agent", " ", [createNamedBlob("a.txt", "a")]),
-    /项目目录未选择，无法导入文件。/,
+    /Project directory not selected, cannot import files\./,
   );
   assert.deepEqual(await upload.importReadableFiles("token", "desktop-agent", "/workspace", []), {
     files: [],

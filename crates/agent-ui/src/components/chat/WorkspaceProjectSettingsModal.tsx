@@ -325,7 +325,7 @@ export function WorkspaceProjectSettingsModal(props: {
           <DialogTitle id="workspace-project-settings-title" className="truncate">
             {t("chat.workspaceSettingsTitle")}
           </DialogTitle>
-          {/* The path is already shown (and copyable) on the 通用配置 panel, so the
+          {/* The path is already shown (and copyable) on the General configuration panel, so the
               header only needs to say which workspace this is. */}
           <DialogDescription
             className="truncate text-xs"

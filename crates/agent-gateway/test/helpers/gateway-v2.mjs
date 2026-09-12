@@ -1,7 +1,7 @@
-// v2 线协议测试编解码器：用与被测代码同一份生成 schema + protobuf 运行时
-// 编解码二进制帧，让 FakeWebSocket 以 v2 服务端的身份说话。
-// 服务端帧用 protojson 形状（proto 字段名 + oneof 臂即普通字段）构造，
-// bytes 字段传 base64 字符串。
+// v2 wire-protocol test codec: uses the same generated schema + protobuf runtime as the code under
+// test to encode/decode binary frames, so FakeWebSocket can speak as the v2 server.
+// Server frames are constructed in protojson shape (proto field names + the oneof arm as an ordinary
+// field), with bytes fields passed as base64 strings.
 export function createGatewayV2Codec(loader) {
   const pb = loader.loadModule("@bufbuild/protobuf");
   const v2 = loader.loadModule("src/lib/proto/gen/proto/v2/gateway_ws_pb.ts");
@@ -15,7 +15,7 @@ export function createGatewayV2Codec(loader) {
     throw new Error("expected binary frame data");
   };
 
-  // 编码为 ArrayBuffer（浏览器 binaryType="arraybuffer" 时 event.data 的形状）。
+  // Encoded as an ArrayBuffer (the shape of event.data when the browser has binaryType="arraybuffer").
   const toArrayBuffer = (u8) => u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
 
   function decodeClientFrame(data) {
@@ -29,7 +29,7 @@ export function createGatewayV2Codec(loader) {
     };
   }
 
-  // init 为 protojson 形状，如 { request_id: "r1", status: { online: true } }。
+  // init is in protojson shape, e.g. { request_id: "r1", status: { online: true } }.
   function encodeServerFrame(init) {
     const frame = pb.fromJson(v2.WebServerFrameSchema, init);
     return toArrayBuffer(pb.toBinary(v2.WebServerFrameSchema, frame));
@@ -46,7 +46,7 @@ export function createGatewayV2Codec(loader) {
     return toArrayBuffer(pb.toBinary(v2.TerminalServerFrameSchema, frame));
   }
 
-  // bytes 字段的 protojson 形式：字符串按 UTF-8、二进制原样、其余 JSON 序列化。
+  // The protojson form of a bytes field: strings as UTF-8, binary as-is, everything else JSON-serialized.
   const base64 = (value) => {
     if (value instanceof Uint8Array || Array.isArray(value)) {
       return Buffer.from(value).toString("base64");

@@ -6,7 +6,7 @@ export type ClawHubSkillCard = {
   slug: string;
   displayName: string;
   summary: string;
-  /** ClawHub 上的自由标签，用于本地分类与卡片标签展示。 */
+  /** Free-form tags on ClawHub, used for local categorization and card label display. */
   topics: string[];
   latestVersion: string | null;
   downloads: number;
@@ -144,7 +144,7 @@ export class ClawHubHttpError extends Error {
 }
 
 async function fetchClawHubJson(url: URL): Promise<unknown> {
-  // 经 hubFetch 出网：桌面端由本地反代按应用代理配置转发，WebUI 浏览器直连。
+  // Network egress goes through hubFetch: on desktop the local reverse proxy forwards according to the app proxy settings, while the WebUI browser connects directly.
   const response = await hubFetch(url.toString(), {
     headers: { Accept: "application/json" },
   });
@@ -268,7 +268,7 @@ export async function getClawHubSkillDetail(
   ownerHandle?: string | null,
 ): Promise<ClawHubSkillDetail> {
   const url = new URL(`/api/v1/skills/${encodeURIComponent(slug)}`, CLAWHUB_API_BASE);
-  // ClawHub 对重名 slug 返回 409，须带 ownerHandle 消歧。
+  // ClawHub returns 409 for a duplicate slug, so ownerHandle must be supplied to disambiguate.
   if (ownerHandle) {
     url.searchParams.set("ownerHandle", ownerHandle);
   }

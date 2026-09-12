@@ -1,7 +1,7 @@
 import type { AppSettings, CustomProvider, ProviderId } from "../lib/settings";
 import type { SettingsSectionProps } from "../pages/settings/types";
 
-/** WebUI 会脱敏 API Key，复制配置按钮仅在桌面端提供。 */
+/** The WebUI masks the API Key, and the copy-config button is only provided on desktop. */
 export function ProviderCopyConfigButton(_props: {
   provider: Pick<CustomProvider, "baseUrl" | "apiKey">;
 }) {

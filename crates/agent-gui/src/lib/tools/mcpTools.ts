@@ -103,9 +103,10 @@ export async function createMcpTools(params: {
   onLoadError?: (message: string) => void;
   loadFailureMode?: "continue" | "throw";
   /**
-   * 允许 cua-driver 的工具看到并操作 LiveAgent 自己的窗口。默认 false
-   * ——自指操作能绕过工具审批、改写权限设置、关闭应用本身。见
-   * `cuaSelfGuard.ts`。
+   * Allow cua-driver tools to see and operate ReactorPro's own window.
+   * Defaults to false -- self-referential operations can bypass tool approval,
+   * rewrite permission settings, and close the application itself. See
+   * `cuaSelfGuard.ts`.
    */
   cuaAllowSelfTargeting?: boolean;
 }): Promise<
@@ -118,12 +119,13 @@ export async function createMcpTools(params: {
   const enabledServers = servers.filter((s) => s.enabled);
 
   /**
-   * 挂着 cua-driver 的那些 server 的 id。
+   * Ids of the servers that have cua-driver attached.
    *
-   * 判定看 `isCuaDriverServer`（id **或** command 命中），而运行时手上只有
-   * server id，所以在这里一次性把 id 收成集合，后面按 id 查表即可。只认
-   * `id === "cua-driver"` 的话，一条命名成别的、command 仍指向 cua-driver
-   * 的条目就完全绕开了闸门与审批缺省。
+   * Detection uses `isCuaDriverServer` (matching on id **or** command), but at
+   * runtime we only have the server id, so collect the ids into a set once
+   * here and look them up by id later. Matching only `id === "cua-driver"`
+   * would let an entry named something else whose command still points at
+   * cua-driver bypass the gate and approval defaults entirely.
    */
   const cuaServerIds = new Set(
     enabledServers.filter(isCuaDriverServer).map((server) => server.id?.trim() ?? ""),
@@ -131,14 +133,16 @@ export async function createMcpTools(params: {
   const isCuaServerId = (serverId: string) => cuaServerIds.has(serverId.trim());
 
   /**
-   * 每个 server 的硬编码缺省策略，同样按配置（含 command）算，随工具元数据
-   * 一起带下去。`resolveToolPolicy` 手上只有 serverId，不该在那里现查。
+   * The hardcoded default policy for each server, likewise computed from the
+   * config (including command) and carried along with the tool metadata.
+   * `resolveToolPolicy` only has the serverId and should not look it up there.
    */
   const serverPolicyDefaults = new Map(
     enabledServers.map((server) => [server.id?.trim() ?? "", hardcodedServerPolicyDefault(server)]),
   );
 
-  // 只有真的挂了 cua-driver 才去问宿主 pid，别的组合零开销。
+  // Only ask for the host pid when cua-driver is actually attached; other
+  // combinations have zero overhead.
   const cuaSelfGuard: CuaSelfGuard | null =
     cuaServerIds.size > 0 ? await resolveCuaSelfGuard(params.cuaAllowSelfTargeting === true) : null;
 
@@ -211,9 +215,9 @@ export async function createMcpTools(params: {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (params.loadFailureMode === "throw") {
-      throw new Error(message || "MCP tools 加载失败");
+      throw new Error(message || "Failed to load MCP tools");
     }
-    params.onLoadError?.(message || "MCP tools 加载失败");
+    params.onLoadError?.(message || "Failed to load MCP tools");
     console.warn("[MCP] tools list failed, continuing without MCP tools", err);
   }
 
@@ -242,8 +246,10 @@ export async function createMcpTools(params: {
     tools.push({
       name: safeName,
       description: `${descriptionPrefix}${info.description || info.name}`,
-      // MCP 的 inputSchema 是运行时由 server 提供、未经校验的 JSON Schema;过界前
-      // 做结构守卫,畸形值回退为 {type:"object"},避免直接送 provider 引发报错。
+      // MCP's inputSchema is a runtime-provided, unvalidated JSON Schema;
+      // guard its structure before crossing the boundary, falling back to
+      // {type:"object"} for malformed values so it is not sent to the
+      // provider and trigger an error.
       parameters: normalizeToolParametersSchema(info.inputSchema, `MCP ${safeName}`),
     });
     toolNameMap.set(safeName, {
@@ -294,11 +300,14 @@ export async function createMcpTools(params: {
       };
     }
 
-    // 自指闸门：拦在发出调用之前。按 pid / window_id 寻址的直接拒绝；以桌面
-    // 为目标、坐标落在宿主窗口矩形内的也拒绝；无明确目标的键盘输入在宿主处于
-    // 前台时也拒绝——后两条要各取一次系统事实（窗口几何 / 前台应用），所以
-    // 这里是异步的。工具名必须一并传入：键盘类调用没有任何可疑参数字段，
-    // 只看参数认不出来。
+    // Self-targeting gate: intercept before issuing the call. Addresses by
+    // pid / window_id are refused outright; targeting the desktop with
+    // coordinates inside the host window rectangle is also refused; keyboard
+    // input without an explicit target is refused while the host is in the
+    // foreground -- the latter two each need a system fact (window geometry /
+    // foreground app), so this is async. The tool name must be passed in as
+    // well: keyboard calls have no suspicious argument fields, so they cannot
+    // be recognized from arguments alone.
     if (cuaSelfGuard && isCuaServerId(mapped.serverId)) {
       const refusal = await cuaSelfGuard.refuse(mapped.toolName, toolCall.arguments);
       if (refusal) {
@@ -343,8 +352,9 @@ export async function createMcpTools(params: {
             { onAbort: () => requestRuntimeCancel(runId) },
           );
 
-          // 出参过滤：把宿主自己的记录从窗口 / 应用枚举里摘掉，顺手记下
-          // 它的 window_id 供后续入参拦截使用。
+          // Output filtering: remove the host's own records from the
+          // window / app enumeration, and note its window_id for later input
+          // interception.
           const rawContent = res?.content ?? [{ type: "text", text: "" }];
           const content =
             cuaSelfGuard && isCuaServerId(mapped.serverId)

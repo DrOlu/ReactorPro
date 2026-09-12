@@ -33,13 +33,13 @@ pub fn truncate_run_output(text: &str) -> String {
 
 pub fn open_automation_connection() -> Result<Connection, String> {
     let db_path = crate::commands::settings::config_db_path()?;
-    let conn = Connection::open(db_path).map_err(|e| format!("打开 automation 数据库失败：{e}"))?;
+    let conn = Connection::open(db_path).map_err(|e| format!("failed to open automation database: {e}"))?;
     conn.busy_timeout(Duration::from_secs(5))
-        .map_err(|e| format!("设置 SQLite busy_timeout 失败：{e}"))?;
+        .map_err(|e| format!("failed to set SQLite busy_timeout: {e}"))?;
     conn.pragma_update(None, "journal_mode", "WAL")
-        .map_err(|e| format!("启用 SQLite WAL 失败：{e}"))?;
+        .map_err(|e| format!("failed to enable SQLite WAL: {e}"))?;
     conn.pragma_update(None, "synchronous", "NORMAL")
-        .map_err(|e| format!("设置 SQLite synchronous 失败：{e}"))?;
+        .map_err(|e| format!("failed to set SQLite synchronous: {e}"))?;
     Ok(conn)
 }
 
@@ -94,7 +94,7 @@ pub fn ensure_schema(conn: &Connection) -> Result<(), String> {
             ON automation_cron_runs (state);
         ",
     )
-    .map_err(|e| format!("初始化 automation 表失败：{e}"))?;
+    .map_err(|e| format!("failed to initialize automation tables: {e}"))?;
     Ok(())
 }
 
@@ -105,10 +105,10 @@ fn meta_read_i64(conn: &Connection, key: &str) -> Result<Option<i64>, String> {
         |row| row.get::<_, String>(0),
     )
     .optional()
-    .map_err(|e| format!("读取 automation_meta.{key} 失败：{e}"))?
+    .map_err(|e| format!("failed to read automation_meta.{key}: {e}"))?
     .map(|raw| {
         raw.parse::<i64>()
-            .map_err(|e| format!("解析 automation_meta.{key} 失败：{e}"))
+            .map_err(|e| format!("failed to parse automation_meta.{key}: {e}"))
     })
     .transpose()
 }
@@ -119,7 +119,7 @@ pub fn meta_write_i64(conn: &Connection, key: &str, value: i64) -> Result<(), St
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         params![key, value.to_string()],
     )
-    .map_err(|e| format!("写入 automation_meta.{key} 失败：{e}"))?;
+    .map_err(|e| format!("failed to write automation_meta.{key}: {e}"))?;
     Ok(())
 }
 
@@ -154,7 +154,7 @@ fn task_config_json(task: &CronTask) -> Result<String, String> {
         config.insert(
             "requests".to_string(),
             serde_json::to_value(requests)
-                .map_err(|e| format!("序列化 cron requests 失败：{e}"))?,
+                .map_err(|e| format!("failed to serialize cron requests: {e}"))?,
         );
     }
     if let Some(prompt) = &task.prompt {
@@ -164,7 +164,7 @@ fn task_config_json(task: &CronTask) -> Result<String, String> {
         config.insert(
             "selectedModel".to_string(),
             serde_json::to_value(selected_model)
-                .map_err(|e| format!("序列化 cron selectedModel 失败：{e}"))?,
+                .map_err(|e| format!("failed to serialize cron selectedModel: {e}"))?,
         );
     }
     if let Some(reasoning) = &task.reasoning {
@@ -178,7 +178,7 @@ fn task_config_json(task: &CronTask) -> Result<String, String> {
         Value::Number(task.timeout_seconds.into()),
     );
     serde_json::to_string(&Value::Object(config))
-        .map_err(|e| format!("序列化 cron config 失败：{e}"))
+        .map_err(|e| format!("failed to serialize cron config: {e}"))
 }
 
 fn hook_config_json(hook: &HookDef) -> Result<String, String> {
@@ -190,11 +190,11 @@ fn hook_config_json(hook: &HookDef) -> Result<String, String> {
         config.insert(
             "requests".to_string(),
             serde_json::to_value(requests)
-                .map_err(|e| format!("序列化 hook requests 失败：{e}"))?,
+                .map_err(|e| format!("failed to serialize hook requests: {e}"))?,
         );
     }
     serde_json::to_string(&Value::Object(config))
-        .map_err(|e| format!("序列化 hook config 失败：{e}"))
+        .map_err(|e| format!("failed to serialize hook config: {e}"))
 }
 
 pub fn insert_cron_task(conn: &Connection, task: &CronTask, sort_index: i64) -> Result<(), String> {
@@ -217,7 +217,7 @@ pub fn insert_cron_task(conn: &Connection, task: &CronTask, sort_index: i64) -> 
             now_ms(),
         ],
     )
-    .map_err(|e| format!("写入 automation_cron_tasks 失败：{e}"))?;
+    .map_err(|e| format!("failed to write automation_cron_tasks: {e}"))?;
     Ok(())
 }
 
@@ -240,7 +240,7 @@ pub fn update_cron_task_row(conn: &Connection, task: &CronTask) -> Result<usize,
             now_ms(),
         ],
     )
-    .map_err(|e| format!("更新 automation_cron_tasks 失败：{e}"))
+    .map_err(|e| format!("failed to update automation_cron_tasks: {e}"))
 }
 
 pub fn insert_hook(conn: &Connection, hook: &HookDef, sort_index: i64) -> Result<(), String> {
@@ -262,7 +262,7 @@ pub fn insert_hook(conn: &Connection, hook: &HookDef, sort_index: i64) -> Result
             now_ms(),
         ],
     )
-    .map_err(|e| format!("写入 automation_hooks 失败：{e}"))?;
+    .map_err(|e| format!("failed to write automation_hooks: {e}"))?;
     Ok(())
 }
 
@@ -284,7 +284,7 @@ pub fn update_hook_row(conn: &Connection, hook: &HookDef) -> Result<usize, Strin
             now_ms(),
         ],
     )
-    .map_err(|e| format!("更新 automation_hooks 失败：{e}"))
+    .map_err(|e| format!("failed to update automation_hooks: {e}"))
 }
 
 struct TaskConfig {
@@ -386,13 +386,13 @@ pub fn read_cron_tasks(conn: &Connection) -> Result<Vec<CronTask>, String> {
              FROM automation_cron_tasks
              ORDER BY sort_index ASC, task_id ASC",
         )
-        .map_err(|e| format!("准备读取 automation_cron_tasks 失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare read of automation_cron_tasks: {e}"))?;
     let rows = stmt
         .query_map([], cron_task_from_row)
-        .map_err(|e| format!("读取 automation_cron_tasks 失败：{e}"))?;
+        .map_err(|e| format!("failed to read automation_cron_tasks: {e}"))?;
     let mut tasks = Vec::new();
     for row in rows {
-        tasks.push(row.map_err(|e| format!("读取 automation_cron_tasks 行失败：{e}"))?);
+        tasks.push(row.map_err(|e| format!("failed to read automation_cron_tasks row: {e}"))?);
     }
     Ok(tasks)
 }
@@ -406,7 +406,7 @@ pub fn read_cron_task(conn: &Connection, task_id: &str) -> Result<Option<CronTas
         cron_task_from_row,
     )
     .optional()
-    .map_err(|e| format!("读取 automation_cron_tasks.{task_id} 失败：{e}"))
+    .map_err(|e| format!("failed to read automation_cron_tasks.{task_id}: {e}"))
 }
 
 pub fn read_hooks(conn: &Connection) -> Result<Vec<HookDef>, String> {
@@ -416,13 +416,13 @@ pub fn read_hooks(conn: &Connection) -> Result<Vec<HookDef>, String> {
              FROM automation_hooks
              ORDER BY sort_index ASC, hook_id ASC",
         )
-        .map_err(|e| format!("准备读取 automation_hooks 失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare read of automation_hooks: {e}"))?;
     let rows = stmt
         .query_map([], hook_from_row)
-        .map_err(|e| format!("读取 automation_hooks 失败：{e}"))?;
+        .map_err(|e| format!("failed to read automation_hooks: {e}"))?;
     let mut hooks = Vec::new();
     for row in rows {
-        hooks.push(row.map_err(|e| format!("读取 automation_hooks 行失败：{e}"))?);
+        hooks.push(row.map_err(|e| format!("failed to read automation_hooks row: {e}"))?);
     }
     Ok(hooks)
 }
@@ -435,7 +435,7 @@ pub fn read_hook(conn: &Connection, hook_id: &str) -> Result<Option<HookDef>, St
         hook_from_row,
     )
     .optional()
-    .map_err(|e| format!("读取 automation_hooks.{hook_id} 失败：{e}"))
+    .map_err(|e| format!("failed to read automation_hooks.{hook_id}: {e}"))
 }
 
 pub fn read_cron_snapshot(conn: &Connection) -> Result<CronSnapshot, String> {
@@ -482,13 +482,13 @@ pub fn read_runs(
              ORDER BY started_at DESC, execution_id DESC
              LIMIT ?2",
         )
-        .map_err(|e| format!("准备读取 automation_cron_runs 失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare read of automation_cron_runs: {e}"))?;
     let rows = stmt
         .query_map(params![task_id, limit], run_record_from_row)
-        .map_err(|e| format!("读取 automation_cron_runs 失败：{e}"))?;
+        .map_err(|e| format!("failed to read automation_cron_runs: {e}"))?;
     let mut runs = Vec::new();
     for row in rows {
-        runs.push(row.map_err(|e| format!("读取 automation_cron_runs 行失败：{e}"))?);
+        runs.push(row.map_err(|e| format!("failed to read automation_cron_runs row: {e}"))?);
     }
     Ok(runs)
 }
@@ -509,12 +509,12 @@ pub fn prune_runs(conn: &Connection, task_id: &str) -> Result<(), String> {
         ),
         params![task_id],
     )
-    .map_err(|e| format!("修剪 automation_cron_runs 失败：{e}"))?;
+    .map_err(|e| format!("failed to prune automation_cron_runs: {e}"))?;
     conn.execute(
         "DELETE FROM automation_cron_runs
          WHERE state IN ('done', 'expired') AND started_at < ?1",
         params![now_ms() - RUN_RETENTION_MAX_AGE_MS],
     )
-    .map_err(|e| format!("按时限修剪 automation_cron_runs 失败：{e}"))?;
+    .map_err(|e| format!("failed to prune automation_cron_runs by age: {e}"))?;
     Ok(())
 }

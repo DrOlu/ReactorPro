@@ -808,7 +808,7 @@ describe("file tree model", () => {
   });
 });
 
-test("background-tasks 开合手势:归一化上限、固定可见与 dismissal 快照", () => {
+test("background-tasks toggle gesture: normalized cap, pinned visibility, and dismissal snapshot", () => {
   assert.deepEqual(
     settings.normalizeRightDockBackgroundTasksState({
       opened: true,
@@ -823,7 +823,7 @@ test("background-tasks 开合手势:归一化上限、固定可见与 dismissal 
   assert.ok(opened.tabOrder.includes(settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID));
   assert.deepEqual(opened.backgroundTasks, { opened: true, dismissedIds: [] });
 
-  // 关是 hide-only:仅写 dismissal 快照,activeTabId/tabOrder 不动;重开清空快照。
+  // Closing is hide-only: it writes only the dismissal snapshot and leaves activeTabId/tabOrder untouched; reopening clears the snapshot.
   const closed = settings.closeRightDockBackgroundTasksTabState(opened, ["p-1"]);
   assert.deepEqual(closed, {
     ...opened,
@@ -835,8 +835,8 @@ test("background-tasks 开合手势:归一化上限、固定可见与 dismissal 
   });
 });
 
-test("background-tasks 意图落盘递增版本并随 (stateVersion, writerId) 归并", () => {
-  // 仅 backgroundTasks 变更也是内容:落盘并递增 stateVersion。
+test("background-tasks intent persists with an incrementing version and merges by (stateVersion, writerId)", () => {
+  // A backgroundTasks-only change is still content: persist it and increment stateVersion.
   const opened = settings.updateRightDockProjectState(
     settings.normalizeSettings({}),
     "/workspace/app",
@@ -846,7 +846,7 @@ test("background-tasks 意图落盘递增版本并随 (stateVersion, writerId) �
   assert.deepEqual(state.backgroundTasks, { opened: true, dismissedIds: [] });
   assert.equal(state.stateVersion, 1);
 
-  // 仅后台意图的桶是活状态:lastUsedAt 久远时若被误判为空桶会走墓碑 TTL 被丢弃。
+  // A bucket with only background intent is live state: if its old lastUsedAt were misjudged as an empty bucket, it would be discarded via the tombstone TTL.
   assert.ok(
     settings.normalizeRightDockSettings({
       projects: {
@@ -860,7 +860,7 @@ test("background-tasks 意图落盘递增版本并随 (stateVersion, writerId) �
     }).projects["/workspace/app"],
   );
 
-  // 更高 stateVersion 的对端意图在归并中胜出。
+  // The peer intent with the higher stateVersion wins during the merge.
   const merged = sync.applyGatewaySettingsSyncPayload(
     opened,
     rightDockSyncPayload({

@@ -10,14 +10,13 @@ pub async fn settings_load_all() -> Result<SettingsLoadResponse, String> {
             agents: load_agents(&conn)?,
             ssh: load_ssh(&conn)?,
             remote: load_remote(&conn)?,
-            stt: load_stt_redacted(&conn)?,
             memory: load_memory(&conn)?,
             model_failover: load_model_failover(&conn)?,
             default_workdir,
         })
     })
     .await
-    .map_err(|e| format!("settings_load_all join 失败：{e}"))?
+    .map_err(|e| format!("settings_load_all join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -27,7 +26,7 @@ pub async fn settings_save_providers(payload: Value) -> Result<(), String> {
         save_providers(&mut conn, payload)
     })
     .await
-    .map_err(|e| format!("settings_save_providers join 失败：{e}"))?
+    .map_err(|e| format!("settings_save_providers join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -38,11 +37,12 @@ pub async fn settings_save_system(
     tauri::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_system(&mut conn, payload)?;
-        // 保存成功后刷新全局代理状态，让 shell env 注入与出网代理即时生效。
+        // After a successful save, refresh the global proxy state so shell env
+        // injection and the outbound proxy take effect immediately.
         refresh_system_proxy_state(&conn)
     })
     .await
-    .map_err(|e| format!("settings_save_system join 失败：{e}"))??;
+    .map_err(|e| format!("settings_save_system join failed: {e}"))??;
     // Bash cron tasks execute in the system workdir; reschedule so the new
     // workdir takes effect without an app restart.
     automation_scheduler.request_reload();
@@ -56,7 +56,7 @@ pub async fn settings_save_mcp(payload: Value) -> Result<(), String> {
         save_mcp(&mut conn, payload)
     })
     .await
-    .map_err(|e| format!("settings_save_mcp join 失败：{e}"))?
+    .map_err(|e| format!("settings_save_mcp join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -69,7 +69,7 @@ pub async fn settings_save_remote(
         save_remote(&mut conn, payload)
     })
     .await
-    .map_err(|e| format!("settings_save_remote join 失败：{e}"))??;
+    .map_err(|e| format!("settings_save_remote join failed: {e}"))??;
     gateway_controller.apply_config(normalized)
 }
 
@@ -80,7 +80,7 @@ pub async fn settings_save_memory(payload: Value) -> Result<(), String> {
         save_memory(&mut conn, payload)
     })
     .await
-    .map_err(|e| format!("settings_save_memory join 失败：{e}"))?
+    .map_err(|e| format!("settings_save_memory join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -90,38 +90,7 @@ pub async fn settings_save_model_failover(payload: Value) -> Result<(), String> 
         save_model_failover(&mut conn, payload)
     })
     .await
-    .map_err(|e| format!("settings_save_model_failover join 失败：{e}"))?
-}
-
-#[tauri::command]
-pub async fn settings_save_stt(
-    payload: Value,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
-) -> Result<Value, String> {
-    let saved = tauri::async_runtime::spawn_blocking(move || {
-        let mut conn = open_db()?;
-        save_stt(&mut conn, payload)?;
-        load_stt_redacted(&conn).map(|value| value.unwrap_or_else(|| json!({})))
-    })
-    .await
-    .map_err(|e| format!("settings_save_stt join failed: {e}"))??;
-    if let Err(error) = gateway_controller.publish_current_settings_sync().await {
-        eprintln!("publish STT settings sync failed: {error}");
-    }
-    Ok(saved)
-}
-
-#[tauri::command]
-pub async fn settings_reveal_stt_secret(
-    provider: String,
-    field: String,
-) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let conn = open_db()?;
-        load_stt_secret(&conn, &provider, &field)
-    })
-    .await
-    .map_err(|e| format!("settings_reveal_stt_secret join failed: {e}"))?
+    .map_err(|e| format!("settings_save_model_failover join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -131,7 +100,7 @@ pub async fn settings_save_agents(payload: Value) -> Result<(), String> {
         save_agents(&mut conn, payload)
     })
     .await
-    .map_err(|e| format!("settings_save_agents join 失败：{e}"))?
+    .map_err(|e| format!("settings_save_agents join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -141,7 +110,7 @@ pub async fn settings_save_ssh(payload: Value) -> Result<(), String> {
         save_ssh(&mut conn, payload)
     })
     .await
-    .map_err(|e| format!("settings_save_ssh join 失败：{e}"))?
+    .map_err(|e| format!("settings_save_ssh join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -151,7 +120,7 @@ pub async fn settings_apply_ssh_patch(payload: Value) -> Result<SshPatchApplyRes
         apply_ssh_patch_with_conn(&mut conn, payload)
     })
     .await
-    .map_err(|e| format!("settings_apply_ssh_patch join 失败：{e}"))?
+    .map_err(|e| format!("settings_apply_ssh_patch join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -164,5 +133,5 @@ pub async fn settings_reset_ssh_known_host(
         Ok(SshKnownHostResetResponse { deleted })
     })
     .await
-    .map_err(|e| format!("settings_reset_ssh_known_host join 失败：{e}"))?
+    .map_err(|e| format!("settings_reset_ssh_known_host join failed: {e}"))?
 }

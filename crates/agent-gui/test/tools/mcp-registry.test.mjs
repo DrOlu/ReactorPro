@@ -80,7 +80,7 @@ test("registry installs inherit card description and preferred docs URL", () => 
   });
 });
 
-test("official registry npm stdio packages become LiveAgent MCP drafts", async () => {
+test("official registry npm stdio packages become ReactorPro MCP drafts", async () => {
   const result = await registry.searchMcpRegistry({
     source: "official",
     query: "filesystem",

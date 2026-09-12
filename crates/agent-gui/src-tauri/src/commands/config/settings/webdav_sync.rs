@@ -1,24 +1,24 @@
-// WebDAV 同步编排：设置存取 + 上传/下载命令。
+// WebDAV sync orchestration: settings storage + upload/download commands.
 //
-// 分层：本文件只做编排与校验，所有 HTTP 细节在 `services/webdav.rs`。
-// 快照的采集/校验/应用复用 `backup_snapshot.rs`，与本地导入导出同一套代码路径。
+// Layering: this file only does orchestration and validation; all HTTP details live in `services/webdav.rs`.
+// Snapshot collection/validation/application reuses `backup_snapshot.rs`, the same code path as local import/export.
 
-/// 远端布局的版本目录。协议或 schema 不兼容演进时换目录，
-/// 让新旧版本客户端各读各的，而不是互相写坏同一份文件。
+/// Version directory of the remote layout. When the protocol or schema evolves incompatibly, switch directories
+/// so old and new clients each read their own, rather than corrupting the same file for one another.
 const WEBDAV_LAYOUT_DIR: &str = "v1";
-/// manifest 体积上限：它只有几百字节，1 MiB 已是极宽松的上界。
+/// Manifest size cap: it is only a few hundred bytes, so 1 MiB is already a very loose upper bound.
 const WEBDAV_MANIFEST_MAX_BYTES: usize = 1024 * 1024;
-/// config 体积上限，与本地导入的上限保持一致。
+/// Config size cap, kept consistent with the local import limit.
 const WEBDAV_CONFIG_MAX_BYTES: usize = 16 * 1024 * 1024;
 const WEBDAV_MANIFEST_FILENAME: &str = "manifest.json";
 const WEBDAV_CONFIG_FILENAME: &str = "config.json";
 const WEBDAV_DEFAULT_PROFILE: &str = "default";
 const WEBDAV_DEFAULT_REMOTE_DIR: &str = "liveagent";
 
-/// 同步配置。
+/// Sync configuration.
 ///
-/// 存于独立表 `backup_sync_settings`，**不进配置快照** —— 它是设备级的，
-/// 若随快照流转会让 A 机器的凭据覆盖 B 机器，形成循环。
+/// Stored in a separate table `backup_sync_settings`, **not part of the config snapshot** -- it is device-level;
+/// letting it travel with snapshots would let machine A's credentials overwrite machine B's, creating a loop.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupSyncConfig {
@@ -28,26 +28,27 @@ pub struct BackupSyncConfig {
     pub username: String,
     #[serde(default)]
     pub password: String,
-    /// 远端根目录，相对于 url。
+    /// Remote root directory, relative to url.
     #[serde(default = "default_backup_remote_dir")]
     pub remote_dir: String,
-    /// 同一账号下的多套配置隔离（如 work / personal）。
+    /// Isolation of multiple config sets under the same account (e.g. work / personal).
     #[serde(default = "default_backup_profile")]
     pub profile: String,
-    /// 自动同步开关（**仅自动上传，不会自动下载**）。
+    /// Auto-sync switch (**auto upload only, never auto download**).
     #[serde(default)]
     pub auto_sync: bool,
-    /// 最近一次同步成功的时间（毫秒）。
+    /// Time of the most recent successful sync (milliseconds).
     #[serde(default)]
     pub last_sync_at: Option<i64>,
-    /// 最近一次**自动**同步的失败原因。
+    /// Failure reason of the most recent **automatic** sync.
     ///
-    /// 只记录自动路径：手动同步的成败由命令返回值当场反馈，用户就在屏幕前，
-    /// 不需要留痕。自动同步发生在后台，用户多半不在设置页，错误只存在于前端
-    /// state 的话页面一卸载就丢了，用户永远不知道自己的配置早就没在同步。
+    /// Only the automatic path is recorded: manual sync success/failure is reported right away by the
+    /// command return value since the user is at the screen and needs no trace. Automatic sync happens in the
+    /// background, when the user is mostly not on the settings page; if the error lived only in frontend state
+    /// it would be lost as soon as the page unmounts, and the user would never know their config had long stopped syncing.
     ///
-    /// 等价于 cc-switch 的 `last_error` + `last_error_source == "auto"`：
-    /// 我们只在自动入口写这个字段，来源信息因此隐含在「字段有值」里。
+    /// Equivalent to cc-switch's `last_error` + `last_error_source == "auto"`:
+    /// we only write this field on the automatic entry point, so the source is implied by "the field has a value".
     #[serde(default)]
     pub last_error: Option<String>,
 }
@@ -75,8 +76,9 @@ impl Default for BackupSyncConfig {
     }
 }
 
-/// 保存请求。password 与 passwordTouched 分离是为了让 UI 能展示掩码占位符
-/// 而不必把真密码回传前端 —— 用户没动密码框时，后端沿用库里的旧值。
+/// Save request. Separating password from passwordTouched lets the UI show a masked placeholder
+/// without sending the real password back to the frontend -- when the user has not touched the password field,
+/// the backend reuses the old value from the database.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupSyncConfigRequest {
@@ -96,7 +98,7 @@ pub struct BackupSyncConfigRequest {
     pub auto_sync: bool,
 }
 
-/// 回传前端的配置视图：**不含密码**，只告知是否已设置。
+/// Config view returned to the frontend: **contains no password**, only reports whether one is set.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupSyncConfigView {
@@ -107,11 +109,11 @@ pub struct BackupSyncConfigView {
     pub profile: String,
     pub auto_sync: bool,
     pub last_sync_at: Option<i64>,
-    /// 最近一次自动同步的失败原因；成功或从未失败为 None。
+    /// Failure reason of the most recent automatic sync; None on success or if it never failed.
     pub last_error: Option<String>,
 }
 
-/// 远端备份的摘要，供上传/下载前的确认对话框展示。
+/// Summary of the remote backup, shown in the confirmation dialog before upload/download.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupRemoteInfo {
@@ -120,8 +122,8 @@ pub struct BackupRemoteInfo {
     pub sha256: String,
 }
 
-/// 远端 manifest：在导出 manifest 的基础上多带 config.json 的大小与摘要，
-/// 用于下载后校验完整性（PUT 可能被中断，留下截断的 config.json）。
+/// Remote manifest: on top of the export manifest it carries the size and digest of config.json,
+/// used to verify integrity after download (a PUT may be interrupted, leaving a truncated config.json).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BackupRemoteManifest {
@@ -148,21 +150,21 @@ impl From<BackupSyncConfig> for BackupSyncConfigView {
     }
 }
 
-/// 串行化所有远端读写。
+/// Serialize all remote reads and writes.
 ///
-/// 上传是「PUT config → PUT manifest」两步，并发执行会让两个文件来自不同快照，
-/// 下载侧的 sha256 校验就会失败。
+/// An upload is a two-step "PUT config -> PUT manifest"; running concurrently would make the two files come from
+/// different snapshots, and the sha256 check on the download side would fail.
 fn backup_sync_mutex() -> &'static tokio::sync::Mutex<()> {
     static MUTEX: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
     MUTEX.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
-/// 清洗一段远端路径：去首尾斜杠，并丢弃 `.` / `..` 段。
+/// Sanitize a remote path: strip leading/trailing slashes and drop `.` / `..` segments.
 ///
-/// `join_url` 是逐段 percent-encode，而 `.` 与 `..` 都不在转义集里，会原样留在
-/// URL 路径里由服务器按相对路径解析。用户在「远端目录」里填 `../../etc`，
-/// 请求就会打到 WebDAV 根目录之外 —— 上传时那是把全部明文 API key PUT 到
-/// 非预期路径，下载时是从非预期路径读回来当配置应用。
+/// `join_url` percent-encodes segment by segment, and neither `.` nor `..` are in the escape set, so they stay
+/// as-is in the URL path and are resolved by the server as relative paths. If a user enters `../../etc` in
+/// "remote directory", the request lands outside the WebDAV root -- on upload that PUTs all plaintext API keys to
+/// an unexpected path, and on download it reads back from an unexpected path and applies it as config.
 fn sanitize_remote_path(raw: &str) -> String {
     raw.split('/')
         .map(str::trim)
@@ -195,14 +197,14 @@ pub(crate) fn load_backup_sync_config(conn: &Connection) -> Result<BackupSyncCon
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|e| format!("读取 {BACKUP_SYNC_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to read {BACKUP_SYNC_SETTINGS_TABLE}: {e}"))?;
 
     let Some(raw) = payload_json else {
         return Ok(BackupSyncConfig::default());
     };
     let value = parse_json(&raw, BACKUP_SYNC_SETTINGS_TABLE)?;
     let config = serde_json::from_value::<BackupSyncConfig>(value)
-        .map_err(|e| format!("解析同步配置失败：{e}"))?;
+        .map_err(|e| format!("failed to parse sync config: {e}"))?;
     Ok(normalize_backup_sync_config(config))
 }
 
@@ -211,7 +213,7 @@ fn persist_backup_sync_config(
     config: &BackupSyncConfig,
 ) -> Result<(), String> {
     let payload = serde_json::to_value(config)
-        .map_err(|e| format!("序列化 {BACKUP_SYNC_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to serialize {BACKUP_SYNC_SETTINGS_TABLE}: {e}"))?;
     conn.execute(
         &format!(
             "INSERT INTO {BACKUP_SYNC_SETTINGS_TABLE} (config_id, payload_json, updated_at)
@@ -225,14 +227,14 @@ fn persist_backup_sync_config(
             now_ms()
         ],
     )
-    .map_err(|e| format!("写入 {BACKUP_SYNC_SETTINGS_TABLE} 失败：{e}"))?;
+    .map_err(|e| format!("failed to write {BACKUP_SYNC_SETTINGS_TABLE}: {e}"))?;
     Ok(())
 }
 
-/// 把保存请求解析成完整配置：密码未被触碰时回填库中旧值。
+/// Resolve a save request into the full config: when the password was not touched, backfill the old value from the DB.
 ///
-/// 这是 cc-switch 踩过的真实坑 —— UI 给密码框填掩码占位符后原样提交，
-/// 会把占位符当成新密码写库，用户下次同步就认证失败。
+/// This is a real pitfall cc-switch hit -- after the UI fills the password field with a masked placeholder and
+/// submits it as-is, the placeholder gets written to the DB as the new password, and the user's next sync fails authentication.
 pub(crate) fn resolve_backup_sync_config(
     request: BackupSyncConfigRequest,
     persisted: &BackupSyncConfig,
@@ -249,18 +251,19 @@ pub(crate) fn resolve_backup_sync_config(
         remote_dir: request.remote_dir,
         profile: request.profile,
         auto_sync: request.auto_sync,
-        // 保存配置不改变同步时间。
+        // Saving the config does not change the sync time.
         last_sync_at: persisted.last_sync_at,
-        // 但要清掉旧的自动同步错误：用户刚改过配置，那条错误说的是改之前的状态，
-        // 继续挂着会让人以为新配置也是坏的。下次自动同步会重新写入真实结果。
+        // But clear the old auto-sync error: the user just changed the config, and that error described the
+        // state before the change; leaving it up would suggest the new config is broken too. The next auto-sync
+        // rewrites the real result.
         last_error: None,
     })
 }
 
-/// 远端目录的分段：`{remote_dir}/v1/{profile}/`。
+/// Remote directory segments: `{remote_dir}/v1/{profile}/`.
 ///
-/// 版本段夹在中间而不是最外层，这样用户在 WebDAV 客户端里看到的是一个
-/// 干净的 `liveagent/` 顶层目录，内部再按版本和 profile 分。
+/// The version segment sits in the middle rather than outermost, so what the user sees in a WebDAV client is a
+/// clean `liveagent/` top-level directory, subdivided internally by version and profile.
 fn backup_remote_segments(config: &BackupSyncConfig) -> Vec<&str> {
     vec![
         config.remote_dir.as_str(),
@@ -288,13 +291,13 @@ fn backup_sha256_hex(bytes: &[u8]) -> String {
 
 fn backup_credentials(config: &BackupSyncConfig) -> Result<crate::services::webdav::WebdavCredentials, String> {
     if config.url.is_empty() {
-        return Err("请先填写 WebDAV 服务器地址".to_string());
+        return Err("Please enter the WebDAV server address first".to_string());
     }
     if config.username.is_empty() {
-        return Err("请先填写 WebDAV 用户名".to_string());
+        return Err("Please enter the WebDAV username first".to_string());
     }
     if config.password.is_empty() {
-        return Err("请先填写 WebDAV 密码".to_string());
+        return Err("Please enter the WebDAV password first".to_string());
     }
     Ok(crate::services::webdav::WebdavCredentials {
         base_url: config.url.clone(),
@@ -303,16 +306,16 @@ fn backup_credentials(config: &BackupSyncConfig) -> Result<crate::services::webd
     })
 }
 
-/// 校验下载到的 config 与 manifest 声明的大小/摘要一致。
+/// Verify that the downloaded config matches the size/digest declared in the manifest.
 ///
-/// PUT 可能被中断，留下截断的 config.json；没有这道校验就会把残缺配置
-/// 当成合法快照写进本地库。
+/// A PUT may be interrupted, leaving a truncated config.json; without this check the incomplete config would be
+/// written into the local DB as a valid snapshot.
 ///
-/// 缺字段一律当作损坏处理，**不跳过校验**。曾经这里对 size==0 / sha256=="" 放行，
-/// 理由是「兼容旧版本写的 manifest」—— 但 `v1/` 布局是随本功能一起引入的，
-/// 不存在写过无摘要 manifest 的历史版本。真正会命中这条分支的只有异常数据：
-/// 截断的 PUT、被别的客户端改写过的 manifest。放行等于让它们绕过完整性检查
-/// 直接落进本地库。
+/// Missing fields are always treated as corruption, **never skipped**. This used to let size==0 / sha256=="" pass,
+/// justified as "compatible with manifests written by older versions" -- but the `v1/` layout was introduced
+/// together with this feature, so there is no historical version that wrote a manifest without a digest. The only
+/// data that actually hits this branch is abnormal: truncated PUTs, manifests rewritten by another client.
+/// Letting them pass would let them bypass the integrity check straight into the local DB.
 pub(crate) fn verify_backup_payload(
     body: &[u8],
     expected_size: usize,
@@ -320,19 +323,19 @@ pub(crate) fn verify_backup_payload(
 ) -> Result<(), String> {
     if expected_size == 0 || expected_sha256.is_empty() {
         return Err(
-            "远端备份元信息缺少大小或校验和，无法确认配置完整，请从源设备重新上传一次"
+            "The remote backup metadata is missing a size or checksum, so the config cannot be confirmed complete; please re-upload from the source device"
                 .to_string(),
         );
     }
     if body.len() != expected_size {
         return Err(format!(
-            "远端配置大小校验失败：期望 {expected_size} 字节，实际 {} 字节。远端文件可能未上传完整，请从源设备重新上传",
+            "Remote config size check failed: expected {expected_size} bytes, got {} bytes. The remote file may not have uploaded completely; please re-upload from the source device",
             body.len()
         ));
     }
     let actual = backup_sha256_hex(body);
     if !actual.eq_ignore_ascii_case(expected_sha256) {
-        return Err("远端配置校验和不匹配，文件可能已损坏，请从源设备重新上传".to_string());
+        return Err("Remote config checksum mismatch; the file may be corrupted, please re-upload from the source device".to_string());
     }
     Ok(())
 }
@@ -342,22 +345,22 @@ fn load_backup_sync_config_from_db() -> Result<BackupSyncConfig, String> {
     load_backup_sync_config(&conn)
 }
 
-/// 记录一次同步成功：写入时间戳并清掉遗留的自动同步错误横幅。
+/// Record a successful sync: write the timestamp and clear any leftover auto-sync error banner.
 fn touch_backup_last_sync_at() -> Result<i64, String> {
     let timestamp = now_ms();
     let conn = open_db()?;
     let mut config = load_backup_sync_config(&conn)?;
     config.last_sync_at = Some(timestamp);
-    // 手动同步成功同样清错误：既然这条链路现在是通的，那条旧错误已经过期。
+    // A successful manual sync also clears the error: since this path now works, that old error is stale.
     config.last_error = None;
     persist_backup_sync_config(&conn, &config)?;
     Ok(timestamp)
 }
 
-/// 记录一次**自动**同步失败。
+/// Record a failed **automatic** sync.
 ///
-/// 尽力而为：写库本身失败时只能放弃 —— 调用方已经处在错误路径上，
-/// 再抛一个错误没有任何人能处理，反而会盖掉真正的失败原因。
+/// Best-effort: if the DB write itself fails we can only give up -- the caller is already on an error path, and
+/// throwing another error would be handled by no one while masking the real failure reason.
 fn record_backup_auto_sync_error(message: &str) {
     let Ok(conn) = open_db() else { return };
     let Ok(mut config) = load_backup_sync_config(&conn) else {
@@ -367,13 +370,13 @@ fn record_backup_auto_sync_error(message: &str) {
     let _ = persist_backup_sync_config(&conn, &config);
 }
 
-// ===== Tauri 命令 =====
+// ===== Tauri commands =====
 
 #[tauri::command]
 pub async fn settings_backup_load_sync_config() -> Result<BackupSyncConfigView, String> {
     tauri::async_runtime::spawn_blocking(|| Ok(load_backup_sync_config_from_db()?.into()))
         .await
-        .map_err(|e| format!("settings_backup_load_sync_config join 失败：{e}"))?
+        .map_err(|e| format!("settings_backup_load_sync_config join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -388,25 +391,25 @@ pub async fn settings_backup_save_sync_config(
         Ok(resolved.into())
     })
     .await
-    .map_err(|e| format!("settings_backup_save_sync_config join 失败：{e}"))?
+    .map_err(|e| format!("settings_backup_save_sync_config join failed: {e}"))?
 }
 
-/// 测试连接。用库里已保存的配置，因此前端须先保存再测试。
+/// Test the connection. Uses the config already saved in the DB, so the frontend must save before testing.
 #[tauri::command]
 pub async fn settings_backup_test_sync_connection() -> Result<(), String> {
     let config = tauri::async_runtime::spawn_blocking(load_backup_sync_config_from_db)
         .await
-        .map_err(|e| format!("settings_backup_test_sync_connection join 失败：{e}"))??;
+        .map_err(|e| format!("settings_backup_test_sync_connection join failed: {e}"))??;
     let creds = backup_credentials(&config)?;
     crate::services::webdav::test_connection(&creds).await
 }
 
-/// 拉取远端摘要。远端还没有备份时返回 None。
+/// Fetch the remote summary. Returns None when the remote has no backup yet.
 #[tauri::command]
 pub async fn settings_backup_fetch_remote_info() -> Result<Option<BackupRemoteInfo>, String> {
     let config = tauri::async_runtime::spawn_blocking(load_backup_sync_config_from_db)
         .await
-        .map_err(|e| format!("settings_backup_fetch_remote_info join 失败：{e}"))??;
+        .map_err(|e| format!("settings_backup_fetch_remote_info join failed: {e}"))??;
     let creds = backup_credentials(&config)?;
     let _guard = backup_sync_mutex().lock().await;
 
@@ -415,7 +418,7 @@ pub async fn settings_backup_fetch_remote_info() -> Result<Option<BackupRemoteIn
         &creds,
         &segments,
         WEBDAV_MANIFEST_MAX_BYTES,
-        "远端备份元信息",
+        "remote backup metadata",
     )
     .await?
     else {
@@ -432,23 +435,24 @@ pub async fn settings_backup_fetch_remote_info() -> Result<Option<BackupRemoteIn
 
 pub(crate) fn parse_backup_remote_manifest(body: &[u8]) -> Result<BackupRemoteManifest, String> {
     let text = std::str::from_utf8(body)
-        .map_err(|_| "远端备份元信息不是合法的 UTF-8 文本".to_string())?;
+        .map_err(|_| "Remote backup metadata is not valid UTF-8 text".to_string())?;
     let remote = serde_json::from_str::<BackupRemoteManifest>(text)
-        .map_err(|e| format!("解析远端备份元信息失败：{e}"))?;
+        .map_err(|e| format!("failed to parse remote backup metadata: {e}"))?;
     validate_backup_manifest(&remote.manifest)?;
     Ok(remote)
 }
 
-/// 上传：采集 → 建目录 → **先 PUT config 再 PUT manifest**。
+/// Upload: collect -> create directories -> **PUT config first, then PUT manifest**.
 ///
-/// 顺序是有意的。manifest 是「这份备份可用」的信号，最后写入，
-/// 中途失败时远端留下的是旧 manifest + 新 config，下载侧的 sha256 校验
-/// 会拦下这个不一致，而不会当成合法数据应用。
+/// The order is intentional. The manifest is the signal that "this backup is usable", so it is written last; if the
+/// process fails midway the remote is left with an old manifest + new config, and the sha256 check on the download
+/// side catches the mismatch instead of applying it as valid data.
 ///
-/// **锁必须在采集之前获取。** 反过来（先采集后加锁）会开一个窗口：一次手动
-/// 下载可以整个挤在采集与 PUT 之间完成，于是这次上传把下载前的旧快照盖回远端，
-/// 用户刚拉下来的远端配置被自己的机器悄悄覆盖。抑制守卫挡不住这种情况 ——
-/// 它只阻止下载期间新产生的标脏，管不了一个已经采完快照、正停在锁上的上传。
+/// **The lock must be acquired before collection.** The reverse (collect first, lock later) opens a window: a
+/// manual download could squeeze entirely between collection and the PUT, so this upload would overwrite the remote
+/// with the pre-download old snapshot, silently clobbering the remote config the user just pulled with their own
+/// machine. A suppression guard cannot stop this -- it only blocks dirty flags created during a download, not an
+/// upload that has already collected its snapshot and is sitting on the lock.
 async fn upload_backup_snapshot() -> Result<i64, String> {
     let _guard = backup_sync_mutex().lock().await;
 
@@ -461,7 +465,7 @@ async fn upload_backup_snapshot() -> Result<i64, String> {
         Ok::<_, String>((config, (document, manifest)))
     })
     .await
-    .map_err(|e| format!("settings_backup_upload join 失败：{e}"))??;
+    .map_err(|e| format!("settings_backup_upload join failed: {e}"))??;
     let (document, manifest) = document;
 
     let creds = backup_credentials(&config)?;
@@ -473,7 +477,7 @@ async fn upload_backup_snapshot() -> Result<i64, String> {
         sha256: backup_sha256_hex(&body),
     };
     let manifest_body = serde_json::to_vec_pretty(&remote_manifest)
-        .map_err(|e| format!("序列化远端备份元信息失败：{e}"))?;
+        .map_err(|e| format!("failed to serialize remote backup metadata: {e}"))?;
 
     crate::services::webdav::ensure_remote_dirs(&creds, &backup_remote_segments(&config)).await?;
     crate::services::webdav::put_bytes(
@@ -493,7 +497,7 @@ async fn upload_backup_snapshot() -> Result<i64, String> {
 
     tauri::async_runtime::spawn_blocking(touch_backup_last_sync_at)
         .await
-        .map_err(|e| format!("settings_backup_upload join 失败：{e}"))?
+        .map_err(|e| format!("settings_backup_upload join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -501,16 +505,18 @@ pub async fn settings_backup_upload() -> Result<i64, String> {
     upload_backup_snapshot().await
 }
 
-/// 自动同步的上传入口。
+/// Upload entry point for auto-sync.
 ///
-/// 与手动上传有两点不同：
-/// 1. 没开开关或凭据不全就静默跳过 —— 自动路径不该因为用户没配 WebDAV 就反复弹错误。
-/// 2. 失败会落库（`last_error`）。用户此刻多半不在设置页，只靠事件推送的话
-///    页面一卸载错误就没了，配置早已停止同步而用户毫不知情。
+/// Differs from a manual upload in two ways:
+/// 1. If the switch is off or credentials are incomplete, skip silently -- the automatic path should not pop errors
+///    repeatedly just because the user has not configured WebDAV.
+/// 2. Failures are persisted (`last_error`). The user is most likely not on the settings page right now; relying on
+///    event push alone, the error would vanish as soon as the page unmounts, leaving the user unaware that config
+///    had long stopped syncing.
 pub(crate) async fn auto_upload_backup_snapshot() -> Result<Option<i64>, String> {
     let config = tauri::async_runtime::spawn_blocking(load_backup_sync_config_from_db)
         .await
-        .map_err(|e| format!("auto_upload_backup_snapshot join 失败：{e}"))??;
+        .map_err(|e| format!("auto_upload_backup_snapshot join failed: {e}"))??;
     if !config.auto_sync || backup_credentials(&config).is_err() {
         return Ok(None);
     }
@@ -518,7 +524,7 @@ pub(crate) async fn auto_upload_backup_snapshot() -> Result<Option<i64>, String>
         Ok(timestamp) => Ok(Some(timestamp)),
         Err(error) => {
             let message = error.clone();
-            // 落库放到 blocking 线程，避免在异步上下文里做同步 SQLite IO。
+            // Persisting goes on a blocking thread to avoid synchronous SQLite IO in an async context.
             let _ = tauri::async_runtime::spawn_blocking(move || {
                 record_backup_auto_sync_error(&message);
             })
@@ -528,17 +534,17 @@ pub(crate) async fn auto_upload_backup_snapshot() -> Result<Option<i64>, String>
     }
 }
 
-/// 下载：拉 manifest → 拉 config → 校验 size+sha256 → 应用快照。
+/// Download: pull manifest -> pull config -> verify size+sha256 -> apply snapshot.
 ///
-/// **全程持有全局锁**，应用快照也在锁内。应用要跨多个配置域分别写库，
-/// 中间态是不自洽的；若此时自动上传拿到锁开始采集快照，传上去的
-/// 就是半旧半新的配置。抑制守卫在锁内获取、随 blocking 任务一同释放，
-/// 顺序与 cc-switch 的 `run_with_webdav_lock` 一致。
+/// **The global lock is held throughout**, including while applying the snapshot. Applying writes to several config
+/// domains separately, and the intermediate state is inconsistent; if an auto-upload then acquired the lock and
+/// started collecting a snapshot, what it uploaded would be half old and half new. The suppression guard is
+/// acquired under the lock and released with the blocking task, matching cc-switch's `run_with_webdav_lock` order.
 #[tauri::command]
 pub async fn settings_backup_download() -> Result<BackupApplyOutcome, String> {
     let config = tauri::async_runtime::spawn_blocking(load_backup_sync_config_from_db)
         .await
-        .map_err(|e| format!("settings_backup_download join 失败：{e}"))??;
+        .map_err(|e| format!("settings_backup_download join failed: {e}"))??;
     let creds = backup_credentials(&config)?;
 
     let _guard = backup_sync_mutex().lock().await;
@@ -547,45 +553,46 @@ pub async fn settings_backup_download() -> Result<BackupApplyOutcome, String> {
         &creds,
         &backup_remote_file_segments(&config, WEBDAV_MANIFEST_FILENAME),
         WEBDAV_MANIFEST_MAX_BYTES,
-        "远端备份元信息",
+        "remote backup metadata",
     )
     .await?
     else {
-        return Err("远端还没有备份，请先在任一设备上传一次".to_string());
+        return Err("There is no backup on the remote yet; please upload once from any device first".to_string());
     };
-    // parse 时已校验 manifest 的版本兼容性，不兼容会在这里中止。
+    // The manifest's version compatibility is already validated during parse; an incompatible one aborts here.
     let remote = parse_backup_remote_manifest(&manifest_body)?;
 
     let Some(body) = crate::services::webdav::get_bytes(
         &creds,
         &backup_remote_file_segments(&config, WEBDAV_CONFIG_FILENAME),
         WEBDAV_CONFIG_MAX_BYTES,
-        "远端配置",
+        "remote config",
     )
     .await?
     else {
-        return Err("远端元信息存在但配置文件缺失，请从源设备重新上传一次".to_string());
+        return Err("Remote metadata exists but the config file is missing; please re-upload from the source device".to_string());
     };
     verify_backup_payload(&body, remote.size, &remote.sha256)?;
     let document =
-        String::from_utf8(body).map_err(|_| "远端配置不是合法的 UTF-8 文本".to_string())?;
+        String::from_utf8(body).map_err(|_| "Remote config is not valid UTF-8 text".to_string())?;
 
     tauri::async_runtime::spawn_blocking(move || {
-        // 应用快照会走各域的 save_*，它们都会标脏。
-        // 不抑制就会把刚拉下来的远端数据原样推回去。
+        // Applying the snapshot goes through each domain's save_*, all of which mark dirty.
+        // Without suppression it would push the just-pulled remote data right back.
         let _suppression = crate::services::webdav_auto_sync::suppress();
         let (snapshot, _) = parse_backup_document(&document)?;
         let mut conn = open_db()?;
         let outcome = apply_backup_snapshot(&mut conn, snapshot)?;
-        // 时间戳写失败**不能**推翻已经落库的还原。快照此刻已经 commit，
-        // 这里再返回 Err 会让前端走 catch 分支：还原提示变成错误提示，
-        // 且负责重载前端 store 的 `syncStateAfterRestore` 不会执行 ——
-        // 内存里仍是还原前的旧配置，下次编辑任一域就把它整个写回库，
-        // 用户看到的是「还原报错了，配置也确实没变」，而库已经被改了。
-        // last_sync_at 只是展示用的元信息，丢一次远不如丢掉还原结果严重。
+        // A failed timestamp write must **not** overturn a restore already committed to the DB. The snapshot is
+        // committed at this point, so returning Err here would send the frontend down the catch branch: the restore
+        // notice becomes an error notice, and `syncStateAfterRestore`, which reloads the frontend store, would not
+        // run -- memory would still hold the pre-restore old config, and the next edit to any domain would write it
+        // all back to the DB. The user would see "restore errored and the config really did not change" while the
+        // DB had already been modified. last_sync_at is only display metadata; losing it is far less serious than
+        // losing the restore result.
         let _ = touch_backup_last_sync_at();
         Ok(outcome)
     })
     .await
-    .map_err(|e| format!("settings_backup_download join 失败：{e}"))?
+    .map_err(|e| format!("settings_backup_download join failed: {e}"))?
 }

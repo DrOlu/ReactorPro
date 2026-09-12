@@ -1,23 +1,26 @@
-//! `cua-driver` 的探测 / 安装 / 权限查询。
+//! Probing / installation / permission queries for `cua-driver`.
 //!
-//! 计算机操作能力本身**不经过这里**——`cua-driver mcp` 是一个标准的
-//! stdio MCP server，由 `commands/integration/mcp.rs` 那套通用 MCP
-//! client 驱动，工具由 `tools/list` 自动发现。这个模块只负责它前面那
-//! 一小段引导：用户机器上有没有这个二进制、装在哪、要不要装、macOS
-//! 的 TCC 授权给了没有。
+//! The computer-operation capability itself does **not** go through here — `cua-driver mcp`
+//! is a standard stdio MCP server driven by the generic MCP client in
+//! `commands/integration/mcp.rs`, with tools auto-discovered via `tools/list`. This module
+//! only handles the small piece of bootstrapping in front of it: whether the binary exists
+//! on the user's machine, where it is installed, whether to install it, and whether macOS
+//! TCC authorization has been granted.
 //!
-//! 设计原则是**把活都推给上游**。版本检查、下载、解压、更新、授权引导
-//! 上游 CLI 全都有（`install.sh` / `update --apply` / `permissions
-//! grant` / `doctor`），这里不重新实现，只做三件事：
+//! The design principle is to **push all the work upstream**. Version checks, downloads,
+//! extraction, updates, and authorization prompts all exist in the upstream CLI
+//! (`install.sh` / `update --apply` / `permissions grant` / `doctor`); we do not reimplement
+//! them here, only three things:
 //!
-//! 1. 找到二进制（GUI 进程的 PATH 通常不含 `~/.local/bin`，必须补候选路径）；
-//! 2. 问 `cua-driver manifest` 要 MCP 调用方式，而不是硬编码 `["mcp"]`；
-//! 3. 需要安装时，转调官方安装脚本并把输出流式转发给前端。
+//! 1. find the binary (a GUI process's PATH usually lacks `~/.local/bin`, so candidate paths must be added);
+//! 2. ask `cua-driver manifest` for the MCP invocation instead of hardcoding `["mcp"]`;
+//! 3. when installation is needed, delegate to the official install script and stream its output to the frontend.
 //!
-//! macOS 上刻意**不**使用 `mcp --direct`：那会让 MCP 进程沿用宿主
-//! （LiveAgent.app）的 TCC 归属，等于要求 LiveAgent 自己去拿
-//! Accessibility 与 Screen Recording 授权。默认模式经 CuaDriver.app
-//! 的守护进程代理，授权归它，宿主不需要任何 TCC 权限。
+//! On macOS we deliberately do **not** use `mcp --direct`: that would make the MCP process
+//! inherit the host's (ReactorPro.app) TCC attribution, effectively requiring ReactorPro to
+//! obtain Accessibility and Screen Recording authorization itself. The default mode proxies
+//! through the CuaDriver.app daemon, which owns the authorization, so the host needs no TCC
+//! permissions.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -30,20 +33,21 @@ use wait_timeout::ChildExt;
 
 pub mod installed_apps;
 
-/// 单次外部命令的等待上限。`manifest` / `permissions status` 都在 1 秒
-/// 内返回；留足余量给冷启动的守护进程握手。
+/// Wait limit for a single external command. `manifest` / `permissions status` both return
+/// within 1 second; leave ample margin for a cold-start daemon handshake.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// 安装脚本的等待上限。要下载解压，比探测慢得多，但也不该无限等——网络
-/// 挂住时裸 `wait()` 会让 UI 的「安装中」永远停在那里，除了重启应用没有
-/// 别的出路。
+/// Wait limit for the install script. It must download and extract, so it is far slower
+/// than probing, but it should not wait forever either — when the network hangs, a bare
+/// `wait()` would leave the UI's "installing" state stuck forever, with no way out but
+/// restarting the app.
 const INSTALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
-/// 安装脚本的进度事件名。前端 `CuaDriverSetupCard` 监听它滚动日志。
+/// Progress event name for the install script. The frontend `CuaDriverSetupCard` listens to it to scroll logs.
 pub const INSTALL_PROGRESS_EVENT: &str = "cua_driver_install_progress";
 
-/// 官方安装脚本来源。展示给用户看的就是这个域名——必须与实际执行的
-/// URL 一致，否则确认对话框就是在骗人。
+/// Official install script source. This domain is what users see — it must match the URL
+/// actually executed, otherwise the confirmation dialog is lying.
 const INSTALL_SCRIPT_URL_UNIX: &str = "https://cua.ai/driver/install.sh";
 const INSTALL_SCRIPT_URL_WINDOWS: &str = "https://cua.ai/driver/install.ps1";
 
@@ -51,45 +55,49 @@ const INSTALL_SCRIPT_URL_WINDOWS: &str = "https://cua.ai/driver/install.ps1";
 #[serde(rename_all = "camelCase")]
 pub struct CuaDriverProbe {
     pub installed: bool,
-    /// 二进制绝对路径。写进 MCP server 配置的就是它——不用裸名字，
-    /// 因为 MCP 子进程继承的是 GUI 进程那份窄 PATH。
+    /// Absolute path to the binary. This is what gets written into the MCP server config —
+    /// not the bare name, because the MCP child process inherits the GUI process's narrow PATH.
     pub path: Option<String>,
     pub version: Option<String>,
-    /// `manifest.mcp_invocation` 给出的调用方式。上游若改了子命令，
-    /// 这里跟着变，不需要我们发版。
+    /// The invocation given by `manifest.mcp_invocation`. If upstream changes its subcommand,
+    /// this follows along without requiring a release from us.
     pub mcp_command: Option<String>,
     pub mcp_args: Vec<String>,
-    /// 本平台是否存在需要用户处理的系统授权门槛。只有 macOS 有 TCC，
-    /// Windows / Linux 恒 false —— 前端据此**立即**决定要不要渲染授权
-    /// 那一节，不必等 `permissions_status` 那趟子进程回来。
+    /// Whether this platform has a system authorization gate the user must handle. Only macOS
+    /// has TCC; Windows / Linux are always false — the frontend uses this to decide
+    /// **immediately** whether to render the authorization section, without waiting for the
+    /// `permissions_status` child process to return.
     pub permissions_required: bool,
-    /// 探测失败的原因（未安装是正常状态，不算错误，此时为 None）。
+    /// Reason probing failed (not being installed is a normal state, not an error, in which case this is None).
     pub error: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CuaDriverPermissions {
-    /// 只有 macOS 有 TCC 门槛；其他平台恒 false，前端据此隐藏整段。
+    /// Only macOS has a TCC gate; other platforms are always false, and the frontend hides
+    /// the whole section accordingly.
     pub supported: bool,
     pub accessibility: bool,
     pub screen_recording: bool,
-    /// 授权归属的 bundle id（正常是 `com.trycua.driver`）。守护进程没起
-    /// 来时上游会报 unknown，此时两个布尔值不可信。
+    /// The bundle id the authorization is attributed to (normally `com.trycua.driver`). When
+    /// the daemon is not running, upstream reports unknown, and the two booleans are unreliable.
     pub attributed_to: Option<String>,
     pub error: Option<String>,
 }
 
-/// 安装命令预览。**只描述，不执行**——UI 必须先把 `display` 原样展示
-/// 给用户确认，才允许调 `install`。
+/// Install command preview. **Describes only, never executes** — the UI must first show
+/// `display` verbatim for the user to confirm before `install` may be called.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallCommandPreview {
     pub program: String,
     pub args: Vec<String>,
-    /// 可直接粘进终端的完整命令。用户也可以选择自己去终端跑这一条。
+    /// The complete command, pasteable directly into a terminal. The user may also choose to
+    /// run this one themselves in a terminal.
     pub display: String,
-    /// 脚本来源 URL，用于在确认文案里点明「这会从网络下载并执行脚本」。
+    /// Script source URL, used in the confirmation text to make clear "this downloads and
+    /// executes a script from the network".
     pub source_url: String,
 }
 
@@ -101,22 +109,23 @@ pub struct InstallProgress {
     pub line: String,
 }
 
-// ───────── 探测 ─────────
+// ───────── Probing ─────────
 
-/// 本平台是否存在需要用户处理的系统授权门槛。只有 macOS 有 TCC。
+/// Whether this platform has a system authorization gate the user must handle. Only macOS has TCC.
 ///
-/// 单独成函数而不是内联 `cfg!`，是为了让测试能在不 spawn 任何子进程的前提下
-/// 断言这一位——`probe()` 会真的去跑 `cua-driver manifest`，让它进单测就等于
-/// 让测试结果取决于跑测试那台机器装没装驱动。
+/// It is a separate function rather than an inline `cfg!` so tests can assert this bit
+/// without spawning any child process — `probe()` really runs `cua-driver manifest`, so
+/// putting it in a unit test would make the result depend on whether the machine running
+/// the tests has the driver installed.
 const fn platform_requires_permissions() -> bool {
     cfg!(target_os = "macos")
 }
 
-/// 在 PATH 与平台候选目录里找 `cua-driver`。
+/// Find `cua-driver` in PATH and the platform candidate directories.
 ///
-/// 必须自己 walk 而不是靠 `Command::new("cua-driver")`：macOS 上从
-/// Finder / Dock 启动的 GUI 进程拿到的是 launchd 的默认 PATH，不含
-/// `~/.local/bin`，而那正是官方安装脚本的默认落点。
+/// We must walk ourselves rather than rely on `Command::new("cua-driver")`: on macOS a GUI
+/// process launched from Finder / Dock gets launchd's default PATH, which lacks
+/// `~/.local/bin` — exactly the default landing spot of the official install script.
 fn find_binary() -> Option<PathBuf> {
     if let Some(found) = find_in_path("cua-driver") {
         return Some(found);
@@ -158,7 +167,7 @@ fn candidate_paths() -> Vec<PathBuf> {
 
     #[cfg(target_os = "macos")]
     {
-        // 装了 CuaDriver.app 但没建 PATH 软链的情况。
+        // The case where CuaDriver.app is installed but no PATH symlink was created.
         out.push(PathBuf::from(
             "/Applications/CuaDriver.app/Contents/MacOS/cua-driver",
         ));
@@ -176,12 +185,14 @@ fn candidate_paths() -> Vec<PathBuf> {
     out
 }
 
-/// 构造一个不会弹控制台窗口的子进程命令。
+/// Build a child-process command that will not pop up a console window.
 ///
-/// Windows 上从 GUI 进程 spawn 控制台程序会真的开一个黑框窗口——探测、
-/// 权限查询、安装脚本全是后台行为，用户每进一次 CUA 设置页就被闪一下。
-/// `CREATE_NO_WINDOW` 只影响是否分配控制台，stdout / stderr 仍照常通过
-/// 管道拿到。非 Windows 平台没有这个概念，helper 退化成 `Command::new`。
+/// On Windows, spawning a console program from a GUI process really does open a black
+/// console window — probing, permission queries, and the install script are all background
+/// work, so the user would get a flash every time they open the CUA settings page.
+/// `CREATE_NO_WINDOW` only affects whether a console is allocated; stdout / stderr are still
+/// obtained through pipes as usual. Non-Windows platforms have no such concept, so the
+/// helper degrades to `Command::new`.
 fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     #[cfg(target_os = "windows")]
     {
@@ -229,8 +240,9 @@ fn run_capture(program: &Path, args: &[&str]) -> Result<String, String> {
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     if !status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        // 有些子命令（如 permissions status）业务失败也走非零退出但仍
-        // 打了有效 JSON；把 stdout 一并带回去，让调用方决定怎么解析。
+        // Some subcommands (e.g. permissions status) also exit non-zero on business failure
+        // while still printing valid JSON; include stdout as well and let the caller decide
+        // how to parse it.
         return Err(format!(
             "exit {}: {}",
             status.code().unwrap_or(-1),
@@ -244,7 +256,8 @@ fn run_capture(program: &Path, args: &[&str]) -> Result<String, String> {
     Ok(stdout)
 }
 
-/// 探测安装状态。未安装不是错误——返回 `installed: false, error: None`。
+/// Probe the installation status. Not being installed is not an error — returns
+/// `installed: false, error: None`.
 pub fn probe() -> CuaDriverProbe {
     let Some(path) = find_binary() else {
         return CuaDriverProbe {
@@ -288,8 +301,8 @@ pub fn probe() -> CuaDriverProbe {
         Err(error) => probe.error = Some(error),
     }
 
-    // manifest 没给出调用方式（老版本 / 解析失败）时回落到已知形态。
-    // 刻意不加 `--direct`：见模块头注释。
+    // Fall back to the known shape when the manifest gives no invocation (old version /
+    // parse failure). Deliberately do not add `--direct`: see the module header comment.
     if probe.mcp_command.is_none() {
         probe.mcp_command = probe.path.clone();
         probe.mcp_args = vec!["mcp".to_string()];
@@ -298,7 +311,7 @@ pub fn probe() -> CuaDriverProbe {
     probe
 }
 
-// ───────── 宿主自身身份 ─────────
+// ───────── Host's own identity ─────────
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -306,29 +319,33 @@ pub struct SelfIdentity {
     pub pid: u32,
 }
 
-/// LiveAgent 自己的进程身份，供前端把 cua-driver 的视野裁掉宿主窗口。
+/// ReactorPro's own process identity, so the frontend can crop host windows out of
+/// cua-driver's view.
 ///
-/// 让模型操作 LiveAgent 自己的界面是危险的自指：它能点掉自己的审批弹窗、
-/// 改自己的权限策略、或者直接把自己关了。过滤在前端做（Rust 侧的
-/// `mcp_call_tool` 是所有 MCP server 共用的通道，不该塞 cua 专属逻辑），
-/// 这里只提供比对用的事实。
+/// Letting the model operate ReactorPro's own UI is a dangerous self-reference: it could
+/// dismiss its own approval dialog, change its own permission policy, or simply shut itself
+/// down. Filtering is done in the frontend (the Rust-side `mcp_call_tool` is a channel shared
+/// by all MCP servers and should not carry cua-specific logic), so this only provides the
+/// facts for comparison.
 pub fn self_identity() -> SelfIdentity {
     SelfIdentity {
         pid: std::process::id(),
     }
 }
 
-/// 当前前台（持有键盘焦点的）应用的 pid。
+/// The pid of the current frontmost (keyboard-focus-holding) application.
 ///
-/// 存在的理由：cua-driver 的 `press_key` / `hotkey` / `type_text` 在
-/// desktop 作用域下不要求 pid / window_id / 坐标，输入投递给**前台应用**。
-/// 这类调用按 pid 与按坐标的两道闸都管不到——只有知道前台是谁，才能判断
-/// 这次按键会不会落在宿主自己身上（按掉审批弹窗、`cmd+q` 关掉应用）。
+/// Why it exists: cua-driver's `press_key` / `hotkey` / `type_text` do not require
+/// pid / window_id / coordinates under the desktop scope, and deliver input to the
+/// **frontmost application**. Such calls slip past both the by-pid and by-coordinate gates —
+/// only by knowing who is frontmost can we tell whether this keypress would land on the host
+/// itself (dismissing the approval dialog, `cmd+q` quitting the app).
 ///
-/// 取不到时返回 `Err`，前端按 **fail-closed** 处理（拒绝并让模型改用带
-/// pid / window_id 的显式目标）。这里不能学窗口矩形那样「取不到就放行」：
-/// 键盘输入不存在「误伤矩形下方真实目标」的二义性，而放行的代价是模型
-/// 可以对宿主敲任意按键。
+/// Returns `Err` when it cannot be obtained, and the frontend handles it **fail-closed**
+/// (reject and make the model use an explicit target with pid / window_id). We must not
+/// follow the window-rect approach of "allow when unavailable": keyboard input has no
+/// ambiguity about "hitting the real target below the rectangle", and the cost of allowing
+/// it is that the model can type arbitrary keys at the host.
 pub fn frontmost_pid() -> Result<u32, String> {
     #[cfg(target_os = "macos")]
     {
@@ -358,15 +375,16 @@ pub fn frontmost_pid() -> Result<u32, String> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        // Linux 没有跨 X11 / Wayland 的统一前台查询。返回 Err 让前端
-        // fail-closed：无明确目标的桌面键盘调用被拒，带 pid / window_id
-        // 的显式目标不受影响，能力不算丢失。
+        // Linux has no unified frontmost-app query across X11 / Wayland. Returning Err makes
+        // the frontend fail-closed: desktop keyboard calls without an explicit target are
+        // rejected, while explicit targets with pid / window_id are unaffected, so no
+        // capability is lost.
         Err("frontmost application detection is not supported on this platform".to_string())
     }
 }
 
-/// 宿主自己某个窗口在屏幕坐标系里的矩形，单位是逻辑点（与 macOS 的
-/// Accessibility / cua-driver 的桌面坐标同一套）。
+/// The rectangle of one of the host's own windows in screen coordinates, in logical points
+/// (the same system as macOS Accessibility / cua-driver desktop coordinates).
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SelfWindowRect {
@@ -376,16 +394,18 @@ pub struct SelfWindowRect {
     pub height: f64,
 }
 
-/// LiveAgent 自己所有可见窗口的屏幕矩形。
+/// The screen rectangles of all of ReactorPro's own visible windows.
 ///
-/// 用途只有一个：拦下**以桌面为目标、按屏幕坐标**下发的点击 / 拖拽 /
-/// 按键。按 pid 或 window_id 寻址的调用由前端的自指闸门直接拒绝，但坐标
-/// 无法反查归属——模型从整屏截图上量出宿主窗口里某个按钮的位置，再以
-/// `{"target":{"kind":"desktop"},"x":…,"y":…}` 发出来，就绕开了那道闸。
-/// 把矩形交给前端比对，落在里面的坐标一律拒绝。
+/// There is only one purpose: to intercept clicks / drags / keypresses issued **targeting
+/// the desktop, by screen coordinate**. Calls addressed by pid or window_id are rejected
+/// outright by the frontend's self-targeting gate, but coordinates cannot be traced back to
+/// an owner — the model can measure the position of a button inside a host window from a
+/// full-screen screenshot and send it as `{"target":{"kind":"desktop"},"x":…,"y":…}`, slipping
+/// past that gate. Hand the rectangles to the frontend for comparison and reject any
+/// coordinate that falls inside one.
 ///
-/// 不可见 / 最小化的窗口不返回：它们接不到点击，列进来只会误伤那片区域
-/// 下面真正的目标窗口。
+/// Invisible / minimized windows are not returned: they cannot receive clicks, and including
+/// them would only harm the real target window beneath that area.
 pub fn self_window_rects(app: &AppHandle) -> Vec<SelfWindowRect> {
     use tauri::Manager;
 
@@ -408,7 +428,7 @@ pub fn self_window_rects(app: &AppHandle) -> Vec<SelfWindowRect> {
         .collect()
 }
 
-// ───────── 权限（macOS） ─────────
+// ───────── Permissions (macOS) ─────────
 
 pub fn permissions_status() -> CuaDriverPermissions {
     if !cfg!(target_os = "macos") {
@@ -422,10 +442,11 @@ pub fn permissions_status() -> CuaDriverPermissions {
         };
     };
 
-    // 只问 `permissions status`。曾经额外并行 spawn 一次 `cua-driver status`
-    // 去判断守护进程有没有起来，但那个结果前端从头到尾没有用过，而代价是每次
-    // 进设置页多一个子进程，且判定方式是拿英文散文做子串匹配（上游改一次措辞
-    // 就静默失真）。要用的时候再加，并且要用结构化输出。
+    // Only ask `permissions status`. We once additionally spawned `cua-driver status` in
+    // parallel to decide whether the daemon was up, but the frontend never used that result
+    // at all, while the cost was an extra child process on every settings-page visit and a
+    // decision made by substring-matching English prose (silently wrong the moment upstream
+    // rewords it). Add it back when needed, and with structured output.
     match run_capture(&path, &["permissions", "status", "--json"]) {
         Ok(raw) => match serde_json::from_str::<Value>(&raw) {
             Ok(payload) => CuaDriverPermissions {
@@ -459,9 +480,9 @@ pub fn permissions_status() -> CuaDriverPermissions {
     }
 }
 
-/// 触发上游的授权引导。会弹系统对话框并把 CuaDriver.app 拉起来，
-/// 归属正确的 bundle identity——这是唯一正确的授权路径，只读的
-/// `permissions status` 永远不会触发它。
+/// Trigger upstream's authorization prompt. It pops the system dialog and launches
+/// CuaDriver.app, attributing to the correct bundle identity — this is the only correct
+/// authorization path; the read-only `permissions status` never triggers it.
 pub fn permissions_grant() -> Result<CuaDriverPermissions, String> {
     if !cfg!(target_os = "macos") {
         return Ok(CuaDriverPermissions::default());
@@ -471,27 +492,30 @@ pub fn permissions_grant() -> Result<CuaDriverPermissions, String> {
     Ok(permissions_status())
 }
 
-// ───────── 安装 ─────────
+// ───────── Installation ─────────
 
-/// Unix 侧交给 `/bin/bash -c` 的安装脚本原文。
+/// The raw install script handed to `/bin/bash -c` on Unix.
 ///
-/// 必须是 `curl | bash` 的管道形式，**不能**写成 `$(curl …)`：终端里的
-/// `bash -c "$(curl …)"` 之所以成立，是因为外层交互 shell 先做命令替换、
-/// 脚本全文成为 `-c` 的参数。而从 Rust 直接 spawn 时没有外层 shell——
-/// 字面量 `$(curl …)` 成了 bash 自己的脚本，bash 对**替换结果**只做分词、
-/// 当一条简单命令执行，不会重新按脚本解析。于是下载内容的第一个词
-/// `#!/bin/bash` 被当作命令名去找，报 `No such file or directory` 退出 127。
+/// It must be in `curl | bash` pipeline form, and must **not** be written as `$(curl …)`:
+/// in a terminal, `bash -c "$(curl …)"` works because the outer interactive shell performs
+/// command substitution first, turning the whole script into the argument to `-c`. But when
+/// spawning directly from Rust there is no outer shell — the literal `$(curl …)` becomes
+/// bash's own script, and bash only word-splits the **substitution result**, executing it as
+/// a single simple command without re-parsing it as a script. The first word of the
+/// downloaded content, `#!/bin/bash`, is then looked up as a command name, reporting
+/// `No such file or directory` and exiting 127.
 ///
-/// `pipefail` 同样不能省：没有它，curl 拉取失败时 bash 收到空输入会以 0
-/// 退出，安装失败被静默当成成功。
+/// `pipefail` is likewise essential: without it, when curl fails to fetch, bash receives
+/// empty input and exits 0, silently treating the failed install as success.
 fn unix_install_script(script_url: &str) -> String {
     format!("set -o pipefail; curl -fsSL {script_url} | /bin/bash")
 }
 
-/// 描述将要执行的安装命令。**不执行任何东西。**
+/// Describe the install command that will be executed. **Executes nothing.**
 ///
-/// 存在的理由就是让 UI 能在动手之前把命令原文摆到用户面前：这条命令
-/// 会从网络拉一段 shell 脚本直接执行，用户有权在看到全文之后再决定。
+/// The whole reason it exists is to let the UI put the raw command in front of the user
+/// before acting: this command fetches a shell script from the network and executes it
+/// directly, and the user has the right to decide after seeing the full text.
 pub fn install_command_preview() -> InstallCommandPreview {
     if cfg!(target_os = "windows") {
         let inner = format!("irm {INSTALL_SCRIPT_URL_WINDOWS} | iex");
@@ -512,10 +536,10 @@ pub fn install_command_preview() -> InstallCommandPreview {
     }
 }
 
-/// 执行官方安装脚本，把 stdout / stderr 逐行 emit 给前端。
+/// Execute the official install script, emitting stdout / stderr line by line to the frontend.
 ///
-/// 调用方（Tauri command）必须确保用户已经在看到
-/// `install_command_preview().display` 之后显式确认过。
+/// The caller (Tauri command) must ensure the user has explicitly confirmed after seeing
+/// `install_command_preview().display`.
 pub fn install(app: &AppHandle) -> Result<CuaDriverProbe, String> {
     let preview = install_command_preview();
     let mut child = hidden_command(&preview.program)
@@ -617,18 +641,20 @@ mod tests {
     #[test]
     fn install_preview_never_executes_and_matches_its_source_url() {
         let preview = install_command_preview();
-        // 展示给用户的命令必须真的包含那个 URL——确认对话框的全部意义
-        // 就在于「看到的即将执行的」。
+        // The command shown to the user must really contain that URL — the entire point of
+        // the confirmation dialog is "what you see is what will run".
         assert!(preview.display.contains(&preview.source_url));
         assert!(preview.args.iter().any(|arg| arg.contains(&preview.source_url)));
     }
 
-    /// 真跑一遍 bash（curl 支持 file://，不出网、不依赖装没装驱动），钉住
-    /// 两个语义：脚本全文被**按脚本解析**执行，以及 curl 失败必须传出去。
+    /// Actually run bash (curl supports file://, so no network and no dependency on whether
+    /// the driver is installed), pinning down two semantics: the whole script is executed
+    /// **by being parsed as a script**, and a curl failure must be propagated.
     ///
-    /// 曾经的写法是把 `$(curl …)` 字面量交给 `bash -c`——bash 对替换结果只
-    /// 分词、当一条简单命令执行，脚本第一个词 `#!/bin/bash` 被当作命令名，
-    /// 安装必然以 127 失败。这个测试对那个写法会当场红掉。
+    /// The former implementation handed the `$(curl …)` literal to `bash -c` — bash only
+    /// word-splits the substitution result and executes it as a single simple command, so
+    /// the script's first word `#!/bin/bash` was treated as a command name and the install
+    /// inevitably failed with 127. This test would immediately go red on that form.
     #[cfg(unix)]
     #[test]
     fn unix_install_script_parses_the_payload_as_a_script_and_propagates_curl_failure() {
@@ -651,34 +677,37 @@ mod tests {
                 .expect("spawn bash")
         };
 
-        // 带 shebang 的脚本应被完整解析执行（shebang 行是注释），退出码是
-        // 脚本自己的 42，而不是「找不到命令 #!/bin/bash」的 127。
+        // A script with a shebang should be parsed and executed in full (the shebang line is
+        // a comment), exiting with the script's own 42 rather than 127's "command #!/bin/bash
+        // not found".
         let ok = run(&format!("file://{}", script.display()));
-        assert_eq!(ok.code(), Some(42), "脚本应按脚本解析执行，而不是被当作一条命令");
+        assert_eq!(ok.code(), Some(42), "the script should be parsed and executed as a script, not treated as a single command");
 
-        // curl 拉不到时整条管道必须以非零退出——没有 pipefail 的话 bash 收到
-        // 空输入会以 0 退出，安装失败被静默当成成功。
+        // When curl cannot fetch, the whole pipeline must exit non-zero — without pipefail,
+        // bash receiving empty input exits 0 and the failed install is silently treated as
+        // success.
         let missing = run(&format!("file://{}", dir.join("missing.sh").display()));
-        assert_ne!(missing.code(), Some(0), "curl 失败不能被静默当成安装成功");
+        assert_ne!(missing.code(), Some(0), "a curl failure must not be silently treated as a successful install");
 
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
     fn permissions_required_tracks_the_platform_tcc_gate() {
-        // 前端靠这一位决定要不要渲染授权那一节；不能等 permissions_status
-        // 那趟慢查询回来才知道平台，否则卡片会「先没有、后长出来」。
+        // The frontend uses this bit to decide whether to render the authorization section;
+        // it must not wait for the slow permissions_status query to learn the platform, or
+        // the card would "not appear first, then grow in later".
         assert_eq!(platform_requires_permissions(), cfg!(target_os = "macos"));
         assert_eq!(
             CuaDriverProbe::default().permissions_required,
             false,
-            "Default 用于「探测彻底失败」的兜底，不该声称有授权门槛"
+            "Default is the fallback for a total probe failure and must not claim an authorization gate"
         );
     }
 
     #[test]
     fn probe_reports_not_installed_without_error() {
-        // 未安装是正常状态，不该被前端当成故障红条渲染。
+        // Not being installed is a normal state and must not be rendered by the frontend as a failure red bar.
         let probe = CuaDriverProbe::default();
         assert!(!probe.installed);
         assert!(probe.error.is_none());
@@ -689,7 +718,7 @@ mod tests {
         let paths = candidate_paths();
         assert!(
             paths.iter().any(|p| p.to_string_lossy().contains(".local")),
-            "官方安装脚本默认落在 ~/.local/bin，GUI 进程的 PATH 通常不含它"
+            "the official install script lands in ~/.local/bin by default, which a GUI process's PATH usually lacks"
         );
     }
 }

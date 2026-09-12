@@ -108,7 +108,7 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
           .catch((error) => {
             updateConversationRuntimeEntry(conversationId, (prev) => ({
               ...prev,
-              errorMessage: asErrorMessage(error, "保存会话模型选择失败。"),
+              errorMessage: asErrorMessage(error, "Failed to save the conversation model selection."),
             }));
           });
       }
@@ -117,8 +117,9 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
     [currentConversationIdRef, setSettings, sidebarStore, updateConversationRuntimeEntry],
   );
 
-  // 跨端收敛：history-sync 带回的会话模型选择（如 WebUI 发消息后落库）
-  // 写回当前会话的 runtime entry；值相等或发送中不动，无回环。
+  // Cross-client convergence: the conversation model selection brought back by history-sync (e.g. persisted
+  // after the WebUI sends a message) is written back to the current conversation's runtime entry; no change when
+  // the value is equal or a send is in flight, so there is no loop.
   const displayedConversationPersistedModelJson =
     sidebarConversationsById.get(currentConversationId)?.selectedModelJson;
   useEffect(() => {

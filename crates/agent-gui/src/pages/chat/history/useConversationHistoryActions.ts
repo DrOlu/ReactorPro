@@ -53,11 +53,13 @@ export type PersistConversationParams = {
   titleLookahead?: boolean;
 };
 
-// 成功返回盖好 revision 的持久化状态（revision 是 replace/分页的 CAS 令牌，
-// 只能在写库成功后由 summary.updatedAt 重建），失败返回 null。调用方若要把
-// 本次持久化的状态落进运行时缓存（压缩收尾即是），必须落这份带章状态——
-// checkpoint 状态出自 appendMessagesToConversation，revision 恒为 null，照原
-// 样 apply 会把缓存里的 revision 永久清空，后续 edit-resend 直接失败。
+// On success returns the persisted state stamped with a revision (the revision is the
+// CAS token for replace/pagination and can only be rebuilt from summary.updatedAt after
+// a successful DB write); on failure returns null. If the caller wants to put this
+// persisted state into the runtime cache (as compaction teardown does), it must use this
+// stamped state — the checkpoint state comes from appendMessagesToConversation with a
+// revision that is always null, and applying it as-is would permanently clear the
+// revision in the cache, making subsequent edit-resend fail outright.
 export type PersistConversationAction = (
   params: PersistConversationParams,
 ) => Promise<ConversationViewState | null>;
@@ -85,11 +87,11 @@ type UseConversationHistoryActionsParams = {
   resetVisibleTransientState: () => void;
   deleteConversationArtifacts: (conversationId: string) => void;
   disposeSubagentsForConversation?: (conversationId: string) => void;
-  /** 空闲运行时缓存被逐出时的瞬态交互清理(挂起提问/工具审批/MCP 激活集)。
-   * 与 ChatPage 自己的 prune 路径共用同一实现,两条路径的生命周期裁决必须一致。
-   * 刻意不含计划审批——待决计划跨 run 存活,仅会话删除时清(见下)。 */
+  /** Transient interaction cleanup when an idle runtime cache is evicted (pending questions / tool approvals / MCP activation set).
+   * Shares the same implementation as ChatPage's own prune path; the lifecycle decisions of the two paths must stay consistent.
+   * Deliberately excludes plan approvals — pending plans survive across runs and are cleared only when the conversation is deleted (see below). */
   cancelConversationTransientInteractions?: (conversationId: string) => void;
-  /** 会话真正删除时的计划审批清理(含批准落定态)。 */
+  /** Plan-approval cleanup when a conversation is actually deleted (including the approved-settled state). */
   cancelPlanDecisionsForConversation?: (conversationId: string) => void;
   getDefaultNewConversationWorkdir?: () => string | undefined;
   resolveConversationSelectedModel: (json: string | null | undefined) => SelectedModel | undefined;
@@ -288,7 +290,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         return "painted";
       }
 
-      if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
+      if (!record.activeSegment) throw new Error("history window is missing an active segment");
       const state = buildConversationStateFromWindow(record);
       // Runtime may have advanced while metadata was loading (including streaming turns).
       const latestCached = fromSearch ? conversationRuntimeCacheRef.current.get(id) : undefined;
@@ -362,7 +364,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
           maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
           includeActiveSegment: true,
         });
-        if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
+        if (!record.activeSegment) throw new Error("history window is missing an active segment");
         const entry = createConversationRuntimeEntry({
           state: buildConversationStateFromWindow(record),
           sessionId: record.conversation.sessionId ?? record.conversation.id,
@@ -405,7 +407,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         includeActiveSegment: false,
       });
       if (page.oldestOffset >= transcript.oldestMessageOffset) {
-        throw new Error("历史分页游标未向前推进");
+        throw new Error("history pagination cursor did not advance forward");
       }
       const projection = createTranscriptProjection({
         segments: page.segments,
@@ -441,11 +443,11 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     const id = conversationId.trim();
     const current = conversationRuntimeCacheRef.current.get(id);
     if (!id || !current) {
-      throw new Error("无法替换未加载的历史会话");
+      throw new Error("cannot replace a history conversation that is not loaded");
     }
     const expectedRevision = current.state.transcript.revision;
     if (!expectedRevision) {
-      throw new Error("历史会话缺少 revision，无法安全替换消息");
+      throw new Error("history conversation is missing a revision; cannot safely replace messages");
     }
 
     const replaced = await replaceChatHistoryFromMessage({
@@ -455,7 +457,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
       expectedRevision,
     });
-    if (!replaced.activeSegment) throw new Error("历史替换结果缺少活跃分段");
+    if (!replaced.activeSegment) throw new Error("history replace result is missing an active segment");
     const state = buildConversationStateFromWindow(replaced);
     const entry = {
       ...current,
@@ -486,7 +488,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     deleteConversationArtifacts(id);
     disposeSubagentsForConversation?.(id);
     cancelConversationTransientInteractions?.(id);
-    // 会话已不存在,计划审批(含批准落定态)才随之销毁——空闲 prune 不走这里。
+    // Only when the conversation no longer exists are plan approvals (including the approved-settled state) destroyed along with it — idle prune does not go through here.
     cancelPlanDecisionsForConversation?.(id);
 
     if (currentConversationIdRef.current === id) {

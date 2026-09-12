@@ -14,16 +14,16 @@ fn record_to_segment_input(record: &ChatHistorySegmentRecord) -> ChatHistorySegm
 
 fn validate_segment_input(segment: &ChatHistorySegmentInput) -> Result<(), String> {
     if segment.segment_index < 0 {
-        return Err("segmentIndex 不能小于 0".to_string());
+        return Err("segmentIndex cannot be less than 0".to_string());
     }
     if segment.segment_id.trim().is_empty() {
-        return Err("segmentId 不能为空".to_string());
+        return Err("segmentId cannot be empty".to_string());
     }
     if segment.messages_json.trim().is_empty() {
-        return Err("messagesJson 不能为空".to_string());
+        return Err("messagesJson cannot be empty".to_string());
     }
     if segment.message_count < 0 {
-        return Err("messageCount 不能小于 0".to_string());
+        return Err("messageCount cannot be less than 0".to_string());
     }
     Ok(())
 }
@@ -45,17 +45,17 @@ fn validate_upsert_input(input: &ChatHistoryUpsertInput) -> Result<(), String> {
         updated_at: input.updated_at,
     })?;
     if input.segments.is_empty() {
-        return Err("segments 不能为空".to_string());
+        return Err("segments cannot be empty".to_string());
     }
     if input.total_segment_count != input.segments.len() as i64 {
-        return Err("totalSegmentCount 必须与 segments.length 一致".to_string());
+        return Err("totalSegmentCount must match segments.length".to_string());
     }
 
     for (index, segment) in input.segments.iter().enumerate() {
         validate_segment_input(segment)?;
         if segment.segment_index != index as i64 {
             return Err(format!(
-                "segments 必须按 segmentIndex 从 0 连续递增，发现位置 {} 的 segmentIndex={}",
+                "segments must increase consecutively by segmentIndex from 0; found position {} with segmentIndex={}",
                 index, segment.segment_index
             ));
         }
@@ -66,31 +66,31 @@ fn validate_upsert_input(input: &ChatHistoryUpsertInput) -> Result<(), String> {
 
 fn validate_conversation_input(input: &ChatHistoryConversationInput) -> Result<(), String> {
     if input.id.trim().is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("History conversation id cannot be empty".to_string());
     }
     if input.title.trim().is_empty() {
-        return Err("历史对话标题不能为空".to_string());
+        return Err("History conversation title cannot be empty".to_string());
     }
     if input.provider_id.trim().is_empty() {
-        return Err("providerId 不能为空".to_string());
+        return Err("providerId cannot be empty".to_string());
     }
     if input.model.trim().is_empty() {
-        return Err("model 不能为空".to_string());
+        return Err("model cannot be empty".to_string());
     }
     if input.context_meta_json.trim().is_empty() {
-        return Err("contextMetaJson 不能为空".to_string());
+        return Err("contextMetaJson cannot be empty".to_string());
     }
     if input.active_segment_index < 0 {
-        return Err("activeSegmentIndex 不能小于 0".to_string());
+        return Err("activeSegmentIndex cannot be less than 0".to_string());
     }
     if input.total_segment_count <= 0 {
-        return Err("totalSegmentCount 必须大于 0".to_string());
+        return Err("totalSegmentCount must be greater than 0".to_string());
     }
     if input.total_message_count < 0 {
-        return Err("totalMessageCount 不能小于 0".to_string());
+        return Err("totalMessageCount cannot be less than 0".to_string());
     }
     if input.active_segment_index != input.total_segment_count - 1 {
-        return Err("activeSegmentIndex 必须等于 totalSegmentCount - 1".to_string());
+        return Err("activeSegmentIndex must equal totalSegmentCount - 1".to_string());
     }
 
     Ok(())
@@ -100,7 +100,7 @@ fn validate_segment_mutation_input(input: &ChatHistorySegmentMutationInput) -> R
     validate_conversation_input(&input.conversation)?;
     validate_segment_input(&input.segment)?;
     if input.segment.segment_index != input.conversation.active_segment_index {
-        return Err("segmentIndex 必须等于 activeSegmentIndex".to_string());
+        return Err("segmentIndex must equal activeSegmentIndex".to_string());
     }
     Ok(())
 }
@@ -110,10 +110,10 @@ fn validate_append_segment_input(input: &ChatHistoryAppendSegmentInput) -> Resul
     validate_segment_input(&input.previous_segment)?;
     validate_segment_input(&input.segment)?;
     if input.segment.segment_index != input.conversation.active_segment_index {
-        return Err("segmentIndex 必须等于 activeSegmentIndex".to_string());
+        return Err("segmentIndex must equal activeSegmentIndex".to_string());
     }
     if input.previous_segment.segment_index + 1 != input.segment.segment_index {
-        return Err("previousSegment 与 segment 必须连续".to_string());
+        return Err("previousSegment and segment must be consecutive".to_string());
     }
     Ok(())
 }
@@ -134,44 +134,44 @@ fn validate_append_segment_preconditions(
             |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, Option<i64>>(1)?)),
         )
         .optional()
-        .map_err(|e| format!("读取 append segment 前置状态失败：{e}"))?;
+        .map_err(|e| format!("Failed to read append segment precondition state: {e}"))?;
 
     let (active_segment_index, total_segment_count) = match existing_header {
         Some((Some(active_segment_index), Some(total_segment_count))) => {
             (active_segment_index, total_segment_count)
         }
         Some(_) => {
-            return Err("append segment 需要完整的分段主表数据".to_string());
+            return Err("append segment requires complete segment header data".to_string());
         }
         None => {
-            return Err("append segment 需要已存在的历史对话".to_string());
+            return Err("append segment requires an existing history conversation".to_string());
         }
     };
 
     if active_segment_index != total_segment_count - 1 {
-        return Err("append segment 前置校验失败：现有 activeSegmentIndex 非最后一段".to_string());
+        return Err("append segment precondition check failed: existing activeSegmentIndex is not the last segment".to_string());
     }
     if input.previous_segment.segment_index != active_segment_index {
         return Err(format!(
-            "append segment 待封存分段错误：期望 segmentIndex={}，实际为 {}",
+            "append segment: wrong segment to seal: expected segmentIndex={}, actual {}",
             active_segment_index, input.previous_segment.segment_index
         ));
     }
     if input.segment.segment_index != total_segment_count {
         return Err(format!(
-            "append segment 只能追加到末尾：期望 segmentIndex={}，实际为 {}",
+            "append segment can only append at the end: expected segmentIndex={}, actual {}",
             total_segment_count, input.segment.segment_index
         ));
     }
     if input.conversation.active_segment_index != total_segment_count {
         return Err(format!(
-            "append segment 前置校验失败：activeSegmentIndex 应为 {}，实际为 {}",
+            "append segment precondition check failed: activeSegmentIndex should be {}, actual {}",
             total_segment_count, input.conversation.active_segment_index
         ));
     }
     if input.conversation.total_segment_count != total_segment_count + 1 {
         return Err(format!(
-            "append segment 前置校验失败：totalSegmentCount 应为 {}，实际为 {}",
+            "append segment precondition check failed: totalSegmentCount should be {}, actual {}",
             total_segment_count + 1,
             input.conversation.total_segment_count
         ));
@@ -188,10 +188,10 @@ fn validate_append_segment_preconditions(
             |_| Ok(()),
         )
         .optional()
-        .map_err(|e| format!("检查 append segment 目标分段失败：{e}"))?;
+        .map_err(|e| format!("Failed to check append segment target segment: {e}"))?;
     if existing_segment.is_some() {
         return Err(format!(
-            "append segment 不允许覆盖已有分段：segmentIndex={}",
+            "append segment must not overwrite an existing segment: segmentIndex={}",
             input.segment.segment_index
         ));
     }
@@ -207,10 +207,10 @@ fn validate_append_segment_preconditions(
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|e| format!("读取待封存历史分段失败：{e}"))?
-        .ok_or_else(|| "append segment 缺少待封存的现有活跃分段".to_string())?;
+        .map_err(|e| format!("Failed to read history segment to seal: {e}"))?
+        .ok_or_else(|| "append segment is missing the existing active segment to seal".to_string())?;
     if stored_previous_segment_id != input.previous_segment.segment_id {
-        return Err("append segment 待封存分段身份不一致".to_string());
+        return Err("append segment: segment identity to seal does not match".to_string());
     }
 
     Ok(())
@@ -238,14 +238,14 @@ fn load_segments(
             ORDER BY segment_index ASC
             ",
         )
-        .map_err(|e| format!("准备历史分段查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare history segment query: {e}"))?;
     let rows = stmt
         .query_map(params![conversation_id], row_to_segment)
-        .map_err(|e| format!("查询历史分段失败：{e}"))?;
+        .map_err(|e| format!("Failed to query history segments: {e}"))?;
 
     let mut segments = Vec::new();
     for row in rows {
-        segments.push(row.map_err(|e| format!("读取历史分段失败：{e}"))?);
+        segments.push(row.map_err(|e| format!("Failed to read history segment: {e}"))?);
     }
     Ok(segments)
 }
@@ -277,15 +277,15 @@ fn load_tail_segments(
             ORDER BY segment_index DESC
             ",
         )
-        .map_err(|e| format!("准备尾部历史分段查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare tail history segment query: {e}"))?;
     let rows = stmt
         .query_map(params![conversation_id], row_to_segment)
-        .map_err(|e| format!("查询尾部历史分段失败：{e}"))?;
+        .map_err(|e| format!("Failed to query tail history segment: {e}"))?;
 
     let mut segments = Vec::new();
     let mut loaded_messages = 0_i64;
     for row in rows {
-        let segment = row.map_err(|e| format!("读取尾部历史分段失败：{e}"))?;
+        let segment = row.map_err(|e| format!("Failed to read tail history segment: {e}"))?;
         loaded_messages = loaded_messages.saturating_add(segment.message_count.max(0));
         segments.push(segment);
         if loaded_messages >= max_messages {
@@ -315,12 +315,12 @@ fn load_message_window_segments(
             ORDER BY segment_index ASC
             ",
         )
-        .map_err(|e| format!("准备历史窗口分段元数据查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare history window segment metadata query: {e}"))?;
     let metadata_rows = metadata_stmt
         .query_map(params![conversation_id], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
         })
-        .map_err(|e| format!("查询历史窗口分段元数据失败：{e}"))?;
+        .map_err(|e| format!("Failed to query history window segment metadata: {e}"))?;
 
     let mut first_segment_index = None;
     let mut last_segment_index = None;
@@ -328,7 +328,7 @@ fn load_message_window_segments(
     let mut segment_start_offset = 0_i64;
     for row in metadata_rows {
         let (segment_index, message_count) =
-            row.map_err(|e| format!("读取历史窗口分段元数据失败：{e}"))?;
+            row.map_err(|e| format!("Failed to read history window segment metadata: {e}"))?;
         let segment_end_offset = segment_start_offset.saturating_add(message_count.max(0));
         if segment_end_offset > start_offset && segment_start_offset < end_offset {
             if first_segment_index.is_none() {
@@ -365,16 +365,16 @@ fn load_message_window_segments(
             ORDER BY segment_index ASC
             ",
         )
-        .map_err(|e| format!("准备历史窗口分段查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare history window segment query: {e}"))?;
     let rows = stmt
         .query_map(
             params![conversation_id, first_segment_index, last_segment_index],
             row_to_segment,
         )
-        .map_err(|e| format!("查询历史窗口分段失败：{e}"))?;
+        .map_err(|e| format!("Failed to query history window segments: {e}"))?;
     let mut segments = Vec::new();
     for row in rows {
-        segments.push(row.map_err(|e| format!("读取历史窗口分段失败：{e}"))?);
+        segments.push(row.map_err(|e| format!("Failed to read history window segment: {e}"))?);
     }
     Ok((segments, first_segment_offset))
 }
@@ -405,11 +405,11 @@ fn load_segment_by_index(
     .map_err(|e| match e {
         rusqlite::Error::QueryReturnedNoRows => {
             format!(
-                "未找到历史分段：conversationId={} segmentIndex={segment_index}",
+                "History segment not found: conversationId={} segmentIndex={segment_index}",
                 conversation_id
             )
         }
-        _ => format!("读取活跃历史分段失败：{e}"),
+        _ => format!("Failed to read active history segment: {e}"),
     })
 }
 
@@ -488,7 +488,7 @@ fn upsert_chat_history_header(
             updated_at
         ],
     )
-    .map_err(|e| format!("写入聊天历史主表失败：{e}"))?;
+    .map_err(|e| format!("Failed to write chat history header table: {e}"))?;
 
     Ok(())
 }
@@ -500,12 +500,12 @@ fn set_chat_history_model_sync(
 ) -> Result<ChatHistorySummary, String> {
     let chat_id = id.trim();
     if chat_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("History conversation id cannot be empty".to_string());
     }
 
     let payload = selected_model_json.trim();
     let parsed: serde_json::Value =
-        serde_json::from_str(payload).map_err(|_| "会话模型选择格式无效".to_string())?;
+        serde_json::from_str(payload).map_err(|_| "Invalid conversation model selection format".to_string())?;
     let has_non_empty = |key: &str| {
         parsed
             .get(key)
@@ -513,7 +513,7 @@ fn set_chat_history_model_sync(
             .is_some_and(|value| !value.trim().is_empty())
     };
     if !has_non_empty("customProviderId") || !has_non_empty("model") {
-        return Err("会话模型选择格式无效".to_string());
+        return Err("Invalid conversation model selection format".to_string());
     }
 
     let affected = conn
@@ -525,10 +525,10 @@ fn set_chat_history_model_sync(
             ",
             params![payload, chat_id],
         )
-        .map_err(|e| format!("更新历史对话模型选择失败：{e}"))?;
+        .map_err(|e| format!("Failed to update history conversation model selection: {e}"))?;
 
     if affected == 0 {
-        return Err("未找到对应的历史对话".to_string());
+        return Err("No matching history conversation found".to_string());
     }
 
     get_summary_by_id(conn, chat_id)
@@ -541,7 +541,7 @@ fn set_chat_history_pinned_sync(
 ) -> Result<ChatHistorySummary, String> {
     let chat_id = id.trim();
     if chat_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("History conversation id cannot be empty".to_string());
     }
 
     let pinned_at = is_pinned.then(now_ms);
@@ -554,10 +554,10 @@ fn set_chat_history_pinned_sync(
             ",
             params![if is_pinned { 1 } else { 0 }, pinned_at, chat_id],
         )
-        .map_err(|e| format!("更新历史对话置顶状态失败：{e}"))?;
+        .map_err(|e| format!("Failed to update history conversation pinned state: {e}"))?;
 
     if affected == 0 {
-        return Err("未找到对应的历史对话".to_string());
+        return Err("No matching history conversation found".to_string());
     }
 
     get_summary_by_id(conn, chat_id)
@@ -570,12 +570,12 @@ fn set_chat_history_cwd_sync(
 ) -> Result<ChatHistorySummary, String> {
     let chat_id = id.trim();
     if chat_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("History conversation id cannot be empty".to_string());
     }
 
     let target = cwd.trim();
     if target.is_empty() {
-        return Err("目标工作空间不能为空".to_string());
+        return Err("Target workspace cannot be empty".to_string());
     }
 
     let affected = conn
@@ -587,10 +587,10 @@ fn set_chat_history_cwd_sync(
             ",
             params![target, chat_id],
         )
-        .map_err(|e| format!("更新历史对话工作空间失败：{e}"))?;
+        .map_err(|e| format!("Failed to update history conversation workspace: {e}"))?;
 
     if affected == 0 {
-        return Err("未找到对应的历史对话".to_string());
+        return Err("No matching history conversation found".to_string());
     }
 
     get_summary_by_id(conn, chat_id)
@@ -603,10 +603,10 @@ fn rename_chat_history_sync(
     let chat_id = id.trim();
     let next_title = title.trim();
     if chat_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("History conversation id cannot be empty".to_string());
     }
     if next_title.is_empty() {
-        return Err("历史对话标题不能为空".to_string());
+        return Err("History conversation title cannot be empty".to_string());
     }
 
     let affected = conn
@@ -618,10 +618,10 @@ fn rename_chat_history_sync(
             ",
             params![next_title, chat_id],
         )
-        .map_err(|e| format!("更新历史对话标题失败：{e}"))?;
+        .map_err(|e| format!("Failed to update history conversation title: {e}"))?;
 
     if affected == 0 {
-        return Err("未找到对应的历史对话".to_string());
+        return Err("No matching history conversation found".to_string());
     }
 
     reindex_chat_history_conversation_fts(conn, chat_id)?;
@@ -670,7 +670,7 @@ fn upsert_single_segment(
             segment.updated_at
         ],
     )
-    .map_err(|e| format!("写入历史分段失败：{e}"))?;
+    .map_err(|e| format!("Failed to write history segment: {e}"))?;
     let conversation = load_chat_history_fts_conversation_info(conn, conversation_id)?;
     index_chat_history_segment_fts(conn, &conversation, segment)?;
 
@@ -710,7 +710,7 @@ fn insert_single_segment(
             segment.updated_at
         ],
     )
-    .map_err(|e| format!("追加历史分段失败：{e}"))?;
+    .map_err(|e| format!("Failed to append history segment: {e}"))?;
     let conversation = load_chat_history_fts_conversation_info(conn, conversation_id)?;
     index_chat_history_segment_fts(conn, &conversation, segment)?;
 
@@ -777,7 +777,7 @@ fn sync_segments(
                     segment.updated_at
                 ],
             )
-            .map_err(|e| format!("写入历史分段失败：{e}"))?;
+            .map_err(|e| format!("Failed to write history segment: {e}"))?;
         }
         index_chat_history_segment_fts(conn, &conversation, segment)?;
     }
@@ -790,7 +790,7 @@ fn sync_segments(
         ",
         params![conversation_id, total_segment_count],
     )
-    .map_err(|e| format!("清理过期历史分段失败：{e}"))?;
+    .map_err(|e| format!("Failed to clean up expired history segments: {e}"))?;
     delete_chat_history_fts_from_segment(conn, conversation_id, total_segment_count)?;
 
     Ok(())
@@ -830,10 +830,10 @@ fn verify_chat_history_consistency(conn: &Connection, conversation_id: &str) -> 
             |_| Ok(()),
         )
         .optional()
-        .map_err(|e| format!("执行聊天历史一致性校验失败：{e}"))?;
+        .map_err(|e| format!("Failed to run chat history consistency check: {e}"))?;
 
     if mismatch.is_some() {
-        return Err("聊天历史一致性校验失败：segment/message 统计不匹配".to_string());
+        return Err("Chat history consistency check failed: segment/message counts do not match".to_string());
     }
 
     Ok(())
@@ -841,7 +841,7 @@ fn verify_chat_history_consistency(conn: &Connection, conversation_id: &str) -> 
 
 fn resolve_history_list_page(page: i64) -> Result<i64, String> {
     if page <= 0 {
-        Err("历史列表 page 必须大于 0".to_string())
+        Err("History list page must be greater than 0".to_string())
     } else {
         Ok(page)
     }

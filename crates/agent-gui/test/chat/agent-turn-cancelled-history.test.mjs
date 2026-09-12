@@ -139,8 +139,9 @@ const loader = createTsModuleLoader({
       async resolveRuntimePlatform() {
         return "win32";
       },
-      // buildToolsSuffix（turn runner 起始的用量环 fixed 校准）会走到这三个
-      // 纯函数；整模块替换的桩必须补齐，否则 turn 一进门就抛错。
+      // buildToolsSuffix (the usage-ring fixed calibration at the start of the turn
+      // runner) reaches these three pure functions; the whole-module replacement stub
+      // must fill them in, otherwise the turn throws as soon as it begins.
       normalizeRuntimePlatform(value) {
         return value === "windows" || value === "macos" || value === "linux" ? value : undefined;
       },
@@ -683,7 +684,8 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
     assert.deepEqual(liveRounds[0].runningToolCallIds, []);
     assert.equal(askTools.getAskUserQuestionDeadlineAt(askToolCall.id), null);
 
-    // onToolCall 的内部回合语义仍须生效：后续长文本不能重新触发 mid-stream 保护。
+    // onToolCall's internal-round semantics must still apply: subsequent long text must not
+    // re-trigger mid-stream protection.
     params.onTextDelta?.("x".repeat(200), 1);
 
     params.onToolExecutionStart?.(askToolCall, 1);

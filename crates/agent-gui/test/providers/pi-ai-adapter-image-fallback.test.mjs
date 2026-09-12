@@ -3,12 +3,13 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 // ============================================================================
-// pi-ai 适配器入口侧的工具结果图片降级。
+// Tool-result image downgrade on the pi-ai adapter entry side.
 //
-// 纯文本模型（model.input 不含 "image"）下，openai-completions / openai-responses /
-// google 三协议在进 pi-ai 前把工具结果里的 image 块替换成说明文字；
-// anthropic-messages 刻意不做（自定义模型的 input 是保守默认值，中转背后可能
-// 具备视觉）。本文件按"传给 pi-ai stream() 的 context"逐协议锁定这条口径。
+// For text-only models (model.input does not contain "image"), the openai-completions /
+// openai-responses / google protocols replace image blocks in tool results with explanatory text
+// before entering pi-ai; anthropic-messages deliberately does not (a custom model's input is a
+// conservative default, and the relay behind it may support vision). This file locks down this
+// policy protocol by protocol, based on the "context passed to pi-ai stream()".
 // ============================================================================
 
 function createUsage() {
@@ -128,7 +129,7 @@ function assertDegraded(model, { original, passed }) {
   assert.match(toolResult.content[1].text, /1 image omitted from this tool result/);
   assert.match(toolResult.content[1].text, new RegExp(`${model.id}.*does not accept image input`));
   assert.ok(!JSON.stringify(passed).includes(SCREENSHOT), `${model.api}: bytes must not leak`);
-  // 调用方的 context 不被改写：UI 仍渲染图片，切到视觉模型后图片仍可发送。
+  // The caller's context is not rewritten: the UI still renders the image, and the image can still be sent after switching to a vision model.
   assert.equal(original.messages[1].content[1].type, "image");
 }
 

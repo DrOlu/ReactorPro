@@ -16,8 +16,8 @@ pub async fn browser_action(
 ) -> Result<BrowserActionResponse, String> {
     let manager = Arc::clone(&state);
     let mut args = args;
-    // 浏览器接入模式以持久化设置为唯一权威（同 load_runtime_command_safety_mode
-    // 范式）：不信任渲染进程/网关透传，改设置后下一次动作即生效。
+    // The browser integration mode treats the persisted setting as the sole authority (same
+    // paradigm as load_runtime_command_safety_mode): the renderer/gateway pass-through is not trusted, and a settings change takes effect on the next action.
     args.browser_mode = Some(
         crate::commands::settings::load_runtime_browser_automation_mode(),
     );
@@ -41,24 +41,24 @@ pub async fn browser_close(state: State<'_, Arc<BrowserManager>>) -> Result<(), 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserExtensionInstallInfo {
-    /// 扩展是否已连上桥接服务（已连即视为安装完成）。
+    /// Whether the extension is connected to the bridge service (connected is treated as installation complete).
     pub connected: bool,
-    /// 扩展安装目录（chrome://extensions「加载已解压的扩展程序」的目标），
-    /// 固定为 `~/.liveagent/extension`。同步失败（找不到内置资源）为 None。
+    /// The extension install directory (the target of chrome://extensions "Load unpacked"),
+    /// fixed to `~/.liveagent/extension`. None when sync fails (no bundled resource found).
     pub extension_dir: Option<String>,
 }
 
-/// 扩展的稳定安装目录：`~/.liveagent/extension`。Chrome 加载解压扩展记录的
-/// 是绝对路径——若直接指向 bundle resources，应用更新（安装目录整体替换）
-/// 或 .app 移动后即失效；固定到 .liveagent 下路径终身稳定，内容由每次启动
-/// 的同步保持最新。
+/// The stable install directory for the extension: `~/.liveagent/extension`. Chrome records an
+/// absolute path when loading an unpacked extension -- if it pointed directly at bundle resources, it would
+/// break after an app update (whole install directory replaced) or a .app move; a fixed path under
+/// .liveagent stays stable for life, with contents kept current by the sync on every launch.
 fn liveagent_extension_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".liveagent").join("extension"))
 }
 
-/// 同步数据源：打包产物为 bundle resources 下的 browser-extension/
-/// （tauri.conf.json `bundle.resources` 声明）；dev 下 Tauri 把 resources
-/// 拷到 target/debug/，再兜底仓库内 crates/agent-gui/browser-extension/。
+/// Sync source: in a packaged build it is browser-extension/ under bundle resources
+/// (declared by tauri.conf.json `bundle.resources`); in dev, Tauri copies resources
+/// to target/debug/, then falls back to crates/agent-gui/browser-extension/ inside the repo.
 fn bundled_extension_source(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path()
         .resolve("browser-extension", tauri::path::BaseDirectory::Resource)
@@ -72,52 +72,52 @@ fn bundled_extension_source(app: &tauri::AppHandle) -> Option<PathBuf> {
         })
 }
 
-/// 应用启动时把内置扩展同步到 `~/.liveagent/extension`（整目录替换）。
-/// 应用更新后重启即拿到新版扩展文件，Chrome 里已加载的目录无需重选。
+/// Syncs the bundled extension to `~/.liveagent/extension` on app startup (whole-directory replace).
+/// After an app update, a restart picks up the new extension files, and the directory already loaded in Chrome needs no reselection.
 pub fn sync_bundled_browser_extension(app: &tauri::AppHandle) -> Result<(), String> {
     let source =
-        bundled_extension_source(app).ok_or_else(|| "未找到内置浏览器扩展资源".to_string())?;
-    let dest = liveagent_extension_dir().ok_or_else(|| "无法定位用户主目录".to_string())?;
+        bundled_extension_source(app).ok_or_else(|| "bundled browser extension resource not found".to_string())?;
+    let dest = liveagent_extension_dir().ok_or_else(|| "unable to locate the user home directory".to_string())?;
     replace_extension_dir(&source, &dest)
 }
 
-/// 用 source 的内容整体替换 dest。先删后拷避免旧版本残留文件；删除失败
-/// （如个别文件被外部进程占用）不阻断，退化为按文件覆盖。
+/// Replaces dest entirely with the contents of source. Delete-then-copy avoids leftover files from the old version; a failed delete
+/// (e.g. an individual file held by an external process) does not abort, degrading to file-by-file overwrite.
 fn replace_extension_dir(source: &Path, dest: &Path) -> Result<(), String> {
     if dest.exists() {
         let _ = std::fs::remove_dir_all(dest);
     }
-    std::fs::create_dir_all(dest).map_err(|e| format!("创建扩展目录失败：{e}"))?;
+    std::fs::create_dir_all(dest).map_err(|e| format!("failed to create extension directory: {e}"))?;
     for entry in walkdir::WalkDir::new(source)
         .follow_links(false)
         .min_depth(1)
     {
-        let entry = entry.map_err(|e| format!("读取扩展资源失败：{e}"))?;
+        let entry = entry.map_err(|e| format!("failed to read extension resource: {e}"))?;
         let rel = entry
             .path()
             .strip_prefix(source)
-            .map_err(|e| format!("计算扩展相对路径失败：{e}"))?;
+            .map_err(|e| format!("failed to compute extension relative path: {e}"))?;
         let target = dest.join(rel);
         if entry.file_type().is_dir() {
-            std::fs::create_dir_all(&target).map_err(|e| format!("创建扩展目录失败：{e}"))?;
+            std::fs::create_dir_all(&target).map_err(|e| format!("failed to create extension directory: {e}"))?;
         } else if entry.file_type().is_file() {
             std::fs::copy(entry.path(), &target)
-                .map_err(|e| format!("复制扩展文件 {} 失败：{e}", rel.display()))?;
+                .map_err(|e| format!("failed to copy extension file {}: {e}", rel.display()))?;
         }
     }
     Ok(())
 }
 
-/// 设置页安装引导：返回扩展连接状态与本机扩展目录。Chrome 不允许外部进程
-/// 静默安装扩展（企业策略除外），能自动化的上限就是给出目录 + 步骤引导。
+/// Settings-page install guidance: returns the extension connection state and the local extension directory. Chrome does not allow an external process
+/// to silently install an extension (except via enterprise policy), so the automation ceiling is to give the directory plus step-by-step guidance.
 #[tauri::command]
 pub fn browser_extension_install_info(
     app: tauri::AppHandle,
     state: State<'_, Arc<BrowserManager>>,
 ) -> BrowserExtensionInstallInfo {
     let connected = state.extension_connected();
-    // 常态下启动同步已就位，这里只做存在性检查（5s 轮询须廉价）；目录被
-    // 用户手动删除等情况按需补一次同步自愈。
+    // Normally the startup sync is already in place, so this only does an existence check (the 5s poll must be cheap); if the directory was
+    // manually deleted by the user, a sync is performed on demand to self-heal.
     let extension_dir = liveagent_extension_dir()
         .and_then(|dir| {
             if !dir.join("manifest.json").is_file() {
@@ -132,7 +132,7 @@ pub fn browser_extension_install_info(
     }
 }
 
-/// 在系统文件管理器中打开扩展目录（引导用户去 chrome://extensions 加载）。
+/// Opens the extension directory in the system file manager (guiding the user to load it at chrome://extensions).
 #[tauri::command]
 pub fn browser_extension_reveal_dir(
     app: tauri::AppHandle,
@@ -142,10 +142,10 @@ pub fn browser_extension_reveal_dir(
     let info = browser_extension_install_info(app.clone(), state);
     let dir = info
         .extension_dir
-        .ok_or_else(|| "未找到浏览器扩展目录".to_string())?;
+        .ok_or_else(|| "browser extension directory not found".to_string())?;
     app.opener()
         .open_path(dir, None::<String>)
-        .map_err(|e| format!("打开扩展目录失败：{e}"))
+        .map_err(|e| format!("failed to open extension directory: {e}"))
 }
 
 #[cfg(test)]
@@ -160,7 +160,7 @@ mod tests {
         std::fs::write(source.join("manifest.json"), b"{}").unwrap();
         std::fs::write(source.join("icons").join("icon.png"), b"png").unwrap();
 
-        // dest 已存在旧版本：残留文件必须被清掉，否则可能破坏扩展加载。
+        // An old version already exists at dest: leftover files must be cleared, or they may break extension loading.
         let dest = tmp.path().join("dest");
         std::fs::create_dir_all(&dest).unwrap();
         std::fs::write(dest.join("stale.js"), b"old").unwrap();

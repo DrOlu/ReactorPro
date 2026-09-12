@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-// #749 的 WebUI 侧同步：`.gateway-history-switch-overlay` 用 --layer-panel（20）
-// 压在共享宽度手柄（z-10）之上。这里不改层级，而是让 GatewayAppView 在遮罩挂载
-// 期间挂起手柄，遮罩离开的同一次 commit 里手柄恢复。本文件锁住这组配对。
+// WebUI-side sync for #749: `.gateway-history-switch-overlay` sits above the shared
+// width handle (z-10) at --layer-panel (20). Rather than changing the layer here,
+// GatewayAppView suspends the handle while the overlay is mounted, and restores it in
+// the same commit that the overlay leaves. This file locks down that pairing.
 
 const appViewSource = readFileSync(
   new URL("../src/app/GatewayAppView.tsx", import.meta.url),

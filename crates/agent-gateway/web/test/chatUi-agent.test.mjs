@@ -452,7 +452,7 @@ test("buildRowsFromEntries anchors delayed hosted search inside the streamed tex
   let turn = newTurn();
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "任务1完成。现在按顺序进行联网检索设计模式定义。任务2完成：设计模式是可复用方案。",
+    text: "Task 1 complete. Now performing web searches in order to define design patterns. Task 2 complete: a design pattern is a reusable solution.",
     round: 1,
   });
   turn = applyEventToTurn(turn, {
@@ -460,8 +460,8 @@ test("buildRowsFromEntries anchors delayed hosted search inside the streamed tex
     id: "search-pattern",
     provider: "codex",
     status: "completed",
-    queries: ["设计模式定义"],
-    sources: [{ url: "https://example.com/pattern", title: "设计模式" }],
+    queries: ["design pattern definition"],
+    sources: [{ url: "https://example.com/pattern", title: "design pattern" }],
     round: 1,
   });
 
@@ -473,15 +473,15 @@ test("buildRowsFromEntries anchors delayed hosted search inside the streamed tex
     blocks.map((block) => block.kind),
     ["text", "hostedSearch", "text"],
   );
-  assert.equal(blocks[0].text, "任务1完成。现在按顺序进行联网检索设计模式定义。");
-  assert.equal(blocks[2].text, "任务2完成：设计模式是可复用方案。");
+  assert.equal(blocks[0].text, "Task 1 complete. Now performing web searches in order to define design patterns. ");
+  assert.equal(blocks[2].text, "Task 2 complete: a design pattern is a reusable solution.");
 });
 
 test("applyEventToTurn keeps streamed text after hosted search in event order", () => {
   let turn = newTurn();
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "任务1完成。现在开始联网搜索。",
+    text: "Task 1 complete. Now starting the web search.",
     round: 1,
   });
   turn = applyEventToTurn(turn, {
@@ -489,13 +489,13 @@ test("applyEventToTurn keeps streamed text after hosted search in event order", 
     id: "search-live-order",
     provider: "codex",
     status: "searching",
-    queries: ["LiveAgent web search"],
+    queries: ["ReactorPro web search"],
     sources: [],
     round: 1,
   });
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "任务2继续输出，应该出现在搜索卡片之后。",
+    text: "Task 2 continues output and should appear after the search card.",
     round: 1,
   });
   turn = applyEventToTurn(turn, {
@@ -503,7 +503,7 @@ test("applyEventToTurn keeps streamed text after hosted search in event order", 
     id: "search-live-order",
     provider: "codex",
     status: "completed",
-    queries: ["LiveAgent web search"],
+    queries: ["ReactorPro web search"],
     sources: [{ url: "https://example.com/live-order", title: "Live order" }],
     round: 1,
   });
@@ -524,15 +524,15 @@ test("applyEventToTurn keeps streamed text after hosted search in event order", 
     blocks.map((block) => block.kind),
     ["text", "hostedSearch", "text"],
   );
-  assert.equal(blocks[0].text, "任务1完成。现在开始联网搜索。");
-  assert.equal(blocks[2].text, "任务2继续输出，应该出现在搜索卡片之后。");
+  assert.equal(blocks[0].text, "Task 1 complete. Now starting the web search.");
+  assert.equal(blocks[2].text, "Task 2 continues output and should appear after the search card.");
 });
 
 test("buildRowsFromEntries groups live hosted searches separated by streamed text", () => {
   let turn = newTurn();
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "先查第一组资料。",
+    text: "First look up the first set of materials.",
     round: 1,
   });
   turn = applyEventToTurn(turn, {
@@ -546,7 +546,7 @@ test("buildRowsFromEntries groups live hosted searches separated by streamed tex
   });
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "继续说明中间过程。",
+    text: "Continue explaining the intermediate process.",
     round: 1,
   });
   turn = applyEventToTurn(turn, {
@@ -579,7 +579,7 @@ test("applyEventToTurn does not split a sentence when hosted search arrives mid 
   let turn = newTurn();
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "现在反过来，我先看“谁",
+    text: "Now the other way around, I first look at \"who ",
     round: 1,
   });
   turn = applyEventToTurn(turn, {
@@ -593,7 +593,7 @@ test("applyEventToTurn does not split a sentence when hosted search arrives mid 
   });
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "为什么会掏钱”。然后再看市场。",
+    text: "would pay\". Then look at the market.",
     round: 1,
   });
 
@@ -605,9 +605,9 @@ test("applyEventToTurn does not split a sentence when hosted search arrives mid 
     blocks.map((block) => block.kind),
     ["text", "hostedSearch", "text"],
   );
-  assert.equal(blocks[0].text, "现在反过来，我先看“谁为什么会掏钱”。");
+  assert.equal(blocks[0].text, "Now the other way around, I first look at \"who would pay\". ");
   assert.equal(blocks[1].item.id, "search-sentence");
-  assert.equal(blocks[2].text, "然后再看市场。");
+  assert.equal(blocks[2].text, "Then look at the market.");
 });
 
 test("hosted search finalization keeps stream order across non-text blocks", () => {
@@ -623,14 +623,14 @@ test("hosted search finalization keeps stream order across non-text blocks", () 
     {
       role: "assistant",
       content: [
-        { type: "text", text: "任务1完成。" },
+        { type: "text", text: "Task 1 complete." },
         {
           type: "toolCall",
           id: "call-read",
           name: "Read",
           arguments: { path: "README.md" },
         },
-        { type: "text", text: "任务2继续输出。" },
+        { type: "text", text: "Task 2 continues output." },
         search,
       ],
       provider: "codex",
@@ -640,9 +640,9 @@ test("hosted search finalization keeps stream order across non-text blocks", () 
       timestamp: 2,
     },
     [
-      { kind: "text", text: "任务1完成。" },
+      { kind: "text", text: "Task 1 complete." },
       { kind: "hostedSearch", item: search },
-      { kind: "text", text: "任务2继续输出。" },
+      { kind: "text", text: "Task 2 continues output." },
     ],
   );
 
@@ -664,7 +664,7 @@ test("hosted search finalization keeps stream order across non-text blocks", () 
 
 test("web UI hydrates persisted hosted search sources from answer links", () => {
   const ui = uiMessages.buildUiMessages([
-    { role: "user", content: "请联网搜索 iDRAC 是什么", timestamp: 1 },
+    { role: "user", content: "Please search the web for what iDRAC is", timestamp: 1 },
     {
       role: "assistant",
       content: [
@@ -678,7 +678,7 @@ test("web UI hydrates persisted hosted search sources from answer links", () => 
         },
         {
           type: "text",
-          text: "参考：\n- Dell 官方 iDRAC 页面：https://www.dell.com/en-us/lp/dt/open-manage-idrac",
+          text: "Reference: \n- Official Dell iDRAC page: https://www.dell.com/en-us/lp/dt/open-manage-idrac",
         },
       ],
       provider: "codex",
@@ -693,7 +693,7 @@ test("web UI hydrates persisted hosted search sources from answer links", () => 
   assert.deepEqual(searchBlock.item.sources, [
     {
       url: "https://www.dell.com/en-us/lp/dt/open-manage-idrac",
-      title: "Dell 官方 iDRAC 页面",
+      title: "Official Dell iDRAC page",
       sourceType: "citation",
     },
   ]);
@@ -706,13 +706,13 @@ test("applyEventToTurn hydrates live hosted search sources from streamed answer 
     id: "search-live-empty",
     provider: "codex",
     status: "completed",
-    queries: ["iDRAC 是什么"],
+    queries: ["what iDRAC is"],
     sources: [],
     round: 1,
   });
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "参考：Dell 官方 iDRAC 页面：https://www.dell.com/en-us/lp/dt/open-manage-idrac",
+    text: "Reference: Official Dell iDRAC page: https://www.dell.com/en-us/lp/dt/open-manage-idrac",
     round: 1,
   });
 
@@ -720,7 +720,7 @@ test("applyEventToTurn hydrates live hosted search sources from streamed answer 
   assert.deepEqual(turn.entries[0].hostedSearch.sources, [
     {
       url: "https://www.dell.com/en-us/lp/dt/open-manage-idrac",
-      title: "参考：Dell 官方 iDRAC 页面",
+      title: "Reference: Official Dell iDRAC page",
       sourceType: "citation",
     },
   ]);
@@ -740,7 +740,7 @@ test("web UI keeps inferred sources scoped to each persisted search block", () =
           queries: [],
           sources: [],
         },
-        { type: "text", text: "A 来源：https://example.com/a\n" },
+        { type: "text", text: "Source A: https://example.com/a\n" },
         {
           type: "hostedSearch",
           id: "search-b",
@@ -749,7 +749,7 @@ test("web UI keeps inferred sources scoped to each persisted search block", () =
           queries: [],
           sources: [],
         },
-        { type: "text", text: "B 来源：https://example.com/b" },
+        { type: "text", text: "Source B: https://example.com/b" },
       ],
       provider: "codex",
       model: "gpt-5.5",
@@ -777,8 +777,8 @@ test("hosted search finalization does not split a sentence at the stream event o
     queries: ["AI companion app revenue 2025 users pay loneliness"],
     sources: [{ url: "https://example.com/market", title: "Market" }],
   };
-  const beforeSearch = "对，我前面犯的是工程师病：先造东西，再硬想怎么卖。现在反过来，我先看“谁";
-  const afterSearch = "为什么会掏钱”。然后再分析产品。";
+  const beforeSearch = "Right, my earlier mistake was the engineer's disease: build the thing first, then force-fit how to sell it. Now the other way around, I first look at \"who";
+  const afterSearch = "would pay\". Then analyze the product.";
   const assistant = hostedSearch.applyHostedSearchOrderToAssistant(
     {
       role: "assistant",
@@ -803,16 +803,16 @@ test("hosted search finalization does not split a sentence at the stream event o
     assistant.content.map((block) => block.type),
     ["text", "hostedSearch", "text"],
   );
-  assert.equal(assistant.content[0].text, `${beforeSearch}为什么会掏钱”。`);
+  assert.equal(assistant.content[0].text, `${beforeSearch}would pay". `);
   assert.equal(assistant.content[1].id, "search-final-sentence");
-  assert.equal(assistant.content[2].text, "然后再分析产品。");
+  assert.equal(assistant.content[2].text, "Then analyze the product.");
 });
 
 test("applyEventToTurn keeps streamed text after tool calls in event order", () => {
   let turn = newTurn();
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "先说明工具调用前的内容。",
+    text: "First explain the content before the tool call.",
     round: 1,
   });
   turn = applyEventToTurn(turn, {
@@ -824,7 +824,7 @@ test("applyEventToTurn keeps streamed text after tool calls in event order", () 
   });
   turn = applyEventToTurn(turn, {
     type: "token",
-    text: "工具调用后的正文应该留在工具卡之后。",
+    text: "Body text after the tool call should remain after the tool card.",
     round: 1,
   });
 
@@ -841,8 +841,8 @@ test("applyEventToTurn keeps streamed text after tool calls in event order", () 
     blocks.map((block) => block.kind),
     ["text", "tool", "text"],
   );
-  assert.equal(blocks[0].text, "先说明工具调用前的内容。");
-  assert.equal(blocks[2].text, "工具调用后的正文应该留在工具卡之后。");
+  assert.equal(blocks[0].text, "First explain the content before the tool call.");
+  assert.equal(blocks[2].text, "Body text after the tool call should remain after the tool card.");
 });
 
 test("applyEventToTurn merges streamed Write deltas with final call and result", () => {
@@ -1163,12 +1163,12 @@ test("buildSubagentPlaceholderToolCalls builds stable Agent cards from structure
       agents: [
         {
           id: "player1",
-          name: "一号玩家",
-          role: "发言者",
+          name: "Player One",
+          role: "Speaker",
           mode: "readonly",
-          prompt: "第一轮请给出观点",
+          prompt: "Round one, please state your view",
         },
-        { id: "player2", name: "二号玩家", mode: "readonly", prompt: "第二轮请反驳" },
+        { id: "player2", name: "Player Two", mode: "readonly", prompt: "Round two, please rebut" },
       ],
     },
   });
@@ -1180,15 +1180,15 @@ test("buildSubagentPlaceholderToolCalls builds stable Agent cards from structure
   );
   assert.deepEqual(
     placeholders.map((item) => item.arguments.name),
-    ["一号玩家", "二号玩家"],
+    ["Player One", "Player Two"],
   );
   assert.deepEqual(
     placeholders.map((item) => item.arguments.prompt),
-    ["第一轮请给出观点", "第二轮请反驳"],
+    ["Round one, please state your view", "Round two, please rebut"],
   );
   assert.deepEqual(
     placeholders.map((item) => item.arguments.role),
-    ["发言者", undefined],
+    ["Speaker", undefined],
   );
   assert.deepEqual(
     placeholders.map((item) => item.arguments.subagent_card),
@@ -1212,8 +1212,8 @@ test("buildRowsFromEntries shows Agent placeholders while aggregate result is pe
       arguments: {
         concurrency: 8,
         agents: [
-          { id: "player1", name: "一号玩家", mode: "readonly", prompt: "第一轮请给出观点" },
-          { id: "player2", name: "二号玩家", mode: "readonly", prompt: "第二轮请反驳" },
+          { id: "player1", name: "Player One", mode: "readonly", prompt: "Round one, please state your view" },
+          { id: "player2", name: "Player Two", mode: "readonly", prompt: "Round two, please rebut" },
         ],
       },
     },
@@ -1231,7 +1231,7 @@ test("buildRowsFromEntries shows Agent placeholders while aggregate result is pe
   );
   assert.deepEqual(
     pendingBlocks.map((block) => block.item.toolCall.arguments.name),
-    ["一号玩家", "二号玩家"],
+    ["Player One", "Player Two"],
   );
   assert.ok(pendingBlocks.every((block) => !block.item.toolResult));
   assert.deepEqual(pendingItems[0].rounds[0].runningToolCallIds, [
@@ -1259,8 +1259,8 @@ test("buildRowsFromEntries shows Agent placeholders while aggregate result is pe
             totalDurationMs: 2400,
             mode: "readonly",
             agents: [
-              createSubagentReport("player1", "第一轮请给出观点", "一号完成"),
-              createSubagentReport("player2", "第二轮请反驳", "二号完成"),
+              createSubagentReport("player1", "Round one, please state your view", "Player One done"),
+              createSubagentReport("player2", "Round two, please rebut", "Player Two done"),
             ],
           },
           isError: false,
@@ -1281,18 +1281,18 @@ test("buildRowsFromEntries shows Agent placeholders while aggregate result is pe
   );
   assert.deepEqual(
     completedBlocks.map((block) => block.item.toolResult.details.agent.summary),
-    ["一号完成", "二号完成"],
+    ["Player One done", "Player Two done"],
   );
   assert.deepEqual(completedItems[0].rounds[0].runningToolCallIds, []);
 });
 
 test("buildRowsFromEntries uses the stable Agent name supplied by item results", () => {
-  const firstAgent = createSubagentReport("agent-1", "哲学视角探讨生命的意义", "first", {
-    name: "哲学家 - 苏格拉底",
+  const firstAgent = createSubagentReport("agent-1", "A philosophical perspective on the meaning of life", "first", {
+    name: "Philosopher - Socrates",
   });
-  const secondAgent = createSubagentReport("agent-1", "哲学家继续回应", "second", {
-    name: "哲学家 - 苏格拉底",
-    role: "哲学视角",
+  const secondAgent = createSubagentReport("agent-1", "The philosopher responds further", "second", {
+    name: "Philosopher - Socrates",
+    role: "Philosophical perspective",
   });
   const entries = [
     {
@@ -1348,9 +1348,9 @@ test("buildRowsFromEntries uses the stable Agent name supplied by item results",
   const items = buildRowsFromEntries(entries, "history");
   const firstTool = items[0].rounds[0].blocks.find((block) => block.kind === "tool");
   const secondTool = items[0].rounds[1].blocks.find((block) => block.kind === "tool");
-  assert.equal(firstTool.item.toolResult.details.agent.name, "哲学家 - 苏格拉底");
-  assert.equal(secondTool.item.toolCall.arguments.name, "哲学家 - 苏格拉底");
-  assert.equal(secondTool.item.toolResult.details.agent.name, "哲学家 - 苏格拉底");
-  assert.equal(secondTool.item.toolCall.arguments.role, "哲学视角");
-  assert.equal(secondTool.item.toolResult.details.agent.role, "哲学视角");
+  assert.equal(firstTool.item.toolResult.details.agent.name, "Philosopher - Socrates");
+  assert.equal(secondTool.item.toolCall.arguments.name, "Philosopher - Socrates");
+  assert.equal(secondTool.item.toolResult.details.agent.name, "Philosopher - Socrates");
+  assert.equal(secondTool.item.toolCall.arguments.role, "Philosophical perspective");
+  assert.equal(secondTool.item.toolResult.details.agent.role, "Philosophical perspective");
 });

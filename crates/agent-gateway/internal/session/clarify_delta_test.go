@@ -58,10 +58,10 @@ func TestDispatchClarifyTurnDeltaDoesNotOccupyUnaryStream(t *testing.T) {
 	dispatchFor(m, sess, &gatewayv2.AgentEnvelope{
 		RequestId: "turn-1",
 		Payload: &gatewayv2.AgentEnvelope_ClarifyTurnDelta{
-			ClarifyTurnDelta: &gatewayv2.ClarifyTurnDelta{Text: "流"},
+			ClarifyTurnDelta: &gatewayv2.ClarifyTurnDelta{Text: "stream"},
 		},
 	})
-	if got != "流" {
+	if got != "stream" {
 		t.Fatalf("delta not forwarded: %q", got)
 	}
 }

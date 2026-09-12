@@ -277,7 +277,7 @@ function validateBashBackgroundStdio(command: string) {
   throw new Error(
     [
       "Background Bash commands must detach stdout and stderr before using `&`.",
-      "Long-running processes that inherit LiveAgent's tool pipes can keep the Bash task running forever.",
+      "Long-running processes that inherit ReactorPro's tool pipes can keep the Bash task running forever.",
       "Redirect output to a log file, for example: `nohup command > /tmp/liveagent-task.log 2>&1 < /dev/null &`.",
       "For dev servers or watchers, prefer a dedicated terminal or managed process workflow.",
     ].join(" "),
@@ -521,7 +521,7 @@ export function createShellTools(params: {
   managedProcessEnabled?: boolean;
   resumableShellEnabled?: boolean;
   resolveHomeDir?: () => Promise<string>;
-  /** OS 级沙箱;undefined 或 enabled=false 时直跑。Windows 联网后端不掩蔽凭据目录。 */
+  /** OS-level sandbox; runs directly when undefined or enabled=false. The Windows network-enabled backend does not mask credential directories. */
   sandbox?: ShellSandboxSettings;
 }): BuiltinToolBundle {
   const timeoutPolicy = resolveBashTimeoutPolicy(params.providerId);
@@ -530,8 +530,10 @@ export function createShellTools(params: {
   const platformLabel = runtimePlatformLabel(runtimePlatform);
   const sandboxEnabled = params.sandbox?.enabled === true;
   const sandboxAllowNetwork = params.sandbox?.allowNetwork !== false;
-  // Windows 联网沙箱是 Low IL token:只围写、不掩读。模型描述不得承诺 ~/.ssh
-  // 被掩蔽;断网(AppContainer)以及 macOS/Linux 才有读掩蔽。
+  // The Windows network-enabled sandbox uses a Low IL token: it only fences
+  // writes, not reads. Model descriptions must not promise that ~/.ssh is
+  // masked; only the offline (AppContainer) case and macOS/Linux have read
+  // masking.
   const sandboxMasksCredentials =
     sandboxEnabled && !(runtimePlatform === "windows" && sandboxAllowNetwork);
   const sandboxPolicy = sandboxEnabled
@@ -734,11 +736,11 @@ export function createShellTools(params: {
     stdout: string;
     stderr: string;
     shellFamily?: string;
-    /** 本次运行是否被 shell 超时杀掉（`ShellRunResponse.timed_out`）。 */
+    /** Whether this run was killed by the shell timeout (`ShellRunResponse.timed_out`). */
     timedOut?: boolean;
-    /** 实际生效的超时上限（res.effective_timeout_ms，回退到请求值）。 */
+    /** The timeout cap actually in effect (res.effective_timeout_ms, falling back to the requested value). */
     effectiveTimeoutMs?: number;
-    /** 当前 provider 的硬上限；等于 effectiveTimeoutMs 时说明是策略上限而非请求值。 */
+    /** The current provider's hard cap; when equal to effectiveTimeoutMs it means the cap is a policy limit rather than the requested value. */
     timeoutCapMs?: number;
     providerLabel?: string;
   }) {
@@ -746,10 +748,14 @@ export function createShellTools(params: {
     const hints: string[] = [];
 
     if (params.timedOut) {
-      // 报告里的真实困惑："同一个构建为什么连续跑了三次、日志里看不到失败原因"。
-      // 超时杀进程时，命令自己的日志文件里当然什么都没有——它被外部 SIGKILL 了。
-      // 所以这里把"被杀的原因"写成模型和人都能直接读到的一行，并说明重跑同一
-      // 条命令不会有别的结果（这一层从来没有自动重试，重复执行都是模型自己发的）。
+      // The real confusion in reports: "why did the same build run three times
+      // in a row and the log shows no reason it failed?" When a process is
+      // killed by timeout, its own log file naturally has nothing — it was
+      // SIGKILLed externally. So the "reason it was killed" is written here as
+      // one line both the model and a human can read directly, explaining that
+      // re-running the same command will not produce a different result (this
+      // layer never retries automatically; repeated executions are all
+      // initiated by the model itself).
       const limitMs = params.effectiveTimeoutMs ?? 0;
       const capMs = params.timeoutCapMs ?? limitMs;
       hints.push(
@@ -791,7 +797,7 @@ export function createShellTools(params: {
 
     if (
       params.cwd.scope === "skill" &&
-      /No such file or directory|can't open file|not found|没有那个文件|无法打开文件/i.test(
+      /No such file or directory|can't open file|not found|no such file|unable to open file/i.test(
         combined,
       )
     ) {
@@ -883,7 +889,7 @@ export function createShellTools(params: {
 
   const toolManagedProcess: Tool = {
     name: "ManagedProcess",
-    description: `Start, inspect, wait for, read logs for, or stop a long-running local process such as a dev server, watcher, or preview server. Runtime platform: ${platformLabel}; commands use the same platform shell policy as Bash. Use this instead of detached shell/background syntax, but never use it to intentionally delete workspace or enabled Skill paths; use Delete so LiveAgent can track the deletion. action="start" runs a foreground command under LiveAgent process management, redirects stdout/stderr to a log file (line-buffered), and returns immediately with process_id, pid, and log_path. Do not use ProcessWait with that process_id — ProcessWait only accepts Bash session_id values. Use action="wait" to block until new log output arrives, the process exits, or yield_time_ms elapses. By default managed processes are terminated automatically when LiveAgent exits; pass isolated=true only when the user explicitly wants the service to outlive LiveAgent. Use action="status" to list or inspect processes, action="read_log" to read recent log output, and action="stop" to terminate the process tree.`,
+    description: `Start, inspect, wait for, read logs for, or stop a long-running local process such as a dev server, watcher, or preview server. Runtime platform: ${platformLabel}; commands use the same platform shell policy as Bash. Use this instead of detached shell/background syntax, but never use it to intentionally delete workspace or enabled Skill paths; use Delete so ReactorPro can track the deletion. action="start" runs a foreground command under ReactorPro process management, redirects stdout/stderr to a log file (line-buffered), and returns immediately with process_id, pid, and log_path. Do not use ProcessWait with that process_id — ProcessWait only accepts Bash session_id values. Use action="wait" to block until new log output arrives, the process exits, or yield_time_ms elapses. By default managed processes are terminated automatically when ReactorPro exits; pass isolated=true only when the user explicitly wants the service to outlive ReactorPro. Use action="status" to list or inspect processes, action="read_log" to read recent log output, and action="stop" to terminate the process tree.`,
     parameters: strictToolParameters({
       action: Type.Union(
         [
@@ -918,7 +924,7 @@ export function createShellTools(params: {
       isolated: Type.Optional(
         Type.Boolean({
           description:
-            'Only for action="start". Default false: the process is terminated automatically when LiveAgent exits. Set true ONLY when the user explicitly asks for the service to keep running after LiveAgent quits; it then detaches from the LiveAgent lifecycle and must be stopped manually from the background tasks panel.',
+            'Only for action="start". Default false: the process is terminated automatically when ReactorPro exits. Set true ONLY when the user explicitly asks for the service to keep running after ReactorPro quits; it then detaches from the ReactorPro lifecycle and must be stopped manually from the background tasks panel.',
         }),
       ),
       process_id: Type.Optional(
@@ -1160,8 +1166,9 @@ export function createShellTools(params: {
             cwd: cwd || undefined,
             label: label || undefined,
             isolated: isolated || undefined,
-            // 跟随所选模式:sandboxOffline 下常驻进程同样断网(无法对外提供服务,
-            // 需要 dev server 时应切回"沙箱"模式)。
+            // Follows the selected mode: under sandboxOffline a long-running
+            // process is also offline (it cannot serve externally; switch back
+            // to "sandbox" mode when a dev server is needed).
             sandbox: sandboxEnabled,
             sandbox_allow_network: sandboxAllowNetwork,
           },
@@ -1451,9 +1458,11 @@ export function createShellTools(params: {
 
     const timeoutRaw = toolCall.arguments?.timeout_ms;
     if (allowResumableShell) {
-      // Resumable 模式下 provider cap（codex 系 30s）不再适用：单轮时延由
-      // yield_time_ms 界定，timeout_ms 只是命令总时长的可选硬上限，按全局
-      // 上限（600s）收敛，避免把显式长限截短后误杀构建。
+      // In Resumable mode the provider cap (30s for the codex family) no longer
+      // applies: per-round latency is bounded by yield_time_ms, and timeout_ms
+      // is merely an optional hard cap on the command's total duration,
+      // converged to the global cap (600s) so that explicitly long limits are
+      // not truncated and builds are not wrongly killed.
       const timeout_ms =
         typeof timeoutRaw === "number" && Number.isFinite(timeoutRaw)
           ? normalizeIntegerInRange(

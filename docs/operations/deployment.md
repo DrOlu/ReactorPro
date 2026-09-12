@@ -1,112 +1,112 @@
-# CI/CD 与发布
+# CI/CD and Release
 
-本文档描述当前自动化发布链路：CI 检查、Gateway Docker 镜像、用户自部署 Gateway、桌面端 macOS/Windows Release。
+This document describes the current automated release pipeline: CI checks, the Gateway Docker image, user self-hosted Gateway, and desktop macOS/Windows Release.
 
-## 自动化入口
+## Automation Entry Points
 
-| 入口 | Workflow | 动作 |
+| Entry point | Workflow | Action |
 |---|---|---|
-| PR / `main` push | `.github/workflows/ci.yml` | 跑 Gateway、WebUI、GUI、Tauri Rust 测试和 proto 一致性检查。 |
-| 每日定时 | `.github/workflows/update-model-catalog.yml` | 刷新模型能力目录；仅在数据变化时由 GitHub Actions 创建或更新待审核 PR。 |
-| `v*` tag / 手动指定 tag | `.github/workflows/gateway-docker.yml` | 构建并推送 `vX.Y.Z` 与 `latest` Gateway 镜像。 |
-| `v*` tag / 手动指定 tag | `.github/workflows/desktop-release.yml` | 并行构建 macOS Intel、macOS Apple Silicon、Windows x64 和 Linux x64 桌面包，并上传到 GitHub Release。 |
+| PR / `main` push | `.github/workflows/ci.yml` | Runs Gateway, WebUI, GUI, and Tauri Rust tests plus the proto consistency check. |
+| Daily schedule | `.github/workflows/update-model-catalog.yml` | Refreshes the model capability catalog; GitHub Actions creates or updates a pending-review PR only when the data changes. |
+| `v*` tag / manually specified tag | `.github/workflows/gateway-docker.yml` | Builds and pushes the `vX.Y.Z` and `latest` Gateway images. |
+| `v*` tag / manually specified tag | `.github/workflows/desktop-release.yml` | Builds macOS Intel, macOS Apple Silicon, Windows x64, and Linux x64 desktop packages in parallel and uploads them to the GitHub Release. |
 
-## 模型目录同步
+## Model Catalog Sync
 
-`update-model-catalog.yml` 每天 03:17 UTC（北京时间 11:17）运行。任务直接运行 `node scripts/generate-model-catalog.mjs`，从 OpenAI Codex `models.json` 和 `models.dev/api.json` 生成 `crates/agent-ui/src/lib/models/catalog.generated.ts`。
+`update-model-catalog.yml` runs every day at 03:17 UTC (11:17 Beijing time). The job directly runs `node scripts/generate-model-catalog.mjs`, generating `crates/agent-ui/src/lib/models/catalog.generated.ts` from OpenAI Codex `models.json` and `models.dev/api.json`.
 
-- 上游没有实际数据变化时任务直接结束，不创建 PR；快照日期本身不触发更新。
-- 有变化时固定更新 `automation/model-catalog-refresh` 分支和同一个 PR，避免产生重复 PR。
-- PR 通过 `add-paths` 只提交模型目录生成文件；上游请求失败、数据截断或关键模型缺失时生成任务失败。
-- PR 使用默认 `GITHUB_TOKEN` 创建，不会自动触发 `pull_request` CI 或 PR 治理工作流，由维护者审核后自行触发所需检查并合并。
-- 模型目录是编译期静态快照；已安装版本不会动态同步，合并后的数据只进入后续构建和 Release。
+- When there is no actual upstream data change, the job ends immediately and does not create a PR; the snapshot date itself does not trigger an update.
+- When there is a change, it always updates the `automation/model-catalog-refresh` branch and the same PR, avoiding duplicate PRs.
+- The PR commits only the model catalog generated file via `add-paths`; the generation job fails when an upstream request fails, data is truncated, or a key model is missing.
+- The PR is created with the default `GITHUB_TOKEN` and does not automatically trigger `pull_request` CI or PR governance workflows; maintainers review it and then trigger the required checks themselves and merge.
+- The model catalog is a compile-time static snapshot; installed versions do not sync dynamically, and merged data only enters subsequent builds and Releases.
 
-工作流不需要额外 Secret，但仓库需要在 Actions 设置中允许 GitHub Actions 创建 Pull Request。`governance-exempt` 标签用于避免自动 PR 被 stale 任务关闭。
+The workflow does not need extra Secrets, but the repository must allow GitHub Actions to create Pull Requests in the Actions settings. The `governance-exempt` label is used to prevent automatic PRs from being closed by the stale job.
 
-`github-release-main` 只从已经审核的 `main` 创建并推送 Tag，不再在发布过程中联网刷新、提交或直接推送模型目录，避免外部数据变化和网络故障影响发布可复现性。
+`github-release-main` only creates and pushes Tags from the already-reviewed `main`; it no longer refreshes, commits, or directly pushes the model catalog online during release, avoiding external data changes and network failures affecting release reproducibility.
 
-## Gateway 镜像
+## Gateway Image
 
-根目录 `Dockerfile` 是 Gateway 的生产镜像：
+The `Dockerfile` at the repository root is the production image for the Gateway:
 
-| 阶段 | 内容 |
+| Stage | Content |
 |---|---|
-| `webui` | 用 Node 22 和 pnpm 构建 `crates/agent-gateway/web/dist`。 |
-| `gateway-builder` | 用 Go 编译 `cmd/gateway`，WebUI 静态资源通过 `go:embed` 打进二进制。 |
-| `runtime` | Debian slim + CA certificates + `liveagent-gateway`，非 root 用户运行。 |
+| `webui` | Builds `crates/agent-gateway/web/dist` with Node 22 and pnpm. |
+| `gateway-builder` | Compiles `cmd/gateway` with Go; the WebUI static assets are embedded into the binary via `go:embed`. |
+| `runtime` | Debian slim + CA certificates + `liveagent-gateway`, running as a non-root user. |
 
-运行时变量：
+Runtime variables:
 
-| 变量 | 必填 | 说明 |
+| Variable | Required | Description |
 |---|---|---|
-| `LIVEAGENT_GATEWAY_TOKEN` | 是 | WebUI、HTTP API、桌面端 v2 WebSocket 的共享访问 token。 |
-| `PORT` | Railway 自动提供 | HTTP/WebUI/桌面端 WebSocket 监听端口，未提供时 Dockerfile 默认 `8080`。 |
-| `LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT` | 否 | `chat.prepare` 与 command accepted 前关联原生 Ping/Pong 的最大等待时间，默认 `2s`。 |
-| `LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT` | 否 | accepted 后把 `ChatCommandRequest` 投递到当前桌面 Agent stream 的最大等待时间，默认 `5s`。 |
-| `LIVEAGENT_GATEWAY_CHAT_START_TIMEOUT` | 否 | Chat command 进入桌面运行态的第一段 watchdog，默认 `5s`。 |
-| `LIVEAGENT_GATEWAY_CHAT_RENDER_START_TIMEOUT` | 否 | 第一段 watchdog 后继续等待桌面 run settled 的附加窗口，默认 `10s`。 |
+| `LIVEAGENT_GATEWAY_TOKEN` | Yes | Shared access token for the WebUI, HTTP API, and desktop v2 WebSocket. |
+| `PORT` | Provided automatically by Railway | Listening port for HTTP/WebUI/desktop WebSocket; when not provided, the Dockerfile defaults to `8080`. |
+| `LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT` | No | Maximum wait for the associated native Ping/Pong before `chat.prepare` and command accepted, default `2s`. |
+| `LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT` | No | Maximum wait to deliver the `ChatCommandRequest` to the current desktop Agent stream after accepted, default `5s`. |
+| `LIVEAGENT_GATEWAY_CHAT_START_TIMEOUT` | No | The first watchdog segment for a Chat command entering the desktop running state, default `5s`. |
+| `LIVEAGENT_GATEWAY_CHAT_RENDER_START_TIMEOUT` | No | The additional window to keep waiting for the desktop run to settle after the first watchdog segment, default `10s`. |
 
-本地 smoke run 示例：
+Example local smoke run:
 
 ```bash
 make gateway-docker-smoke
 ```
 
-CI 中的 `Gateway Docker Smoke` job 会执行同等检查：构建镜像、启动容器、访问 `/healthz`。
+The `Gateway Docker Smoke` job in CI performs the equivalent check: build the image, start the container, and access `/healthz`.
 
-## 用户自部署 Gateway
+## User Self-Hosted Gateway
 
-LiveAgent 不提供托管 Gateway 服务。需要公网 Remote Gateway 的用户可以用自己的 Railway 账号部署本仓库，或在其他 Docker 平台部署 `ghcr.io/<owner>/liveagent-gateway:vX.Y.Z` / `latest` 镜像。
+ReactorPro does not provide a hosted Gateway service. Users who need a public Remote Gateway can deploy this repository with their own Railway account, or deploy the `ghcr.io/<owner>/liveagent-gateway:vX.Y.Z` / `latest` image on another Docker platform.
 
-Railway 自部署路径：
+Railway self-hosting path:
 
-1. 在 Railway 新建项目，选择 GitHub Repository。
-2. 选择 `Stack-Cairn/LiveAgent` 或用户自己的 fork。
-3. 分支选择包含根目录 `Dockerfile` 和 `railway.json` 的分支。
-4. 在 service variables 中设置 `LIVEAGENT_GATEWAY_TOKEN=<long-random-token>`。
-5. 部署成功后生成 Public Domain，并访问 `/healthz` 验证健康检查。
+1. Create a new project in Railway and choose GitHub Repository.
+2. Choose `DrOlu/ReactorPro` or your own fork.
+3. Choose a branch that contains the root `Dockerfile` and `railway.json`.
+4. Set `LIVEAGENT_GATEWAY_TOKEN=<long-random-token>` in the service variables.
+5. After a successful deployment, generate a Public Domain and access `/healthz` to verify the health check.
 
-推荐生产部署模型：
+Recommended production deployment model:
 
-| 流量 | Railway 能力 | Remote 配置 |
+| Traffic | Railway capability | Remote configuration |
 |---|---|---|
-| WebUI / HTTP / 桌面端 WebSocket（`/ws/v2*`） | Public Networking HTTPS 域名 | 桌面端设置 `Gateway URL=https://<service>.up.railway.app`，网关端口填 `443`。 |
+| WebUI / HTTP / desktop WebSocket (`/ws/v2*`) | Public Networking HTTPS domain | On the desktop, set `Gateway URL=https://<service>.up.railway.app` and fill in `443` for the gateway port. |
 
-全部实时链路统一走同一 HTTPS 域名与端口。
+All real-time links uniformly use the same HTTPS domain and port.
 
-Gateway 运行时变量由用户在自己的平台配置：
+Gateway runtime variables are configured by the user on their own platform:
 
-| 变量 | 说明 |
+| Variable | Description |
 |---|---|
-| `LIVEAGENT_GATEWAY_TOKEN` | WebUI、管理 API 与 Agent 链路使用的网关 Token；Agent 也可使用独立凭证。 |
-| `LIVEAGENT_GATEWAY_AGENT_DB` | Agent 凭证 SQLite 路径；缺省自动创建，无需手动设置。 |
-| `LIVEAGENT_GATEWAY_DATA_DIR` | 自动数据库的父目录；官方容器默认 `/var/lib/liveagent`，直接运行二进制时默认使用用户配置目录。 |
-| `LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT` | 默认 `2s`；通常无需调大，超时应暴露半开连接并让客户端快速恢复。 |
-| `LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT` | 默认 `5s`；控制 accepted 后投递桌面 stream 的上限。 |
-| `LIVEAGENT_GATEWAY_CHAT_START_TIMEOUT` | 默认 `5s`；控制远程 command 启动 watchdog 的第一阶段。 |
-| `LIVEAGENT_GATEWAY_CHAT_RENDER_START_TIMEOUT` | 默认 `10s`；控制启动 watchdog 的附加阶段。 |
+| `LIVEAGENT_GATEWAY_TOKEN` | The gateway Token used by the WebUI, management API, and Agent links; Agents may also use separate credentials. |
+| `LIVEAGENT_GATEWAY_AGENT_DB` | Path to the Agent credential SQLite database; created automatically by default, no manual setup required. |
+| `LIVEAGENT_GATEWAY_DATA_DIR` | Parent directory of the automatic database; the official container defaults to `/var/lib/liveagent`, and running the binary directly defaults to the user configuration directory. |
+| `LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT` | Default `2s`; usually no need to increase it. A timeout should expose a half-open connection and let the client recover quickly. |
+| `LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT` | Default `5s`; controls the upper bound for delivering to the desktop stream after accepted. |
+| `LIVEAGENT_GATEWAY_CHAT_START_TIMEOUT` | Default `5s`; controls the first phase of the remote command startup watchdog. |
+| `LIVEAGENT_GATEWAY_CHAT_RENDER_START_TIMEOUT` | Default `10s`; controls the additional phase of the startup watchdog. |
 
-Gateway 的 conversation stream replay 与 `client_request_id` 去重当前都是进程内有界状态，本身不需要持久卷。事件窗口默认保留最近 10 分钟、最多 4096 条或约 8 MiB；command 去重记录保留 24 小时，但 Gateway 进程重启后不会保留。Gateway 默认自动创建每 Agent 凭证数据库（SQLite）；可用 `-agent-db` 指定路径。生产部署需要把数据库目录挂载到持久卷；官方 Docker 命令使用 `-v liveagent-gateway-data:/var/lib/liveagent`，否则重建容器会丢失已签发的凭证（见 [multi-agent.md](multi-agent.md)）。
+The Gateway's conversation stream replay and `client_request_id` deduplication are both currently bounded in-process state and do not themselves require a persistent volume. The event window retains the last 10 minutes, at most 4096 entries, or about 8 MiB by default; command deduplication records are kept for 24 hours but are not retained after a Gateway process restart. By default the Gateway automatically creates a per-Agent credential database (SQLite); you can specify the path with `-agent-db`. Production deployments need to mount the database directory onto a persistent volume; the official Docker command uses `-v liveagent-gateway-data:/var/lib/liveagent`, otherwise rebuilding the container loses issued credentials (see [multi-agent.md](multi-agent.md)).
 
-升级时旧启动脚本中的 `-grpc-addr` 和 `-command-queue-timeout` 会在新版参数解析前被移除，不会出现在 `--help`，也不会恢复已删除的 v1/gRPC 或离线命令队列。`-grpc-max-message-bytes` 与 `LIVEAGENT_GATEWAY_GRPC_MAX_MESSAGE_BYTES` 会映射到当前 WebSocket protobuf 消息上限；新名称 `-max-message-bytes` 和 `LIVEAGENT_GATEWAY_MAX_MESSAGE_BYTES` 优先。其他未知参数仍会报错，避免隐藏配置拼写错误。
+During upgrades, `-grpc-addr` and `-command-queue-timeout` in old startup scripts are removed before the new argument parsing, do not appear in `--help`, and do not restore the deleted v1/gRPC or offline command queue. `-grpc-max-message-bytes` and `LIVEAGENT_GATEWAY_GRPC_MAX_MESSAGE_BYTES` map to the current WebSocket protobuf message limit; the new names `-max-message-bytes` and `LIVEAGENT_GATEWAY_MAX_MESSAGE_BYTES` take precedence. Other unknown arguments still raise errors, avoiding hidden configuration typos.
 
 ## GitHub Secrets
 
-macOS signed/notarized release 需要这些 secrets：
+The macOS signed/notarized release needs these secrets:
 
-| Secret | 说明 |
+| Secret | Description |
 |---|---|
-| `APPLE_CERTIFICATE_P12_BASE64` | Developer ID Application `.p12` 的 base64。 |
-| `APPLE_CERTIFICATE_PASSWORD` | 导出 `.p12` 时设置的密码。 |
-| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: wenlin fei (UU94JSVAA9)`。 |
-| `APPLE_ID` | Apple Developer 账号邮箱。 |
-| `APPLE_TEAM_ID` | `UU94JSVAA9`。 |
-| `APPLE_APP_SPECIFIC_PASSWORD` | Apple app-specific password。 |
-| `TAURI_SIGNING_PRIVATE_KEY` | Tauri updater 私钥，用于生成 release 更新包签名。 |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Tauri updater 私钥密码；无密码时可为空。 |
-| `TAURI_UPDATER_PUBLIC_KEY` | Tauri updater 公钥，会编译进桌面端用于校验更新包。 |
+| `APPLE_CERTIFICATE_P12_BASE64` | Base64 of the Developer ID Application `.p12`. |
+| `APPLE_CERTIFICATE_PASSWORD` | The password set when exporting the `.p12`. |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: wenlin fei (UU94JSVAA9)`. |
+| `APPLE_ID` | Apple Developer account email. |
+| `APPLE_TEAM_ID` | `UU94JSVAA9`. |
+| `APPLE_APP_SPECIFIC_PASSWORD` | Apple app-specific password. |
+| `TAURI_SIGNING_PRIVATE_KEY` | Tauri updater private key, used to generate release update package signatures. |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Tauri updater private key password; may be empty when there is no password. |
+| `TAURI_UPDATER_PUBLIC_KEY` | Tauri updater public key, compiled into the desktop app to verify update packages. |
 
-脚本化写入 GitHub 配置：
+Scripted write to GitHub configuration:
 
 ```bash
 BOOTSTRAP_APPLE_SECRETS=1 \
@@ -114,58 +114,58 @@ APPLE_CERTIFICATE_PASSWORD=<p12-export-password> \
   scripts/release/bootstrap-github-secrets.sh
 ```
 
-如果 `CERT_DIR/developer_id_application.p12` 不存在，脚本会从本机 Keychain 中的 `Developer ID Application: wenlin fei (UU94JSVAA9)` 自动导出，并生成 `.p12` 密码写入 GitHub Secret。`CERT_DIR` 默认优先使用 `~/Personal/cert`，不存在时使用 `~/Downloads/cert`。已有 `.p12` 时需要传入 `APPLE_CERTIFICATE_PASSWORD=<p12-password>`。
+If `CERT_DIR/developer_id_application.p12` does not exist, the script automatically exports it from `Developer ID Application: wenlin fei (UU94JSVAA9)` in the local Keychain and generates a `.p12` password to write into the GitHub Secret. `CERT_DIR` defaults to `~/Personal/cert` first, and uses `~/Downloads/cert` when it does not exist. When a `.p12` already exists, you need to pass `APPLE_CERTIFICATE_PASSWORD=<p12-password>`.
 
-如果自动导出失败，先确认本机能看到可签名 identity：
+If automatic export fails, first confirm that a signable identity is visible on the machine:
 
 ```bash
 security find-identity -v -p codesigning "$HOME/Library/Keychains/login.keychain-db"
 ```
 
-Keychain 中必须是带私钥的 `Developer ID Application` identity。若 macOS 拒绝私钥导出，可以在 Keychain Access 中手动导出 `.p12` 到 `P12_PATH`，再用同一个 `APPLE_CERTIFICATE_PASSWORD` 重新运行脚本。
+The Keychain must contain a `Developer ID Application` identity with a private key. If macOS refuses to export the private key, you can manually export the `.p12` to `P12_PATH` in Keychain Access, then re-run the script with the same `APPLE_CERTIFICATE_PASSWORD`.
 
-脚本默认读取：
+The script reads by default:
 
-| 文件 | 用途 |
+| File | Purpose |
 |---|---|
-| `CERT_DIR/developer_id_application.p12` | CI 导入的签名 identity。 |
-| `CERT_DIR/app key.md` | Apple app-specific password。 |
+| `CERT_DIR/developer_id_application.p12` | The signing identity imported by CI. |
+| `CERT_DIR/app key.md` | Apple app-specific password. |
 
-## 桌面产物
+## Desktop Artifacts
 
-`desktop-release.yml` 产物：
+`desktop-release.yml` artifacts:
 
-| 平台 | Runner | 产物 |
+| Platform | Runner | Artifacts |
 |---|---|---|
-| macOS Intel | `macos-15-intel` | `LiveAgent-vX.Y.Z-macOS-x64.dmg`，以及 updater 使用的 `.app.tar.gz` / `.sig`。 |
-| macOS Apple Silicon | `macos-14` | `LiveAgent-vX.Y.Z-macOS-aarch64.dmg`，以及 updater 使用的 `.app.tar.gz` / `.sig`。 |
-| Windows x64 | `windows-latest` | `LiveAgent-vX.Y.Z-Windows-x64.msi`、`LiveAgent-vX.Y.Z-Windows-x64-Setup.exe`，以及 updater 使用的 `.zip` / `.sig`。 |
-| Linux x64 | `ubuntu-latest` | `LiveAgent-vX.Y.Z-Linux-x86_64.AppImage`、`.deb`、`.rpm`，以及 updater 使用的 `.tar.gz` / `.sig`。 |
+| macOS Intel | `macos-15-intel` | `ReactorPro-vX.Y.Z-macOS-x64.dmg`, plus the `.app.tar.gz` / `.sig` used by the updater. |
+| macOS Apple Silicon | `macos-14` | `ReactorPro-vX.Y.Z-macOS-aarch64.dmg`, plus the `.app.tar.gz` / `.sig` used by the updater. |
+| Windows x64 | `windows-latest` | `ReactorPro-vX.Y.Z-Windows-x64.msi`, `ReactorPro-vX.Y.Z-Windows-x64-Setup.exe`, plus the `.zip` / `.sig` used by the updater. |
+| Linux x64 | `ubuntu-latest` | `ReactorPro-vX.Y.Z-Linux-x86_64.AppImage`, `.deb`, `.rpm`, plus the `.tar.gz` / `.sig` used by the updater. |
 
-macOS DMG 的安装窗口布局（背景图、窗口尺寸、图标位置）落盘在 DMG 根目录的 `.DS_Store`。tauri-bundler 通过 AppleScript 驱动 Finder 写入这份文件，但只要检测到 `CI=true` 就会跳过这一步，产出没有任何布局的白底 DMG。因此 `make desktop-build-macos-release` 不直接发布 tauri-bundler 生成的 DMG，而是在 `.app` 签名校验通过后用 [dmgbuild](https://github.com/dmgbuild/dmgbuild)（`dmgbuild==1.6.5`，CI 由 `desktop-release.yml` 的 `Install deterministic DMG builder` 步骤安装）按 `scripts/release/macos-dmg-settings.py` 重新生成 DMG：dmgbuild 直接写入 Finder 元数据，不依赖 GUI 会话，布局在任何 runner 上都是确定的。随后 DMG 再签名、公证、stapler 校验，并用 `scripts/release/verify-macos-dmg.sh` 挂载校验 `.DS_Store`、`.background.png`、`LiveAgent.app` 与 `Applications` 链接是否齐全，缺失即中止发布。本地排查时可以直接对任意 DMG 运行该脚本（`make desktop-verify-macos` 也会执行它）。
+The macOS DMG install window layout (background image, window size, icon positions) is written to `.DS_Store` at the DMG root. tauri-bundler drives Finder via AppleScript to write this file, but it skips this step whenever `CI=true` is detected, producing a plain white DMG with no layout. Therefore `make desktop-build-macos-release` does not directly publish the DMG generated by tauri-bundler; instead, after the `.app` signature verification passes, it regenerates the DMG with [dmgbuild](https://github.com/dmgbuild/dmgbuild) (`dmgbuild==1.6.5`, installed in CI by the `Install deterministic DMG builder` step of `desktop-release.yml`) according to `scripts/release/macos-dmg-settings.py`: dmgbuild writes Finder metadata directly without relying on a GUI session, so the layout is deterministic on any runner. The DMG is then signed, notarized, and stapler-verified, and `scripts/release/verify-macos-dmg.sh` is used to mount and verify that `.DS_Store`, `.background.png`, `ReactorPro.app`, and the `Applications` link are all present, aborting the release if anything is missing. For local troubleshooting you can run that script directly against any DMG (`make desktop-verify-macos` also runs it).
 
-发布 job 会在上传平台产物后生成并上传 `latest.json`。桌面端「设置 -> 关于」会根据用户是否允许预发布，从 GitHub Releases 中筛选带 `latest.json` 的正式 / 预发布版本；未允许预发布时只检查正式 Release。
+After uploading the platform artifacts, the release job generates and uploads `latest.json`. The desktop "Settings -> About" filters official / prerelease versions with `latest.json` from GitHub Releases based on whether the user allows prereleases; when prereleases are not allowed, only official Releases are checked.
 
-## 桌面版本号来源
+## Desktop Version Number Source
 
-本地开发和普通本机构建只维护一个默认版本源：`crates/agent-gui/package.json`。Tauri 默认配置、前端 About 页和 Rust 运行时代码都会从这里读取版本，因此日常开发不需要到多个文件里同步版本号。
+Local development and ordinary local builds maintain only one default version source: `crates/agent-gui/package.json`. The Tauri default configuration, the frontend About page, and the Rust runtime code all read the version from here, so daily development does not require syncing the version number across multiple files.
 
-正式发布时不依赖人工修改 `package.json`。`desktop-release.yml` 会先在 `Release Metadata` job 中解析 release tag：
+Official releases do not rely on manually editing `package.json`. `desktop-release.yml` first parses the release tag in the `Release Metadata` job:
 
 ```bash
 node scripts/release/prepare-app-version-from-tag.mjs vX.Y.Z
 ```
 
-这个脚本会校验 tag 必须是 `v` 开头的 semver，输出：
+This script validates that the tag must be a semver starting with `v`, and outputs:
 
-| 输出 | 示例 | 用途 |
+| Output | Example | Purpose |
 |---|---|---|
-| `LIVEAGENT_RELEASE_TAG` | `v0.1.3` | GitHub Release、产物命名和下载 URL。 |
-| `LIVEAGENT_APP_VERSION` | `0.1.3` | 前端 About 页和 Rust 运行时代码。 |
-| `LIVEAGENT_IS_PRERELEASE` | `false` | 决定 GitHub Release 是否标记为 prerelease。 |
-| `LIVEAGENT_TAURI_VERSION_CONFIG` | `src-tauri/tauri.version.generated.conf.json` | Tauri 构建时追加的临时 config overlay。 |
+| `LIVEAGENT_RELEASE_TAG` | `v0.1.3` | GitHub Release, artifact naming, and download URLs. |
+| `LIVEAGENT_APP_VERSION` | `0.1.3` | The frontend About page and Rust runtime code. |
+| `LIVEAGENT_IS_PRERELEASE` | `false` | Determines whether the GitHub Release is marked as prerelease. |
+| `LIVEAGENT_TAURI_VERSION_CONFIG` | `src-tauri/tauri.version.generated.conf.json` | Temporary config overlay appended during the Tauri build. |
 
-各平台构建 job 会复用同一份 metadata，并生成一个未提交到仓库的 Tauri overlay：
+Each platform's build job reuses the same metadata and generates a Tauri overlay that is not committed to the repository:
 
 ```json
 {
@@ -173,6 +173,6 @@ node scripts/release/prepare-app-version-from-tag.mjs vX.Y.Z
 }
 ```
 
-Tauri 构建命令通过额外的 `--config "$LIVEAGENT_TAURI_VERSION_CONFIG"` 注入这个版本；Vite 和 Rust build script 通过 `LIVEAGENT_APP_VERSION` 注入同一个版本。这样发布版本以 tag 为事实来源，updater manifest、应用内显示版本和安装包版本会保持一致；忘记改 `package.json` 不会导致发布包仍显示旧版本。
+The Tauri build command injects this version via the extra `--config "$LIVEAGENT_TAURI_VERSION_CONFIG"`; Vite and the Rust build script inject the same version via `LIVEAGENT_APP_VERSION`. This way the release version takes the tag as its source of truth, and the updater manifest, the in-app displayed version, and the installer version stay consistent; forgetting to change `package.json` will not cause a release package to still show an old version.
 
-Windows 当前没有代码签名 secret，release workflow 会先自动发布 unsigned 包。接入 Windows `.p12/.pfx` 或 Trusted Signing 后再补签名步骤。
+Windows currently has no code signing secret, so the release workflow first automatically publishes an unsigned package. Add the signing step later after integrating Windows `.p12/.pfx` or Trusted Signing.

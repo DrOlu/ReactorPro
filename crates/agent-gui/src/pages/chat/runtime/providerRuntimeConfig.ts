@@ -79,7 +79,7 @@ export function resolveCommitMessageModelSelection(
   };
 }
 
-// Prompt-clarify model override (设置抽屉「澄清对话模型」). Returns null when
+// Prompt-clarify model override (the "Clarify conversation model" setting in the settings drawer). Returns null when
 // unset or stale so the caller falls back to the current conversation model —
 // same contract as resolveCommitMessageModelSelection, validation shared with
 // the web surface via resolvePromptClarifyModel.
@@ -138,7 +138,7 @@ export function failoverTargetLabel(providerName: string, model: string) {
  * cross-vendor. Each fallback re-sends the conversation's *own model id* to
  * the queued provider (cc-switch semantics: switch provider, keep model);
  * queued providers that don't have that model active are skipped for this
- * turn. The active selection stays first (LiveAgent keeps the user's
+ * turn. The active selection stays first (ReactorPro keeps the user's
  * per-conversation choice, unlike cc-switch's always-P1 routing); queue
  * entries that duplicate the active provider are dropped. Returns undefined
  * when failover is off for this vendor or nothing remains to fail over to.

@@ -267,7 +267,7 @@ export function normalizeWorkspaceProjectGroups(input: unknown): WorkspaceProjec
 function normalizeWorkspaceProjectGroup(input: unknown): WorkspaceProjectGroup | null {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : createUuid();
-  const name = typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : "未命名分组";
+  const name = typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : "Untitled group";
   const projectPaths: string[] = [];
   const seenPaths = new Set<string>();
   for (const raw of normalizeStringArray(obj.projectPaths)) {

@@ -1,22 +1,26 @@
-// 轨迹事件与 prompt 分段的持久化。
+// Persistence for trajectory events and prompt segments.
 //
-// 事件挂在 `chatHistorySegment.trajectory_json` 上；整段删除由外键生命周期处理，
-// 但分支和段内 edit-resend 仍需显式裁剪，相关逻辑位于 trajectory_lifecycle.rs。
+// Events hang off `chatHistorySegment.trajectory_json`; whole-segment deletion is handled by the
+// foreign-key lifecycle, but branching and in-segment edit-resend still require explicit pruning,
+// with the relevant logic in trajectory_lifecycle.rs.
 //
-// 追加不做事件去重：读取侧的 `buildTrajectoryLedger` 按事件身份幂等收敛。
-// 单次追加在 SQLite 事务内执行，避免并发读改写静默覆盖。
+// Appends do not deduplicate events: the read side's `buildTrajectoryLedger` converges
+// idempotently by event identity. A single append runs inside a SQLite transaction to avoid
+// concurrent read-modify-write silently overwriting.
 
 use sha2::{Digest as TrajectoryDigest, Sha256 as TrajectorySha256};
 use std::collections::HashSet as TrajectorySectionIdSet;
 
-/// 单个分段的事件上限，超出后拒绝继续追加。
+/// Per-segment event limit; once exceeded, further appends are rejected.
 ///
-/// 正常长回合约 150 条 / 18 KB，这个上限留了两个数量级的余量，只用于挡住
-/// 埋点失控（例如某个循环反复发同一条）导致数据库无界增长。
+/// A normal long turn is around 150 entries / 18 KB, so this limit leaves two orders of
+/// magnitude of headroom; it exists only to stop runaway instrumentation (for example, a loop
+/// repeatedly emitting the same entry) from growing the database without bound.
 const TRAJECTORY_MAX_EVENTS_BYTES: usize = 8 * 1024 * 1024;
 
-/// 单份 prompt 分段的上限。memory overview 自身有 16 KB 帽，工具目录序列化后
-/// 通常几十 KB；1 MB 足够容纳异常大的 system prompt 又不至于失控。
+/// Limit for a single prompt segment. The memory overview itself has a 16 KB cap, and a
+/// serialized tool catalog is usually tens of KB; 1 MB is enough to hold an exceptionally large
+/// system prompt without running away.
 const TRAJECTORY_MAX_SECTION_BYTES: usize = 1024 * 1024;
 /// SYSTEM details need current+previous request slots; 64 leaves ample room while
 /// preventing an authenticated client from constructing an unbounded SQLite IN query.
@@ -43,10 +47,10 @@ pub struct TrajectorySectionRecord {
 #[serde(rename_all = "camelCase")]
 pub struct TrajectoryEventsResponse {
     pub conversation_id: String,
-    /// 全会话事件的扁平 JSON 数组文本；无记录时为 `[]`。
+    /// Flat JSON array text of all conversation events; `[]` when there are no records.
     pub events_json: String,
     pub segment_count: i64,
-    /// 是否有分段因触顶而停止记录，UI 据此提示轨迹不完整。
+    /// Whether any segment stopped recording because it hit the limit; the UI uses this to indicate an incomplete trajectory.
     pub truncated: bool,
 }
 
@@ -54,7 +58,7 @@ pub struct TrajectoryEventsResponse {
 #[serde(rename_all = "camelCase")]
 pub struct TrajectoryAppendResult {
     pub stored_bytes: i64,
-    /// true 表示本次事件被上限拒绝，没有写入。
+    /// true means these events were rejected by the limit and nothing was written.
     pub truncated: bool,
 }
 
@@ -64,27 +68,28 @@ fn parse_event_array(raw: &str, label: &str) -> Result<Vec<Value>, String> {
         return Ok(Vec::new());
     }
     let parsed: Value =
-        serde_json::from_str(trimmed).map_err(|e| format!("解析{label}失败：{e}"))?;
+        serde_json::from_str(trimmed).map_err(|e| format!("Failed to parse {label}: {e}"))?;
     match parsed {
         Value::Array(items) => Ok(items),
-        _ => Err(format!("{label}必须是 JSON 数组")),
+        _ => Err(format!("{label} must be a JSON array")),
     }
 }
 
-/// 追加事件到指定分段。
+/// Append events to the specified segment.
 ///
-/// 分段不存在时返回错误而不是静默建段：轨迹永远跟随已存在的消息分段，凭空建段
-/// 会产生没有消息的孤儿轨迹。
+/// Returns an error when the segment does not exist rather than silently creating one: the
+/// trajectory always follows an existing message segment, and creating one out of thin air would
+/// produce an orphan trajectory with no message.
 fn append_trajectory_events_sync(
     conn: &Connection,
     conversation_id: &str,
     segment_index: i64,
     events_json: &str,
 ) -> Result<TrajectoryAppendResult, String> {
-    let incoming = parse_event_array(events_json, "轨迹事件")?;
+    let incoming = parse_event_array(events_json, "trajectory events")?;
     let tx = conn
         .unchecked_transaction()
-        .map_err(|e| format!("开启轨迹追加事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin trajectory append transaction: {e}"))?;
     let existing: Option<(String, i64)> = tx
         .query_row(
             "SELECT trajectory_json, trajectory_truncated FROM chatHistorySegment
@@ -93,23 +98,23 @@ fn append_trajectory_events_sync(
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
-        .map_err(|e| format!("读取分段轨迹失败：{e}"))?;
+        .map_err(|e| format!("Failed to read segment trajectory: {e}"))?;
     let Some((existing_raw, existing_truncated)) = existing else {
         return Err(format!(
-            "分段不存在：conversation={conversation_id} segment={segment_index}"
+            "Segment does not exist: conversation={conversation_id} segment={segment_index}"
         ));
     };
 
     if incoming.is_empty() || existing_truncated != 0 {
         tx.commit()
-            .map_err(|e| format!("提交空轨迹追加事务失败：{e}"))?;
+            .map_err(|e| format!("Failed to commit empty trajectory append transaction: {e}"))?;
         return Ok(TrajectoryAppendResult {
             stored_bytes: existing_raw.len() as i64,
             truncated: existing_truncated != 0,
         });
     }
 
-    let mut merged = match parse_event_array(&existing_raw, "已存轨迹事件") {
+    let mut merged = match parse_event_array(&existing_raw, "stored trajectory events") {
         Ok(events) => events,
         Err(_) => {
             tx.execute(
@@ -117,9 +122,9 @@ fn append_trajectory_events_sync(
                  WHERE conversation_id = ?1 AND segment_index = ?2",
                 params![conversation_id, segment_index],
             )
-            .map_err(|e| format!("标记损坏轨迹分段失败：{e}"))?;
+            .map_err(|e| format!("Failed to mark corrupted trajectory segment: {e}"))?;
             tx.commit()
-                .map_err(|e| format!("提交损坏轨迹分段标记失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit corrupted trajectory segment mark: {e}"))?;
             return Ok(TrajectoryAppendResult {
                 stored_bytes: existing_raw.len() as i64,
                 truncated: true,
@@ -128,18 +133,18 @@ fn append_trajectory_events_sync(
     };
     merged.extend(incoming);
     let serialized =
-        serde_json::to_string(&merged).map_err(|e| format!("序列化轨迹事件失败：{e}"))?;
+        serde_json::to_string(&merged).map_err(|e| format!("Failed to serialize trajectory events: {e}"))?;
 
     if serialized.len() > TRAJECTORY_MAX_EVENTS_BYTES {
-        // 触顶标记必须持久化；否则重启后读取侧会把不完整轨迹误报为完整。
+        // The truncation flag must be persisted; otherwise, after a restart the read side would misreport an incomplete trajectory as complete.
         tx.execute(
             "UPDATE chatHistorySegment SET trajectory_truncated = 1
              WHERE conversation_id = ?1 AND segment_index = ?2",
             params![conversation_id, segment_index],
         )
-        .map_err(|e| format!("标记分段轨迹截断失败：{e}"))?;
+        .map_err(|e| format!("Failed to mark segment trajectory truncation: {e}"))?;
         tx.commit()
-            .map_err(|e| format!("提交轨迹截断标记失败：{e}"))?;
+            .map_err(|e| format!("Failed to commit trajectory truncation mark: {e}"))?;
         return Ok(TrajectoryAppendResult {
             stored_bytes: existing_raw.len() as i64,
             truncated: true,
@@ -152,9 +157,9 @@ fn append_trajectory_events_sync(
          WHERE conversation_id = ?1 AND segment_index = ?2",
         params![conversation_id, segment_index, serialized],
     )
-    .map_err(|e| format!("写入分段轨迹失败：{e}"))?;
+    .map_err(|e| format!("Failed to write segment trajectory: {e}"))?;
     tx.commit()
-        .map_err(|e| format!("提交轨迹追加事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit trajectory append transaction: {e}"))?;
 
     Ok(TrajectoryAppendResult {
         stored_bytes: serialized.len() as i64,
@@ -172,24 +177,24 @@ fn load_trajectory_events_sync(
              WHERE conversation_id = ?1
              ORDER BY segment_index ASC",
         )
-        .map_err(|e| format!("准备轨迹查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare trajectory query: {e}"))?;
     let rows = stmt
         .query_map(params![conversation_id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })
-        .map_err(|e| format!("查询轨迹失败：{e}"))?;
+        .map_err(|e| format!("Failed to query trajectory: {e}"))?;
 
     let mut events: Vec<Value> = Vec::new();
     let mut segment_count = 0_i64;
     let mut truncated = false;
     for row in rows {
-        let (raw, segment_truncated) = row.map_err(|e| format!("读取轨迹行失败：{e}"))?;
+        let (raw, segment_truncated) = row.map_err(|e| format!("Failed to read trajectory row: {e}"))?;
         segment_count += 1;
         truncated |= segment_truncated != 0;
-        match parse_event_array(&raw, "轨迹事件") {
+        match parse_event_array(&raw, "trajectory events") {
             Ok(items) => events.extend(items),
             Err(_) => {
-                // 单个分段损坏只让该段降级，其余分段照常返回。
+                // A single corrupted segment only degrades that segment; the others are returned as usual.
                 truncated = true;
             }
         }
@@ -197,7 +202,7 @@ fn load_trajectory_events_sync(
 
     backfill_legacy_trajectory_user_ids(conn, conversation_id, &mut events)?;
     let events_json =
-        serde_json::to_string(&events).map_err(|e| format!("序列化轨迹事件失败：{e}"))?;
+        serde_json::to_string(&events).map_err(|e| format!("Failed to serialize trajectory events: {e}"))?;
     Ok(TrajectoryEventsResponse {
         conversation_id: conversation_id.to_string(),
         events_json,
@@ -218,7 +223,7 @@ fn resolve_trajectory_turn_number_sync(
             |row| row.get::<_, i64>(0),
         )
         .optional()
-        .map_err(|e| format!("读取轨迹轮次保守计数失败：{e}"))?
+        .map_err(|e| format!("Failed to read conservative trajectory turn count: {e}"))?
         .unwrap_or(0)
         .max(0);
     let mut stmt = conn
@@ -226,19 +231,19 @@ fn resolve_trajectory_turn_number_sync(
             "SELECT messages_json, trajectory_json FROM chatHistorySegment
              WHERE conversation_id = ?1 ORDER BY segment_index ASC",
         )
-        .map_err(|e| format!("准备轨迹轮次解析失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare trajectory turn resolution: {e}"))?;
     let rows = stmt
         .query_map(params![conversation_id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
-        .map_err(|e| format!("查询轨迹轮次解析失败：{e}"))?;
+        .map_err(|e| format!("Failed to query trajectory turn resolution: {e}"))?;
     let mut user_turns = 0_i64;
     let mut max_event_turn = 0_i64;
     let mut messages_complete = true;
     for row in rows {
         let (messages_raw, trajectory_raw) =
-            row.map_err(|e| format!("读取轨迹轮次分段失败：{e}"))?;
-        match parse_event_array(&messages_raw, "历史分段消息") {
+            row.map_err(|e| format!("Failed to read trajectory turn segment: {e}"))?;
+        match parse_event_array(&messages_raw, "history segment messages") {
             Ok(messages) => {
                 for message in messages {
                     if message
@@ -253,7 +258,7 @@ fn resolve_trajectory_turn_number_sync(
             }
             Err(_) => messages_complete = false,
         }
-        if let Ok(events) = parse_event_array(&trajectory_raw, "轨迹事件") {
+        if let Ok(events) = parse_event_array(&trajectory_raw, "trajectory events") {
             for turn in events.iter().filter_map(|event| {
                 event
                     .as_object()
@@ -296,14 +301,14 @@ fn expected_trajectory_section_id(content: &str) -> String {
 fn validate_trajectory_section(section: &TrajectorySectionInput) -> Result<(), String> {
     let section_id = section.section_id.trim();
     if section_id.is_empty() {
-        return Err("分段 id 不能为空".to_string());
+        return Err("Segment id cannot be empty".to_string());
     }
     let expected = expected_trajectory_section_id(&section.content);
     if section_id != expected {
-        return Err(format!("轨迹分段 id 与内容 SHA-256 不匹配：{section_id}"));
+        return Err(format!("Trajectory section id does not match the content SHA-256: {section_id}"));
     }
     if !TRAJECTORY_SECTION_SLOT_NAMES.contains(&section.slot.as_str()) {
-        return Err(format!("未知轨迹分段槽位：{}", section.slot));
+        return Err(format!("Unknown trajectory section slot: {}", section.slot));
     }
     Ok(())
 }
@@ -318,13 +323,13 @@ fn put_trajectory_sections_sync(
     }
     let tx = conn
         .unchecked_transaction()
-        .map_err(|e| format!("开启轨迹分段事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin trajectory section transaction: {e}"))?;
     let now = now_ms();
     let mut stored = 0_i64;
     for section in sections {
         validate_trajectory_section(section)?;
         if section.content.len() > TRAJECTORY_MAX_SECTION_BYTES {
-            // 详情缺失是允许的诊断降级；事件骨架仍可继续写入和查看。
+            // Missing details are an acceptable diagnostic degradation; the event skeleton can still be written and viewed.
             continue;
         }
         let section_id = section.section_id.trim();
@@ -342,7 +347,7 @@ fn put_trajectory_sections_sync(
                     now
                 ],
             )
-            .map_err(|e| format!("写入轨迹分段失败：{e}"))?;
+            .map_err(|e| format!("Failed to write trajectory section: {e}"))?;
         if affected == 0 {
             let existing: Option<String> = tx
                 .query_row(
@@ -352,17 +357,17 @@ fn put_trajectory_sections_sync(
                     |row| row.get(0),
                 )
                 .optional()
-                .map_err(|e| format!("校验轨迹分段冲突失败：{e}"))?;
+                .map_err(|e| format!("Failed to check trajectory section conflict: {e}"))?;
             // section_id addresses content only. The same exact text may
             // legally occupy multiple prompt slots; refs carry slot position.
             if existing.as_deref() != Some(section.content.as_str()) {
-                return Err(format!("轨迹分段内容寻址冲突：{section_id}"));
+                return Err(format!("Trajectory section content-addressing conflict: {section_id}"));
             }
         }
         stored += affected as i64;
     }
     tx.commit()
-        .map_err(|e| format!("提交轨迹分段事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit trajectory section transaction: {e}"))?;
     Ok(stored)
 }
 
@@ -384,7 +389,7 @@ fn get_trajectory_sections_sync(
         unique_ids.push(id.to_string());
         if unique_ids.len() > TRAJECTORY_MAX_SECTION_REQUESTS {
             return Err(format!(
-                "轨迹分段请求过多：最多 {TRAJECTORY_MAX_SECTION_REQUESTS} 个"
+                "Too many trajectory section requests: at most {TRAJECTORY_MAX_SECTION_REQUESTS}"
             ));
         }
     }
@@ -400,7 +405,7 @@ fn get_trajectory_sections_sync(
     );
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("准备轨迹分段查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare trajectory section query: {e}"))?;
     let mut bindings: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(unique_ids.len() + 1);
     bindings.push(&conversation_id);
     for id in &unique_ids {
@@ -415,11 +420,11 @@ fn get_trajectory_sections_sync(
                 bytes: row.get("bytes")?,
             })
         })
-        .map_err(|e| format!("查询轨迹分段失败：{e}"))?;
+        .map_err(|e| format!("Failed to query trajectory sections: {e}"))?;
 
     let mut out = Vec::new();
     for row in rows {
-        out.push(row.map_err(|e| format!("读取轨迹分段行失败：{e}"))?);
+        out.push(row.map_err(|e| format!("Failed to read trajectory section row: {e}"))?);
     }
     Ok(out)
 }
@@ -435,7 +440,7 @@ pub async fn trajectory_append_events(
         append_trajectory_events_sync(&conn, &conversation_id, segment_index, &events_json)
     })
     .await
-    .map_err(|e| format!("trajectory_append_events join 失败：{e}"))?
+    .map_err(|e| format!("trajectory_append_events join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -447,7 +452,7 @@ pub async fn trajectory_get_events(
         load_trajectory_events_sync(&conn, &conversation_id)
     })
     .await
-    .map_err(|e| format!("trajectory_get_events join 失败：{e}"))?
+    .map_err(|e| format!("trajectory_get_events join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -460,7 +465,7 @@ pub async fn trajectory_resolve_turn_number(
         resolve_trajectory_turn_number_sync(&conn, &conversation_id, current_user_persisted)
     })
     .await
-    .map_err(|e| format!("trajectory_resolve_turn_number join 失败：{e}"))?
+    .map_err(|e| format!("trajectory_resolve_turn_number join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -473,7 +478,7 @@ pub async fn trajectory_put_sections(
         put_trajectory_sections_sync(&conn, &conversation_id, &sections)
     })
     .await
-    .map_err(|e| format!("trajectory_put_sections join 失败：{e}"))?
+    .map_err(|e| format!("trajectory_put_sections join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -486,7 +491,7 @@ pub async fn trajectory_get_sections(
         get_trajectory_sections_sync(&conn, &conversation_id, &section_ids)
     })
     .await
-    .map_err(|e| format!("trajectory_get_sections join 失败：{e}"))?
+    .map_err(|e| format!("trajectory_get_sections join failed: {e}"))?
 }
 
 #[cfg(test)]
@@ -610,7 +615,7 @@ mod trajectory_tests {
         seed_conversation(&conn, "c1", &[0]);
         let error = append_trajectory_events_sync(&conn, "c1", 7, r#"[{"k":"user","t":1,"at":1}]"#)
             .expect_err("missing segment must fail");
-        assert!(error.contains("分段不存在"));
+        assert!(error.contains("Segment does not exist"));
     }
 
     #[test]

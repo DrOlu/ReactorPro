@@ -37,7 +37,6 @@ type PersistedSettingsResponse = {
   agents?: unknown | null;
   ssh?: unknown | null;
   remote?: unknown | null;
-  stt?: unknown | null;
   memory?: unknown | null;
   modelFailover?: unknown | null;
   defaultWorkdir?: unknown | null;
@@ -69,7 +68,6 @@ type SshPatchApplyResponse = {
 
 export type PersistSettingsResult = {
   ssh?: AppSettings["ssh"];
-  stt?: AppSettings["stt"];
   conflict?: "ssh_settings_changed";
 };
 
@@ -119,8 +117,9 @@ function readLocalUiSettings(): {
     return {
       conversationTitleModel: normalizeSelectedModel(obj.conversationTitleModel),
       commitMessageModel: normalizeSelectedModel(obj.commitMessageModel),
-      // 与 normalizeCustomSettings 同口径（供应商校验留给 normalizeSettings，
-      // 这里无 providers 上下文）：缺省开启，模型未选即跟随当前对话模型。
+      // Same convention as normalizeCustomSettings (provider validation is left to
+      // normalizeSettings, since there is no providers context here): enabled by
+      // default, and when no model is selected it follows the current conversation model.
       promptClarifyEnabled: obj.promptClarifyEnabled !== false,
       promptClarifyModel: normalizeSelectedModel(obj.promptClarifyModel),
       chatSidebar: {
@@ -130,7 +129,7 @@ function readLocalUiSettings(): {
       sidebarShortcuts: normalizeSidebarShortcuts(obj.sidebarShortcuts),
       chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
       rightDock: normalizeRightDockSettings(obj.rightDock),
-      // 三档枚举（与 normalizeCustomSettings 同口径）：脏值/缺省落回统计状态栏。
+      // Three-value enum (same convention as normalizeCustomSettings): dirty values/default fall back to the stats bar.
       composerContextDisplay:
         obj.composerContextDisplay === "ring" || obj.composerContextDisplay === "both"
           ? obj.composerContextDisplay
@@ -276,7 +275,6 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     agents: (persisted?.agents ?? defaults.agents) as AppSettings["agents"],
     ssh: (persisted?.ssh ?? defaults.ssh) as AppSettings["ssh"],
     remote: (persisted?.remote ?? defaults.remote) as AppSettings["remote"],
-    stt: (persisted?.stt ?? defaults.stt) as AppSettings["stt"],
     memory: (persisted?.memory ?? defaults.memory) as AppSettings["memory"],
     skills: localUi.skills,
     chatRuntimeControls: localUi.chatRuntimeControls,
@@ -390,16 +388,6 @@ export async function persistSettings(
     );
   }
 
-  if (hasChanged(prev.stt, next.stt)) {
-    tasks.push(
-      invoke<unknown>("settings_save_stt", { payload: next.stt }).then((response) => {
-        if (response) {
-          result.stt = normalizeSettings({ stt: response as AppSettings["stt"] }).stt;
-        }
-      }),
-    );
-  }
-
   if (
     hasChanged(prev.skills, next.skills) ||
     hasChanged(prev.chatRuntimeControls, next.chatRuntimeControls) ||
@@ -424,8 +412,9 @@ export async function persistSettings(
     });
   }
 
-  // 自动同步的标脏完全由后端完成：快照六域全部落 SQLite，各域的 save_*
-  // 在 tx.commit() 之后自行标脏，前端无需（也不应）参与。
+  // Dirty-marking for automatic sync is entirely handled by the backend: all six
+  // snapshot domains land in SQLite, and each domain's save_* marks itself dirty after
+  // tx.commit(); the frontend need not (and should not) participate.
   await Promise.all(tasks);
 
   return result;

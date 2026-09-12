@@ -3,8 +3,9 @@ import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// Hub（Skills/MCP 商店）出网适配层契约：桌面端把完整上游 URL 改写为
-// 本地反代请求，并恒带 use-system-proxy 头交由 Rust 按应用代理配置出网。
+// Hub (Skills/MCP store) network-egress adapter contract: the desktop side
+// rewrites the full upstream URL into a local proxy request and always carries
+// the use-system-proxy header so Rust egresses according to the app proxy config.
 const loader = createTsModuleLoader({
   mocks: {
     "@tauri-apps/api/core": {
@@ -21,7 +22,7 @@ const loader = createTsModuleLoader({
 const proxy = loader.loadModule("@liveagent/ui/lib/providers/proxy.ts");
 const hubFetchModule = loader.loadModule("@liveagent/ui/lib/hubFetch.ts");
 
-test("prepareUpstreamProxyRequest 保留路径与查询串并携带三个反代头", async () => {
+test("prepareUpstreamProxyRequest preserves path and query string and carries the three proxy headers", async () => {
   const prepared = await proxy.prepareUpstreamProxyRequest(
     "https://clawhub.ai/api/v1/skills?limit=24&sort=downloads",
   );
@@ -32,7 +33,7 @@ test("prepareUpstreamProxyRequest 保留路径与查询串并携带三个反代�
   assert.equal(prepared.headers["x-liveagent-use-system-proxy"], "1");
 });
 
-test("prepareUpstreamProxyRequest 拒绝相对地址、非 http(s) 与内嵌凭据", async () => {
+test("prepareUpstreamProxyRequest rejects relative addresses, non-http(s), and embedded credentials", async () => {
   await assert.rejects(() => proxy.prepareUpstreamProxyRequest("/api/v1/skills"), /absolute URL/);
   await assert.rejects(
     () => proxy.prepareUpstreamProxyRequest("ftp://clawhub.ai/api"),
@@ -44,14 +45,14 @@ test("prepareUpstreamProxyRequest 拒绝相对地址、非 http(s) 与内嵌凭�
   );
 });
 
-test("prepareUpstreamProxyRequest 拒绝 // 开头路径（防 Url::join 改写上游主机）", async () => {
+test("prepareUpstreamProxyRequest rejects paths beginning with // (guards against Url::join rewriting the upstream host)", async () => {
   await assert.rejects(
     () => proxy.prepareUpstreamProxyRequest("https://api.smithery.ai//servers/foo"),
     /must not begin with \/\//,
   );
 });
 
-test("prepareUpstreamProxyRequest 根路径映射为无尾斜杠形态", async () => {
+test("prepareUpstreamProxyRequest maps the root path to a no-trailing-slash form", async () => {
   const bare = await proxy.prepareUpstreamProxyRequest("https://clawhub.ai");
   assert.equal(bare.url, "http://127.0.0.1:43110/proxy/hub");
 
@@ -59,7 +60,7 @@ test("prepareUpstreamProxyRequest 根路径映射为无尾斜杠形态", async (
   assert.equal(withQuery.url, "http://127.0.0.1:43110/proxy/hub?probe=1");
 });
 
-test("hubFetch 桌面端改写请求地址并合并调用方 headers", async () => {
+test("hubFetch on desktop rewrites the request URL and merges caller headers", async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
@@ -89,7 +90,7 @@ test("hubFetch 桌面端改写请求地址并合并调用方 headers", async () 
   assert.equal(headers.get("x-liveagent-use-system-proxy"), "1");
 });
 
-test("hubFetch 桌面端透传 init 的 method/body/signal", async () => {
+test("hubFetch on desktop passes through init's method/body/signal", async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   const controller = new AbortController();
@@ -115,7 +116,7 @@ test("hubFetch 桌面端透传 init 的 method/body/signal", async () => {
   assert.equal(new Headers(calls[0].init.headers).get("content-type"), "application/json");
 });
 
-test("hubFetch 在 Gateway WebUI 运行时直连、不改写地址不加反代头", async () => {
+test("hubFetch connects directly when running in the Gateway WebUI, without rewriting the URL or adding proxy headers", async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   const originalDocument = globalThis.document;
@@ -123,7 +124,7 @@ test("hubFetch 在 Gateway WebUI 运行时直连、不改写地址不加反代�
     calls.push({ url: String(url), init });
     return { ok: true, status: 200 };
   };
-  // 模拟 web main.tsx 在渲染前写入的运行时标记。
+  // Simulate the runtime marker that web main.tsx writes before rendering.
   globalThis.document = { documentElement: { dataset: { liveagentWebui: "gateway" } } };
   try {
     await hubFetchModule.hubFetch("https://clawhub.ai/api/v1/skills?limit=24", {

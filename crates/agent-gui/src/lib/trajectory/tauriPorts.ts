@@ -1,7 +1,8 @@
 /**
- * recorder 的 Tauri 落盘端口与 Gateway 下发端口。
+ * The recorder's Tauri persist port and Gateway publish port.
  *
- * 落盘失败一律吞掉：轨迹是诊断视图，宁可缺一段记录也不该影响对话。
+ * Persist failures are always swallowed: the trajectory is a diagnostic view, and a missing
+ * record is preferable to affecting the conversation.
  */
 
 import type { TrajectoryEvent, TrajectorySection } from "@liveagent/ui/lib/trajectory/types";
@@ -11,10 +12,10 @@ import type { TrajectoryRecorderPorts } from "./recorder";
 export type TrajectoryPublish = (events: readonly TrajectoryEvent[]) => void;
 
 /**
- * 构造桌面端 recorder 端口。
+ * Constructs the desktop recorder ports.
  *
- * @param publish - 实时下发回调；未连接 Gateway 时可缺省。
- * @returns 落盘与下发端口。
+ * @param publish - real-time publish callback; may be omitted when no Gateway is connected.
+ * @returns The persist and publish ports.
  */
 export function createTauriTrajectoryPorts(publish?: TrajectoryPublish): TrajectoryRecorderPorts {
   return {

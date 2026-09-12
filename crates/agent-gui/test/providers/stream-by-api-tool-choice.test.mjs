@@ -87,7 +87,7 @@ const echoTool = {
   parameters: { type: "object", properties: {} },
 };
 
-test("openai-completions: 无工具请求不下发 tool_choice（压缩摘要等 text-only 路径）", async () => {
+test("openai-completions: a request without tools does not send tool_choice (text-only paths such as compaction summaries)", async () => {
   const options = await streamOnce(
     { messages: [{ role: "user", content: "compaction payload", timestamp: 1 }] },
     "none",
@@ -95,7 +95,7 @@ test("openai-completions: 无工具请求不下发 tool_choice（压缩摘要等
   assert.equal(options.toolChoice, undefined);
 });
 
-test("openai-completions: 无工具请求即使 toolChoice=auto 也不下发", async () => {
+test("openai-completions: a request without tools sends nothing even when toolChoice=auto", async () => {
   const options = await streamOnce(
     { messages: [{ role: "user", content: "hi", timestamp: 1 }] },
     "auto",
@@ -103,7 +103,7 @@ test("openai-completions: 无工具请求即使 toolChoice=auto 也不下发", a
   assert.equal(options.toolChoice, undefined);
 });
 
-test("openai-completions: 带工具请求保留 tool_choice=none", async () => {
+test("openai-completions: a request with tools keeps tool_choice=none", async () => {
   const options = await streamOnce(
     {
       tools: [echoTool],
@@ -114,7 +114,7 @@ test("openai-completions: 带工具请求保留 tool_choice=none", async () => {
   assert.equal(options.toolChoice, "none");
 });
 
-test("openai-completions: 带工具请求 any 映射为 required", async () => {
+test("openai-completions: a request with tools maps any to required", async () => {
   const options = await streamOnce(
     {
       tools: [echoTool],

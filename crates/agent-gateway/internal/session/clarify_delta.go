@@ -6,8 +6,10 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// clarifyDeltaHub 把桌面端澄清流式增量交给发起该轮的浏览器。
-// 与 unary 等待分离：delta 不得占用 AwaitUnaryResponse 的首条关联响应。
+// clarifyDeltaHub routes streaming clarification deltas from the desktop app to the
+// browser that initiated the turn.
+// Kept separate from unary waits: a delta must not consume the first correlated
+// response of AwaitUnaryResponse.
 type clarifyDeltaHub struct {
 	mu   sync.Mutex
 	subs map[string]func(*gatewayv2.ClarifyTurnDelta)
@@ -17,8 +19,10 @@ func newClarifyDeltaHub() *clarifyDeltaHub {
 	return &clarifyDeltaHub{subs: make(map[string]func(*gatewayv2.ClarifyTurnDelta))}
 }
 
-// WatchClarifyDeltas 订阅指定（已命名空间化）request_id 的澄清增量。
-// 返回退订函数；重复订阅同一 id 覆盖前一个回调。
+// WatchClarifyDeltas subscribes to clarification deltas for the given
+// (already namespaced) request_id.
+// Returns an unsubscribe function; subscribing again to the same id overwrites the
+// previous callback.
 func (m *Manager) WatchClarifyDeltas(requestID string, fn func(*gatewayv2.ClarifyTurnDelta)) func() {
 	if requestID == "" || fn == nil {
 		return func() {}

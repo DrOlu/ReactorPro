@@ -1,23 +1,25 @@
 /**
- * Intl formatter 缓存。
+ * Intl formatter cache.
  *
- * 构造一个 `Intl.*Format` 会走 ICU 初始化（`udat_open` →
- * `icu::SimpleDateFormat`），是公认的昂贵操作。在渲染体或定时器回调里每次
- * `new` 一次，等价于每个 tick 做一次 ICU 初始化：实测长会话下这条路径把渲染
- * 进程 CPU 顶到 100%+，`sample` 抓到的热点栈正是
+ * Constructing an `Intl.*Format` goes through ICU initialization (`udat_open` ->
+ * `icu::SimpleDateFormat`) and is a notoriously expensive operation. Calling `new` once per render
+ * body or timer callback is equivalent to doing an ICU initialization every tick: measured on long
+ * conversations, this path pushes the render process CPU to 100%+, and the hot stack captured by
+ * `sample` is exactly
  * `timerFired → JSEventListener::handleEvent → constructIntlDateTimeFormat →
- * udat_open`。同一个 formatter 的生命周期应当是进程级的——locale 集合极小，
- * 选项形状在调用点都是字面量常量。
+ * udat_open`. A single formatter's lifetime should be process-level -- the locale set is tiny and
+ * the option shapes are literal constants at the call sites.
  *
- * 缓存键是 `${variant}|${locale}`，而不是把 options 序列化进去：调用方为每处
- * 调用点给一个稳定的 variant 名，这样键只是短字符串拼接；若用
- * `JSON.stringify(options)` 作键，每次调用都要付一次序列化成本，等于把省下来的
- * ICU 开销换成字符串开销——而那正是同一份 sample 里 `WTF::findCommon` 那类
- * 热点的由来。
+ * The cache key is `${variant}|${locale}` rather than serializing the options in: callers give
+ * each call site a stable variant name, so the key is just short string concatenation; using
+ * `JSON.stringify(options)` as the key would pay a serialization cost on every call, effectively
+ * trading the saved ICU overhead for string overhead -- and that is precisely the source of hot
+ * spots like `WTF::findCommon` in the same sample.
  *
- * 用法：同一处调用点必须始终使用同一个 variant 名，并始终传同一套 options。
- * variant 与 options 不一致会让缓存返回错误的格式化结果，因此这里不做运行时
- * 校验——调用点相邻书写，评审时一眼可见。
+ * Usage: the same call site must always use the same variant name and always pass the same set of
+ * options. A mismatch between variant and options would make the cache return wrong formatting
+ * results, so no runtime validation is done here -- call sites are written adjacently and are
+ * visible at a glance during review.
  */
 
 const numberFormats = new Map<string, Intl.NumberFormat>();
@@ -67,7 +69,7 @@ export function cachedRelativeTimeFormat(
   return formatter;
 }
 
-/** 测试用：清空缓存（省略参数则全清）。 */
+/** For tests: clear the cache (omitting the argument clears everything). */
 export function clearIntlFormatterCaches(kind?: "number" | "dateTime" | "relativeTime"): void {
   if (kind === undefined || kind === "number") numberFormats.clear();
   if (kind === undefined || kind === "dateTime") dateTimeFormats.clear();

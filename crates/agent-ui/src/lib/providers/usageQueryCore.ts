@@ -1,9 +1,9 @@
-// 用量查询共享核心（状态归约、协调器与 hook、展示派生纯函数）。平台传输差异
-// 只进各端的 usageQuery.ts 适配层。展示派生函数返回 token/结构，不接触 i18n。
+// Shared usage query core (state reduction, coordinator and hook, display derivation pure functions). Platform transport differences
+// only go into each end's usageQuery.ts adapter layer. Display derivation functions return tokens/structures and do not touch i18n.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-// 富结果模型:与桌面端 Rust UsageData(serde camelCase)同构。字段全可选,
-// total === -1 表示无限额度(展示为 ∞)。
+// Rich result model: isomorphic with the desktop Rust UsageData (serde camelCase). All fields are optional,
+// total === -1 means unlimited quota (displayed as ∞).
 export type UsageData = {
   planName?: string | null;
   extra?: string | null;
@@ -52,7 +52,7 @@ export function reduceUsageState(
   action: UsageStateAction,
 ): ProviderUsageState {
   if (action.result) {
-    // 混版桌面端可能仍回旧形状(无 data 字段)——容错为空数组。
+    // A mixed-version desktop may still return the old shape (no data field) — tolerate it as an empty array.
     return {
       ...state,
       [action.providerId]: { ...action.result, data: action.result.data ?? [] },
@@ -73,7 +73,7 @@ export function reduceUsageState(
   };
 }
 
-/** 打开供应商设置页时批量强制刷新的对象:所有启用了用量查询的供应商。 */
+/** Objects to force-refresh in bulk when opening the provider settings page: all providers with usage query enabled. */
 export function getEnabledUsageProviderIds(providers: readonly UsageQueryProvider[]): string[] {
   return providers
     .filter((provider) => provider.usageQuery?.enabled)
@@ -81,7 +81,7 @@ export function getEnabledUsageProviderIds(providers: readonly UsageQueryProvide
 }
 
 // ---------------------------------------------------------------------------
-// 展示派生(纯函数,组件层负责把 token 翻译成 i18n 文案)
+// Display derivation (pure functions; the component layer is responsible for translating tokens into i18n text)
 // ---------------------------------------------------------------------------
 
 export type UsageRelativeTime =
@@ -104,7 +104,7 @@ export function formatUsageAmount(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
-// 配额窗口稳定 token(Rust 侧 coding-plan 输出),未识别的 planName 原样展示。
+// Stable quota-window tokens (Rust-side coding-plan output); an unrecognized planName is displayed as-is.
 export type UsagePlanTitle =
   | { kind: "window"; token: "5h" | "weekly" | "monthly" | "quota" }
   | { kind: "text"; text: string }
@@ -140,11 +140,11 @@ export function getUsagePlanSeverity(plan: UsageData): UsagePlanSeverity {
 export type UsagePlanDisplay = {
   title: UsagePlanTitle;
   severity: UsagePlanSeverity;
-  /** 主数值(优先 remaining;退化到 total-used / used)。 */
+  /** Primary value (prefer remaining; degrade to total-used / used). */
   amount: string | null;
-  /** 配额总量;total === -1 显示 ∞。 */
+  /** Quota total; total === -1 shows ∞. */
   total: string | null;
-  /** remaining/total 百分比(0-100 取整),total>0 时才有。 */
+  /** remaining/total percentage (rounded 0-100); present only when total>0. */
   percent: number | null;
   unit: string | null;
   extra: string | null;
@@ -191,9 +191,9 @@ export function getProviderUsageCardDisplay(
   const queriedAt = usage?.queriedAt ?? null;
   return {
     show: Boolean(provider.usageQuery?.enabled || usage),
-    // 首个结果落地前视为加载中(桌面端总会应答,成功或错误形态都会写入
-    // usage),卡片据此渲染等高骨架占位;已有结果的手动刷新不回到骨架,
-    // 保持旧值原位更新(stale-while-revalidate),避免高度反复变化。
+    // Treated as loading until the first result lands (the desktop always responds, writing usage on both success and error
+    // shapes), so the card renders an equal-height skeleton placeholder; a manual refresh with an existing result does not return to the skeleton,
+    // keeping the old value updated in place (stale-while-revalidate), avoiding repeated height changes.
     loading: !usage,
     plans: (usage?.data ?? []).map(getUsagePlanDisplay),
     isStale: usage?.isStale === true,
@@ -206,7 +206,7 @@ export function getProviderUsageCardDisplay(
   };
 }
 
-// 相对时间的 30s ticker:卡片列表挂一个实例,驱动"N 分钟前"随时间推进。
+// A 30s ticker for relative time: one instance is mounted on the card list, driving "N minutes ago" forward as time passes.
 export const USAGE_NOW_TICK_MS = 30_000;
 
 export function useUsageNowTicker(enabled: boolean): number {
@@ -332,8 +332,8 @@ export function useProviderUsageWithQuery(
     return () => coordinator.syncProviders([]);
   }, [coordinator]);
 
-  // 打开供应商设置页即对所有启用查询的供应商并发强制刷新一次;供应商配置
-  // 变更(providers 引用变化)时对应卡片被协调器失效后也走这里重查。
+  // Opening the provider settings page force-refreshes all providers with query enabled once concurrently; when a provider config
+  // changes (providers reference changes), the corresponding card is invalidated by the coordinator and re-queried here as well.
   useEffect(() => {
     for (const providerId of enabledProviderIds) {
       void coordinator.request(providerId, true);

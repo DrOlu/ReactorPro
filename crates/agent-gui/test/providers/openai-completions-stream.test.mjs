@@ -119,7 +119,8 @@ test("openai-completions: empty successful stream is rejected", async () => {
     ["start", "error"],
   );
   assert.equal((await stream.result()).stopReason, "error");
-  // 措辞必须继续命中 pi-ai 的可重试模式,否则空响应会直接打死一轮而不是重试。
+  // The wording must keep matching pi-ai's retryable pattern, otherwise an empty response kills
+  // a whole turn instead of being retried.
   assert.match((await stream.result()).errorMessage, /provider returned error/i);
 });
 
@@ -134,8 +135,8 @@ test("openai-completions: empty response error stays retryable for withStreamRet
   );
   await collectEvents(stream);
 
-  // 空响应是上游抖动,必须能被统一重试链路吃掉;文案一旦偏离 pi-ai 的模式表,
-  // 一次空回复就会直接终结整轮对话。
+  // An empty response is upstream jitter and must be absorbed by the unified retry chain; if the
+  // wording drifts from pi-ai's pattern table, a single empty reply ends the whole conversation.
   assert.equal(isRetryableAssistantError(await stream.result()), true);
 });
 
@@ -145,8 +146,9 @@ test("openai-completions: truncated and aborted turns are never rewritten as emp
     "src/lib/providers/runtime/openAICompletionsStream.ts",
   );
 
-  // length = 输出被 token 上限截断,是真实终止语义(下游据此拒绝可能截断的工具
-  // 调用);aborted = 用户主动停止。两者都不能被改写成"空响应"。
+  // length = output truncated by the token limit, a real termination semantic (the downstream
+  // rejects possibly-truncated tool calls based on it); aborted = the user actively stopped.
+  // Neither may be rewritten as "empty response".
   for (const stopReason of ["length", "aborted"]) {
     const stream = rejectEmptyOpenAICompletionsResponse(
       createTerminalSource(createAssistant([], stopReason)),
@@ -162,7 +164,8 @@ test("openai-completions: thinking-only turns are not treated as empty", async (
   const { rejectEmptyOpenAICompletionsResponse } = loader.loadModule(
     "src/lib/providers/runtime/openAICompletionsStream.ts",
   );
-  // 推理模型可能把预算全烧在 thinking 上;重试只会再烧一遍,不是空响应。
+  // A reasoning model may burn the whole budget on thinking; retrying would only burn it again,
+  // so this is not an empty response.
   const assistant = createAssistant([{ type: "thinking", thinking: "long chain" }]);
   const stream = rejectEmptyOpenAICompletionsResponse(createTerminalSource(assistant));
   const events = await collectEvents(stream);

@@ -1,19 +1,19 @@
 fn load_mcp(conn: &Connection) -> Result<Option<Value>, String> {
     let mut stmt = conn
         .prepare(MCP_SETTINGS_SELECT_SQL)
-        .map_err(|e| format!("准备读取 {MCP_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare reading {MCP_SETTINGS_TABLE}: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
-        .map_err(|e| format!("读取 {MCP_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to read {MCP_SETTINGS_TABLE}: {e}"))?;
 
     let mut servers = Vec::new();
     let mut selected = Vec::new();
 
     for row in rows {
         let (server_id, payload_json) =
-            row.map_err(|e| format!("读取 {MCP_SETTINGS_TABLE} 行失败：{e}"))?;
+            row.map_err(|e| format!("failed to read row of {MCP_SETTINGS_TABLE}: {e}"))?;
         let mut server = expect_object(
             parse_json(&payload_json, MCP_SETTINGS_TABLE)?,
             MCP_SETTINGS_TABLE,
@@ -22,7 +22,7 @@ fn load_mcp(conn: &Connection) -> Result<Option<Value>, String> {
         let selected_flag = match server.remove("selected") {
             Some(Value::Bool(value)) => value,
             Some(Value::Null) | None => false,
-            Some(_) => return Err("mcp_settings.selected 必须是布尔值".to_string()),
+            Some(_) => return Err("mcp_settings.selected must be a boolean".to_string()),
         };
         if selected_flag {
             selected.push(Value::String(server_id.clone()));
@@ -56,9 +56,9 @@ fn save_mcp(conn: &mut Connection, payload: Value) -> Result<(), String> {
     let updated_at = now_ms();
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启 {MCP_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin {MCP_SETTINGS_TABLE} transaction: {e}"))?;
     tx.execute(MCP_SETTINGS_DELETE_SQL, [])
-        .map_err(|e| format!("清空 {MCP_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to clear {MCP_SETTINGS_TABLE}: {e}"))?;
 
     let mut seen = HashSet::new();
     for (sort_index, server) in servers.into_iter().enumerate() {
@@ -66,7 +66,7 @@ fn save_mcp(conn: &mut Connection, payload: Value) -> Result<(), String> {
         let server_id =
             extract_non_empty_string(&server, "id", "settings_save_mcp payload.servers[]")?;
         if !seen.insert(server_id.clone()) {
-            return Err(format!("mcp_settings.server_id 重复：{server_id}"));
+            return Err(format!("duplicate mcp_settings.server_id: {server_id}"));
         }
 
         server.insert(
@@ -83,11 +83,11 @@ fn save_mcp(conn: &mut Connection, payload: Value) -> Result<(), String> {
                 updated_at
             ],
         )
-        .map_err(|e| format!("写入 {MCP_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to write {MCP_SETTINGS_TABLE}: {e}"))?;
     }
 
     tx.commit()
-        .map_err(|e| format!("提交 {MCP_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("failed to commit {MCP_SETTINGS_TABLE} transaction: {e}"))?;
     crate::services::webdav_auto_sync::mark_dirty();
     Ok(())
 }

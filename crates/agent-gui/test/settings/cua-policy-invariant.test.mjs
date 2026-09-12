@@ -3,12 +3,16 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 /**
- * 跨模块不变量：**CUA 设置页显示的审批档位 === 运行时实际执行的档位。**
+ * Cross-module invariant: **the approval level shown in the CUA settings page ===
+ * the level actually enforced at runtime.**
  *
- * 两边分别有自己的单测（设置页能读小写条目、运行时能回落规范化键），但
- * 分开测保证不了这条不变量本身——历史上正是「运行时补了回落、设置页没补」
- * 造成了「页面显示 ask、运行时执行 allow」。这里把两个模块放进同一张
- * 配置矩阵里逐格比对，任何一侧单独改动查表顺序都会先把这里弄红。
+ * Each side has its own unit tests (the settings page can read lowercase entries,
+ * the runtime falls back to normalized keys), but testing them separately cannot
+ * guarantee this invariant itself -- historically it was "the runtime added a
+ * fallback, the settings page did not" that produced "the page shows ask, the
+ * runtime enforces allow". Here both modules are put into the same config matrix
+ * and compared cell by cell, so any one-sided change to the lookup order turns
+ * this red first.
  */
 
 const loader = createTsModuleLoader();
@@ -26,7 +30,7 @@ const entryOf = (id) => ({
   timeoutMs: 60_000,
 });
 
-/** 与 mcpTools.ts 建工具表的方式一致：serverId 取条目原文，缺省按配置算好带下去。 */
+/** Consistent with how mcpTools.ts builds the tool table: serverId takes the entry raw text, and the default is computed from the config and carried down. */
 const metadataOf = (entry) => ({
   groupId: "mcp",
   kind: "mcp",
@@ -44,14 +48,14 @@ const policyTables = [
   { "server:cua-driver": "deny" },
   { "server:CUA-DRIVER": "allow" },
   { "server:CUA-DRIVER": "deny" },
-  // 原文键与规范化键同时存在（历史写入留下的重影）。
+  // Both the raw key and the normalized key present (ghosting left by historical writes).
   { "server:CUA-DRIVER": "deny", "server:cua-driver": "allow" },
   { "server:cua-driver": "ask", "server:CUA-DRIVER": "allow" },
-  // 无关键不干扰。
+  // Unrelated keys do not interfere.
   { Bash: "deny", "group:mcp": "allow" },
 ];
 
-test("设置页显示值 === 运行时生效值（全矩阵）", () => {
+test("settings page displayed value === runtime enforced value (full matrix)", () => {
   for (const id of ids) {
     const entry = entryOf(id);
     const metadata = metadataOf(entry);
@@ -61,17 +65,17 @@ test("设置页显示值 === 运行时生效值（全矩阵）", () => {
       assert.equal(
         uiPolicy,
         runtimePolicy,
-        `id=${JSON.stringify(id)} policies=${JSON.stringify(policies)}: 页面显示 ${uiPolicy}，运行时执行 ${runtimePolicy}`,
+        `id=${JSON.stringify(id)} policies=${JSON.stringify(policies)}: page shows ${uiPolicy}, runtime enforces ${runtimePolicy}`,
       );
     }
   }
 });
 
-test("写回之后不变量依然成立（写入路径不制造新的错位）", () => {
+test("the invariant still holds after write-back (the write path creates no new mismatch)", () => {
   for (const id of ids) {
     const entry = entryOf(id);
     const metadata = metadataOf(entry);
-    // 从一份带重影的表出发，把三个档位各写一遍。
+    // Starting from a ghosted table, write each of the three levels once.
     for (const next of ["allow", "ask", "deny"]) {
       const written = form.applyCuaPolicy(
         { "server:cua-driver": "allow", "server:CUA-DRIVER": "deny", Bash: "deny" },
@@ -80,8 +84,8 @@ test("写回之后不变量依然成立（写入路径不制造新的错位）",
       );
       const uiPolicy = form.readCuaPolicy(written, entry);
       const runtimePolicy = toolPolicy.resolveToolPolicy("mcp_cua_click", metadata, written);
-      assert.equal(uiPolicy, next, `写入 ${next} 后页面应显示 ${next}`);
-      assert.equal(runtimePolicy, next, `写入 ${next} 后运行时应执行 ${next}`);
+      assert.equal(uiPolicy, next, `after writing ${next} the page should show ${next}`);
+      assert.equal(runtimePolicy, next, `after writing ${next} the runtime should enforce ${next}`);
     }
   }
 });

@@ -444,7 +444,7 @@
   }
 }
 
-/* 供应商卡片用量区:结果替换等高骨架占位时柔和浮现,只动透明度不动高度。 */
+/* Provider card usage area: softly fade in when the result replaces the equal-height skeleton placeholder, animating opacity only and not height. */
 .settings-usage-reveal {
   animation: settings-usage-reveal 240ms ease-out;
 }

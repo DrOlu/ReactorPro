@@ -7,24 +7,24 @@ const HISTORY_DB_SCHEMA_VERSION: i64 = 4;
 static HISTORY_DB_MIGRATION_LOCK: Mutex<()> = Mutex::new(());
 
 fn history_db_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "Unable to locate the user directory".to_string())?;
     let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
-    fs::create_dir_all(&dir).map_err(|e| format!("创建历史目录失败：{e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create history directory: {e}"))?;
     Ok(dir)
 }
 
 pub(crate) fn open_connection() -> Result<Connection, String> {
     let db_path = history_db_dir()?.join(DB_FILENAME);
-    let conn = Connection::open(db_path).map_err(|e| format!("打开历史数据库失败：{e}"))?;
+    let conn = Connection::open(db_path).map_err(|e| format!("Failed to open history database: {e}"))?;
     configure_connection(&conn)?;
     Ok(conn)
 }
 
 fn configure_connection(conn: &Connection) -> Result<(), String> {
     conn.busy_timeout(Duration::from_secs(5))
-        .map_err(|e| format!("设置 SQLite busy_timeout 失败：{e}"))?;
+        .map_err(|e| format!("Failed to set SQLite busy_timeout: {e}"))?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")
-        .map_err(|e| format!("启用历史数据库外键失败：{e}"))?;
+        .map_err(|e| format!("Failed to enable history database foreign keys: {e}"))?;
     Ok(())
 }
 
@@ -36,34 +36,34 @@ pub(crate) fn initialize_history_db() -> Result<(), String> {
 pub(crate) fn initialize_connection(conn: &Connection) -> Result<(), String> {
     let _guard = HISTORY_DB_MIGRATION_LOCK
         .lock()
-        .map_err(|_| "历史数据库迁移锁已损坏".to_string())?;
+        .map_err(|_| "History database migration lock is corrupted".to_string())?;
     configure_connection(conn)?;
     migrate_history_db(conn)
 }
 
 fn read_user_version(conn: &Connection) -> Result<i64, String> {
     conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
-        .map_err(|e| format!("读取历史数据库版本失败：{e}"))
+        .map_err(|e| format!("Failed to read history database version: {e}"))
 }
 
 fn set_user_version(conn: &Connection, version: i64) -> Result<(), String> {
     conn.execute_batch(&format!("PRAGMA user_version = {version};"))
-        .map_err(|e| format!("更新历史数据库版本失败：{e}"))
+        .map_err(|e| format!("Failed to update history database version: {e}"))
 }
 
 fn migrate_history_db(conn: &Connection) -> Result<(), String> {
     conn.execute_batch("BEGIN IMMEDIATE;")
-        .map_err(|e| format!("锁定历史数据库迁移失败：{e}"))?;
+        .map_err(|e| format!("Failed to lock history database migration: {e}"))?;
 
     let result = migrate_history_db_inner(conn);
     match result {
         Ok(()) => conn
             .execute_batch("COMMIT;")
-            .map_err(|e| format!("提交历史数据库迁移失败：{e}")),
+            .map_err(|e| format!("Failed to commit history database migration: {e}")),
         Err(error) => {
             let rollback = conn.execute_batch("ROLLBACK;");
             if let Err(rollback_error) = rollback {
-                return Err(format!("{error}；回滚历史数据库迁移失败：{rollback_error}"));
+                return Err(format!("{error}; failed to roll back history database migration: {rollback_error}"));
             }
             Err(error)
         }
@@ -74,7 +74,7 @@ fn migrate_history_db_inner(conn: &Connection) -> Result<(), String> {
     let current_version = read_user_version(conn)?;
     if current_version > HISTORY_DB_SCHEMA_VERSION {
         return Err(format!(
-            "历史数据库版本 {current_version} 高于当前支持版本 {HISTORY_DB_SCHEMA_VERSION}"
+            "History database version {current_version} is higher than the currently supported version {HISTORY_DB_SCHEMA_VERSION}"
         ));
     }
 
@@ -110,8 +110,8 @@ fn migrate_to_v1(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-// v2: chatHistory 新增 selected_model_json（每会话模型选择）。schema ensure
-// 本身幂等，重跑即补齐缺失列。
+// v2: chatHistory gains selected_model_json (per-session model selection). schema ensure is
+// itself idempotent, so re-running it backfills any missing column.
 fn migrate_to_v2(conn: &Connection) -> Result<(), String> {
     ensure_chat_history_schema(conn)?;
     Ok(())
@@ -124,16 +124,18 @@ fn migrate_to_v3(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-// v4: 清除 1.x 遗留的 chatHistory.context_json(NOT NULL 且无默认值)。该列在
-// 分段持久化上线后已无任何读写方,但 CREATE TABLE IF NOT EXISTS 不改建既有表、
-// 列 ensure 只加不删——携带该列的老库每次 INSERT 都被 NOT NULL 约束拒绝,
-// 聊天历史/任务清单持久化全部失败,轨迹分段随之因外键(主表行缺失)刷屏报错。
+// v4: drop the chatHistory.context_json left over from 1.x (NOT NULL with no default). That column
+// has had no readers or writers since segment persistence shipped, but CREATE TABLE IF NOT EXISTS
+// does not rebuild existing tables and column ensure only adds, never drops---old databases still
+// carrying the column have every INSERT rejected by the NOT NULL constraint, all chat history / task
+// list persistence fails, and trajectory segments then spam errors due to the foreign key (missing
+// main-table row).
 fn migrate_to_v4(conn: &Connection) -> Result<(), String> {
     ensure_chat_history_schema(conn)?;
     let columns = read_table_columns(conn, "chatHistory", "chatHistory")?;
     if columns.contains("context_json") {
         conn.execute_batch("ALTER TABLE chatHistory DROP COLUMN context_json;")
-            .map_err(|e| format!("移除遗留 chatHistory.context_json 列失败：{e}"))?;
+            .map_err(|e| format!("Failed to drop legacy chatHistory.context_json column: {e}"))?;
     }
     Ok(())
 }
@@ -145,13 +147,13 @@ fn read_table_columns(
 ) -> Result<HashSet<String>, String> {
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({table_name})"))
-        .map_err(|e| format!("读取{table_label}结构失败：{e}"))?;
+        .map_err(|e| format!("Failed to read {table_label} structure: {e}"))?;
     let rows = stmt
         .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|e| format!("查询{table_label}结构失败：{e}"))?;
+        .map_err(|e| format!("Failed to query {table_label} structure: {e}"))?;
     let mut columns = HashSet::new();
     for row in rows {
-        let column = row.map_err(|e| format!("读取{table_label}字段失败：{e}"))?;
+        let column = row.map_err(|e| format!("Failed to read {table_label} column: {e}"))?;
         columns.insert(column.to_ascii_lowercase());
     }
     Ok(columns)
@@ -181,7 +183,7 @@ fn ensure_table_columns(
                     columns = refreshed_columns;
                     continue;
                 }
-                return Err(format!("迁移{table_label}字段 {column} 失败：{error}"));
+                return Err(format!("Failed to migrate {table_label} column {column}: {error}"));
             }
         }
     }
@@ -238,9 +240,10 @@ fn ensure_chat_history_schema(conn: &Connection) -> Result<(), String> {
             FOREIGN KEY (conversation_id) REFERENCES chatHistory(id) ON DELETE CASCADE
         );
 
-        -- 轨迹的 system prompt 分段池：内容寻址，按会话隔离。
-        -- 不做跨会话共享是刻意的：共享需要引用计数才能安全回收，而按会话隔离时
-        -- 删除会话即整段回收，代价只是 base 段在会话间重复存一份。
+        -- Trajectory system prompt segment pool: content-addressed, isolated per session.
+        -- Not sharing across sessions is deliberate: sharing would require reference counting to reclaim
+        -- safely, whereas with per-session isolation deleting a session reclaims the whole segment, at the
+        -- cost of storing one duplicate copy of the base segment per session.
         CREATE TABLE IF NOT EXISTS chatTrajectorySection (
             conversation_id TEXT NOT NULL,
             section_id TEXT NOT NULL,
@@ -253,7 +256,7 @@ fn ensure_chat_history_schema(conn: &Connection) -> Result<(), String> {
         );
         ",
     )
-    .map_err(|e| format!("初始化聊天历史表失败：{e}"))?;
+    .map_err(|e| format!("Failed to initialize chat history table: {e}"))?;
 
     ensure_chat_history_columns(conn)?;
     ensure_chat_history_segment_columns(conn)?;
@@ -272,7 +275,7 @@ fn ensure_chat_history_schema(conn: &Connection) -> Result<(), String> {
             ON chatTrajectorySection(conversation_id);
         ",
     )
-    .map_err(|e| format!("初始化聊天历史索引失败：{e}"))?;
+    .map_err(|e| format!("Failed to initialize chat history indexes: {e}"))?;
     ensure_chat_history_fts(conn)?;
 
     Ok(())
@@ -282,7 +285,7 @@ fn ensure_chat_history_columns(conn: &Connection) -> Result<(), String> {
     ensure_table_columns(
         conn,
         "chatHistory",
-        "聊天历史主表",
+        "chat history main table",
         &[
             (
                 "title",
@@ -383,7 +386,7 @@ fn ensure_chat_history_columns(conn: &Connection) -> Result<(), String> {
         WHERE is_pinned IS NULL;
         ",
     )
-    .map_err(|e| format!("修复聊天历史主表默认字段失败：{e}"))?;
+    .map_err(|e| format!("Failed to repair chat history main table default columns: {e}"))?;
 
     Ok(())
 }
@@ -392,7 +395,7 @@ fn ensure_chat_history_segment_columns(conn: &Connection) -> Result<(), String> 
     ensure_table_columns(
         conn,
         "chatHistorySegment",
-        "聊天历史分段表",
+        "chat history segment table",
         &[
             (
                 "segment_id",
@@ -426,7 +429,7 @@ fn ensure_chat_history_segment_columns(conn: &Connection) -> Result<(), String> 
                 "updated_at",
                 "ALTER TABLE chatHistorySegment ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;",
             ),
-            // 轨迹事件随分段走，自动继承分支/截断/替换的生命周期。
+            // Trajectory events follow their segment and automatically inherit the branch/truncate/replace lifecycle.
             (
                 "trajectory_json",
                 "ALTER TABLE chatHistorySegment ADD COLUMN trajectory_json TEXT NOT NULL DEFAULT '[]';",
@@ -469,7 +472,7 @@ fn ensure_chat_history_segment_columns(conn: &Connection) -> Result<(), String> 
         WHERE trajectory_truncated IS NULL;
         ",
     )
-    .map_err(|e| format!("修复聊天历史分段表默认字段失败：{e}"))?;
+    .map_err(|e| format!("Failed to repair chat history segment table default columns: {e}"))?;
 
     Ok(())
 }
@@ -478,7 +481,7 @@ fn ensure_chat_history_share_columns(conn: &Connection) -> Result<(), String> {
     ensure_table_columns(
         conn,
         "chatHistoryShare",
-        "聊天历史分享表",
+        "chat history share table",
         &[
             (
                 "token",
@@ -522,7 +525,7 @@ fn ensure_chat_history_share_columns(conn: &Connection) -> Result<(), String> {
         WHERE updated_at IS NULL;
         ",
     )
-    .map_err(|e| format!("修复聊天历史分享表默认字段失败：{e}"))?;
+    .map_err(|e| format!("Failed to repair chat history share table default columns: {e}"))?;
 
     Ok(())
 }
@@ -567,7 +570,7 @@ fn ensure_chat_history_fts(conn: &Connection) -> Result<(), String> {
         );
         "#,
     )
-    .map_err(|e| format!("初始化聊天历史 FTS 表失败：{e}"))?;
+    .map_err(|e| format!("Failed to initialize chat history FTS table: {e}"))?;
 
     ensure_chat_history_fts_index_columns(conn)?;
     conn.execute_batch(
@@ -579,7 +582,7 @@ fn ensure_chat_history_fts(conn: &Connection) -> Result<(), String> {
             ON chatHistoryFtsSegmentIndex(conversation_updated_at DESC);
         ",
     )
-    .map_err(|e| format!("初始化聊天历史 FTS 索引失败：{e}"))?;
+    .map_err(|e| format!("Failed to initialize chat history FTS indexes: {e}"))?;
 
     seed_existing_chat_history_fts_index(conn)?;
 
@@ -590,7 +593,7 @@ fn ensure_chat_history_fts_index_columns(conn: &Connection) -> Result<(), String
     ensure_table_columns(
         conn,
         "chatHistoryFtsSegmentIndex",
-        "聊天历史 FTS 元数据表",
+        "chat history FTS metadata table",
         &[
             (
                 "segment_updated_at",
@@ -629,7 +632,7 @@ fn seed_existing_chat_history_fts_index(conn: &Connection) -> Result<(), String>
         ",
         [],
     )
-    .map_err(|e| format!("同步历史 FTS 元数据失败：{e}"))?;
+    .map_err(|e| format!("Failed to sync history FTS metadata: {e}"))?;
 
     Ok(())
 }
@@ -905,8 +908,8 @@ mod tests {
     #[test]
     fn migrate_v3_database_drops_legacy_context_json() {
         let conn = Connection::open_in_memory().expect("open v3 in-memory history db");
-        // 1.x 一路升到 v3 的真实老库形态:chatHistory 仍携带 NOT NULL 的
-        // context_json 列(建表早于分段持久化,列 ensure 只加不删)。
+        // The shape of a real old database upgraded all the way from 1.x to v3: chatHistory still carries
+        // the NOT NULL context_json column (the table predates segment persistence and column ensure only adds, never drops).
         conn.execute_batch(
             "
             CREATE TABLE chatHistory (
@@ -944,7 +947,7 @@ mod tests {
             !columns.contains("context_json"),
             "legacy context_json must be dropped"
         );
-        // 迁移后 INSERT 不再被遗留 NOT NULL 约束拒绝。
+        // After migration, INSERT is no longer rejected by the legacy NOT NULL constraint.
         conn.execute(
             "INSERT INTO chatHistory (id, title, provider_id, model, context_meta_json, active_segment_index, total_segment_count, total_message_count, created_at, updated_at) VALUES ('c1', 't', 'claude_code', 'm', '{}', 0, 1, 0, 1, 1)",
             [],

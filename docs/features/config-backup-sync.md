@@ -1,110 +1,110 @@
-# 配置备份与同步
+# Configuration Backup and Sync
 
-## 总体模型
+## Overall Model
 
-把「服务商 / MCP / 系统偏好 / 提示词模板 / 模型故障转移 / STT」六域打包成一份 JSON 快照，支持导出到本地文件，或同步到用户自己的 WebDAV 网盘以在多台设备间共用。
+Pack six domains — "providers / MCP / system preferences / prompt templates / model failover / STT" — into a single JSON snapshot, supporting export to a local file, or syncing to the user's own WebDAV cloud drive for sharing across multiple devices.
 
-这是**桌面独占能力**。快照的采集与应用都直接触碰 SQLite 与本地文件系统，符合「桌面是唯一执行工具、唯一持久化数据的地方」这一核心不变量。WebUI 侧没有这个分区，Gateway 不参与任何一步。
+This is a **desktop-exclusive capability**. Both collecting and applying the snapshot directly touch SQLite and the local file system, consistent with the core invariant that "the desktop is the only place that executes tools and the only place that persists data". There is no such partition on the WebUI side, and the Gateway does not participate in any step.
 
-| 层 | 路径 | 职责 |
+| Layer | Path | Responsibility |
 |---|---|---|
-| 快照采集/校验/应用 | `src-tauri/src/commands/config/settings/backup_snapshot.rs` | `collect_backup_snapshot` / `validate_backup_manifest` / `apply_backup_snapshot`；应用前自动备份到 `~/.liveagent/backups/`。 |
-| 本地导入导出 | `src-tauri/src/commands/config/settings/backup_io.rs` | rfd 文件对话框 + 解析校验 + 写入。 |
-| WebDAV 编排 | `src-tauri/src/commands/config/settings/webdav_sync.rs` | 同步配置存取、远端路径拼装、上传/下载、校验和验证。 |
-| WebDAV 传输 | `src-tauri/src/services/webdav.rs` | PROPFIND / MKCOL / PUT / GET，超时分级、响应体大小上限、日志脱敏、坚果云等服务商的定向错误文案。 |
-| 自动同步 | `src-tauri/src/services/webdav_auto_sync.rs` | 防抖上传任务、抑制守卫。 |
-| 前端 IPC | `crates/agent-gui/src/lib/backup/index.ts` | 命令封装 + 状态事件类型。 |
-| Settings UI | `crates/agent-gui/src/pages/settings/BackupSyncSection.tsx` | 本地备份组 + WebDAV 同步组。 |
+| Snapshot collection/validation/application | `src-tauri/src/commands/config/settings/backup_snapshot.rs` | `collect_backup_snapshot` / `validate_backup_manifest` / `apply_backup_snapshot`; automatically backs up to `~/.liveagent/backups/` before applying. |
+| Local import/export | `src-tauri/src/commands/config/settings/backup_io.rs` | rfd file dialog + parse validation + write. |
+| WebDAV orchestration | `src-tauri/src/commands/config/settings/webdav_sync.rs` | Sync config storage/retrieval, remote path assembly, upload/download, checksum verification. |
+| WebDAV transport | `src-tauri/src/services/webdav.rs` | PROPFIND / MKCOL / PUT / GET, tiered timeouts, response body size caps, log redaction, and targeted error messages for providers such as Nutstore. |
+| Automatic sync | `src-tauri/src/services/webdav_auto_sync.rs` | Debounced upload jobs, suppression guard. |
+| Frontend IPC | `crates/agent-gui/src/lib/backup/index.ts` | Command wrappers + status event types. |
+| Settings UI | `crates/agent-gui/src/pages/settings/BackupSyncSection.tsx` | Local backup group + WebDAV sync group. |
 
-## 备份范围（schema v2）
+## Backup Scope (schema v2)
 
-**在范围内**：
+**In scope**:
 
-- 服务商配置（含 API 密钥）
-- MCP 服务器
-- 系统偏好 —— 仅 `SYSTEM_PORTABLE_BACKUP_KEYS` 白名单：executionMode、toolPolicies、commandSafetyMode、browserAutomationMode
-- 提示词模板（`agent_prompt_templates`）
-- 模型故障转移（`model_failover_settings`）
-- STT 语音识别配置（`stt_settings`，含密钥）
+- Provider configuration (including API keys)
+- MCP servers
+- System preferences — only the `SYSTEM_PORTABLE_BACKUP_KEYS` allowlist: executionMode, toolPolicies, commandSafetyMode, browserAutomationMode
+- Prompt templates (`agent_prompt_templates`)
+- Model failover (`model_failover_settings`)
+- STT speech recognition configuration (`stt_settings`, including keys)
 
-**不在范围内**：对话历史、记忆库、上传文件、SSH 私钥、技能、WebDAV 凭据本身，以及 system 域中的设备本地态（workdir、workspaceProjects 及其衍生键、systemProxy）。
+**Out of scope**: conversation history, memory stores, uploaded files, SSH private keys, skills, the WebDAV credentials themselves, and device-local state in the system domain (workdir, workspaceProjects and their derived keys, systemProxy).
 
-六域全部存于 SQLite，采集与应用完全在后端完成，前端不参与快照内容的拼装。
+All six domains live in SQLite; collection and application are completed entirely in the backend, and the frontend does not participate in assembling the snapshot content.
 
-### 为什么 system 域只带可移植偏好
+### Why the system domain carries only portable preferences
 
-workdir 与 workspaceProjects 全是绝对路径，A 机器的路径在 B 机器上多半不存在，同步过去即污染；systemProxy 是每台机器 / 每个网络环境各自的配置，把 A 的代理密码推给 B 没有意义还多一处泄露面。应用侧按白名单**叠加**（而非整域覆盖）：快照里的可移植键覆盖本机，白名单之外的键保持本机原值 —— v1 旧备份里混入的设备本地键也因此被自然过滤。
+workdir and workspaceProjects are all absolute paths; a path on machine A most likely does not exist on machine B, and syncing it over just pollutes the config; systemProxy is configured per machine / per network environment, so pushing A's proxy password to B is meaningless and adds another exposure surface. The apply side **merges** by allowlist (rather than overwriting the whole domain): portable keys in the snapshot overwrite the local machine, while keys outside the allowlist keep their local values — so device-local keys mixed into old v1 backups are naturally filtered out too.
 
-### 为什么去掉了 skills 域（v1 → v2）
+### Why the skills domain was removed (v1 → v2)
 
-技能本体是磁盘上的目录（`~/.liveagent/skills/`），v1 只同步 `{enabled, selected}` 开关：在新设备上 selected 指向的技能根本不存在，同步过去的是一份指向空气的清单。v2 直接移除该域；v1 备份仍可导入，skills 字段被 serde 忽略。
+Skills themselves are directories on disk (`~/.liveagent/skills/`); v1 synced only the `{enabled, selected}` toggles: on a new device the skills that `selected` points to simply do not exist, so what gets synced is a list pointing at nothing. v2 removes this domain outright; v1 backups can still be imported, with the skills field ignored by serde.
 
-> **WebDAV 凭据必须排除在快照之外。** 若随快照流转，A 机器的凭据会覆盖 B 机器，形成同步循环。为此同步配置存在独立表 `backup_sync_settings` 而不是 `system_settings` —— 后者的 `save_system` 采用「DELETE 整表 → 按固定 key 白名单重新 INSERT」的写法，任何不在白名单里的 key 都会在下一次系统设置保存时被静默抹掉。
+> **WebDAV credentials must be excluded from the snapshot.** If they circulate with the snapshot, machine A's credentials would overwrite machine B's, forming a sync loop. For this reason the sync configuration lives in a separate table `backup_sync_settings` rather than `system_settings` — the latter's `save_system` uses the pattern "DELETE the whole table → re-INSERT by a fixed key allowlist", so any key not in the allowlist is silently wiped on the next system settings save.
 
-## 安全取舍
+## Security Trade-offs
 
-**快照中的服务商 API 密钥与 STT 密钥是明文的**，与 cc-switch 的做法一致。
+**The provider API keys and STT keys in the snapshot are plaintext**, consistent with cc-switch's approach.
 
-这不违反「Gateway 从不持有真实密钥」的不变量 —— 那条不变量约束的是 Gateway↔WebUI 这条不可信链路，而 WebDAV 端点是用户自己持有、自己认证的。
+This does not violate the "Gateway never holds real keys" invariant — that invariant constrains the untrusted Gateway↔WebUI link, whereas the WebDAV endpoint is held and authenticated by the user themselves.
 
-配套的缓解：
+Supporting mitigations:
 
-1. WebDAV 账号密码本身**从不**进入任何快照。
-2. 系统代理密码随设备本地态一起被排除在快照之外。
-3. manifest 预留 `encryption` 字段（当前恒为 `"none"`），为后续加密留出无破坏性的升级路径。
+1. The WebDAV account password itself **never** enters any snapshot.
+2. The system proxy password is excluded from the snapshot along with device-local state.
+3. The manifest reserves an `encryption` field (currently always `"none"`), leaving a non-breaking upgrade path for future encryption.
 
-UI 不单独提示「密钥是明文」—— 与 cc-switch 对齐：导出与上传的说明只陈述同步内容的范围，开启自动同步的确认框讲的是流量消耗。
+The UI does not separately warn that "keys are plaintext" — aligned with cc-switch: the export and upload descriptions only state the scope of the synced content, and the confirmation dialog for enabling automatic sync talks about traffic consumption.
 
-## 远端布局
+## Remote Layout
 
 ```
 {remote_dir}/v1/{profile}/
-  ├── manifest.json   # 元信息 + config.json 的 size 与 sha256
-  └── config.json     # 快照本体
+  ├── manifest.json   # metadata + size and sha256 of config.json
+  └── config.json     # the snapshot itself
 ```
 
-默认 `liveagent/v1/default/`。
+Defaults to `liveagent/v1/default/`.
 
-版本段 `v1` 夹在中间而非最外层，使用户在 WebDAV 客户端里看到的是一个干净的顶层目录。协议不兼容演进时更换该段，让新旧客户端各读各的。schema 的兼容性演进（如本次 v1→v2）走 manifest 里的 `schemaVersion`：新客户端可读旧快照，旧客户端拒绝新快照并提示升级。
+The version segment `v1` sits in the middle rather than at the outermost layer, so that what the user sees in a WebDAV client is a clean top-level directory. When the protocol evolves incompatibly, this segment is changed so that old and new clients each read their own. Schema compatibility evolution (such as this v1→v2) goes through `schemaVersion` in the manifest: new clients can read old snapshots, and old clients reject new snapshots and prompt for an upgrade.
 
-`profile` 支持同一账号下隔离多套配置（如 work / personal）。
+`profile` supports isolating multiple sets of configurations under the same account (such as work / personal).
 
-**上传顺序是「先 PUT config.json 再 PUT manifest.json」**，这是有意的。manifest 是「这份备份可用」的信号，最后写入；中途失败时远端留下的是旧 manifest + 新 config，下载侧的 sha256 校验会拦下这个不一致，而不会把残缺配置当成合法快照应用。
+**The upload order is "PUT config.json first, then PUT manifest.json"**, and this is intentional. The manifest is the signal that "this backup is usable", so it is written last; if a failure occurs midway, the remote side is left with an old manifest + a new config, and the sha256 check on the download side catches this inconsistency instead of applying the incomplete configuration as a valid snapshot.
 
-所有远端读写由一个全局 mutex 串行化 —— 上传是两步 PUT，并发执行会让两个文件来自不同快照。
+All remote reads and writes are serialized by a single global mutex — an upload is a two-step PUT, and concurrent execution would make the two files come from different snapshots.
 
-## 自动同步
+## Automatic Sync
 
-**只上传，不下载。** 自动拉取远端会在用户毫无察觉的情况下覆盖本机配置，出错方向不可接受，因此拉取永远是手动动作。
+**Upload only, never download.** Automatically pulling from the remote would overwrite the local configuration without the user noticing, and the failure direction is unacceptable, so pulling is always a manual action.
 
-### 触发与防抖
+### Trigger and Debounce
 
-标脏完全在后端完成：`save_providers` / `save_mcp` / `save_system` / `save_agents` / `save_model_failover` / `save_stt` 在 `tx.commit()`（或原子 UPSERT）成功**之后**调用 `mark_dirty()`，回滚的事务不会误触发。这些函数是各域在 SQLite 侧唯一的写入咽喉，天然覆盖 Gateway 发起的写入；快照六域全部落库后，前端不再需要（v1 时代为 localStorage 里的 skills 而设的）显式标脏通道。
+Dirty marking is done entirely in the backend: `save_providers` / `save_mcp` / `save_system` / `save_agents` / `save_model_failover` / `save_stt` call `mark_dirty()` **after** `tx.commit()` (or the atomic UPSERT) succeeds, so rolled-back transactions do not falsely trigger it. These functions are the sole write choke points for each domain on the SQLite side, naturally covering writes initiated by the Gateway; once all six snapshot domains are persisted, the frontend no longer needs the explicit dirty-marking channel (which existed in the v1 era for skills in localStorage).
 
-> 为什么不用 SQLite `update_hook`：`open_db()` 每次调用都新建一个 `Connection`（全仓 69 处调用），而 `update_hook` 是 per-connection 的；且当前只启用了 rusqlite 的 `bundled` feature。
+> Why not use SQLite's `update_hook`: `open_db()` creates a new `Connection` on every call (69 call sites across the repo), while `update_hook` is per-connection; moreover, only rusqlite's `bundled` feature is currently enabled.
 
-脏信号走一个容量 1 的 channel —— 已有未处理信号时新信号直接丢弃，防抖窗口本就会把它们合并成一次上传。窗口为 1s 静默 + 10s 硬上限；没有上限的话，持续编辑（例如逐字输入 API Key）会不断刷新防抖窗口，无限推迟上传。
+The dirty signal goes through a channel with capacity 1 — when an unhandled signal already exists, new signals are simply dropped, since the debounce window would merge them into a single upload anyway. The window is 1s of silence + a 10s hard cap; without a cap, continuous editing (for example typing an API Key character by character) would keep refreshing the debounce window and postpone the upload indefinitely.
 
-### 抑制
+### Suppression
 
-下载并应用远端快照期间持有 `AutoSyncSuppressionGuard`（RAII 引用计数）。应用快照走的正是各域的 `save_*`，不抑制就会把刚从远端拉下来的数据原样推回去。
+While downloading and applying a remote snapshot, `AutoSyncSuppressionGuard` (RAII reference counting) is held. Applying a snapshot goes exactly through each domain's `save_*`; without suppression, it would push the data just pulled from the remote straight back.
 
-本地导入路径（`settings_backup_apply_import`）**有意不抑制** —— 用户主动从文件导入的配置应当传播到远端。
+The local import path (`settings_backup_apply_import`) is **intentionally not suppressed** — a configuration the user actively imports from a file should propagate to the remote.
 
-### 状态反馈
+### Status Feedback
 
-后台同步的结果通过 Tauri 事件 `backup-sync-status-updated` 推送，载荷 `{ lastSyncAt, lastError }`。手动同步的成败由命令的返回值同步告知前端，不走这个事件 —— 所以收到事件就意味着「后台自动同步」。
+The result of background sync is pushed via the Tauri event `backup-sync-status-updated`, with payload `{ lastSyncAt, lastError }`. The success or failure of a manual sync is reported to the frontend synchronously via the command's return value and does not go through this event — so receiving the event means "background automatic sync".
 
-## Tauri 命令
+## Tauri Commands
 
-| 命令 | 说明 |
+| Command | Description |
 |---|---|
-| `settings_backup_export` / `settings_backup_peek_import` / `settings_backup_apply_import` | 本地导入导出；peek 只解析校验、不写入，供确认对话框展示来源设备与条目数。 |
-| `settings_backup_load_sync_config` / `settings_backup_save_sync_config` | 同步配置存取。**回传前端的视图不含密码**，只用 `hasPassword` 告知是否已设置。 |
-| `settings_backup_test_sync_connection` | PROPFIND Depth=0 探活，不解析 XML。 |
-| `settings_backup_fetch_remote_info` | 只拉 manifest，供上传/下载前的确认对话框。远端无备份时返回 `null`。 |
-| `settings_backup_upload` / `settings_backup_download` | 手动同步。 |
+| `settings_backup_export` / `settings_backup_peek_import` / `settings_backup_apply_import` | Local import/export; peek only parses and validates without writing, for the confirmation dialog to display the source device and item count. |
+| `settings_backup_load_sync_config` / `settings_backup_save_sync_config` | Sync config storage/retrieval. **The view returned to the frontend does not contain the password**; it only uses `hasPassword` to indicate whether one has been set. |
+| `settings_backup_test_sync_connection` | PROPFIND Depth=0 liveness check without parsing XML. |
+| `settings_backup_fetch_remote_info` | Fetches only the manifest, for the confirmation dialog before upload/download. Returns `null` when there is no remote backup. |
+| `settings_backup_upload` / `settings_backup_download` | Manual sync. |
 
-**密码回填**：前端未修改密码时传 `passwordTouched: false`，后端沿用库里的旧值。这是 cc-switch 记录过的真实 bug —— UI 给密码框填掩码占位符后原样提交，会把占位符当成新密码写库，用户下次同步就认证失败。
+**Password backfill**: when the frontend has not modified the password, it passes `passwordTouched: false`, and the backend reuses the old value from the database. This is a real bug recorded by cc-switch — after the UI fills the password field with a masked placeholder and submits it as-is, the placeholder gets written to the database as the new password, and the user's next sync fails authentication.
 
-**STT 应用细节**：应用快照时对 stt 域注入 `allowIncomplete: true` —— 源设备可能处于「已清空密钥」等刻意不完整的状态，这份数据当初已被源侧 `save_stt` 接受过，应用侧不按「用户正在提交表单」的标准复验。
+**STT application detail**: when applying a snapshot, `allowIncomplete: true` is injected for the stt domain — the source device may be in an intentionally incomplete state such as "keys already cleared", and this data was already accepted by the source-side `save_stt` back then, so the apply side does not re-validate it by the standard of "the user is currently submitting a form".

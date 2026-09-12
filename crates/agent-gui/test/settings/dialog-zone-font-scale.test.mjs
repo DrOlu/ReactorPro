@@ -9,10 +9,10 @@ function read(relativePath) {
 const UI = "../../../agent-ui/src/components/ui/";
 
 test("dialogs publish their font-scale zone and portaled popups pick it up", () => {
-  // --zone-font-scale 是 CSS 自定义属性，到 portal 边界就断了：对话框里打开的
-  // Select/Dropdown 渲染在 body 下，会退回 1.0，而触发器按对话框的 0.9 绘制。
-  // React context 能穿过 portal：对话框经 context 发布档位，弹层 Positioner 把它
-  // 写回内联变量，.layer-popover 负责按该变量重声明字号变量。
+  // --zone-font-scale is a CSS custom property that breaks at the portal boundary: a Select/Dropdown opened inside a dialog
+  // renders under body and falls back to 1.0, while the trigger is drawn at the dialog's 0.9.
+  // React context can cross the portal: the dialog publishes the scale via context, and the popover Positioner writes it
+  // back to an inline variable, with .layer-popover responsible for re-declaring the font-size variable from it.
   for (const file of ["dialog.tsx", "alert-dialog.tsx"]) {
     const source = read(UI + file);
     assert.match(source, /resolveZoneFontScale\(style, (ALERT_)?DIALOG_FONT_SCALE\)/, file);
@@ -37,7 +37,7 @@ test("scroll-fade hides the native scrollbar only where the fade is applied", ()
     /@supports \(animation-timeline: scroll\(self y\)\) \{[\s\S]*?\n  \}/,
   );
   assert.ok(supports, "@supports block exists");
-  // 没有滚动驱动动画的引擎既不渐隐也不该藏滚动条，否则溢出没有任何提示。
+  // An engine without scroll-driven animation should neither fade nor hide the scrollbar, otherwise overflow gives no indication at all.
   assert.match(supports[0], /scrollbar-width: none;/);
   assert.doesNotMatch(block[0].replace(supports[0], ""), /scrollbar-width: none;/);
   assert.doesNotMatch(css, /@utility no-scrollbar/);

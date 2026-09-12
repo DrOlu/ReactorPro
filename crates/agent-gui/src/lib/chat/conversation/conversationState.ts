@@ -25,7 +25,7 @@ import { buildUiMessages, type UiRound } from "../messages/uiMessages";
 
 export const INTERNAL_RESUME_MESSAGE_TEXT =
   "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.";
-const SILENT_MEMORY_EXTRACTION_FINAL_TEXTS = new Set(["记忆整理完成。", "本轮无需更新记忆。"]);
+const SILENT_MEMORY_EXTRACTION_FINAL_TEXTS = new Set(["Memory organization complete.", "No memory update needed this turn."]);
 
 export type StoredSummaryMessage = {
   role: "summary";
@@ -38,8 +38,8 @@ export type StoredSummaryMessage = {
     coversThroughMessageId: string;
     coveredMessageCount: number;
     basedOnSummaryMessageId?: string;
-    // 确定性机器维护的文件账本，跨 checkpoint 继承。可选字段；旧数据缺失即视为无账本。
-    // 存储在 summaryMeta（对 Rust 的 summary_json 不透明），不占摘要正文的字符预算。
+    // A deterministic machine-maintained file ledger, inherited across checkpoints. Optional field; missing in old data means no ledger.
+    // Stored in summaryMeta (opaque to Rust's summary_json), not consuming the summary body's character budget.
     fileLedger?: FileLedger;
     generatedBy: {
       providerId: string;
@@ -59,9 +59,9 @@ export type StoredSummaryMessage = {
   };
 };
 
-// 压缩引擎在 checkpoint assistant 消息上附带的统计扩展：
-// conversationTokens 是被压缩会话的规模；summarizer 是压缩请求自身的用量。
-// 两者必须分开——checkpoint 消息本身的 usage 恒为零，避免污染 token 观测。
+// Statistics extension attached by the compaction engine to checkpoint assistant messages:
+// conversationTokens is the size of the compacted conversation; summarizer is the usage of the compaction request itself.
+// The two must be kept separate — the checkpoint message's own usage is always zero, avoiding pollution of token observation.
 export type CompactionCheckpointStats = {
   conversationTokens?: number;
   summarizer?: {
@@ -107,8 +107,8 @@ export type RenderSummaryCard = {
     model: string;
     promptVersion?: string;
   };
-  // 压缩落定时的权威上下文占用快照（stats.contextTokensAfter）；用量环
-  // 扫描优先读它，避免退回摘要正文估算（与 WebUI checkpoint 行同口径）。
+  // Authoritative context-usage snapshot at compaction finalization (stats.contextTokensAfter); the usage ring
+  // scan reads it first, avoiding falling back to estimating from the summary body (same basis as the WebUI checkpoint row).
   contextUsageTokens?: number;
   timestamp: number;
   collapsed: boolean;
@@ -457,9 +457,9 @@ function appendCompactionCheckpointToSegments(
     nextSegmentIndex,
     checkpointMessage.timestamp ?? Date.now(),
   );
-  // 累积账本：上一 checkpoint 的账本（seed）+ 本段被折叠消息的新增操作。在消息级合并，
-  // 以保住本段内“先改后读”等真实时序。previousSegment.summary 恰是上一次压缩产生的
-  // checkpoint（basedOn 亦指向它），其 fileLedger 覆盖 previousSegment.messages 之前的历史。
+  // Accumulated ledger: the previous checkpoint's ledger (seed) + the new operations from messages folded in this segment. Merged at the message level
+  // to preserve real ordering such as "write then read" within the segment. previousSegment.summary is exactly the checkpoint produced by the previous compaction
+  // (basedOn also points to it), and its fileLedger covers history before previousSegment.messages.
   const fileLedger = mergeMessagesIntoLedger(
     previousSegment.summary?.summaryMeta.fileLedger,
     previousSegment.messages,

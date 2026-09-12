@@ -106,8 +106,9 @@ export type MentionListResponse = {
   truncated: boolean;
 };
 
-/** 桌面宿主的已安装应用（@ 应用提及）；字段对齐桌面 InstalledApp 的
- *  camelCase 序列化，空串表示缺失（无 bundle id / 取不到图标）。 */
+/** Installed apps on the desktop host (@ app mentions); fields align with the
+ *  desktop InstalledApp's camelCase serialization, and an empty string means
+ *  missing (no bundle id / icon unavailable). */
 export type InstalledAppsListResponse = {
   apps: Array<{ name: string; bundleId: string; path: string; iconDataUrl: string }>;
 };
@@ -145,8 +146,9 @@ export type GatewayWorkspaceRootGrantsResponse = {
   grants: GatewayWorkspaceRootGrant[];
 };
 
-// 检查点回退的载荷类型:UI 层 checkpointRewind 是唯一真源,这里只做转发,
-// 保证 socket 层调用方(gatewaySocket/gatewaySocketRpc)不直接跨层 import。
+// Checkpoint rewind payload types: the UI-layer checkpointRewind is the single
+// source of truth, and here we only re-export, so socket-layer callers
+// (gatewaySocket/gatewaySocketRpc) do not import directly across layers.
 export type {
   CheckpointDiffStats,
   CheckpointRewindClient,
@@ -456,7 +458,7 @@ export function buildWebSocketUrl() {
   }
   const url = new URL(origin);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  // v2 统一线协议端点（WebSocket + Protobuf 二进制帧）。
+  // v2 unified wire-protocol endpoint (WebSocket + Protobuf binary frames).
   url.pathname = "/ws/v2";
   url.search = "";
   url.hash = "";
@@ -927,6 +929,7 @@ export function persistActiveAgent(agentId: string) {
       globalThis.localStorage?.removeItem(ACTIVE_AGENT_STORAGE_KEY);
     }
   } catch {
-    // 隐私模式等场景不可写：选择只在本页生命周期内生效。
+    // Not writable in scenarios such as private mode: the choice only takes effect
+    // for this page's lifetime.
   }
 }

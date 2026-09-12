@@ -5,7 +5,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const implementations = [
   {
-    label: "共享 Skills Hub",
+    label: "Shared Skills Hub",
     loader: createTsModuleLoader(),
     sources: [
       "SkillsHubPage.tsx",

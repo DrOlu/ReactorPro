@@ -1,9 +1,9 @@
 /**
- * 账本 → 视觉记录模型。
+ * Ledger -> visual record model.
  *
- * 事件流只保存时序与结构；完整正文由当前已加载的转录窗口补齐。正文索引可能只是
- * 一个长会话的尾部窗口，因此所有连接都按稳定 messageId → 全局 messageIndex →
- * 局部 turn/尾部顺序逐级降级，绝不假设“窗口里的 Turn 1 就是会话 Turn 1”。
+ * The event stream stores only ordering and structure; the full body is filled in from the currently loaded transcript window. The body index may be only
+ * the tail window of a long conversation, so all joins degrade step by step through stable messageId -> global messageIndex ->
+ * local turn/tail order, and never assume that "Turn 1 in the window is Turn 1 of the conversation".
  */
 
 import type {
@@ -40,7 +40,7 @@ export type TrajectoryToolContent = {
   outputBlocks?: readonly TrajectorySourceBlock[];
 };
 
-/** 一条 assistant 正文及其前置 user 锚点。 */
+/** An assistant body and its preceding user anchor. */
 export type TrajectoryIndexedAssistantContent = {
   turn: number;
   step: number;
@@ -50,7 +50,7 @@ export type TrajectoryIndexedAssistantContent = {
   content: TrajectoryAssistantContent;
 };
 
-/** 一条工具正文；callId 之外还保留 turn/step/user 锚点，避免供应商复用 callId。 */
+/** A tool body; besides callId it keeps turn/step/user anchors, avoiding provider reuse of callId. */
 export type TrajectoryIndexedToolContent = {
   turn: number;
   step: number;
@@ -61,14 +61,14 @@ export type TrajectoryIndexedToolContent = {
   content: TrajectoryToolContent;
 };
 
-/** 正文索引：由宿主从当前已加载的 UiMessage 构建，布局层只读。 */
+/** Body index: built by the host from the currently loaded UiMessages; the layout layer only reads it. */
 export type TrajectoryContentIndex = {
   userByTurn: ReadonlyMap<number, TrajectoryContentEntry>;
   userByMessageId?: ReadonlyMap<string, TrajectoryContentEntry>;
   userByMessageIndex?: ReadonlyMap<number, TrajectoryContentEntry>;
   turnByMessageId?: ReadonlyMap<string, number>;
   turnByMessageIndex?: ReadonlyMap<number, number>;
-  /** 当前消息窗口按出现顺序对应的 turn；无稳定锚点时用于安全的尾部对齐。 */
+  /** The turn corresponding to the current message window in appearance order; used for safe tail alignment when there is no stable anchor. */
   turnOrder?: readonly number[];
   assistantByStep: ReadonlyMap<string, TrajectoryAssistantContent>;
   assistantEntries?: readonly TrajectoryIndexedAssistantContent[];
@@ -162,11 +162,11 @@ function userInputOf(turn: LedgerTurn | undefined): LedgerInput | undefined {
 }
 
 /**
- * 把权威 ledger turn 映射到当前正文窗口。
+ * Map authoritative ledger turns to the current body window.
  *
- * 稳定 messageId 优先，其次是 conversation-global messageIndex；两者都没有的旧数据按
- * 当前可见窗口与 ledger 的尾部顺序对齐。这样旧会话尾窗仍可读，但不会把真实 Turn 93
- * 永久误编号为 Turn 1。
+ * Stable messageId takes priority, followed by conversation-global messageIndex; old data lacking both is aligned by
+ * tail order between the currently visible window and the ledger. This way an old conversation's tail window remains readable, but a real Turn 93
+ * is not permanently mis-numbered as Turn 1.
  */
 function resolveContentTurnMap(
   ledger: TrajectoryLedger,
@@ -429,8 +429,8 @@ function buildSubagentRecords(
     if (run === undefined) continue;
     for (const runStep of run.steps) {
       for (const tool of runStep.tools) {
-        // 工具自身的起止优先；消息缺时间戳（旧数据）时回退所属 step 的跨度，
-        // 有自身起点但结果未回时不伪造到 step 结束的时长 —— 交给状态列表达运行/中断。
+        // The tool's own start/end takes priority; when a message lacks a timestamp (old data), fall back to its step's span,
+        // and when there is a start but the result has not returned, do not fabricate a duration to the step's end — leave running/interrupted to the status column.
         const hasOwnTiming = tool.startedAt !== undefined && tool.startedAt !== null;
         const toolStartedAt = tool.startedAt ?? runStep.startedAt;
         const toolEndedAt = hasOwnTiming
@@ -554,7 +554,7 @@ function orderTurnItems(turn: LedgerTurn): TurnItem[] {
     .map((entry) => entry.item);
 }
 
-/** 最终按显示顺序重新编号，保证时间插入的 standalone compaction 不破坏单调 index。 */
+/** Finally re-number in display order, guaranteeing that standalone compaction inserted in time does not break the monotonic index. */
 function reindexModels(models: readonly TrajectoryTurnModel[]): readonly TrajectoryTurnModel[] {
   let index = 0;
   return models.map((model) => ({

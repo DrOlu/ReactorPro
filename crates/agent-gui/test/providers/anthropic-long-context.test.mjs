@@ -31,7 +31,7 @@ function makeAnthropicModel(overrides = {}) {
   };
 }
 
-test("长上下文 beta：adaptive 模型 ctx>200K 时仅追加 context-1m，保留既有请求头", () => {
+test("Long-context beta: for adaptive models with ctx>200K only context-1m is appended, preserving existing request headers", () => {
   const options = {
     apiKey: "sk-relay-key",
     headers: { Authorization: "Bearer sk-relay-key", "x-api-key": "sk-relay-key" },
@@ -44,11 +44,11 @@ test("长上下文 beta：adaptive 模型 ctx>200K 时仅追加 context-1m，保
   assert.equal(next.headers["anthropic-beta"], CONTEXT_1M_BETA);
   assert.equal(next.headers.Authorization, "Bearer sk-relay-key");
   assert.equal(next.headers["x-api-key"], "sk-relay-key");
-  // 原 options 不被原地修改。
+  // The original options are not mutated in place.
   assert.equal(options.headers["anthropic-beta"], undefined);
 });
 
-test("长上下文 beta：非 adaptive 模型镜像 pi-ai 的 interleaved beta 再追加 context-1m", () => {
+test("Long-context beta: non-adaptive models mirror pi-ai's interleaved beta and then append context-1m", () => {
   const next = longContext.attachAnthropicLongContextBeta(
     { apiKey: "sk-relay-key", headers: {} },
     {
@@ -60,7 +60,7 @@ test("长上下文 beta：非 adaptive 模型镜像 pi-ai 的 interleaved beta �
   assert.equal(next.headers["anthropic-beta"], `${INTERLEAVED_BETA},${CONTEXT_1M_BETA}`);
 });
 
-test("长上下文 beta：compat 关闭 eager streaming 且带工具时镜像 fine-grained beta", () => {
+test("Long-context beta: with compat disabling eager streaming and tools present, mirror the fine-grained beta", () => {
   const next = longContext.attachAnthropicLongContextBeta(
     { apiKey: "sk-relay-key", headers: {} },
     {
@@ -78,7 +78,7 @@ test("长上下文 beta：compat 关闭 eager streaming 且带工具时镜像 fi
   assert.equal(next.headers["anthropic-beta"], `${FINE_GRAINED_BETA},${CONTEXT_1M_BETA}`);
 });
 
-test("长上下文 beta：忽略已有值，仅使用 pi-ai 动态 beta 与 context-1m", () => {
+test("Long-context beta: ignore existing values and use only pi-ai's dynamic beta and context-1m", () => {
   const next = longContext.attachAnthropicLongContextBeta(
     {
       apiKey: "sk-relay-key",
@@ -101,7 +101,7 @@ test("长上下文 beta：忽略已有值，仅使用 pi-ai 动态 beta 与 cont
   assert.equal(next.headers.Authorization, "Bearer sk-relay-key");
 });
 
-test("长上下文 beta：Anthropic 官方与 Vertex 端点不注入 HTTP 1M beta 头", () => {
+test("Long-context beta: Anthropic official and Vertex endpoints do not inject the HTTP 1M beta header", () => {
   for (const baseUrl of [
     "https://api.anthropic.com/v1",
     "https://us-central1-aiplatform.googleapis.com/v1",
@@ -119,7 +119,7 @@ test("长上下文 beta：Anthropic 官方与 Vertex 端点不注入 HTTP 1M bet
   }
 });
 
-test("长上下文 beta：标准窗口/OAuth/非 anthropic api 一律不改写", () => {
+test("Long-context beta: standard window/OAuth/non-anthropic api are never rewritten", () => {
   const standardWindow = { apiKey: "sk-relay-key", headers: {} };
   assert.equal(
     longContext.attachAnthropicLongContextBeta(standardWindow, {
@@ -130,8 +130,8 @@ test("长上下文 beta：标准窗口/OAuth/非 anthropic api 一律不改写",
     standardWindow,
   );
 
-  // OAuth：pi-ai 注入 claude-code/oauth beta 组合，覆盖会破坏鉴权；官方 GA 后
-  // OAuth 也无需该头。
+  // OAuth: pi-ai injects the claude-code/oauth beta combination, and overriding it would break
+  // authentication; after official GA, OAuth does not need this header either.
   const oauth = { apiKey: "sk-ant-oat01-xxx", headers: {} };
   assert.equal(
     longContext.attachAnthropicLongContextBeta(oauth, {
@@ -162,7 +162,7 @@ test("长上下文 beta：标准窗口/OAuth/非 anthropic api 一律不改写",
   );
 });
 
-test("payload 管线：目录模型经 createModelFromConfig 后自动携带 1M beta 头", () => {
+test("Payload pipeline: catalog models automatically carry the 1M beta header after createModelFromConfig", () => {
   const model = modelFactory.createModelFromConfig(
     "claude_code",
     "claude-sonnet-4-6",
@@ -178,17 +178,17 @@ test("payload 管线：目录模型经 createModelFromConfig 后自动携带 1M 
   assert.equal(finalized.headers["x-api-key"], "sk-relay-key");
 });
 
-test("id 规范化：剥离 [1m] 后缀并与日期/@版本/大小写规则组合", () => {
+test("Id normalization: strip the [1m] suffix and combine it with date/@version/case rules", () => {
   const candidates = anthropicModels.normalizeAnthropicModelIdCandidates(
     "Claude-Sonnet-4-6-20260101[1m]",
   );
   assert.ok(candidates.includes("claude-sonnet-4-6"));
   assert.ok(candidates.includes("claude-sonnet-4-6-20260101"));
-  // 原始 id 始终是首选候选，命中目录后请求体仍用原始 id。
+  // The original id is always the preferred candidate, and after a catalog hit the request body still uses the original id.
   assert.equal(candidates[0], "Claude-Sonnet-4-6-20260101[1m]");
 });
 
-test("wire model id：官方端点剥离 [1m]，兼容中转保留端点要求的 suffix", () => {
+test("Wire model id: official endpoints strip [1m], while compatibility relays keep the suffix required by the endpoint", () => {
   const official = modelFactory.createModelFromConfig(
     "claude_code",
     "claude-sonnet-4-6[1m]",
@@ -212,7 +212,7 @@ test("wire model id：官方端点剥离 [1m]，兼容中转保留端点要求�
   assert.equal(relay.contextWindow, 1_000_000);
 });
 
-test("有效限额：adaptive 世代保留 1M，旧世代默认钳回 200K，显式 [1m] 走中转 1M", () => {
+test("Effective limit: adaptive generations keep 1M, older generations clamp back to 200K by default, and an explicit [1m] goes through as relay 1M", () => {
   assert.deepEqual(anthropicModels.resolveAnthropicKnownModelLimits("claude-sonnet-4-6"), {
     contextWindow: 1_000_000,
     maxOutputToken: 128_000,
@@ -221,7 +221,7 @@ test("有效限额：adaptive 世代保留 1M，旧世代默认钳回 200K，显
     contextWindow: 1_000_000,
     maxOutputToken: 128_000,
   });
-  // 官方 2026-04-30 起 sonnet-4/4.5 的 context-1m beta 退役，目录 1M 是历史数值。
+  // Anthropic retired the context-1m beta for sonnet-4/4.5 as of 2026-04-30; the catalog's 1M is a historical value.
   assert.deepEqual(anthropicModels.resolveAnthropicKnownModelLimits("claude-sonnet-4-5"), {
     contextWindow: 200_000,
     maxOutputToken: 64_000,
@@ -236,7 +236,7 @@ test("有效限额：adaptive 世代保留 1M，旧世代默认钳回 200K，显
   assert.equal(anthropicModels.resolveAnthropicKnownModelLimits("unknown-model"), undefined);
 });
 
-test("settings 默认值：装饰 id 继承规范化目录限额，未知 id 落回 200K 默认", () => {
+test("Settings defaults: decorated ids inherit the normalized catalog limit, and unknown ids fall back to the 200K default", () => {
   assert.equal(
     settings.getProviderModelDefaults("claude_code", "claude-sonnet-4-6-20260101").contextWindow,
     1_000_000,

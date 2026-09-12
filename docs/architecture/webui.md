@@ -1,97 +1,97 @@
-# WebUI 架构
+# WebUI Architecture
 
-## 定位
+## Positioning
 
-WebUI 是 Gateway 承载的浏览器端操作台。它与 GUI 共同复用 `crates/agent-ui`，但不直接执行 Agent、本地工具或 Tauri 命令。所有需要本地权限的操作都通过 Gateway WebSocket/HTTP 转发到桌面端。
+WebUI is the browser-side console hosted by Gateway. It shares `crates/agent-ui` with the GUI, but does not directly execute Agents, local tools, or Tauri commands. All operations requiring local permissions are forwarded to the desktop via Gateway WebSocket/HTTP.
 
-## 主要模块
+## Main Modules
 
-| 模块 | 路径 | 职责 |
+| Module | Path | Responsibility |
 |---|---|---|
-| App shell | `crates/agent-gateway/web/src/App.tsx`、`web/src/app/GatewayApp.tsx` | `App` 负责登录与启动，`GatewayApp` 负责 socket、settings/history/chat 状态和共享 UI 的数据装配。 |
-| Socket client | `web/src/lib/gatewaySocket.ts` | v2 WebSocket（Protobuf 帧）请求/响应、广播监听、连接超时、原生 Chat Runtime 唤醒、Chat command ACK 恢复与错误处理；proto 生成代码位于 `web/src/lib/proto/gen/`。 |
-| Conversation stream | `web/src/lib/chat/stream/conversationStreamClient.ts` | 按会话持久订阅注册表：维护 `after_seq`/`stream_epoch` 游标、重连自动重订阅、gap resync 与有界退避重试。 |
-| Gateway types | `web/src/lib/gatewayTypes.ts` | WebUI 侧协议类型。 |
-| Settings storage | `web/src/lib/webSettings.ts`、`web/src/lib/settings/*` | 浏览器本地设置缓存、脱敏 provider snapshot、settings sync payload。 |
-| History sync | `web/src/lib/sidebar/webSidebarBackend.ts`、`web/src/lib/chat/chatHistory.ts`、`web/src/lib/historyParser.ts` | 历史摘要/事件同步、详情读取和大历史 worker 解析。 |
-| Transcript | `web/src/components/GatewayTranscript.tsx`、`web/src/pages/chat/*` | WebUI 行模型、流式快照和虚拟列表；composer/header/消息操作等公共视觉来自 `agent-ui`。 |
-| Shared UI | `crates/agent-ui/src/*` | GUI/WebUI 共用的 Settings shell、Hub、chat sidebar、project tools 与领域逻辑。 |
-| 宿主能力 | `web/src/agent-ui-adapters/*`、`web/src/shims/*` | 为共享 UI 提供 Gateway/browser 实现，并隔离残留的 Tauri 兼容入口。 |
+| App shell | `crates/agent-gateway/web/src/App.tsx`, `web/src/app/GatewayApp.tsx` | `App` handles login and startup; `GatewayApp` handles the socket, settings/history/chat state, and data assembly for the shared UI. |
+| Socket client | `web/src/lib/gatewaySocket.ts` | v2 WebSocket (Protobuf frames) request/response, broadcast listening, connection timeout, native Chat Runtime wake-up, Chat command ACK recovery, and error handling; the proto-generated code is located in `web/src/lib/proto/gen/`. |
+| Conversation stream | `web/src/lib/chat/stream/conversationStreamClient.ts` | Per-conversation persistent subscription registry: maintains `after_seq`/`stream_epoch` cursors, auto-resubscribe on reconnect, gap resync, and bounded backoff retries. |
+| Gateway types | `web/src/lib/gatewayTypes.ts` | Protocol types on the WebUI side. |
+| Settings storage | `web/src/lib/webSettings.ts`, `web/src/lib/settings/*` | Browser-local settings cache, redacted provider snapshot, settings sync payload. |
+| History sync | `web/src/lib/sidebar/webSidebarBackend.ts`, `web/src/lib/chat/chatHistory.ts`, `web/src/lib/historyParser.ts` | History summary/event sync, detail reading, and large-history worker parsing. |
+| Transcript | `web/src/components/GatewayTranscript.tsx`, `web/src/pages/chat/*` | WebUI row model, streaming snapshot, and virtual list; shared visuals such as composer/header/message actions come from `agent-ui`. |
+| Shared UI | `crates/agent-ui/src/*` | Settings shell, Hub, chat sidebar, project tools, and domain logic shared by GUI/WebUI. |
+| Host capabilities | `web/src/agent-ui-adapters/*`, `web/src/shims/*` | Provide Gateway/browser implementations for the shared UI and isolate leftover Tauri compatibility entry points. |
 
-## 连接与认证
+## Connection and Authentication
 
-| 阶段 | 行为 |
+| Stage | Behavior |
 |---|---|
-| token 读取 | WebUI 从浏览器存储读取 token，或通过 LoginPage 输入。 |
-| socket 创建 | `getGatewayWebSocketClient(token)` 建立 `/ws/v2` 连接（Protobuf 二进制帧，子协议 `liveagent.v2.pb`）；连接建立总超时为 10 秒，认证另有 15 秒超时，旧连接迟到的 close 不会误伤新连接。 |
-| 状态订阅 | 订阅 Gateway status，展示 Desktop Agent online/offline。 |
-| 请求响应 | 所有 request 带 id，Gateway 用同 id 返回 payload 或 error。 |
-| Chat 唤醒 | 用户消息先即时 optimistic echo，再串行发送 `chat.prepare`；Gateway 通过关联原生 Ping/Pong 真正唤醒桌面 Chat Runtime，并让紧随其后的 command 复用同一 Agent session 上 2 秒内的新鲜探测，避免正常路径重复一个原生 RTT。准备请求最多等待 2.5 秒，旧 Gateway 不支持该方法时回退到 `status.get`，最终仍由 `chat.command` 作为兜底唤醒信号。 |
-| Chat 流 | 提交/编辑/取消走 WebSocket `chat.command`；ACK 最多等待 4 秒，连接中断或 ACK 丢失时只重试一次，并复用完全相同的 payload 与 `client_request_id`。流式输出走按会话持久订阅 `chat.subscribe`（`chat.event` 推送，seq 续传）。 |
-| 断线恢复 | WebSocket client 处理普通同步重连；Chat 订阅在 history snapshot hydrate 后重发 `chat.subscribe`，按同 conversation 单调递增的 `after_seq`（配合 `stream_epoch`）跨 run 补齐内存窗口内的缺失事件；单次订阅 5 秒超时，失败后以 250ms、500ms、1s、2s、5s 上限加 jitter 自恢复。观察正在运行的远程会话时优先使用 `history.list.running_conversations[].first_seq - 1` 作为当前 run 的订阅起点。 |
+| token read | WebUI reads the token from browser storage, or the user enters it via LoginPage. |
+| socket creation | `getGatewayWebSocketClient(token)` establishes a `/ws/v2` connection (Protobuf binary frames, subprotocol `liveagent.v2.pb`); the overall connection timeout is 10 seconds, authentication has a separate 15-second timeout, and a late close from an old connection will not affect the new one. |
+| status subscription | Subscribes to Gateway status and shows Desktop Agent online/offline. |
+| request/response | All requests carry an id; Gateway returns a payload or error with the same id. |
+| Chat wake-up | User messages are first echoed optimistically and immediately, then `chat.prepare` is sent serially; Gateway truly wakes the desktop Chat Runtime via a correlated native Ping/Pong, and lets the immediately following command reuse a fresh probe within 2 seconds on the same Agent session, avoiding an extra native RTT on the normal path. The prepare request waits at most 2.5 seconds, falling back to `status.get` when an older Gateway does not support the method, with `chat.command` as the final fallback wake-up signal. |
+| Chat stream | Submit/edit/cancel go through the WebSocket `chat.command`; ACK waits at most 4 seconds, and on connection interruption or lost ACK it retries exactly once, reusing the completely identical payload and `client_request_id`. Streaming output uses the per-conversation persistent subscription `chat.subscribe` (`chat.event` pushes, seq continuation). |
+| Reconnect recovery | The WebSocket client handles ordinary synchronous reconnects; after the history snapshot is hydrated, the Chat subscription resends `chat.subscribe` with a monotonically increasing `after_seq` for the same conversation (together with `stream_epoch`) to fill missing events within the in-memory window across runs; a single subscription times out after 5 seconds, and on failure it self-recovers with 250ms, 500ms, 1s, 2s, 5s caps plus jitter. When observing a running remote conversation, prefer `history.list.running_conversations[].first_seq - 1` as the subscription start point for the current run. |
 
-## WebUI 本地状态
+## WebUI Local State
 
-| 状态 | 来源 | 用途 |
+| State | Source | Purpose |
 |---|---|---|
-| `token` | 用户输入/localStorage | WebSocket 和 HTTP API 认证。 |
-| `settings` | Gateway `settings.get`、`settings.event`、local redacted cache | 渲染 Settings、Chat mode、model list、MCP/Skills/Memory 等。 |
-| `historyItems` | Gateway `history.list`、`history.event` | 侧边栏、pin/share/delete/rename。 |
-| `visible transcript` | `history.get`、live chat events、本地 draft | 当前会话内容。 |
-| `live stream cache` | Chat Command 返回、`chat.subscribe` replay 与 `chat.event` 推送 | 保持运行中会话流式可见。 |
-| `draft conversation` | WebUI 本地临时 id | 新对话提交后迁移到桌面端返回的真实 conversationId。 |
-| upload cache | HTTP upload response | 将导入后的 `ChatUploadedFile` 附到下一次 Chat Command。 |
+| `token` | user input/localStorage | WebSocket and HTTP API authentication. |
+| `settings` | Gateway `settings.get`, `settings.event`, local redacted cache | Render Settings, Chat mode, model list, MCP/Skills/Memory, etc. |
+| `historyItems` | Gateway `history.list`, `history.event` | Sidebar, pin/share/delete/rename. |
+| `visible transcript` | `history.get`, live chat events, local draft | Current conversation content. |
+| `live stream cache` | Chat Command response, `chat.subscribe` replay and `chat.event` pushes | Keep running conversations visible while streaming. |
+| `draft conversation` | WebUI local temporary id | Migrated to the real conversationId returned by the desktop after the new conversation is submitted. |
+| upload cache | HTTP upload response | Attach the imported `ChatUploadedFile` to the next Chat Command. |
 
 ## Session Workbench
 
-- WebUI 与 Desktop 复用 `@liveagent/ui` 的 PaneTree、几何、拖拽事务、终端租约和 Surface 外壳。
-- 会话的流、草稿、附件、队列、审批、模型与轨迹状态均按 `conversationId` 分桶；drop/paste 在事件落点读取 Pane 的会话标记，不依赖异步焦点切换。
-- WebUI 刷新始终以当前会话创建单 Root Pane，并向 `useWindowWorkbench` 传入 `persistence: false`，不会恢复浏览器上一次多 Pane 布局。
-- WebUI 终端通过 Gateway 创建；显式拖入或菜单新建会立即授权启动。若未来恢复出无运行时绑定的终端 Surface，仍须用户确认后才能创建本地或 SSH 会话。
-- `VITE_LIVEAGENT_SESSION_WORKBENCH=0` 可回退旧单 Pane 渲染路径，默认值为开启。
+- WebUI and Desktop share `@liveagent/ui`'s PaneTree, geometry, drag transactions, terminal leases, and Surface shell.
+- A conversation's stream, draft, attachments, queue, approvals, model, and trace state are all bucketed by `conversationId`; drop/paste reads the Pane's conversation marker at the event location, without relying on asynchronous focus switching.
+- WebUI refresh always creates a single Root Pane for the current conversation and passes `persistence: false` to `useWindowWorkbench`, so the browser's previous multi-Pane layout is not restored.
+- WebUI terminals are created through Gateway; explicitly dragging one in or creating one from the menu authorizes startup immediately. If a terminal Surface with no runtime binding is ever restored, the user must still confirm before a local or SSH session can be created.
+- `VITE_LIVEAGENT_SESSION_WORKBENCH=0` falls back to the old single-Pane rendering path; it is enabled by default.
 
-## 与 GUI 的共享和分离
+## Sharing and Separation from the GUI
 
-| 维度 | 说明 |
+| Dimension | Description |
 |---|---|
-| 视觉/交互 | Settings、Skills Hub、MCP Hub、Chat sidebar、AssistantBubble 等与 GUI 保持 parity。 |
-| 源码组织 | 公共源码位于 `crates/agent-ui`；WebUI 只保留 Gateway、登录、远程状态和浏览器传输等应用逻辑。`scripts/check-ui-boundaries.mjs` 阻止共享层反向依赖具体应用，并禁止应用保留同路径副本。 |
-| 能力差异 | Settings 通过 `UiExtensionRegistry` 注册页面：WebUI 独有 `devices`，GUI 独有 `shortcuts` 与 `about`。 |
-| Tauri API | WebUI 通过 Vite alias 指向 shims，避免真实 Tauri 依赖进入浏览器运行时。 |
-| 数据通道 | GUI 走 Tauri invoke；WebUI 走 Gateway WebSocket/HTTP。 |
-| 执行权限 | GUI 可以触发本地工具；WebUI 只能请求桌面端代执行。 |
+| Visuals/interactions | Settings, Skills Hub, MCP Hub, Chat sidebar, AssistantBubble, etc. stay at parity with the GUI. |
+| Source organization | Shared source lives in `crates/agent-ui`; WebUI keeps only application logic such as Gateway, login, remote state, and browser transport. `scripts/check-ui-boundaries.mjs` prevents the shared layer from depending on a specific app in reverse and forbids apps from keeping duplicate copies at the same path. |
+| Capability differences | Settings registers pages via `UiExtensionRegistry`: WebUI has `devices` exclusively, while GUI has `shortcuts` and `about` exclusively. |
+| Tauri API | WebUI points to shims via a Vite alias, keeping real Tauri dependencies out of the browser runtime. |
+| Data channel | GUI uses Tauri invoke; WebUI uses Gateway WebSocket/HTTP. |
+| Execution permissions | GUI can trigger local tools; WebUI can only request the desktop to execute on its behalf. |
 
-## WebUI 支持的主要 Gateway 方法
+## Main Gateway Methods Supported by WebUI
 
-| 方法族 | 示例 |
+| Method family | Examples |
 |---|---|
-| Auth/status | `status.get`、socket auth/unauthorized handling |
-| Chat | WS `chat.prepare`、`chat.command`（`chat.submit`/`chat.edit_resend`/`chat.cancel`）、`chat.subscribe`/`chat.unsubscribe`、`chat.activities`；事件经 `chat.event`/`chat.command_update` 推送 |
-| History | `history.list`、`history.get`、`history.rename`、`history.pin`、`history.share.get`、`history.share.set`、`history.delete` |
-| Settings | `settings.get`、`settings.update` |
-| Providers | `providers.list`、provider model scan related request |
-| Skills | `skills.list`、`skills.manage`、`skills.read-metadata`、`skills.read-text` |
-| MCP | MCP settings 通过 settings 更新；运行期工具由桌面端执行。 |
+| Auth/status | `status.get`, socket auth/unauthorized handling |
+| Chat | WS `chat.prepare`, `chat.command` (`chat.submit`/`chat.edit_resend`/`chat.cancel`), `chat.subscribe`/`chat.unsubscribe`, `chat.activities`; events are pushed via `chat.event`/`chat.command_update` |
+| History | `history.list`, `history.get`, `history.rename`, `history.pin`, `history.share.get`, `history.share.set`, `history.delete` |
+| Settings | `settings.get`, `settings.update` |
+| Providers | `providers.list`, provider model scan related request |
+| Skills | `skills.list`, `skills.manage`, `skills.read-metadata`, `skills.read-text` |
+| MCP | MCP settings are updated via settings; runtime tools are executed by the desktop. |
 | Cron | `cron.manage` |
 | Memory | `memory.manage` |
-| Files | 文件上传走 HTTP `/api/files/import`；目录选择会重建并导入目录树，将其挂载为当前项目的只读 workspace root，活动 root 显示在 File Tree 中。mentions/fs roots/list dirs 走 Gateway request。 |
+| Files | File uploads go over HTTP `/api/files/import`; selecting a directory rebuilds and imports the directory tree, mounting it as a read-only workspace root for the current project, and the active root is shown in the File Tree. mentions/fs roots/list dirs go over Gateway request. |
 
-## Provider Secret 处理
+## Provider Secret Handling
 
-| 场景 | 处理 |
+| Scenario | Handling |
 |---|---|
-| GUI -> Gateway settings sync | provider API key 被 redaction，只同步 `apiKeyConfigured` 等 presence 信息。 |
-| Gateway -> WebUI | WebUI 只能看到脱敏快照。 |
-| WebUI 保存已有 provider | 未输入新 key 时不把空/脱敏值覆盖回 GUI 真实 key。 |
-| WebUI 输入新 key | 通过 `providerApiKeyUpdates` 单向发回 GUI 更新。 |
-| WebUI localStorage | 保存 redacted provider settings，避免浏览器长期保存真实 secret。 |
+| GUI -> Gateway settings sync | Provider API keys are redacted; only presence information such as `apiKeyConfigured` is synced. |
+| Gateway -> WebUI | WebUI can only see a redacted snapshot. |
+| WebUI saves an existing provider | When no new key is entered, empty/redacted values do not overwrite the real key in the GUI. |
+| WebUI enters a new key | Sent one-way back to the GUI for update via `providerApiKeyUpdates`. |
+| WebUI localStorage | Stores redacted provider settings, avoiding long-term storage of real secrets in the browser. |
 
-## WebUI 的重要限制
+## Important WebUI Limitations
 
-| 限制 | 影响 |
+| Limitation | Impact |
 |---|---|
-| 不直接执行工具 | Shell、FS、MCP、Memory mutation、Cron prompt 都必须回到桌面端。 |
-| 依赖 Gateway 在线 | Gateway 或 Desktop offline 时，Chat/Settings/History 能力受限。 |
-| 共享边界 | 公共交互改动只修改 `crates/agent-ui`；应用差异必须留在 `@liveagent/adapters` 或扩展注册表中。 |
-| 浏览器存储不是权威 | Settings 和 history 的真实来源仍是桌面端 SQLite 与 Gateway sync。 |
-| Gateway relay 不是持久历史 | `chat.subscribe` 的 seq replay 来自 Gateway 进程内的有界事件窗口；Gateway 重启或窗口 reset 时，WebUI 以桌面历史 snapshot 重新 hydrate。 |
+| Does not directly execute tools | Shell, FS, MCP, Memory mutation, and Cron prompts must all go back to the desktop. |
+| Depends on Gateway being online | When Gateway or Desktop is offline, Chat/Settings/History capabilities are limited. |
+| Shared boundaries | Changes to shared interactions modify only `crates/agent-ui`; application differences must stay in `@liveagent/adapters` or the extension registry. |
+| Browser storage is not authoritative | The real source of Settings and history remains desktop SQLite and Gateway sync. |
+| Gateway relay is not persistent history | `chat.subscribe` seq replay comes from a bounded event window inside the Gateway process; when Gateway restarts or the window resets, WebUI re-hydrates from the desktop history snapshot. |

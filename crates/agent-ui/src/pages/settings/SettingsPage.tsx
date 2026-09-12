@@ -1,5 +1,4 @@
 import { createSettingsExtension } from "@liveagent/adapters/settingsExtension";
-import type { SttProviderId } from "@liveagent/app/lib/settings";
 import type { SettingsPageProps } from "@liveagent/app/pages/settings/types";
 import {
   Blend,
@@ -10,13 +9,12 @@ import {
   Cloud,
   Cpu,
   Key,
-  Mic,
   Settings2,
   SquareMousePointer,
   Wrench,
   Zap,
 } from "@liveagent/ui/components/IconSet";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SettingsSectionDefinition, UiExtensionRegistry } from "../../contracts/registry";
 import { AgentsSection } from "./AgentsSection";
 import { CronSection } from "./CronSection";
@@ -28,15 +26,10 @@ import { RemoteSection } from "./RemoteSection";
 import { ResourceHubSection } from "./ResourceHubSection";
 import { SettingsShell } from "./SettingsShell";
 import { SshSection } from "./SshSection";
-import { SttSection } from "./SttSection";
 import { SystemSettingsForm } from "./SystemSettingsForm";
 import { SystemToolsSection } from "./SystemToolsSection";
 
 const EMPTY_SERVICES = {};
-const STT_SELECTED_PROVIDER_CACHE = new WeakMap<
-  SettingsPageProps["sttSettingsService"],
-  SttProviderId
->();
 
 export function SettingsPage(props: SettingsPageProps) {
   const {
@@ -47,35 +40,11 @@ export function SettingsPage(props: SettingsPageProps) {
     initialSection = "system",
     initialProviderId,
     hiddenSections = [],
-    sttSettingsService,
-    onSttProviderChange,
   } = props;
   const [pendingProviderId, setPendingProviderId] = useState(initialProviderId);
-  const [sttSelectedProvider, setSttSelectedProvider] = useState<SttProviderId>(
-    () =>
-      STT_SELECTED_PROVIDER_CACHE.get(sttSettingsService) ??
-      settings.stt.provider ??
-      "tencent_cloud",
-  );
-  const sttSelectionChangedRef = useRef(STT_SELECTED_PROVIDER_CACHE.has(sttSettingsService));
   const extension = createSettingsExtension(props);
 
   useEffect(() => setPendingProviderId(initialProviderId), [initialProviderId]);
-  useEffect(() => {
-    if (!sttSelectionChangedRef.current) {
-      setSttSelectedProvider(settings.stt.provider ?? "tencent_cloud");
-    }
-  }, [settings.stt.provider]);
-
-  const handleSttProviderChange = useCallback(
-    (provider: SttProviderId) => {
-      sttSelectionChangedRef.current = true;
-      STT_SELECTED_PROVIDER_CACHE.set(sttSettingsService, provider);
-      setSttSelectedProvider(provider);
-      onSttProviderChange?.(provider);
-    },
-    [onSttProviderChange, sttSettingsService],
-  );
 
   const sections = useMemo<SettingsSectionDefinition<void>[]>(
     () => [
@@ -157,9 +126,11 @@ export function SettingsPage(props: SettingsPageProps) {
         render: () => <SystemToolsSection settings={settings} setSettings={setSettings} />,
       },
       {
-        // Computer Use（CUA）。两端同一份引导页：探测与授权状态经宿主真实读取
-        // （WebUI 走 gateway 中继），设置项两端同样可写，只有安装与授权两个必须
-        // 在桌面主机那台机器上完成的动作在 web 面收起——判定交给组件的 surface。
+        // Computer Use (CUA). Both ends share the same onboarding page: probe and
+        // authorization state are read truly from the host (WebUI via the gateway
+        // relay), settings are writable on both ends, and only the two actions that
+        // must be performed on the desktop host machine are collapsed on the web
+        // side -- the decision is left to the component's surface.
         id: "cua",
         groupKey: "settings.groupIntelligence",
         groupOrder: 25,
@@ -171,23 +142,6 @@ export function SettingsPage(props: SettingsPageProps) {
             settings={settings}
             setSettings={setSettings}
             surface={extension.surface}
-          />
-        ),
-      },
-      {
-        id: "stt",
-        groupKey: "settings.groupIntelligence",
-        groupOrder: 25,
-        order: 30,
-        labelKey: "settings.navStt",
-        icon: <Mic className={extension.iconClassName} />,
-        render: () => (
-          <SttSection
-            settings={settings}
-            setSettings={setSettings}
-            service={sttSettingsService}
-            selectedProvider={sttSelectedProvider}
-            onSelectedProviderChange={handleSttProviderChange}
           />
         ),
       },
@@ -232,16 +186,7 @@ export function SettingsPage(props: SettingsPageProps) {
       },
       ...extension.sections,
     ],
-    [
-      extension,
-      handleSttProviderChange,
-      pendingProviderId,
-      saveState,
-      setSettings,
-      settings,
-      sttSelectedProvider,
-      sttSettingsService,
-    ],
+    [extension, pendingProviderId, saveState, setSettings, settings],
   );
   const registry: UiExtensionRegistry<void> = {
     surface: extension.surface,

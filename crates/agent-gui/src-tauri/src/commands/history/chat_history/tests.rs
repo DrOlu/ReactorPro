@@ -5,9 +5,9 @@ mod tests {
 
     fn open_test_db() -> Result<Connection, String> {
         let conn =
-            Connection::open_in_memory().map_err(|e| format!("打开测试聊天历史数据库失败：{e}"))?;
+            Connection::open_in_memory().map_err(|e| format!("failed to open test chat history database: {e}"))?;
         conn.busy_timeout(Duration::from_secs(5))
-            .map_err(|e| format!("设置测试 SQLite busy_timeout 失败：{e}"))?;
+            .map_err(|e| format!("failed to set test SQLite busy_timeout: {e}"))?;
         history_db::initialize_connection(&conn)?;
         Ok(conn)
     }
@@ -555,18 +555,19 @@ mod tests {
 
         let empty_target =
             set_chat_history_cwd_sync(&conn, "conv-1", "  ").expect_err("reject empty target");
-        assert!(empty_target.contains("工作空间"));
+        assert!(empty_target.contains("workspace"));
 
         let missing =
             set_chat_history_cwd_sync(&conn, "does-not-exist", "/tmp/project-b")
                 .expect_err("reject missing conversation");
-        assert!(missing.contains("未找到"));
+        assert!(missing.contains("No matching history conversation"));
     }
 
     #[test]
     fn v1_database_gains_selected_model_column_via_v2_migration() {
-        // 复现存量库场景：完整的 v1 schema（无 selected_model_json）且
-        // user_version 已到 1——版本门禁必须由 v2 迁移补齐新列。
+        // Reproduce the existing-database scenario: a complete v1 schema
+        // (without selected_model_json) with user_version already at 1 -- the
+        // version gate must have the v2 migration add the new columns.
         let v1 = Connection::open_in_memory().expect("open v1 in-memory chat history database");
         v1.execute_batch(
             "
@@ -981,8 +982,8 @@ mod tests {
                 segment_id: "segment-0".to_string(),
                 summary_json: None,
                 messages_json: r#"[
-                  {"id":"m-user","role":"user","content":"以后请用陕西腔跟我说话。","timestamp":1700000000001},
-                  {"id":"m-assistant","role":"assistant","content":[{"type":"text","text":"我会记住陕西腔偏好。"},{"type":"thinking","thinking":"hidden"}],"timestamp":1700000000002}
+                  {"id":"m-user","role":"user","content":"From now on, please speak to me in the Shaanxi dialect.","timestamp":1700000000001},
+                  {"id":"m-assistant","role":"assistant","content":[{"type":"text","text":"I will remember the Shaanxi dialect preference."},{"type":"thinking","thinking":"hidden"}],"timestamp":1700000000002}
                 ]"#
                 .to_string(),
                 message_count: 2,
@@ -994,20 +995,21 @@ mod tests {
         )
         .expect("upsert segment");
 
-        let matches = search_chat_history_fts(&conn, "陕西腔", 8, &default_history_search_filter())
+        let matches = search_chat_history_fts(&conn, "Shaanxi dialect", 8, &default_history_search_filter())
             .expect("search history fts");
 
         assert!(
             matches.iter().any(|item| item.source == "message"
                 && item.role.as_deref() == Some("user")
-                && item.snippet.contains("陕西腔")),
+                && item.snippet.contains("Shaanxi dialect")),
             "message-level FTS should match user text: {:?}",
             matches
         );
+        // The aggregated segment text is indexed too, so the same query matches at
+        // segment level. Its FTS snippet truncates mid-phrase for longer English
+        // text, so assert on the segment match itself rather than the snippet window.
         assert!(
-            matches
-                .iter()
-                .any(|item| item.source == "segment" && item.snippet.contains("陕西腔")),
+            matches.iter().any(|item| item.source == "segment"),
             "segment-level FTS should match aggregated segment text: {:?}",
             matches
         );
@@ -1283,23 +1285,23 @@ mod tests {
             ",
             params![
                 "conv-1",
-                r#"[{"id":"m-user","role":"user","content":"请以后称呼我为林舟。","timestamp":1700000000001}]"#,
+                r#"[{"id":"m-user","role":"user","content":"From now on, please call me Lin Zhou.","timestamp":1700000000001}]"#,
                 1_700_000_000_000_i64,
                 1_700_000_000_001_i64,
             ],
         )
         .expect("insert legacy segment without fts");
 
-        let before = search_chat_history_fts(&conn, "林舟", 8, &default_history_search_filter())
+        let before = search_chat_history_fts(&conn, "Lin Zhou", 8, &default_history_search_filter())
             .expect("search before backfill");
         assert!(before.is_empty());
 
         refresh_chat_history_fts(&conn, &default_history_search_filter()).expect("refresh fts");
-        let after = search_chat_history_fts(&conn, "林舟", 8, &default_history_search_filter())
+        let after = search_chat_history_fts(&conn, "Lin Zhou", 8, &default_history_search_filter())
             .expect("search after backfill");
 
         assert!(
-            after.iter().any(|item| item.snippet.contains("林舟")),
+            after.iter().any(|item| item.snippet.contains("Lin Zhou")),
             "backfilled FTS should find existing history: {:?}",
             after
         );
@@ -1327,7 +1329,7 @@ mod tests {
             ",
             params![
                 "conv-1",
-                r#"[{"id":"m-user","role":"user","content":"热路径不能做全库回填。","timestamp":1700000000001}]"#,
+                r#"[{"id":"m-user","role":"user","content":"The hot path must not perform a full-database backfill.","timestamp":1700000000001}]"#,
                 1_700_000_000_000_i64,
                 1_700_000_000_001_i64,
             ],
@@ -1336,7 +1338,7 @@ mod tests {
 
         history_db::initialize_connection(&conn).expect("re-run schema initialization");
         let after_init =
-            search_chat_history_fts(&conn, "热路径", 8, &default_history_search_filter())
+            search_chat_history_fts(&conn, "hot path", 8, &default_history_search_filter())
                 .expect("search after schema init");
 
         assert!(
@@ -1368,7 +1370,7 @@ mod tests {
             ",
             params![
                 "conv-1",
-                r#"[{"id":"m-user","role":"user","content":"搜索入口负责回填历史正文索引。","timestamp":1700000000001}]"#,
+                r#"[{"id":"m-user","role":"user","content":"The search entry point is responsible for backfilling the history body index.","timestamp":1700000000001}]"#,
                 1_700_000_000_000_i64,
                 1_700_000_000_001_i64,
             ],
@@ -1377,7 +1379,7 @@ mod tests {
 
         let matches = search_chat_history_fts_with_refresh(
             &conn,
-            "历史正文索引",
+            "history body index",
             8,
             &default_history_search_filter(),
         )
@@ -1386,7 +1388,7 @@ mod tests {
         assert!(
             matches
                 .iter()
-                .any(|item| item.snippet.contains("历史正文索引")),
+                .any(|item| item.snippet.contains("history body index")),
             "search should refresh FTS before querying: {:?}",
             matches
         );
@@ -1455,7 +1457,7 @@ mod tests {
                 segment_index: 0,
                 segment_id: "segment-0".to_string(),
                 summary_json: None,
-                messages_json: r#"[{"id":"m-user","role":"user","content":"重复索引自愈测试","timestamp":1700000000001}]"#
+                messages_json: r#"[{"id":"m-user","role":"user","content":"duplicate index self-healing test","timestamp":1700000000001}]"#
                     .to_string(),
                 message_count: 1,
                 start_message_id: Some("m-user".to_string()),
@@ -1496,7 +1498,7 @@ mod tests {
 
         let matches = search_chat_history_fts(
             &conn,
-            "重复索引自愈测试",
+            "duplicate index self-healing test",
             8,
             &default_history_search_filter(),
         )
@@ -1762,9 +1764,9 @@ mod tests {
                 "seg-0",
                 None,
                 &[
-                    branch_user_message("u0", "第零问", 1_000),
-                    branch_assistant_message("a0", "第零答", 1_001),
-                    branch_user_message("u00", "较早问题", 1_002),
+                    branch_user_message("u0", "Question zero", 1_000),
+                    branch_assistant_message("a0", "Answer zero", 1_001),
+                    branch_user_message("u00", "Earlier question", 1_002),
                 ],
             ),
             branch_segment_record(
@@ -1772,9 +1774,9 @@ mod tests {
                 "seg-1",
                 Some(r#"{"role":"summary","id":"summary-1","content":"older"}"#),
                 &[
-                    branch_assistant_message("a1", "中间回答", 1_003),
-                    branch_tool_result_message("tr1", "工具结果", 1_004),
-                    branch_user_message("u1", "较新问题", 1_005),
+                    branch_assistant_message("a1", "Middle answer", 1_003),
+                    branch_tool_result_message("tr1", "Tool result", 1_004),
+                    branch_user_message("u1", "Newer question", 1_005),
                 ],
             ),
             branch_segment_record(
@@ -1782,17 +1784,20 @@ mod tests {
                 "seg-2",
                 None,
                 &[
-                    branch_assistant_message("a2", "最新回答", 1_006),
-                    branch_user_message("u2", "最新问题", 1_007),
+                    branch_assistant_message("a2", "Latest answer", 1_006),
+                    branch_user_message("u2", "Latest question", 1_007),
                 ],
             ),
         ]
     }
 
-    // 与前端 getHistoryMessageContentHash 的跨语言对齐校验：fixture 与期望
-    // 哈希和 crates/agent-gui/test/chat/edit-resend-message-ref.test.mjs 中的
-    // "content hash stays byte-aligned with the Rust implementation" 用例
-    // 逐字面值一致。任何一侧改动哈希算法都必须同步更新两处。
+    // Cross-language alignment check with the frontend
+    // getHistoryMessageContentHash: the fixture and expected hashes are the
+    // same literals as the "content hash stays byte-aligned with the Rust
+    // implementation" case in
+    // crates/agent-gui/test/chat/edit-resend-message-ref.test.mjs.
+    // Any change to the hash algorithm on either side must update both places
+    // in sync.
     #[test]
     fn history_message_content_hash_matches_frontend_fixture() {
         let plain = json!({
@@ -1829,7 +1834,7 @@ mod tests {
                     "cwd": " /tmp/work ",
                     "updatedAt": 1_735_689_600_123_i64,
                 },
-                { "id": "conv-beta", "title": "训练 β 运行" },
+                { "id": "conv-beta", "title": "Training β run" },
                 { "id": "conv-alpha", "title": "duplicate entry" },
                 { "id": "conv-gamma", "title": "third reference" },
                 { "id": "conv-delta", "title": "over the cap" },
@@ -1837,11 +1842,13 @@ mod tests {
         });
 
         assert_eq!(history_message_content_hash(&plain), "fnv1a32:73027b85");
-        // 空引用数组不追加哈希段：旧消息与旧客户端产出的 ref 向后兼容。
+        // An empty ref array appends no hash segment: old messages and refs
+        // produced by old clients stay backward compatible.
         assert_eq!(history_message_content_hash(&empty_refs), "fnv1a32:73027b85");
-        // 引用参与哈希前经过与前端一致的归一化：id 修剪、标题折叠空白并
-        // 截断、按 id 去重、最多 3 条。
-        assert_eq!(history_message_content_hash(&with_refs), "fnv1a32:87daff4d");
+        // Before hashing, refs go through the same normalization as the
+        // frontend: id trimming, title whitespace collapsing and truncation,
+        // dedup by id, at most 3 entries.
+        assert_eq!(history_message_content_hash(&with_refs), "fnv1a32:19221043");
     }
 
     #[test]
@@ -1960,11 +1967,11 @@ mod tests {
                 "seg-0",
                 None,
                 &[
-                    branch_assistant_message("carry", "上段续写", 1_000),
-                    branch_user_message("u0", "本轮问题", 1_001),
-                    branch_assistant_message("a0", "本轮回答", 1_002),
-                    branch_tool_result_message("tr0", "工具结果", 1_003),
-                    branch_user_message("u1", "下一轮问题", 1_004),
+                    branch_assistant_message("carry", "Continuation of previous segment", 1_000),
+                    branch_user_message("u0", "Current turn question", 1_001),
+                    branch_assistant_message("a0", "Current turn answer", 1_002),
+                    branch_tool_result_message("tr0", "Tool result", 1_003),
+                    branch_user_message("u1", "Next turn question", 1_004),
                 ],
             )],
         );
@@ -1992,12 +1999,12 @@ mod tests {
     #[test]
     fn history_window_boundary_alignment_stays_bounded_without_nearby_groups() {
         let mut conn = open_test_db().expect("open test db");
-        let mut messages = vec![branch_assistant_message("a0", "长工具轮", 1_000)];
+        let mut messages = vec![branch_assistant_message("a0", "Long tool turn", 1_000)];
         for index in 0..100 {
             let id = format!("tr-{index}");
             messages.push(branch_tool_result_message(
                 &id,
-                "连续工具结果",
+                "Consecutive tool results",
                 1_001 + index,
             ));
         }
@@ -2050,11 +2057,11 @@ mod tests {
     #[test]
     fn replace_single_segment_persists_replacement_and_returns_window() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let a1 = branch_assistant_message("a1", "第一答", 1_001);
-        let u2 = branch_user_message("u2", "第二问", 1_002);
-        let a2 = branch_assistant_message("a2", "第二答", 1_003);
-        let mut replacement = branch_user_message("u2-edited", "编辑后的第二问", 1_004);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let a1 = branch_assistant_message("a1", "Answer one", 1_001);
+        let u2 = branch_user_message("u2", "Question two", 1_002);
+        let a2 = branch_assistant_message("a2", "Answer two", 1_003);
+        let mut replacement = branch_user_message("u2-edited", "Edited question two", 1_004);
         replacement["liveAgentHistoryRef"] = json!({
             "segmentIndex": 99,
             "messageIndex": 99,
@@ -2166,16 +2173,16 @@ mod tests {
     #[test]
     fn replace_cross_segment_deletes_tail_and_rebuilds_fts() {
         let mut conn = open_test_db().expect("open test db");
-        let u2 = branch_user_message("u2", "第二问", 1_003);
-        let replacement = branch_user_message("u2-edited", "编辑后的第二问", 1_007);
+        let u2 = branch_user_message("u2", "Question two", 1_003);
+        let replacement = branch_user_message("u2-edited", "Edited question two", 1_007);
         let segments = vec![
             branch_segment_record(
                 0,
                 "seg-0",
                 None,
                 &[
-                    branch_user_message("u1", "第一问", 1_000),
-                    branch_assistant_message("a1", "第一答", 1_001),
+                    branch_user_message("u1", "Question one", 1_000),
+                    branch_assistant_message("a1", "Answer one", 1_001),
                 ],
             ),
             branch_segment_record(
@@ -2183,9 +2190,9 @@ mod tests {
                 "seg-1",
                 None,
                 &[
-                    branch_tool_result_message("tr1", "工具结果", 1_002),
+                    branch_tool_result_message("tr1", "Tool result", 1_002),
                     u2.clone(),
-                    branch_assistant_message("a2", "第二答", 1_004),
+                    branch_assistant_message("a2", "Answer two", 1_004),
                 ],
             ),
             branch_segment_record(
@@ -2193,8 +2200,8 @@ mod tests {
                 "seg-2",
                 None,
                 &[
-                    branch_user_message("u3", "第三问", 1_005),
-                    branch_assistant_message("a3", "第三答", 1_006),
+                    branch_user_message("u3", "Question three", 1_005),
+                    branch_assistant_message("a3", "Answer three", 1_006),
                 ],
             ),
         ];
@@ -2293,8 +2300,8 @@ mod tests {
     #[test]
     fn replace_ref_mismatch_does_not_mutate_history() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let replacement = branch_user_message("u1-edited", "编辑后的第一问", 1_002);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let replacement = branch_user_message("u1-edited", "Edited question one", 1_002);
         seed_branch_source(
             &conn,
             "conv-replace",
@@ -2302,7 +2309,7 @@ mod tests {
                 0,
                 "seg-0",
                 None,
-                &[u1.clone(), branch_assistant_message("a1", "第一答", 1_001)],
+                &[u1.clone(), branch_assistant_message("a1", "Answer one", 1_001)],
             )],
         );
         let before_record = get_record_by_id(&conn, "conv-replace").expect("load source");
@@ -2343,8 +2350,8 @@ mod tests {
     #[test]
     fn replace_rejects_stale_revision_without_mutation() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let replacement = branch_user_message("u1-edited", "编辑后的第一问", 1_002);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let replacement = branch_user_message("u1-edited", "Edited question one", 1_002);
         seed_branch_source(
             &conn,
             "conv-replace",
@@ -2352,7 +2359,7 @@ mod tests {
                 0,
                 "seg-0",
                 None,
-                &[u1.clone(), branch_assistant_message("a1", "第一答", 1_001)],
+                &[u1.clone(), branch_assistant_message("a1", "Answer one", 1_001)],
             )],
         );
         let anchor = branch_anchor(0, 0, "seg-0", &u1);
@@ -2388,7 +2395,7 @@ mod tests {
     #[test]
     fn replace_rejects_non_user_or_missing_stable_id() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
         seed_branch_source(
             &conn,
             "conv-replace",
@@ -2402,7 +2409,7 @@ mod tests {
         let anchor = branch_anchor(0, 0, "seg-0", &u1);
         let revision = seeded_history_revision(&conn, "conv-replace");
 
-        let assistant = branch_assistant_message("a-edited", "错误角色", 1_001);
+        let assistant = branch_assistant_message("a-edited", "Wrong role", 1_001);
         let role_error = chat_history_replace_from_message_sync(
             &mut conn,
             "conv-replace",
@@ -2416,7 +2423,7 @@ mod tests {
 
         let missing_id = json!({
             "role": "user",
-            "content": "缺少稳定 id",
+            "content": "Missing stable id",
             "timestamp": 1_001,
         });
         let id_error = chat_history_replace_from_message_sync(
@@ -2433,7 +2440,7 @@ mod tests {
             &mut conn,
             "conv-replace",
             &anchor,
-            &branch_user_message("u1-edited", "编辑后的第一问", 1_001),
+            &branch_user_message("u1-edited", "Edited question one", 1_001),
             10,
             "",
         )
@@ -2456,10 +2463,10 @@ mod tests {
             0,
             "seg-0",
             None,
-            &[branch_user_message("u0", "较早问题", 1_000)],
+            &[branch_user_message("u0", "Earlier question", 1_000)],
         );
         malformed_segment.messages_json = "not-json".to_string();
-        let u1 = branch_user_message("u1", "待编辑问题", 1_001);
+        let u1 = branch_user_message("u1", "Question to edit", 1_001);
         let segments = vec![
             malformed_segment,
             branch_segment_record(
@@ -2468,14 +2475,14 @@ mod tests {
                 None,
                 &[
                     u1.clone(),
-                    branch_assistant_message("a1", "待删除回答", 1_002),
+                    branch_assistant_message("a1", "Answer to delete", 1_002),
                 ],
             ),
             branch_segment_record(
                 2,
                 "seg-2",
                 None,
-                &[branch_user_message("u2", "待删除后续", 1_003)],
+                &[branch_user_message("u2", "Follow-up to delete", 1_003)],
             ),
         ];
         seed_branch_source(&conn, "conv-replace", &segments);
@@ -2483,7 +2490,7 @@ mod tests {
         let before_segments = load_segments(&conn, "conv-replace").expect("load source segments");
         let before_fts_counts = history_fts_row_counts(&conn, "conv-replace");
         let anchor = branch_anchor(1, 0, "seg-1", &u1);
-        let replacement = branch_user_message("u1-edited", "编辑后的问题", 1_004);
+        let replacement = branch_user_message("u1-edited", "Edited question", 1_004);
         let revision = seeded_history_revision(&conn, "conv-replace");
 
         let error = chat_history_replace_from_message_sync(
@@ -2496,9 +2503,14 @@ mod tests {
         )
         .expect_err("window construction failure should roll back replace");
 
-        // 轨迹截断点统计在构造窗口前逐段解析消息，坏分段此刻最先暴露
-        // （旧流程要到 locate 才报英文格式；两条路径都在写库前失败，回滚等价）。
-        assert!(error.contains("解析历史分段 seg-0 失败"));
+        // Trajectory truncation-point counting parses messages segment by
+        // segment before building the window, so a bad segment surfaces first
+        // here (the old flow only reported the English format at locate; both
+        // paths fail before writing to the DB, so rollback is equivalent).
+        assert!(
+            error.contains("parse history segment seg-0 failed")
+                || error.contains("Failed to parse history segment seg-0")
+        );
         let after_record = get_record_by_id(&conn, "conv-replace").expect("reload source");
         let after_segments = load_segments(&conn, "conv-replace").expect("reload source segments");
         assert_eq!(after_record.updated_at, before_record.updated_at);
@@ -2528,10 +2540,10 @@ mod tests {
     #[test]
     fn branch_copies_prefix_including_anchor_turn() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let a1 = branch_assistant_message("a1", "第一答", 1_001);
-        let u2 = branch_user_message("u2", "第二问", 1_002);
-        let a2 = branch_assistant_message("a2", "第二答", 1_003);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let a1 = branch_assistant_message("a1", "Answer one", 1_001);
+        let u2 = branch_user_message("u2", "Question two", 1_002);
+        let a2 = branch_assistant_message("a2", "Answer two", 1_003);
         seed_branch_source(
             &conn,
             "conv-source",
@@ -2576,10 +2588,10 @@ mod tests {
     #[test]
     fn branch_full_copy_when_anchor_is_last_turn() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let a1 = branch_assistant_message("a1", "第一答", 1_001);
-        let u2 = branch_user_message("u2", "第二问", 1_002);
-        let a2 = branch_assistant_message("a2", "第二答", 1_003);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let a1 = branch_assistant_message("a1", "Answer one", 1_001);
+        let u2 = branch_user_message("u2", "Question two", 1_002);
+        let a2 = branch_assistant_message("a2", "Answer two", 1_003);
         seed_branch_source(
             &conn,
             "conv-source",
@@ -2607,12 +2619,14 @@ mod tests {
 
     #[test]
     fn branch_fails_when_anchor_reply_not_persisted() {
-        // persist-lag 竞态：done 事件先于落盘，锚点用户消息已写入但助手回复
-        // 还没有——此时分支必须报可重试错误，而不是静默复制出缺回复的前缀。
+        // persist-lag race: the done event precedes persistence, the anchor user
+        // message has been written but the assistant reply has not -- the
+        // branch must report a retryable error here instead of silently
+        // copying a prefix with a missing reply.
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let a1 = branch_assistant_message("a1", "第一答", 1_001);
-        let u2 = branch_user_message("u2", "第二问", 1_002);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let a1 = branch_assistant_message("a1", "Answer one", 1_001);
+        let u2 = branch_user_message("u2", "Question two", 1_002);
         seed_branch_source(
             &conn,
             "conv-source",
@@ -2627,7 +2641,7 @@ mod tests {
         let anchor = branch_anchor(0, 2, "seg-0", &u2);
         let error = chat_history_branch_sync(&mut conn, "conv-source", &anchor)
             .expect_err("branch should fail while the reply is unpersisted");
-        assert!(error.contains("尚未写入"), "unexpected error: {error}");
+        assert!(error.contains("has not been written"), "unexpected error: {error}");
 
         let conversation_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM chatHistory", [], |row| row.get(0))
@@ -2638,12 +2652,12 @@ mod tests {
     #[test]
     fn branch_drops_following_segment_when_next_user_starts_it() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let a1 = branch_assistant_message("a1", "第一答", 1_001);
-        let u2 = branch_user_message("u2", "第二问", 1_002);
-        let a2 = branch_assistant_message("a2", "第二答", 1_003);
-        let u3 = branch_user_message("u3", "第三问", 1_004);
-        let a3 = branch_assistant_message("a3", "第三答", 1_005);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let a1 = branch_assistant_message("a1", "Answer one", 1_001);
+        let u2 = branch_user_message("u2", "Question two", 1_002);
+        let a2 = branch_assistant_message("a2", "Answer two", 1_003);
+        let u3 = branch_user_message("u3", "Question three", 1_004);
+        let a3 = branch_assistant_message("a3", "Answer three", 1_005);
         seed_branch_source(
             &conn,
             "conv-source",
@@ -2676,12 +2690,12 @@ mod tests {
     #[test]
     fn branch_slices_mid_segment_and_recomputes_ids() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let a1 = branch_assistant_message("a1", "第一答", 1_001);
-        let u2 = branch_user_message("u2", "第二问", 1_002);
-        let a2 = branch_assistant_message("a2", "第二答", 1_003);
-        let u3 = branch_user_message("u3", "第三问", 1_004);
-        let a3 = branch_assistant_message("a3", "第三答", 1_005);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let a1 = branch_assistant_message("a1", "Answer one", 1_001);
+        let u2 = branch_user_message("u2", "Question two", 1_002);
+        let a2 = branch_assistant_message("a2", "Answer two", 1_003);
+        let u3 = branch_user_message("u3", "Question three", 1_004);
+        let a3 = branch_assistant_message("a3", "Answer three", 1_005);
         seed_branch_source(
             &conn,
             "conv-source",
@@ -2716,8 +2730,8 @@ mod tests {
     #[test]
     fn branch_fails_on_anchor_mismatch() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let a1 = branch_assistant_message("a1", "第一答", 1_001);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let a1 = branch_assistant_message("a1", "Answer one", 1_001);
         seed_branch_source(
             &conn,
             "conv-source",
@@ -2728,7 +2742,7 @@ mod tests {
         anchor.content_hash = "fnv1a32:deadbeef".to_string();
         let error = chat_history_branch_sync(&mut conn, "conv-source", &anchor)
             .expect_err("mismatched anchor should fail");
-        assert!(error.contains("锚点"), "unexpected error: {error}");
+        assert!(error.contains("anchor"), "unexpected error: {error}");
 
         let conversation_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM chatHistory", [], |row| row.get(0))
@@ -2745,10 +2759,10 @@ mod tests {
     #[test]
     fn branch_copies_model_cwd_and_patches_context_meta() {
         let mut conn = open_test_db().expect("open test db");
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let a1 = branch_assistant_message("a1", "第一答", 1_001);
-        let u2 = branch_user_message("u2", "第二问", 1_002);
-        let a2 = branch_assistant_message("a2", "第二答", 1_003);
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let a1 = branch_assistant_message("a1", "Answer one", 1_001);
+        let u2 = branch_user_message("u2", "Question two", 1_002);
+        let a2 = branch_assistant_message("a2", "Answer two", 1_003);
         seed_branch_source(
             &conn,
             "conv-source",
@@ -2804,15 +2818,16 @@ mod tests {
 
     #[test]
     fn branch_segments_cut_in_later_segment_midway() {
-        // 锚点轮次的助手回复跨过分段边界：更早分段整段复制，切点段裁剪。
-        let u1 = branch_user_message("u1", "第一问", 1_000);
-        let a1 = branch_assistant_message("a1", "第一答", 1_001);
-        let u2 = branch_user_message("u2", "第二问", 1_002);
-        let a2_head = branch_assistant_message("a2-head", "第二答上半", 1_003);
-        let a2_tail = branch_assistant_message("a2-tail", "第二答下半", 1_004);
-        let tr2 = branch_tool_result_message("tr2", "工具输出", 1_005);
-        let u3 = branch_user_message("u3", "第三问", 1_006);
-        let a3 = branch_assistant_message("a3", "第三答", 1_007);
+        // The anchor turn's assistant reply spans a segment boundary: earlier
+        // segments are copied whole, the cut segment is trimmed.
+        let u1 = branch_user_message("u1", "Question one", 1_000);
+        let a1 = branch_assistant_message("a1", "Answer one", 1_001);
+        let u2 = branch_user_message("u2", "Question two", 1_002);
+        let a2_head = branch_assistant_message("a2-head", "Answer two first half", 1_003);
+        let a2_tail = branch_assistant_message("a2-tail", "Answer two second half", 1_004);
+        let tr2 = branch_tool_result_message("tr2", "Tool output", 1_005);
+        let u3 = branch_user_message("u3", "Question three", 1_006);
+        let a3 = branch_assistant_message("a3", "Answer three", 1_007);
         let segments = [
             branch_segment_record(0, "seg-0", None, &[u1, a1, u2.clone(), a2_head]),
             branch_segment_record(

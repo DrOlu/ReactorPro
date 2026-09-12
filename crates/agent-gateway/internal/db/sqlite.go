@@ -9,8 +9,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// openSQLite 打开内嵌 SQLite 连接池。WAL 让读写不互斥，busy_timeout 让偶发写
-// 冲突等待重试；文件收紧到 0600（默认 0644，库内含凭证哈希等敏感数据）。
+// openSQLite opens the embedded SQLite connection pool. WAL keeps reads and writes
+// from excluding each other, busy_timeout makes occasional write conflicts wait and
+// retry, and the file is tightened to 0600 (default 0644; the database contains
+// sensitive data such as credential hashes).
 func openSQLite(path string) (*sql.DB, error) {
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -21,10 +23,13 @@ func openSQLite(path string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	// SQLite 写天然单写者串行、读走 WAL 并行；4 足够覆盖握手校验 + 管理 API 的并发面。
+	// SQLite writes are naturally serialized to a single writer while reads run in
+	// parallel via WAL; 4 is enough to cover the concurrency of handshake validation
+	// plus the admin API.
 	pool.SetMaxOpenConns(4)
 	pool.SetMaxIdleConns(4)
-	// sql.Open 惰性建连；Ping 强制创建库文件，chmod 才有目标。
+	// sql.Open connects lazily; Ping forces creation of the database file so that
+	// chmod has a target.
 	if err := pool.Ping(); err != nil {
 		_ = pool.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)

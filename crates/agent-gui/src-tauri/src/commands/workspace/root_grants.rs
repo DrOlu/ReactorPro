@@ -38,7 +38,7 @@ impl WorkspaceRootAccess {
         match value {
             "read" => Ok(Self::Read),
             "write" => Ok(Self::Write),
-            other => Err(format!("不支持的目录权限：{other}")),
+            other => Err(format!("Unsupported directory permission: {other}")),
         }
     }
 }
@@ -105,10 +105,10 @@ fn now_ms() -> i64 {
 fn validate_project_id(project_id: &str) -> Result<&str, String> {
     let value = project_id.trim();
     if value.is_empty() {
-        return Err("projectId 不能为空".to_string());
+        return Err("projectId cannot be empty".to_string());
     }
     if value.len() > 256 {
-        return Err("projectId 过长".to_string());
+        return Err("projectId is too long".to_string());
     }
     Ok(value)
 }
@@ -124,11 +124,11 @@ fn validate_alias(alias: &str) -> Result<String, String> {
         });
     if !valid {
         return Err(format!(
-            "目录别名“{value}”无效：必须以小写字母开头，且只能包含小写字母、数字、-、_，最长 32 个字符"
+            "Directory alias \"{value}\" is invalid: it must start with a lowercase letter and contain only lowercase letters, digits, -, _, up to 32 characters"
         ));
     }
     if matches!(value, "workspace" | "skill" | "uploads" | "external") {
-        return Err(format!("目录别名“{value}”是保留名称"));
+        return Err(format!("Directory alias \"{value}\" is a reserved name"));
     }
     Ok(value.to_string())
 }
@@ -146,29 +146,29 @@ fn is_windows_unc_path(value: &str) -> bool {
 fn canonical_directory(value: &str, field_name: &str) -> Result<PathBuf, String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        return Err(format!("{field_name} 不能为空"));
+        return Err(format!("{field_name} cannot be empty"));
     }
     #[cfg(windows)]
     if is_windows_unc_path(trimmed) {
-        return Err(format!("{field_name} 暂不支持 UNC 路径：{trimmed}"));
+        return Err(format!("{field_name} does not yet support UNC paths: {trimmed}"));
     }
     let input = Path::new(trimmed);
     if !input.is_absolute() {
-        return Err(format!("{field_name} 必须是绝对路径：{trimmed}"));
+        return Err(format!("{field_name} must be an absolute path: {trimmed}"));
     }
     let canonical = fs::canonicalize(input)
-        .map_err(|error| format!("{field_name} 不存在或无法访问（{trimmed}）：{error}"))?;
+        .map_err(|error| format!("{field_name} does not exist or is inaccessible ({trimmed}): {error}"))?;
     #[cfg(windows)]
     if is_windows_unc_path(&canonical.to_string_lossy()) {
         return Err(format!(
-            "{field_name} 解析为暂不支持的 UNC 路径：{}",
+            "{field_name} resolves to an unsupported UNC path: {}",
             canonical.display()
         ));
     }
     let metadata = fs::metadata(&canonical)
-        .map_err(|error| format!("读取 {field_name} 失败（{}）：{error}", canonical.display()))?;
+        .map_err(|error| format!("Failed to read {field_name} ({}): {error}", canonical.display()))?;
     if !metadata.is_dir() {
-        return Err(format!("{field_name} 不是目录：{}", canonical.display()));
+        return Err(format!("{field_name} is not a directory: {}", canonical.display()));
     }
     Ok(canonical)
 }
@@ -181,7 +181,7 @@ fn validate_drafts(
     project_path: &str,
     drafts: Vec<WorkspaceRootGrantDraft>,
 ) -> Result<(PathBuf, Vec<ValidatedDraft>), String> {
-    let primary = canonical_directory(project_path, "项目主目录")?;
+    let primary = canonical_directory(project_path, "project primary directory")?;
     let mut aliases = HashSet::new();
     let mut ids = HashSet::new();
     let mut validated: Vec<ValidatedDraft> = Vec::with_capacity(drafts.len());
@@ -189,30 +189,30 @@ fn validate_drafts(
     for draft in drafts {
         let alias = validate_alias(&draft.alias)?;
         if !aliases.insert(alias.clone()) {
-            return Err(format!("目录别名重复：{alias}"));
+            return Err(format!("Duplicate directory alias: {alias}"));
         }
         if let Some(id) = draft.id.as_deref() {
             let id = id.trim();
             if id.is_empty() || !ids.insert(id.to_string()) {
-                return Err("目录授权 id 为空或重复".to_string());
+                return Err("Directory grant id is empty or duplicated".to_string());
             }
         }
 
         let display_path = draft.display_path.trim().to_string();
-        let canonical_path = canonical_directory(&display_path, "附加目录")?;
+        let canonical_path = canonical_directory(&display_path, "attached directory")?;
 
         // A child/equal root adds no capability beyond the primary root. A
         // broader read-only reference is useful (for example a monorepo parent)
         // and is the one intentional primary/additional overlap we allow.
         if canonical_path == primary || canonical_path.starts_with(&primary) {
             return Err(format!(
-                "附加目录不能等于或位于项目主目录内：{}",
+                "An attached directory must not equal or be located inside the project primary directory: {}",
                 canonical_path.display()
             ));
         }
         if primary.starts_with(&canonical_path) && draft.access != WorkspaceRootAccess::Read {
             return Err(format!(
-                "包含项目主目录的附加目录只能设置为只读：{}",
+                "An attached directory containing the project primary directory can only be set to read-only: {}",
                 canonical_path.display()
             ));
         }
@@ -220,7 +220,7 @@ fn validate_drafts(
         for previous in &validated {
             if paths_overlap(&canonical_path, &previous.canonical_path) {
                 return Err(format!(
-                    "附加目录不能互相重叠：{} 与 {}",
+                    "Attached directories must not overlap: {} and {}",
                     previous.canonical_path.display(),
                     canonical_path.display()
                 ));
@@ -270,14 +270,14 @@ fn list_with_conn(
              WHERE project_id = ?1 AND project_path_key = ?2 \
              ORDER BY alias ASC, grant_id ASC",
         )
-        .map_err(|error| format!("准备附加目录查询失败：{error}"))?;
+        .map_err(|error| format!("Failed to prepare attached directory query: {error}"))?;
     let rows = statement
         .query_map(params![project_id, project_path_key], row_to_grant)
-        .map_err(|error| format!("查询附加目录失败：{error}"))?;
+        .map_err(|error| format!("Failed to query attached directories: {error}"))?;
     let mut grants = Vec::new();
     for row in rows {
         let (mut grant, access_mode) =
-            row.map_err(|error| format!("读取附加目录记录失败：{error}"))?;
+            row.map_err(|error| format!("Failed to read attached directory record: {error}"))?;
         grant.access = WorkspaceRootAccess::parse(&access_mode)?;
         grant.state = match fs::canonicalize(&grant.display_path) {
             Ok(current) if current.to_string_lossy() == grant.canonical_path => {
@@ -299,7 +299,7 @@ fn load_existing_grants(
         .prepare(
             "SELECT grant_id, created_at, canonical_path FROM workspace_root_grants WHERE project_id = ?1",
         )
-        .map_err(|error| format!("准备现有附加目录查询失败：{error}"))?;
+        .map_err(|error| format!("Failed to prepare existing attached directory query: {error}"))?;
     let rows = statement
         .query_map(params![project_id], |row| {
             Ok((
@@ -310,10 +310,10 @@ fn load_existing_grants(
                 },
             ))
         })
-        .map_err(|error| format!("查询现有附加目录失败：{error}"))?;
+        .map_err(|error| format!("Failed to query existing attached directories: {error}"))?;
     let mut existing = HashMap::new();
     for row in rows {
-        let (id, grant) = row.map_err(|error| format!("读取现有附加目录失败：{error}"))?;
+        let (id, grant) = row.map_err(|error| format!("Failed to read existing attached directories: {error}"))?;
         existing.insert(id, grant);
     }
     Ok(existing)
@@ -332,7 +332,7 @@ fn apply_with_conn(
 
     let transaction = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|error| format!("开始保存附加目录事务失败：{error}"))?;
+        .map_err(|error| format!("Failed to begin save attached directories transaction: {error}"))?;
     let existing = load_existing_grants(&transaction, &project_id)?;
 
     // An id sent by the client must already belong to this project. This keeps
@@ -340,11 +340,11 @@ fn apply_with_conn(
     for draft in &validated {
         if let Some(id) = draft.id.as_deref() {
             let Some(existing_grant) = existing.get(id) else {
-                return Err(format!("附加目录授权不存在或不属于当前项目：{id}"));
+                return Err(format!("Attached directory grant does not exist or does not belong to the current project: {id}"));
             };
             if draft.canonical_path.to_string_lossy() != existing_grant.canonical_path {
                 return Err(format!(
-                    "附加目录授权目标已变化，不能隐式重新授权；请移除后重新选择：{}",
+                    "Attached directory grant target has changed; implicit re-authorization is not allowed; remove it and select again: {}",
                     draft.display_path
                 ));
             }
@@ -356,7 +356,7 @@ fn apply_with_conn(
             "DELETE FROM workspace_root_grants WHERE project_id = ?1",
             params![project_id],
         )
-        .map_err(|error| format!("清理旧附加目录失败：{error}"))?;
+        .map_err(|error| format!("Failed to clear old attached directories: {error}"))?;
 
     for draft in validated {
         let id = draft.id.unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -380,11 +380,11 @@ fn apply_with_conn(
                     now,
                 ],
             )
-            .map_err(|error| format!("保存附加目录失败：{error}"))?;
+            .map_err(|error| format!("Failed to save attached directories: {error}"))?;
     }
     transaction
         .commit()
-        .map_err(|error| format!("提交附加目录事务失败：{error}"))?;
+        .map_err(|error| format!("Failed to commit attached directories transaction: {error}"))?;
 
     list_with_conn(conn, &project_id, &path_key)
 }
@@ -395,7 +395,7 @@ fn revoke_with_conn(conn: &Connection, project_id: &str) -> Result<(), String> {
         "DELETE FROM workspace_root_grants WHERE project_id = ?1",
         params![project_id],
     )
-    .map_err(|error| format!("撤销项目附加目录授权失败：{error}"))?;
+    .map_err(|error| format!("Failed to revoke project attached directory grant: {error}"))?;
     Ok(())
 }
 
@@ -410,18 +410,18 @@ fn revoke_many_with_conn(conn: &mut Connection, project_ids: &[String]) -> Resul
 
     let transaction = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|error| format!("开始批量撤销项目附加目录授权事务失败：{error}"))?;
+        .map_err(|error| format!("Failed to begin batch revoke project attached directory grants transaction: {error}"))?;
     for project_id in project_ids {
         transaction
             .execute(
                 "DELETE FROM workspace_root_grants WHERE project_id = ?1",
                 params![project_id],
             )
-            .map_err(|error| format!("撤销项目附加目录授权失败：{error}"))?;
+            .map_err(|error| format!("Failed to revoke project attached directory grant: {error}"))?;
     }
     transaction
         .commit()
-        .map_err(|error| format!("提交批量撤销项目附加目录授权事务失败：{error}"))?;
+        .map_err(|error| format!("Failed to commit batch revoke project attached directory grants transaction: {error}"))?;
     Ok(())
 }
 
@@ -436,7 +436,7 @@ pub(crate) async fn revoke_workspace_root_grants_for_projects(
         revoke_many_with_conn(&mut conn, &project_ids)
     })
     .await
-    .map_err(|error| format!("workspace root grants batch revoke join 失败：{error}"))?
+    .map_err(|error| format!("workspace root grants batch revoke join failed: {error}"))?
 }
 
 #[tauri::command]
@@ -448,13 +448,13 @@ pub async fn workspace_root_grants_list(
         // Keep the list API project-scoped rather than accepting an id alone.
         // This also prevents a missing/stale project entry from silently exposing
         // grants which can no longer be safely evaluated against its primary root.
-        let canonical_primary = canonical_directory(&project_path, "项目主目录")?;
+        let canonical_primary = canonical_directory(&project_path, "project primary directory")?;
         let path_key = project_path_key(&canonical_primary.to_string_lossy());
         let conn = open_db()?;
         list_with_conn(&conn, &project_id, &path_key)
     })
     .await
-    .map_err(|error| format!("workspace_root_grants_list join 失败：{error}"))?
+    .map_err(|error| format!("workspace_root_grants_list join failed: {error}"))?
 }
 
 #[tauri::command]
@@ -468,7 +468,7 @@ pub async fn workspace_root_grants_apply(
         apply_with_conn(&mut conn, &project_id, &project_path, grants)
     })
     .await
-    .map_err(|error| format!("workspace_root_grants_apply join 失败：{error}"))?
+    .map_err(|error| format!("workspace_root_grants_apply join failed: {error}"))?
 }
 
 #[tauri::command]
@@ -480,7 +480,7 @@ pub async fn workspace_root_grants_revoke(project_id: String) -> Result<(), Stri
         revoke_with_conn(&conn, &project_id)
     })
     .await
-    .map_err(|error| format!("workspace_root_grants_revoke join 失败：{error}"))?
+    .map_err(|error| format!("workspace_root_grants_revoke join failed: {error}"))?
 }
 
 #[cfg(test)]
@@ -552,7 +552,7 @@ mod tests {
             vec![draft("Shared Core", temp.path(), WorkspaceRootAccess::Read)],
         )
         .unwrap_err();
-        assert!(invalid_alias.contains("目录别名"));
+        assert!(invalid_alias.contains("Directory alias"));
 
         let missing = temp.path().join("missing");
         assert!(validate_drafts(
@@ -560,14 +560,14 @@ mod tests {
             vec![draft("missing", &missing, WorkspaceRootAccess::Read)]
         )
         .unwrap_err()
-        .contains("不存在"));
+        .contains("does not exist"));
 
         assert!(validate_drafts(
             &primary.to_string_lossy(),
             vec![draft("file", &file, WorkspaceRootAccess::Read)]
         )
         .unwrap_err()
-        .contains("不是目录"));
+        .contains("is not a directory"));
     }
 
     #[test]
@@ -596,7 +596,7 @@ mod tests {
             ],
         )
         .unwrap_err();
-        assert!(error.contains("不能互相重叠"));
+        assert!(error.contains("must not overlap"));
     }
 
     #[test]
@@ -617,7 +617,7 @@ mod tests {
             ],
         )
         .unwrap_err();
-        assert!(error.contains("目录别名重复"));
+        assert!(error.contains("Duplicate directory alias"));
     }
 
     #[test]
@@ -637,7 +637,7 @@ mod tests {
             vec![draft("monorepo", temp.path(), WorkspaceRootAccess::Write)],
         )
         .unwrap_err();
-        assert!(error.contains("只能设置为只读"));
+        assert!(error.contains("can only be set to read-only"));
     }
 
     #[test]
@@ -652,7 +652,7 @@ mod tests {
             vec![draft("src", &child, WorkspaceRootAccess::Read)],
         )
         .unwrap_err();
-        assert!(error.contains("项目主目录内"));
+        assert!(error.contains("inside the project primary directory"));
     }
 
     #[test]
@@ -684,7 +684,7 @@ mod tests {
             vec![forged]
         )
         .unwrap_err()
-        .contains("不存在或不属于"));
+        .contains("does not exist or does not belong"));
         let key = project_path_key(&fs::canonicalize(&primary).unwrap().to_string_lossy());
         assert_eq!(list_with_conn(&conn, "project-1", &key).unwrap(), saved);
         assert!(list_with_conn(&conn, "project-1", "/different-project")
@@ -802,7 +802,7 @@ mod tests {
             vec![update],
         )
         .expect_err("changed target must require explicit reauthorization");
-        assert!(error.contains("不能隐式重新授权"), "{error}");
+        assert!(error.contains("implicit re-authorization is not allowed"), "{error}");
         let still_changed = list_with_conn(&conn, "project-1", &key).expect("list unchanged grant");
         assert_eq!(still_changed[0].state, WorkspaceRootGrantState::Changed);
         assert_eq!(still_changed[0].canonical_path, saved[0].canonical_path);

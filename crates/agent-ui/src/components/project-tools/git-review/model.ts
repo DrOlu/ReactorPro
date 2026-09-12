@@ -190,7 +190,7 @@ export type GitBranchFromCommitState = {
 };
 
 export function isMissingRemoteSetupError(message: string) {
-  return message.includes("找不到 origin remote") || message.includes("还没有设置远端仓库");
+  return message.includes("no origin remote") || message.includes("has no remote configured");
 }
 
 // git aborts a checkout that would clobber uncommitted local changes; the

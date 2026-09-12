@@ -61,9 +61,10 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     setTerminalSessions(sortTerminalSessions(sessions));
   }, []);
 
-  // 函数式变体:回调方按 React 当前值合并,而不是按 render 闭包里的快照。
-  // 两个事件在一次重渲染之间到达(SSH 面板 snapshot 紧跟 reconcile)时,
-  // 整表提交会让后者覆盖前者;这里与 dock 侧 `sessionsRef.current` 同口径。
+  // Functional variant: the callback side merges against React's current value rather than a snapshot
+  // from the render closure. When two events arrive between a single re-render (an SSH panel snapshot
+  // immediately followed by a reconcile), a whole-table commit would make the latter overwrite the
+  // former; this uses the same measure as `sessionsRef.current` on the dock side.
   const updateProjectTerminalSessions = useCallback(
     (updater: (current: readonly TerminalSession[]) => readonly TerminalSession[]) => {
       terminalSessionsVersionRef.current += 1;

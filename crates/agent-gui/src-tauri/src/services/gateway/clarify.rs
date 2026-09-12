@@ -1,10 +1,11 @@
-//! 澄清轮次 unary 桥（Web 计划 2）+ 流式增量。
+//! Clarify-turn unary bridge (Web plan 2) + streaming deltas.
 //!
-//! Web 端经 gateway 转发 `ClarifyTurnRequest` 到桌面 agent。Rust 收到后把请求
-//! 以 `gateway:clarify-turn-requested` 事件发到 TS 运行时执行 LLM 补全；流式
-//! 增量经 `gateway_clarify_delta` 以同 request_id 的 `ClarifyTurnDelta` 回推，
-//! 终稿经 `gateway_clarify_respond` 回 `ClarifyTurnResp`。delta 不得占用 unary
-//! 等待的首条关联响应。
+//! The web side forwards `ClarifyTurnRequest` through the gateway to the desktop agent. When Rust
+//! receives it, it sends the request to the TS runtime as a `gateway:clarify-turn-requested` event
+//! to perform the LLM completion; streaming deltas are pushed back via `gateway_clarify_delta` as a
+//! `ClarifyTurnDelta` with the same request_id, and the final result returns via
+//! `gateway_clarify_respond` as a `ClarifyTurnResp`. A delta must not occupy the first correlated
+//! response the unary call is waiting for.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,8 +23,8 @@ use super::util::now_unix_seconds;
 
 pub(crate) const GATEWAY_CLARIFY_TURN_REQUESTED_EVENT: &str = "gateway:clarify-turn-requested";
 
-/// Rust → TS 的澄清轮次事件载荷。runtime_controls 以 JSON 字符串传递，
-/// TS 侧 parse 回 ChatRuntimeControls（复用 agent-ui 的 normalize 逻辑）。
+/// Rust -> TS clarify-turn event payload. runtime_controls is passed as a JSON string and parsed
+/// back into ChatRuntimeControls on the TS side (reusing agent-ui's normalize logic).
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayClarifyTurnRequestEvent {
@@ -34,7 +35,7 @@ pub struct GatewayClarifyTurnRequestEvent {
     pub runtime_controls_json: String,
 }
 
-/// TS 侧经 invoke gateway_clarify_respond 回传的结果。
+/// The result returned by the TS side via invoke gateway_clarify_respond.
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayClarifyRespondInput {
@@ -44,7 +45,7 @@ pub struct GatewayClarifyRespondInput {
     pub error_message: Option<String>,
 }
 
-/// TS 侧经 invoke gateway_clarify_delta 回传的流式增量。
+/// The streaming delta returned by the TS side via invoke gateway_clarify_delta.
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayClarifyDeltaInput {
@@ -76,7 +77,7 @@ impl GatewayClarifyTurnRequestEvent {
     }
 }
 
-/// 三个失败出口（emit 失败/发送端悬垂/超时）共用的错误响应。
+/// Error response shared by the three failure exits (emit failure / dangling sender / timeout).
 fn clarify_error_response(code: &str, message: String) -> ClarifyTurnResponse {
     ClarifyTurnResponse {
         final_text: String::new(),
@@ -192,7 +193,7 @@ impl GatewayController {
             .map_err(|_| "gateway clarify turn lock poisoned".to_string())?
             .remove(&input.request_id)
         else {
-            return Ok(()); // 已超时/已移除：静默丢弃迟到的响应。
+            return Ok(()); // already timed out/removed: silently discard the late response.
         };
         tx.send(ClarifyTurnResponse::from(input))
             .map_err(|_| "gateway clarify turn response receiver dropped".to_string())

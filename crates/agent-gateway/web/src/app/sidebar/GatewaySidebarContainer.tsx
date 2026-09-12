@@ -61,7 +61,7 @@ export type GatewaySidebarContainerProps = Omit<
 > & {
   store: SidebarStore;
   approvalConversationIds: ReadonlySet<string>;
-  // 手动压缩 pending 已按会话 id 键化，多个会话可同时“转圈”（issue #359 缺陷 #3）。
+  // Manual compaction pending state is keyed by conversation id, so multiple conversations can spin at once (issue #359 bug #3).
   transientRunningConversations?: readonly TransientSidebarRunningConversation[];
   // GatewayApp-level sidebar errors (project removal flow); store errors are
   // derived locally and take precedence.
@@ -73,9 +73,9 @@ export type GatewaySidebarContainerProps = Omit<
   // both the browser transport and the desktop Agent are confirmed online.
   sectionsDisabled: boolean;
   isLocalDraftConversationId: (id: string) => boolean;
-  /** Session Workbench：菜单入口「在分屏中打开」（未接入时不渲染该菜单项）。 */
+  /** Session Workbench: menu entry "Open in split view" (the item is not rendered when unconnected). */
   onConversationOpenInWorkbenchSplit?: (item: SidebarConversation) => void;
-  /** Session Workbench：会话行标题拖拽发起（未接入时行内不装拖拽手柄）。 */
+  /** Session Workbench: conversation-row title drag initiation (no drag handle is installed in the row when unconnected). */
   onConversationWorkbenchDragIntent?: (
     item: SidebarConversation,
     event: {
@@ -85,7 +85,7 @@ export type GatewaySidebarContainerProps = Omit<
       currentTarget?: EventTarget | null;
     },
   ) => void;
-  /** Session Workbench：项目行标题拖拽发起（落点为该项目新建会话）。 */
+  /** Session Workbench: project-row title drag initiation (the drop target creates a new conversation for that project). */
   onProjectWorkbenchDragIntent?: (
     project: ChatHistorySidebarContainerSource["projects"][number],
     event: {

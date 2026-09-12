@@ -17,7 +17,7 @@ export async function importPastedTextsAsFiles(params: {
   const { token, agentId, workdir, pastes } = params;
   const normalizedWorkdir = workdir.trim();
   if (!normalizedWorkdir) {
-    throw new Error("项目目录未选择，无法发送大段粘贴内容。");
+    throw new Error("No project directory selected; cannot send large pasted content.");
   }
   if (pastes.length === 0) {
     return {

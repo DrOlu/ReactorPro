@@ -19,20 +19,20 @@ export type SshTerminalPaneSurfaceProps = {
   errorMessage?: string | null;
   onRetry?: () => void;
   onError: (sessionId: string, message: string | null) => void;
-  /** 触发 ssh 重连;由宿主注入(组件不接触 Tauri)。省略时不显示重连按钮。 */
+  /** Trigger an ssh reconnect; injected by the host (the component never touches Tauri). When omitted, no reconnect button is shown. */
   onReconnect?: () => void;
-  /** 宿主的重连调用进行中(与会话自身的 reconnecting 状态叠加显示)。 */
+  /** The host's reconnect call is in progress (displayed on top of the session's own reconnecting state). */
   isReconnecting?: boolean;
-  /** 宿主轮询的往返延迟;null/省略显示 "--"(未知)。 */
+  /** Round-trip latency polled by the host; null/omitted shows "--" (unknown). */
   latencyMs?: number | null;
-  /** 极窄 Pane:状态行隐藏端点标签,只留状态点+延迟+重连。 */
+  /** Very narrow Pane: the status row hides the endpoint label, keeping only the status dot + latency + reconnect. */
   isCompact?: boolean;
 };
 
 /**
- * SSH 终端 Pane:在 LocalTerminalPaneSurface 之上叠一条紧凑连接状态行
- * (状态点/端点标签/延迟/重连按钮)。exited/error/占位语义完全沿用 Local;
- * SFTP 保留在 workspace overlay,Pane 内只承载 shell 视口。
+ * SSH terminal Pane: overlays LocalTerminalPaneSurface with a compact connection status row
+ * (status dot / endpoint label / latency / reconnect button). exited/error/placeholder semantics are fully inherited
+ * from Local; SFTP stays in the workspace overlay, and the Pane carries only the shell viewport.
  */
 export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
   const {
@@ -60,7 +60,7 @@ export function SshTerminalPaneSurface(props: SshTerminalPaneSurfaceProps) {
       : status === "reconnecting"
         ? t("workbench.sshStatusReconnecting")
         : t("workbench.sshStatusDisconnected");
-  // 延迟着色沿用状态点三色:<100ms 绿 / <300ms 黄 / 其余红;未知灰。
+  // Latency coloring reuses the status dot's three colors: <100ms green / <300ms yellow / otherwise red; unknown gray.
   const latencyKnown = typeof latencyMs === "number" && Number.isFinite(latencyMs);
   const latencyClass = !latencyKnown
     ? "text-muted-foreground/70"

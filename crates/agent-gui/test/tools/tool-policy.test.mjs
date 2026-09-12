@@ -17,31 +17,31 @@ const meta = (over = {}) => ({
   ...over,
 });
 
-test("显式策略优先于任何缺省推断", () => {
+test("explicit policy takes precedence over any default inference", () => {
   const policies = { Bash: "deny", plugin_a_x: "allow", Read: "ask" };
   assert.equal(resolveToolPolicy("Bash", meta({ groupId: "shell" }), policies), "deny");
   assert.equal(resolveToolPolicy("plugin_a_x", meta({ groupId: "plugin" }), policies), "allow");
-  // 显式 ask 覆盖只读工具的恒 allow 缺省
+  // An explicit ask overrides the always-allow default for read-only tools
   assert.equal(resolveToolPolicy("Read", meta({ isReadOnly: true }), policies), "ask");
 });
 
-test("缺省:只读工具恒 allow", () => {
+test("default: read-only tools are always allowed", () => {
   assert.equal(resolveToolPolicy("Grep", meta({ isReadOnly: true, groupId: "fs" }), undefined), "allow");
-  // 即便是插件的只读工具,缺省也不拦(读操作无副作用)
+  // Even a plugin's read-only tool is not blocked by default (reads have no side effects)
   assert.equal(
     resolveToolPolicy("plugin_a_read", meta({ isReadOnly: true, groupId: "plugin" }), undefined),
     "allow",
   );
 });
 
-test("缺省:内置/mcp/未知工具 allow", () => {
+test("default: built-in/mcp/unknown tools allow", () => {
   assert.equal(resolveToolPolicy("Bash", meta({ groupId: "shell" }), undefined), "allow");
   assert.equal(resolveToolPolicy("mcp_s_t", meta({ groupId: "mcp" }), undefined), "allow");
-  // 无元数据(未知名)不制造回归 → allow
+  // No metadata (unknown name) must not create a regression → allow
   assert.equal(resolveToolPolicy("Mystery", undefined, undefined), "allow");
 });
 
-test("normalizeToolPolicies 丢弃非法值与空键,空表归一为 undefined", () => {
+test("normalizeToolPolicies drops invalid values and empty keys; an empty table normalizes to undefined", () => {
   assert.equal(normalizeToolPolicies(undefined), undefined);
   assert.equal(normalizeToolPolicies({ "": "deny", Bash: "nope" }), undefined);
   assert.deepEqual(normalizeToolPolicies({ Bash: "ask", " Write ": "deny", X: 1 }), {
@@ -50,34 +50,35 @@ test("normalizeToolPolicies 丢弃非法值与空键,空表归一为 undefined",
   });
 });
 
-test("normalizeSystemSettings 透传 toolPolicies 且旧快照缺失时不报错", () => {
+test("normalizeSystemSettings passes through toolPolicies and does not error when a legacy snapshot lacks it", () => {
   const withPolicies = settings.normalizeSystemSettings({ toolPolicies: { Bash: "deny" } });
   assert.deepEqual(withPolicies.toolPolicies, { Bash: "deny" });
   const legacy = settings.normalizeSystemSettings({});
   assert.equal(legacy.toolPolicies, undefined);
 });
 
-// cua-driver 作为普通 MCP server 接入,工具的 groupId 是 "mcp"。若只靠
-// 「mcp 缺省 allow」,kill_app / type_text / clipboard_write 会被隐式放行。
+// cua-driver is integrated as an ordinary MCP server, and its tools' groupId is "mcp". If it
+// relied only on the "mcp defaults to allow" rule, kill_app / type_text / clipboard_write would be
+// implicitly permitted.
 const cuaDriverMeta = (over = {}) => ({
   groupId: "mcp",
   kind: "mcp",
   isReadOnly: false,
   displayCategory: "mcp",
   serverId: "cua-driver",
-  // 建工具表时由 mcpServerDefaults 依据 server 配置算好带下来的。
+  // Computed and carried down by mcpServerDefaults from the server config when building the tool table.
   serverPolicyDefault: "ask",
   ...over,
 });
 
-test("cua-driver 默认 ask：没有用户策略时不走 mcp 的 allow 缺省", () => {
+test("cua-driver defaults to ask: with no user policy it does not take mcp's allow default", () => {
   assert.equal(resolveToolPolicy("mcp_cua-driver_click", cuaDriverMeta(), undefined), "ask");
-  // 只读工具也要 ask：截屏会把整个桌面内容交给模型。
+  // A read-only tool still asks: a screenshot hands the entire desktop content to the model.
   assert.equal(
     resolveToolPolicy("mcp_cua-driver_get_desktop_state", cuaDriverMeta({ isReadOnly: true }), undefined),
     "ask",
   );
-  // 其他 MCP server 不受影响,仍是 allow。
+  // Other MCP servers are unaffected and remain allow.
   assert.equal(
     resolveToolPolicy(
       "mcp_other_t",
@@ -88,7 +89,7 @@ test("cua-driver 默认 ask：没有用户策略时不走 mcp 的 allow 缺省",
   );
 });
 
-test("cua-driver 用户显式策略覆盖 ask 缺省", () => {
+test("a user's explicit policy overrides cua-driver's ask default", () => {
   const meta = cuaDriverMeta();
   assert.equal(resolveToolPolicy("mcp_cua-driver_click", meta, { "server:cua-driver": "deny" }), "deny");
   assert.equal(
@@ -101,9 +102,10 @@ test("cua-driver 用户显式策略覆盖 ask 缺省", () => {
   );
 });
 
-test("server 级硬编码缺省优先于 group:mcp 的用户策略", () => {
-  // 用户把「所有 MCP 工具」设为 allow,cua-driver 仍单独保持 ask——组级放
-  // 行不该顺带放行一个能敲键盘杀进程的 server;要放行得显式写 server:。
+test("the server-level hardcoded default takes precedence over a group:mcp user policy", () => {
+  // The user sets "all MCP tools" to allow, but cua-driver still stays ask on its own — a
+  // group-level permit should not incidentally permit a server that can type on the keyboard and
+  // kill processes; to permit it you must write server: explicitly.
   assert.equal(
     resolveToolPolicy("mcp_cua-driver_click", cuaDriverMeta(), { "group:mcp": "allow" }),
     "ask",
@@ -112,7 +114,7 @@ test("server 级硬编码缺省优先于 group:mcp 的用户策略", () => {
 
 const defaults = loader.loadModule("../agent-ui/src/contracts/mcpServerDefaults.ts");
 
-test("硬编码缺省按 server 配置判定,而不是按 id", () => {
+test("the hardcoded default is decided by server config, not by id", () => {
   assert.equal(defaults.hardcodedServerPolicyDefault({ id: "cua-driver" }), "ask");
   assert.equal(defaults.hardcodedServerPolicyDefault({ id: "other" }), undefined);
   assert.equal(defaults.effectiveServerPolicyDefault({ id: "cua-driver" }), "ask");
@@ -120,44 +122,47 @@ test("硬编码缺省按 server 配置判定,而不是按 id", () => {
   assert.equal(defaults.effectiveServerPolicyDefault(undefined), "allow");
 });
 
-test("id 大小写与空白不影响判定", () => {
-  // 一份写成 CUA-DRIVER 的配置照样被识别为受管条目：若这里查不到,缺省会
-  // 从 ask 静默退回到 mcp 的兜底 allow——安全侧的缺省因大小写失效。
+test("id casing and whitespace do not affect the decision", () => {
+  // A config written as CUA-DRIVER is still recognized as a managed entry: if this lookup missed,
+  // the default would silently fall back from ask to mcp's catch-all allow — a security-side
+  // default defeated by casing.
   assert.equal(defaults.hardcodedServerPolicyDefault({ id: "CUA-DRIVER" }), "ask");
   assert.equal(defaults.hardcodedServerPolicyDefault({ id: " Cua-Driver " }), "ask");
   assert.ok(defaults.isCuaDriverServerId("CUA-DRIVER"));
   assert.ok(defaults.isHubHiddenServerId(" CUA-Driver "));
 });
 
-test("换个 id 但 command 仍指向 cua-driver 的条目同样按 ask 处理", () => {
-  // 这是最要命的一条：id 是用户可以随手改的展示性标识。只认 id 的话,把条目
-  // 命名成 my-tools 就能让 60 个点击 / 输入 / 杀进程的工具零审批放行。
+test("an entry with a different id but a command still pointing at cua-driver is also treated as ask", () => {
+  // This is the most critical one: id is a display identifier the user can change at will. If only
+  // the id were trusted, naming the entry my-tools would let 60 click / type / kill-process tools
+  // through with zero approval.
   const renamed = { id: "my-tools", command: "/Users/x/.local/bin/cua-driver" };
   assert.ok(defaults.isCuaDriverServer(renamed));
   assert.equal(defaults.effectiveServerPolicyDefault(renamed), "ask");
 
-  // 路径分隔符、扩展名、引号都要认。
+  // Path separators, extensions, and quotes must all be recognized.
   assert.ok(defaults.isCuaDriverServer({ id: "x", command: "C:\\bin\\CUA-Driver.exe" }));
   assert.ok(defaults.isCuaDriverServer({ id: "x", command: '"/opt/homebrew/bin/cua-driver"' }));
   assert.ok(defaults.isCuaDriverServer({ id: "x", command: "cua-driver" }));
 
-  // 名字里含 cua-driver 但不是它的二进制不该被误判。
+  // A binary whose name contains cua-driver but is not it must not be misidentified.
   assert.equal(defaults.isCuaDriverServer({ id: "x", command: "/bin/cua-driver-proxy" }), false);
   assert.equal(defaults.isCuaDriverServer({ id: "x", command: "/opt/cua-driver/bin/serve" }), false);
   assert.equal(defaults.isCuaDriverServer({ id: "x", command: "" }), false);
   assert.equal(defaults.isCuaDriverServer(undefined), false);
 });
 
-test("Hub 隐藏只看 id——自己加的条目不该变成谁也删不掉的幽灵配置", () => {
+test("Hub hiding looks only at id — a self-added entry should not become a ghost config nobody can delete", () => {
   assert.ok(defaults.isHubHiddenServerId("cua-driver"));
-  // command 指向 cua-driver 但 id 是自己起的：安全上按 cua 处理,但仍留在
-  // Hub 里可见可删。
+  // The command points at cua-driver but the id is user-chosen: it is handled as cua for security
+  // but still remains visible and deletable in the Hub.
   assert.equal(defaults.isHubHiddenServerId("my-tools"), false);
 });
 
-test("server 策略键在大小写错位时回落到规范化键", () => {
-  // 设置页按条目原文写键;运行时拿到的 serverId 可能只差大小写。原文优先,
-  // 规范化键兜底,显式配置不会因此失效。
+test("server policy keys fall back to the normalized key when casing differs", () => {
+  // The settings page writes keys using the entry's original text; the serverId seen at runtime
+  // may differ only in casing. The original takes precedence, the normalized key is the fallback,
+  // and explicit config therefore does not stop working.
   assert.equal(
     resolveToolPolicy("mcp_cua_click", cuaDriverMeta({ serverId: "CUA-DRIVER" }), {
       "server:CUA-DRIVER": "deny",
@@ -170,7 +175,7 @@ test("server 策略键在大小写错位时回落到规范化键", () => {
     }),
     "allow",
   );
-  // 原文键优先于规范化键。
+  // The original key takes precedence over the normalized key.
   assert.equal(
     resolveToolPolicy("mcp_cua_click", cuaDriverMeta({ serverId: "CUA-DRIVER" }), {
       "server:CUA-DRIVER": "deny",
@@ -180,15 +185,17 @@ test("server 策略键在大小写错位时回落到规范化键", () => {
   );
 });
 
-test("候选键列表:原文在前、规范化兜底,一致时只有一条", () => {
-  // 这份列表是运行时与设置页共用的唯一顺序来源;顺序一变,两边一起变。
+test("candidate key list: original first, normalized fallback, and only one when they coincide", () => {
+  // This list is the single source of ordering shared by the runtime and the settings page; if the
+  // order changes, both change together.
   assert.deepEqual(defaults.serverPolicyKeyCandidates("CUA-DRIVER"), [
     "server:CUA-DRIVER",
     "server:cua-driver",
   ]);
   assert.deepEqual(defaults.serverPolicyKeyCandidates("cua-driver"), ["server:cua-driver"]);
-  // 原文候选做过 trim:策略表的键经 normalizeToolPolicies 归一,带空白的键
-  // 根本不会存在,不 trim 的原文候选永远查不到东西。
+  // The original candidate is trimmed: policy-table keys are normalized by normalizeToolPolicies,
+  // so a key with whitespace never exists, and an untrimmed original candidate would never find
+  // anything.
   assert.deepEqual(defaults.serverPolicyKeyCandidates(" Cua-Driver "), [
     "server:Cua-Driver",
     "server:cua-driver",

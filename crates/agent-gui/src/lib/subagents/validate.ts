@@ -137,7 +137,7 @@ export function parseSubagentBatch(
   options: {
     identities: Map<string, SubagentIdentity>;
     templates: SubagentTemplate[];
-    /** Plan mode:强制一切子代理 readonly(worktree 请求成为错误而非静默降级)。 */
+    /** Plan mode: force all subagents readonly (a worktree request becomes an error rather than a silent downgrade). */
     forceReadonly?: boolean;
   },
 ): ParseBatchResult {
@@ -283,8 +283,9 @@ export function parseSubagentBatch(
         );
         mode = "readonly";
       } else if (options.forceReadonly && rawMode === "worktree") {
-        // Plan mode 下 worktree 是明确冲突,按仓库取向报错而非静默降级:
-        // 模型应改用 readonly 调研,文件改动留到计划批准后的执行轮。
+        // Under plan mode worktree is an explicit conflict, so report an error per the repo's stance
+        // rather than silently downgrading: the model should switch to readonly research, and file
+        // changes wait for the execution turn after the plan is approved.
         issues.push(
           issue(
             "invalid_arguments",
@@ -297,7 +298,7 @@ export function parseSubagentBatch(
         mode = rawMode as SubagentMode;
       }
     } else if (options.forceReadonly) {
-      // 缺省也强制 readonly:复用的 worktree 身份在 plan mode 里同样只读。
+      // The default is also to force readonly: a reused worktree identity is likewise read-only in plan mode.
       mode = "readonly";
     } else {
       mode = existingIdentity?.lastMode ?? "readonly";

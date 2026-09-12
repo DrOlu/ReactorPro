@@ -20,7 +20,7 @@ function key(overrides) {
   };
 }
 
-test("刷新全家桶在生产配置下全部拦截", () => {
+test("the whole reload family is blocked under the production config", () => {
   const reloadChords = [
     key({ key: "F5", code: "F5" }),
     key({ key: "F5", code: "F5", ctrlKey: true }),
@@ -30,7 +30,7 @@ test("刷新全家桶在生产配置下全部拦截", () => {
     key({ key: "r", code: "KeyR", ctrlKey: true }),
     key({ key: "R", code: "KeyR", ctrlKey: true, shiftKey: true }),
     key({ key: "r", code: "KeyR", metaKey: true }),
-    // 西里尔布局：key 为本地字符，物理键位 code 仍是 KeyR。
+    // Cyrillic layout: key is a local character while the physical key code is still KeyR.
     key({ key: "к", code: "KeyR", ctrlKey: true }),
   ];
   for (const event of reloadChords) {
@@ -39,7 +39,7 @@ test("刷新全家桶在生产配置下全部拦截", () => {
   }
 });
 
-test("dev 配置放行刷新组合键，但仍拦其余浏览器加速键", () => {
+test("the dev config allows reload chords but still blocks other browser accelerators", () => {
   assert.equal(guard.shouldBlockBrowserKeyDefault(key({ key: "F5", code: "F5" }), DEV), false);
   assert.equal(
     guard.shouldBlockBrowserKeyDefault(key({ key: "r", code: "KeyR", ctrlKey: true }), DEV),
@@ -55,7 +55,7 @@ test("dev 配置放行刷新组合键，但仍拦其余浏览器加速键", () =
   );
 });
 
-test("Ctrl/Cmd 组合的打印、查找、保存、打开、查看源码被拦截", () => {
+test("Ctrl/Cmd combinations for print, find, save, open, and view-source are blocked", () => {
   for (const [k, code] of [
     ["p", "KeyP"],
     ["f", "KeyF"],
@@ -76,7 +76,7 @@ test("Ctrl/Cmd 组合的打印、查找、保存、打开、查看源码被拦�
   }
 });
 
-test("F3/F7 与键盘导航媒体键被拦截", () => {
+test("F3/F7 and keyboard-navigation media keys are blocked", () => {
   for (const k of [
     "F3",
     "F7",
@@ -91,7 +91,7 @@ test("F3/F7 与键盘导航媒体键被拦截", () => {
   }
 });
 
-test("Alt+方向键历史导航只在非 mac 拦截（mac 上是分词移动光标）", () => {
+test("Alt+arrow history navigation is blocked only off mac (on mac it moves the cursor by word)", () => {
   for (const k of ["ArrowLeft", "ArrowRight", "Home"]) {
     assert.equal(
       guard.shouldBlockBrowserKeyDefault(key({ key: k, code: k, altKey: true }), PROD),
@@ -104,14 +104,14 @@ test("Alt+方向键历史导航只在非 mac 拦截（mac 上是分词移动光�
       `mac Option+${k}`,
     );
   }
-  // 不带 Alt 的方向键永不拦截。
+  // Arrow keys without Alt are never blocked.
   assert.equal(
     guard.shouldBlockBrowserKeyDefault(key({ key: "ArrowLeft", code: "ArrowLeft" }), PROD),
     false,
   );
 });
 
-test("常规输入与应用快捷键不受影响", () => {
+test("ordinary input and application shortcuts are unaffected", () => {
   const passThrough = [
     key({ key: "a", code: "KeyA" }),
     key({ key: "a", code: "KeyA", ctrlKey: true }),
@@ -121,7 +121,7 @@ test("常规输入与应用快捷键不受影响", () => {
     key({ key: "Enter", code: "Enter" }),
     key({ key: "F1", code: "F1" }),
     key({ key: "F12", code: "F12" }),
-    // AltGr（Windows 报告为 ctrl+alt）打特殊字符，必须放行。
+    // AltGr (reported as ctrl+alt on Windows) types special characters and must be allowed through.
     key({ key: "ŕ", code: "KeyR", ctrlKey: true, altKey: true }),
     key({ key: "þ", code: "KeyP", ctrlKey: true, altKey: true }),
   ];
@@ -162,23 +162,23 @@ function fakeEvent(overrides) {
   return event;
 }
 
-test("安装器：keydown 捕获阶段拦截 F5，卸载后不再拦", () => {
+test("installer: blocks F5 in the keydown capture phase and stops blocking after uninstall", () => {
   const win = createFakeWindow();
   const uninstall = guard.installWebviewNavigationGuard({ isMac: false }, win);
 
   const keydownEntry = win.listeners.find((entry) => entry.type === "keydown");
-  assert.ok(keydownEntry, "keydown 已注册");
-  assert.equal(keydownEntry.options?.capture, true, "keydown 走捕获阶段");
+  assert.ok(keydownEntry, "keydown is registered");
+  assert.equal(keydownEntry.options?.capture, true, "keydown uses the capture phase");
 
   const f5 = fakeEvent(key({ key: "F5", code: "F5" }));
   win.dispatch("keydown", f5);
   assert.equal(f5.defaultPrevented, true);
 
   uninstall();
-  assert.equal(win.listeners.length, 0, "卸载后无残留监听器");
+  assert.equal(win.listeners.length, 0, "no leftover listeners after uninstall");
 });
 
-test("安装器：鼠标侧键前进/后退被取消，普通点击不受影响", () => {
+test("installer: mouse side-button forward/back are cancelled while normal clicks are unaffected", () => {
   const win = createFakeWindow();
   const uninstall = guard.installWebviewNavigationGuard({ isMac: false }, win);
 
@@ -197,11 +197,11 @@ test("安装器：鼠标侧键前进/后退被取消，普通点击不受影响"
   uninstall();
 });
 
-test("安装器：页内拖放兜底取消导航，可编辑目标与已处理事件放行", () => {
+test("installer: in-page drag-and-drop fallback cancels navigation, while editable targets and handled events pass through", () => {
   const win = createFakeWindow();
   const uninstall = guard.installWebviewNavigationGuard({ isMac: false }, win);
 
-  // 未被任何组件处理的拖放：取消默认导航并标记不可放置。
+  // A drag-and-drop not handled by any component: cancel the default navigation and mark it non-droppable.
   const dataTransfer = { dropEffect: "copy" };
   const dragOver = fakeEvent({ target: { tagName: "DIV" }, dataTransfer });
   win.dispatch("dragover", dragOver);
@@ -212,7 +212,7 @@ test("安装器：页内拖放兜底取消导航，可编辑目标与已处理�
   win.dispatch("drop", drop);
   assert.equal(drop.defaultPrevented, true);
 
-  // 拖进输入框/富文本是合法编辑操作。
+  // Dropping into an input box/rich text is a legitimate editing operation.
   for (const target of [
     { tagName: "TEXTAREA" },
     { tagName: "INPUT" },
@@ -223,7 +223,7 @@ test("安装器：页内拖放兜底取消导航，可编辑目标与已处理�
     assert.equal(editableDrop.defaultPrevented, false, JSON.stringify(target));
   }
 
-  // 组件已 preventDefault 的事件不再动它（dropEffect 保持组件设置的值）。
+  // Events already preventDefault'd by a component are left alone (dropEffect keeps the value the component set).
   const handledTransfer = { dropEffect: "move" };
   const handled = fakeEvent({ target: { tagName: "DIV" }, dataTransfer: handledTransfer });
   handled.preventDefault();
@@ -233,7 +233,7 @@ test("安装器：页内拖放兜底取消导航，可编辑目标与已处理�
   uninstall();
 });
 
-test("安装器：漏接的表单提交被兜底取消；重复安装保持幂等", () => {
+test("installer: unhandled form submissions are cancelled by the fallback; repeated installs stay idempotent", () => {
   const win = createFakeWindow();
   const first = guard.installWebviewNavigationGuard({ isMac: false }, win);
 
@@ -243,10 +243,10 @@ test("安装器：漏接的表单提交被兜底取消；重复安装保持幂�
 
   const before = win.listeners.length;
   const second = guard.installWebviewNavigationGuard({ isMac: false }, win);
-  assert.equal(win.listeners.length, before, "重复安装先卸载旧监听器");
+  assert.equal(win.listeners.length, before, "repeated install uninstalls the old listeners first");
 
   second();
   assert.equal(win.listeners.length, 0);
-  // 旧的卸载函数再调用也不应报错或误删。
+  // Calling the old uninstall function again should neither throw nor remove the wrong listeners.
   first();
 });

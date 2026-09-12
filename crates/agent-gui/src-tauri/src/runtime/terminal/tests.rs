@@ -1295,9 +1295,10 @@ fn registry_create_rejects_cwd_outside_the_project() {
 
 #[test]
 fn mark_finished_broadcasts_exit_only_for_the_first_finisher() {
-    // close() 与 PTY reader 线程在终止时都会调 mark_finished;若两次都广播
-    // exit,输掉竞态的那次会在 closed 之后送达,前端将把刚关闭的会话复活成
-    // 幽灵(attach 必败的 dock tab)。首个 finisher 独占广播。
+    // Both close() and the PTY reader thread call mark_finished on termination; if
+    // both broadcast exit, the loser of the race delivers after closed and the
+    // frontend revives the just-closed session as a ghost (a dock tab whose attach
+    // always fails). Only the first finisher broadcasts.
     let registry = Arc::new(TerminalSessionRegistry::default());
     insert_test_ssh_session(
         &registry,
@@ -1338,7 +1339,8 @@ fn close_emits_exit_then_closed_without_a_trailing_exit() {
     registry
         .close("ssh-close-order".to_string())
         .expect("close test session");
-    // 模拟 reader 线程迟到的 mark_finished:会话已移除,必须完全静默。
+    // Simulate a late mark_finished from the reader thread: the session is already
+    // removed, so it must be completely silent.
     registry.mark_finished("ssh-close-order");
 
     let kinds: Vec<String> = std::iter::from_fn(|| rx.try_recv().ok())

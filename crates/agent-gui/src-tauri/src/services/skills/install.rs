@@ -1,8 +1,9 @@
-//! 安装编排：stage-then-swap 原子安装、备份与 install payload 处理。
+//! Install orchestration: stage-then-swap atomic install, backups, and install payload handling.
 //!
-//! 写入纪律：新内容先在 `<root>/.staging/` 下完整构建（同一文件系统，`.` 前缀
-//! 对发现/list 不可见），最后在 [`skills_write_guard`] 保护下用 `fs::rename`
-//! 原子入位。读者永远只会看到旧目录或新目录，不存在半成品窗口。
+//! Write discipline: new content is fully built first under `<root>/.staging/` (same filesystem;
+//! the `.` prefix makes it invisible to discovery/list), then finally placed atomically with
+//! `fs::rename` under the protection of [`skills_write_guard`]. Readers only ever see the old
+//! directory or the new directory; there is no half-built window.
 
 use chrono::Utc;
 use serde_json::Value;

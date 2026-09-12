@@ -16,18 +16,19 @@ import type {
   RunClarifyTurn,
 } from "./clarifyTypes";
 
-// 测试经本模块读取上限常量（单一事实来源仍在 clarifyProtocol）。
+// Tests read the limit constants through this module (the single source of
+// truth is still in clarifyProtocol).
 export { CLARIFY_MAX_ROUNDS };
 
 export type ClarifySessionStatus = "idle" | "asking" | "awaitingInput" | "done" | "error";
 
 export type ClarifySessionState = {
   status: ClarifySessionStatus;
-  /** 会话起点的用户草稿（面板头部引用展示）。 */
+  /** The user draft at the start of the session (shown as a quote in the panel header). */
   draftText: string;
-  /** 问答轮次。末轮 answers === null 即当前待作答的问题组。 */
+  /** Q&A rounds. The last round with answers === null is the question group currently awaiting answers. */
   rounds: ClarifyRound[];
-  /** 终稿轮的流式预览文本（问题轮流的是 JSON，恒为空串）。 */
+  /** Streaming preview text for the final-draft round (question rounds stream JSON, so it is always an empty string). */
   streamingText: string;
   error: string | null;
   roundCount: number;
@@ -46,18 +47,18 @@ export const EMPTY_CLARIFY_SESSION_STATE: ClarifySessionState = {
 
 export type ClarifySessionCore = {
   getState(): ClarifySessionState;
-  /** 外部（React useSyncExternalStore）订阅状态变化；返回退订函数。 */
+  /** Subscribe to external (React useSyncExternalStore) state changes; returns an unsubscribe function. */
   subscribe(listener: () => void): () => void;
   start(draftText: string): Promise<void>;
-  /** 提交当前轮全部应答；模型据此决定追问下一轮或直接产出终稿。 */
+  /** Submit all answers for the current round; the model uses them to decide whether to ask another round or produce the final draft directly. */
   submitAnswers(answers: ClarifyAnswer[]): Promise<void>;
-  /** 就按已有回答（含当前轮的部分选择）直接生成终稿，不再等待剩余问题。 */
+  /** Generate the final draft directly from the existing answers (including partial selections in the current round) without waiting for the remaining questions. */
   generateNow(answers?: ClarifyAnswer[]): Promise<void>;
   retry(): Promise<void>;
   close(): void;
 };
 
-/** 应答里至少有一题真的给了内容（选了选项或写了自由文本）。 */
+/** At least one answer actually provided content (selected an option or wrote free text). */
 function hasAnsweredContent(answers: ClarifyAnswer[]): boolean {
   return answers.some(
     (answer) => answer.selectedLabels.length > 0 || (answer.customText?.trim().length ?? 0) > 0,
@@ -65,8 +66,10 @@ function hasAnsweredContent(answers: ClarifyAnswer[]): boolean {
 }
 
 /**
- * 澄清会话核心（框架无关，便于 node:test 直测）。React hook 只是把 core 的
- * state 镜像进 useSyncExternalStore。一次 start 对应一次会话；close 丢弃全部状态。
+ * Clarify-session core (framework-agnostic, easy to test directly with
+ * node:test). The React hook merely mirrors the core's state into
+ * useSyncExternalStore. One start corresponds to one session; close discards
+ * all state.
  */
 export function createClarifySessionCore(
   runTurn: RunClarifyTurn,
@@ -78,10 +81,12 @@ export function createClarifySessionCore(
   let rounds: ClarifyRound[] = [];
   let roundCount = 0;
   let controller: AbortController | null = null;
-  // 会话代际：start()/close() 各递增一次。在途 ask() 捕获进入时的代际，
-  // 之后任何 await 回来先比对——代际变了说明会话已被重置/替换，迟到结果一律丢弃。
-  // 这同时覆盖了「close 后迟到的 reject 把 idle 态写成 error」和
-  // 「close 后 start(new)，旧请求的成功结果污染新会话消息」两类竞态。
+  // Session generation: start()/close() each increment it once. An in-flight
+  // ask() captures the generation at entry, then compares on every await
+  // return -- a changed generation means the session was reset/replaced, so
+  // late results are discarded. This covers both races: "a late reject after
+  // close writes the idle state into error" and "start(new) after close, where
+  // the old request's success result pollutes the new session's messages".
   let epoch = 0;
   const listeners = new Set<() => void>();
   const emit = () => {
@@ -93,7 +98,7 @@ export function createClarifySessionCore(
     emit();
   };
 
-  /** 把待作答的末轮落定为已应答；无待作答轮时是空操作。 */
+  /** Commit the awaiting final round as answered; a no-op when there is no awaiting round. */
   const settlePendingRound = (answers: ClarifyAnswer[]): ClarifyRound | null => {
     const pending = rounds.at(-1);
     if (!pending || pending.answers !== null) return null;
@@ -103,9 +108,11 @@ export function createClarifySessionCore(
   };
 
   const ask = async (extraUser?: ClarifyMessage) => {
-    // 任何新轮次（start/submitAnswers/generateNow/retry）都作废在途旧轮：
-    // 代际 +1 在先，再中止旧 controller。旧 ask 的迟到 delta/完成/失败
-    // 全部被下方代际闸门静默丢弃（abort 类错误尤其不得落 error 态）。
+    // Any new round (start/submitAnswers/generateNow/retry) invalidates the
+    // in-flight old round: the generation is incremented first, then the old
+    // controller is aborted. The old ask's late delta/completion/failure are all
+    // silently discarded by the generation gate below (abort-style errors in
+    // particular must not land in the error state).
     epoch += 1;
     controller?.abort();
     controller = null;
@@ -114,18 +121,21 @@ export function createClarifySessionCore(
     controller = localController;
     const currentEpoch = epoch;
     setState({ status: "asking", streamingText: "", error: null, rounds: rounds.slice() });
-    // 流式预览不是逐段拼接稳定的（标记/JSON 前缀要整体判定），
-    // 单独累积原始文本、每次全量重算预览。
+    // The streaming preview is not stable when concatenated piecewise (markers
+    // / JSON prefixes must be judged as a whole), so accumulate the raw text
+    // separately and recompute the preview in full each time.
     let streamedRaw = "";
     let raw: string;
     try {
-      // context 用 getter 取：宿主切工作区后无需重建 core（设计文档「上下文感知」）。
+      // context is obtained via a getter: the host does not need to rebuild the core
+      // after switching workspaces (design doc "context awareness").
       raw = await runTurn(
         buildClarifyMessages(sessionMessages, getContext?.()),
         localController.signal,
         (delta) => {
-          // 仅当前代际且仍处 asking 态才累积：turn 结束或会话被重置后
-          // 迟到的 delta 不得写入已清空/已提交的 streamingText。
+          // Accumulate only in the current generation and while still asking: a
+          // late delta after the turn ends or the session is reset must not be
+          // written into the cleared/committed streamingText.
           if (epoch !== currentEpoch || state.status !== "asking") return;
           streamedRaw += delta;
           const preview = clarifyStreamPreview(streamedRaw);
@@ -133,10 +143,13 @@ export function createClarifySessionCore(
         },
       );
     } catch (error) {
-      // 会话已被 close()/start() 丢弃：旧请求的失败（包括 abort）不属于当前会话，
-      // 不落 error 态——否则会把刚重置的 idle/新会话翻成 error。
+      // The session has been discarded by close()/start(): the old request's
+      // failure (including abort) does not belong to the current session and
+      // must not land in the error state -- otherwise it would flip the
+      // just-reset idle / new session into error.
       if (epoch !== currentEpoch) return;
-      // 同一代际内的失败才是真正的网络/模型错误；error 态不得残留半截流文本。
+      // Only failures within the same generation are real network/model errors; the
+      // error state must not retain half a stream of text.
       setState({
         status: "error",
         streamingText: "",
@@ -144,10 +157,12 @@ export function createClarifySessionCore(
       });
       return;
     } finally {
-      // 只有自己仍是当前 controller 时才清引用：避免迟到的旧 ask 清掉新 ask 的 controller。
+      // Clear the reference only when this is still the current controller: avoid a
+      // late old ask clearing the new ask's controller.
       if (controller === localController) controller = null;
     }
-    // 成功结果同样要先过代际闸门，再解析/写消息。
+    // A successful result must likewise pass the generation gate first, then parse
+    // / write messages.
     if (epoch !== currentEpoch) return;
     const parsed = parseClarifyTurn(raw);
     sessionMessages.push({ role: "assistant", content: raw });
@@ -158,12 +173,14 @@ export function createClarifySessionCore(
         finalText: parsed.text,
         rounds: rounds.slice(),
       });
-      // 宿主回调放在状态提交为 done 之后、且包住异常：宿主副作用抛错
-      // 不应把已落定的 done 态翻回 error，也不应让 start() 的 Promise reject。
+      // Host callbacks are invoked after the state commits as done and wrapped
+      // against exceptions: a host side-effect throwing must not flip the
+      // settled done state back to error, nor reject start()'s Promise.
       try {
         callbacks.onFinal(parsed.text);
       } catch {
-        // 吞掉宿主回调异常：状态机对外只认会话自身的错误。
+        // Swallow host callback exceptions: the state machine only recognizes the
+        // session's own errors externally.
       }
       return;
     }
@@ -184,7 +201,8 @@ export function createClarifySessionCore(
       return () => listeners.delete(listener);
     },
     start(draftText) {
-      // 新会话重置消息与轮次；代际递增与在途请求中止统一由 ask() 负责。
+      // A new session resets messages and rounds; the generation increment and
+      // abort of in-flight requests are handled uniformly by ask().
       sessionMessages = [{ role: "user", content: draftText }];
       rounds = [];
       roundCount = 0;
@@ -192,8 +210,9 @@ export function createClarifySessionCore(
       return ask();
     },
     submitAnswers(answers) {
-      // 只有等待作答时才接受提交：done 后不得重开轮次/二次 onFinal，
-      // asking 中的提交属于 UI 不可达路径，一并挡掉。
+      // Accept a submission only while awaiting answers: after done, rounds
+      // must not reopen or onFinal fire twice, and a submission while asking is
+      // a UI-unreachable path that is blocked as well.
       if (state.status !== "awaitingInput") return Promise.resolve();
       const settled = settlePendingRound(answers);
       if (!settled) return Promise.resolve();
@@ -202,18 +221,21 @@ export function createClarifySessionCore(
         content: buildClarifyAnswersMessage(settled),
       };
       if (roundCount >= CLARIFY_MAX_ROUNDS) {
-        // 硬上限：不再放行提问，答案连同终稿指令一起送出（设计文档「错误处理」）。
+        // Hard limit: no more questions are allowed; answers are sent together with
+        // the final-draft instruction (design doc "error handling").
         sessionMessages.push(answersMessage);
         return ask({ role: "user", content: CLARIFY_FORCE_FINAL_INSTRUCTION });
       }
       return ask(answersMessage);
     },
     generateNow(answers) {
-      // done 之后强制终稿是空操作：终稿已落定，不重开轮次。
+      // Forcing the final draft after done is a no-op: the draft has settled and
+      // rounds are not reopened.
       if (state.status === "done") return Promise.resolve();
       if (state.status === "awaitingInput") {
         const settled = settlePendingRound(answers ?? []);
-        // 当前轮已选的部分回答一并入档；全空就不给模型添噪声消息。
+        // Include the current round's partial selected answers in the record; if all
+        // empty, do not add a noise message for the model.
         if (settled && hasAnsweredContent(settled.answers ?? [])) {
           sessionMessages.push({ role: "user", content: buildClarifyAnswersMessage(settled) });
         }
@@ -221,14 +243,17 @@ export function createClarifySessionCore(
       return ask({ role: "user", content: CLARIFY_FORCE_FINAL_INSTRUCTION });
     },
     retry() {
-      // 仅 error 态可重试：失败的轮次里 sessionMessages 尾部正是那轮的
-      // user 输入，直接原样重发即可（pop 再 push 同一条是恒等变换，不做）。
+      // Only the error state can retry: in a failed round the tail of
+      // sessionMessages is exactly that round's user input, so resend it as-is
+      // (pop then push the same entry is an identity transform, so skip it).
       if (state.status !== "error") return Promise.resolve();
       return ask();
     },
     close() {
-      // 代际 +1 在先：在途 ask 的迟到结果（成功或失败）全部作废，
-      // 不得写入刚清空的 sessionMessages / 复活幽灵 awaitingInput 会话。
+      // Increment the generation first: any late result (success or failure)
+      // of the in-flight ask is invalidated and must not write into the
+      // just-cleared sessionMessages or resurrect a ghost awaitingInput
+      // session.
       epoch += 1;
       controller?.abort();
       controller = null;
@@ -241,7 +266,7 @@ export function createClarifySessionCore(
   };
 }
 
-/** React 包装：useSyncExternalStore 镜像 core 状态；runTurn/callbacks/context 经 ref 保持最新。 */
+/** React wrapper: useSyncExternalStore mirrors the core state; runTurn/callbacks/context stay fresh via refs. */
 export function useClarifySession(
   runTurn: RunClarifyTurn,
   clarifyContext: ClarifyContext | undefined,
@@ -254,7 +279,8 @@ export function useClarifySession(
   retry: () => void;
   close: () => void;
 } {
-  // 每次渲染刷新 ref：core 闭包里永远读到最新的宿主回调，core 本体不必重建。
+  // Refresh refs on every render: the core closure always reads the latest host
+  // callbacks and the core itself need not be rebuilt.
   const runTurnRef = useRef(runTurn);
   runTurnRef.current = runTurn;
   const contextRef = useRef(clarifyContext);
@@ -262,7 +288,8 @@ export function useClarifySession(
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
 
-  // core 只创建一次：换 identity 会导致订阅丢失与在途会话断裂。
+  // The core is created only once: changing identity would lose subscriptions and
+  // break the in-flight session.
   const coreRef = useRef<ClarifySessionCore | null>(null);
   if (!coreRef.current) {
     coreRef.current = createClarifySessionCore(
@@ -273,11 +300,13 @@ export function useClarifySession(
   }
   const core = coreRef.current;
 
-  // subscribe 必须引用稳定，否则 useSyncExternalStore 每渲染重订阅。
+  // subscribe must be a stable reference, otherwise useSyncExternalStore
+  // resubscribes on every render.
   const subscribe = useCallback((listener: () => void) => core.subscribe(listener), [core]);
   const state = useSyncExternalStore(subscribe, core.getState);
 
-  // 动作返回 void：错误已由 core 落进 state.error，Promise 无需调用方续接。
+  // Actions return void: errors are already put into state.error by the core, so
+  // the Promise needs no continuation by the caller.
   const start = useCallback((draftText: string) => void core.start(draftText), [core]);
   const submitAnswers = useCallback(
     (answers: ClarifyAnswer[]) => void core.submitAnswers(answers),
@@ -290,10 +319,12 @@ export function useClarifySession(
   const retry = useCallback(() => void core.retry(), [core]);
   const close = useCallback(() => core.close(), [core]);
 
-  // 卸载即丢弃：宿主（ChatComposerBar）已在 close()/切会话路径显式关会话，
-  // 这里兜底纯卸载路径（视图切换等组件直接消失）——core.close() 里的
-  // AbortController 贯穿到在途请求（设计文档「错误处理」）。依赖数组留空：
-  // coreRef 是稳定的 ref，cleanup 只在卸载时执行一次。
+  // Unmount discards: the host (ChatComposerBar) already explicitly closes the
+  // session on close()/conversation-switch paths; this covers the pure-unmount
+  // path (the component disappearing directly, e.g. on a view switch) -- the
+  // AbortController in core.close() reaches in-flight requests (design doc
+  // "error handling"). The dep array is empty: coreRef is a stable ref, so
+  // cleanup runs only once on unmount.
   useEffect(() => {
     return () => coreRef.current?.close();
   }, []);

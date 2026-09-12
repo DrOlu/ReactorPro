@@ -133,16 +133,18 @@ function useGatewayAppController() {
   // an actual split without changing the visible homepage experience.
   const [initialHomeConversation] = useState(createGatewayHomeConversationState);
   const [conversationId, setConversationId] = useState(initialHomeConversation.conversationId);
-  // 本地未持久化的会话模型切换（按会话 id 键）；发消息随 selected_model
-  // 落库后由 history-sync 回声在清理 effect 中收敛删除。
+  // Local, unpersisted per-conversation model switches (keyed by conversation id); after a
+  // message is sent and selected_model is persisted, the history-sync echo converges and deletes
+  // them in the cleanup effect.
   const [conversationModelOverrides, setConversationModelOverrides] = useState<
     ReadonlyMap<string, SelectedModel>
   >(new Map());
   const [chatError, setChatError] = useState<string | null>(null);
-  // 用量环手动压缩：以 operationId 关联桌面终态，避免 accepted 被误当作完成。
-  // 按会话 id 键化（issue #359 缺陷 #3）：不同会话各自独立 pending，一个会话压缩
-  // 期间绝不静默屏蔽另一个会话的压缩请求。state 与 ref 经唯一 setter/clearer 同步
-  // 写以保证两者一致。
+  // Usage-ring manual compaction: associates the desktop terminal state by operationId so
+  // "accepted" is not mistaken for completion. Keyed by conversation id (issue #359 bug #3):
+  // different conversations each have their own pending state, and while one conversation is
+  // compacting it never silently blocks another conversation's compaction request. State and ref
+  // are written synchronously through a single setter/clearer to keep the two consistent.
   const [manualCompactPendingByConversation, setManualCompactPendingState] = useState<
     ReadonlyMap<string, ManualCompactPendingRequest>
   >(() => new Map());
@@ -247,8 +249,10 @@ function useGatewayAppController() {
     listenerRoot: transcriptScrollAreaRoot,
     trackKeys: true,
   });
-  // 楼层导航：当前楼层由转写区上报，跳转经 navRef 直达虚拟列表；粘底跟随
-  // 激活时程序化滚动会被立即拽回底部——跳转前先按「跳入历史」语义解除跟随。
+  // Floor navigation: the current floor is reported by the transcript area, and jumps go through
+  // navRef straight to the virtual list; while stick-to-bottom following is active, a programmatic
+  // scroll is immediately yanked back to the bottom -- so before jumping, release following using
+  // the "jump into history" semantics.
   const transcriptNavRef = useRef<GatewayTranscriptNavHandle | null>(null);
   const [activeFloorKey, setActiveFloorKey] = useState<string | null>(null);
   const handleFloorJump = useCallback(
@@ -260,10 +264,11 @@ function useGatewayAppController() {
   );
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const composerDraftCacheRef = useRef<Map<string, MentionComposerDraft>>(new Map());
-  // 草稿 id → 真实会话 id。Pane 宿主草稿 effect 的 cleanup 闭包捕获的是旧
-  // conversationId:draft→real 原位重绑时 cleanup 在 rename 之后才执行,
-  // 若直接写 draft key 会落进永远读不到的孤儿条目,宿主新 effect 随即
-  // clear() 掉用户正在输入的内容。读写统一经本映射改写到真实 id。
+  // Draft id -> real conversation id. The Pane host's draft effect cleanup closes over the old
+  // conversationId: when rebinding in place from draft to real, the cleanup runs after the rename,
+  // so writing directly to the draft key would land on an orphan entry that can never be read, and
+  // the host's new effect would immediately clear() what the user is typing. Reads and writes are
+  // uniformly rewritten to the real id through this mapping.
   const boundComposerDraftIdsRef = useRef<Map<string, string>>(new Map());
   const resolveComposerDraftKey = useCallback((conversationId: string) => {
     return boundComposerDraftIdsRef.current.get(conversationId) ?? conversationId;
@@ -379,7 +384,7 @@ function useGatewayAppController() {
     () => chatCommandPipeline.pendingConversationIds(),
     [chatCommandPipeline],
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Agent ID 是侧边栏 Store 的数据隔离边界。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Agent ID is the data isolation boundary of the sidebar Store.
   const sidebarStore = useMemo(
     () =>
       createSidebarStore(
@@ -528,7 +533,7 @@ function useGatewayAppController() {
   const resolveActiveAgentID = useCallback(async () => {
     const currentApi = apiRef.current;
     if (!currentApi) {
-      throw new Error("Gateway 尚未连接。");
+      throw new Error("Gateway is not connected yet.");
     }
     let agentID = currentApi.getActiveAgent().trim();
     if (!agentID) {
@@ -536,7 +541,7 @@ function useGatewayAppController() {
       agentID = currentApi.getActiveAgent().trim();
     }
     if (!agentID) {
-      throw new Error("没有可用的 Agent。");
+      throw new Error("No Agent is available.");
     }
     return agentID;
   }, []);
@@ -554,7 +559,8 @@ function useGatewayAppController() {
       onWorkspaceDirectoriesMounted: handleWorkspaceDirectoriesMounted,
     });
 
-  // 无会话兜底：等价于点一次“新对话”，返回新草稿会话 id 供上传立即挂靠。
+  // No-conversation fallback: equivalent to clicking "New chat" once; returns the new draft
+  // conversation id so the upload can attach immediately.
   const ensureUploadConversation = useCallback(() => startNewConversationRef.current(), []);
   const workdirForConversation = useCallback(
     (targetConversationId: string) => {
@@ -643,8 +649,9 @@ function useGatewayAppController() {
     });
   }, [api, applyChatQueueSnapshot]);
 
-  // AskUserQuestion 卡片的应答出口：经网关 chat_queue.tool_answer 送达桌面端
-  // 的工具挂起表；桌面端 resolve 后照常以 tool_result 事件流回本端。
+  // Answer outlet for the AskUserQuestion card: delivered via the gateway
+  // chat_queue.tool_answer to the desktop's tool suspension table; after the desktop resolves it,
+  // the result flows back here as a tool_result event as usual.
   useEffect(() => {
     if (!api) {
       registerAskUserQuestionAnswerHandler(null);
@@ -672,15 +679,17 @@ function useGatewayAppController() {
     return () => registerAskUserQuestionAnswerHandler(null);
   }, [api]);
 
-  // 工具审批卡片的决定出口：经网关 chat_queue.tool_approval 送达桌面端审批挂起表;
-  // 桌面端据此放行/拒绝该工具,结果照常以 tool_result 事件流回本端。
+  // Decision outlet for the tool approval card: delivered via the gateway
+  // chat_queue.tool_approval to the desktop's approval suspension table; the desktop then
+  // allows/denies the tool, and the result flows back here as a tool_result event as usual.
   useEffect(() => {
     if (!api) {
       registerToolApprovalDecisionHandler(null);
       return;
     }
     registerToolApprovalDecisionHandler(async (toolCallId, decision, targetConversationId) => {
-      // 背景 Pane 显式携带自己的会话 id;主视图缺省仍按当前展示会话路由。
+      // Background Panes explicitly carry their own conversation id; the main view by default
+      // still routes by the currently displayed conversation.
       const conversationIdValue = (
         targetConversationId?.trim() ||
         resolveVisibleConversationId(selectedHistoryIdRef.current, conversationIdRef.current)
@@ -702,8 +711,9 @@ function useGatewayAppController() {
     return () => registerToolApprovalDecisionHandler(null);
   }, [api]);
 
-  // 计划卡片的决定出口：经网关 chat_queue.plan_decision 送达桌面端计划挂起表;
-  // 桌面端据此批准/退回计划,结果照常以 tool_result 事件流回本端。
+  // Decision outlet for the plan card: delivered via the gateway chat_queue.plan_decision to the
+  // desktop's plan suspension table; the desktop then approves/rejects the plan, and the result
+  // flows back here as a tool_result event as usual.
   useEffect(() => {
     if (!api) {
       registerPlanDecisionHandler(null);
@@ -795,9 +805,10 @@ function useGatewayAppController() {
     return historyLoadSequenceRef.current;
   }, []);
 
-  // Session Workbench：草稿转正时把承载草稿的 Pane 原位重绑到真实会话 id，
-  // 与 setConversationId 同批提交——聚焦 Pane 不会闪现只读预览，DOM 不重挂载。
-  // workbenchController 在下方创建后回填本 ref。
+  // Session Workbench: when a draft is promoted, rebind the Pane hosting the draft in place to
+  // the real conversation id, committed in the same batch as setConversationId -- the focused Pane
+  // never flashes a read-only preview, and the DOM is not remounted. workbenchController is
+  // created below and backfills this ref.
   const workbenchRenameConversationRef = useRef<(fromId: string, toId: string) => void>(() => {});
   const workbenchClearRef = useRef<() => void>(() => {});
 
@@ -826,8 +837,9 @@ function useGatewayAppController() {
         conversationWorkdirsRef.current.set(nextId, workdir);
       }
 
-      // 先登记改写映射再搬缓存:宿主草稿 effect 的 cleanup 会在 rename 提交
-      // 后仍以旧 id 写回,经映射落到真实 id 上,不产生孤儿条目。
+      // Register the rewrite mapping before moving the cache: the host's draft effect cleanup
+      // writes back with the old id even after the rename commits, but the mapping lands it on the
+      // real id, so no orphan entry is produced.
       for (const [draftId, boundId] of boundComposerDraftIdsRef.current) {
         if (boundId === previousId) boundComposerDraftIdsRef.current.set(draftId, nextId);
       }
@@ -988,7 +1000,8 @@ function useGatewayAppController() {
   // race-free: the next run's events simply flow in).
   const displayedConversationId = resolveVisibleConversationId(selectedHistoryId, conversationId);
 
-  // 会话生效模型：本地 override > sidebar 行携带的持久化选择 > 全局默认。
+  // Effective model for a conversation: local override > persisted choice carried by the sidebar
+  // row > global default.
   const selectionForConversation = useCallback(
     (targetConversationId: string) =>
       resolveActiveModelSelection({
@@ -1008,8 +1021,9 @@ function useGatewayAppController() {
       }),
     [conversationModelOverrides, displayedConversationId, settings, sidebarConversationsById],
   );
-  // override 的持久化回声（本会话 selected_model 落库后随 history-sync 回流）
-  // 到达即清理，会话从此走服务器权威值。
+  // The persistence echo of the override (which flows back with history-sync after this
+  // conversation's selected_model is persisted) is cleared on arrival, and the conversation then
+  // uses the server-authoritative value.
   useEffect(() => {
     if (conversationModelOverrides.size === 0) return;
     let changed = false;
@@ -1451,8 +1465,9 @@ function useGatewayAppController() {
     setSettings,
     settings,
   });
-  // @ 弹层的应用候选：门控与 GUI 完全同源（agent 模式 + 工作区挂
-  // cua-driver），列表经 Gateway 直通中继自桌面宿主本机。
+  // App candidates for the @ popover: gating is exactly the same as the GUI (agent mode +
+  // workspace with cua-driver attached), and the list is relayed straight through the Gateway from
+  // the desktop host machine.
   const mentionApps = useMentionApps(workspaceResources.mcpServers, isAgentMode);
   const {
     cancelChat,
@@ -1684,17 +1699,19 @@ function useGatewayAppController() {
         terminalSessionsVersionRef.current += 1;
         setTerminalSessions(sortTerminalSessions(sessions));
       } catch {
-        // 瞬时网关错误不应把仍存活的终端误判为幽灵会话。
+        // A transient gateway error should not misclassify a still-live terminal as a ghost
+        // conversation.
       }
     },
     [setTerminalSessions, terminalClient, terminalSessionsVersionRef],
   );
 
-  // --- Session Workbench（多看板分屏）----------------------------------------
-  // 布局与聚焦语义复用共享 reducer；聚焦 Pane 的会话 === 页面当前会话
-  // （与桌面端相同不变式）。每个会话 Pane 渲染同一套完整宿主，焦点切换
-  // 只换绑定不拆 DOM；侧栏选中走 syncCurrentConversation（已有 Pane 则
-  // 聚焦，否则重绑聚焦 Pane）。拖拽体系与桌面端共用。
+  // --- Session Workbench (multi-board split view) ----------------------------
+  // Layout and focus semantics reuse the shared reducer; the focused Pane's conversation === the
+  // page's current conversation (the same invariant as the desktop). Every conversation Pane
+  // renders the same complete host, and focus changes only swap bindings without tearing down the
+  // DOM; sidebar selection goes through syncCurrentConversation (focus an existing Pane, otherwise
+  // rebind the focused Pane). The drag system is shared with the desktop.
   const workbenchController = useGatewayWorkbench({
     enabled: sessionWorkbench.enabled,
     displayedConversationId,
@@ -1732,12 +1749,14 @@ function useGatewayAppController() {
   workbenchRenameConversationRef.current = workbenchController.workbench.renameConversation;
   workbenchClearRef.current = workbenchController.clearWorkbench;
 
-  // 会话从权威索引消失（批量删除等）：先收起对应 Pane，再走既有移除通路；
-  // displayed 被删时的选中迁移完成后，syncCurrentConversation 会把聚焦 Pane
-  // 重新绑定到新的当前会话。草稿 id 必须跳过——草稿转正会经 removeLocal 把
-  // 草稿 id 移出权威索引，此时 Pane 已由 rename 通路原位重绑，收 Pane 会误关
-  // 聚焦面板；与底层处理器跳过草稿的口径一致。用户手动删草稿走
-  // onLocalDraftDeleted 通路。
+  // A conversation disappears from the authoritative index (bulk delete, etc.): collapse the
+  // corresponding Pane first, then go through the existing removal path; after the selection
+  // migration when displayed is deleted completes, syncCurrentConversation rebinds the focused
+  // Pane to the new current conversation. Draft ids must be skipped -- promoting a draft moves the
+  // draft id out of the authoritative index via removeLocal, and by then the Pane has already been
+  // rebound in place by the rename path, so collapsing the Pane would wrongly close the focused
+  // panel; this matches the underlying handler's policy of skipping drafts. A user manually
+  // deleting a draft goes through the onLocalDraftDeleted path.
   const handleSidebarConversationsRemovedWithWorkbench = (ids: readonly string[]) => {
     workbenchController.closePanesForRemovedConversations(
       ids.filter((id) => !isLocalDraftConversationId(id)),
@@ -1759,9 +1778,10 @@ function useGatewayAppController() {
     }
 
     const frameId = window.requestAnimationFrame(() => {
-      // Workbench 开启后草稿始终由稳定 Pane 宿主管理，包括布局从多 Pane
-      // 收敛回单 Pane 的一帧；页面级 restore 只能服务关闭 Workbench 的
-      // legacy composer，否则会用旧缓存覆盖宿主里尚未写回的输入。
+      // Once Workbench is enabled, drafts are always managed by a stable Pane host, including the
+      // frame where the layout converges from multiple Panes back to a single Pane; page-level
+      // restore may only serve the legacy composer when Workbench is off, otherwise it would
+      // overwrite the not-yet-written-back input in the host with stale cache.
       if (sessionWorkbench.enabled) {
         composerDraftOwnerRef.current = targetConversationId;
         return;
@@ -1932,8 +1952,9 @@ function useGatewayAppController() {
       </LocaleContext.Provider>
     );
   }
-  // --- 多看板背景 Pane 的按会话绑定能力(复刻桌面端 buildBackgroundPaneBinding
-  // 的数据面):工作区、草稿缓存、附件导入全部按显式 conversationId 路由。---
+  // --- Per-conversation binding for multi-board background Panes (replicating the data plane of
+  // the desktop's buildBackgroundPaneBinding): workspace, draft cache, and attachment import are
+  // all routed by explicit conversationId. ---
   const getCachedComposerDraft = (targetConversationId: string) =>
     composerDraftCacheRef.current.get(resolveComposerDraftKey(targetConversationId));
   const setCachedComposerDraft = (targetConversationId: string, draft: MentionComposerDraft) => {

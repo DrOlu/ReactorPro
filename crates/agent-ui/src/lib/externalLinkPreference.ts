@@ -1,4 +1,4 @@
-// 本地界面偏好：跨会话、重启保留，不随远端 Agent 设置同步。
+// Local UI preference: preserved across sessions and restarts, not synced with remote Agent settings.
 const STORAGE_KEY = "liveagent:skip-external-link-confirmation:v1";
 let skipForSession = false;
 
@@ -15,6 +15,6 @@ export function rememberExternalLinkConfirmation(): void {
   try {
     globalThis.localStorage?.setItem(STORAGE_KEY, "true");
   } catch {
-    // 存储不可用时仍打开链接，偏好降级为本次运行有效。
+    // Links still open when storage is unavailable; the preference degrades to being effective for this run only.
   }
 }

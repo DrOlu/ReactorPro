@@ -11,8 +11,8 @@ import { Brain, ChevronRight } from "../../IconSet";
 
 /**
  * One reasoning segment in the processing trace. Streams visibly while the
- * model is thinking ("思考中"), then settles into a collapsed "思考了 Xs" /
- * "思考过程" row whose body stays unmounted until the user expands it — the
+ * model is thinking ("Thinking"), then settles into a collapsed "Thought for Xs" /
+ * "Thinking process" row whose body stays unmounted until the user expands it — the
  * reasoning text is never dropped from the transcript, only folded.
  */
 export function ThinkingDisclosure(props: {

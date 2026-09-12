@@ -1,7 +1,8 @@
 package websocket_test
 
-// v2 浏览器链路集成测试：真实 httptest 服务器 + 二进制 proto 帧，覆盖握手鉴权、本地操作、
-// 直通转发（白名单/限额/关联 id 命名空间化）、chat 订阅与事件推送。
+// v2 browser-path integration test: a real httptest server plus binary proto frames, covering handshake
+// authentication, local operations, passthrough forwarding (allowlist/limits/correlation-id namespacing),
+// chat subscription, and event push.
 
 import (
 	"crypto/sha256"
@@ -43,7 +44,7 @@ func TestV2HelloRejectsBadToken(t *testing.T) {
 	if hello == nil || hello.GetOk() {
 		t.Fatalf("hello reply = %#v, want ok=false", frame)
 	}
-	// 其后连接应被服务端关闭。
+	// The server should close the connection afterwards.
 	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 	if _, _, err := conn.ReadMessage(); err == nil {
 		t.Fatal("connection stayed open after rejected hello")
@@ -96,7 +97,7 @@ func TestV2AgentRequestPassthroughRoundtrip(t *testing.T) {
 	sm, agentSession, conn, cleanup := newV2BrowserTest(t)
 	defer cleanup()
 
-	// page_size 越界应被网关钳制到协议上限（200）。
+	// An out-of-range page_size should be clamped by the gateway to the protocol upper bound (200).
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "hist-1",
 		AgentId:   "desktop-agent",
@@ -134,7 +135,7 @@ func TestV2AgentRequestPassthroughRoundtrip(t *testing.T) {
 	if response == nil {
 		t.Fatalf("passthrough reply = %#v, want agent_response", frame)
 	}
-	// 回程信封的关联 id 已剥离命名空间前缀。
+	// The return envelope's correlation id has had the namespace prefix stripped.
 	if response.GetRequestId() != "hist-1" {
 		t.Fatalf("agent_response request_id = %q, want hist-1", response.GetRequestId())
 	}
@@ -149,7 +150,7 @@ func TestV2GuardRejectsNonWhitelistedArms(t *testing.T) {
 	_, _, conn, cleanup := newV2BrowserTest(t)
 	defer cleanup()
 
-	// chat_command 必须走网关编排帧，不允许直通。
+	// chat_command must go through a gateway-orchestrated frame and is not allowed to pass through.
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "bad-1",
 		AgentId:   "desktop-agent",
@@ -166,7 +167,7 @@ func TestV2GuardRejectsNonWhitelistedArms(t *testing.T) {
 		t.Fatalf("chat_command passthrough reply = %#v, want local_error", frame)
 	}
 
-	// 内部推送臂同理。
+	// The internal push arms behave likewise.
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "bad-2",
 		AgentId:   "desktop-agent",
@@ -221,7 +222,7 @@ func TestV2ChatSubscribeAndStreamEvents(t *testing.T) {
 		},
 	})
 
-	// 依次应收到 started 与 token 两条流事件。
+	// Both stream events, started and token, should be received in order.
 	sawToken := false
 	for attempt := 0; attempt < 8 && !sawToken; attempt++ {
 		frame := receiveWebFrame(t, conn)
@@ -245,8 +246,9 @@ func TestV2ChatSubscribeAndStreamEvents(t *testing.T) {
 	}
 }
 
-// TestV2EndToEndBinaryPath 打通首条全二进制路径：假 agent 经 /ws/v2/agent 接入，
-// 浏览器经 /ws/v2 直通请求，全程使用 Protobuf 二进制帧。
+// TestV2EndToEndBinaryPath exercises the first fully binary path: a fake agent connects
+// via /ws/v2/agent, the browser sends passthrough requests via /ws/v2, and Protobuf
+// binary frames are used throughout.
 func TestV2EndToEndBinaryPath(t *testing.T) {
 	t.Parallel()
 
@@ -262,7 +264,7 @@ func TestV2EndToEndBinaryPath(t *testing.T) {
 	mux.Handle("/ws/v2", srv.BrowserHandler())
 	mux.Handle("/ws/v2/agent", srv.AgentHandler())
 
-	// ---- 假 agent 上线 ----
+	// ---- Fake agent comes online ----
 	agentConn, agentCleanup := dialV2Path(t, mux, "/ws/v2/agent")
 	defer agentCleanup()
 	sendProtoFrame(t, agentConn, &gatewayv2.AgentClientFrame{
@@ -281,7 +283,7 @@ func TestV2EndToEndBinaryPath(t *testing.T) {
 		t.Fatalf("agent hello reply = %#v, want ok with session id", agentHello)
 	}
 
-	// ---- 浏览器接入并发起直通请求 ----
+	// ---- Browser connects and issues a passthrough request ----
 	browserConn, browserCleanup := dialV2Path(t, mux, "/ws/v2")
 	defer browserCleanup()
 	helloV2(t, browserConn, "ws-token")
@@ -298,7 +300,7 @@ func TestV2EndToEndBinaryPath(t *testing.T) {
 		},
 	})
 
-	// agent 侧应收到直通信封（跳过心跳 Ping）。
+	// The agent side should receive the passthrough envelope (skipping heartbeat Pings).
 	var inbound *gatewayv2.GatewayEnvelope
 	for attempt := 0; attempt < 8; attempt++ {
 		envelope := receiveAgentServerFrame(t, agentConn).GetEnvelope()
@@ -446,7 +448,7 @@ func TestV2ChatIngressRepeatedGapEscalatesToCheckpoint(t *testing.T) {
 	}
 }
 
-// dialV2Path 对多路由 mux 的指定路径拨号。
+// dialV2Path dials the given path on a multi-route mux.
 func dialV2Path(t *testing.T, handler http.Handler, path string) (*websocket.Conn, func()) {
 	t.Helper()
 	return dialV2(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

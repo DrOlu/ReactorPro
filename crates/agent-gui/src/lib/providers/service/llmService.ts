@@ -4,11 +4,12 @@ import { usePayloadInterceptor } from "./interceptors";
 import type { LlmStreamRequest } from "./types";
 
 /**
- * dev 构建探测。
+ * Dev build detection.
  *
- * Vite 下 import.meta.env.DEV 为真；生产构建被静态替换为 false。Node 测试
- * 加载器（esbuild CJS 转译）中 import.meta 是空壳，可选链安全落到 false——
- * 测试如需覆盖冻结路径用 setLlmServiceDevModeForTest。
+ * Under Vite, import.meta.env.DEV is true; production builds statically replace it with
+ * false. In the Node test loader (esbuild CJS transpilation) import.meta is an empty
+ * shell, so optional chaining safely lands on false — tests that need to cover the
+ * frozen path use setLlmServiceDevModeForTest.
  */
 function detectDevBuild(): boolean {
   try {
@@ -20,7 +21,7 @@ function detectDevBuild(): boolean {
 
 let devModeOverride: boolean | undefined;
 
-/** 测试专用：强制指定 dev 冻结开关（undefined 恢复自动探测）。 */
+/** Test-only: force the dev freeze switch (undefined restores auto-detection). */
 export function setLlmServiceDevModeForTest(value: boolean | undefined): void {
   devModeOverride = value;
 }
@@ -29,23 +30,27 @@ function isDevBuild(): boolean {
   return devModeOverride ?? detectDevBuild();
 }
 
-/** 已分发过的请求信封——一次性分发不变量的记账。 */
+/** Already-dispatched request envelopes — bookkeeping for the dispatch-once invariant. */
 const dispatchedRequests = new WeakSet<LlmStreamRequest>();
 
 /**
- * LLM 统一流式入口。
+ * Unified LLM streaming entry point.
  *
- * 职责被刻意压到最小（PR-1 行为等价不变量）：
- * 1. 一次性分发——同一请求信封重复分发抛错，杜绝"复用上一轮请求信封"这类
- *    隐性共享（重试/failover 的重放语义在适配器内部与调用方，不经此层）；
- * 2. dev 冻结——仅 dev 构建把信封冻住，让越过 seam 之后的信封突变当场以
- *    TypeError 暴露（ESM 严格模式）；生产构建零开销；
- * 3. 经 runtime/streamByApi.ts 协议分发针孔路由到注册表适配器。针孔是 seam
- *    的公开可观测点（传输 golden 与 failover 测试按该模块路径 mock 截获
- *    全部出站流），不得绕开。
+ * Responsibilities are deliberately minimal (PR-1 behavior-equivalence invariant):
+ * 1. Dispatch-once — dispatching the same request envelope twice throws, preventing
+ *    implicit sharing such as "reusing the previous turn's request envelope" (the
+ *    replay semantics of retry/failover live inside the adapter and the caller, not
+ *    through this layer);
+ * 2. Dev freeze — only dev builds freeze the envelope, so an envelope mutation past
+ *    the seam surfaces immediately as a TypeError (ESM strict mode); production builds
+ *    cost nothing;
+ * 3. Route to the registry adapter through the protocol-dispatch pinhole in
+ *    runtime/streamByApi.ts. The pinhole is the seam's public observation point
+ *    (transport golden and failover tests mock that module path to intercept all
+ *    outbound streams) and must not be bypassed.
  *
- * 传输路由字段（headers 内 x-liveagent-* 等）不透明透传：不读取、不判断、
- * 不缓存。
+ * Transport routing fields (x-liveagent-* in headers, etc.) pass through opaquely:
+ * not read, not interpreted, not cached.
  */
 export function llmStream(request: LlmStreamRequest): AssistantMessageEventStream {
   if (dispatchedRequests.has(request)) {
@@ -61,8 +66,9 @@ export function llmStream(request: LlmStreamRequest): AssistantMessageEventStrea
 export const llm = {
   stream: llmStream,
   /**
-   * 注册自定义 payload 拦截器（PR-3），返回幂等 dispose。执行位置在默认
-   * 拦截器之后、payload-debug-logging 链尾之前。
+   * Register a custom payload interceptor (PR-3), returning an idempotent dispose.
+   * Execution happens after the default interceptors and before the tail of the
+   * payload-debug-logging chain.
    */
   use: usePayloadInterceptor,
 };

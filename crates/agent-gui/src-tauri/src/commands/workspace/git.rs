@@ -28,8 +28,8 @@ const GIT_TRANSIENT_RETRY_ATTEMPTS: usize = 3;
 const GIT_TRANSIENT_RETRY_DELAY_MS: u64 = 160;
 const GIT_LOG_DEFAULT_LIMIT: usize = 50;
 const GIT_LOG_MAX_LIMIT: usize = 1000;
-const GIT_MISSING_REMOTE_MESSAGE: &str = "当前仓库还没有设置远端仓库。";
-const GIT_MISSING_ORIGIN_REMOTE_MESSAGE: &str = "当前分支没有 upstream，且找不到 origin remote。";
+const GIT_MISSING_REMOTE_MESSAGE: &str = "This repository has no remote configured.";
+const GIT_MISSING_ORIGIN_REMOTE_MESSAGE: &str = "This branch has no upstream, and no origin remote could be found.";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -317,15 +317,15 @@ impl GitCloneTaskRegistry {
         let parent = validate_git_clone_parent(&parent)?;
         let name = validate_project_folder_name(&name)?.to_string();
         let remote_url = validate_git_remote_url(&remote_url)?;
-        let branch = validate_git_config_value("分支名", branch)?.unwrap_or_default();
+        let branch = validate_git_config_value("branch name", branch)?.unwrap_or_default();
         let target = parent.join(&name);
 
         match fs::create_dir(&target) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                return Err(format!("克隆目标已存在：{}", target.display()));
+                return Err(format!("Clone target already exists: {}", target.display()));
             }
-            Err(error) => return Err(format!("创建克隆目标失败：{error}")),
+            Err(error) => return Err(format!("Failed to create clone target: {error}")),
         }
 
         let mut command = Command::new("git");
@@ -348,13 +348,13 @@ impl GitCloneTaskRegistry {
             Ok(child) => child,
             Err(error) => {
                 let _ = fs::remove_dir_all(&target);
-                return Err(format!("git 执行失败：{error}"));
+                return Err(format!("git execution failed: {error}"));
             }
         };
         let stderr = child
             .stderr
             .take()
-            .ok_or_else(|| "无法读取 git clone 进度输出。".to_string())?;
+            .ok_or_else(|| "Unable to read git clone progress output.".to_string())?;
         let id = uuid::Uuid::new_v4().to_string();
         let task = GitCloneTask {
             id: id.clone(),
@@ -364,7 +364,7 @@ impl GitCloneTaskRegistry {
             status: "running".to_string(),
             phase: "preparing".to_string(),
             progress: None,
-            detail: "正在准备克隆…".to_string(),
+            detail: "Preparing to clone...".to_string(),
             error: String::new(),
             started_at: now_ms(),
         };
@@ -372,7 +372,7 @@ impl GitCloneTaskRegistry {
             let mut tasks = self
                 .tasks
                 .lock()
-                .map_err(|_| "克隆任务注册表不可用。".to_string())?;
+                .map_err(|_| "The clone task registry is unavailable.".to_string())?;
             tasks.insert(
                 id.clone(),
                 GitCloneTaskEntry {
@@ -391,7 +391,7 @@ impl GitCloneTaskRegistry {
         let tasks = self
             .tasks
             .lock()
-            .map_err(|_| "克隆任务注册表不可用。".to_string())?;
+            .map_err(|_| "The clone task registry is unavailable.".to_string())?;
         let mut tasks = tasks
             .values()
             .map(|entry| entry.task.clone())
@@ -405,15 +405,15 @@ impl GitCloneTaskRegistry {
             let mut tasks = self
                 .tasks
                 .lock()
-                .map_err(|_| "克隆任务注册表不可用。".to_string())?;
+                .map_err(|_| "The clone task registry is unavailable.".to_string())?;
             let entry = tasks
                 .get_mut(id.trim())
-                .ok_or_else(|| "找不到克隆任务。".to_string())?;
+                .ok_or_else(|| "Clone task not found.".to_string())?;
             if entry.task.status != "running" {
                 return Ok(entry.task.clone());
             }
             entry.task.status = "cancelling".to_string();
-            entry.task.detail = "正在取消克隆…".to_string();
+            entry.task.detail = "Canceling clone...".to_string();
             entry.pid
         };
         terminate_process_tree_by_pid(pid, Duration::from_millis(500));
@@ -423,25 +423,26 @@ impl GitCloneTaskRegistry {
     pub fn task(&self, id: &str) -> Result<GitCloneTask, String> {
         self.tasks
             .lock()
-            .map_err(|_| "克隆任务注册表不可用。".to_string())?
+            .map_err(|_| "The clone task registry is unavailable.".to_string())?
             .get(id)
             .map(|entry| entry.task.clone())
-            .ok_or_else(|| "找不到克隆任务。".to_string())
+            .ok_or_else(|| "Clone task not found.".to_string())
     }
 
-    /// 终态任务的唯一清理路径：用户关闭任务卡时从注册表移除，
-    /// 否则刷新/重连后快照会让已关闭的卡片重现。运行中的任务拒绝移除。
+    /// The only cleanup path for terminal tasks: remove from the registry when the user closes the
+    /// task card, otherwise a refresh/reconnect snapshot would make the closed card reappear.
+    /// Tasks that are still running are refused removal.
     pub fn dismiss(&self, id: String) -> Result<(), String> {
         let mut tasks = self
             .tasks
             .lock()
-            .map_err(|_| "克隆任务注册表不可用。".to_string())?;
+            .map_err(|_| "The clone task registry is unavailable.".to_string())?;
         let id = id.trim();
         let Some(entry) = tasks.get(id) else {
             return Ok(());
         };
         if entry.task.status == "running" || entry.task.status == "cancelling" {
-            return Err("克隆任务仍在进行，无法移除。".to_string());
+            return Err("The clone task is still running and cannot be removed.".to_string());
         }
         tasks.remove(id);
         Ok(())
@@ -476,7 +477,7 @@ impl GitCloneTaskRegistry {
                 Ok(Some(status)) => break Some(status),
                 Ok(None) => thread::sleep(Duration::from_millis(100)),
                 Err(error) => {
-                    self.fail(&id, format!("等待 git clone 失败：{error}"), &target);
+                    self.fail(&id, format!("Waiting for git clone failed: {error}"), &target);
                     break None;
                 }
             }
@@ -495,7 +496,7 @@ impl GitCloneTaskRegistry {
                 task.status = "cancelled".to_string();
                 task.phase = "cancelled".to_string();
                 task.progress = None;
-                task.detail = "克隆已取消。".to_string();
+                task.detail = "Clone canceled.".to_string();
             });
             return;
         }
@@ -506,7 +507,7 @@ impl GitCloneTaskRegistry {
                         task.status = "completed".to_string();
                         task.phase = "completed".to_string();
                         task.progress = Some(100);
-                        task.detail = "克隆完成。".to_string();
+                        task.detail = "Clone complete.".to_string();
                     }),
                     Err(error) => self.fail(&id, error, &target),
                 }
@@ -516,7 +517,7 @@ impl GitCloneTaskRegistry {
                 self.fail(
                     &id,
                     if message.is_empty() {
-                        format!("git clone 退出，状态码：{}", status.code().unwrap_or(-1))
+                        format!("git clone exited with status code: {}", status.code().unwrap_or(-1))
                     } else {
                         message
                     },
@@ -528,9 +529,9 @@ impl GitCloneTaskRegistry {
     }
 
     fn apply_output(&self, id: &str, chunk: &str) {
-        // 读取线程按 \r 切块，但 git 的非进度输出（Cloning into/remote: 等）
-        // 以 \n 结尾，会与下一条进度行合并进同一 chunk——逐行处理防止
-        // detail 混入多行文本。
+        // The reader thread splits chunks on \r, but git's non-progress output (Cloning into/
+        // remote:, etc.) ends with \n and gets merged into the same chunk as the next progress
+        // line -- process line by line to keep detail from mixing in multi-line text.
         for line in chunk.split(['\r', '\n']) {
             let detail = line.trim();
             if detail.is_empty() {
@@ -556,7 +557,7 @@ impl GitCloneTaskRegistry {
             task.phase = "failed".to_string();
             task.progress = None;
             task.error = error.clone();
-            task.detail = "克隆失败。".to_string();
+            task.detail = "Clone failed.".to_string();
         });
     }
 
@@ -626,11 +627,11 @@ fn read_temp_file(file: &mut NamedTempFile, label: &str) -> Result<Vec<u8>, Stri
     let handle = file.as_file_mut();
     handle
         .seek(SeekFrom::Start(0))
-        .map_err(|error| format!("读取 git {label} 失败：{error}"))?;
+        .map_err(|error| format!("Failed to read git {label}: {error}"))?;
     let mut bytes = Vec::new();
     handle
         .read_to_end(&mut bytes)
-        .map_err(|error| format!("读取 git {label} 失败：{error}"))?;
+        .map_err(|error| format!("Failed to read git {label}: {error}"))?;
     Ok(bytes)
 }
 
@@ -644,15 +645,15 @@ fn git_output_with_timeout(
     timeout: Duration,
 ) -> Result<Output, String> {
     let mut stdout_file =
-        NamedTempFile::new().map_err(|error| format!("创建 git stdout 缓存失败：{error}"))?;
+        NamedTempFile::new().map_err(|error| format!("Failed to create git stdout cache: {error}"))?;
     let mut stderr_file =
-        NamedTempFile::new().map_err(|error| format!("创建 git stderr 缓存失败：{error}"))?;
+        NamedTempFile::new().map_err(|error| format!("Failed to create git stderr cache: {error}"))?;
     let stdout_target = stdout_file
         .reopen()
-        .map_err(|error| format!("打开 git stdout 缓存失败：{error}"))?;
+        .map_err(|error| format!("Failed to open git stdout cache: {error}"))?;
     let stderr_target = stderr_file
         .reopen()
-        .map_err(|error| format!("打开 git stderr 缓存失败：{error}"))?;
+        .map_err(|error| format!("Failed to open git stderr cache: {error}"))?;
     let mut command = Command::new("git");
     configure_child_process_group(&mut command);
     let mut child = command
@@ -667,14 +668,14 @@ fn git_output_with_timeout(
         .stdout(Stdio::from(stdout_target))
         .stderr(Stdio::from(stderr_target))
         .spawn()
-        .map_err(|error| format!("git 执行失败：{error}"))?;
+        .map_err(|error| format!("git execution failed: {error}"))?;
     let Some(status) = child
         .wait_timeout(timeout)
-        .map_err(|error| format!("等待 git 命令失败：{error}"))?
+        .map_err(|error| format!("Failed to wait for git command: {error}"))?
     else {
         kill_child_process_tree_best_effort(&mut child);
         return Err(format!(
-            "git 命令超时（{} 秒）：git {}",
+            "git command timed out ({}s): git {}",
             timeout.as_secs(),
             args.join(" ")
         ));
@@ -1205,8 +1206,9 @@ pub(crate) fn git_branches_sync(workdir: String) -> Result<GitBranchesResponse, 
             .cmp(&right.kind)
             .then_with(|| left.full_name.cmp(&right.full_name))
     });
-    // worktree 列表用于 UI 识别“被 worktree 检出的分支”（删除分支前需先
-    // 移除 worktree）。查询失败时降级为空列表，不影响分支主流程。
+    // The worktree list is used by the UI to identify "branches checked out by a worktree" (the
+    // worktree must be removed before deleting the branch). A failed query degrades to an empty
+    // list without affecting the main branch flow.
     let worktrees = git_worktrees_sync(&state.repo_root).unwrap_or_default();
     Ok(GitBranchesResponse {
         state,
@@ -1223,8 +1225,9 @@ fn worktree_paths_match(left: &Path, right: &Path) -> bool {
     normalized_worktree_path(left) == normalized_worktree_path(right)
 }
 
-/// `--porcelain -z` 让字段与记录都由 NUL 分隔，路径中的换行符不会破坏解析。
-/// 第一条记录由 Git 定义为主工作树；detached / prunable / locked 字段可直接忽略。
+/// `--porcelain -z` makes both fields and records NUL-separated, so newlines in paths do not break
+/// parsing. The first record is defined by Git as the main worktree; the detached / prunable /
+/// locked fields can be ignored directly.
 fn parse_git_worktree_records(output: &str, current_repo_root: &str) -> Vec<GitWorktreeRecord> {
     let mut records = Vec::new();
     let mut record = GitWorktreeRecord::default();
@@ -1263,19 +1266,20 @@ fn git_worktree_records_sync(repo_root: &str) -> Result<Vec<GitWorktreeRecord>, 
     let output = git_success(repo_root, &["worktree", "list", "--porcelain", "-z"])?;
     let records = parse_git_worktree_records(&output.stdout, repo_root);
     if records.is_empty() {
-        return Err("Git 未返回 Worktree 登记信息。".to_string());
+        return Err("Git did not return Worktree registration info.".to_string());
     }
     Ok(records)
 }
 
-/// 返回 linked worktree，主工作树不暴露为可删除项；每条记录携带稳定的主工作树
-/// 路径与“当前项目”标记，调用方从 linked worktree 内查询时也能正确识别自身。
+/// Returns linked worktrees; the main worktree is not exposed as a removable item. Each record
+/// carries a stable main-worktree path and a "current project" marker, so callers querying from
+/// inside a linked worktree can still identify themselves correctly.
 fn git_worktrees_sync(repo_root: &str) -> Result<Vec<GitWorktreeInfo>, String> {
     let records = git_worktree_records_sync(repo_root)?;
     let main_worktree_path = records
         .first()
         .map(|record| record.path.clone())
-        .ok_or_else(|| "Git 未返回主 Worktree。".to_string())?;
+        .ok_or_else(|| "Git did not return the main Worktree.".to_string())?;
     Ok(records
         .into_iter()
         .filter(|record| !record.is_main)
@@ -1295,7 +1299,7 @@ fn ensure_ready_state(workdir: &str) -> Result<GitRepositoryState, String> {
     } else {
         Err(state
             .error
-            .unwrap_or_else(|| "当前项目不是 Git 仓库。".to_string()))
+            .unwrap_or_else(|| "The current project is not a Git repository.".to_string()))
     }
 }
 
@@ -1311,24 +1315,24 @@ fn looks_like_windows_drive_path(path: &str) -> bool {
 fn validate_repo_relative_path(path: &str) -> Result<String, String> {
     let trimmed = path.trim().replace('\\', "/");
     if trimmed.is_empty() {
-        return Err("Git 文件路径不能为空。".to_string());
+        return Err("Git file path cannot be empty.".to_string());
     }
     #[cfg(windows)]
     {
         if looks_like_windows_drive_path(&trimmed) || trimmed.starts_with("//") {
-            return Err("Git 文件路径不能是绝对路径。".to_string());
+            return Err("Git file path cannot be an absolute path.".to_string());
         }
     }
     let path = Path::new(&trimmed);
     if path.is_absolute() {
-        return Err("Git 文件路径不能是绝对路径。".to_string());
+        return Err("Git file path cannot be an absolute path.".to_string());
     }
     for component in path.components() {
         if matches!(
             component,
             Component::ParentDir | Component::RootDir | Component::Prefix(_)
         ) {
-            return Err("Git 文件路径不能包含 .. 或根路径。".to_string());
+            return Err("Git file path cannot contain .. or a root path.".to_string());
         }
     }
     Ok(trimmed)
@@ -1358,9 +1362,10 @@ fn spawn_system_file_manager(program: &str, args: &[String]) -> Result<(), Strin
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    // 启动器不等，但必须收尸：`Child` 直接丢掉的话，子进程退出后没人 wait()，
-    // 每次"在文件管理器中显示"都会在本进程下留一个 <defunct>。
-    spawn_and_reap(&mut command).map_err(|error| format!("打开系统资源管理器失败：{error}"))?;
+    // The launcher is not awaited, but it must be reaped: if `Child` is simply dropped, no one
+    // wait()s after the child exits, and every "reveal in file manager" leaves a <defunct> under
+    // this process.
+    spawn_and_reap(&mut command).map_err(|error| format!("Failed to open the system file manager: {error}"))?;
     Ok(())
 }
 
@@ -1398,17 +1403,17 @@ fn open_system_file_location(target: &Path, repo_root: &Path) -> Result<(), Stri
     {
         let _ = target;
         let _ = repo_root;
-        Err("当前系统不支持打开系统资源管理器。".to_string())
+        Err("The current system does not support opening the system file manager.".to_string())
     }
 }
 
 fn validate_branch_name(repo_root: &str, branch: &str) -> Result<String, String> {
     let branch = branch.trim();
     if branch.is_empty() {
-        return Err("分支名不能为空。".to_string());
+        return Err("Branch name cannot be empty.".to_string());
     }
     if branch.chars().any(char::is_whitespace) {
-        return Err("分支名不能包含空白字符。".to_string());
+        return Err("Branch name cannot contain whitespace.".to_string());
     }
     git_success(repo_root, &["check-ref-format", "--branch", branch])?;
     Ok(branch.to_string())
@@ -1417,11 +1422,11 @@ fn validate_branch_name(repo_root: &str, branch: &str) -> Result<String, String>
 fn validate_git_init_workdir(workdir: &str) -> Result<String, String> {
     let workdir = workdir.trim();
     if workdir.is_empty() {
-        return Err("初始化目录不能为空。".to_string());
+        return Err("Initialization directory cannot be empty.".to_string());
     }
-    let metadata = fs::metadata(workdir).map_err(|error| format!("初始化目录不可访问：{error}"))?;
+    let metadata = fs::metadata(workdir).map_err(|error| format!("Initialization directory is not accessible: {error}"))?;
     if !metadata.is_dir() {
-        return Err("初始化目录必须是文件夹。".to_string());
+        return Err("Initialization directory must be a folder.".to_string());
     }
     Ok(workdir.to_string())
 }
@@ -1429,18 +1434,18 @@ fn validate_git_init_workdir(workdir: &str) -> Result<String, String> {
 fn validate_git_clone_parent(parent: &str) -> Result<PathBuf, String> {
     let parent = parent.trim();
     if parent.is_empty() {
-        return Err("克隆目标的父目录不能为空。".to_string());
+        return Err("The clone target's parent directory cannot be empty.".to_string());
     }
     let parent_path = PathBuf::from(parent);
     if !parent_path.is_absolute() {
-        return Err(format!("克隆目标的父目录必须是绝对路径：{parent}"));
+        return Err(format!("The clone target's parent directory must be an absolute path: {parent}"));
     }
     let metadata =
-        fs::metadata(&parent_path).map_err(|error| format!("克隆目标的父目录不可访问：{error}"))?;
+        fs::metadata(&parent_path).map_err(|error| format!("The clone target's parent directory is not accessible: {error}"))?;
     if !metadata.is_dir() {
-        return Err("克隆目标的父目录必须是文件夹。".to_string());
+        return Err("The clone target's parent directory must be a folder.".to_string());
     }
-    fs::canonicalize(&parent_path).map_err(|error| format!("无法解析克隆目标的父目录：{error}"))
+    fs::canonicalize(&parent_path).map_err(|error| format!("Unable to resolve the clone target's parent directory: {error}"))
 }
 
 pub(crate) fn git_clone_repository_sync(
@@ -1452,15 +1457,15 @@ pub(crate) fn git_clone_repository_sync(
     let parent = validate_git_clone_parent(&parent)?;
     let name = validate_project_folder_name(&name)?;
     let remote_url = validate_git_remote_url(&remote_url)?;
-    let branch = validate_git_config_value("分支名", branch)?;
+    let branch = validate_git_config_value("branch name", branch)?;
     let target = parent.join(name);
 
     match fs::create_dir(&target) {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            return Err(format!("克隆目标已存在：{}", target.display()));
+            return Err(format!("Clone target already exists: {}", target.display()));
         }
-        Err(error) => return Err(format!("创建克隆目标失败：{error}")),
+        Err(error) => return Err(format!("Failed to create clone target: {error}")),
     }
 
     let target_workdir = target.to_string_lossy().into_owned();
@@ -1486,7 +1491,7 @@ pub(crate) fn git_clone_repository_sync(
         state,
         stdout: clone_output.stdout,
         stderr: clone_output.stderr,
-        message: "仓库已克隆。".to_string(),
+        message: "Repository cloned.".to_string(),
     })
 }
 
@@ -1496,7 +1501,7 @@ pub(crate) fn git_list_remote_branches_sync(
     let remote_url = validate_git_remote_url(&remote_url)?;
     // Run ls-remote from a private temp dir so whatever repository happens to
     // contain the process cwd can't leak its configuration into the lookup.
-    let scratch = tempfile::tempdir().map_err(|error| format!("创建临时目录失败：{error}"))?;
+    let scratch = tempfile::tempdir().map_err(|error| format!("Failed to create temporary directory: {error}"))?;
     let cwd = scratch.path().to_string_lossy().into_owned();
     let heads = git_success(&cwd, &["ls-remote", "--heads", "--", remote_url.as_str()])?;
     let mut branches = heads
@@ -1543,7 +1548,7 @@ fn validate_git_config_value(label: &str, value: Option<String>) -> Result<Optio
         return Ok(None);
     }
     if value.chars().any(|ch| matches!(ch, '\0' | '\n' | '\r')) {
-        return Err(format!("{label} 不能包含换行或空字符。"));
+        return Err(format!("{label} cannot contain newlines or null characters."));
     }
     Ok(Some(value.to_string()))
 }
@@ -1551,13 +1556,13 @@ fn validate_git_config_value(label: &str, value: Option<String>) -> Result<Optio
 fn validate_git_remote_url(value: &str) -> Result<String, String> {
     let value = value.trim();
     if value.is_empty() {
-        return Err("远端仓库地址不能为空。".to_string());
+        return Err("Remote repository URL cannot be empty.".to_string());
     }
     if value.chars().any(|ch| matches!(ch, '\0' | '\n' | '\r')) {
-        return Err("远端仓库地址不能包含换行或空字符。".to_string());
+        return Err("Remote repository URL cannot contain newlines or null characters.".to_string());
     }
     if is_git_remote_helper_url(value) {
-        return Err("不支持 remote helper 形式的远端地址（如 ext::）。".to_string());
+        return Err("Remote URLs in remote-helper form (such as ext::) are not supported.".to_string());
     }
     Ok(value.to_string())
 }
@@ -1656,19 +1661,19 @@ fn merge_git_outputs(outputs: impl IntoIterator<Item = GitOutput>) -> GitOutput 
 fn build_untracked_file_patch(repo_root: &str, path: &str) -> Result<Option<String>, String> {
     let clean_path = validate_repo_relative_path(path)?;
     let repo_root_path =
-        fs::canonicalize(repo_root).map_err(|error| format!("Git 仓库路径不可访问：{error}"))?;
+        fs::canonicalize(repo_root).map_err(|error| format!("Git repository path is not accessible: {error}"))?;
     let absolute_path = fs::canonicalize(Path::new(repo_root).join(&clean_path))
-        .map_err(|error| format!("无法读取未跟踪文件 {clean_path}：{error}"))?;
+        .map_err(|error| format!("Unable to read untracked file {clean_path}: {error}"))?;
     if !absolute_path.starts_with(&repo_root_path) {
-        return Err("Git 文件路径必须位于当前仓库内。".to_string());
+        return Err("Git file path must be inside the current repository.".to_string());
     }
     let metadata = fs::metadata(&absolute_path)
-        .map_err(|error| format!("无法读取未跟踪文件 {clean_path}：{error}"))?;
+        .map_err(|error| format!("Unable to read untracked file {clean_path}: {error}"))?;
     if !metadata.is_file() || metadata.len() > GIT_UNTRACKED_FILE_MAX_BYTES {
         return Ok(None);
     }
     let bytes = fs::read(&absolute_path)
-        .map_err(|error| format!("无法读取未跟踪文件 {clean_path}：{error}"))?;
+        .map_err(|error| format!("Unable to read untracked file {clean_path}: {error}"))?;
     if bytes.contains(&0) {
         return Ok(None);
     }
@@ -1803,7 +1808,7 @@ pub(crate) fn git_switch_branch_sync(
     operation_response(
         &workdir,
         git_success(&state.repo_root, &args),
-        "分支已切换。",
+        "Branch switched.",
     )
 }
 
@@ -1827,21 +1832,23 @@ pub(crate) fn git_create_branch_sync(
     operation_response(
         &workdir,
         git_success(&state.repo_root, &args),
-        "分支已创建并检出。",
+        "Branch created and checked out.",
     )
 }
 
-/// Worktree 存储基目录（`~/.liveagent/worktree`）。Worktree 是仓库的检出
-/// 副本，落在应用存储域，避免污染工作区目录结构。
+/// Worktree storage base directory (`~/.liveagent/worktree`). A worktree is a checked-out copy of
+/// the repository and lives in the app storage domain, avoiding pollution of the workspace
+/// directory structure.
 fn worktree_storage_base() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录。".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "Unable to locate the user's home directory.".to_string())?;
     let dir = home.join(".liveagent").join("worktree");
-    fs::create_dir_all(&dir).map_err(|error| format!("创建 worktree 目录失败：{error}"))?;
+    fs::create_dir_all(&dir).map_err(|error| format!("Failed to create worktree directory: {error}"))?;
     Ok(dir)
 }
 
-/// 稳定且唯一的 repo id：`<sanitized-basename>-<fnv1a64 完整 64 位 hex>`。
-/// 同一仓库根路径永远映射到同一 id，目录可读；64 位哈希碰撞概率可忽略。
+/// Stable and unique repo id: `<sanitized-basename>-<fnv1a64 full 64-bit hex>`. The same
+/// repository root path always maps to the same id, the directory is human-readable, and the
+/// collision probability of a 64-bit hash is negligible.
 fn repo_worktree_id(repo_root: &str) -> String {
     let basename = Path::new(repo_root)
         .file_name()
@@ -1875,7 +1882,7 @@ fn sanitize_repo_id_component(input: &str) -> String {
     }
 }
 
-/// FNV-1a 64 位哈希，与前端展示无关、仅用于目录命名，无需引入额外依赖。
+/// FNV-1a 64-bit hash; unrelated to frontend display and used only for directory naming, so no extra dependency is needed.
 fn fnv1a64(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in bytes {
@@ -1888,19 +1895,19 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
 fn validate_worktree_parent_directory(parent: &str) -> Result<PathBuf, String> {
     let parent = parent.trim();
     if parent.is_empty() {
-        return Err("Worktree 父目录不能为空。".to_string());
+        return Err("Worktree parent directory cannot be empty.".to_string());
     }
     let parent_path = PathBuf::from(parent);
     if !parent_path.is_absolute() {
-        return Err(format!("Worktree 父目录必须是绝对路径：{parent}"));
+        return Err(format!("Worktree parent directory must be an absolute path: {parent}"));
     }
     let metadata =
-        fs::metadata(&parent_path).map_err(|error| format!("Worktree 父目录不可访问：{error}"))?;
+        fs::metadata(&parent_path).map_err(|error| format!("Worktree parent directory is not accessible: {error}"))?;
     if !metadata.is_dir() {
-        return Err("Worktree 父目录必须是文件夹。".to_string());
+        return Err("Worktree parent directory must be a folder.".to_string());
     }
-    fs::read_dir(&parent_path).map_err(|error| format!("Worktree 父目录不可访问：{error}"))?;
-    fs::canonicalize(&parent_path).map_err(|error| format!("无法解析 Worktree 父目录：{error}"))
+    fs::read_dir(&parent_path).map_err(|error| format!("Worktree parent directory is not accessible: {error}"))?;
+    fs::canonicalize(&parent_path).map_err(|error| format!("Unable to resolve the Worktree parent directory: {error}"))
 }
 
 pub(crate) fn git_create_worktree_sync(
@@ -1925,8 +1932,9 @@ pub(crate) fn git_create_worktree_sync(
     )
 }
 
-/// 默认基目录由调用方注入（生产为 `~/.liveagent/worktree`，测试传临时目录）；
-/// 显式 parent_directory 存在时直接使用经过校验的用户目录。
+/// The default base directory is injected by the caller (production uses `~/.liveagent/worktree`,
+/// tests pass a temporary directory); when an explicit parent_directory is present, the validated
+/// user directory is used directly.
 fn git_create_worktree_with_base(
     workdir: String,
     branch: String,
@@ -1937,39 +1945,39 @@ fn git_create_worktree_with_base(
 ) -> Result<GitWorktreeResponse, String> {
     let state = ensure_ready_state(&workdir)?;
     let repo_root =
-        fs::canonicalize(&state.repo_root).map_err(|error| format!("无法解析仓库路径：{error}"))?;
+        fs::canonicalize(&state.repo_root).map_err(|error| format!("Unable to resolve repository path: {error}"))?;
     let repo_root_str = repo_root.to_string_lossy().into_owned();
     let records = git_worktree_records_sync(&repo_root_str)?;
     let main_worktree_path = records
         .first()
         .map(|record| normalized_worktree_path(Path::new(&record.path)))
-        .ok_or_else(|| "Git 未返回主 Worktree。".to_string())?;
+        .ok_or_else(|| "Git did not return the main Worktree.".to_string())?;
     let main_worktree_path = main_worktree_path.to_string_lossy().into_owned();
     let branch = validate_branch_name(&repo_root_str, &branch)?;
     let directory_name = validate_project_folder_name(&directory_name)?.to_string();
     let target_parent = match parent_directory.as_deref() {
         Some(parent) => validate_worktree_parent_directory(parent)?,
         None => {
-            let base = managed_base.ok_or_else(|| "缺少默认 Worktree 存储目录。".to_string())?;
+            let base = managed_base.ok_or_else(|| "Missing the default Worktree storage directory.".to_string())?;
             let repo_dir = base.join(repo_worktree_id(&main_worktree_path));
             fs::create_dir_all(&repo_dir)
-                .map_err(|error| format!("创建 Worktree 目录失败：{error}"))?;
+                .map_err(|error| format!("Failed to create Worktree directory: {error}"))?;
             fs::canonicalize(&repo_dir)
-                .map_err(|error| format!("无法解析 Worktree 目录：{error}"))?
+                .map_err(|error| format!("Unable to resolve Worktree directory: {error}"))?
         }
     };
     let target = target_parent.join(&directory_name);
     if target
         .try_exists()
-        .map_err(|error| format!("无法检查 Worktree 目标：{error}"))?
+        .map_err(|error| format!("Unable to check the Worktree target: {error}"))?
     {
-        return Err(format!("Worktree 目标已存在：{}", target.display()));
+        return Err(format!("Worktree target already exists: {}", target.display()));
     }
     if records
         .iter()
         .any(|record| target.starts_with(normalized_worktree_path(Path::new(&record.path))))
     {
-        return Err("Worktree 目标不能位于现有 Worktree 目录内。".to_string());
+        return Err("The Worktree target cannot be inside an existing Worktree directory.".to_string());
     }
 
     let validated_start_point = start_point
@@ -1996,7 +2004,7 @@ fn git_create_worktree_with_base(
     match result {
         Ok(output) => {
             let worktree_path = fs::canonicalize(&target)
-                .map_err(|error| format!("无法解析 Worktree 路径：{error}"))?
+                .map_err(|error| format!("Unable to resolve Worktree path: {error}"))?
                 .to_string_lossy()
                 .into_owned();
             Ok(GitWorktreeResponse {
@@ -2008,7 +2016,7 @@ fn git_create_worktree_with_base(
                 main_worktree_path,
                 stdout: output.stdout,
                 stderr: output.stderr,
-                message: "Worktree 已创建。".to_string(),
+                message: "Worktree created.".to_string(),
             })
         }
         Err(error) => Ok(GitWorktreeResponse {
@@ -2044,7 +2052,7 @@ pub(crate) fn git_init_sync(
     let workdir = validate_git_init_workdir(&workdir)?;
     let existing_state = git_status_sync(workdir.clone())?;
     if existing_state.status == "ready" {
-        return Err("当前目录已位于 Git 仓库内。".to_string());
+        return Err("The current directory is already inside a Git repository.".to_string());
     }
 
     let branch = {
@@ -2056,7 +2064,7 @@ pub(crate) fn git_init_sync(
         }
     };
     if branch.chars().any(char::is_whitespace) {
-        return Err("分支名不能包含空白字符。".to_string());
+        return Err("Branch name cannot contain whitespace.".to_string());
     }
     git_success(&workdir, &["check-ref-format", "--branch", branch.as_str()])?;
 
@@ -2065,7 +2073,7 @@ pub(crate) fn git_init_sync(
     let init_output = match git_success(&workdir, &["init", "-b", branch.as_str()]) {
         Ok(output) => output,
         Err(error) => {
-            return operation_response(&workdir, Err(error), "Git 仓库已初始化。");
+            return operation_response(&workdir, Err(error), "Git repository initialized.");
         }
     };
 
@@ -2113,7 +2121,7 @@ pub(crate) fn git_init_sync(
         state: git_status_sync(workdir)?,
         stdout,
         stderr,
-        message: "Git 仓库已初始化。".to_string(),
+        message: "Git repository initialized.".to_string(),
     })
 }
 
@@ -2575,7 +2583,7 @@ fn parse_shortstat(raw: &str) -> (usize, usize, usize) {
 fn validate_commit_sha(repo_root: &str, value: &str) -> Result<String, String> {
     let sha = value.trim();
     if sha.len() < 7 || sha.len() > 64 || !sha.chars().all(|ch| ch.is_ascii_hexdigit()) {
-        return Err("Git commit 必须是有效的提交 SHA。".to_string());
+        return Err("Git commit must be a valid commit SHA.".to_string());
     }
     let rev = format!("{sha}^{{commit}}");
     Ok(git_success(repo_root, &["rev-parse", "--verify", &rev])?
@@ -2590,7 +2598,7 @@ fn validate_commit_sha(repo_root: &str, value: &str) -> Result<String, String> {
 fn validate_start_point(repo_root: &str, value: &str) -> Result<String, String> {
     let start_point = value.trim();
     if start_point.is_empty() {
-        return Err("分支起点不能为空。".to_string());
+        return Err("Branch start point cannot be empty.".to_string());
     }
     if start_point.len() >= 7
         && start_point.len() <= 64
@@ -2599,14 +2607,14 @@ fn validate_start_point(repo_root: &str, value: &str) -> Result<String, String> 
         return validate_commit_sha(repo_root, start_point);
     }
     if start_point.starts_with('-') || start_point.chars().any(char::is_whitespace) {
-        return Err("分支起点不能以 - 开头或包含空白字符。".to_string());
+        return Err("Branch start point cannot begin with - or contain whitespace.".to_string());
     }
     let rev = format!("{start_point}^{{commit}}");
     git_success(
         repo_root,
         &["rev-parse", "--verify", "--end-of-options", &rev],
     )?;
-    // 返回原始 ref（而非解析后的 SHA），保留 switch -c 对远程 ref 的自动 tracking。
+    // Return the raw ref (not the resolved SHA), preserving switch -c's automatic tracking of remote refs.
     Ok(start_point.to_string())
 }
 
@@ -2727,7 +2735,7 @@ pub(crate) fn git_commit_details_sync(
     )?;
     let fields: Vec<&str> = metadata_output.stdout.splitn(7, '\x1f').collect();
     if fields.len() < 7 {
-        return Err("无法解析 Git commit 详情。".to_string());
+        return Err("Unable to parse Git commit details.".to_string());
     }
     let parent_output = git_success(&state.repo_root, &["show", "-s", "--format=%P", &commit])?;
     let first_parent = parent_output
@@ -2801,7 +2809,7 @@ pub(crate) fn git_compare_commit_with_remote_sync(
     let remote_ref = resolve_cloud_tracking_ref(&state);
     if remote_ref.trim().is_empty() {
         return Err(
-            "找不到可用于比较的远端分支。请先设置 upstream 或 fetch 远端分支。".to_string(),
+            "No remote branch available for comparison. Set an upstream or fetch the remote branch first.".to_string(),
         );
     }
     let range = format!("{remote_ref}...{commit}");
@@ -2958,7 +2966,7 @@ pub(crate) fn git_diff_sync(
         base_ref = resolve_review_base(&state);
         if base_ref.is_empty() {
             return Err(
-                "找不到可用于审查的基线分支。请先设置 upstream 或 fetch 主分支。".to_string(),
+                "No baseline branch available for review. Set an upstream or fetch the main branch first.".to_string(),
             );
         }
         args.push(format!("{base_ref}...HEAD"));
@@ -3006,7 +3014,7 @@ pub(crate) fn git_stage_sync(
     operation_response(
         &workdir,
         git_success(&state.repo_root, &["add", "--", path.as_str()]),
-        "文件已暂存。",
+        "File staged.",
     )
 }
 
@@ -3015,7 +3023,7 @@ pub(crate) fn git_stage_all_sync(workdir: String) -> Result<GitOperationResponse
     operation_response(
         &workdir,
         git_success(&state.repo_root, &["add", "-A", "--"]),
-        "所有改动已暂存。",
+        "All changes staged.",
     )
 }
 
@@ -3034,7 +3042,7 @@ pub(crate) fn git_unstage_sync(
         return operation_response(
             &workdir,
             git_success(&state.repo_root, &["rm", "--cached", "--", path.as_str()]),
-            "文件已取消暂存。",
+            "File unstaged.",
         );
     }
     operation_response(
@@ -3043,7 +3051,7 @@ pub(crate) fn git_unstage_sync(
             &state.repo_root,
             &["restore", "--staged", "--", path.as_str()],
         ),
-        "文件已取消暂存。",
+        "File unstaged.",
     )
 }
 
@@ -3055,12 +3063,12 @@ pub(crate) fn git_unstage_all_sync(workdir: String) -> Result<GitOperationRespon
         } else {
             Ok(empty_git_output())
         };
-        return operation_response(&workdir, result, "所有改动已取消暂存。");
+        return operation_response(&workdir, result, "All changes unstaged.");
     }
     operation_response(
         &workdir,
         git_success(&state.repo_root, &["restore", "--staged", "--", "."]),
-        "所有改动已取消暂存。",
+        "All changes unstaged.",
     )
 }
 
@@ -3098,7 +3106,7 @@ pub(crate) fn git_discard_sync(
         }
         git_success(&state.repo_root, &args)
     };
-    operation_response(&workdir, result, "改动已放弃。")
+    operation_response(&workdir, result, "Changes discarded.")
 }
 
 pub(crate) fn git_discard_all_sync(workdir: String) -> Result<GitOperationResponse, String> {
@@ -3123,7 +3131,7 @@ pub(crate) fn git_discard_all_sync(workdir: String) -> Result<GitOperationRespon
                 .map(|clean_output| merge_git_outputs([restore_output, clean_output]))
         })
     };
-    operation_response(&workdir, result, "所有改动已放弃。")
+    operation_response(&workdir, result, "All changes discarded.")
 }
 
 pub(crate) fn git_add_to_gitignore_sync(
@@ -3137,7 +3145,7 @@ pub(crate) fn git_add_to_gitignore_sync(
     let mut content = match fs::read_to_string(&gitignore_path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(error) => return Err(format!("读取 .gitignore 失败：{error}")),
+        Err(error) => return Err(format!("Failed to read .gitignore: {error}")),
     };
     let already_present = content.lines().any(|line| {
         let line = line.trim();
@@ -3159,15 +3167,15 @@ pub(crate) fn git_add_to_gitignore_sync(
                 stdout: String::new(),
                 stderr: String::new(),
             })
-            .map_err(|error| format!("写入 .gitignore 失败：{error}"))
+            .map_err(|error| format!("Failed to write .gitignore: {error}"))
     };
     operation_response(
         &workdir,
         result,
         if already_present {
-            "路径已存在于 .gitignore。"
+            "Path already exists in .gitignore."
         } else {
-            "路径已添加到 .gitignore。"
+            "Path added to .gitignore."
         },
     )
 }
@@ -3186,7 +3194,7 @@ pub(crate) fn git_open_system_file_location_sync(
         state: git_status_sync(workdir)?,
         stdout: String::new(),
         stderr: String::new(),
-        message: "已在系统资源管理器中打开。".to_string(),
+        message: "Opened in the system file manager.".to_string(),
     })
 }
 
@@ -3197,19 +3205,19 @@ pub(crate) fn git_commit_sync(
     let state = ensure_ready_state(&workdir)?;
     let message = message.trim().to_string();
     if message.is_empty() {
-        return Err("Commit message 不能为空。".to_string());
+        return Err("Commit message cannot be empty.".to_string());
     }
     if state.dirty_counts.staged == 0 {
-        return Err("没有已暂存的改动可提交。".to_string());
+        return Err("There are no staged changes to commit.".to_string());
     }
     git_success(&state.repo_root, &["config", "--get", "user.name"])
-        .map_err(|_| "Git user.name 未配置。".to_string())?;
+        .map_err(|_| "Git user.name is not configured.".to_string())?;
     git_success(&state.repo_root, &["config", "--get", "user.email"])
-        .map_err(|_| "Git user.email 未配置。".to_string())?;
+        .map_err(|_| "Git user.email is not configured.".to_string())?;
     operation_response(
         &workdir,
         git_success(&state.repo_root, &["commit", "-m", message.as_str()]),
-        "提交已创建。",
+        "Commit created.",
     )
 }
 
@@ -3220,14 +3228,14 @@ pub(crate) fn git_fetch_sync(workdir: String) -> Result<GitOperationResponse, St
         Ok(_) => git_success(&state.repo_root, &["fetch", "--prune"]),
         Err(error) => Err(error),
     };
-    operation_response(&workdir, result, "Fetch 完成。")
+    operation_response(&workdir, result, "Fetch complete.")
 }
 
 pub(crate) fn git_pull_sync(workdir: String) -> Result<GitOperationResponse, String> {
     let state = ensure_ready_state(&workdir)?;
     let result = if state.upstream.trim().is_empty() {
         if state.head.trim().is_empty() || state.head == "(detached)" {
-            Err("当前不在可拉取的本地分支上。".to_string())
+            Err("Not currently on a local branch that can be pulled.".to_string())
         } else if !git_origin_remote_exists(&state.repo_root) {
             Err(GIT_MISSING_ORIGIN_REMOTE_MESSAGE.to_string())
         } else {
@@ -3239,7 +3247,7 @@ pub(crate) fn git_pull_sync(workdir: String) -> Result<GitOperationResponse, Str
     } else {
         git_success(&state.repo_root, &["pull", "--ff-only"])
     };
-    operation_response(&workdir, result, "Pull 完成。")
+    operation_response(&workdir, result, "Pull complete.")
 }
 
 pub(crate) fn git_set_remote_sync(
@@ -3259,14 +3267,14 @@ pub(crate) fn git_set_remote_sync(
             &["remote", "add", "origin", remote_url.as_str()],
         )
     };
-    operation_response(&workdir, result, "远端仓库已保存。")
+    operation_response(&workdir, result, "Remote repository saved.")
 }
 
 pub(crate) fn git_push_sync(workdir: String) -> Result<GitOperationResponse, String> {
     let state = ensure_ready_state(&workdir)?;
     let result = if state.upstream.trim().is_empty() {
         if state.head.trim().is_empty() || state.head == "(detached)" {
-            Err("当前不在可推送的本地分支上。".to_string())
+            Err("Not currently on a local branch that can be pushed.".to_string())
         } else if !git_origin_remote_exists(&state.repo_root) {
             Err(GIT_MISSING_ORIGIN_REMOTE_MESSAGE.to_string())
         } else {
@@ -3278,7 +3286,7 @@ pub(crate) fn git_push_sync(workdir: String) -> Result<GitOperationResponse, Str
     } else {
         git_success(&state.repo_root, &["push"])
     };
-    operation_response(&workdir, result, "Push 完成。")
+    operation_response(&workdir, result, "Push complete.")
 }
 
 pub(crate) fn git_delete_branch_sync(
@@ -3289,12 +3297,12 @@ pub(crate) fn git_delete_branch_sync(
     let state = ensure_ready_state(&workdir)?;
     let branch = validate_branch_name(&state.repo_root, &branch)?;
     if branch == state.head {
-        return Err("不能删除当前检出的分支。".to_string());
+        return Err("Cannot delete the currently checked-out branch.".to_string());
     }
     let delete_flag = if force == Some(true) { "-D" } else { "-d" };
     let result = git_success(&state.repo_root, &["worktree", "prune", "--expire", "now"])
         .and_then(|_| git_success(&state.repo_root, &["branch", delete_flag, branch.as_str()]));
-    operation_response(&workdir, result, "分支已删除。")
+    operation_response(&workdir, result, "Branch deleted.")
 }
 
 fn select_worktree_control_path(
@@ -3308,11 +3316,12 @@ fn select_worktree_control_path(
                 && Path::new(&record.path).is_dir()
         })
         .map(|record| record.path.clone())
-        .ok_or_else(|| "找不到可用于移除 Worktree 的存活工作树。".to_string())
+        .ok_or_else(|| "No live worktree available to remove a Worktree.".to_string())
 }
 
-/// 移除 Worktree，成功后可选删除其真实关联分支。调用方只能提供布尔选项，
-/// 分支名必须来自 Git 的 Worktree 登记；主工作树永远不可删除。
+/// Remove a Worktree and, on success, optionally delete its genuinely associated branch. Callers
+/// can only supply boolean options, and the branch name must come from Git's Worktree registration;
+/// the main worktree can never be deleted.
 pub(crate) fn git_remove_worktree_sync(
     workdir: String,
     worktree_path: String,
@@ -3322,11 +3331,11 @@ pub(crate) fn git_remove_worktree_sync(
     let state = ensure_ready_state(&workdir)?;
     let trimmed = worktree_path.trim();
     if trimmed.is_empty() {
-        return Err("Worktree 路径不能为空。".to_string());
+        return Err("Worktree path cannot be empty.".to_string());
     }
     let requested_path = PathBuf::from(trimmed);
     if !requested_path.is_absolute() {
-        return Err("Worktree 路径必须是绝对路径。".to_string());
+        return Err("Worktree path must be an absolute path.".to_string());
     }
 
     let records = git_worktree_records_sync(&state.repo_root)?;
@@ -3334,9 +3343,9 @@ pub(crate) fn git_remove_worktree_sync(
         .iter()
         .find(|record| worktree_paths_match(Path::new(&record.path), &requested_path))
         .cloned()
-        .ok_or_else(|| "目标路径不是当前仓库已登记的 Worktree。".to_string())?;
+        .ok_or_else(|| "The target path is not a Worktree registered with the current repository.".to_string())?;
     if target.is_main {
-        return Err("不能删除主 Worktree。".to_string());
+        return Err("Cannot delete the main Worktree.".to_string());
     }
 
     let control_workdir = if target.is_current {
@@ -3347,7 +3356,7 @@ pub(crate) fn git_remove_worktree_sync(
     let main_worktree_path = records
         .first()
         .map(|record| normalized_worktree_path(Path::new(&record.path)))
-        .ok_or_else(|| "Git 未返回主 Worktree。".to_string())?
+        .ok_or_else(|| "Git did not return the main Worktree.".to_string())?
         .to_string_lossy()
         .into_owned();
     let registered_path = target.path.clone();
@@ -3374,7 +3383,7 @@ pub(crate) fn git_remove_worktree_sync(
                 .unwrap_or(true);
             let worktree_removed = !still_registered;
             let message = if worktree_removed {
-                format!("Worktree 登记已移除，但目录清理失败：{error}")
+                format!("Worktree registration removed, but directory cleanup failed: {error}")
             } else {
                 error.clone()
             };
@@ -3408,7 +3417,7 @@ pub(crate) fn git_remove_worktree_sync(
                             true,
                             stdout,
                             branch_output.stderr,
-                            "Worktree 与分支已删除。".to_string(),
+                            "Worktree and branch deleted.".to_string(),
                         )
                     }
                     Err(error) => (
@@ -3416,7 +3425,7 @@ pub(crate) fn git_remove_worktree_sync(
                         false,
                         remove_output.stdout,
                         error.clone(),
-                        format!("Worktree 已移除，但分支删除失败：{error}"),
+                        format!("Worktree removed, but branch deletion failed: {error}"),
                     ),
                 }
             } else if branch_delete_requested {
@@ -3425,7 +3434,7 @@ pub(crate) fn git_remove_worktree_sync(
                     false,
                     remove_output.stdout,
                     remove_output.stderr,
-                    "Worktree 已移除；该 Worktree 未检出本地分支。".to_string(),
+                    "Worktree removed; it had no local branch checked out.".to_string(),
                 )
             } else {
                 (
@@ -3433,7 +3442,7 @@ pub(crate) fn git_remove_worktree_sync(
                     false,
                     remove_output.stdout,
                     remove_output.stderr,
-                    "Worktree 已移除。".to_string(),
+                    "Worktree removed.".to_string(),
                 )
             };
             Ok(GitRemoveWorktreeResponse {
@@ -3467,7 +3476,7 @@ pub(crate) fn git_rename_branch_sync(
             &state.repo_root,
             &["branch", "-m", branch.as_str(), new_branch.as_str()],
         ),
-        "分支已重命名。",
+        "Branch renamed.",
     )
 }
 
@@ -3485,7 +3494,7 @@ pub(crate) fn git_stash_push_sync(
     operation_response(
         &workdir,
         git_success(&state.repo_root, &args),
-        "改动已暂存到 stash。",
+        "Changes stashed.",
     )
 }
 
@@ -3494,7 +3503,7 @@ pub(crate) fn git_stash_pop_sync(workdir: String) -> Result<GitOperationResponse
     operation_response(
         &workdir,
         git_success(&state.repo_root, &["stash", "pop"]),
-        "已恢复最近的 stash。",
+        "Most recent stash restored.",
     )
 }
 
@@ -3502,7 +3511,7 @@ fn parse_gateway_args(args_json: String) -> Result<GitGatewayArgs, String> {
     if args_json.trim().is_empty() {
         return Ok(GitGatewayArgs::default());
     }
-    serde_json::from_str(&args_json).map_err(|error| format!("Git 参数 JSON 无效：{error}"))
+    serde_json::from_str(&args_json).map_err(|error| format!("Invalid Git arguments JSON: {error}"))
 }
 
 pub(crate) fn git_gateway_action_sync(
@@ -3614,10 +3623,10 @@ pub(crate) fn git_gateway_action_sync(
         )?),
         "stash_push" => serde_json::to_value(git_stash_push_sync(workdir, args.message)?),
         "stash_pop" => serde_json::to_value(git_stash_pop_sync(workdir)?),
-        "" => return Err("Git action 不能为空。".to_string()),
-        other => return Err(format!("不支持的 Git action：{other}")),
+        "" => return Err("Git action cannot be empty.".to_string()),
+        other => return Err(format!("Unsupported Git action: {other}")),
     }
-    .map_err(|error| format!("序列化 Git 响应失败：{error}"))?;
+    .map_err(|error| format!("Failed to serialize Git response: {error}"))?;
     Ok(value)
 }
 
@@ -3636,15 +3645,15 @@ pub(crate) fn git_gateway_clone_task_action_sync(
             args.remote_url.unwrap_or_default(),
             args.branch,
         )?)
-        .map_err(|error| format!("序列化 Git 响应失败：{error}")),
+        .map_err(|error| format!("Failed to serialize Git response: {error}")),
         "clone_tasks" => serde_json::to_value(registry.snapshot()?)
-            .map_err(|error| format!("序列化 Git 响应失败：{error}")),
+            .map_err(|error| format!("Failed to serialize Git response: {error}")),
         "clone_cancel" => serde_json::to_value(registry.cancel(args.task_id.unwrap_or_default())?)
-            .map_err(|error| format!("序列化 Git 响应失败：{error}")),
+            .map_err(|error| format!("Failed to serialize Git response: {error}")),
         "clone_dismiss" => {
             registry.dismiss(args.task_id.unwrap_or_default())?;
             serde_json::to_value(registry.snapshot()?)
-                .map_err(|error| format!("序列化 Git 响应失败：{error}"))
+                .map_err(|error| format!("Failed to serialize Git response: {error}"))
         }
         _ => git_gateway_action_sync(action, workdir, args_json),
     }
@@ -3654,21 +3663,21 @@ pub(crate) fn git_gateway_clone_task_action_sync(
 pub async fn git_status(workdir: String) -> Result<GitRepositoryState, String> {
     tauri::async_runtime::spawn_blocking(move || git_status_sync(workdir))
         .await
-        .map_err(|error| format!("git_status join 失败：{error}"))?
+        .map_err(|error| format!("git_status join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_discover_repositories(workdir: String) -> Result<GitRepositoryDiscovery, String> {
     tauri::async_runtime::spawn_blocking(move || git_discover_repositories_sync(workdir))
         .await
-        .map_err(|error| format!("git_discover_repositories join 失败：{error}"))?
+        .map_err(|error| format!("git_discover_repositories join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_branches(workdir: String) -> Result<GitBranchesResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_branches_sync(workdir))
         .await
-        .map_err(|error| format!("git_branches join 失败：{error}"))?
+        .map_err(|error| format!("git_branches join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3679,7 +3688,7 @@ pub async fn git_switch_branch(
 ) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_switch_branch_sync(workdir, branch, kind))
         .await
-        .map_err(|error| format!("git_switch_branch join 失败：{error}"))?
+        .map_err(|error| format!("git_switch_branch join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3692,7 +3701,7 @@ pub async fn git_create_branch(
         git_create_branch_sync(workdir, branch, start_point)
     })
     .await
-    .map_err(|error| format!("git_create_branch join 失败：{error}"))?
+    .map_err(|error| format!("git_create_branch join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3715,7 +3724,7 @@ pub async fn git_create_worktree(
         )
     })
     .await
-    .map_err(|error| format!("git_create_worktree join 失败：{error}"))?
+    .map_err(|error| format!("git_create_worktree join failed: {error}"))?
 }
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_init(
@@ -3733,7 +3742,7 @@ pub async fn git_init(
         )
     })
     .await
-    .map_err(|error| format!("git_init join 失败：{error}"))?
+    .map_err(|error| format!("git_init join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3747,7 +3756,7 @@ pub async fn git_clone_repository(
         git_clone_repository_sync(parent, name, remote_url, branch)
     })
     .await
-    .map_err(|error| format!("git_clone_repository join 失败：{error}"))?
+    .map_err(|error| format!("git_clone_repository join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3791,7 +3800,7 @@ pub async fn git_list_remote_branches(
 ) -> Result<GitRemoteBranchesResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_list_remote_branches_sync(remote_url))
         .await
-        .map_err(|error| format!("git_list_remote_branches join 失败：{error}"))?
+        .map_err(|error| format!("git_list_remote_branches join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3802,7 +3811,7 @@ pub async fn git_diff(
 ) -> Result<GitDiffResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_diff_sync(workdir, mode, path))
         .await
-        .map_err(|error| format!("git_diff join 失败：{error}"))?
+        .map_err(|error| format!("git_diff join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3813,7 +3822,7 @@ pub async fn git_log(
 ) -> Result<GitLogResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_log_sync(workdir, limit, skip))
         .await
-        .map_err(|error| format!("git_log join 失败：{error}"))?
+        .map_err(|error| format!("git_log join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3823,7 +3832,7 @@ pub async fn git_commit_details(
 ) -> Result<GitCommitDetailsResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_commit_details_sync(workdir, commit))
         .await
-        .map_err(|error| format!("git_commit_details join 失败：{error}"))?
+        .map_err(|error| format!("git_commit_details join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3835,7 +3844,7 @@ pub async fn git_compare_commit_with_remote(
         git_compare_commit_with_remote_sync(workdir, commit)
     })
     .await
-    .map_err(|error| format!("git_compare_commit_with_remote join 失败：{error}"))?
+    .map_err(|error| format!("git_compare_commit_with_remote join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3846,35 +3855,35 @@ pub async fn git_commit_diff(
 ) -> Result<GitDiffResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_commit_diff_sync(workdir, commit, path))
         .await
-        .map_err(|error| format!("git_commit_diff join 失败：{error}"))?
+        .map_err(|error| format!("git_commit_diff join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_stage(workdir: String, path: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_stage_sync(workdir, path))
         .await
-        .map_err(|error| format!("git_stage join 失败：{error}"))?
+        .map_err(|error| format!("git_stage join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_stage_all(workdir: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_stage_all_sync(workdir))
         .await
-        .map_err(|error| format!("git_stage_all join 失败：{error}"))?
+        .map_err(|error| format!("git_stage_all join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_unstage(workdir: String, path: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_unstage_sync(workdir, path))
         .await
-        .map_err(|error| format!("git_unstage join 失败：{error}"))?
+        .map_err(|error| format!("git_unstage join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_unstage_all(workdir: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_unstage_all_sync(workdir))
         .await
-        .map_err(|error| format!("git_unstage_all join 失败：{error}"))?
+        .map_err(|error| format!("git_unstage_all join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3885,14 +3894,14 @@ pub async fn git_discard(
 ) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_discard_sync(workdir, path, old_path))
         .await
-        .map_err(|error| format!("git_discard join 失败：{error}"))?
+        .map_err(|error| format!("git_discard join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_discard_all(workdir: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_discard_all_sync(workdir))
         .await
-        .map_err(|error| format!("git_discard_all join 失败：{error}"))?
+        .map_err(|error| format!("git_discard_all join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3902,7 +3911,7 @@ pub async fn git_add_to_gitignore(
 ) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_add_to_gitignore_sync(workdir, path))
         .await
-        .map_err(|error| format!("git_add_to_gitignore join 失败：{error}"))?
+        .map_err(|error| format!("git_add_to_gitignore join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3912,28 +3921,28 @@ pub async fn git_open_system_file_location(
 ) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_open_system_file_location_sync(workdir, path))
         .await
-        .map_err(|error| format!("git_open_system_file_location join 失败：{error}"))?
+        .map_err(|error| format!("git_open_system_file_location join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_commit(workdir: String, message: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_commit_sync(workdir, message))
         .await
-        .map_err(|error| format!("git_commit join 失败：{error}"))?
+        .map_err(|error| format!("git_commit join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_fetch(workdir: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_fetch_sync(workdir))
         .await
-        .map_err(|error| format!("git_fetch join 失败：{error}"))?
+        .map_err(|error| format!("git_fetch join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_pull(workdir: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_pull_sync(workdir))
         .await
-        .map_err(|error| format!("git_pull join 失败：{error}"))?
+        .map_err(|error| format!("git_pull join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3943,14 +3952,14 @@ pub async fn git_set_remote(
 ) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_set_remote_sync(workdir, remote_url))
         .await
-        .map_err(|error| format!("git_set_remote join 失败：{error}"))?
+        .map_err(|error| format!("git_set_remote join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_push(workdir: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_push_sync(workdir))
         .await
-        .map_err(|error| format!("git_push join 失败：{error}"))?
+        .map_err(|error| format!("git_push join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3961,7 +3970,7 @@ pub async fn git_delete_branch(
 ) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_delete_branch_sync(workdir, branch, force))
         .await
-        .map_err(|error| format!("git_delete_branch join 失败：{error}"))?
+        .map_err(|error| format!("git_delete_branch join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3975,7 +3984,7 @@ pub async fn git_remove_worktree(
         git_remove_worktree_sync(workdir, worktree_path, force, delete_branch)
     })
     .await
-    .map_err(|error| format!("git_remove_worktree join 失败：{error}"))?
+    .map_err(|error| format!("git_remove_worktree join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3988,7 +3997,7 @@ pub async fn git_rename_branch(
         git_rename_branch_sync(workdir, branch, new_branch)
     })
     .await
-    .map_err(|error| format!("git_rename_branch join 失败：{error}"))?
+    .map_err(|error| format!("git_rename_branch join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -3998,14 +4007,14 @@ pub async fn git_stash_push(
 ) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_stash_push_sync(workdir, message))
         .await
-        .map_err(|error| format!("git_stash_push join 失败：{error}"))?
+        .map_err(|error| format!("git_stash_push join failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn git_stash_pop(workdir: String) -> Result<GitOperationResponse, String> {
     tauri::async_runtime::spawn_blocking(move || git_stash_pop_sync(workdir))
         .await
-        .map_err(|error| format!("git_stash_pop join 失败：{error}"))?
+        .map_err(|error| format!("git_stash_pop join failed: {error}"))?
 }
 
 #[cfg(test)]
@@ -4083,11 +4092,11 @@ mod tests {
         assert!(parse_gateway_args(String::new()).is_ok());
         assert!(parse_gateway_args(json!({"path":"src/main.rs"}).to_string()).is_ok());
         let init_args = parse_gateway_args(
-            json!({"branch":"main","userName":"LiveAgent Test","userEmail":"test@example.com"})
+            json!({"branch":"main","userName":"ReactorPro Test","userEmail":"test@example.com"})
                 .to_string(),
         )
         .expect("parse init args");
-        assert_eq!(init_args.user_name.as_deref(), Some("LiveAgent Test"));
+        assert_eq!(init_args.user_name.as_deref(), Some("ReactorPro Test"));
         assert_eq!(init_args.user_email.as_deref(), Some("test@example.com"));
         let log_args =
             parse_gateway_args(json!({"limit":50,"skip":100}).to_string()).expect("parse log args");
@@ -4158,7 +4167,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("temp repo");
         run_temp_git(temp.path(), &["init"]);
         run_temp_git(temp.path(), &["config", "core.autocrlf", "false"]);
-        run_temp_git(temp.path(), &["config", "user.name", "LiveAgent Test"]);
+        run_temp_git(temp.path(), &["config", "user.name", "ReactorPro Test"]);
         run_temp_git(temp.path(), &["config", "user.email", "test@example.com"]);
         fs::write(temp.path().join("README.md"), "initial\n").expect("write readme");
         run_temp_git(temp.path(), &["add", "README.md"]);
@@ -4241,7 +4250,7 @@ mod tests {
         let initialized = git_init_sync(
             workdir.clone(),
             "trunk".to_string(),
-            Some("LiveAgent Test".to_string()),
+            Some("ReactorPro Test".to_string()),
             Some("test@example.com".to_string()),
         )
         .expect("init repo");
@@ -4253,12 +4262,12 @@ mod tests {
             git_success(&workdir, &["config", "--get", "user.name"]).expect("user.name");
         let user_email =
             git_success(&workdir, &["config", "--get", "user.email"]).expect("user.email");
-        assert_eq!(user_name.stdout, "LiveAgent Test");
+        assert_eq!(user_name.stdout, "ReactorPro Test");
         assert_eq!(user_email.stdout, "test@example.com");
 
         let duplicate = git_init_sync(workdir, "main".to_string(), None, None)
             .expect_err("second init should fail");
-        assert!(duplicate.contains("Git 仓库内"), "{duplicate}");
+        assert!(duplicate.contains("inside a Git repository"), "{duplicate}");
     }
 
     #[cfg(unix)]
@@ -4280,7 +4289,7 @@ mod tests {
             status: "running".to_string(),
             phase: "preparing".to_string(),
             progress: None,
-            detail: "正在准备克隆…".to_string(),
+            detail: "Preparing to clone...".to_string(),
             error: String::new(),
             started_at: now_ms(),
         };
@@ -4359,7 +4368,7 @@ mod tests {
             None,
         )
         .expect_err("existing clone target must be rejected")
-        .contains("克隆目标已存在"));
+        .contains("Clone target already exists"));
 
         let task_parent = tempfile::tempdir().expect("task clone parent");
         let registry = Arc::new(GitCloneTaskRegistry::default());
@@ -5199,7 +5208,7 @@ mod tests {
         .expect("create worktree");
         assert!(created.ok, "create worktree failed: {}", created.message);
 
-        // 路径布局：<worktree 基目录>/<repo_id>/<name>
+        // Path layout: <worktree base dir>/<repo_id>/<name>
         let repo_root =
             fs::canonicalize(git_status_sync(workdir.clone()).expect("status").repo_root)
                 .expect("canonicalize repo root");
@@ -5213,11 +5222,11 @@ mod tests {
         assert_eq!(PathBuf::from(&created.worktree_path), expected);
         assert!(expected.is_dir(), "worktree directory should exist");
 
-        // 新 worktree 检出到同名新分支
+        // The new worktree checks out to a new branch with the same name
         let branch = git_success(&created.worktree_path, &["branch", "--show-current"])
             .expect("branch of worktree");
         assert_eq!(branch.stdout.trim(), "feature-alpha");
-        // 原仓库留在原分支
+        // The original repository stays on its original branch
         assert_eq!(created.state.head, initial_branch);
     }
 
@@ -5290,7 +5299,7 @@ mod tests {
         );
         assert!(result
             .expect_err("nested worktree target must fail")
-            .contains("不能位于现有 Worktree 目录内"),);
+            .contains("cannot be inside an existing Worktree directory"),);
     }
 
     #[test]
@@ -5460,7 +5469,7 @@ mod tests {
             "worktree directory should be gone"
         );
 
-        // 分支应随之删除
+        // The branch should be deleted along with it
         let state = git_status_sync(workdir.clone()).expect("status");
         let worktrees = git_worktrees_sync(&state.repo_root).expect("worktree list");
         assert!(
@@ -5517,7 +5526,7 @@ mod tests {
         assert!(!result.branch_deleted);
         assert_eq!(result.branch, "wt-unmerged");
         assert!(
-            result.message.contains("Worktree 已移除，但分支删除失败")
+            result.message.contains("Worktree removed, but branch deletion failed")
                 && result.message.contains("not fully merged"),
             "unexpected removal error: {}",
             result.message
@@ -5571,7 +5580,7 @@ mod tests {
             "force removal must not delete an unmerged branch"
         );
         assert!(
-            result.message.contains("Worktree 已移除，但分支删除失败")
+            result.message.contains("Worktree removed, but branch deletion failed")
                 && result.message.contains("not fully merged"),
             "unexpected force removal error: {}",
             result.message
@@ -5676,7 +5685,7 @@ mod tests {
         let result = git_remove_worktree_sync(workdir.clone(), workdir, None, Some(false));
         assert!(result
             .expect_err("main worktree removal must fail")
-            .contains("不能删除主 Worktree"),);
+            .contains("Cannot delete the main Worktree"),);
     }
 
     #[test]
@@ -5854,7 +5863,7 @@ mod tests {
         let missing_origin_push = git_push_sync(workdir.clone()).expect("push without origin");
         assert!(!missing_origin_push.ok);
         assert!(
-            missing_origin_push.message.contains("找不到 origin remote"),
+            missing_origin_push.message.contains("no origin remote"),
             "unexpected push message: {}",
             missing_origin_push.message
         );
@@ -6106,7 +6115,7 @@ mod tests {
         let missing_origin_pull = git_pull_sync(workdir.clone()).expect("pull without origin");
         assert!(!missing_origin_pull.ok);
         assert!(
-            missing_origin_pull.message.contains("找不到 origin remote"),
+            missing_origin_pull.message.contains("no origin remote"),
             "unexpected pull message: {}",
             missing_origin_pull.message
         );
@@ -6145,7 +6154,7 @@ mod tests {
 
         let refused = git_delete_branch_sync(workdir.clone(), initial.head.clone(), None)
             .expect_err("deleting current branch should fail");
-        assert!(refused.contains("不能删除当前检出的分支"), "{refused}");
+        assert!(refused.contains("Cannot delete the currently checked-out branch"), "{refused}");
 
         run_temp_git(repo.path(), &["checkout", "-b", "unmerged-branch"]);
         fs::write(repo.path().join("unmerged.txt"), "unmerged\n").expect("write unmerged file");

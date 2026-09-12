@@ -1,9 +1,11 @@
 /**
- * 会话累计统计的聚合层。
+ * Aggregation layer for cumulative conversation stats.
  *
- * 吃 `buildTrajectoryLedger` 的收敛产物——去重、乱序、重复回放的脏活全在账本层
- * 做完了，这里只做纯算术。运行中的 step/tool 不把 `now` 折进已完成时长，而是回传
- * `*RunningSinceAt` 让展示层用心跳补齐，聚合结果因此保持纯函数、可缓存。
+ * Consumes the converged output of `buildTrajectoryLedger` -- the dirty work of deduplication,
+ * out-of-order handling, and repeated replay is all done in the ledger layer, so only pure arithmetic
+ * happens here. Running steps/tools do not fold `now` into completed durations, but return
+ * `*RunningSinceAt` for the presentation layer to fill in with its heartbeat, keeping the aggregate
+ * result a pure, cacheable function.
  */
 
 import { cachedNumberFormat } from "../shared/intlFormatters";
@@ -12,9 +14,9 @@ import type { TrajectoryLedger } from "./types";
 export type ConversationStats = {
   turns: number;
   steps: number;
-  /** 已完成 step 的累计时长，不含运行中的那段。 */
+  /** Cumulative duration of completed steps, excluding the running portion. */
   llmMs: number;
-  /** 运行中 step 的起点；展示层用 `now − 该值` 补齐。 */
+  /** Start of the running step; the presentation layer fills in with `now - this value`. */
   llmRunningSinceAt: number | null;
   toolMs: number;
   toolRunningSinceAt: number | null;
@@ -22,11 +24,11 @@ export type ConversationStats = {
   ttftSamples: number;
   decodeTokPerSec: number | null;
   cacheHitRatio: number | null;
-  /** prompt 总量：input + cacheRead + cacheWrite，与账单口径一致。 */
+  /** Total prompt volume: input + cacheRead + cacheWrite, consistent with billing semantics. */
   inputTokens: number;
   outputTokens: number;
   compactions: number;
-  /** 事件被截断或未加载完时为 true，展示层加 "≈" 前缀。 */
+  /** True when events were truncated or not fully loaded; the presentation layer adds an "≈" prefix. */
   approximate: boolean;
 };
 
@@ -53,7 +55,7 @@ function positiveSpan(from: number | null, to: number | null): number {
   return span > 0 ? span : 0;
 }
 
-/** 多个运行段取最早起点：展示的是「已经跑了多久」，不是最后一段跑了多久。 */
+/** Takes the earliest start across multiple running segments: what is shown is "how long it has run", not how long the last segment ran. */
 function earlier(current: number | null, candidate: number | null): number | null {
   if (candidate === null) return current;
   if (current === null) return candidate;
@@ -87,8 +89,9 @@ export function aggregateTrajectoryStats(
     for (const step of turn.steps) {
       steps += 1;
 
-      // 只有 status 才能开心跳：账本把崩溃遗留的 step 收敛成 aborted 却不补
-      // endedAt，按 endedAt 判定会让已死会话永远走秒表。
+      // Only status may start a heartbeat: the ledger converges crash-leftover steps into aborted
+      // without filling in endedAt, so deciding by endedAt would leave a dead conversation's stopwatch
+      // running forever.
       if (step.status === "running") {
         llmRunningSinceAt = earlier(llmRunningSinceAt, step.startedAt);
       } else {
@@ -121,7 +124,8 @@ export function aggregateTrajectoryStats(
       cacheReadTokens += cacheRead;
       outputTokens += output;
 
-      // 解码窗口：首 token 之后到结束。缺 firstTokenAt 时退回整段，非正数不计入。
+      // Decode window: from after the first token to the end. Falls back to the whole segment when
+      // firstTokenAt is missing; non-positive values are not counted.
       if (output > 0 && step.endedAt !== null) {
         const window =
           step.firstTokenAt !== null
@@ -153,13 +157,13 @@ export function aggregateTrajectoryStats(
   };
 }
 
-/** 状态栏是否有任何可展示内容——全零（老会话、text 模式）时整条隐藏。 */
+/** Whether the status bar has anything to show -- when all zero (old conversations, text mode) the whole bar is hidden. */
 export function hasConversationStats(stats: ConversationStats | null): boolean {
   if (stats === null) return false;
   return stats.turns > 0 || stats.steps > 0;
 }
 
-/** 把运行段按 `now` 折算进显示用时长。 */
+/** Converts running segments into display durations relative to `now`. */
 export function resolveStatDurations(
   stats: ConversationStats,
   now: number,
@@ -170,7 +174,7 @@ export function resolveStatDurations(
   };
 }
 
-/** `< 60s → 42s`、`< 60min → 12m34s`、`≥ 60min → 5h06m`。 */
+/** `< 60s -> 42s`, `< 60min -> 12m34s`, `≥ 60min -> 5h06m`. */
 export function formatStatDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return "0s";
   const totalSeconds = Math.floor(ms / 1000);
@@ -181,7 +185,7 @@ export function formatStatDuration(ms: number): string {
   return `${hours}h${String(totalMinutes % 60).padStart(2, "0")}m`;
 }
 
-/** TTFT 保留一位小数：`20.9s`；不足 1s 时用毫秒避免显示成 `0.0s`。 */
+/** TTFT keeps one decimal: `20.9s`; under 1s it uses milliseconds to avoid displaying `0.0s`. */
 export function formatStatLatency(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return "0ms";
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -190,9 +194,10 @@ export function formatStatLatency(ms: number): string {
 
 export function formatStatTokens(value: number, locale: string): string {
   if (!Number.isFinite(value) || value <= 0) return "0";
-  // 两个档位各自成键：<1000 不留小数位（892 → "892"，而不是 compact 的 "0.9K"）。
-  // formatter 按 (variant, locale) 缓存——这一族函数在状态栏渲染体里被逐个调用，
-  // 而状态栏运行中每秒重渲染一次（see ConversationStatsBar 心跳）。
+  // The two tiers each get their own key: <1000 keeps no decimals (892 -> "892", not compact's
+  // "0.9K"). The formatter is cached by (variant, locale) -- this family of functions is called one
+  // by one inside the status bar render body, and the status bar re-renders every second while
+  // running (see the ConversationStatsBar heartbeat).
   const formatter = cachedNumberFormat(locale, value < 1000 ? "compact-whole" : "compact-1", {
     notation: "compact",
     maximumFractionDigits: value < 1000 ? 0 : 1,

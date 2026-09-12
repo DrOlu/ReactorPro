@@ -24,19 +24,19 @@ const features = [
   {
     icon: MessageSquareText,
     title: "Remote Chat",
-    desc: "按桌面端式样查看 token、thinking、tool_call 与 tool_result。",
+    desc: "View token, thinking, tool_call and tool_result in the desktop style.",
     accent: "login-feat--blue",
   },
   {
     icon: History,
     title: "History Resume",
-    desc: "从远程历史回填会话并继续对话，而不是只看原始 JSON。",
+    desc: "Restore conversations from remote history and keep chatting, instead of just looking at raw JSON.",
     accent: "login-feat--violet",
   },
   {
     icon: Timer,
     title: "Cron Control",
-    desc: "在浏览器里完成任务查看、创建、更新与删除的转发调试。",
+    desc: "Forward and debug task view, create, update and delete from the browser.",
     accent: "login-feat--amber",
   },
 ];
@@ -58,10 +58,10 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
             <div className="login-logo-mark">
               <Shield size={18} strokeWidth={2} />
             </div>
-            <h1 className="login-hero-title">LiveAgent Gateway</h1>
+            <h1 className="login-hero-title">ReactorPro Gateway</h1>
           </div>
           <p className="login-hero-desc">
-            安全连接到远程代理会话，在浏览器中获得完整的控制台体验。
+            Securely connect to remote agent sessions and get the full console experience in your browser.
           </p>
 
           <div className="login-feat-list login-entrance-d2">
@@ -87,9 +87,9 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 <div className="login-form-icon">
                   <Lock size={16} strokeWidth={2} />
                 </div>
-                <h2 className="login-form-title">连接控制台</h2>
+                <h2 className="login-form-title">Connect Console</h2>
               </div>
-              <p className="login-form-sub">输入 Gateway 服务端的 Access Token 以验证身份</p>
+              <p className="login-form-sub">Enter the Gateway server Access Token to authenticate</p>
             </div>
 
             <div className={cn("login-input-wrap", isFocused && "login-input-wrap--focus")}>
@@ -125,13 +125,13 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 <span className="login-btn-loading" />
               ) : (
                 <>
-                  进入 Gateway
+                  Enter Gateway
                   <ArrowRight size={15} strokeWidth={2.2} />
                 </>
               )}
             </Button>
 
-            <p className="login-form-footer">Token 验证通过后将本地保存，下次自动登录</p>
+            <p className="login-form-footer">Once the token is verified it is stored locally for automatic sign-in next time</p>
           </div>
         </div>
       </div>

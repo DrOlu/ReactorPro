@@ -32,11 +32,11 @@ const env = await createDomTestEnv({
         locale: "zh-CN",
         t: (key) =>
           ({
-            "chat.thinking": "思考中",
-            "chat.thoughtFor": "思考了",
-            "chat.thinkingProcess": "思考过程",
-            "chat.work.running": "处理中",
-            "chat.work.activity": "已处理",
+            "chat.thinking": "Thinking",
+            "chat.thoughtFor": "Thought for",
+            "chat.thinkingProcess": "Thinking process",
+            "chat.work.running": "Processing",
+            "chat.work.activity": "Processed",
           })[key] ?? key,
       }),
     },
@@ -60,7 +60,7 @@ function renderDisclosure(root, props = {}) {
   act(() => {
     root.render(
       React.createElement(ThinkingDisclosure, {
-        text: "先读取文件，再检查测试。",
+        text: "First read the file, then check the tests.",
         trackKey: "turn-1:r1:thinking-1",
         active: true,
         ...props,
@@ -73,22 +73,22 @@ function click(element) {
   act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
-test("a streaming segment shows 思考中 with its reasoning open, then folds into 思考了 Xs", () => {
+test("a streaming segment shows Thinking with its reasoning open, then folds into Thought for Xs", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
 
   renderDisclosure(root, { active: true });
   const button = container.querySelector("button");
-  assert.match(button.textContent, /思考中/);
+  assert.match(button.textContent, /Thinking/);
   assert.equal(button.getAttribute("aria-expanded"), "true");
-  assert.match(container.textContent, /先读取文件/);
+  assert.match(container.textContent, /First read the file/);
   assert.ok(container.querySelector("[data-thinking-disclosure]"));
   assert.ok(container.querySelector("[data-thinking-active]"));
 
   durationState.settledMs = 23_000;
   renderDisclosure(root, { active: false });
   assert.equal(button.getAttribute("aria-expanded"), "false");
-  assert.match(button.textContent, /思考了 23s/);
+  assert.match(button.textContent, /Thought for 23s/);
   assert.equal(container.querySelector("[data-thinking-active]"), null);
 
   act(() => root.unmount());
@@ -131,14 +131,14 @@ test("collapsing a still-streaming segment sticks through settle", () => {
   act(() => root.unmount());
 });
 
-test("a history-loaded segment without a measured duration reads 思考过程", () => {
+test("a history-loaded segment without a measured duration reads Thinking process", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
 
   durationState.settledMs = null;
   renderDisclosure(root, { active: false });
   const button = container.querySelector("button");
-  assert.match(button.textContent, /思考过程/);
+  assert.match(button.textContent, /Thinking process/);
   assert.equal(button.getAttribute("aria-expanded"), "false");
 
   act(() => root.unmount());

@@ -5,7 +5,6 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.showSidebarShortcut": "Show {name} in sidebar",
   "settings.navSystem": "System",
   "settings.navSystemTools": "System Tools",
-  "settings.navStt": "Speech to Text",
   "settings.toolPermissionsOverridden": "{count} customized",
   "settings.toolPolicy.allow": "Allow",
   "settings.toolPolicy.ask": "Ask",
@@ -260,7 +259,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.auto": "Auto",
   "settings.autoDesc": "Follow the system appearance setting",
   "settings.language": "Language",
-  "settings.chinese": "简体中文",
+  "settings.chinese": "Simplified Chinese",
   "settings.english": "English",
   "settings.fontSize": "Font Size",
   "settings.fontSizeSidebar": "Sidebar",
@@ -293,7 +292,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.workdirOpenFailed": "Failed to open directory picker: ",
   "settings.systemTools": "System Tools",
   "settings.systemToolsDesc":
-    "View the built-in tools that LiveAgent registers automatically in Agent mode, and set an approval policy per tool (allow / ask before running / deny).",
+    "View the built-in tools that ReactorPro registers automatically in Agent mode, and set an approval policy per tool (allow / ask before running / deny).",
   "settings.builtinToolCategory.fs": "File System",
   "settings.builtinToolCategory.process": "Terminal & Processes",
   "settings.builtinToolCategory.intelligence": "Intelligence & Memory",
@@ -393,7 +392,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.browser.name": "Browser",
   "settings.builtinTool.browser.desc": "Automate a Chromium browser",
   "settings.builtinTool.browser.detail":
-    "With the LiveAgent browser extension installed, actions run in a new tab of your own browser and reuse your login sessions (only tabs it creates are visible to it). Without the extension, it falls back to launching a dedicated browser with an isolated profile, separate from your logins. Supports navigation, page snapshots, clicking, typing, screenshots and JavaScript evaluation. Each action asks for approval by default; unavailable in offline sandbox mode.",
+    "With the ReactorPro browser extension installed, actions run in a new tab of your own browser and reuse your login sessions (only tabs it creates are visible to it). Without the extension, it falls back to launching a dedicated browser with an isolated profile, separate from your logins. Supports navigation, page snapshots, clicking, typing, screenshots and JavaScript evaluation. Each action asks for approval by default; unavailable in offline sandbox mode.",
   "settings.browserMode.label": "Browser mode",
   "settings.browserMode.auto": "Auto",
   "settings.browserMode.userProfile": "My browser",
@@ -401,7 +400,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.browserMode.auto.desc":
     "Uses your own browser (with your logins) when the extension is connected; otherwise falls back to an isolated browser automatically.",
   "settings.browserMode.userProfile.desc":
-    "Always acts in your own browser, reusing your login sessions. Requires the LiveAgent browser extension; actions fail with guidance instead of silently downgrading when it is not connected.",
+    "Always acts in your own browser, reusing your login sessions. Requires the ReactorPro browser extension; actions fail with guidance instead of silently downgrading when it is not connected.",
   "settings.browserMode.isolated.desc":
     "Always uses a dedicated browser with an isolated profile, fully separate from your logins.",
   "settings.browserMode.extensionConnected": "Extension connected",
@@ -1013,7 +1012,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cronViewLogConclusion": "Conclusion",
   "settings.cronViewLogExit": "Exit code",
   "settings.remoteTitle": "Remote Access",
-  "settings.remoteDesc": "Control your local LiveAgent remotely via cloud Gateway",
+  "settings.remoteDesc": "Control your local ReactorPro remotely via cloud Gateway",
   "settings.remoteConnected": "Connected",
   "settings.remoteConnectedProtocol": "Connected ({protocol})",
   "settings.remoteDisconnected": "Disconnected",
@@ -1054,7 +1053,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.skillsHubStoreTab": "Skills Store",
   "settings.skillsHubImportTab": "Local Import",
   "settings.skillsImportDesc":
-    "Scan local Claude Code, Codex, CodeBuddy, and AGENTS skill directories, then pick skills to import into LiveAgent.",
+    "Scan local Claude Code, Codex, CodeBuddy, and AGENTS skill directories, then pick skills to import into ReactorPro.",
   "settings.skillsImportOverwriteHint":
     "Skills with the same name are backed up, then overwritten.",
   "settings.skillsImportScanning": "Scanning",
@@ -1126,7 +1125,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.skillsScan": "Scan",
   "settings.skillsScanning": "Scanning",
   "settings.skillsScanHint":
-    "Rescan the LiveAgent Skills directory and sync capabilities available to this conversation",
+    "Rescan the ReactorPro Skills directory and sync capabilities available to this conversation",
   "settings.skillsScanComplete": "Scan complete",
   "settings.skillsScanFailed": "Scan failed",
   "settings.skillsScanFound": "Found {count} Skills",
@@ -1325,7 +1324,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.policyTitle": "Approval Policy",
   "settings.cuaDriver.policyDesc":
     "Control whether AI desktop actions require manual confirmation.",
-  "settings.cuaDriver.allowSelfTitle": "Target LiveAgent Windows",
+  "settings.cuaDriver.allowSelfTitle": "Target ReactorPro Windows",
   "settings.cuaDriver.allowSelfDesc":
     "Disabled by default to prevent AI from interacting with this app. Enable for self-automation.",
   "settings.cuaDriver.groupRuntime": "Runtime Parameters",

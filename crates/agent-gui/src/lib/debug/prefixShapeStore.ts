@@ -1,16 +1,16 @@
 /**
- * 按 sessionId 键控的前缀快照存储。归因要求「上一轮」与「本轮」同属一个会话:
- * runner 局部变量既做不到跨 runner 调用存续(同一会话的下一个 turn 只能报
- * initial),也挡不住多会话交错(主会话/子代理/记忆抽取共存)时拿别的会话的
- * 快照当基线比。存储放模块级,按 sessionId 隔离,LRU 上限对齐
- * injectionController 的会话数口径(32)。
+ * Prefix snapshot store keyed by sessionId. Attribution requires "previous turn" and "current turn" to belong to the same session:
+ * runner-local variables can neither persist across runner calls (the next turn of the same session can only report
+ * initial), nor prevent cross-session interleaving (main session/subagent/memory extraction coexisting) from using another session's
+ * snapshot as the baseline. The store is module-level, isolated by sessionId, with an LRU cap matching
+ * injectionController's conversation-count budget (32).
  *
- * 与 prefixCacheShape 同目录但刻意分文件:那边承诺纯函数(不含时间量与状态),
- * 这边就是状态本身,不能混在一起稀释那个承诺。
+ * Same directory as prefixCacheShape but deliberately a separate file: the former promises pure functions (no time quantities or state),
+ * whereas this one is state itself and must not be mixed in to dilute that promise.
  */
 import type { PrefixShape } from "./prefixCacheShape";
 
-/** 缓存的会话数量上限,对齐 injectionController 的 INJECTION_CONVERSATION_STATE_LIMIT。 */
+/** Maximum number of cached sessions, matching injectionController's INJECTION_CONVERSATION_STATE_LIMIT. */
 const PREFIX_SHAPE_SESSION_LIMIT = 32;
 
 type PrefixShapeEntry = {
@@ -20,12 +20,12 @@ type PrefixShapeEntry = {
 
 const shapesBySession = new Map<string, PrefixShapeEntry>();
 
-// 淘汰序只需要相对先后。用单调计数器而不是 Date.now():同一毫秒内的多次触碰
-// 也能保持稳定次序,且不给对账链路引入时间量。
+// The eviction order only needs relative precedence. Use a monotonic counter instead of Date.now(): multiple touches within the same millisecond
+// still keep a stable order, and it does not introduce a time quantity into the reconciliation chain.
 let touchCounter = 0;
 
-// sessionId 缺失时退化为单槽:等价于旧的 runner 局部变量语义(匿名请求之间
-// 仍可能互串),但没有键就没有更好的归属方式,至少保住跨调用的连续性。
+// When sessionId is missing it degrades to a single slot: equivalent to the old runner-local-variable semantics (anonymous requests may
+// still cross-contaminate), but without a key there is no better way to attribute, and at least continuity across calls is preserved.
 let fallbackShape: PrefixShape | null = null;
 
 function pruneShapes() {
@@ -43,7 +43,7 @@ function normalizeKey(sessionId: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-/** 读取该会话上一轮的前缀快照;读也算触碰,让活跃会话不被 LRU 淘汰。 */
+/** Read the previous turn's prefix snapshot for this session; reading counts as a touch so active sessions are not evicted by the LRU. */
 export function readPreviousPrefixShape(sessionId: string | undefined): PrefixShape | null {
   const key = normalizeKey(sessionId);
   if (!key) return fallbackShape;
@@ -53,7 +53,7 @@ export function readPreviousPrefixShape(sessionId: string | undefined): PrefixSh
   return entry.shape;
 }
 
-/** 每轮捕获后写回,作为该会话下一轮比对的基线。 */
+/** Written back after each turn's capture, as the baseline for that session's next-turn comparison. */
 export function recordPrefixShape(sessionId: string | undefined, shape: PrefixShape): void {
   const key = normalizeKey(sessionId);
   if (!key) {

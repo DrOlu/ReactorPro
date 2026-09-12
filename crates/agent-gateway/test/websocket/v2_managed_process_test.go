@@ -1,7 +1,9 @@
 package websocket_test
 
-// ManagedProcess 快照链路集成测试：agent 发布 ManagedProcessSnapshot 后，已连接
-// 浏览器应收到 process_state 广播帧，新连接则应收到缓存回放帧。
+// Integration test for the ManagedProcess snapshot path: after an agent publishes
+// a ManagedProcessSnapshot, already-connected browsers should receive a
+// process_state broadcast frame, while a new connection should receive the cached
+// replay frame.
 
 import (
 	"net/http"
@@ -88,7 +90,8 @@ func TestV2ManagedProcessBroadcastAndReplay(t *testing.T) {
 		},
 	})
 
-	// 已连接浏览器收到广播;新浏览器连接收到缓存回放。
+	// The connected browser receives the broadcast; a new browser connection
+	// receives the cached replay.
 	expectProcessState(t, browserConn, "broadcast")
 	browserConn2, browserCleanup2 := dialV2Path(t, mux, "/ws/v2")
 	defer browserCleanup2()

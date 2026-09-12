@@ -52,7 +52,7 @@ test("readonly happy path: identity prompts, filtered child tools, SendMessage a
   );
   assert.equal(call.sessionId, "parent-session:subagent:reviewer-a");
   assert.equal(call.workdir, "/tmp/liveagent-subagent-test");
-  assert.match(call.context.systemPrompt, /You are Code Reviewer, a named delegated LiveAgent subagent/);
+  assert.match(call.context.systemPrompt, /You are Code Reviewer, a named delegated ReactorPro subagent/);
   assert.match(call.context.systemPrompt, /- Stable id: reviewer-a/);
   assert.match(call.context.systemPrompt, /- Role: Review code paths/);
   assert.match(call.context.systemPrompt, /- Team position: 1 of 1/);
@@ -640,8 +640,8 @@ test("per-agent cards stream through the execution context with stable synthetic
   const harness = await createSubagentHarness();
   const parentToolCall = createAgentToolCall({
     agents: [
-      { id: "alpha", prompt: "研究 A" },
-      { id: "beta", prompt: "实现 B", mode: "worktree", apply_policy: "auto" },
+      { id: "alpha", prompt: "Research A" },
+      { id: "beta", prompt: "Implement B", mode: "worktree", apply_policy: "auto" },
     ],
     concurrency: 2,
   });

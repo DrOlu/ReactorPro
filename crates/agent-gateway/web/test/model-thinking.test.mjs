@@ -10,7 +10,7 @@ const loader = createWebModuleLoader({
 const thinking = loader.loadModule("@liveagent/ui/lib/models/modelThinking.ts");
 const settings = loader.loadModule("src/lib/settings/index.ts");
 
-test("modelThinking.ts 仅保留共享实现", () => {
+test("modelThinking.ts keeps only the shared implementation", () => {
   const webPath = fileURLToPath(new URL("../src/lib/models/modelThinking.ts", import.meta.url));
   const guiPath = fileURLToPath(
     new URL("../../../agent-gui/src/lib/models/modelThinking.ts", import.meta.url),
@@ -34,7 +34,7 @@ test("web thinking wrappers delegate to the shared resolver", () => {
   assert.equal(settings.isThinkingAlwaysOnForModel("xai", "grok-4.5"), true);
   assert.equal(settings.isThinkingAlwaysOnForModel("codex", "gpt-5"), true);
   assert.deepEqual(settings.getKnownModelThinkingLevels("codex", "gpt-4o"), []);
-  // DeepSeek 正式供应商的 V4 Responses 模型：low/high/max，思考可关。
+  // The V4 Responses model of the DeepSeek official provider: low/high/max, with thinking toggleable.
   assert.deepEqual(settings.getKnownModelThinkingLevels("deepseek", "deepseek-v4-flash"), [
     "low",
     "high",

@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// PR #521 review P2:「背景 Pane 的 Send 只聚焦不发送」。修复后背景 Pane 的
-// 发送按本 Pane 的 conversationId 路由(与 Stop 一致):运行中入队,空闲直发。
-// 本文件覆盖 Pane 侧 send handler 的 clear-on-send / restore-on-failure 语义,
-// 以及 ChatPage 源级防回归。
+// PR #521 review P2: "Send in a background Pane only focuses, never sends." After the fix, a
+// background Pane's send is routed by that Pane's own conversationId (consistent with Stop):
+// enqueue when running, send directly when idle. This file covers the Pane-side send handler's
+// clear-on-send / restore-on-failure semantics, plus a source-level regression guard for ChatPage.
 
 const loader = createTsModuleLoader();
 const { createPaneComposerSendHandler } = loader.loadModule(
@@ -171,13 +171,14 @@ test("restore does not clobber text typed after a failed send", async () => {
   rejectSend(new Error("late failure"));
   await tick();
 
-  // 缓存草稿仍被恢复(会话侧不丢),但 composer 里更新的输入不被覆盖。
+  // The cached draft is still restored (the conversation side loses nothing), but newer input
+  // in the composer is not overwritten.
   assert.equal(restoredDrafts.length, 1);
   assert.equal(composer.current().text, "newer text");
 });
 
 // ---------------------------------------------------------------------------
-// 源级防回归:背景 Pane 的发送不得再被 focusGuard 吞掉。
+// Source-level regression guard: a background Pane's send must no longer be swallowed by focusGuard.
 // ---------------------------------------------------------------------------
 
 function readSource(relativePath) {
@@ -191,12 +192,12 @@ test("background pane bindings route Send by conversationId, not through focusGu
   const buildEnd = chatPage.indexOf("const workbenchRegistrations", buildStart);
   const builder = chatPage.slice(buildStart, buildEnd);
 
-  // Send 与 Stop 同语义:显式按 conversationId 路由。
+  // Send has the same semantics as Stop: explicitly routed by conversationId.
   assert.doesNotMatch(builder, /onSend:\s*focusGuard/);
   assert.match(builder, /sendDraft: paneSendDraft/);
   assert.match(builder, /conversationIdOverride: conversationId/);
   assert.match(builder, /uploadedFilesOverride: uploads/);
-  // 运行中的会话入队,而不是丢弃或串到焦点会话。
+  // A running conversation is enqueued, rather than dropped or crossed into the focused conversation.
   assert.match(builder, /enqueueComposerTurnForConversation\(\{/);
 
   const paneHost = readSource("../../src/pages/chat/surfaces/ConversationPaneHost.tsx");

@@ -73,7 +73,7 @@ test("anthropic: supportsAdaptiveAnthropicThinking reads catalog compat.forceAda
     ),
     false,
   );
-  // 没有 compat 的自定义模型一律按 budget 处理，不做 id 猜测。
+  // Custom models without compat are always handled as budget, with no id guessing.
   assert.equal(supportsAdaptiveAnthropicThinking(createAnthropicModel("claude-custom-x")), false);
 });
 
@@ -85,7 +85,7 @@ test("anthropic: mapReasoningToAnthropicEffort honors catalog thinkingLevelMap o
   assert.equal(mapReasoningToAnthropicEffort("xhigh", opus46), "max");
   assert.equal(mapReasoningToAnthropicEffort("medium", opus46), "medium");
 
-  // 没有目录覆盖时走标准档位直通。
+  // With no catalog override, the standard level passes through unchanged.
   const fable = createAnthropicModel("claude-fable-5", {
     compat: { forceAdaptiveThinking: true },
   });
@@ -130,15 +130,15 @@ test("anthropic: resolveAnthropicThinkingRuntime shrinks the budget for small ma
   const runtime = resolveAnthropicThinkingRuntime(small, { reasoning: "max" });
   assert.equal(runtime.mode, "budget");
   assert.equal(runtime.maxTokens, 4_000);
-  // budget(max)=32768 > adjustedMaxTokens(4000) 触发安全降档：4000-1024=2976。
+  // budget(max)=32768 > adjustedMaxTokens(4000) triggers a safety downgrade: 4000-1024=2976.
   assert.equal(runtime.thinkingBudgetTokens, 2_976);
 });
 
 test("openai: clampOpenAIReasoningEffort clamps to nearest catalog-supported level", () => {
   const codexLike = createOpenAIModel("gpt-5.1-codex", { thinkingLevelMap: { minimal: null } });
-  // minimal 被目录禁用，向上取最近档位 low。
+  // minimal is disabled by the catalog, so round up to the nearest level, low.
   assert.equal(clampOpenAIReasoningEffort(codexLike, "minimal"), "low");
-  // xhigh/max 未在目录中显式声明，属于 opt-in-only，向下取 high。
+  // xhigh/max are not explicitly declared in the catalog; they are opt-in-only, so round down to high.
   assert.equal(clampOpenAIReasoningEffort(codexLike, "xhigh"), "high");
   assert.equal(clampOpenAIReasoningEffort(codexLike, "high"), "high");
 });
@@ -166,7 +166,7 @@ test("gemini: 3 pro stays two-tier LOW/HIGH regardless of minor version", () => 
   const pro31 = createGoogleModel("gemini-3.1-pro-preview");
   assert.deepEqual(resolveGeminiThinkingRuntime(pro31, "low"), { enabled: true, level: "LOW" });
   assert.deepEqual(resolveGeminiThinkingRuntime(pro31, "high"), { enabled: true, level: "HIGH" });
-  // xhigh/max 未在任何 Gemini 目录条目中声明，一律降到 high。
+  // xhigh/max are not declared in any Gemini catalog entry, so they are always lowered to high.
   assert.deepEqual(resolveGeminiThinkingRuntime(pro31, "xhigh"), { enabled: true, level: "HIGH" });
 });
 

@@ -31,8 +31,9 @@ function sortAgents(agents: AgentStatus[], activeAgent: string): AgentStatus[] {
   });
 }
 
-// AgentSelector 渲染头像菜单内的 Agent 目录。目录由打标 status 事件与
-// agent_list 响应驱动；单客户端显示身份与状态，多客户端才显示切换列表。
+// AgentSelector renders the Agent directory inside the avatar menu. The directory is driven by tagged
+// status events and agent_list responses; a single client shows identity and status, while multiple
+// clients show a switch list.
 export function AgentSelector({
   api,
   onAgentChange,
@@ -46,7 +47,8 @@ export function AgentSelector({
 
   useEffect(() => {
     const unsubscribe = api.subscribeAgents(setAgents);
-    // 主动拉一次目录：离线/仅签发凭证的 Agent 不会有 status 事件。
+    // Pull the directory once proactively: an offline Agent, or one with only an issued credential,
+    // never produces a status event.
     api
       .listAgents()
       .then(() => {
@@ -55,7 +57,8 @@ export function AgentSelector({
         onAgentChange?.(agentId);
       })
       .catch(() => {
-        // 目录拉取失败不阻塞页面；status 事件仍会渐进填充在线条目。
+        // A failed directory fetch does not block the page; status events still progressively fill in
+        // the online entries.
       });
     return unsubscribe;
   }, [api, onAgentChange]);

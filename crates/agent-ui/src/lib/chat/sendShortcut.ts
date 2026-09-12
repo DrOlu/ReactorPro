@@ -1,4 +1,4 @@
-/** 发送键为本机输入偏好，仅在消息编辑器中读取，不注册系统快捷键。 */
+/** The send key is a local input preference, read only in the message composer and not registered as a system shortcut. */
 export type SendShortcut = "enter" | "ctrlEnter";
 export const SEND_SHORTCUT_STORAGE_KEY = "liveagent.sendShortcut.v1";
 

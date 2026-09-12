@@ -63,14 +63,14 @@ const AlertDialogOverlay = React.forwardRef<
 ));
 AlertDialogOverlay.displayName = "AlertDialogOverlay";
 
-// 与 dialog.tsx 的 DIALOG_FONT_SCALE 保持同一档位。
+// Keeps the same level as DIALOG_FONT_SCALE in dialog.tsx.
 const ALERT_DIALOG_FONT_SCALE = 0.9;
 
 type AlertDialogContentProps = React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Popup>;
 
 export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentProps>(
   ({ className, children, style, ...props }, ref) => {
-    // 同 dialog.tsx：把缩放档位经 context 带过弹层的 portal 边界。
+    // Same as dialog.tsx: carry the scale level across the popup's portal boundary via context.
     const zoneFontScale = resolveZoneFontScale(style, ALERT_DIALOG_FONT_SCALE);
     return (
       <AlertDialogPortal>
@@ -87,8 +87,9 @@ export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogCo
               ...style,
             }}
             className={cn(
-              // 与 dialog.tsx 同源：弹窗自成一个字号缩放 zone（portal 渲染，
-              // 落在所有 zone 之外），且 padding 由 header/body/footer 各自负责。
+              // Same origin as dialog.tsx: the popup forms its own font-scale zone
+              // (portal-rendered, landing outside all zones), and padding is handled by
+              // header/body/footer individually.
               "zone-font-scale",
               "relative my-auto w-full max-w-md rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
               className,

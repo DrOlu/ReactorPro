@@ -8,16 +8,17 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// sessionRegistry 按 agent_id 维护多个桌面 Agent 的登记项。entry 断线后保留
-// （auth/runtime 快照跨重连存活），同 id 重连只顶掉该 id 的旧会话。
+// sessionRegistry maintains registration entries for multiple desktop Agents keyed by agent_id.
+// An entry is retained after disconnection (auth/runtime snapshots survive reconnects); reconnecting
+// with the same id only displaces that id's old session.
 type sessionRegistry struct {
 	mu     sync.RWMutex
 	agents map[string]*agentEntry
 }
 
-// agentEntry 是单个 Agent 的登记项；session 为 nil 表示当前离线。
-// epoch 在每次会话更替时自增，用于把探活结果绑定到具体一次连接。
-// 各快照按 Agent 隔离并跨断线存活（重连后浏览器无需等待全量重推）。
+// agentEntry is the registration entry for a single Agent; a nil session means it is currently offline.
+// epoch is incremented on every session replacement and binds liveness probe results to a specific connection.
+// Each snapshot is isolated per Agent and survives disconnects (the browser need not wait for a full re-push after reconnect).
 type agentEntry struct {
 	id           string
 	session      *AgentSession
@@ -32,20 +33,21 @@ type agentEntry struct {
 	runtimeActiveRunCount uint32
 	chatRuntimeProbeAt    time.Time
 
-	// settingsSnapshot 缓存该 Agent 最近一次 settings 同步（功能门控依据）。
+	// settingsSnapshot caches this Agent's most recent settings sync (the basis for feature gating).
 	settingsSnapshotMu sync.RWMutex
 	settingsSnapshot   map[string]any
 
-	// terminalSessions 缓存该 Agent 的终端会话快照（浏览器接入时回放）。
+	// terminalSessions caches this Agent's terminal session snapshot (replayed when a browser attaches).
 	terminalSessionsMu sync.Mutex
 	terminalSessions   map[string]*gatewayv2.TerminalSession
 
-	// chatQueueSnapshots 缓存该 Agent 各会话的提示队列快照。
+	// chatQueueSnapshots caches each of this Agent's sessions' prompt queue snapshots.
 	chatQueueSnapshotsMu sync.Mutex
 	chatQueueSnapshots   map[string]chatQueueSnapshotRecord
 
-	// terminalStreamToAgent 是该 Agent 终端数据面连接的入站通道；revoke
-	// 关闭通道所属连接，使凭证轮换和删除能同时撤销控制面与终端数据面。
+	// terminalStreamToAgent is the inbound channel of this Agent's terminal data-plane connection;
+	// revoke closes the connection owning the channel, so credential rotation and deletion can
+	// revoke both the control plane and the terminal data plane at once.
 	terminalStreamMu      sync.Mutex
 	terminalStreamToAgent chan *gatewayv2.TerminalStreamFrame
 	terminalStreamRevoke  func()
@@ -63,12 +65,13 @@ func newSessionRegistry() *sessionRegistry {
 	return &sessionRegistry{agents: make(map[string]*agentEntry)}
 }
 
-// normalizeAgentKey 统一 agent_id 的 map 键形态（去空白）。
+// normalizeAgentKey normalizes the map key form of agent_id (trims whitespace).
 func normalizeAgentKey(agentID string) string {
 	return strings.TrimSpace(agentID)
 }
 
-// entryLocked 取或建 agent_id 的登记项；空 id 不创建登记项。调用方需持有写锁。
+// entryLocked gets or creates the registration entry for agent_id; an empty id creates no entry.
+// The caller must hold the write lock.
 func (r *sessionRegistry) entryLocked(agentID string) *agentEntry {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
@@ -82,8 +85,8 @@ func (r *sessionRegistry) entryLocked(agentID string) *agentEntry {
 	return entry
 }
 
-// resolveOnlineLocked 按非空 agent_id 精确解析在线登记项。
-// 调用方需持锁（读锁即可）。
+// resolveOnlineLocked resolves the online registration entry exactly by a non-empty agent_id.
+// The caller must hold the lock (a read lock suffices).
 func (r *sessionRegistry) resolveOnlineLocked(agentID string) (*agentEntry, error) {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
@@ -95,8 +98,9 @@ func (r *sessionRegistry) resolveOnlineLocked(agentID string) (*agentEntry, erro
 	return nil, ErrAgentOffline
 }
 
-// entryForSessionLocked 反查 session 所属的登记项；session 已被顶替/清除时返回 nil，
-// 使旧连接迟到的心跳与运行时上报不会污染新会话。
+// entryForSessionLocked reverse-looks-up the registration entry owning a session; returns nil when
+// the session has been displaced/cleared, so late heartbeats and runtime reports from an old
+// connection do not pollute the new session.
 func (r *sessionRegistry) entryForSessionLocked(session *AgentSession) *agentEntry {
 	if session == nil {
 		return nil
@@ -108,8 +112,9 @@ func (r *sessionRegistry) entryForSessionLocked(session *AgentSession) *agentEnt
 	return entry
 }
 
-// entryFor 返回非空 agent_id 的登记项（可能离线）；不存在或 id 为空返回 nil。
-// 快照读写走 entry 自身的细粒度锁，注册表锁只保护 map 查找。
+// entryFor returns the registration entry for a non-empty agent_id (possibly offline); returns nil
+// when it does not exist or the id is empty. Snapshot reads/writes use the entry's own fine-grained
+// lock; the registry lock only protects map lookups.
 func (m *Manager) entryFor(agentID string) *agentEntry {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
@@ -120,7 +125,7 @@ func (m *Manager) entryFor(agentID string) *agentEntry {
 	return m.registry.agents[agentID]
 }
 
-// entryOrCreate 按非空 agent_id 取或建登记项；空 id 返回 nil。
+// entryOrCreate gets or creates the registration entry for a non-empty agent_id; returns nil for an empty id.
 func (m *Manager) entryOrCreate(agentID string) *agentEntry {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
@@ -131,14 +136,14 @@ func (m *Manager) entryOrCreate(agentID string) *agentEntry {
 	return m.registry.entryLocked(agentID)
 }
 
-// resolveEntry 按非空 agent_id 精确解析在线登记项。
+// resolveEntry resolves the online registration entry exactly by a non-empty agent_id.
 func (m *Manager) resolveEntry(agentID string) (*agentEntry, error) {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
 	return m.registry.resolveOnlineLocked(agentID)
 }
 
-// ResolveAgentID 返回请求明确指向的在线 agent_id；空 id 返回 ErrAgentIDRequired。
+// ResolveAgentID returns the online agent_id that the request explicitly targets; an empty id returns ErrAgentIDRequired.
 func (m *Manager) ResolveAgentID(agentID string) (string, error) {
 	entry, err := m.resolveEntry(agentID)
 	if err != nil {
@@ -147,9 +152,9 @@ func (m *Manager) ResolveAgentID(agentID string) (string, error) {
 	return entry.id, nil
 }
 
-// Tagged 给广播事件附加来源 agent_id。hub 订阅保持全局（每浏览器连接一份订阅），
-// 事件按标签由消费端过滤/盖帧；标签一律取自已认证会话的 AgentID，是跨 Agent
-// 隔离的唯一事实源。
+// Tagged attaches a source agent_id to broadcast events. Hub subscriptions stay global (one
+// subscription per browser connection), and consumers filter/frame events by tag; the tag always
+// comes from the authenticated session's AgentID, the single source of truth for cross-Agent isolation.
 type Tagged[T any] struct {
 	AgentID string
 	Event   T

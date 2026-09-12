@@ -86,8 +86,9 @@ import {
   UsagePlanLine,
 } from "./ProviderPresentation";
 
-// 模型行右侧的输入模态图标：text 是所有模型的公共能力不单独标注，只展示
-// 额外的模态（图片/音频/视频/PDF），按目录的规范顺序排列。
+// Input-modality icons on the right of a model row: text is a capability common
+// to all models and is not annotated separately; only the extra modalities
+// (image/audio/video/PDF) are shown, in the catalog's canonical order.
 const MODEL_MODALITY_ICONS = [
   { modality: "image", Icon: ImageIcon, labelKey: "settings.modelModalityImage" },
   { modality: "audio", Icon: AudioLines, labelKey: "settings.modelModalityAudio" },
@@ -504,7 +505,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                   {visibleModels.length > 0 ? (
                     <div className="flex items-center gap-2 border-b bg-muted/20 px-3 py-1">
                       <div className="flex shrink-0 items-center gap-1">
-                        {/* w-5 占位与行内拖拽把手同宽，保证总开关和每行开关纵向对齐。 */}
+                        {/* The w-5 placeholder is the same width as the inline drag handle, keeping the master switch and each row's switch vertically aligned. */}
                         <span className="w-5 shrink-0" aria-hidden="true" />
                         <DialogSwitch
                           checked={allVisibleModelsActive}
@@ -575,8 +576,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       visibleModels.map((model) => {
                         const isEditingModel = editingModel?.model.id === model.id;
                         const newModelPhase = newModelPhases.get(model.id);
-                        // 用户覆盖（仅表达 text/image 门控、仅部分供应商生效）优先于
-                        // 目录快照：覆盖存在时图标要跟随覆盖，避免与编辑面板矛盾。
+                        // The user override (which only expresses a text/image gate
+                        // and takes effect for some providers) takes precedence over
+                        // the catalog snapshot: when an override exists the icon must
+                        // follow it, avoiding a contradiction with the edit panel.
                         const inputModalities: readonly CatalogInputModality[] | undefined =
                           (canOverrideModelInputModalities ? model.inputModalities : undefined) ??
                           resolveModelInputModalities(providerType, model.id);
@@ -800,7 +803,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                         }
                                       >
                                         <SelectTrigger className="h-8 shadow-none">
-                                          {/* value≠label：闭合态必须显式渲染本地化标签。 */}
+                                          {/* value≠label: the closed state must explicitly render the localized label. */}
                                           <SelectValue>
                                             {t(
                                               editingModel.model.promptCacheHintMode
@@ -1009,7 +1012,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                             className="h-8 shadow-none"
                             aria-label={t("settings.promptCacheHintMode")}
                           >
-                            {/* value≠label：闭合态必须显式渲染本地化标签。 */}
+                            {/* value≠label: the closed state must explicitly render the localized label. */}
                             <SelectValue>
                               {t(PROMPT_CACHE_HINT_LABEL_KEYS[promptCacheHintMode])}
                             </SelectValue>
@@ -1127,7 +1130,8 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       variant="outline"
                       size="sm"
                       className="h-8 shrink-0 gap-1.5 max-[720px]:h-11 max-[720px]:flex-1"
-                      /* 导入视图占据了列表位置,此时新增行不可见,禁用避免静默无响应。 */
+                      /* The import view occupies the list position, so the add row is
+                      invisible; disable it to avoid a silently unresponsive click. */
                       disabled={headerImportOpen}
                       onClick={() => addCustomHeader()}
                     >
@@ -1203,7 +1207,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                   </p>
                 ) : null}
 
-                {/* 导入视图与请求头列表互斥:解析成功后回到列表,直接看到增量导入的结果。 */}
+                {/* The import view and the request-header list are mutually exclusive: after a successful parse it returns to the list, where the incrementally imported results are directly visible. */}
                 {headerImportOpen ? null : customHeaders.length === 0 ? (
                   <button
                     type="button"
@@ -1406,10 +1410,10 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                   />
                 </div>
 
-                {/* 未启用时隐藏全部配置与测试入口,只留开关。 */}
+                {/* When not enabled, hide all configuration and test entry points, leaving only the switch. */}
                 {usageQuery.enabled ? (
                   <>
-                    {/* 功能出处:居中带字分隔线,项目名是带图标的主色链接。 */}
+                    {/* Feature attribution: a centered divider with text, where the project name is a primary-colored link with an icon. */}
                     <div className="mt-3 flex items-center gap-2 text-xs leading-5 text-muted-foreground">
                       <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-border" />
                       <span className="shrink-0">{t("settings.providerUsageCredit")}</span>
@@ -1440,7 +1444,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                         }
                       >
                         <SelectTrigger className="h-8 w-full shadow-none">
-                          {/* value≠label:闭合态必须显式渲染本地化标签(coding-plan → codingPlan 键)。 */}
+                          {/* value≠label: the closed state must explicitly render the localized label (coding-plan → codingPlan key). */}
                           <SelectValue>
                             {t(
                               usageQuery.mode === "coding-plan"
@@ -1481,7 +1485,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       </p>
                     ) : null}
 
-                    {/* 官方余额:按 Base URL 匹配到的供应商徽章。 */}
+                    {/* Official balance: provider badges matched by Base URL. */}
                     {usageQuery.mode === "balance" && matchedBalanceProviders.length > 0 ? (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {matchedBalanceProviders.map((entry) => (
@@ -1495,7 +1499,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       </div>
                     ) : null}
 
-                    {/* 只有通用模板需要用户自行填写 baseUrl / apiKey 覆盖。 */}
+                    {/* Only the general template requires the user to fill in baseUrl / apiKey overrides. */}
                     {usageQuery.mode === "general" ? (
                       <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                         <div className="space-y-2">
@@ -1539,7 +1543,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                       </div>
                     ) : null}
 
-                    {/* 自定义模式:只读展示变量的实际生效值(对齐 cc-switch 支持的变量区)。 */}
+                    {/* Custom mode: read-only display of the variables' actually effective values (aligned with the variable set cc-switch supports). */}
                     {usageQuery.mode === "custom" ? (
                       <div className="mt-4 rounded-lg border bg-muted/30 px-3 py-2.5 text-xs leading-5">
                         <div className="font-medium text-foreground">
@@ -1572,7 +1576,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                                   ? usageVariableApiKey
                                   : "••••••••"}
                               </code>
-                              {/* WebUI 永不下发明文 apiKey,查看按钮只在桌面端提供。 */}
+                              {/* The WebUI never hands out the plaintext apiKey, so the reveal button is only offered on the desktop. */}
                               {!isGatewayWebui ? (
                                 <button
                                   type="button"
@@ -1655,8 +1659,9 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
 
                     {usageQuery.mode === "coding-plan" ? (
                       <>
-                        {/* 内置供应商选择(一比一复刻 cc-switch Token Plan):
-                            显式选择优先,否则按 Base URL 自动检测高亮。 */}
+                        {/* Built-in provider selection (a one-to-one replica of
+                            cc-switch Token Plan): explicit selection takes
+                            precedence, otherwise highlight by Base URL auto-detection. */}
                         <div className="mt-4 flex flex-wrap gap-2">
                           {USAGE_QUERY_CODING_PLAN_PROVIDERS.map((entry) => (
                             <Button
@@ -1890,14 +1895,14 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                           spellCheck={false}
                           onChange={(event) => {
                             const value = event.currentTarget.value;
-                            // 同步写入当前模式的独立脚本槽位,切换查询方式互不串扰。
+                            // Write synchronously into the current mode's dedicated script slot, so switching query methods does not cross-contaminate.
                             setUsageQuery((previous) => setUsageQueryScript(previous, value));
                           }}
                         />
                       </div>
                     ) : null}
 
-                    {/* 测试查询:独占一行的 card——按钮居左,结果内容就地靠左展示。 */}
+                    {/* Test query: a card on its own row — the button is left-aligned and the result content is shown left-aligned in place. */}
                     <div className="mt-4 flex items-center gap-3 rounded-xl border bg-card px-4 py-3">
                       <Button
                         type="button"
@@ -1937,7 +1942,7 @@ export function ProviderModalView({ viewModel }: { viewModel: ProviderModalViewM
                               {usageQueryTest.data.map((plan, index) => (
                                 <UsagePlanLine
                                   key={`${plan.planName ?? ""}:${
-                                    // biome-ignore lint/suspicious/noArrayIndexKey: 套餐无稳定 id,索引即位置语义
+                                    // biome-ignore lint/suspicious/noArrayIndexKey: plans have no stable id, and the index is positional semantics
                                     index
                                   }`}
                                   plan={getUsagePlanDisplay(plan)}

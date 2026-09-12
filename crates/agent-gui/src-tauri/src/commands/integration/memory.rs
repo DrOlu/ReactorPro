@@ -25,7 +25,7 @@ pub async fn memory_list(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.list(args))
         .await
-        .map_err(|e| format!("memory_list join 失败：{e}"))?
+        .map_err(|e| format!("memory_list join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -36,7 +36,7 @@ pub async fn memory_read(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.read(args))
         .await
-        .map_err(|e| format!("memory_read join 失败：{e}"))?
+        .map_err(|e| format!("memory_read join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -53,7 +53,7 @@ pub async fn memory_search(
         Ok(response)
     })
     .await
-    .map_err(|e| format!("memory_search join 失败：{e}"))?
+    .map_err(|e| format!("memory_search join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -64,7 +64,7 @@ pub async fn memory_write(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.write(args))
         .await
-        .map_err(|e| format!("memory_write join 失败：{e}"))?
+        .map_err(|e| format!("memory_write join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -75,7 +75,7 @@ pub async fn memory_update(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.update(args))
         .await
-        .map_err(|e| format!("memory_update join 失败：{e}"))?
+        .map_err(|e| format!("memory_update join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -86,7 +86,7 @@ pub async fn memory_delete(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.delete(args))
         .await
-        .map_err(|e| format!("memory_delete join 失败：{e}"))?
+        .map_err(|e| format!("memory_delete join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -97,7 +97,7 @@ pub async fn memory_delete_project(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.delete_project(args))
         .await
-        .map_err(|e| format!("memory_delete_project join 失败：{e}"))?
+        .map_err(|e| format!("memory_delete_project join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -108,7 +108,7 @@ pub async fn memory_accept(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.accept(args))
         .await
-        .map_err(|e| format!("memory_accept join 失败：{e}"))?
+        .map_err(|e| format!("memory_accept join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -119,7 +119,7 @@ pub async fn memory_apply_batch(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.apply_batch(args))
         .await
-        .map_err(|e| format!("memory_apply_batch join 失败：{e}"))?
+        .map_err(|e| format!("memory_apply_batch join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -130,7 +130,7 @@ pub async fn memory_organize_run_create(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.organize_run_create(args))
         .await
-        .map_err(|e| format!("memory_organize_run_create join 失败：{e}"))?
+        .map_err(|e| format!("memory_organize_run_create join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -141,7 +141,7 @@ pub async fn memory_organize_run_update(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.organize_run_update(args))
         .await
-        .map_err(|e| format!("memory_organize_run_update join 失败：{e}"))?
+        .map_err(|e| format!("memory_organize_run_update join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -153,7 +153,7 @@ pub async fn memory_organize_run_list(
     let resolved = args.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || store.organize_run_list(resolved))
         .await
-        .map_err(|e| format!("memory_organize_run_list join 失败：{e}"))?
+        .map_err(|e| format!("memory_organize_run_list join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -164,7 +164,7 @@ pub async fn memory_organize_run_read(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.organize_run_read(args))
         .await
-        .map_err(|e| format!("memory_organize_run_read join 失败：{e}"))?
+        .map_err(|e| format!("memory_organize_run_read join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -174,7 +174,7 @@ pub async fn memory_organize_run_clear_history(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.organize_run_clear_history())
         .await
-        .map_err(|e| format!("memory_organize_run_clear_history join 失败：{e}"))?
+        .map_err(|e| format!("memory_organize_run_clear_history join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -185,7 +185,7 @@ pub async fn memory_organize_due_claim(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.organize_due_claim(args))
         .await
-        .map_err(|e| format!("memory_organize_due_claim join 失败：{e}"))?
+        .map_err(|e| format!("memory_organize_due_claim join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -196,7 +196,7 @@ pub async fn memory_organize_due_complete(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.organize_due_complete(args))
         .await
-        .map_err(|e| format!("memory_organize_due_complete join 失败：{e}"))?
+        .map_err(|e| format!("memory_organize_due_complete join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -207,7 +207,7 @@ pub async fn memory_index_overview(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.overview(workdir))
         .await
-        .map_err(|e| format!("memory_index_overview join 失败：{e}"))?
+        .map_err(|e| format!("memory_index_overview join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -217,7 +217,7 @@ pub async fn memory_paths_info(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.paths_info())
         .await
-        .map_err(|e| format!("memory_paths_info join 失败：{e}"))?
+        .map_err(|e| format!("memory_paths_info join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -229,7 +229,7 @@ pub async fn memory_recent_rejections(
     let resolved = args.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || store.recent_rejections(resolved))
         .await
-        .map_err(|e| format!("memory_recent_rejections join 失败：{e}"))?
+        .map_err(|e| format!("memory_recent_rejections join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -248,7 +248,7 @@ pub async fn memory_today_daily(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.today_daily(rollover_hour))
         .await
-        .map_err(|e| format!("memory_today_daily join 失败：{e}"))?
+        .map_err(|e| format!("memory_today_daily join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -260,7 +260,7 @@ pub async fn memory_quota_summary(
     let resolved = args.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || store.quota_summary(resolved))
         .await
-        .map_err(|e| format!("memory_quota_summary join 失败：{e}"))?
+        .map_err(|e| format!("memory_quota_summary join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -270,5 +270,5 @@ pub async fn memory_wipe_all(
     let store = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || store.wipe_all())
         .await
-        .map_err(|e| format!("memory_wipe_all join 失败：{e}"))?
+        .map_err(|e| format!("memory_wipe_all join failed: {e}"))?
 }

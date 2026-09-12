@@ -349,26 +349,26 @@
     margin-bottom: 0;
   }
 
-  /* Plan markdown — 计划卡片正文按"规格文档"排版而非聊天正文:更紧的行距与
-     压平的标题层级,让整份计划尽量在一屏内读完再决定是否批准。
-     整块位于全局 first/last reset 之后:本作用域按更高特异性覆盖全局规则,
-     保持"特异性随源顺序递增",不触发 noDescendingSpecificity。 */
+  /* Plan markdown — the plan card body is typeset as a "spec document" rather than chat body: tighter line height and
+     flattened heading hierarchy, so the whole plan can be read in one screen before deciding whether to approve.
+     The whole block comes after the global first/last resets: this scope overrides global rules with higher specificity,
+     keeping "specificity increasing with source order" and not triggering noDescendingSpecificity. */
   .chat-markdown.plan-markdown {
     @apply text-[calc(14px*var(--zone-font-scale,1))] leading-[1.72] text-foreground/90;
   }
   .chat-markdown.plan-markdown p {
     @apply my-1.5 text-[calc(14px*var(--zone-font-scale,1))] leading-[1.72] text-foreground/90;
   }
-  /* 计划里的标题就是阶段分节,层级本身不携带额外信息:统一收成一档字号,
-     靠字重与分节线区分,不再有 text-xl/text-lg 的落差。
-     字号带 ! —— Streamdown 把 text-3xl/text-2xl 直接写在 h1/h2 的 class 上,
-     那是 utilities 层,层级顺序上永远压过本文件所在的 components 层,单靠选择器
-     权重赢不了。 */
+  /* Headings inside a plan are phase sections; the level itself carries no extra information: unify them into a single font size,
+     distinguished by weight and section rules, with no more text-xl/text-lg drop.
+     The font size carries ! — Streamdown writes text-3xl/text-2xl directly on the h1/h2 class,
+     which is the utilities layer and always beats this file's components layer in layer order; selector
+     specificity alone cannot win. */
   .chat-markdown.plan-markdown [data-streamdown^="heading-"] {
     @apply mb-1.5 mt-4 !text-[calc(13px*var(--zone-font-scale,1))] font-semibold leading-[1.6] tracking-[0.01em] text-foreground;
   }
-  /* 标题 mt-4 特异性高于全局 first-child 重置;计划又以标题开头时会在卡片
-     padding 之外再多出一段空白。同作用域补一条,压过标题规则。 */
+  /* The heading mt-4 has higher specificity than the global first-child reset; when a plan starts with a heading it would add
+     a block of whitespace beyond the card padding. Add a rule in the same scope to beat the heading rule. */
   .chat-markdown.plan-markdown > *:first-child,
   .chat-markdown.plan-markdown > *:first-child > *:first-child {
     margin-top: 0;
@@ -377,10 +377,10 @@
   .chat-markdown.plan-markdown [data-streamdown="heading-2"] {
     @apply !text-[calc(13.5px*var(--zone-font-scale,1))];
   }
-  /* 非首个分节标题上方补一条发丝线,把"进入下一阶段"这件事画出来。
-     流式渲染时 Streamdown 会给每个块包一层 display:contents 的方向 div
-     (带 dir 属性),标题便不再是容器的直接子元素;两种层级各写一组,
-     静态/流式两种渲染模式都能命中。 */
+  /* Add a hairline above non-first section headings, drawing the act of "entering the next phase".
+     During streaming, Streamdown wraps each block in a display:contents direction div
+     (with a dir attribute), so a heading is no longer a direct child of the container; write one set for each hierarchy,
+     so both static and streaming render modes match. */
   .chat-markdown.plan-markdown > [data-streamdown="heading-1"]:not(:first-child),
   .chat-markdown.plan-markdown > [data-streamdown="heading-2"]:not(:first-child),
   .chat-markdown.plan-markdown
@@ -398,7 +398,7 @@
   .chat-markdown.plan-markdown [data-streamdown="list-item"] {
     @apply pl-0.5 text-[calc(14px*var(--zone-font-scale,1))] leading-[1.72] text-foreground/90;
   }
-  /* 项目符号压到 muted:状态色只在左侧脊出现一处,正文不参与表达状态。 */
+  /* Compress bullets to muted: the status color appears only once on the left spine; the body does not participate in expressing status. */
   .chat-markdown.plan-markdown [data-streamdown="list-item"]::marker {
     @apply text-muted-foreground/55;
   }
@@ -557,7 +557,7 @@
     animation: toolExpandIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* AskUserQuestion 切题：按方向轻微滑入（forward 从右、backward 从左） */
+  /* AskUserQuestion topic switch: slide in slightly by direction (forward from the right, backward from the left) */
   @keyframes askQuestionSlideForward {
     from {
       opacity: 0;
@@ -588,7 +588,7 @@
     animation: askQuestionSlideBackward 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* “其他（自行输入）”展开输入框：轻微下滑+淡入，呼应磨砂玻璃质感。 */
+  /* "Other (enter your own)" expands the input: slight slide down + fade in, echoing the frosted-glass texture. */
   @keyframes askCustomInputReveal {
     from {
       opacity: 0;

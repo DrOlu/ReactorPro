@@ -138,7 +138,7 @@ function buildToolResultEntry(
     kind: "tool_result",
     round,
     toolResult: normalized,
-    summary: normalized.toolName ? `${normalized.toolName} 执行结果` : "工具执行结果",
+    summary: normalized.toolName ? `${normalized.toolName} execution result` : "Tool execution result",
     text: toolResultMessageToText(normalized),
   };
 }

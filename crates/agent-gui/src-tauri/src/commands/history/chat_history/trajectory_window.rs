@@ -45,7 +45,7 @@ fn backfill_legacy_trajectory_user_ids(
              WHERE conversation_id = ?1
              ORDER BY segment_index ASC",
         )
-        .map_err(|e| format!("准备旧轨迹消息 id 回填查询失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare legacy trajectory message id backfill query: {e}"))?;
     let rows = stmt
         .query_map(params![conversation_id], |row| {
             Ok((
@@ -54,13 +54,13 @@ fn backfill_legacy_trajectory_user_ids(
                 row.get::<_, i64>(2)?,
             ))
         })
-        .map_err(|e| format!("查询旧轨迹消息 id 回填数据失败：{e}"))?;
+        .map_err(|e| format!("failed to query legacy trajectory message id backfill data: {e}"))?;
 
     let mut resolved = HashMap::new();
     let mut global_start = 0_i64;
     for row in rows {
         let (segment_index, raw_messages, message_count) =
-            row.map_err(|e| format!("读取旧轨迹消息 id 回填数据失败：{e}"))?;
+            row.map_err(|e| format!("failed to read legacy trajectory message id backfill data: {e}"))?;
         let count = message_count.max(0);
         let global_end = global_start.saturating_add(count);
         let needed = missing
@@ -71,7 +71,7 @@ fn backfill_legacy_trajectory_user_ids(
             // History corruption must not make the diagnostic endpoint fail wholesale. A segment
             // that cannot be parsed simply keeps its old mi-only event and remains structurally
             // readable through the ledger.
-            if let Ok(messages) = parse_event_array(&raw_messages, "历史分段消息") {
+            if let Ok(messages) = parse_event_array(&raw_messages, "history segment messages") {
                 for global_index in needed {
                     let local_index =
                         usize::try_from(global_index - global_start).unwrap_or(usize::MAX);
@@ -137,7 +137,7 @@ fn load_trajectory_window_sync(
             params![conversation_id],
             |row| row.get::<_, i64>(0),
         )
-        .map_err(|e| format!("统计轨迹分段失败：{e}"))?;
+        .map_err(|e| format!("failed to count trajectory segments: {e}"))?;
     let end_exclusive = before_segment_index
         .unwrap_or(total_segment_count)
         .clamp(0, total_segment_count);
@@ -152,7 +152,7 @@ fn load_trajectory_window_sync(
                AND segment_index < ?3
              ORDER BY segment_index ASC",
         )
-        .map_err(|e| format!("准备轨迹窗口查询失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare trajectory window query: {e}"))?;
     let rows = stmt
         .query_map(
             params![conversation_id, start_inclusive, end_exclusive],
@@ -164,7 +164,7 @@ fn load_trajectory_window_sync(
                 ))
             },
         )
-        .map_err(|e| format!("查询轨迹窗口失败：{e}"))?;
+        .map_err(|e| format!("failed to query trajectory window: {e}"))?;
 
     let mut events = Vec::new();
     let mut oldest_segment_index = end_exclusive;
@@ -172,11 +172,11 @@ fn load_trajectory_window_sync(
     let mut truncated = false;
     for row in rows {
         let (segment_index, raw, persisted_truncated) =
-            row.map_err(|e| format!("读取轨迹窗口失败：{e}"))?;
+            row.map_err(|e| format!("failed to read trajectory window: {e}"))?;
         oldest_segment_index = oldest_segment_index.min(segment_index);
         returned_segment_count += 1;
         truncated |= persisted_truncated != 0;
-        match parse_event_array(&raw, "轨迹窗口事件") {
+        match parse_event_array(&raw, "trajectory window events") {
             Ok(items) => events.extend(items),
             Err(_) => truncated = true,
         }
@@ -184,7 +184,7 @@ fn load_trajectory_window_sync(
 
     backfill_legacy_trajectory_user_ids(conn, conversation_id, &mut events)?;
     let events_json =
-        serde_json::to_string(&events).map_err(|e| format!("序列化轨迹窗口失败：{e}"))?;
+        serde_json::to_string(&events).map_err(|e| format!("failed to serialize trajectory window: {e}"))?;
     Ok(TrajectoryWindowResponse {
         conversation_id: conversation_id.to_string(),
         events_json,
@@ -206,7 +206,7 @@ pub(crate) async fn trajectory_get_window_inner(
         load_trajectory_window_sync(&conn, &conversation_id, max_segments, before_segment_index)
     })
     .await
-    .map_err(|e| format!("trajectory_get_window join 失败：{e}"))?
+    .map_err(|e| format!("trajectory_get_window join failed: {e}"))?
 }
 
 #[tauri::command]

@@ -6,12 +6,12 @@ impl MemoryStore {
         let mut conn = self.lock_conn()?;
         let tx = conn
             .transaction()
-            .map_err(|e| format!("创建 memory organize run 事务失败：{e}"))?;
+            .map_err(|e| format!("Failed to create memory organize run transaction: {e}"))?;
         let now = now_ms();
         reap_stale_organize_runs(&tx, now)?;
         if let Some(active) = find_blocking_organize_run(&tx)? {
             tx.commit()
-                .map_err(|e| format!("提交 stale memory organize run 回收事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit stale memory organize run reclamation transaction: {e}"))?;
             return Ok(MemoryOrganizeRunCreateResponse {
                 run: None,
                 accepted: false,
@@ -39,7 +39,7 @@ impl MemoryStore {
             &mode,
         )?;
         tx.commit()
-            .map_err(|e| format!("提交 memory organize run 事务失败：{e}"))?;
+            .map_err(|e| format!("Failed to commit memory organize run transaction: {e}"))?;
         drop(conn);
         let run = self
             .organize_run_read(MemoryOrganizeRunReadArgs {
@@ -61,7 +61,7 @@ impl MemoryStore {
         let mut conn = self.lock_conn()?;
         let tx = conn
             .transaction()
-            .map_err(|e| format!("创建 memory organize claim 事务失败：{e}"))?;
+            .map_err(|e| format!("Failed to create memory organize claim transaction: {e}"))?;
         let now = args.now.unwrap_or_else(now_ms);
         reap_stale_organize_runs(&tx, now)?;
         if find_active_organize_run(&tx)?.is_some() {
@@ -80,11 +80,11 @@ impl MemoryStore {
                         &normalize_organize_scope(args.scope.as_deref()),
                         &normalize_organize_mode(args.mode.as_deref()),
                         "already_running",
-                        "本次自动记忆整理因已有整理任务运行中而跳过。",
+                        "This automatic memory organization was skipped because another organization task is already running.",
                     )?
                 };
                 tx.commit()
-                    .map_err(|e| format!("提交 memory organize skipped claim 失败：{e}"))?;
+                    .map_err(|e| format!("Failed to commit memory organize skipped claim: {e}"))?;
                 drop(conn);
                 return Ok(MemoryOrganizeDueClaimResponse {
                     run: self.organize_run_read(MemoryOrganizeRunReadArgs { run_id })?,
@@ -92,7 +92,7 @@ impl MemoryStore {
                 });
             }
             tx.commit()
-                .map_err(|e| format!("提交 stale memory organize claim 回收事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit stale memory organize claim reclamation transaction: {e}"))?;
             return Ok(MemoryOrganizeDueClaimResponse {
                 run: None,
                 skipped_reason: Some("already_running".to_string()),
@@ -102,7 +102,7 @@ impl MemoryStore {
         if let Some(run_id) = find_pending_organize_run_id(&tx)? {
             mark_organize_run_running(&tx, &run_id, now)?;
             tx.commit()
-                .map_err(|e| format!("提交 memory organize pending claim 失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit memory organize pending claim: {e}"))?;
             drop(conn);
             return Ok(MemoryOrganizeDueClaimResponse {
                 run: self.organize_run_read(MemoryOrganizeRunReadArgs { run_id })?,
@@ -131,7 +131,7 @@ impl MemoryStore {
                     &mode,
                 )?;
                 tx.commit()
-                    .map_err(|e| format!("提交 memory organize scheduled claim 失败：{e}"))?;
+                    .map_err(|e| format!("Failed to commit memory organize scheduled claim: {e}"))?;
                 drop(conn);
                 return Ok(MemoryOrganizeDueClaimResponse {
                     run: self.organize_run_read(MemoryOrganizeRunReadArgs { run_id })?,
@@ -141,7 +141,7 @@ impl MemoryStore {
         }
 
         tx.commit()
-            .map_err(|e| format!("提交 stale memory organize claim 回收事务失败：{e}"))?;
+            .map_err(|e| format!("Failed to commit stale memory organize claim reclamation transaction: {e}"))?;
         Ok(MemoryOrganizeDueClaimResponse {
             run: None,
             skipped_reason: None,
@@ -170,7 +170,7 @@ impl MemoryStore {
         let mut conn = self.lock_conn()?;
         let tx = conn
             .transaction()
-            .map_err(|e| format!("创建 memory organize update 事务失败：{e}"))?;
+            .map_err(|e| format!("Failed to create memory organize update transaction: {e}"))?;
         let current = load_organize_run_by_id(&tx, run_id)?;
         let Some(current) = current else {
             return Ok(None);
@@ -243,9 +243,9 @@ impl MemoryStore {
                 },
             ],
         )
-        .map_err(|e| format!("更新 memory organize run 失败：{e}"))?;
+        .map_err(|e| format!("Failed to update memory organize run: {e}"))?;
         tx.commit()
-            .map_err(|e| format!("提交 memory organize update 事务失败：{e}"))?;
+            .map_err(|e| format!("Failed to commit memory organize update transaction: {e}"))?;
         drop(conn);
         self.organize_run_read(MemoryOrganizeRunReadArgs {
             run_id: run_id.to_string(),
@@ -280,10 +280,10 @@ impl MemoryStore {
                     LIMIT ?2
                     "#,
                 )
-                .map_err(|e| format!("准备 memory organize run list 失败：{e}"))?;
+                .map_err(|e| format!("Failed to prepare memory organize run list: {e}"))?;
             let rows = stmt
                 .query_map(params![status, limit as i64], row_to_organize_run)
-                .map_err(|e| format!("查询 memory organize run list 失败：{e}"))?;
+                .map_err(|e| format!("Failed to query memory organize run list: {e}"))?;
             collect_organize_runs(rows)?
         } else {
             let mut stmt = conn
@@ -301,10 +301,10 @@ impl MemoryStore {
                     LIMIT ?1
                     "#,
                 )
-                .map_err(|e| format!("准备 memory organize run list 失败：{e}"))?;
+                .map_err(|e| format!("Failed to prepare memory organize run list: {e}"))?;
             let rows = stmt
                 .query_map(params![limit as i64], row_to_organize_run)
-                .map_err(|e| format!("查询 memory organize run list 失败：{e}"))?;
+                .map_err(|e| format!("Failed to query memory organize run list: {e}"))?;
             collect_organize_runs(rows)?
         };
         Ok(MemoryOrganizeRunListResponse { runs })
@@ -328,22 +328,22 @@ impl MemoryStore {
         let mut conn = self.lock_conn()?;
         let tx = conn
             .transaction()
-            .map_err(|e| format!("创建 memory organize history clear 事务失败：{e}"))?;
+            .map_err(|e| format!("Failed to create memory organize history clear transaction: {e}"))?;
         let retained_active_count = tx
             .query_row(
                 "SELECT COUNT(*) FROM memory_organize_runs WHERE status IN ('pending', 'running')",
                 [],
                 |row| row.get::<_, i64>(0),
             )
-            .map_err(|e| format!("统计 memory organize active runs 失败：{e}"))?;
+            .map_err(|e| format!("Failed to count memory organize active runs: {e}"))?;
         let deleted_count =
             tx.execute(
                 "DELETE FROM memory_organize_runs WHERE status NOT IN ('pending', 'running')",
                 [],
             )
-            .map_err(|e| format!("清空 memory organize history 失败：{e}"))? as i64;
+            .map_err(|e| format!("Failed to clear memory organize history: {e}"))? as i64;
         tx.commit()
-            .map_err(|e| format!("提交 memory organize history clear 事务失败：{e}"))?;
+            .map_err(|e| format!("Failed to commit memory organize history clear transaction: {e}"))?;
         Ok(MemoryOrganizeRunClearHistoryResponse {
             deleted_count,
             retained_active_count,
@@ -437,7 +437,7 @@ where
 {
     rows.into_iter()
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取 memory organize run row 失败：{e}"))
+        .map_err(|e| format!("Failed to read memory organize run row: {e}"))
 }
 
 fn load_organize_run_by_id(
@@ -460,7 +460,7 @@ fn load_organize_run_by_id(
         row_to_organize_run,
     )
     .optional()
-    .map_err(|e| format!("读取 memory organize run 失败：{e}"))
+    .map_err(|e| format!("Failed to read memory organize run: {e}"))
 }
 
 fn find_active_organize_run(conn: &Connection) -> Result<Option<MemoryOrganizeRun>, String> {
@@ -482,7 +482,7 @@ fn find_active_organize_run(conn: &Connection) -> Result<Option<MemoryOrganizeRu
         row_to_organize_run,
     )
     .optional()
-    .map_err(|e| format!("读取 active memory organize run 失败：{e}"))
+    .map_err(|e| format!("Failed to read active memory organize run: {e}"))
 }
 
 fn find_blocking_organize_run(conn: &Connection) -> Result<Option<MemoryOrganizeRun>, String> {
@@ -504,7 +504,7 @@ fn find_blocking_organize_run(conn: &Connection) -> Result<Option<MemoryOrganize
         row_to_organize_run,
     )
     .optional()
-    .map_err(|e| format!("读取 blocking memory organize run 失败：{e}"))
+    .map_err(|e| format!("Failed to read blocking memory organize run: {e}"))
 }
 
 fn find_pending_organize_run_id(conn: &Connection) -> Result<Option<String>, String> {
@@ -520,7 +520,7 @@ fn find_pending_organize_run_id(conn: &Connection) -> Result<Option<String>, Str
         |row| row.get(0),
     )
     .optional()
-    .map_err(|e| format!("读取 pending memory organize run 失败：{e}"))
+    .map_err(|e| format!("Failed to read pending memory organize run: {e}"))
 }
 
 fn find_existing_skipped_organize_run_id(
@@ -543,7 +543,7 @@ fn find_existing_skipped_organize_run_id(
         |row| row.get(0),
     )
     .optional()
-    .map_err(|e| format!("读取 skipped memory organize run 失败：{e}"))
+    .map_err(|e| format!("Failed to read skipped memory organize run: {e}"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -586,7 +586,7 @@ fn insert_organize_run(
             mode,
         ],
     )
-    .map_err(|e| format!("插入 memory organize run 失败：{e}"))?;
+    .map_err(|e| format!("Failed to insert memory organize run: {e}"))?;
     Ok(())
 }
 
@@ -629,7 +629,7 @@ fn insert_skipped_organize_run(
             trimmed_protocol_json,
         ],
     )
-    .map_err(|e| format!("插入 skipped memory organize run 失败：{e}"))?;
+    .map_err(|e| format!("Failed to insert skipped memory organize run: {e}"))?;
     Ok(run_id)
 }
 
@@ -658,7 +658,7 @@ fn reap_stale_organize_runs(conn: &Connection, now: i64) -> Result<usize, String
             stale_before,
         ],
     )
-    .map_err(|e| format!("回收 stale memory organize run 失败：{e}"))
+    .map_err(|e| format!("Failed to reclaim stale memory organize run: {e}"))
 }
 
 fn mark_organize_run_running(conn: &Connection, run_id: &str, now: i64) -> Result<(), String> {
@@ -672,6 +672,6 @@ fn mark_organize_run_running(conn: &Connection, run_id: &str, now: i64) -> Resul
         "#,
         params![run_id, now],
     )
-    .map_err(|e| format!("claim memory organize run 失败：{e}"))?;
+    .map_err(|e| format!("Failed to claim memory organize run: {e}"))?;
     Ok(())
 }

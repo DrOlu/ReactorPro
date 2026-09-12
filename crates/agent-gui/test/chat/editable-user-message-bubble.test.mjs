@@ -73,7 +73,7 @@ const normalFile = {
 };
 
 test("editing hides the attachment card for a pasted-text file still referenced by its marker", () => {
-  const text = `请看下 [Pasted text 1: ${pastedFile.relativePath}] 和附件`;
+  const text = `Take a look at [Pasted text 1: ${pastedFile.relativePath}] and the attachment`;
 
   const cardsProps = renderBubble({
     initialText: text,
@@ -89,7 +89,7 @@ test("editing hides the attachment card for a pasted-text file still referenced 
 
 test("editing shows every attachment once no pasted-text marker references it", () => {
   const cardsProps = renderBubble({
-    initialText: "普通消息，没有引用附件",
+    initialText: "A normal message that references no attachments",
     attachments: [normalFile, pastedFile],
   });
 
@@ -108,8 +108,8 @@ test("editing hides a card per marker when the message references several pastes
     displayLabel: "Pasted text 2",
   };
   const text = [
-    `先看 [Pasted text 1: ${pastedFile.relativePath}]`,
-    `再看 [Pasted text 2: ${secondPastedFile.relativePath}]`,
+    `First, [Pasted text 1: ${pastedFile.relativePath}]`,
+    `Then, [Pasted text 2: ${secondPastedFile.relativePath}]`,
   ].join("\n");
 
   const cardsProps = renderBubble({
@@ -130,7 +130,7 @@ test("a marker pointing at a path with no attachment hides nothing", () => {
   // is already gone from the attachment list, and that must not blank out an
   // unrelated card.
   const cardsProps = renderBubble({
-    initialText: "[Pasted text 1: .liveagent/uploads/session-1/already-removed.txt] 还有附件",
+    initialText: "[Pasted text 1: .liveagent/uploads/session-1/already-removed.txt] plus an attachment",
     attachments: [normalFile, pastedFile],
   });
 

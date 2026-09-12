@@ -1,11 +1,14 @@
 import type { CompactionPayload, SerializedGenericCompactionMessage } from "./payload";
 
-// 只需要判断"摘要该用什么语言"，扫最近的用户输入即可，无需全量统计。
+// We only need to decide "what language the summary should use"; scanning the
+// most recent user input is enough, no full statistics required.
 const MAX_SCANNED_CHARS = 4_000;
-// CJK 字符占字母类字符的比例达到该阈值即认为会话以 CJK 语言为主。
-// 中英夹杂的技术对话里大量标识符是英文，阈值不宜过高。
+// When CJK characters reach this proportion of letter-like characters, the
+// conversation is considered predominantly CJK. In mixed Chinese/English
+// technical conversations many identifiers are English, so the threshold should
+// not be too high.
 const CJK_DOMINANCE_THRESHOLD = 0.25;
-// 样本过小时不做判断，维持默认（英文）摘要。
+// Do not decide on too small a sample; keep the default (English) summary.
 const MIN_SCANNED_LETTERS = 8;
 
 type ScriptCounts = {
@@ -56,9 +59,11 @@ function collectRecentUserTexts(payload: CompactionPayload): string[] {
 }
 
 /**
- * 从压缩 payload 的用户消息推断摘要语言。返回英文语言名（如 "Chinese"），
- * 供 buildCompactionSystemPrompt 生成语言指令；返回 undefined 表示维持
- * 默认的英文摘要（西文会话或样本不足）。
+ * Infer the summary language from the user messages in the compaction payload.
+ * Returns the English language name (e.g. "Chinese") for
+ * buildCompactionSystemPrompt to generate a language instruction; returning
+ * undefined means keep the default English summary (Western-language
+ * conversation or insufficient sample).
  */
 export function detectCompactionSummaryLanguage(payload: CompactionPayload): string | undefined {
   const counts: ScriptCounts = { han: 0, kana: 0, hangul: 0, latin: 0 };
@@ -71,7 +76,8 @@ export function detectCompactionSummaryLanguage(payload: CompactionPayload): str
   if (letters < MIN_SCANNED_LETTERS || cjk / letters < CJK_DOMINANCE_THRESHOLD) {
     return undefined;
   }
-  // 日文正文必然混入假名；中文没有假名。谚文占比过半视为韩文。
+  // Japanese text necessarily contains kana; Chinese has none. Hangul making up
+  // more than half is treated as Korean.
   if (counts.kana > 0 && counts.kana * 20 >= cjk) return "Japanese";
   if (counts.hangul * 2 >= cjk) return "Korean";
   return "Chinese";

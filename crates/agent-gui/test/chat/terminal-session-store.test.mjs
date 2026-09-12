@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// applyTerminalEventToSessions 的合并语义。核心不变量:除 created 外,任何
-// 事件都不得把未知 sessionId 追加进列表——close() 与 PTY reader 线程存在
-// 竞态,迟到的 exit 可能在 closed 之后送达,照单追加会把刚关闭的会话复活
-// 成幽灵(dock 冒出 attach 必败的 tab,即"创建→关闭→terminal session
-// not found"的现场)。
+// Merge semantics of applyTerminalEventToSessions. Core invariant: apart from created, no event
+// may append an unknown sessionId to the list -- close() races the PTY reader thread, so a late
+// exit can arrive after closed, and appending it blindly would resurrect the just-closed session
+// as a ghost (a dock tab whose attach is guaranteed to fail, i.e. the "create -> close -> terminal
+// session not found" scenario).
 
 const loader = createTsModuleLoader();
 const { applyTerminalEventToSessions } = loader.loadModule(
@@ -41,7 +41,7 @@ test("closed removes the session; a late exit for the same id does not resurrect
     afterClosed.map((entry) => entry.id),
     ["s-2"],
   );
-  // reader 线程输掉竞态后补发的 exit:带完整 session 记录、id 已不在列表。
+  // A late exit re-sent after the reader thread loses the race: full session record, id no longer in the list.
   const afterLateExit = applyTerminalEventToSessions(afterClosed, {
     kind: "exit",
     sessionId: "s-1",

@@ -9,7 +9,7 @@ import {
   resolvePromptClarifyModel,
 } from "@/lib/settings";
 
-/** clarify.prompt_turn 的最小 API 面（GatewayWebSocketRpcClient 子集）。 */
+/** Minimal API surface for clarify.prompt_turn (a subset of GatewayWebSocketRpcClient). */
 export type ClarifyPromptTurnApi = {
   clarifyPromptTurn(
     input: {
@@ -23,10 +23,12 @@ export type ClarifyPromptTurnApi = {
 };
 
 /**
- * Web 两个宿主（GatewayAppView 内联 composer / workbench Pane）共用的澄清轮次
- * 执行逻辑：设置里的「澄清对话模型」优先，未选或失效时落回 fallback（宿主各自
- * 的当前会话模型）；覆盖生效时 runtime controls 按覆盖供应商/模型重新归一化。
- * 经 gateway 中继到桌面宿主跑一轮纯文本补全；onTextDelta 把流式增量推回面板。
+ * Clarify-turn execution logic shared by the two Web hosts (the inline composer in
+ * GatewayAppView / the workbench Pane): the "clarify conversation model" in settings takes
+ * precedence, and when unset or invalid it falls back to the host's own current session
+ * model; when an override takes effect, runtime controls are re-normalized for the
+ * overridden provider/model. Relayed through the gateway to the desktop host to run a
+ * single text-only completion; onTextDelta pushes streaming deltas back to the panel.
  */
 export async function executeClarifyPromptTurn(
   api: ClarifyPromptTurnApi,

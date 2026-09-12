@@ -1,4 +1,4 @@
-//! SkillsManager 入口：payload 动作解析与 `system_manage_skill_sync` 分发。
+//! SkillsManager entry point: payload action parsing and `system_manage_skill_sync` dispatch.
 
 use serde_json::Value;
 

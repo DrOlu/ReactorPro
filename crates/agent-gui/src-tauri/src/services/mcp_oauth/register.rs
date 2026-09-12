@@ -1,8 +1,8 @@
-//! RFC 7591 动态客户端注册（docs/design/mcp-oauth.md §3）。
+//! RFC 7591 dynamic client registration (docs/design/mcp-oauth.md §3).
 //!
-//! 托管 MCP server 普遍开放 DCR；注册为公共客户端
-//! （`token_endpoint_auth_method: "none"`），AS 若坚持发 secret 则按其返回的
-//! auth method 使用。注册结果随 TokenRecord 同存 keychain。
+//! Hosted MCP servers generally expose DCR; register as a public client
+//! (`token_endpoint_auth_method: "none"`), and if the AS insists on issuing a secret, use
+//! the auth method it returns. The registration result is stored in the keychain alongside the TokenRecord.
 
 use reqwest::blocking::Client;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
@@ -32,8 +32,8 @@ pub fn dynamic_register(
     scope: Option<&str>,
 ) -> Result<RegisteredClient, String> {
     let mut body = json!({
-        "client_name": "LiveAgent",
-        "client_uri": "https://github.com/Stack-Cairn/LiveAgent",
+        "client_name": "ReactorPro",
+        "client_uri": "https://github.com/DrOlu/ReactorPro",
         "redirect_uris": [redirect_uri],
         "grant_types": ["authorization_code", "refresh_token"],
         "response_types": ["code"],
@@ -49,24 +49,24 @@ pub fn dynamic_register(
         .header(CONTENT_TYPE, "application/json")
         .body(body.to_string())
         .send()
-        .map_err(|e| format!("动态注册请求失败（{registration_endpoint}）：{e}"))?;
+        .map_err(|e| format!("Dynamic registration request failed ({registration_endpoint}): {e}"))?;
 
     let status = resp.status();
     let text = resp
         .text()
-        .map_err(|e| format!("读取动态注册响应失败：{e}"))?;
+        .map_err(|e| format!("Failed to read dynamic registration response: {e}"))?;
     if !status.is_success() {
         return Err(format!(
-            "动态注册被拒绝（{registration_endpoint} 返回 {status}）：{}",
+            "Dynamic registration rejected ({registration_endpoint} returned {status}): {}",
             truncate_for_error(&text)
         ));
     }
 
     let parsed: RegistrationResponse = serde_json::from_str(&text)
-        .map_err(|e| format!("解析动态注册响应失败：{e}（{}）", truncate_for_error(&text)))?;
+        .map_err(|e| format!("Failed to parse dynamic registration response: {e} ({})", truncate_for_error(&text)))?;
     let client_id = parsed.client_id.trim().to_string();
     if client_id.is_empty() {
-        return Err("动态注册响应缺少 client_id".to_string());
+        return Err("Dynamic registration response is missing client_id".to_string());
     }
 
     Ok(RegisteredClient {
@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn truncates_long_error_bodies_at_char_boundary() {
-        let long = "错".repeat(200);
+        let long = "€".repeat(200);
         let out = truncate_for_error(&long);
         assert!(out.ends_with('…'));
         assert!(out.len() <= 310);

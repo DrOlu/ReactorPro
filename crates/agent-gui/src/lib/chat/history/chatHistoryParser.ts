@@ -53,23 +53,23 @@ function getParserWorker() {
     if (!pending) return;
     pendingRequests.delete(response.requestId);
     if (response.error) {
-      pending.reject(new Error(`历史消息解析失败：${response.error}`));
+      pending.reject(new Error(`Failed to parse history messages: ${response.error}`));
       return;
     }
     const segments = response.segments ?? [];
     if (segments.some((segment) => !Array.isArray(segment.messages))) {
-      pending.reject(new Error("历史分段消息格式无效"));
+      pending.reject(new Error("Invalid history segment message format"));
       return;
     }
     pending.resolve(segments as ParsedHistorySegment<unknown>[]);
   };
   worker.onerror = (event) => {
-    rejectPendingRequests(`历史消息解析 Worker 失败：${event.message}`);
+    rejectPendingRequests(`History message parser worker failed: ${event.message}`);
     worker.terminate();
     if (parserWorker === worker) parserWorker = null;
   };
   worker.onmessageerror = () => {
-    rejectPendingRequests("历史消息解析 Worker 消息反序列化失败");
+    rejectPendingRequests("Failed to deserialize a history message parser worker message");
     worker.terminate();
     if (parserWorker === worker) parserWorker = null;
   };

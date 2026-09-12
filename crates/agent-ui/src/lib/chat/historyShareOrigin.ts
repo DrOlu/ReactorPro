@@ -1,7 +1,8 @@
-// 分享链接公开访问地址的单一装配点：GUI 与 WebUI 的两个分享弹窗都从这里
-// 拼最终 origin。端口语义与桌面端 WS 连接一致（src-tauri
-// services/gateway/ws_transport.rs build_ws_url）：设置里的 gateway_port
-// 非零时覆盖基址自带的端口；http:80 / https:443 由 URL 规则自然省略。
+// The single assembly point for the public access address of share links: the GUI's and the
+// WebUI's two share dialogs both build the final origin from here. Port semantics match the
+// desktop side's WS connection (src-tauri services/gateway/ws_transport.rs build_ws_url): a
+// non-zero gateway_port in settings overrides the port carried by the base address; http:80 /
+// https:443 are naturally omitted by URL rules.
 
 function getBrowserOrigin() {
   if (typeof window === "undefined") {
@@ -44,7 +45,7 @@ export function resolveShareOrigin(explicitOrigin?: string, gatewayPort?: number
     ) {
       return "";
     }
-    // 浏览器 origin 本身已含端口，只有显式传入的网关基址才需要补端口。
+    // The browser origin already includes the port; only an explicitly passed gateway base address needs one added.
     if (hasExplicitOrigin && isValidGatewayPort(gatewayPort)) {
       url.port = String(gatewayPort);
     }

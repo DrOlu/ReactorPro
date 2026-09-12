@@ -369,7 +369,7 @@ test("DEFAULT_STREAM_RETRY_MAX_ATTEMPTS is 6 total attempts (5 retries), matchin
   assert.equal(DEFAULT_STREAM_RETRY_MAX_ATTEMPTS, 6);
 });
 
-// ---- LiveAgent retry-error extension (#608: Cloudflare 5xx from relays) ----
+// ---- ReactorPro retry-error extension (#608: Cloudflare 5xx from relays) ----
 
 test("isExtensionRetryableError matches a preset status code embedded in an error message", () => {
   const message = createAssistant(undefined, "error", { errorMessage: "HTTP 525 SSL handshake failed" });

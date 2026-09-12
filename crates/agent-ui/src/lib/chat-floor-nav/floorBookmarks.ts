@@ -1,10 +1,12 @@
-// 楼层收藏的前端持久化：单个版本化 localStorage 键（与 lib/settings/storage.ts
-// 的 JSON blob 惯例一致），结构 { version, conversations: { [conversationId]:
-// messageId[] } }。收藏按稳定消息 id（`user-${uuid}`，随会话存 SQLite）记录，
-// 因此重启后仍能对上。localStorage 不可用时收藏静默降级为仅本次运行有效。
+// Frontend persistence for floor bookmarks: a single versioned localStorage key (consistent with
+// the JSON blob convention in lib/settings/storage.ts), shaped
+// { version, conversations: { [conversationId]: messageId[] } }. Bookmarks are recorded by stable
+// message id (`user-${uuid}`, stored alongside the conversation in SQLite), so they still line up
+// after a restart. When localStorage is unavailable, bookmarks silently degrade to
+// current-run-only.
 
 const STORAGE_KEY = "liveagent.floor-bookmarks.v1";
-/** 防止无限增长：仅保留最近写入的这么多个会话的收藏。 */
+/** Prevent unbounded growth: keep bookmarks for only this many most recently written conversations. */
 const MAX_CONVERSATIONS = 200;
 
 const EMPTY_BOOKMARKS: ReadonlySet<string> = new Set();
@@ -45,9 +47,10 @@ function ensureCache(): Map<string, ReadonlySet<string>> {
 }
 
 function persist(map: Map<string, ReadonlySet<string>>) {
-  // 容量裁剪直接作用在内存 Map 上（Map 迭代序 = 插入序，头部最旧），
-  // 再整体落盘——内存与 localStorage 永远一致，不会出现「本次运行还能看到
-  // 已被淘汰会话的收藏、重启后凭空消失」的分叉。
+  // Trim capacity directly on the in-memory Map (Map iteration order = insertion order, oldest
+  // first), then persist the whole thing — memory and localStorage always agree, with no fork
+  // where "this run still sees bookmarks for an evicted conversation that vanish after a
+  // restart".
   while (map.size > MAX_CONVERSATIONS) {
     const oldest = map.keys().next().value;
     if (oldest === undefined) break;
@@ -60,7 +63,7 @@ function persist(map: Map<string, ReadonlySet<string>>) {
     };
     globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
-    // 存储不可用（隐私模式/配额）：收藏仅在本次运行内生效。
+    // Storage unavailable (private mode / quota): bookmarks are effective only for this run.
   }
 }
 
@@ -70,7 +73,7 @@ function emit() {
   }
 }
 
-/** 返回某会话的收藏集合；未变更时引用稳定，可直接用于 useSyncExternalStore。 */
+/** Return a conversation's bookmark set; the reference is stable while unchanged, so it can be used directly with useSyncExternalStore. */
 export function getFloorBookmarks(conversationId: string): ReadonlySet<string> {
   return ensureCache().get(conversationId) ?? EMPTY_BOOKMARKS;
 }
@@ -87,7 +90,8 @@ export function toggleFloorBookmark(conversationId: string, messageId: string): 
   if (next.size === 0) {
     map.delete(conversationId);
   } else {
-    // 重新插入让该会话回到 Map 尾部（persist 的容量裁剪保最近使用）。
+    // Re-inserting moves the conversation back to the tail of the Map (persist's capacity trim
+    // keeps the most recently used).
     map.delete(conversationId);
     map.set(conversationId, next);
   }
@@ -102,7 +106,7 @@ export function subscribeFloorBookmarks(listener: () => void): () => void {
   };
 }
 
-/** 仅供测试：清空内存缓存，强制下次访问重读 localStorage。 */
+/** Test-only: clear the in-memory cache, forcing the next access to re-read localStorage. */
 export function resetFloorBookmarksCacheForTest(): void {
   cache = null;
 }

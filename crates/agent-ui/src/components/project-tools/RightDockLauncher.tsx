@@ -55,13 +55,15 @@ type RightDockChooserProps = RightDockLauncherActions & {
   loading: boolean;
   error: string | null;
   /**
-   * 存在时"新建终端"入口可拖出到工作台画板(拖到落点新建终端 Pane);
-   * 点击行为不变(新建并进 dock)。拖拽阈值与点击抑制由工作台拖拽会话处理。
+   * When present, the "New Terminal" entry can be dragged out to the workbench canvas (drop to
+   * create a terminal Pane at the drop point); click behavior is unchanged (create and add to the
+   * dock). The drag threshold and click suppression are handled by the workbench drag session.
    */
   onNewTerminalDragStart?: (event: RightDockToolDragStartEvent) => void;
   /**
-   * 存在时每个工具入口(文件树/审查/内网穿透/SSH/后台任务)可拖出到工作台
-   * 画板,在落点直接打开该工具 Pane;点击行为不变(在 dock 内打开)。
+   * When present, each tool entry (file tree/review/tunnels/SSH/background tasks) can be dragged
+   * out to the workbench canvas, opening that tool's Pane directly at the drop point; click behavior
+   * is unchanged (open inside the dock).
    */
   onToolDragStart?: (kind: RightDockLeasedToolKind, event: RightDockToolDragStartEvent) => void;
 };

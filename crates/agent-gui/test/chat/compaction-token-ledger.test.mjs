@@ -63,22 +63,22 @@ test("estimateTextTokens is ceil(chars/4) of trimmed text for non-CJK content", 
 });
 
 test("estimateTextTokens weighs CJK characters at 0.7 tokens each", () => {
-  // 100 个汉字按 chars/4 只算 25 token，真实 tokenizer 约 60~70：必须显著高于 25。
-  assert.equal(estimateTextTokens("你".repeat(100)), Math.ceil(100 * 0.7));
-  // 假名与谚文同样按 CJK 密度估算。
+  // 100 CJK characters would count as only 25 tokens by chars/4 while a real tokenizer gives ~60-70: must be significantly higher than 25.
+  assert.equal(estimateTextTokens("あ".repeat(100)), Math.ceil(100 * 0.7));
+  // Kana and hangul are likewise estimated at CJK density.
   assert.equal(estimateTextTokens("あ".repeat(50)), Math.ceil(50 * 0.7));
   assert.equal(estimateTextTokens("한".repeat(50)), Math.ceil(50 * 0.7));
-  // 中英混排：各按各的密度累加。
+  // Mixed CJK and English: each accumulates at its own density.
   assert.equal(
-    estimateTextTokens(`${"你".repeat(40)}${"a".repeat(40)}`),
+    estimateTextTokens(`${"あ".repeat(40)}${"a".repeat(40)}`),
     Math.ceil(40 * 0.7 + 40 / 4),
   );
-  // 全角标点计入 CJK 密度。
+  // Fullwidth punctuation counts at CJK density.
   assert.equal(estimateTextTokens("。".repeat(10)), Math.ceil(10 * 0.7));
 });
 
 test("estimateTextTokenUnits is additive across arbitrary splits", () => {
-  const text = `汉字 mixed ascii ${"你好".repeat(20)} tail`;
+  const text = `CJK mixed ascii ${"あい".repeat(20)} tail`;
   const whole = estimateTextTokenUnits(text);
   const split =
     estimateTextTokenUnits(text.slice(0, 7)) +
@@ -105,15 +105,16 @@ test("estimateMessageTokens covers text, tool calls and model-visible tool resul
     Math.ceil((40 + "Read".length + argsChars) / 4) + 8,
   );
 
-  // details 是 UI/记账负载（shell 全量输出、文件元数据都挂在上面），provider
-  // 转换只发送 content——计入即双算，账本读数系统性虚高。
+  // details is a UI/accounting payload (full shell output and file metadata hang off it), while the
+  // provider conversion sends only content---counting it would double-count and systematically inflate the ledger readings.
   const resultWithDetails = { ...toolResult("c".repeat(80)), details: { lines: 12 } };
   assert.equal(estimateMessageTokens(resultWithDetails), Math.ceil(80 / 4) + 8);
 });
 
 test("estimateMessageTokens prices binary blocks at provider scale, not base64 length", () => {
-  // 400KB 图的 base64 按字符数会虚报 ~13 万 token，环随锚点在估算/真实 usage
-  // 间切换而剧烈跳变；按计价量级常量后读数与真实成本同量级。
+  // A 400KB image's base64 would over-report ~130k tokens by character count, making the ring swing
+  // wildly as the anchor alternates between estimate and real usage; with the pricing-scale constant
+  // the reading is on the same order as the real cost.
   const imageResult = {
     role: "toolResult",
     toolCallId: "tc-img",
@@ -130,14 +131,14 @@ test("estimateMessageTokens prices binary blocks at provider scale, not base64 l
   const imageUser = {
     role: "user",
     content: [
-      { type: "text", text: "看这张图" },
+      { type: "text", text: "Look at this image" },
       { type: "image", data: "B".repeat(500_000), mimeType: "image/jpeg" },
     ],
     timestamp: 1,
   };
   assert.equal(
     estimateMessageTokens(imageUser),
-    Math.ceil(estimateTextTokenUnits("看这张图") + BINARY_BLOCK_TOKENS) + 8,
+    Math.ceil(estimateTextTokenUnits("Look at this image") + BINARY_BLOCK_TOKENS) + 8,
   );
 });
 
@@ -145,23 +146,24 @@ test("estimateMessageTokens memoizes by object identity", () => {
   const message = user("a".repeat(4000));
   const first = estimateMessageTokens(message);
   message.content = "";
-  // 同一对象命中缓存（消息按不可变值对象使用）；内容被原地篡改也不重算。
+  // The same object hits the cache (messages are used as immutable value objects); in-place mutation of content does not trigger recomputation.
   assert.equal(estimateMessageTokens(message), first);
 });
 
 test("usage anchors are pure arithmetic: prompt side plus visible output", () => {
-  // totalTokens 含本轮全部 output（reasoning 占大头）。Chat Completions 等会在
-  // 轮次终止后剥离 reasoning：锚点只做 usage 算术（prompt 侧 + output − reasoning）。
-  // OpenAI Responses 会重放 thinkingSignature，另案保留 reasoning。
+  // totalTokens includes all of this turn's output (reasoning accounts for most of it). Chat Completions
+  // and others strip reasoning after the turn ends: the anchor does only usage arithmetic (prompt side +
+  // output - reasoning). OpenAI Responses replays thinkingSignature and keeps reasoning separately.
   const heavyReasoning = assistant(
     "hi",
     usage(47_500, { input: 4_000, cacheRead: 500, output: 43_000, reasoning: 40_000 }),
   );
-  // stop 终止：4_500(prompt 侧) + 43_000 − 40_000(被剥离的 reasoning) = 7_500。
+  // stop termination: 4_500 (prompt side) + 43_000 - 40_000 (stripped reasoning) = 7_500.
   assert.equal(getMessageObservedTokens(heavyReasoning), 7_500);
 
-  // toolUse 续跑：本轮 reasoning 仍留在同一 turn 的后续请求里（各家都要求
-  // 回传并计费），output 全量计入；thinking 正文绝不再叠加估算（旧双算）。
+  // toolUse continuation: this turn's reasoning still stays in subsequent requests of the same turn (all
+  // providers require it to be sent back and billed), so output is fully counted; the thinking text is
+  // never added again as an estimate (the old double count).
   const toolLoop = assistant(
     "hi",
     usage(47_500, { input: 4_000, cacheRead: 500, output: 43_000, reasoning: 40_000 }),
@@ -169,25 +171,26 @@ test("usage anchors are pure arithmetic: prompt side plus visible output", () =>
   );
   assert.equal(getMessageObservedTokens(toolLoop), 47_500);
 
-  // 中转只报 totalTokens（prompt 侧全零）：文档化降级，读数不许归零。
+  // A relay reports only totalTokens (prompt side all zero): a documented degradation, but the reading must not go to zero.
   assert.equal(getMessageObservedTokens(assistant("hi", usage(1_234))), 1_234);
 });
 
 test("reasoning-less providers deduct estimated thinking text from stop anchors", () => {
-  // 不上报推理分解的供应商：thinking 全文就在消息内容里，轮次终止后服务端
-  // 剥离思维链，锚点按正文估算扣减——误差只剩这一项估算。
+  // For providers that do not report a reasoning breakdown: the full thinking text sits in the message
+  // content, the server strips the chain of thought after the turn ends, and the anchor deducts a
+  // text-based estimate---the only remaining error is this one estimate.
   const thinkingText = "a".repeat(1_000); // 250 token units
-  const message = assistant("答案", usage(0, { input: 2_000, output: 400 }));
+  const message = assistant("Answer", usage(0, { input: 2_000, output: 400 }));
   message.content.unshift({ type: "thinking", thinking: thinkingText });
   assert.equal(getMessageObservedTokens(message), 2_000 + (400 - 250));
 
-  // 扣减下限为 0：估算偏保守时不许把可见输出扣成负数。
-  const overEstimated = assistant("短", usage(0, { input: 1_000, output: 100 }));
+  // The deduction floor is 0: a conservative estimate must not make visible output negative.
+  const overEstimated = assistant("Short", usage(0, { input: 1_000, output: 100 }));
   overEstimated.content.unshift({ type: "thinking", thinking: "b".repeat(1_000) });
   assert.equal(getMessageObservedTokens(overEstimated), 1_000);
 
-  // toolUse 续跑会重放 thinking：不扣减。
-  const inLoop = assistant("跑工具", usage(0, { input: 2_000, output: 400 }), {
+  // A toolUse continuation replays thinking: no deduction.
+  const inLoop = assistant("Run tool", usage(0, { input: 2_000, output: 400 }), {
     stopReason: "toolUse",
   });
   inLoop.content.unshift({ type: "thinking", thinking: thinkingText });
@@ -203,48 +206,50 @@ test("ledger anchors on usage arithmetic and never mutates messages", () => {
   );
   ledger.addMessages([observed]);
 
-  // 6_000(prompt 侧) + 3_000 − 2_800 = 6_200；锚点在读取时现算，不写任何印章。
+  // 6_000 (prompt side) + 3_000 - 2_800 = 6_200; the anchor is computed on read and writes no stamp.
   assert.equal(ledger.total(), 6_200);
   assert.equal(observed.liveAgentContextUsage, undefined);
 });
 
-test("two-turn readings never fall back without compaction (regression: 首轮高、次轮跳水)", () => {
+test("two-turn readings never fall back without compaction (regression: high first turn, dip on second)", () => {
   const ledger = new TokenLedger();
-  ledger.rebase({ systemPrompt: "sys", messages: [user("第一问")] });
+  ledger.rebase({ systemPrompt: "sys", messages: [user("First question")] });
 
-  // 轮 1：重推理（4.5k reasoning）。锚点 = prompt 侧 + 可见输出，不含 reasoning。
+  // Turn 1: heavy reasoning (4.5k reasoning). Anchor = prompt side + visible output, excluding reasoning.
   const turn1 = assistant(
-    "答案一",
+    "Answer one",
     usage(15_500, { input: 10_000, output: 5_000, reasoning: 4_500 }),
   );
   ledger.addMessages([turn1]);
   const afterTurn1 = ledger.total();
   assert.equal(afterTurn1, 10_500);
 
-  // 用户第二问进入 trailing 估算，空闲读数只增不减。
-  const question2 = user("第二问：请继续");
+  // The user's second question enters the trailing estimate; idle readings only grow.
+  const question2 = user("Second question: please continue");
   ledger.addMessages([question2]);
   const idleBeforeTurn2 = ledger.total();
   assert.ok(idleBeforeTurn2 >= afterTurn1);
 
-  // 轮 2：供应商实测 prompt 侧 = 上一轮可见上下文 + 用户消息实际 token。
-  // 旧口径（锚点含 reasoning/正文估算）在这里必然回落；新口径单调不减。
-  const turn2 = assistant("答案二", usage(0, { input: 10_512, output: 300, reasoning: 250 }));
+  // Turn 2: the provider's measured prompt side = the previous turn's visible context + the actual tokens
+  // of the user message. The old convention (anchor including reasoning/text estimates) would necessarily
+  // fall back here; the new convention is monotonically non-decreasing.
+  const turn2 = assistant("Answer two", usage(0, { input: 10_512, output: 300, reasoning: 250 }));
   ledger.addMessages([turn2]);
   const afterTurn2 = ledger.total();
   assert.equal(afterTurn2, 10_562);
   assert.ok(
     afterTurn2 >= afterTurn1,
-    `无压缩不得回落: ${afterTurn1} -> ${afterTurn2}`,
+    `Without compaction the reading must not fall back: ${afterTurn1} -> ${afterTurn2}`,
   );
 });
 
 test("hosted-search turns are never usage anchors and their blocks are never estimated", () => {
-  // 实测数据（用量环 44%→16% 跳水的会话）：搜索轮 usage 报 input 110k（服务端
-  // 多次内部调用的聚合，搜索结果全文计入 input 却不进入后续请求），而下一轮
-  // 实测整个持久上下文只有 52k。聚合值绝不能锚定环读数。
+  // Measured data (a session where the usage ring fell 44%->16%): the search turn's usage reports
+  // input 110k (an aggregate of multiple server-side internal calls; the full search results are counted
+  // into input but never enter subsequent requests), while the next turn measures the entire persistent
+  // context at only 52k. An aggregate must never anchor the ring reading.
   const searchTurn = assistant(
-    "综合搜索结果……",
+    "Search results summary...",
     usage(117_996, { input: 110_008, cacheRead: 5_184, output: 2_804, reasoning: 1_941 }),
   );
   searchTurn.content.push({
@@ -252,23 +257,23 @@ test("hosted-search turns are never usage anchors and their blocks are never est
     id: "hs-1",
     provider: "openai",
     status: "completed",
-    queries: ["西安 今日新闻"],
+    queries: ["Xi'an today's news"],
     sources: [{ url: "https://example.com/a", title: "x".repeat(2_000) }],
   });
   assert.equal(getMessageObservedTokens(searchTurn), undefined);
 
-  // 旧版本按聚合值盖的印章已是死数据：读取侧不存在任何印章消费方。
-  const legacyStamped = assistant("旧印章", usage(117_996, { input: 110_008 }));
+  // Stamps written by older versions from aggregate values are dead data: no consumer on the read side reads stamps.
+  const legacyStamped = assistant("Old stamp", usage(117_996, { input: 110_008 }));
   legacyStamped.content.push({ type: "hostedSearch", id: "hs-2", sources: [] });
   legacyStamped.liveAgentContextUsage = { totalTokens: 117_996, fixedTokens: 100 };
   assert.equal(getMessageObservedTokens(legacyStamped), undefined);
 
-  // hostedSearch 块在请求侧被剥除：估算跳过其 queries/sources JSON。
-  const plainEquivalent = assistant("综合搜索结果……", usage(0));
+  // hostedSearch blocks are stripped on the request side: estimation skips their queries/sources JSON.
+  const plainEquivalent = assistant("Search results summary...", usage(0));
   assert.equal(estimateMessageTokens(searchTurn), estimateMessageTokens(plainEquivalent));
 
-  // 下一个普通轮次的真实 usage 正常锚定：52_719(prompt 侧) + 9(可见输出)。
-  const nextTurn = assistant("好的", usage(52_728, { input: 2_991, cacheRead: 49_728, output: 9 }));
+  // The next ordinary turn's real usage anchors normally: 52_719 (prompt side) + 9 (visible output).
+  const nextTurn = assistant("Okay", usage(52_728, { input: 2_991, cacheRead: 49_728, output: 9 }));
   assert.equal(getMessageObservedTokens(nextTurn), 52_728);
 });
 
@@ -279,7 +284,7 @@ test("OpenAI Responses stop anchors keep reasoning that will be replayed", () =>
     encrypted_content: "A".repeat(1_600),
   });
   const message = assistant(
-    "答案",
+    "Answer",
     usage(0, { input: 18_000, output: 2_366, reasoning: 1_543 }),
     { api: "openai-responses" },
   );
@@ -288,11 +293,11 @@ test("OpenAI Responses stop anchors keep reasoning that will be replayed", () =>
     thinking: "short summary",
     thinkingSignature: signature,
   });
-  // 旧口径扣 1_543 → 18_823；Responses 下一请求仍发送 reasoning item。
+  // The old convention deducted 1_543 -> 18_823; Responses still sends the reasoning item in the next request.
   assert.equal(getMessageObservedTokens(message), 20_366);
 });
 
-test("hosted-search estimate includes Responses signatures so 谢谢 does not jump 19k→30k", () => {
+test("hosted-search estimate includes Responses signatures so a thank-you does not jump 19k->30k", () => {
   const encLens = [1_612, 1_484, 1_356, 1_444, 1_912, 1_420, 1_444, 4_620, 1_848];
   const signatures = encLens.map((encLen) => ({
     type: "thinking",
@@ -304,7 +309,7 @@ test("hosted-search estimate includes Responses signatures so 谢谢 does not ju
     }),
   }));
   const searchTurn = assistant(
-    "以下是西安今日新闻要点……",
+    "Here are the key points of today's Xi'an news...",
     usage(86_331, { input: 80_509, cacheRead: 3_456, output: 2_366, reasoning: 1_543 }),
     { api: "openai-responses" },
   );
@@ -315,23 +320,23 @@ test("hosted-search estimate includes Responses signatures so 谢谢 does not ju
       id: "hs-1",
       provider: "openai",
       status: "completed",
-      queries: ["西安 新闻"],
+      queries: ["Xi'an news"],
       sources: [],
     },
-    { type: "text", text: "以下是西安今日新闻要点……" },
+    { type: "text", text: "Here are the key points of today's Xi'an news..." },
   ];
   assert.equal(getMessageObservedTokens(searchTurn), undefined);
 
   const context = {
     systemPrompt: "s".repeat(4_000),
     tools: [{ name: "Read", description: "d".repeat(200), parameters: { type: "object" } }],
-    messages: [user("请你联网搜索西安今天的新闻"), searchTurn],
+    messages: [user("Please search the web for today's Xi'an news"), searchTurn],
   };
   const ledger = new TokenLedger();
   ledger.rebase(context);
   const withReplay = ledger.total();
 
-  const plainSearch = assistant("以下是西安今日新闻要点……", usage(0));
+  const plainSearch = assistant("Here are the key points of today's Xi'an news...", usage(0));
   plainSearch.content.push({
     type: "hostedSearch",
     id: "hs-plain",
@@ -340,7 +345,7 @@ test("hosted-search estimate includes Responses signatures so 谢谢 does not ju
   const oldLedger = new TokenLedger();
   oldLedger.rebase({
     ...context,
-    messages: [user("请你联网搜索西安今天的新闻"), plainSearch],
+    messages: [user("Please search the web for today's Xi'an news"), plainSearch],
   });
   const withoutReplay = oldLedger.total();
   assert.ok(
@@ -348,26 +353,26 @@ test("hosted-search estimate includes Responses signatures so 谢谢 does not ju
     `signatures must lift hosted-search estimate: ${withReplay} vs ${withoutReplay}`,
   );
 
-  ledger.addMessages([user("谢谢")]);
+  ledger.addMessages([user("Thank you")]);
   const idle = ledger.total();
   ledger.addMessages([
-    assistant("不客气", usage(32_286, { input: 3_149, cacheRead: 29_056, output: 81 })),
+    assistant("You're welcome", usage(32_286, { input: 3_149, cacheRead: 29_056, output: 81 })),
   ]);
   const afterThanks = ledger.total();
   assert.equal(afterThanks, 32_286);
   assert.ok(
-    afterThanks - idle < afterThanks - (withoutReplay + estimateMessageTokens(user("谢谢"))),
+    afterThanks - idle < afterThanks - (withoutReplay + estimateMessageTokens(user("Thank you"))),
     `idle→real jump must shrink: idle=${idle} old=${withoutReplay} real=${afterThanks}`,
   );
 });
 
 test("sanitized hosted-search turns cannot re-anchor rebase on aggregated usage", () => {
-  // 回归：搜索轮结束后空闲环走估算（约 7%），下一轮 beginRequest 对净化后
-  // 上下文 rebase。净化剥除 hostedSearch 块后若留下聚合 usage（实测 input
-  // 101k），账本会把它当真实锚点，流式期环跳高到约 40%，回复完成再落到
-  // 下一轮真实 usage（约 11%）。
+  // Regression: after the search turn ends the idle ring uses estimates (~7%), and the next turn's
+  // beginRequest rebases on the sanitized context. If sanitizing strips the hostedSearch blocks but
+  // leaves the aggregate usage (measured input 101k), the ledger treats it as a real anchor: the ring
+  // jumps to ~40% during streaming, then lands on the next turn's real usage (~11%) when the reply completes.
   const searchTurn = assistant(
-    "以下是西安今日新闻要点……",
+    "Here are the key points of today's Xi'an news...",
     usage(107_014, { input: 101_156, cacheRead: 3_456, output: 2_402, reasoning: 1_799 }),
   );
   searchTurn.content.push({
@@ -375,12 +380,12 @@ test("sanitized hosted-search turns cannot re-anchor rebase on aggregated usage"
     id: "hs-sanitize",
     provider: "openai",
     status: "completed",
-    queries: ["西安 新闻"],
+    queries: ["Xi'an news"],
     sources: [],
   });
   const originalUsage = { ...searchTurn.usage };
   const sanitized = sanitizeMessageForModelContext(searchTurn);
-  const nextUser = { role: "user", content: "好的", timestamp: 3 };
+  const nextUser = { role: "user", content: "Okay", timestamp: 3 };
 
   assert.equal(
     sanitized.content.some((block) => block.type === "hostedSearch"),
@@ -392,7 +397,7 @@ test("sanitized hosted-search turns cannot re-anchor rebase on aggregated usage"
   const ledger = new TokenLedger();
   ledger.rebase({
     systemPrompt: "s".repeat(400),
-    messages: [user("请你联网搜索西安今天的新闻"), sanitized, nextUser],
+    messages: [user("Please search the web for today's Xi'an news"), sanitized, nextUser],
   });
   const snapshot = ledger.snapshot();
   assert.equal(snapshot.hasObservedUsage, false);
@@ -401,14 +406,14 @@ test("sanitized hosted-search turns cannot re-anchor rebase on aggregated usage"
     `sanitized rebase must stay on estimate path, got ${snapshot.totalTokens}`,
   );
 
-  const realNext = assistant("收到", usage(30_986, { input: 1_883, cacheRead: 29_056, output: 47 }));
+  const realNext = assistant("Got it", usage(30_986, { input: 1_883, cacheRead: 29_056, output: 47 }));
   ledger.addMessages([realNext]);
   assert.equal(ledger.total(), 30_986);
 });
 
 test("warm hosted-search turns anchor on cacheRead+output, not aggregated input", () => {
   const searchTurn = assistant(
-    "西安今日新闻速览",
+    "Xi'an today's news at a glance",
     usage(86_335, { input: 53_290, cacheRead: 30_080, output: 2_965, reasoning: 2_057 }),
     { api: "openai-responses" },
   );
@@ -417,7 +422,7 @@ test("warm hosted-search turns anchor on cacheRead+output, not aggregated input"
     id: "hs-warm",
     provider: "openai",
     status: "completed",
-    queries: ["西安 新闻"],
+    queries: ["Xi'an news"],
     sources: [],
   });
   assert.equal(getMessageObservedTokens(searchTurn), 33_045);
@@ -434,18 +439,18 @@ test("warm hosted-search turns anchor on cacheRead+output, not aggregated input"
   assert.equal(sanitized.usage.output, 2_965);
   assert.equal(getMessageObservedTokens(sanitized), 33_045);
 
-  const nextUser = { role: "user", content: "好的", timestamp: 3 };
+  const nextUser = { role: "user", content: "Okay", timestamp: 3 };
   const ledger = new TokenLedger();
   ledger.rebase({
     systemPrompt: "s".repeat(400),
-    messages: [user("请你联网搜索西安今天的新闻"), sanitized, nextUser],
+    messages: [user("Please search the web for today's Xi'an news"), sanitized, nextUser],
   });
   const snapshot = ledger.snapshot();
   assert.equal(snapshot.hasObservedUsage, true);
   assert.equal(snapshot.observedTokens, 33_045);
   assert.equal(snapshot.totalTokens, 33_045 + estimateMessageTokens(nextUser));
 
-  const realNext = assistant("不客气", usage(32_703, { input: 3_588, cacheRead: 29_056, output: 59 }));
+  const realNext = assistant("You're welcome", usage(32_703, { input: 3_588, cacheRead: 29_056, output: 59 }));
   ledger.addMessages([realNext]);
   assert.equal(ledger.total(), 32_703);
   assert.ok(
@@ -458,7 +463,7 @@ test("suppressUsageAnchors still accepts warm hosted-search follow-up tokens", (
   const ledger = new TokenLedger();
   ledger.rebase({ systemPrompt: "s".repeat(400), messages: [user("question")] });
   const warm = assistant(
-    "搜索汇总",
+    "Search summary",
     usage(86_335, { input: 53_290, cacheRead: 30_080, output: 2_965 }),
   );
   ledger.addMessages([warm], { suppressUsageAnchors: true });
@@ -467,12 +472,13 @@ test("suppressUsageAnchors still accepts warm hosted-search follow-up tokens", (
 });
 
 test("addMessages with suppressUsageAnchors keeps usage turns on the estimate path", () => {
-  // 搜索收尾会异步替换 assistant 消息对象，提交时刻内容块可能还没挂上，
-  // 调用方按轮次追踪并显式抑制：不锚定、只累计 trailing 估算。
+  // The search wrap-up asynchronously replaces the assistant message object, so content blocks may not be
+  // attached at submit time; the caller tracks by turn and explicitly suppresses: no anchoring, only
+  // accumulate the trailing estimate.
   const ledger = new TokenLedger();
   ledger.rebase({ systemPrompt: "s".repeat(400), messages: [user("question")] });
   const totalBefore = ledger.total();
-  const aggregated = assistant("搜索汇总", usage(117_996, { input: 110_008, cacheRead: 5_184 }));
+  const aggregated = assistant("Search summary", usage(117_996, { input: 110_008, cacheRead: 5_184 }));
   ledger.addMessages([aggregated], { suppressUsageAnchors: true });
 
   assert.equal(ledger.snapshot().hasObservedUsage, false);
@@ -482,7 +488,7 @@ test("addMessages with suppressUsageAnchors keeps usage turns on the estimate pa
 test("rebase skips hosted-search anchors and lands on the previous trusted usage", () => {
   const ledger = new TokenLedger();
   const trusted = assistant("earlier answer", usage(30_000, { input: 30_000 }));
-  const searchTurn = assistant("搜索汇总", usage(117_996, { input: 110_008 }), { timestamp: 4 });
+  const searchTurn = assistant("Search summary", usage(117_996, { input: 110_008 }), { timestamp: 4 });
   searchTurn.content.push({ type: "hostedSearch", id: "hs-3", sources: [] });
   ledger.rebase({
     systemPrompt: "sys",
@@ -491,8 +497,8 @@ test("rebase skips hosted-search anchors and lands on the previous trusted usage
 
   const snapshot = ledger.snapshot();
   assert.equal(snapshot.hasObservedUsage, true);
-  // 锚点落在更早的可信轮次（30_000 prompt 侧 + 0 可见输出），搜索轮与其后的
-  // 消息按 trailing 估算。
+  // The anchor lands on the earlier trusted turn (30_000 prompt side + 0 visible output), and the search
+  // turn and the messages after it are trailing estimates.
   assert.equal(snapshot.observedTokens, 30_000);
   assert.equal(
     snapshot.trailingTokens,
@@ -528,15 +534,16 @@ test("rebase anchors on the latest real usage and estimates the trailing message
   assert.equal(snapshot.hasObservedUsage, true);
   assert.equal(snapshot.observedTokens, 5000);
   assert.equal(snapshot.trailingTokens, expectedTrailing);
-  // observed usage 已含 system prompt，fixed 不再叠加。
+  // Observed usage already includes the system prompt, so fixed is not added again.
   assert.equal(snapshot.totalTokens, snapshot.observedTokens + snapshot.trailingTokens);
 });
 
 test("legacy liveAgentContextUsage stamps are dead data: anchors recompute from usage", () => {
-  // 修复前持久化的印章按旧口径写入（正文估算、甚至聚合值），读取侧曾无条件
-  // 优先——旧会话因此继续锯齿。现在锚点一律从 usage 现算，印章没有任何读取方。
+  // Stamps persisted before the fix were written under the old convention (text estimates, even
+  // aggregates) and the read side once preferred them unconditionally---so old sessions kept sawtoothing.
+  // Now anchors are always computed from usage, and stamps have no readers.
   const ledger = new TokenLedger();
-  const stamped = assistant("旧会话轮次", usage(0, { input: 5_000, output: 200 }));
+  const stamped = assistant("Legacy session turn", usage(0, { input: 5_000, output: 200 }));
   stamped.liveAgentContextUsage = { totalTokens: 117_996, fixedTokens: 100 };
   ledger.rebase({ systemPrompt: "sys", messages: [user("q"), stamped] });
 
@@ -547,9 +554,10 @@ test("legacy liveAgentContextUsage stamps are dead data: anchors recompute from 
 test("usage anchors always beat estimates regardless of fixed-cost size", () => {
   const ledger = new TokenLedger();
   const observed = assistant("answer", usage(1_000));
-  // 估算口径有意高估（序列化字符 / CJK 密度），绝不允许覆盖真实读数——
-  // 否则环读数会超 100% 并触发自动压缩循环。usage 锚点已含 system/tools
-  // 的真实占用，fixed 估算无论多大都不叠加。
+  // The estimation convention deliberately over-estimates (serialized characters / CJK density) and must
+  // never override a real reading---otherwise the ring would exceed 100% and trigger an automatic
+  // compaction loop. The usage anchor already includes the real system/tools occupancy, so the fixed
+  // estimate is not added no matter how large it is.
   ledger.rebase({
     systemPrompt: "s".repeat(400_000),
     tools: [{ name: "LargeTool", description: "d".repeat(400_000), parameters: {} }],
@@ -562,7 +570,7 @@ test("usage anchors always beat estimates regardless of fixed-cost size", () => 
 
 test("real usage anchors are never overridden by the full-history estimate", () => {
   const ledger = new TokenLedger();
-  // 100 万字符的工具输出估算约 25 万 token，真实 usage 只有 5000：读数恒信 usage。
+  // A 1,000,000-character tool output estimates to ~250k tokens while real usage is only 5000: the reading always trusts usage.
   ledger.rebase({
     systemPrompt: "sys",
     messages: [toolResult("x".repeat(1_000_000)), assistant("done", usage(5_000))],
@@ -578,7 +586,7 @@ test("assistant messages without provider usage stay on the estimate path", () =
   const totalBefore = ledger.total();
   ledger.addMessages([noUsage]);
 
-  // 无 usage 的消息只走 trailing 估算，绝不产生锚点。
+  // Messages without usage go only through the trailing estimate and never produce an anchor.
   assert.equal(getMessageObservedTokens(noUsage), undefined);
   assert.equal(ledger.total(), totalBefore + estimateMessageTokens(noUsage));
 });
@@ -624,15 +632,15 @@ test("totalWithPendingTokens adds the streamed token-unit estimate in O(1)", () 
   ledger.rebase({ systemPrompt: "", messages: [assistant("w", usage(4000))] });
   assert.equal(ledger.totalWithPendingTokens(0), 4000);
   assert.equal(ledger.totalWithPendingTokens(estimateTextTokenUnits("a".repeat(401))), 4000 + 101);
-  // 中文流按 CJK 密度累计：400 字远高于 400/4=100。
+  // CJK streams accumulate at CJK density: 400 characters is far higher than 400/4=100.
   assert.equal(
-    ledger.totalWithPendingTokens(estimateTextTokenUnits("好".repeat(400))),
+    ledger.totalWithPendingTokens(estimateTextTokenUnits("あ".repeat(400))),
     4000 + Math.ceil(400 * 0.7),
   );
 });
 
 test("estimateMessageTokens weighs CJK message content by CJK density", () => {
-  const cjkMessage = user("这是一段用于估算的中文正文内容".repeat(20));
+  const cjkMessage = user("あいうえおかきくけこさしすせそ".repeat(20));
   const asciiEquivalent = user("a".repeat(15 * 20));
   assert.ok(
     estimateMessageTokens(cjkMessage) > estimateMessageTokens(asciiEquivalent) * 2,

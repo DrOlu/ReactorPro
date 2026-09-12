@@ -11,7 +11,8 @@ import (
 	"github.com/liveagent/agent-gateway/internal/db"
 )
 
-// openTestDB 打开共享池并在其上初始化凭证表（生命周期由测试清理关闭）。
+// openTestDB opens a shared pool and initializes the credential table on it
+// (its lifecycle is closed by the test cleanup).
 func openTestDB(t *testing.T, path string) (*db.DB, *Store) {
 	t.Helper()
 	database, err := db.Open(path)
@@ -102,7 +103,7 @@ func TestIssueValidateDeleteLifecycle(t *testing.T) {
 	t.Parallel()
 
 	store, _ := openTestStore(t)
-	token, err := store.Issue("agent-a", "备注")
+	token, err := store.Issue("agent-a", "note")
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestIssueValidateDeleteLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registered: %v", err)
 	}
-	if len(entries) != 1 || entries[0].AgentID != "agent-a" || entries[0].Name != "备注" {
+	if len(entries) != 1 || entries[0].AgentID != "agent-a" || entries[0].Name != "note" {
 		t.Fatalf("registered = %#v", entries)
 	}
 
@@ -288,7 +289,7 @@ func TestRegisterAddsGatewayTokenAgentWithoutCredential(t *testing.T) {
 	if err := store.UpdateName("shared-token-agent", ""); err != nil {
 		t.Fatalf("clear name: %v", err)
 	}
-	if err := store.UpdateName("shared-token-agent", strings.Repeat("名", 65)); !errors.Is(err, ErrAgentNameTooLong) {
+	if err := store.UpdateName("shared-token-agent", strings.Repeat("x", 65)); !errors.Is(err, ErrAgentNameTooLong) {
 		t.Fatalf("long name error = %v", err)
 	}
 
@@ -331,7 +332,8 @@ func TestTokensSurviveReopen(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	// 模拟网关重启：重开库后凭证仍有效，删除也持久化。
+	// Simulate a gateway restart: after reopening the database the credential is
+	// still valid, and deletion is persisted too.
 	_, reopened := openTestDB(t, path)
 	if !tokenAuthenticates(t, reopened, "agent-a", token) {
 		t.Fatal("token must survive reopen")
@@ -362,8 +364,10 @@ func TestNewStorePreloadsKnownAgentsAfterReopen(t *testing.T) {
 		t.Fatalf("close database: %v", err)
 	}
 
-	// 模拟 Gateway 重启。把重开的单连接切为只读，确保已有 Agent 重连完全依赖
-	// 启动预加载缓存；如果仍执行 INSERT OR IGNORE，此处会因只读而失败。
+	// Simulate a Gateway restart. Switch the reopened single connection to
+	// read-only to ensure an existing Agent's reconnect relies entirely on the
+	// startup preload cache; if it still executed INSERT OR IGNORE, this would
+	// fail because the connection is read-only.
 	reopenedDB, reopened := openTestDB(t, path)
 	reopenedDB.Pool().SetMaxOpenConns(1)
 	reopenedDB.Pool().SetMaxIdleConns(1)
@@ -409,7 +413,7 @@ func TestDBFilePermissionsAndNoPlaintext(t *testing.T) {
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("db file perm = %o, want 0600", perm)
 	}
-	// 明文绝不落库：直接扫库文件字节。
+	// Plaintext must never land in the database: scan the database file bytes directly.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read db: %v", err)
@@ -423,7 +427,8 @@ func TestListPaginates(t *testing.T) {
 	t.Parallel()
 
 	store, _ := openTestStore(t)
-	// 混合登记 120 个 Agent：一半有独立凭证，一半仅在目录中。
+	// Register a mix of 120 Agents: half have independent credentials, half exist
+	// only in the directory.
 	for i := 0; i < 120; i++ {
 		agentID := fmt.Sprintf("agent-%03d", i)
 		if i%2 == 0 {
@@ -454,7 +459,7 @@ func TestListPaginates(t *testing.T) {
 		t.Fatalf("page 3 = len %d, hasMore %v, want 20 entries no-more", len(last.Entries), last.HasMore)
 	}
 
-	// 超末页返回空、total 仍准确。
+	// Beyond the last page returns empty, and total stays accurate.
 	beyond, err := store.List(PageParams{Page: 99, PageSize: 50})
 	if err != nil {
 		t.Fatalf("list beyond: %v", err)
@@ -524,7 +529,8 @@ func TestListParamsClamped(t *testing.T) {
 		}
 	}
 
-	// page<1 归一到 1，page_size<=0 用默认，超上限钳制到 maxPageSize。
+	// page<1 normalizes to 1, page_size<=0 uses the default, and values above the
+	// cap are clamped to maxPageSize.
 	zero, _ := store.List(PageParams{Page: 0, PageSize: 0})
 	if zero.Page != 1 || zero.PageSize != defaultPageSize {
 		t.Fatalf("clamp low = page %d size %d", zero.Page, zero.PageSize)
@@ -544,7 +550,8 @@ func TestListOrderUsesIndexNotFullScan(t *testing.T) {
 			t.Fatalf("issue: %v", err)
 		}
 	}
-	// 分页排序不得触发临时 B-Tree 排序（全表 sort），应走 created_at 索引。
+	// Pagination ordering must not trigger a temporary B-Tree sort (full-table
+	// sort); it should use the created_at index.
 	var plan strings.Builder
 	rows, err := store.pool.Query(
 		`EXPLAIN QUERY PLAN

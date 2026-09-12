@@ -1,5 +1,5 @@
-// Sidebar 状态层的端无关结构。平台差异只能进入各端 backend adapter。
-// 时间戳统一为 epoch milliseconds；Web adapter 会先归一化网关的秒级字段。
+// End-agnostic structure of the Sidebar state layer. Platform differences may only enter each end's backend adapter.
+// Timestamps are uniformly epoch milliseconds; the Web adapter normalizes the gateway's second-level fields first.
 
 export type SidebarConversation = {
   id: string;

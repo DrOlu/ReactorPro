@@ -27,8 +27,9 @@ type UseUploadZoneDropParams = {
 };
 
 /**
- * 上传区拖入内容的分发器：原生路径先经 Rust 分类，文件走附件导入管线，
- * 文件夹挂载为当前工作空间的附属目录（只读，可在项目设置中调整）。
+ * Dispatcher for content dropped into the upload zone: native paths are first classified by Rust,
+ * files go through the attachment import pipeline, and folders are mounted as auxiliary directories
+ * of the current workspace (read-only; adjustable in project settings).
  */
 export function useUploadZoneDrop(params: UseUploadZoneDropParams) {
   const {
@@ -93,7 +94,7 @@ export function useUploadZoneDrop(params: UseUploadZoneDropParams) {
           ? resolveConversationTarget(targetConversationId)
           : null;
         if (targetConversationId && !target) {
-          addNotify("warning", "文件投放目标会话已失效，请重试");
+          addNotify("warning", "The conversation targeted by the file drop is no longer valid, please retry");
           return;
         }
         const classified = await invoke<SystemClassifiedDroppedPaths>(

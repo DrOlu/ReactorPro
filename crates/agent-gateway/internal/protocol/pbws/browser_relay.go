@@ -10,10 +10,12 @@ import (
 	"github.com/liveagent/agent-gateway/internal/transport/wscore"
 )
 
-// handleAgentRequest 直通转发一条浏览器构造的 GatewayEnvelope：白名单/限额校验 →
-// request_id 按连接命名空间化 → 经 session 层等待关联响应 → list 类共享后处理 →
-// 还原 request_id 回送。载荷在浏览器与 Agent 之间保持 proto 直通。
-// agentID 是已由分派层校验过的显式目标 Agent。
+// handleAgentRequest relays a browser-constructed GatewayEnvelope straight through:
+// allowlist/limit checks → namespace the request_id per connection → wait for the
+// correlated response via the session layer → shared post-processing for list-kind
+// responses → restore the request_id and send back. The payload stays proto-passthrough
+// between the browser and the Agent.
+// agentID is the explicit target Agent already validated by the dispatch layer.
 func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gatewayv2.GatewayEnvelope) {
 	if requestID == "" {
 		_ = c.sendLocalError(requestID, "request id is required")
@@ -25,7 +27,8 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 		return
 	}
 
-	// 命名空间化：多标签页共享一个桌面端，透传 id 必须按连接隔离；回程剥离前缀还原。
+	// Namespace: multiple tabs share one desktop app, so passthrough ids must be
+	// isolated per connection; strip the prefix on the way back to restore them.
 	agentRequestID := c.idPrefix + requestID
 	env.RequestId = agentRequestID
 	if env.GetTimestamp() == 0 {
@@ -70,7 +73,8 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 		return
 	}
 
-	// list 类终端响应的合并/过滤与兴趣登记（按目标 Agent 视图执行共享域逻辑）。
+	// Merge/filter list-kind terminal responses and register interest (shared-domain
+	// logic executed against the target Agent view).
 	if terminalResp := response.GetTerminalResponse(); terminalResp != nil {
 		req := env.GetTerminalRequest()
 		finalized := shared.FinalizeTerminalResponse(
@@ -85,7 +89,8 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 		}
 	}
 
-	// 还原关联 id 后原样回送；error=99 臂保留结构化错误码并交由客户端处理。
+	// Restore the correlation id and send back as-is; the error=99 arm keeps the
+	// structured error code and leaves handling to the client.
 	response.RequestId = requestID
 	_ = c.send(wscore.FrameResponse, "agent_response", &gatewayv2.WebServerFrame{
 		RequestId: requestID,

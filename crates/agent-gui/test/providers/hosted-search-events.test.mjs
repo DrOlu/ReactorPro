@@ -225,7 +225,7 @@ test("hosted search aggregation dedupes identical updates and separates completi
       type: "web_search_call",
       id: "search-1",
       status: "in_progress",
-      action: { query: "LiveAgent hosted search" },
+      action: { query: "ReactorPro hosted search" },
     },
   };
 
@@ -254,7 +254,7 @@ test("hosted search aggregation extracts structural Anthropic and Gemini search 
       type: "server_tool_use",
       id: "toolu_1",
       name: "web_search",
-      input: { query: "LiveAgent Anthropic search" },
+      input: { query: "ReactorPro Anthropic search" },
     },
   });
   anthropic.accept({
@@ -272,7 +272,7 @@ test("hosted search aggregation extracts structural Anthropic and Gemini search 
     },
   });
 
-  assert.deepEqual(anthropic.getBlocks()[0].queries, ["LiveAgent Anthropic search"]);
+  assert.deepEqual(anthropic.getBlocks()[0].queries, ["ReactorPro Anthropic search"]);
   assert.deepEqual(anthropic.getBlocks()[0].sources.map((source) => source.url), [
     "https://example.com/anthropic",
   ]);
@@ -284,7 +284,7 @@ test("hosted search aggregation extracts structural Anthropic and Gemini search 
     candidates: [
       {
         groundingMetadata: {
-          webSearchQueries: ["LiveAgent Gemini search"],
+          webSearchQueries: ["ReactorPro Gemini search"],
           groundingChunks: [
             {
               web: {
@@ -298,7 +298,7 @@ test("hosted search aggregation extracts structural Anthropic and Gemini search 
     ],
   });
 
-  assert.deepEqual(gemini.getBlocks()[0].queries, ["LiveAgent Gemini search"]);
+  assert.deepEqual(gemini.getBlocks()[0].queries, ["ReactorPro Gemini search"]);
   assert.deepEqual(gemini.getBlocks()[0].sources.map((source) => source.url), [
     "https://example.com/gemini",
   ]);
@@ -327,17 +327,17 @@ test("hosted search aggregation accumulates an Anthropic query streamed as parti
   anthropic.accept({
     type: "content_block_delta",
     index: 0,
-    delta: { type: "input_json_delta", partial_json: 'ry": "LiveAg' },
+    delta: { type: "input_json_delta", partial_json: 'ry": "Reacto' },
   });
   assert.deepEqual(anthropic.getBlocks(), []);
 
   anthropic.accept({
     type: "content_block_delta",
     index: 0,
-    delta: { type: "input_json_delta", partial_json: 'ent incremental search"}' },
+    delta: { type: "input_json_delta", partial_json: 'rPro incremental search"}' },
   });
 
-  assert.deepEqual(anthropic.getBlocks()[0].queries, ["LiveAgent incremental search"]);
+  assert.deepEqual(anthropic.getBlocks()[0].queries, ["ReactorPro incremental search"]);
   assert.equal(anthropic.getBlocks()[0].status, "searching");
 
   anthropic.accept({ type: "content_block_stop", index: 0 });
@@ -354,7 +354,7 @@ test("hosted search aggregation extracts Anthropic citations_delta into the acti
       type: "server_tool_use",
       id: "toolu_cited",
       name: "web_search",
-      input: { query: "LiveAgent citation search" },
+      input: { query: "ReactorPro citation search" },
     },
   });
   anthropic.accept({
@@ -367,7 +367,7 @@ test("hosted search aggregation extracts Anthropic citations_delta into the acti
   });
 
   const block = anthropic.getBlocks()[0];
-  assert.deepEqual(block.queries, ["LiveAgent citation search"]);
+  assert.deepEqual(block.queries, ["ReactorPro citation search"]);
   assert.deepEqual(
     block.sources.map((source) => ({ url: source.url, sourceType: source.sourceType })),
     [{ url: "https://example.com/cited", sourceType: "citation" }],
@@ -385,7 +385,7 @@ test("hosted search aggregation marks Anthropic web_search_tool_result_error as 
       type: "server_tool_use",
       id: "toolu_failed",
       name: "web_search",
-      input: { query: "LiveAgent failing search" },
+      input: { query: "ReactorPro failing search" },
     },
   });
   anthropic.accept({
@@ -409,7 +409,7 @@ test("hosted search aggregation extracts OpenAI url_citation annotations and mar
       type: "web_search_call",
       id: "search-annotated",
       status: "in_progress",
-      action: { query: "LiveAgent OpenAI search" },
+      action: { query: "ReactorPro OpenAI search" },
     },
   });
   openai.accept({
@@ -427,7 +427,7 @@ test("hosted search aggregation extracts OpenAI url_citation annotations and mar
 
   const block = openai.getBlocks()[0];
   assert.equal(block.status, "completed");
-  assert.deepEqual(block.queries, ["LiveAgent OpenAI search"]);
+  assert.deepEqual(block.queries, ["ReactorPro OpenAI search"]);
   assert.deepEqual(
     block.sources.map((source) => ({ url: source.url, sourceType: source.sourceType })),
     [{ url: "https://example.com/openai", sourceType: "citation" }],
@@ -654,13 +654,13 @@ test("codex aggregator tracks xAI x_search_call items and extracts action source
       type: "x_search_call",
       id: "xs-1",
       status: "in_progress",
-      action: { query: "武汉今天的天气" },
+      action: { query: "Weather in Wuhan today" },
     },
   });
 
   let block = aggregator.getBlocks().find((candidate) => candidate.id === "xs-1");
   assert.equal(block.status, "searching");
-  assert.deepEqual(block.queries, ["武汉今天的天气"]);
+  assert.deepEqual(block.queries, ["Weather in Wuhan today"]);
 
   aggregator.accept({
     type: "response.output_item.done",
@@ -669,7 +669,7 @@ test("codex aggregator tracks xAI x_search_call items and extracts action source
       id: "xs-1",
       status: "completed",
       action: {
-        query: "武汉今天的天气",
+        query: "Weather in Wuhan today",
         sources: [{ url: "https://example.com/weather", title: "Weather" }, "https://example.com/extra"],
       },
     },

@@ -67,7 +67,7 @@ export type SubagentRunEnvironment = {
     execute: ChildToolExecutor,
   ) => { tools: Tool[]; execute: ChildToolExecutor };
   enqueueWorktreeApply: <T>(run: () => Promise<T>) => Promise<T>;
-  /** 父对话检查点上下文;传给 worktree.apply 让后端在改写父工作区前捕获前像。 */
+  /** Parent-conversation checkpoint context; passed to worktree.apply so the backend captures the before-image before rewriting the parent workspace. */
   checkpoint?: { conversationId: string; turnId: string };
   onStatus?: (status: string | null) => void;
 };
@@ -473,7 +473,7 @@ export async function executeSubagentRun(
       agentTotal: request.total,
       messageBusEnabled: env.messageBusEnabled,
     });
-    // 子代理复用同一压缩状态机：sinks 只捕获结果状态与触发运行期持久化。
+    // Subagents reuse the same compaction state machine: sinks only capture result state and trigger runtime persistence.
     const compaction = new CompactionController();
     const compactionCancellation = createTurnCancellationFromSignal(signal);
     let compactionAppliedState: ConversationViewState | null = null;
@@ -606,7 +606,7 @@ export async function executeSubagentRun(
             ? { ...context, messages: [...context.messages, busUpdateMessage] }
             : context;
 
-        // controller 内部消化非中止失败（含 prune 降级）；用户中止会原样抛出。
+        // The controller absorbs non-abort failures internally (including prune degradation); a user abort is rethrown as-is.
         compactionAppliedState = null;
         const { context: compactedContext } = await compaction.compactDuringRun({
           trigger: "post-tool",

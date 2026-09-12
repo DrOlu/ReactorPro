@@ -1,5 +1,5 @@
 export type DroppedDirectoryFile = {
-  /** 目录内相对路径（不含顶层文件夹名），正斜杠分隔。 */
+  /** Path relative to the directory (excluding the top-level folder name), separated by forward slashes. */
   relativePath: string;
   file: File;
 };
@@ -14,11 +14,11 @@ export type CollectedDropPayload = {
   directories: DroppedDirectory[];
 };
 
-/** 与桌面端网关侧的 2000 上限对齐；超限直接失败而非静默截断。 */
+/** Aligned with the desktop gateway's limit of 2000; exceeding it fails outright rather than silently truncating. */
 export const MAX_DIRECTORY_UPLOAD_FILES = 2000;
 export const MAX_DIRECTORY_UPLOAD_BYTES = 200 * 1024 * 1024;
 
-/** 拖入整个项目时这些目录既大又无导入价值，收集阶段直接剪枝。 */
+/** When an entire project is dropped in, these directories are both large and worthless to import, so they are pruned during collection. */
 const EXCLUDED_DIRECTORY_NAMES = new Set([".git", "node_modules", "__pycache__"]);
 
 const EXCLUDED_FILE_NAMES = new Set([".DS_Store", "Thumbs.db"]);
@@ -32,8 +32,8 @@ export function isExcludedFileName(name: string) {
 }
 
 /**
- * DataTransferItem 只在 drop 事件的同步阶段有效，必须先同步取出全部
- * entry 再做异步遍历。
+ * DataTransferItem is only valid during the synchronous phase of the drop event,
+ * so all entries must be taken synchronously before any asynchronous traversal.
  */
 export function snapshotDroppedEntries(dataTransfer: DataTransfer): FileSystemEntry[] {
   const entries: FileSystemEntry[] = [];
@@ -96,7 +96,7 @@ function readAllDirectoryEntries(directory: FileSystemDirectoryEntry): Promise<F
   return new Promise((resolve, reject) => {
     const collected: FileSystemEntry[] = [];
     const readBatch = () => {
-      // readEntries 每次最多返回 100 条，必须循环读到空批为止。
+      // readEntries returns at most 100 entries per call, so it must be looped until an empty batch.
       reader.readEntries((batch) => {
         if (batch.length === 0) {
           resolve(collected);
@@ -151,8 +151,9 @@ async function collectDirectoryFiles(
 }
 
 /**
- * 把 drop 快照展开成顶层文件与文件夹树。文件夹内文件数超过
- * MAX_DIRECTORY_UPLOAD_FILES 时抛出 `TOO_MANY_FILES:<max>` 错误。
+ * Expands a drop snapshot into top-level files and a folder tree. Throws a
+ * `TOO_MANY_FILES:<max>` error when a folder contains more than
+ * MAX_DIRECTORY_UPLOAD_FILES files.
  */
 export async function collectDroppedPayload(
   entries: readonly FileSystemEntry[],

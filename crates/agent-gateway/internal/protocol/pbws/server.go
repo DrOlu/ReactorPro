@@ -1,7 +1,9 @@
-// Package pbws 实现 v2 统一线协议（WebSocket+Protobuf）服务端的三条链路（见 proto/v2/gateway_ws.proto）：
-// /ws/v2 浏览器直通、/ws/v2/agent 桌面端信封流、/ws/v2/terminal 终端数据面。
-// 本包只做帧编解码、鉴权握手、直通白名单与事件扇出；会话状态复用 session，
-// 传输运行时复用 wscore，跨协议域逻辑复用 shared 与 chatcmd。
+// Package pbws implements the three links of the v2 unified wire protocol (WebSocket+Protobuf)
+// server (see proto/v2/gateway_ws.proto): /ws/v2 browser passthrough, /ws/v2/agent desktop envelope
+// stream, and /ws/v2/terminal terminal data plane.
+// This package only does frame encoding/decoding, auth handshake, passthrough whitelisting, and
+// event fan-out; session state reuses session, the transport runtime reuses wscore, and cross-
+// protocol-domain logic reuses shared and chatcmd.
 package pbws
 
 import (
@@ -20,40 +22,48 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// Subprotocol 是 v2 的 WebSocket 子协议名；服务端必须回显，否则浏览器主动断开握手。
+// Subprotocol is the v2 WebSocket subprotocol name; the server must echo it, otherwise the browser
+// actively aborts the handshake.
 const Subprotocol = "liveagent.v2.pb"
 
-// ProtocolVersion 是本包实现的协议版本号（ClientHello.protocol_version）。
+// ProtocolVersion is the protocol version implemented by this package (ClientHello.protocol_version).
 const ProtocolVersion = 2
 
-// closeCodeUnauthorized 是鉴权失败时的自定义关闭码（4000-4999 为应用保留段）。
+// closeCodeUnauthorized is the custom close code for authentication failure (4000-4999 is the
+// application-reserved range).
 const closeCodeUnauthorized = 4401
 
-// 加固上限：单个连接（bug 或凭证被盗）的损害必须被限制在该连接内，不能升级成
-// 全网关故障。并发连接上限已改为配置项（config.DefaultMax*Connections 为默认值），
-// 以下为每连接粒度的固定值，与总台数无关。
+// Hardening limits: the damage from a single connection (a bug or a stolen credential) must be
+// confined to that connection and must not escalate into a whole-gateway failure. The concurrent
+// connection limits have become config items (config.DefaultMax*Connections are the defaults);
+// the values below are fixed per-connection values, independent of the total count.
 const (
-	// 每浏览器连接在途派发上限：直通请求可在 AwaitUnaryResponse 上阻塞至
-	// requestTimeout（默认 2 分钟），无上限时重试风暴即 goroutine 泄漏。
+	// In-flight dispatch limit per browser connection: passthrough requests can block on
+	// AwaitUnaryResponse until requestTimeout (2 minutes by default), and without a limit a retry
+	// storm is a goroutine leak.
 	maxInflightDispatches = 16
 
-	// 浏览器链路入站限速（帧/秒）：正常 webui 远低于此，不误伤。
+	// Browser-link inbound rate limit (frames/second): a normal webui is far below this, so there
+	// are no false positives.
 	browserInboundFramesPerSecond = 100
 	browserInboundBurst           = 200
 	browserRateLimitMaxViolations = 3
 
-	// 读限额按链路收紧：浏览器控制帧合法场景仅数百 KB，64 MiB 上限是内存放大
-	// 攻击面；Agent 链路维持配置值（上传需要）。
+	// Read limits are tightened per link: legitimate browser control frames are only a few hundred KB,
+	// so the 64 MiB limit is a memory-amplification attack surface; the Agent link keeps the config
+	// value (needed for uploads).
 	browserReadLimit         = 4 << 20
 	terminalBrowserReadLimit = 1 << 20
 	terminalAgentReadLimit   = 16 << 20
 )
 
-// Server 聚合三条 v2 链路的依赖，由 http 路由层构造一次、复用于全部连接。
+// Server aggregates the dependencies of the three v2 links; the http routing layer constructs it
+// once and reuses it for all connections.
 type Server struct {
 	cfg *config.Config
 	sm  *session.Manager
-	// tokens 是每 Agent 凭证存储；生产网关启动时始终非 nil，nil 仅供轻量测试构造。
+	// tokens is the per-Agent credential store; it is always non-nil when a production gateway starts,
+	// and nil is only for lightweight test construction.
 	tokens *agenttoken.Store
 
 	agentConns    atomic.Int64
@@ -61,12 +71,14 @@ type Server struct {
 	terminalConns atomic.Int64
 }
 
-// NewServer 构造 v2 协议服务端；tokens 传 nil 仅用于不涉及持久化的单元测试。
+// NewServer constructs the v2 protocol server; passing nil for tokens is only for unit tests that do
+// not involve persistence.
 func NewServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store) *Server {
 	return &Server{cfg: cfg, sm: sm, tokens: tokens}
 }
 
-// acquireConnSlot 在升级前占用一个连接槽位；超限返回 false（调用方回 503）。
+// acquireConnSlot occupies a connection slot before upgrade; returns false when over the limit (the
+// caller responds 503).
 func acquireConnSlot(counter *atomic.Int64, limit int64) (func(), bool) {
 	if counter.Add(1) > limit {
 		counter.Add(-1)
@@ -80,8 +92,9 @@ func acquireConnSlot(counter *atomic.Int64, limit int64) (func(), bool) {
 	}, true
 }
 
-// 三条链路的并发连接上限：取配置值，未配置回落默认（Load 已兜底，此处再防
-// 测试直接构造 Config 的零值）。
+// Concurrent connection limits for the three links: take the config value, falling back to the
+// default when unset (Load already provides a fallback; this additionally guards against tests
+// constructing a zero-value Config directly).
 func (s *Server) maxAgentConnections() int64 {
 	if s.cfg != nil && s.cfg.MaxAgentConnections > 0 {
 		return int64(s.cfg.MaxAgentConnections)
@@ -112,7 +125,8 @@ func (s *Server) upgrader() websocket.Upgrader {
 	}
 }
 
-// readLimit 复用 MaxMessageBytes 配置（历史命名保留，语义为消息大小上限）。
+// readLimit reuses the MaxMessageBytes config (the historical name is kept; its semantics are the
+// message size limit).
 func (s *Server) readLimit() int64 {
 	if s.cfg != nil && s.cfg.MaxMessageBytes > 0 {
 		return int64(s.cfg.MaxMessageBytes)
@@ -141,7 +155,7 @@ func (s *Server) requestTimeout() time.Duration {
 	return 2 * time.Minute
 }
 
-// errorMessage 把内部错误映射为对客户端友好的信息。
+// errorMessage maps internal errors to client-friendly messages.
 func errorMessage(err error) string {
 	if err == nil {
 		return "request failed"
@@ -158,7 +172,7 @@ func errorMessage(err error) string {
 	return err.Error()
 }
 
-// writeDirectMessage 在写泵启动前（握手阶段）直接写出一条二进制帧。
+// writeDirectMessage writes one binary frame directly before the write pump starts (handshake phase).
 func writeDirectMessage(conn *websocket.Conn, timeout time.Duration, msg proto.Message) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {

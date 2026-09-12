@@ -159,9 +159,10 @@ impl GatewayController {
             tauri::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(GATEWAY_CHAT_LEASE_SWEEP_INTERVAL).await;
-                    // 未连上网关时这些 tick 什么也做不成（inbox 只有远端会写、
-                    // 租约只服务远端会话），但每条都要抢锁扫一遍。这条循环在未配置
-                    // 网关的机器上也常驻，所以先按 online 收敛。
+                    // When the gateway is not connected these ticks can accomplish nothing (only
+                    // the remote writes the inbox, and leases only serve remote sessions), yet each
+                    // one still grabs a lock and scans. This loop also runs persistently on
+                    // machines without a configured gateway, so converge on online first.
                     if !controller.status().online {
                         continue;
                     }
@@ -185,8 +186,9 @@ impl GatewayController {
             tauri::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(GATEWAY_RUNTIME_STATUS_REPUBLISH_INTERVAL).await;
-                    // 离线时发送本身就是 no-op，但快照构造 + protobuf 编码照旧执行。
-                    // 这条循环同样在未配置网关时常驻，先按 online 收敛掉。
+                    // When offline, sending is itself a no-op, but snapshot construction +
+                    // protobuf encoding still run. This loop likewise runs persistently when no
+                    // gateway is configured, so converge it away on online first.
                     if !controller.status().online {
                         continue;
                     }
@@ -391,11 +393,7 @@ impl GatewayController {
             return Ok(());
         }
 
-        // The cached/browser-visible snapshot remains redacted. Only the
-        // authenticated desktop-to-Gateway envelope receives the raw STT
-        // sidecar, which Gateway consumes before broadcasting the snapshot.
-        let outbound = attach_current_stt_secret_sync(snapshot).await?;
-        let envelope = build_settings_sync_envelope(outbound)?;
+        let envelope = build_settings_sync_envelope(snapshot)?;
         self.send_agent_envelope(envelope).await
     }
 }

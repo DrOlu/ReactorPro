@@ -243,11 +243,11 @@ test("subtool rows carry per-tool timing and fall back to the step span for lega
           startedAt: BASE + 100,
           endedAt: BASE + 800,
           tools: [
-            // 新数据：工具自身有起止。
+            // New data: the tool itself has start and end.
             { callId: "t-own", name: "Grep", isError: false, startedAt: BASE + 120, endedAt: BASE + 200 },
-            // 新数据：有起点无终点（崩溃遗留）→ 时长为空，不借用 step 终点。
+            // New data: has a start but no end (left over from a crash) -> duration is empty; do not borrow the step's end.
             { callId: "t-open", name: "Bash", isError: false, startedAt: BASE + 300, endedAt: null },
-            // 旧数据：无任何时间字段 → 回退 step 跨度。
+            // Old data: no time fields at all -> fall back to the step span.
             { callId: "t-legacy", name: "Read", isError: false },
           ],
         },
@@ -320,7 +320,7 @@ test("duration projection removes idle gaps between operations", () => {
   const turns = layoutOf([
     { k: "step_start", t: 1, s: 1, at: BASE },
     { k: "step_end", t: 1, s: 1, at: BASE + 100, st: "complete" },
-    // 200ms 空转后才有下一步：压缩后这段间隙必须消失。
+    // The next step only appears after 200ms of idling: this gap must disappear after compaction.
     { k: "step_start", t: 1, s: 2, at: BASE + 300 },
     { k: "step_end", t: 1, s: 2, at: BASE + 400, st: "complete" },
     { k: "turn_end", t: 1, at: BASE + 400, st: "complete" },
@@ -351,7 +351,7 @@ test("parallel tools in one step get separate rows in duration mode", () => {
   assert.notEqual(tools[0].row, tools[1].row);
   assert.deepEqual(model.laneRows, [1, 1, 2]);
 
-  // sequence 模式每条记录独占单位区间，同泳道不重叠 → 恒一行。
+  // In sequence mode each record occupies its own unit interval and does not overlap within a lane -> always one row.
   const sequence = deriveTrajectoryTimeline(turns, "sequence");
   assert.deepEqual(sequence.laneRows, [1, 1, 1]);
 });
@@ -380,7 +380,7 @@ test("duration projection reports the idle gaps it compressed", () => {
     { k: "turn_end", t: 1, at: BASE + 400, st: "complete" },
   ]);
   const model = deriveTrajectoryTimeline(turns, "duration");
-  // 200ms 空转被压缩：位置 = 第一步结束的投影位置，毫秒数 = 原始间隙。
+  // The 200ms idle is compressed: position = the projected position where the first step ends, milliseconds = the original gap.
   assert.deepEqual(model.idleGaps, [{ at: BASE + 100, ms: 200 }]);
 });
 
@@ -393,11 +393,12 @@ test("turn boundaries carry segment ends for the turn band", () => {
   const duration = deriveTrajectoryTimeline(layoutOf(twoTurnEvents()), "duration");
   assert.equal(duration.turnBoundaries.length, 2);
   const [first, second] = duration.turnBoundaries;
-  // turn 1 墙钟 209ms（user@1 → tool_end@210），压缩掉 9ms+10ms 两段间隙 → 190ms。
+  // Turn 1 wall clock 209ms (user@1 -> tool_end@210), compressing away the two gaps of 9ms+10ms -> 190ms.
   assert.equal(first.end - first.time, 190);
   assert.equal(second.end, duration.end);
-  // 回合净活跃毫秒与投影模式无关：sequence 的 time/end 是序号，差值是记录条数，
-  // 不能拿来当时长 —— activeMs 必须两模式一致，回合带数字才不会在切换模式时漂移。
+  // The turn's net active milliseconds are independent of the projection mode: sequence's
+  // time/end are ordinals whose difference is the record count and cannot be used as a duration --
+  // activeMs must be identical in both modes so the turn's numbers do not drift when switching modes.
   assert.equal(sequence.turnBoundaries.length, 2);
   assert.equal(first.activeMs, 190);
   assert.equal(second.activeMs, 90);

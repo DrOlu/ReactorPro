@@ -40,7 +40,7 @@ func (m *Manager) ingestChatEvent(agentID, requestID string, event *gatewayv2.Ch
 	streamWasUnknown := existingStream == nil ||
 		(existingStream.lastSeq == 0 && existingStream.activity == nil)
 	stream := s.streamLocked(agentID, conversationID, now)
-	// 入站事件按已认证会话身份盖章会话流归属（伪造不可能：id 来自握手）。
+	// Inbound events are stamped with the session stream ownership of the authenticated session identity (spoofing impossible: the id comes from the handshake).
 	if agentID != "" {
 		stream.agentID = agentID
 	}
@@ -188,7 +188,7 @@ func (m *Manager) ingestChatControl(agentID, requestID string, control *gatewayv
 		return
 	}
 	stream := s.streamLocked(agentID, conversationID, now)
-	// 入站事件按已认证会话身份盖章会话流归属（伪造不可能：id 来自握手）。
+	// Inbound events are stamped with the session stream ownership of the authenticated session identity (spoofing impossible: the id comes from the handshake).
 	if agentID != "" {
 		stream.agentID = agentID
 	}
@@ -303,7 +303,7 @@ func (m *Manager) ingestRuntimeSnapshot(agentID string, snapshot *gatewayv2.Chat
 	existingStream := s.streams[conversationStreamKey(agentID, conversationID)]
 	streamWasUnknown := existingStream == nil || (existingStream.lastSeq == 0 && existingStream.activity == nil)
 	stream := s.streamLocked(agentID, conversationID, now)
-	// 入站事件按已认证会话身份盖章会话流归属（伪造不可能：id 来自握手）。
+	// Inbound events are stamped with the session stream ownership of the authenticated session identity (spoofing impossible: the id comes from the handshake).
 	if agentID != "" {
 		stream.agentID = agentID
 	}

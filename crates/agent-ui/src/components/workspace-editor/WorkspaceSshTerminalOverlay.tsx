@@ -51,16 +51,18 @@ type WorkspaceSshTerminalOverlayProps = {
   onHide: () => void;
   onOpenSftpFile?: (session: TerminalSession, request: SftpOpenFileRequest) => void;
   /**
-   * 被工作台 Pane 租用的会话:shell 视口与 Pane 互斥(输出流单消费),
-   * overlay 内显示"已在画板中打开"占位。SFTP tab 不受影响——SFTP 走独立
-   * 通道,不与 XTermViewport 争夺输出流。
+   * Sessions leased by a workbench Pane: the shell viewport and the Pane are mutually exclusive
+   * (single consumer of the output stream), and the overlay shows an "already open in the canvas"
+   * placeholder. SFTP tabs are unaffected — SFTP uses a separate channel and does not compete with
+   * XTermViewport for the output stream.
    */
   paneLeasedSessionIds?: ReadonlySet<string>;
-  /** 点击占位跳转聚焦画板中的 Pane;省略时只显示占位文案。 */
+  /** Clicking the placeholder jumps to focus the Pane in the canvas; when omitted only the placeholder text is shown. */
   onFocusLeasedSession?: (sessionId: string) => void;
   /**
-   * 存在时 shell tab 可拖出到工作台画板(SFTP tab 不可拖)。pointerdown 上报,
-   * 激活阈值与点击抑制由工作台拖拽会话统一处理,tab 点击激活不受影响。
+   * When present, shell tabs can be dragged out to the workbench canvas (SFTP tabs cannot be
+   * dragged). Reported on pointerdown; the activation threshold and click suppression are handled
+   * uniformly by the workbench drag session, so tab click activation is unaffected.
    */
   onSessionTabDragStart?: (
     session: TerminalSession,
@@ -408,7 +410,7 @@ export function WorkspaceSshTerminalOverlay(props: WorkspaceSshTerminalOverlayPr
               onPointerDown={
                 onSessionTabDragStart && tab.kind !== "sftp"
                   ? (event) => {
-                      // 触控仍用于滚动 tab 条;拖出仅响应鼠标/笔主键。
+                      // Touch is still used to scroll the tab strip; dragging out responds only to the primary mouse/pen button.
                       if (event.button !== 0 || event.pointerType === "touch") return;
                       onSessionTabDragStart(session, {
                         pointerId: event.pointerId,

@@ -77,25 +77,25 @@ test("external-link dialog saves only on checked confirmation and bypasses all m
 
   await click(button("First"));
   assert.ok(dialog());
-  assert.equal(dialog().querySelector('[data-slot="dialog-title"]').textContent, "打开外部链接");
+  assert.equal(dialog().querySelector('[data-slot="dialog-title"]').textContent, "Open external link");
   assert.equal(checkbox().getAttribute("aria-checked"), "false");
   await click(checkbox());
-  await click(button("复制链接"));
+  await click(button("Copy link"));
   assert.deepEqual(copied, ["https://example.com/first"]);
   assert.equal(localStorage.getItem(storageKey), null);
-  await click(document.querySelector('[aria-label="关闭"]'));
+  await click(document.querySelector('[aria-label="Close"]'));
   assert.equal(localStorage.getItem(storageKey), null);
 
   await click(button("First"));
   assert.equal(checkbox().getAttribute("aria-checked"), "false");
-  await click(button("打开链接"));
+  await click(button("Open link"));
   assert.deepEqual(opened, ["https://example.com/first"]);
   assert.equal(localStorage.getItem(storageKey), null);
 
   await click(button("Second"));
   assert.ok(dialog());
   await click(checkbox());
-  await click(button("打开链接"));
+  await click(button("Open link"));
   assert.equal(localStorage.getItem(storageKey), "true");
   await click(button("First"));
   assert.equal(dialog(), null);

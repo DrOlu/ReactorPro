@@ -102,7 +102,7 @@ test("releaseForPane releases only the lease held by that pane and is idempotent
 
 test("releaseOrphanTerminalPaneLeases reclaims leases whose pane left the layout", () => {
   const store = createTerminalPaneLeaseStore();
-  // drop 事务同步占约后 Pane 在宿主挂载前被关闭:租约无人持有 release。
+  // The pane is closed before the host mounts after the drop transaction synchronously reserves the lease: no one holds the lease to release.
   store.acquire("session-orphan", "pane-closed");
   store.acquire("session-live", "pane-live");
   releaseOrphanTerminalPaneLeases(store, {
@@ -110,7 +110,7 @@ test("releaseOrphanTerminalPaneLeases reclaims leases whose pane left the layout
   });
   assert.equal(store.paneIdFor("session-orphan"), null, "orphan lease must be reclaimed");
   assert.equal(store.paneIdFor("session-live"), "pane-live", "held lease must survive");
-  // 布局未变时对账是无副作用的幂等操作。
+  // Reconciliation when the layout is unchanged is an idempotent operation with no side effects.
   const snapshot = store.leasedSessionIds();
   releaseOrphanTerminalPaneLeases(store, {
     panes: { "pane-live": { paneId: "pane-live" } },

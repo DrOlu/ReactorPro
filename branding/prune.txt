@@ -1,0 +1,21 @@
+# Paths ReactorPro intentionally removes. The upstream sync workflow deletes
+# these after merging, so an upstream change cannot silently restore them.
+# One repo-relative path or directory per line. Lines starting with # are ignored.
+
+# Chinese-language README (the project is English-only).
+README.zh-CN.md
+
+# Speech-to-text feature and its Chinese cloud providers.
+crates/agent-gateway/internal/stt
+crates/agent-gui/src-tauri/src/services/stt
+crates/agent-gui/src-tauri/src/commands/config/settings/stt.rs
+crates/agent-ui/src/lib/stt
+crates/agent-ui/src/pages/settings/SttSection.tsx
+crates/agent-ui/src/pages/chat/useComposerStt.ts
+crates/agent-gui/src/lib/stt
+crates/agent-gui/test/chat/composer-stt-lifecycle.test.mjs
+crates/agent-gui/test/chat/stt-audio.test.mjs
+crates/agent-gui/test/settings/stt-settings.test.mjs
+crates/agent-gateway/web/src/lib/stt
+crates/agent-gateway/internal/session/manager_settings_sync_stt_test.go
+docs/stt-mvp-acceptance.md

@@ -1,11 +1,11 @@
-// Web 端 Session Workbench 拖拽合同测试：
-// 1) 模型层——Web 与桌面共用同一拖拽状态机/终端 drop 事务；这里验证 Web 的
-//    窗口级单例(可恢复绑定表 + 内存租约)与共享事务的组合语义:既有会话拖入先写
-//    绑定再开 Pane、重复拖入只移动/聚焦、关 Pane(Detach)后绑定可回收。
-// 2) 源码断言——useGatewayWorkbench 按桌面同一口径接线:提交前 CAS 校验布局
-//    修订号、workspace 拖拽以创建结果返回的草稿 id 原子开新 Pane、终端 Pane
-//    关闭回收绑定、`closed` 事件联动关 Pane;视图层装上 dropPreview、拖拽
-//    幽灵、Pane 拖动把手与侧栏/Right Dock 拖拽入口。
+// Web-side Session Workbench drag contract tests:
+// 1) Model layer — Web and Desktop share the same drag state machine / terminal drop transaction; here we verify the Web
+//    window-level singleton (recoverable binding table + in-memory lease) and its combined semantics with the shared transaction: dragging in an existing session first writes
+//    the binding then opens a Pane, a repeated drag only moves/focuses, and after closing the Pane (Detach) the binding can be reclaimed.
+// 2) Source assertions — useGatewayWorkbench is wired by the same contract as Desktop: CAS-validate the layout
+//    revision before submit, a workspace drag atomically opens a new Pane with the draft id returned by the create result, a terminal Pane
+//    close reclaims the binding, and the `closed` event closes the Pane in response; the view layer installs dropPreview, the drag
+//    ghost, the Pane drag handle and the sidebar / Right Dock drag entry points.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -89,7 +89,7 @@ function singlePaneLayout(paneId = "pane-a") {
 }
 
 // ---------------------------------------------------------------------------
-// 模型层:Web 单例 + 共享 drop 事务
+// Model layer: Web singleton + shared drop transaction
 // ---------------------------------------------------------------------------
 
 test("web terminal pane runtime exposes the same binding contract as desktop", () => {
@@ -98,7 +98,7 @@ test("web terminal pane runtime exposes the same binding contract as desktop", (
   assert.equal(gatewayTerminalPaneBindings.get("surface-mem"), "session-mem");
   gatewayTerminalPaneBindings.delete("surface-mem");
   assert.equal(gatewayTerminalPaneBindings.get("surface-mem"), null);
-  // Node 环境无 window/sessionStorage 时共享 store 会安全降级为内存实现。
+  // When the Node environment has no window/sessionStorage, the shared store safely degrades to an in-memory implementation.
 });
 
 test("Web starts from a single-pane homepage and keeps terminal bindings in memory", () => {
@@ -181,7 +181,7 @@ test("dropping an existing dock session binds first, then opens the pane", () =>
       createSurfaceId: () => "surface-1",
       authorizeAutoLaunch: () => {},
       openTerminalSurface: (surface, target) => {
-        // 开 Pane 时绑定必须已就位,宿主挂载即可复用会话而不是新建 PTY。
+        // The binding must already be in place when the Pane opens, so the host mount can reuse the session instead of creating a new PTY.
         assert.equal(bindings.get(surface.surfaceId), "session-1");
         opened.push({ surface, target });
         return { paneId: "pane-b" };
@@ -195,7 +195,7 @@ test("dropping an existing dock session binds first, then opens the pane", () =>
   assert.deepEqual(result, { action: "opened", paneId: "pane-b", surfaceId: "surface-1" });
   assert.equal(opened.length, 1);
   assert.equal(opened[0].surface.kind, "localTerminal");
-  // 租约必须在 drop 事务里同步占住,这样 Right Dock 同一次渲染就会卸视口。
+  // The lease must be taken synchronously within the drop transaction, so the Right Dock unmounts the viewport in the same render.
   assert.equal(lease.paneIdFor("session-1"), "pane-b");
 });
 
@@ -260,10 +260,10 @@ test("sidebar payloads auto-dock instead of overwriting a pane center", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 源码断言:useGatewayWorkbench 的接线口径
+// Source assertions: the wiring contract of useGatewayWorkbench
 // ---------------------------------------------------------------------------
 
-/** 从标记处截到该 hook/callback 的依赖数组收尾(`]);` 或多行 `],\n  );`),不锚定行号。 */
+/** Slice from the marker to the end of that hook/callback dependency array (`]);` or the multi-line `],\n  );`), without anchoring to line numbers. */
 function blockFrom(source, marker) {
   const start = source.indexOf(marker);
   assert.notEqual(start, -1, `marker not found: ${marker}`);
@@ -356,7 +356,7 @@ test("an explicit dock close cascades to the leased pane via the closed event", 
 });
 
 // ---------------------------------------------------------------------------
-// 源码断言:视图层装上拖拽入口
+// Source assertions: the view layer installs the drag entry points
 // ---------------------------------------------------------------------------
 
 test("the canvas renders the drop preview and the drag ghost from dragState", () => {
@@ -385,7 +385,7 @@ test("terminal panes render through the gateway terminal pane host", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 源码断言:会话 Pane 与桌面端同一宿主模型
+// Source assertions: the session Pane uses the same host model as Desktop
 // ---------------------------------------------------------------------------
 
 const hostSource = readFileSync(

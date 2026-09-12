@@ -42,9 +42,9 @@ const chatStylesSource = fs.readFileSync(
 
 test("tool and operation blocks share the same compact rhythm as prose", () => {
   assert.match(roundContentSource, /const isOperationBlock = block\.kind !== "text";/);
-  // 行距已收归工作轨迹容器（AssistantWorkTrace 的 space-y-2）：此前由
-  // RoundContent 的 my-1 加上各行自带的 pb-1 拼出，四种行类型凑出的间隙
-  // 并不相等。包装层现在不再贡献任何外边距。
+  // Row spacing is now centralized in the work-trace container (AssistantWorkTrace's space-y-2): previously it
+  // was assembled from RoundContent's my-1 plus each row's own pb-1, so the gaps produced by the four row types
+  // were not equal. The wrapper layer now contributes no margin at all.
   assert.doesNotMatch(roundContentSource, /my-1/);
   assert.doesNotMatch(roundContentSource, /standalone/);
   assert.match(roundContentSource, /data-assistant-operation=\{isOperationBlock \? "" : undefined\}/);

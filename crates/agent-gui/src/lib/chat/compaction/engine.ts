@@ -31,7 +31,7 @@ export function createSyntheticContinueUserMessage(
   return {
     role: "user",
     id: `user-${createUuid()}`,
-    // 必须与 conversationState 的常量逐字节一致：normalizeSegment 依赖它过滤持久化。
+    // Must match the conversationState constant byte-for-byte: normalizeSegment relies on it to filter persistence.
     content: INTERNAL_RESUME_MESSAGE_TEXT,
     timestamp,
   };
@@ -56,8 +56,9 @@ function buildCheckpointMessage(params: {
     stopReason: "stop",
     timestamp: params.timestamp,
     responseId: params.responseId || `liveagent-compaction-${params.timestamp}-${createUuid()}`,
-    // checkpoint 消息自身的 usage 恒为零：summarizer 请求的真实用量走 compactionStats，
-    // 绝不冒充会话上下文规模（旧实现的 usage 污染即源于此）。
+    // The checkpoint message's own usage is always zero: the summarizer request's real usage goes
+    // through compactionStats and never masquerades as the conversation context size (the old
+    // implementation's usage pollution stemmed from this).
     usage: {
       input: 0,
       output: 0,
@@ -74,9 +75,9 @@ function buildCheckpointMessage(params: {
 }
 
 /**
- * 执行一次完整压缩：payload 构建 → 预算裁剪 → 摘要（含恢复）→ 校验 →
- * 零 usage checkpoint 消息 → 追加新 segment。无决策、无状态标记、无持久化——
- * 那些属于 controller。
+ * Runs one full compaction: payload construction -> budget trimming -> summarization (with
+ * recovery) -> validation -> zero-usage checkpoint message -> append a new segment. No decisions,
+ * no state markers, no persistence -- those belong to the controller.
  */
 export async function runCompaction(params: {
   state: ConversationViewState;

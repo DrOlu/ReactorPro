@@ -1,8 +1,10 @@
-// WebDAV 传输层：纯 HTTP，不含任何同步编排与配置存取。
+// WebDAV transport layer: pure HTTP, with no sync orchestration or config storage.
 //
-// 只用到 WebDAV 的四个动作：PROPFIND（探测）、MKCOL（建目录）、PUT、GET。
-// 刻意不引入 WebDAV 客户端库也不解析 XML —— 各家服务器的 multistatus 响应体
-// 差异极大，而本功能只需要「目录是否存在」这个布尔判断，看状态码就够了。
+// Only four WebDAV actions are used: PROPFIND (probe), MKCOL (create directory),
+// PUT, and GET. We deliberately avoid a WebDAV client library and do not parse
+// XML -- the multistatus response bodies differ wildly between servers, and this
+// feature only needs the boolean "does the directory exist", so the status code
+// is enough.
 
 use std::time::Duration;
 
@@ -11,15 +13,17 @@ use reqwest::{Client, Method, Response, StatusCode};
 
 use crate::services::system_proxy;
 
-/// 元数据操作（PROPFIND / MKCOL）超时。
+/// Timeout for metadata operations (PROPFIND / MKCOL).
 const WEBDAV_META_TIMEOUT: Duration = Duration::from_secs(30);
-/// 传输操作（PUT / GET）超时。载荷小但用户网络可能很慢。
+/// Timeout for transfer operations (PUT / GET). Payloads are small, but the user's
+/// network may be very slow.
 const WEBDAV_TRANSFER_TIMEOUT: Duration = Duration::from_secs(300);
 
-/// 路径段需要转义的字符集。
+/// Character set that path segments need to escape.
 ///
-/// 不能用 `NON_ALPHANUMERIC`：它会把 `-` `_` `.` `~` 也编码，虽然合法但会让
-/// 远端文件名变得难认。这里只转义 RFC 3986 的分隔符与控制字符。
+/// `NON_ALPHANUMERIC` cannot be used: it would also encode `-` `_` `.` `~`, which
+/// is legal but makes remote file names hard to recognize. Only RFC 3986
+/// delimiters and control characters are escaped here.
 const PATH_SEGMENT_ESCAPE: &AsciiSet = &CONTROLS
     .add(b' ')
     .add(b'"')
@@ -49,27 +53,32 @@ fn method_mkcol() -> Method {
     Method::from_bytes(b"MKCOL").expect("MKCOL is a valid HTTP method token")
 }
 
-/// 构造客户端。**必须**走应用代理设置，否则用户配了代理却对 WebDAV 无效。
+/// Builds the client. It **must** go through the application proxy settings,
+/// otherwise a user-configured proxy has no effect on WebDAV.
 ///
-/// **不跟随重定向**，与 `provider_usage` / `tunnel` 的出网客户端一致。
-/// reqwest 默认 `Policy::limited(10)` 会静默吞掉 3xx，带来两类问题：
-/// 一是本文件里对 3xx 的判断（`describe_status_error` 的「地址可能不在 WebDAV
-/// 根路径下」提示、`ensure_remote_dirs` 的 may_already_exist）全部变成死代码，
-/// 用户把门户地址误填成 WebDAV 地址时，302→200 会让测试连接/MKCOL/PUT 全部
-/// 报成功而实际什么都没存；二是 307/308 会把 `config.json`（含全部明文
-/// provider API key）原样重发到一个用户从未配置过的主机。
+/// **Does not follow redirects**, consistent with the egress clients for
+/// `provider_usage` / `tunnel`. reqwest's default `Policy::limited(10)` silently
+/// swallows 3xx, causing two problems: first, all the 3xx handling in this file
+/// (`describe_status_error`'s "the address may not be at the WebDAV root path"
+/// hint, and `ensure_remote_dirs`'s may_already_exist) becomes dead code -- when a
+/// user mistakenly enters a portal address as the WebDAV address, a 302->200 makes
+/// test connection/MKCOL/PUT all report success while nothing is actually stored;
+/// second, 307/308 would resend `config.json` (containing all plaintext provider
+/// API keys) verbatim to a host the user never configured.
 fn build_client(timeout: Duration) -> Result<Client, String> {
     system_proxy::async_client_builder()?
         .redirect(reqwest::redirect::Policy::none())
         .timeout(timeout)
         .build()
-        .map_err(|_| "创建 WebDAV HTTP 客户端失败".to_string())
+        .map_err(|_| "Failed to create WebDAV HTTP client".to_string())
 }
 
-/// 拼接远端 URL：base 去尾斜杠，各段 percent-encode 后以 `/` 连接。
+/// Joins a remote URL: the base has its trailing slash removed, and each segment is
+/// percent-encoded and joined with `/`.
 ///
-/// 空段跳过，避免用户输入 `dav//backup/` 这类路径时产生双斜杠 —— 部分服务器
-/// 会把 `//` 当成不同资源，导致「上传成功但下载 404」。
+/// Empty segments are skipped, avoiding double slashes when a user enters paths
+/// like `dav//backup/` -- some servers treat `//` as a different resource, causing
+/// "upload succeeds but download returns 404".
 pub fn join_url(base: &str, segments: &[&str]) -> String {
     let mut url = base.trim_end_matches('/').to_string();
     for segment in segments {
@@ -84,21 +93,21 @@ pub fn join_url(base: &str, segments: &[&str]) -> String {
     url
 }
 
-/// 目录 URL 需带尾斜杠：多数服务器据此区分 collection 与普通资源。
+/// Directory URLs need a trailing slash: most servers use it to distinguish a collection from an ordinary resource.
 pub fn dir_url(base: &str, segments: &[&str]) -> String {
     format!("{}/", join_url(base, segments))
 }
 
-/// 日志脱敏：剥离 userinfo 与整个 query string。
+/// Log redaction: strips userinfo and the entire query string.
 ///
-/// userinfo 里可能嵌着密码（`https://user:pass@host/`），query 里可能带
-/// 一次性令牌，两者都不该进日志或错误文案。
+/// userinfo may embed a password (`https://user:pass@host/`), and the query may
+/// carry a one-time token; neither should end up in logs or error messages.
 pub fn redact_url_for_log(url: &str) -> String {
     let (scheme, rest) = match url.split_once("://") {
         Some((scheme, rest)) => (Some(scheme), rest),
         None => (None, url),
     };
-    // userinfo 只在第一个 '/' 之前的 authority 部分有效。
+    // userinfo is only valid in the authority portion before the first '/'.
     let authority_end = rest.find('/').unwrap_or(rest.len());
     let (authority, path) = rest.split_at(authority_end);
     let host = match authority.rsplit_once('@') {
@@ -112,11 +121,14 @@ pub fn redact_url_for_log(url: &str) -> String {
     }
 }
 
-/// 坚果云需要特判：它的错误码语义与通用 WebDAV 服务器不同，直接透传
-/// 状态码用户完全无法自救（尤其 401 —— 真正原因是要用应用密码而非登录密码）。
+/// Nutstore needs special handling: its error-code semantics differ from generic
+/// WebDAV servers, and passing the status code through directly leaves the user
+/// unable to recover (especially 401 -- the real cause is needing an app password
+/// rather than the login password).
 ///
-/// 国际版用的是 `dav.jianguoyun.com` 之外的 `nutstore` 域名，同一套后端、
-/// 同一套错误语义，必须一并识别，否则国际版用户只会看到通用文案。
+/// The international edition uses `nutstore` domains other than
+/// `dav.jianguoyun.com`, with the same backend and the same error semantics, so it
+/// must be recognized as well; otherwise international users only see the generic text.
 fn is_jianguoyun(url: &str) -> bool {
     let host = url
         .split_once("://")
@@ -126,64 +138,64 @@ fn is_jianguoyun(url: &str) -> bool {
         .next()
         .unwrap_or("")
         .to_ascii_lowercase();
-    // 只按域名边界匹配：`jianguoyun.com.evil.test` 不能命中。
+    // Match only on domain boundaries: `jianguoyun.com.evil.test` must not hit.
     ["jianguoyun.com", "nutstore.net", "nutstore.com"]
         .iter()
         .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
 }
 
-/// 把状态码翻成用户能照着操作的中文文案。
+/// Translates a status code into text the user can act on.
 fn describe_status_error(url: &str, status: StatusCode, action: &str) -> String {
     let jianguoyun = is_jianguoyun(url);
     match status {
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
             if jianguoyun {
-                "认证失败：坚果云要求使用「第三方应用管理」中生成的应用密码，而不是账号登录密码；同时确认服务器地址为 https://dav.jianguoyun.com/dav/".to_string()
+                "Authentication failed: Nutstore requires an app password generated in \"Third-Party App Management\", not the account login password; also make sure the server address is https://dav.jianguoyun.com/dav/".to_string()
             } else {
-                format!("认证失败（{status}）：请检查用户名与密码")
+                format!("Authentication failed ({status}): check the username and password")
             }
         }
         StatusCode::NOT_FOUND => {
             if jianguoyun {
-                "路径不存在：坚果云的 WebDAV 可写目录必须位于 /dav/ 之下，请确认服务器地址与远端目录".to_string()
+                "Path not found: Nutstore's WebDAV writable directory must be under /dav/; verify the server address and remote directory".to_string()
             } else {
-                format!("路径不存在（{status}）：请检查服务器地址与远端目录")
+                format!("Path not found ({status}): check the server address and remote directory")
             }
         }
         StatusCode::CONFLICT => {
             if jianguoyun {
-                "创建目录失败：坚果云不允许通过 WebDAV 自动创建顶层文件夹，请先在网页端手动创建该目录".to_string()
+                "Failed to create directory: Nutstore does not allow creating top-level folders automatically over WebDAV; create the directory manually in the web UI first".to_string()
             } else {
-                format!("创建目录失败（{status}）：上级目录可能不存在")
+                format!("Failed to create directory ({status}): the parent directory may not exist")
             }
         }
-        StatusCode::INSUFFICIENT_STORAGE => "远端存储空间不足".to_string(),
+        StatusCode::INSUFFICIENT_STORAGE => "Remote storage is full".to_string(),
         status if status.is_redirection() => {
             if jianguoyun {
-                format!("服务器返回重定向（{status}）：坚果云的 WebDAV 地址应为 https://dav.jianguoyun.com/dav/，请勿使用网页版地址")
+                format!("Server returned a redirect ({status}): Nutstore's WebDAV address should be https://dav.jianguoyun.com/dav/; do not use the web UI address")
             } else {
-                format!("服务器返回重定向（{status}）：地址可能不是 WebDAV 入口")
+                format!("Server returned a redirect ({status}): the address may not be a WebDAV endpoint")
             }
         }
-        status => format!("{action}失败：服务器返回 {status}"),
+        status => format!("{action} failed: server returned {status}"),
     }
 }
 
 fn map_request_error(url: &str, action: &str, error: &reqwest::Error) -> String {
     let redacted = redact_url_for_log(url);
     if error.is_timeout() {
-        return format!("{action}超时：{redacted}");
+        return format!("{action} timed out: {redacted}");
     }
     if error.is_connect() {
-        return format!("{action}失败：无法连接到 {redacted}");
+        return format!("{action} failed: cannot connect to {redacted}");
     }
-    format!("{action}失败：{redacted}")
+    format!("{action} failed: {redacted}")
 }
 
-/// PROPFIND Depth=0 探测资源是否可访问。
+/// PROPFIND Depth=0 probe for whether a resource is accessible.
 ///
-/// 不解析响应体 —— 只要服务器认了这个方法并返回 2xx 或 207，就说明地址、
-/// 凭据、可访问性都没问题。
+/// The response body is not parsed -- as long as the server accepts this method
+/// and returns 2xx or 207, the address, credentials, and accessibility are all fine.
 async fn propfind_ok(creds: &WebdavCredentials, url: &str) -> Result<bool, String> {
     let client = build_client(WEBDAV_META_TIMEOUT)?;
     let response = client
@@ -192,7 +204,7 @@ async fn propfind_ok(creds: &WebdavCredentials, url: &str) -> Result<bool, Strin
         .header("Depth", "0")
         .send()
         .await
-        .map_err(|e| map_request_error(url, "连接 WebDAV 服务器", &e))?;
+        .map_err(|e| map_request_error(url, "Connect to WebDAV server", &e))?;
 
     let status = response.status();
     if status.is_success() || status == StatusCode::MULTI_STATUS {
@@ -201,10 +213,10 @@ async fn propfind_ok(creds: &WebdavCredentials, url: &str) -> Result<bool, Strin
     if status == StatusCode::NOT_FOUND {
         return Ok(false);
     }
-    Err(describe_status_error(url, status, "连接 WebDAV 服务器"))
+    Err(describe_status_error(url, status, "Connect to WebDAV server"))
 }
 
-/// 测试连接：探测 base_url 本身可达。
+/// Tests the connection: probes whether base_url itself is reachable.
 pub async fn test_connection(creds: &WebdavCredentials) -> Result<(), String> {
     let url = dir_url(&creds.base_url, &[]);
     if propfind_ok(creds, &url).await? {
@@ -213,16 +225,18 @@ pub async fn test_connection(creds: &WebdavCredentials) -> Result<(), String> {
         Err(describe_status_error(
             &url,
             StatusCode::NOT_FOUND,
-            "连接 WebDAV 服务器",
+            "Connect to WebDAV server",
         ))
     }
 }
 
-/// 把各段按 `/` 摊平成逐级目录名，口径与 `join_url` 一致。
+/// Flattens each segment on `/` into per-level directory names, using the same
+/// rules as `join_url`.
 ///
-/// `remote_dir` 允许写成 `a/b` 这种多级路径。若按传入的**元素**迭代，`a/b`
-/// 会被当成一级，中间的 `a/` 永远不会被 MKCOL，服务器只能返回 409（上级缺失），
-/// 嵌套远端目录因此彻底不可用。
+/// `remote_dir` may be written as a multi-level path like `a/b`. If iterated by
+/// the passed **elements**, `a/b` would be treated as one level, the intermediate
+/// `a/` would never be MKCOL'd, and the server could only return 409 (missing
+/// parent), making nested remote directories completely unusable.
 fn dir_ladder<'a>(segments: &[&'a str]) -> Vec<&'a str> {
     segments
         .iter()
@@ -231,11 +245,13 @@ fn dir_ladder<'a>(segments: &[&'a str]) -> Vec<&'a str> {
         .collect()
 }
 
-/// 逐级创建目录。
+/// Creates directories level by level.
 ///
-/// 乐观 MKCOL：不先查存在性（多一轮 RTT），直接建，遇到「已存在」类错误就
-/// 用 PROPFIND 确认。405 = 方法不允许（多为已存在），409 = 上级缺失，
-/// 3xx = 服务器把已存在的 collection 重定向了 —— 三者都可能是「其实已经有了」。
+/// Optimistic MKCOL: rather than checking existence first (an extra RTT), create
+/// directly and, on an "already exists" style error, confirm with PROPFIND.
+/// 405 = method not allowed (usually already exists), 409 = missing parent,
+/// 3xx = the server redirected an already-existing collection -- all three may
+/// mean "it actually already exists".
 pub async fn ensure_remote_dirs(
     creds: &WebdavCredentials,
     segments: &[&str],
@@ -252,7 +268,7 @@ pub async fn ensure_remote_dirs(
             .basic_auth(&creds.username, Some(&creds.password))
             .send()
             .await
-            .map_err(|e| map_request_error(&url, "创建远端目录", &e))?;
+            .map_err(|e| map_request_error(&url, "Create remote directory", &e))?;
 
         let status = response.status();
         if status.is_success() {
@@ -264,15 +280,15 @@ pub async fn ensure_remote_dirs(
         if may_already_exist && propfind_ok(creds, &url).await? {
             continue;
         }
-        return Err(describe_status_error(&url, status, "创建远端目录"));
+        return Err(describe_status_error(&url, status, "Create remote directory"));
     }
     Ok(())
 }
 
-/// 流式读取响应体，边累加边检查上限。
+/// Streams the response body, checking the limit as it accumulates.
 ///
-/// 不能只信 `Content-Length`：它可以缺失，也可以撒谎。恶意或故障的服务器
-/// 用一个无限响应体就能耗尽内存。
+/// `Content-Length` cannot be trusted alone: it may be absent or lie. A malicious
+/// or malfunctioning server could exhaust memory with an unbounded response body.
 async fn read_body_capped(
     mut response: Response,
     max_bytes: usize,
@@ -282,10 +298,10 @@ async fn read_body_capped(
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|_| format!("读取{label}失败：连接中断"))?
+        .map_err(|_| format!("Failed to read {label}: connection interrupted"))?
     {
         if buffer.len() + chunk.len() > max_bytes {
-            return Err(format!("{label}超过大小上限（{max_bytes} 字节）"));
+            return Err(format!("{label} exceeds the size limit ({max_bytes} bytes)"));
         }
         buffer.extend_from_slice(&chunk);
     }
@@ -307,17 +323,18 @@ pub async fn put_bytes(
         .body(body)
         .send()
         .await
-        .map_err(|e| map_request_error(&url, "上传", &e))?;
+        .map_err(|e| map_request_error(&url, "Upload", &e))?;
 
     let status = response.status();
     if status.is_success() {
         Ok(())
     } else {
-        Err(describe_status_error(&url, status, "上传"))
+        Err(describe_status_error(&url, status, "Upload"))
     }
 }
 
-/// 下载。资源不存在返回 `Ok(None)`，供调用方区分「远端还没有备份」与真正的错误。
+/// Download. Returns `Ok(None)` when the resource does not exist, letting the
+/// caller distinguish "the remote has no backup yet" from a real error.
 pub async fn get_bytes(
     creds: &WebdavCredentials,
     segments: &[&str],
@@ -331,14 +348,14 @@ pub async fn get_bytes(
         .basic_auth(&creds.username, Some(&creds.password))
         .send()
         .await
-        .map_err(|e| map_request_error(&url, "下载", &e))?;
+        .map_err(|e| map_request_error(&url, "Download", &e))?;
 
     let status = response.status();
     if status == StatusCode::NOT_FOUND {
         return Ok(None);
     }
     if !status.is_success() {
-        return Err(describe_status_error(&url, status, "下载"));
+        return Err(describe_status_error(&url, status, "Download"));
     }
     Ok(Some(read_body_capped(response, max_bytes, label).await?))
 }
@@ -353,7 +370,7 @@ mod tests {
             join_url("https://example.com/dav/", &["liveagent", "v1"]),
             "https://example.com/dav/liveagent/v1"
         );
-        // 用户输入的重复斜杠不应产生 `//`：部分服务器视其为不同资源。
+        // Duplicate slashes entered by the user must not produce `//`: some servers treat it as a different resource.
         assert_eq!(
             join_url("https://example.com/dav", &["//liveagent//", "/v1/"]),
             "https://example.com/dav/liveagent/v1"
@@ -366,13 +383,13 @@ mod tests {
 
     #[test]
     fn dir_ladder_flattens_multi_level_segments() {
-        // remote_dir 写成 `a/b` 时必须逐级建，否则中间的 `a/` 从来没被 MKCOL 过，
-        // 服务器对 `a/b` 只会回 409。
+        // When remote_dir is written as `a/b`, each level must be created, otherwise
+        // the intermediate `a/` was never MKCOL'd and the server only returns 409 for `a/b`.
         assert_eq!(
             dir_ladder(&["a/b", "v1", "default"]),
             ["a", "b", "v1", "default"]
         );
-        // 摊平口径与 join_url 一致：空段一律丢弃。
+        // Flattening rules match join_url: empty segments are always discarded.
         assert_eq!(dir_ladder(&["//a//", "/b/"]), ["a", "b"]);
     }
 
@@ -383,15 +400,15 @@ mod tests {
             "https://example.com/dav/my%20backup"
         );
         assert_eq!(
-            join_url("https://example.com/dav", &["配置"]),
-            "https://example.com/dav/%E9%85%8D%E7%BD%AE"
+            join_url("https://example.com/dav", &["café"]),
+            "https://example.com/dav/caf%C3%A9"
         );
-        // 常见文件名字符保持可读，不被过度编码。
+        // Common filename characters stay readable and are not over-encoded.
         assert_eq!(
             join_url("https://example.com/dav", &["config-v1.2_final~x.json"]),
             "https://example.com/dav/config-v1.2_final~x.json"
         );
-        // 段内的 '?' 必须编码，否则会被当成 query 起点。
+        // A '?' inside a segment must be encoded, otherwise it is treated as the start of the query.
         assert_eq!(
             join_url("https://example.com/dav", &["a?b"]),
             "https://example.com/dav/a%3Fb"
@@ -420,7 +437,7 @@ mod tests {
             redact_url_for_log("https://example.com/dav/x"),
             "https://example.com/dav/x"
         );
-        // '@' 出现在路径里时不该被误当成 userinfo 分隔符。
+        // An '@' appearing in the path must not be mistaken for a userinfo delimiter.
         assert_eq!(
             redact_url_for_log("https://example.com/dav/a@b"),
             "https://example.com/dav/a@b"
@@ -432,48 +449,48 @@ mod tests {
     fn detects_jianguoyun_hosts() {
         assert!(is_jianguoyun("https://dav.jianguoyun.com/dav/"));
         assert!(is_jianguoyun("https://DAV.JianGuoYun.com/dav/"));
-        // 国际版走 nutstore 域名，错误语义与国内版一致。
+        // The international edition uses nutstore domains, with the same error semantics as the domestic edition.
         assert!(is_jianguoyun(
             "https://dav.jianguoyun.com.nutstore.net/dav/"
         ));
         assert!(is_jianguoyun("https://app.nutstore.net/dav/"));
         assert!(!is_jianguoyun("https://example.com/dav/"));
-        // 后缀相似但不同域的主机不应误判。
+        // Hosts with a similar suffix but a different domain must not be misidentified.
         assert!(!is_jianguoyun("https://jianguoyun.com.evil.test/dav/"));
         assert!(!is_jianguoyun("https://nutstore.net.evil.test/dav/"));
-        // 仅子串包含也不能命中。
+        // A mere substring match must not hit either.
         assert!(!is_jianguoyun("https://mynutstore.example/dav/"));
     }
 
     #[test]
     fn jianguoyun_errors_mention_app_password_and_manual_folder() {
         let url = "https://dav.jianguoyun.com/dav/liveagent/";
-        let unauthorized = describe_status_error(url, StatusCode::UNAUTHORIZED, "连接");
-        assert!(unauthorized.contains("应用密码"), "{unauthorized}");
+        let unauthorized = describe_status_error(url, StatusCode::UNAUTHORIZED, "Connect");
+        assert!(unauthorized.contains("app password"), "{unauthorized}");
 
-        let conflict = describe_status_error(url, StatusCode::CONFLICT, "创建远端目录");
-        assert!(conflict.contains("网页端手动创建"), "{conflict}");
+        let conflict = describe_status_error(url, StatusCode::CONFLICT, "Create remote directory");
+        assert!(conflict.contains("manually in the web UI"), "{conflict}");
 
-        let not_found = describe_status_error(url, StatusCode::NOT_FOUND, "下载");
+        let not_found = describe_status_error(url, StatusCode::NOT_FOUND, "Download");
         assert!(not_found.contains("/dav/"), "{not_found}");
 
-        let redirect = describe_status_error(url, StatusCode::FOUND, "连接");
+        let redirect = describe_status_error(url, StatusCode::FOUND, "Connect");
         assert!(redirect.contains("dav.jianguoyun.com"), "{redirect}");
     }
 
     #[test]
     fn generic_errors_stay_generic() {
         let url = "https://example.com/dav/";
-        let unauthorized = describe_status_error(url, StatusCode::UNAUTHORIZED, "连接");
-        assert!(!unauthorized.contains("坚果云"), "{unauthorized}");
-        assert!(unauthorized.contains("用户名与密码"), "{unauthorized}");
+        let unauthorized = describe_status_error(url, StatusCode::UNAUTHORIZED, "Connect");
+        assert!(!unauthorized.contains("Nutstore"), "{unauthorized}");
+        assert!(unauthorized.contains("username and password"), "{unauthorized}");
 
-        let storage = describe_status_error(url, StatusCode::INSUFFICIENT_STORAGE, "上传");
-        assert!(storage.contains("空间不足"), "{storage}");
+        let storage = describe_status_error(url, StatusCode::INSUFFICIENT_STORAGE, "Upload");
+        assert!(storage.contains("storage is full"), "{storage}");
 
-        // 未特别处理的状态码回落到通用文案，且带上动作名。
-        let teapot = describe_status_error(url, StatusCode::IM_A_TEAPOT, "上传");
-        assert!(teapot.contains("上传失败"), "{teapot}");
+        // Status codes without special handling fall back to generic text, including the action name.
+        let teapot = describe_status_error(url, StatusCode::IM_A_TEAPOT, "Upload");
+        assert!(teapot.contains("Upload failed"), "{teapot}");
     }
 
     #[test]
@@ -485,34 +502,35 @@ mod tests {
             StatusCode::CONFLICT,
             StatusCode::IM_A_TEAPOT,
         ] {
-            let message = describe_status_error(url, status, "上传");
+            let message = describe_status_error(url, status, "Upload");
             assert!(!message.contains("s3cret"), "{message}");
             assert!(!message.contains("token=abc"), "{message}");
         }
     }
 
-    /// 真实服务器联通性测试。**默认不跑**（`#[ignore]`）。
+    /// Real-server connectivity test. **Not run by default** (`#[ignore]`).
     ///
-    /// 凭据只从环境变量读，永不落进仓库：
+    /// Credentials are read only from environment variables and never land in the repo:
     /// ```text
     /// LIVEAGENT_WEBDAV_URL=https://dav.jianguoyun.com/dav/ \
     /// LIVEAGENT_WEBDAV_USER=... \
     /// LIVEAGENT_WEBDAV_PASS=... \
     /// cargo test --lib services::webdav::tests::live -- --ignored --nocapture
     /// ```
-    /// 三个变量缺任一即跳过，避免在 CI 上变成失败。
+    /// If any of the three variables is missing, it is skipped, avoiding failures on CI.
     ///
-    /// 四段合成一个用例而不是四个：它们共用同一个远端目录，并行跑会互相踩踏
-    /// （建目录/写文件/删文件的顺序不确定）。
+    /// The four stages are combined into one test case rather than four: they share
+    /// the same remote directory, and running them in parallel would trample each
+    /// other (the order of creating directories / writing files / deleting files is undefined).
     #[tokio::test]
-    #[ignore = "需要真实 WebDAV 账号，通过 LIVEAGENT_WEBDAV_* 环境变量提供"]
+    #[ignore = "requires a real WebDAV account, provided via LIVEAGENT_WEBDAV_* environment variables"]
     async fn live_webdav_end_to_end() {
         let (Ok(base_url), Ok(username), Ok(password)) = (
             std::env::var("LIVEAGENT_WEBDAV_URL"),
             std::env::var("LIVEAGENT_WEBDAV_USER"),
             std::env::var("LIVEAGENT_WEBDAV_PASS"),
         ) else {
-            eprintln!("跳过：未设置 LIVEAGENT_WEBDAV_URL / _USER / _PASS");
+            eprintln!("Skipped: LIVEAGENT_WEBDAV_URL / _USER / _PASS not set");
             return;
         };
 
@@ -522,38 +540,39 @@ mod tests {
             password,
         };
 
-        // ① 测试连接成功（AC6 正向）
+        // (1) Test connection succeeds (AC6 positive)
         test_connection(&creds)
             .await
-            .expect("test_connection 应成功");
-        eprintln!("① test_connection: ok");
+            .expect("test_connection should succeed");
+        eprintln!("(1) test_connection: ok");
 
-        // ② 错误密码走到坚果云特判文案（AC6 反向 + 错误映射）
+        // (2) A wrong password hits the Nutstore special-case text (AC6 negative + error mapping)
         let bad = WebdavCredentials {
             password: "definitely-not-the-password".to_string(),
             ..creds.clone()
         };
-        let err = test_connection(&bad).await.expect_err("错误密码应认证失败");
-        assert!(err.contains("认证失败"), "{err}");
+        let err = test_connection(&bad).await.expect_err("a wrong password should fail authentication");
+        assert!(err.contains("Authentication failed"), "{err}");
         assert!(
             !err.contains("definitely-not-the-password"),
-            "错误文案不得回显凭据：{err}"
+            "the error text must not echo credentials: {err}"
         );
-        eprintln!("② 错误密码: {err}");
+        eprintln!("(2) wrong password: {err}");
 
-        // ③ 建目录 → PUT → GET 往返（AC8/AC9 的传输基础）
+        // (3) Create directory -> PUT -> GET round trip (transport basis for AC8/AC9)
         let dir = format!("liveagent-livetest-{}", std::process::id());
         ensure_remote_dirs(&creds, &[&dir])
             .await
-            .expect("ensure_remote_dirs 应成功");
-        // 重复调用必须幂等（走 MKCOL 405/409 → PROPFIND 回落这条分支）
+            .expect("ensure_remote_dirs should succeed");
+        // Repeated calls must be idempotent (exercising the MKCOL 405/409 -> PROPFIND fallback branch)
         ensure_remote_dirs(&creds, &[&dir])
             .await
-            .expect("ensure_remote_dirs 应幂等");
-        eprintln!("③ ensure_remote_dirs（含幂等重试）: ok");
+            .expect("ensure_remote_dirs should be idempotent");
+        eprintln!("(3) ensure_remote_dirs (with idempotent retry): ok");
 
-        // 载荷刻意含中文：验证 UTF-8 字节在 PUT/GET 往返中不被服务器改写。
-        let body = r#"{"hello":"webdav","zh":"中文"}"#.as_bytes().to_vec();
+        // Payload deliberately contains non-ASCII characters: verify UTF-8 bytes are
+        // not rewritten by the server across the PUT/GET round trip.
+        let body = r#"{"hello":"webdav","utf8":"café"}"#.as_bytes().to_vec();
         put_bytes(
             &creds,
             &[&dir, "probe.json"],
@@ -561,19 +580,20 @@ mod tests {
             "application/json",
         )
         .await
-        .expect("put_bytes 应成功");
-        let fetched = get_bytes(&creds, &[&dir, "probe.json"], 1024 * 1024, "探针")
+        .expect("put_bytes should succeed");
+        let fetched = get_bytes(&creds, &[&dir, "probe.json"], 1024 * 1024, "probe")
             .await
-            .expect("get_bytes 应成功")
-            .expect("刚上传的文件必须存在");
-        assert_eq!(fetched, body, "下行字节必须与上行完全一致");
-        eprintln!("④ put/get 往返 {} 字节: 一致", body.len());
+            .expect("get_bytes should succeed")
+            .expect("the file just uploaded must exist");
+        assert_eq!(fetched, body, "downloaded bytes must exactly match uploaded bytes");
+        eprintln!("(4) put/get round trip {} bytes: identical", body.len());
 
-        // ④ 缺失文件返回 Ok(None) 而不是 Err —— 「远端还没有备份」的判定基础
-        let missing = get_bytes(&creds, &[&dir, "no-such-file.json"], 1024, "探针")
+        // (5) A missing file returns Ok(None), not Err -- the basis for deciding
+        // "the remote has no backup yet"
+        let missing = get_bytes(&creds, &[&dir, "no-such-file.json"], 1024, "probe")
             .await
-            .expect("404 不应报错");
-        assert!(missing.is_none(), "缺失文件应返回 Ok(None)");
-        eprintln!("⑤ 缺失文件: Ok(None)");
+            .expect("404 should not error");
+        assert!(missing.is_none(), "a missing file should return Ok(None)");
+        eprintln!("(5) missing file: Ok(None)");
     }
 }

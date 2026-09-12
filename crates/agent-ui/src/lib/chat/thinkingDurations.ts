@@ -1,8 +1,8 @@
-// Reasoning blocks carry no timing metadata from providers, so "思考了 Xs" is
+// Reasoning blocks carry no timing metadata from providers, so "Thought for Xs" is
 // measured client-side while a segment streams. State lives at module scope,
 // keyed by the transcript entry key, so it survives virtualization unmounts
 // mid-run; after an app reload the header simply falls back to the untimed
-// "思考过程" label. Both maps are idempotent per key, which lets renderers
+// "Thinking" label. Both maps are idempotent per key, which lets renderers
 // call resolveThinkingDurationMs during render (StrictMode double-render safe).
 
 const MAX_TRACKED_SEGMENTS = 512;

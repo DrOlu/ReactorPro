@@ -117,7 +117,7 @@ test("live work trace keeps reasoning entries with their streaming flag", () => 
       {
         round: 1,
         key: "r1",
-        blocks: [{ kind: "thinking", id: "thinking-1", text: "检查当前请求" }],
+        blocks: [{ kind: "thinking", id: "thinking-1", text: "Checking current request" }],
         runningToolCallIds: [],
         thinkingOpen: true,
       },
@@ -128,7 +128,7 @@ test("live work trace keeps reasoning entries with their streaming flag", () => 
     reasoningEntries.map((entry) => entry.block.kind),
     ["thinking"],
   );
-  assert.equal(reasoningEntries[0].block.text, "检查当前请求");
+  assert.equal(reasoningEntries[0].block.text, "Checking current request");
   assert.equal(reasoningEntries[0].thinkingOpen, true);
   assert.equal(resolveActiveThinkingEntryKey(reasoningEntries), reasoningEntries[0].key);
 
@@ -413,8 +413,9 @@ test("assistant rounds hide task tools while preserving grouped top-level render
     ["hostedSearchGroup"],
   );
   assert.equal(footerRows(snapshot).length, 1);
-  // 头像已整体退役，行模型不再携带 showAvatar；显式断言字段消失，
-  // 否则 !undefined === true 会让旧断言空洞地通过。
+  // Avatars have been retired entirely and the row model no longer carries
+  // showAvatar; explicitly assert the field is gone, otherwise
+  // !undefined === true would let the old assertion pass vacuously.
   assert.equal("showAvatar" in workTraceRows(snapshot)[0], false);
 });
 
@@ -831,7 +832,7 @@ test("the work trace flags a final answer only once the turn has settled with on
     key: "r1",
     blocks: [
       { kind: "tool", item: toolItem },
-      { kind: "text", id: "text-1", text: "进度说明" },
+      { kind: "text", id: "text-1", text: "Progress note" },
     ],
     runningToolCallIds: [],
     thinkingOpen: false,
@@ -1047,23 +1048,25 @@ test("a status-only live tail (idle manual compaction) closes without a stranded
   const model = createTranscriptRowModel();
   const history = [userItem("u1"), assistantItem("a1", [round("r1", "reply")])];
 
-  // 手动压缩空闲态：TranscriptList 以 isCompactionRunning 激活 live tail（不置
-  // isSending，这正是发布出去的真实状态形状），经 LiveTailInput.isCompactionRunning
-  // 走可见性 gate；live store 只有 toolStatus——live 行是纯状态行（CompactingText），
-  // 没有内容块。
+  // Idle manual compaction: TranscriptList activates the live tail with
+  // isCompactionRunning (without setting isSending, which is exactly the real
+  // shape of the published state) and goes through the visibility gate via
+  // LiveTailInput.isCompactionRunning; the live store only has toolStatus -- the
+  // live row is a pure status row (CompactingText) with no content blocks.
   const compacting = model.build(history, {
     ...idleLive,
     isSending: false,
     isCompactionRunning: true,
-    toolStatus: "正在压缩上下文…",
+    toolStatus: "Compacting context...",
   });
   const compactingTail = compacting.rows.at(-1);
   assert.equal(compactingTail.kind, "assistant-activity");
   assert.equal(compactingTail.units.length, 1);
   assert.equal(compactingTail.units[0].unit.kind, "work-trace");
 
-  // 压缩落定：历史被重排成检查点卡片（没有可收养的 assistant 孪生项）。
-  // 无内容的 live 轮必须直接收尾，不能留下冻结的 settling 状态行。
+  // Compaction settles: history is rearranged into a checkpoint card (no
+  // adoptable assistant twin). A contentless live turn must close directly and
+  // must not leave a frozen settling status row.
   const compactedHistory = [
     {
       kind: "summary",
@@ -1091,8 +1094,9 @@ test("a cancelled run's abort-notice twin is adopted by the live turn (no remoun
   const model = createTranscriptRowModel();
   const history = [userItem("u1")];
 
-  // 被取消的 run：内容在取消瞬间尚未成块（这里以纯状态 live tail 模拟），
-  // live tail 没有任何可见 block 单元——producedContent 为 false。
+  // A cancelled run: content had not yet become a block at the moment of
+  // cancellation (simulated here with a pure-status live tail); the live tail
+  // has no visible block unit -- producedContent is false.
   const streaming = model.build(history, {
     ...idleLive,
     isSending: true,
@@ -1104,13 +1108,15 @@ test("a cancelled run's abort-notice twin is adopted by the live turn (no remoun
   const liveTurnKey = liveActivity.replyKey;
   assert.match(liveTurnKey, /^live-turn-/);
 
-  // 取消落定：中止提示 assistant 项持久化为孪生行（有真实文本内容）。
+  // Cancellation settles: the abort-notice assistant item is persisted as a twin
+  // row (with real text content).
   const settledHistory = [userItem("u1"), assistantItem("a1", [round("r1", "partial final")])];
   const settled = model.build(settledHistory, idleLive);
 
-  // 孪生行必须被同一 live turn 领养：以 streaming renderMode 渲染、包在一个
-  // activity 行里、key 沿用 live turn 的 replyKey（零 remount），而不是以新的
-  // static key 重挂载。
+  // The twin row must be adopted by the same live turn: rendered with
+  // renderMode streaming, wrapped in one activity row, and reusing the live
+  // turn's replyKey (zero remount), rather than remounting under a new static
+  // key.
   assert.equal(settled.liveStartIndex, -1);
   const settledActivity = settled.rows.find((row) => row.kind === "assistant-activity");
   assert.ok(settledActivity, "the abort-notice twin must be adopted into a streaming activity row");
@@ -1129,8 +1135,9 @@ test("a Task-only run's twin (all blocks filtered) is adopted by the live turn (
   };
   const history = [userItem("u1")];
 
-  // 仅输出 Task 工具的 run：块被 isVisibleGroupedBlock 全部过滤，live tail 没有
-  // 任何可见 block 单元（只剩状态行）——producedContent 为 false。
+  // A run that only outputs Task tools: all blocks are filtered by
+  // isVisibleGroupedBlock, so the live tail has no visible block unit (only the
+  // status row) -- producedContent is false.
   const streaming = model.build(history, {
     ...idleLive,
     isSending: true,
@@ -1140,9 +1147,10 @@ test("a Task-only run's twin (all blocks filtered) is adopted by the live turn (
   const liveTurnKey = streaming.rows.at(-1).replyKey;
   assert.match(liveTurnKey, /^live-turn-/);
 
-  // 落定：任务列表更新的 assistant 项持久化为孪生行（块同样被过滤）。孪生行必须
-  // 被 live turn 领养 → 渲染成一个 streaming activity 行、replyKey 沿用 live turn，
-  // 而不是以新的 static key 重挂载。
+  // Settles: the task-list-update assistant item is persisted as a twin row (its
+  // blocks are likewise filtered). The twin row must be adopted by the live turn
+  // -> rendered as one streaming activity row with replyKey reused from the live
+  // turn, rather than remounting under a new static key.
   const settledHistory = [
     userItem("u1"),
     assistantItem("a1", [{ round: 1, key: "r1", blocks: [taskTool] }]),

@@ -1,5 +1,6 @@
-// 项目工具 Pane 合同测试:文件树/审查/内网穿透/SSH/后台任务作为 Workbench
-// Surface 的身份、最小尺寸、reducer 唯一性、拖拽落点解析与共享 drop 事务。
+// Project tool Pane contract tests: file tree / review / tunnel / SSH / background tasks as
+// Workbench Surfaces — identity, minimum size, reducer uniqueness, drag-drop target resolution,
+// and the shared drop transaction.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -97,7 +98,7 @@ test("every project tool has a stable per-scope identity and label key", () => {
     assert.match(projectToolSurfaceTitleKey(kind), /^projectTools\./);
   }
   assert.equal(surfaceIdentityKey({ kind: "gitReview", project: PROJECT }), "gitReview:/workspace/project-main");
-  // 后台任务镜像全局进程注册表:整窗口单例,身份不含项目。
+  // Background tasks mirror the global process registry: a whole-window singleton whose identity excludes the project.
   assert.equal(
     projectToolSurfaceIdentityKey("backgroundTasks", PROJECT.projectPathKey),
     projectToolSurfaceIdentityKey("backgroundTasks", OTHER_PROJECT.projectPathKey),
@@ -140,7 +141,8 @@ test("reducer opens each tool once per scope and rejects duplicates", () => {
   assert.equal(duplicate.ok, false);
   assert.equal(duplicate.error.code, "duplicate-surface");
 
-  // 另一个项目的审查是不同身份,可以并存;后台任务整窗口单例,第二个项目也被拒。
+  // Another project's review is a different identity and can coexist; background tasks are a
+  // whole-window singleton, so the second project is rejected too.
   const otherReview = apply(layout, {
     type: "OPEN_PANE",
     pane: toolPane("pane-other-review", "gitReview", OTHER_PROJECT),
@@ -214,7 +216,7 @@ test("commitProjectToolDrop focuses, moves, or opens by identity", () => {
     commitProjectToolDrop(payload, { kind: "pane-center", paneId: "pane-tunnel" }, deps()),
     { action: "focused", paneId: "pane-tunnel" },
   );
-  // 落在别的 Pane 中心不是移动语义(与文件树一致):忽略。
+  // Landing in the center of another Pane is not a move semantic (consistent with the file tree): ignore it.
   assert.deepEqual(
     commitProjectToolDrop(payload, { kind: "pane-center", paneId: "pane-root" }, deps()),
     { action: "ignored" },
@@ -271,20 +273,22 @@ test("drag resolution treats the tool's own pane as focus and honours its minimu
     pane: toolPane("pane-review", "gitReview"),
     target: { kind: "pane-edge", paneId: "pane-root", edge: "right" },
   });
-  // 1400px 画布分两半各 697px;再切半得 345px,满足审查 Pane 的 320px 最小宽。
+  // A 1400px canvas split in half gives 697px each; splitting again gives 345px, satisfying the
+  // review Pane's 320px minimum width.
   const geometry = computeWorkbenchGeometry(layout.root, { left: 0, top: 0, width: 1400, height: 600 }, { dividerSize: 6 });
   const payload = { kind: "projectTool", tool: "gitReview", project: PROJECT, title: "Git" };
   assert.deepEqual(
     resolveWorkbenchDropTarget({ kind: "pane-edge", paneId: "pane-review", edge: "left" }, payload, geometry, layout),
     { kind: "pane-center", paneId: "pane-review" },
   );
-  // 另一个项目的审查是新的 Surface:沿着 root Pane 右侧切半仍满足最小宽,落点保留。
+  // Another project's review is a new Surface: splitting along the right side of the root Pane
+  // still satisfies the minimum width, so the target is kept.
   const otherPayload = { ...payload, project: OTHER_PROJECT };
   assert.deepEqual(
     resolveWorkbenchDropTarget({ kind: "pane-edge", paneId: "pane-root", edge: "right" }, otherPayload, geometry, layout),
     { kind: "pane-edge", paneId: "pane-root", edge: "right" },
   );
-  // 太窄的画布:两半都放不下审查的最小宽,落点被拒。
+  // Too-narrow canvas: neither half can fit the review minimum width, so the target is rejected.
   const narrow = computeWorkbenchGeometry(layout.root, { left: 0, top: 0, width: 640, height: 600 }, { dividerSize: 6 });
   assert.equal(
     resolveWorkbenchDropTarget({ kind: "pane-edge", paneId: "pane-root", edge: "right" }, otherPayload, narrow, layout),
@@ -306,7 +310,7 @@ test("leased tools disappear from the dock tab list", () => {
   });
   const leased = leasedProjectToolKinds(layout, PROJECT.projectPathKey, PROJECT_TOOL_SURFACE_KINDS);
   assert.deepEqual([...leased].sort(), ["backgroundTasks", "sshTunnel"]);
-  // 后台任务是整窗口单例:任何项目的 dock 都视为已租用。
+  // Background tasks are a whole-window singleton: any project's dock counts as already leased.
   assert.deepEqual(
     [...leasedProjectToolKinds(layout, OTHER_PROJECT.projectPathKey, PROJECT_TOOL_SURFACE_KINDS)],
     ["backgroundTasks"],

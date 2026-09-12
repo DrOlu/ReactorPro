@@ -54,7 +54,7 @@ test("isXaiProviderTarget matches the formal xai provider type", () => {
   );
 });
 
-test("mapUiEffortToXaiEffort maps LiveAgent levels onto official Grok efforts", () => {
+test("mapUiEffortToXaiEffort maps ReactorPro levels onto official Grok efforts", () => {
   assert.equal(mapUiEffortToXaiEffort("minimal", "grok-4.5"), "low");
   assert.equal(mapUiEffortToXaiEffort("low", "grok-4.5"), "low");
   assert.equal(mapUiEffortToXaiEffort("medium", "grok-4.5"), "medium");

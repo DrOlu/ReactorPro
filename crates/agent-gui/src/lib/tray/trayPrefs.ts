@@ -1,10 +1,11 @@
 /**
- * 托盘本机偏好（桌面 GUI 专属，不进 settings 同步/网关）：
- * - showConversationTitles：托盘是否显示会话标题（投屏隐私；关闭后显示「对话 N」）
- * - showRunningBadge：macOS 状态栏是否显示运行中数量文字徽标
+ * Tray local preferences (desktop GUI only; not synced into settings / gateway):
+ * - showConversationTitles: whether the tray shows conversation titles (screen-sharing privacy; when off, shows "Conversation N")
+ * - showRunningBadge: whether the macOS status bar shows a text badge with the running count
  *
- * 存 localStorage；与全局快捷键绑定（`lib/shortcuts/globalShortcuts.ts`）
- * 同属「设备偏好」类别。带订阅以便托盘同步 effect 在设置页改动后即时重推。
+ * Stored in localStorage; together with global shortcut bindings
+ * (`lib/shortcuts/globalShortcuts.ts`) it belongs to the "device preferences" category. It
+ * carries a subscription so the tray sync effect re-pushes immediately after a settings change.
  */
 
 import { useSyncExternalStore } from "react";
@@ -49,7 +50,7 @@ export function writeTrayPrefs(patch: Partial<TrayPrefs>): TrayPrefs {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
-    // 存储不可用时仅内存生效。
+    // When storage is unavailable, this takes effect in memory only.
   }
   for (const listener of listeners) {
     listener();

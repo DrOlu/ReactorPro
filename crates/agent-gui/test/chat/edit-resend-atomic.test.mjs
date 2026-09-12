@@ -125,11 +125,11 @@ test("edit-resend reports a rejected send without mutating history itself", asyn
   await handleResendFromEdit(messageRef, "edited prompt", [], []);
 
   assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /原历史保持不变/);
+  assert.match(errors[0].message, /the original history is unchanged/);
 });
 
 test("send preflight atomically persists the replacement before starting the runtime", () => {
-  // 替换结果在 Run 边界清除上一 Run 的 taskList 后落入 nextConversationState。
+  // The replacement result lands in nextConversationState after the Run boundary clears the previous Run's taskList.
   const replaceIndex = sendSource.indexOf(
     "nextConversationState = clearTaskListState(\n          await replaceConversationAtMessage(",
   );

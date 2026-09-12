@@ -1,31 +1,33 @@
-//! 已安装应用枚举，供输入框 @ 提及（computer use 的操作目标）。
+//! Enumerates installed applications for @ mentions in the input box (operation targets for computer use).
 //!
-//! 语义是「已安装」而不是「正在运行」——cua-driver 自己的 `list_apps`
-//! 报告的是运行中的进程，而 @ 提及要的是"打开 Safari 做…"这类还没
-//! 启动的目标，所以宿主自己扫应用目录。
+//! The semantics are "installed" rather than "running" - cua-driver's own `list_apps`
+//! reports running processes, whereas @ mentions target things not yet launched,
+//! such as "open Safari and do ...", so the host scans the application directories itself.
 //!
-//! macOS：扫 `/Applications`、`/System/Applications` 与 `~/Applications`
-//! 的顶层 `.app` bundle，读 `Contents/Info.plist` 取 bundle id 与显示名。
+//! macOS: scans the top-level `.app` bundles under `/Applications`, `/System/Applications`
+//! and `~/Applications`, reading `Contents/Info.plist` for the bundle id and display name.
 //!
-//! Windows：扫系统与用户两处开始菜单 `Programs` 目录下的 `.lnk` 快捷
-//! 方式（这正是"用户可启动的已安装应用"的用户认知边界），解析快捷方式
-//! 拿到目标 `.exe` 的绝对路径作稳定身份——Windows 没有 bundle id，
-//! `bundle_id` 留空，前端整条链路（token/身份键/图标注册表）本就以
-//! path 兜底。MSIX/UWP 应用不在开始菜单放 `.lnk`，暂不覆盖。
+//! Windows: scans `.lnk` shortcuts under the system and user Start Menu `Programs`
+//! directories (which matches users' mental boundary of "installed apps they can launch"),
+//! resolving shortcuts to the target `.exe` absolute path as a stable identity - Windows has
+//! no bundle id, so `bundle_id` is left empty and the whole frontend chain
+//! (token/identity key/icon registry) falls back to the path. MSIX/UWP apps do not put
+//! `.lnk` files in the Start Menu and are not covered for now.
 //!
-//! 其他平台返回空列表——cua-driver 在那些平台上按进程名/窗口寻址，
-//! 没有等价的"已安装应用"稳定标识，前端对空列表的行为就是不显示应用
-//! 分组，无需平台分支。
+//! Other platforms return an empty list - cua-driver addresses by process name/window there,
+//! with no equivalent stable "installed app" identifier, and the frontend's behavior for an
+//! empty list is simply not showing the app group, so no platform branch is needed.
 //!
-//! 图标一律交给系统 API 统一取（macOS `NSWorkspace.iconForFile`、
-//! Windows `SHGetFileInfoW`）而不是自己解 `.icns`/`.ico`：现代应用的
-//! 图标常在 Assets.car / 资源段里，清单字段根本不存在，只有系统 API
-//! 能统一取到。取回后转 32px PNG data URL（弹层行渲染 16 逻辑像素，
-//! 32 物理像素覆盖 retina/高 DPI），随列表一次性返回——列表在会话内
-//! 只取一次，几百 KB 的一次性载荷可接受，换来前端零额外往返。
+//! Icons are always fetched uniformly through system APIs (macOS `NSWorkspace.iconForFile`,
+//! Windows `SHGetFileInfoW`) rather than parsed from `.icns`/`.ico` ourselves: modern app
+//! icons often live in Assets.car / resource sections, and the manifest field simply does not
+//! exist, so only the system API can retrieve them uniformly. After fetching, they are converted
+//! to 32px PNG data URLs (popup rows render at 16 logical pixels; 32 physical pixels cover
+//! retina/high DPI) and returned once with the list - the list is fetched only once per session,
+//! and a one-off payload of a few hundred KB is acceptable in exchange for zero extra frontend round trips.
 //!
-//! 宿主自己（LiveAgent.app）被有意从结果中剔除：`cuaSelfGuard` 会拒绝
-//! 一切以宿主为目标的操作，把它留在候选里等于让用户选一个必然失败的项。
+//! The host itself (ReactorPro.app) is intentionally excluded from the results: `cuaSelfGuard`
+//! rejects all operations targeting the host, so leaving it among the candidates would let the user pick a guaranteed-to-fail entry.
 
 use serde::Serialize;
 
@@ -33,21 +35,21 @@ use serde::Serialize;
 #[serde(rename_all = "camelCase")]
 pub struct InstalledApp {
     pub name: String,
-    /// macOS bundle id。理论上 Info.plist 可以缺失它；此时不返回该项，
-    /// 因为没有稳定身份的应用无法被 CUA 工具可靠寻址。
+    /// macOS bundle id. In theory Info.plist can omit it; in that case the entry is not returned,
+    /// because an app without a stable identity cannot be reliably addressed by CUA tools.
     pub bundle_id: String,
     pub path: String,
-    /// `data:image/png;base64,…` 形式的应用图标；取不到时省略，前端
-    /// 回退到通用应用占位图标。
+    /// The app icon in `data:image/png;base64,...` form; omitted when unavailable, and the
+    /// frontend falls back to a generic app placeholder icon.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon_data_url: Option<String>,
 }
 
-/// 枚举已安装应用，按名称排序、按稳定身份去重。
+/// Enumerates installed applications, sorted by name and deduplicated by stable identity.
 ///
-/// `exclude_bundle_id` 是宿主自己的 bundle id（来自 tauri 配置），在
-/// macOS 上恒被剔除，见模块注释；Windows 没有 bundle id 概念，宿主按
-/// 当前进程的 exe 路径剔除，该参数不参与。
+/// `exclude_bundle_id` is the host's own bundle id (from the tauri config) and is always
+/// excluded on macOS, see the module docs; Windows has no bundle id concept, so the host is
+/// excluded by the current process's exe path and this parameter is unused.
 pub fn list_installed_apps(exclude_bundle_id: &str) -> Vec<InstalledApp> {
     #[cfg(target_os = "macos")]
     {
@@ -79,8 +81,8 @@ fn list_macos_apps(exclude_bundle_id: &str) -> Vec<InstalledApp> {
         roots.push(home.join("Applications"));
     }
 
-    // BTreeMap 一步拿到"按 bundle id 去重 + 稳定序"。用户目录排在系统
-    // 目录之后，同 id 时保留先见的系统安装路径。
+    // BTreeMap gives "dedup by bundle id + stable order" in one step. The user directory comes
+    // after the system directories, so for the same id the system install path seen first is kept.
     let mut by_bundle_id: BTreeMap<String, InstalledApp> = BTreeMap::new();
     for root in roots {
         let Ok(entries) = std::fs::read_dir(&root) else {
@@ -118,7 +120,7 @@ fn read_macos_app_bundle(path: &std::path::Path) -> Option<InstalledApp> {
             .map(str::to_owned)
     };
     let bundle_id = string_of("CFBundleIdentifier")?;
-    // 显示名优先；bundle 目录名（去掉 .app）永远存在，作最终兜底。
+    // Display name takes precedence; the bundle directory name (with .app stripped) always exists as the final fallback.
     let name = string_of("CFBundleDisplayName")
         .or_else(|| string_of("CFBundleName"))
         .or_else(|| {
@@ -134,17 +136,18 @@ fn read_macos_app_bundle(path: &std::path::Path) -> Option<InstalledApp> {
     })
 }
 
-/// 应用图标 → 32px PNG data URL。见模块注释：必须走 NSWorkspace，
-/// Assets.car 时代自己解 .icns 会大面积取不到图标。
+/// App icon -> 32px PNG data URL. See the module docs: it must go through NSWorkspace, since
+/// parsing .icns ourselves in the Assets.car era fails to find icons across the board.
 ///
-/// 提取路径是 `CGImageForProposedRect(32×32)` → `NSBitmapImageRep` →
-/// PNG：NSImage 会按 proposed rect 只解码最匹配的那一档分辨率。不要换回
-/// `TIFFRepresentation`——它把 16→1024 全部分辨率都物化（实测 15 个应用
-/// 1GB / 8 秒），而这条路径全程 <1 秒。
+/// The extraction path is `CGImageForProposedRect(32x32)` -> `NSBitmapImageRep` ->
+/// PNG: NSImage decodes only the resolution tier that best matches the proposed rect. Do not
+/// switch back to `TIFFRepresentation` - it materializes every resolution from 16 to 1024
+/// (measured at 1GB / 8 seconds for 15 apps), whereas this path takes <1 second end to end.
 ///
-/// AppKit 的图像对象没有标注 Send/Sync，全程只在当前调用栈上使用、不跨
-/// 线程持有；iconForFile 与位图转换都是无 UI 的解码操作，允许后台线程
-/// 调用（NSImage 线程安全清单），配合调用方的 spawn_blocking 安全。
+/// AppKit image objects are not marked Send/Sync, so they are used only on the current call
+/// stack and never held across threads; iconForFile and the bitmap conversion are UI-free
+/// decoding operations, permitted on background threads (NSImage thread-safety list), and
+/// safe together with the caller's spawn_blocking.
 #[cfg(target_os = "macos")]
 fn macos_app_icon_data_url(path: &std::path::Path) -> Option<String> {
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -152,7 +155,7 @@ fn macos_app_icon_data_url(path: &std::path::Path) -> Option<String> {
     use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSWorkspace};
     use objc2_foundation::{NSDictionary, NSPoint, NSRect, NSSize, NSString};
 
-    /// 弹层行渲染 16 逻辑像素；32 物理像素在 retina 下 1:1。
+    /// Popup rows render at 16 logical pixels; 32 physical pixels is 1:1 on retina.
     const TARGET_PIXELS: f64 = 32.0;
 
     let icon = NSWorkspace::sharedWorkspace().iconForFile(&NSString::from_str(path.to_str()?));
@@ -174,19 +177,19 @@ fn macos_app_icon_data_url(path: &std::path::Path) -> Option<String> {
     ))
 }
 
-/// MS-SHLLINK（`.lnk`）的最小子集解析：只提取目标绝对路径。
+/// Minimal subset parser for MS-SHLLINK (`.lnk`): extracts only the target absolute path.
 ///
-/// 纯字节解析、不碰任何 Windows API，因此无条件编译——单元测试在
-/// macOS/Linux CI 上照跑。取路径的优先级与 shell 的解析一致：
-/// LinkInfo 的 LocalBasePath（Unicode 偏移优先，ANSI 兜底）→
-/// ExtraData 的 EnvironmentVariableDataBlock（安装器常用
-/// `%ProgramFiles%\…` 形态，需展开环境变量）。两者都没有（如指向
-/// shell 对象的快捷方式）则放弃该项。
+/// It is a pure byte parser and touches no Windows API, so it compiles unconditionally -
+/// unit tests also run on macOS/Linux CI. The path priority matches shell parsing:
+/// LinkInfo's LocalBasePath (Unicode offset preferred, ANSI fallback) ->
+/// ExtraData's EnvironmentVariableDataBlock (installers commonly use the
+/// `%ProgramFiles%\...` form, which requires expanding environment variables). If neither is
+/// present (e.g. a shortcut pointing to a shell object), the entry is abandoned.
 #[allow(dead_code)]
 mod lnk {
     const HEADER_SIZE: usize = 0x4C;
-    /// LinkCLSID 00021401-0000-0000-C000-000000000046 的磁盘字节序
-    /// （Data1-3 小端，Data4 原序）。
+    /// Disk byte order of LinkCLSID 00021401-0000-0000-C000-000000000046
+    /// (Data1-3 little-endian, Data4 in original order).
     const LINK_CLSID: [u8; 16] = [
         0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x46,
@@ -202,7 +205,7 @@ mod lnk {
     const IS_UNICODE: u32 = 1 << 7;
 
     const ENV_VARIABLE_BLOCK_SIGNATURE: u32 = 0xA000_0001;
-    /// EnvironmentVariableDataBlock 固定载荷：260 字节 ANSI + 520 字节 UTF-16。
+    /// EnvironmentVariableDataBlock fixed payload: 260 bytes ANSI + 520 bytes UTF-16.
     const ENV_BLOCK_ANSI_LEN: usize = 260;
     const ENV_BLOCK_UNICODE_LEN: usize = 520;
 
@@ -218,17 +221,17 @@ mod lnk {
         ))
     }
 
-    /// 从 `offset` 读 NUL 结尾的 ANSI 字符串（截止 `end`）。系统 ANSI
-    /// 代码页不可移植，这里按 UTF-8 lossy 解码：安装路径几乎全 ASCII，
-    /// 非 ASCII 的老式 ANSI 路径在 Unicode 偏移缺失时才会走到这，宁可
-    /// 出现替换符也不整项丢弃。
+    /// Reads a NUL-terminated ANSI string from `offset` (up to `end`). The system ANSI
+    /// code page is not portable, so this decodes as UTF-8 lossy: install paths are almost
+    /// all ASCII, and only legacy non-ASCII ANSI paths with a missing Unicode offset reach
+    /// this branch, so a replacement character is preferable to discarding the whole entry.
     fn ansi_z_at(data: &[u8], offset: usize, end: usize) -> Option<String> {
         let slice = data.get(offset..end.min(data.len()))?;
         let nul = slice.iter().position(|&byte| byte == 0)?;
         Some(String::from_utf8_lossy(&slice[..nul]).into_owned())
     }
 
-    /// 从 `offset` 读 NUL 结尾的 UTF-16LE 字符串（截止 `end`）。
+    /// Reads a NUL-terminated UTF-16LE string from `offset` (up to `end`).
     fn utf16_z_at(data: &[u8], offset: usize, end: usize) -> Option<String> {
         let slice = data.get(offset..end.min(data.len()))?;
         let mut units = Vec::new();
@@ -242,7 +245,7 @@ mod lnk {
         None
     }
 
-    /// LinkInfo → LocalBasePath (+ CommonPathSuffix)。
+    /// LinkInfo -> LocalBasePath (+ CommonPathSuffix).
     fn link_info_local_path(data: &[u8], base: usize, size: usize) -> Option<String> {
         let end = base.checked_add(size)?;
         if end > data.len() || size < 0x1C {
@@ -250,11 +253,11 @@ mod lnk {
         }
         let header_size = u32_at(data, base + 0x04)? as usize;
         let info_flags = u32_at(data, base + 0x08)?;
-        // bit0 = VolumeIDAndLocalBasePath；没有本地路径（纯网络快捷方式）直接放弃。
+        // bit0 = VolumeIDAndLocalBasePath; with no local path (pure network shortcut) give up immediately.
         if info_flags & 1 == 0 {
             return None;
         }
-        // HeaderSize >= 0x24 时才有 Unicode 偏移对（MS-SHLLINK 2.3）。
+        // The Unicode offset pair exists only when HeaderSize >= 0x24 (MS-SHLLINK 2.3).
         let unicode = header_size >= 0x24;
         let base_path = unicode
             .then(|| u32_at(data, base + 0x1C))
@@ -287,8 +290,8 @@ mod lnk {
         Some(joined)
     }
 
-    /// 展开 `%VAR%` 形态的环境变量引用；未定义的变量原样保留（与
-    /// shell 行为一致，后续存在性检查会滤掉无效路径）。
+    /// Expands `%VAR%`-form environment variable references; undefined variables are left as-is
+    /// (consistent with shell behavior; the later existence check filters out invalid paths).
     fn expand_env(value: &str, lookup: &dyn Fn(&str) -> Option<String>) -> String {
         let mut out = String::with_capacity(value.len());
         let mut rest = value;
@@ -318,8 +321,8 @@ mod lnk {
         out
     }
 
-    /// 解析 `.lnk` 字节流，返回目标绝对路径。`env` 注入环境变量查询，
-    /// 测试可传假值，Windows 运行时传 `std::env::var`。
+    /// Parses a `.lnk` byte stream and returns the target absolute path. `env` injects the
+    /// environment variable lookup; tests can pass a fake, and the Windows runtime passes `std::env::var`.
     pub fn resolve_target(data: &[u8], env: &dyn Fn(&str) -> Option<String>) -> Option<String> {
         if data.len() < HEADER_SIZE
             || u32_at(data, 0)? as usize != HEADER_SIZE
@@ -339,7 +342,7 @@ mod lnk {
             }
             offset = offset.checked_add(size)?;
         }
-        // 逐段跳过 StringData（字符计数不含结尾 NUL；Unicode 时字节数翻倍）。
+        // Skip StringData sections one by one (the character count excludes the trailing NUL; byte count doubles for Unicode).
         for flag in [
             HAS_NAME,
             HAS_RELATIVE_PATH,
@@ -354,7 +357,7 @@ mod lnk {
             let bytes = if flags & IS_UNICODE != 0 { chars * 2 } else { chars };
             offset = offset.checked_add(2 + bytes)?;
         }
-        // ExtraData：找 EnvironmentVariableDataBlock。BlockSize < 8 即终结哨兵。
+        // ExtraData: look for EnvironmentVariableDataBlock. BlockSize < 8 is the terminating sentinel.
         loop {
             let size = u32_at(data, offset)? as usize;
             if size < 8 {
@@ -384,12 +387,12 @@ mod windows {
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
 
-    /// 与 macOS 一致：弹层行渲染 16 逻辑像素，32 物理像素覆盖高 DPI。
-    /// SHGFI_LARGEICON 取回的正是系统大图标（默认 32×32）。
+    /// Same as macOS: popup rows render at 16 logical pixels, and 32 physical pixels cover high DPI.
+    /// SHGFI_LARGEICON retrieves exactly the system large icon (32x32 by default).
     pub fn list_windows_apps() -> Vec<InstalledApp> {
         let mut roots: Vec<PathBuf> = Vec::new();
-        // 系统开始菜单在前、用户在后：同一目标先见者胜，对齐 macOS
-        // "系统安装路径优先"的去重取向。
+        // System Start Menu first, user second: for the same target the first seen wins, matching
+        // macOS's "system install path first" dedup orientation.
         if let Ok(program_data) = std::env::var("ProgramData") {
             roots.push(PathBuf::from(program_data).join(r"Microsoft\Windows\Start Menu\Programs"));
         }
@@ -401,13 +404,13 @@ mod windows {
             .ok()
             .map(|path| normalize_identity(&path.to_string_lossy()));
 
-        // SHGetFileInfoW 要求调用线程已初始化 COM（调用方在 spawn_blocking
-        // 线程上，进程主线程的初始化覆盖不到这里）。
+        // SHGetFileInfoW requires the calling thread to have initialized COM (the caller is on a
+        // spawn_blocking thread, which the process main thread's initialization does not cover).
         let _com = ComInit::new();
 
         let mut by_identity: BTreeMap<String, InstalledApp> = BTreeMap::new();
         for root in roots {
-            // 开始菜单的厂商子目录一般只有一层，容错到 4 层防跑飞。
+            // Start Menu vendor subdirectories are usually only one level deep; allow up to 4 for safety.
             for entry in walkdir::WalkDir::new(&root)
                 .max_depth(4)
                 .into_iter()
@@ -445,8 +448,8 @@ mod windows {
                 }
                 by_identity.entry(identity).or_insert_with(|| InstalledApp {
                     name,
-                    // Windows 没有 bundle id；空串经前端映射为 undefined，
-                    // token/身份键/图标注册表全部以 path 兜底。
+                    // Windows has no bundle id; the empty string maps to undefined on the frontend,
+                    // and the token/identity key/icon registry all fall back to the path.
                     bundle_id: String::new(),
                     icon_data_url: app_icon_data_url(Path::new(&target)),
                     path: target,
@@ -459,10 +462,10 @@ mod windows {
         apps
     }
 
-    /// 读取并解析 `.lnk`，只保留"存在的 `.exe`"目标——开始菜单里的
-    /// 文档/网页/shell 对象快捷方式都不是可寻址的应用。
+    /// Reads and parses a `.lnk`, keeping only targets that are "an existing `.exe`" - Start Menu
+    /// shortcuts to documents/web pages/shell objects are not addressable applications.
     fn resolve_lnk_file(path: &Path) -> Option<String> {
-        // 快捷方式本体几 KB；1 MB 上限防御损坏文件。
+        // The shortcut itself is a few KB; a 1 MB cap defends against corrupt files.
         let metadata = std::fs::metadata(path).ok()?;
         if metadata.len() > 1024 * 1024 {
             return None;
@@ -475,8 +478,8 @@ mod windows {
         Some(target)
     }
 
-    /// 卸载器是"已安装应用"里的常客噪声（"Uninstall Foo.lnk"），按
-    /// 快捷方式名与目标文件名双向过滤。
+    /// Uninstallers are frequent noise among "installed apps" ("Uninstall Foo.lnk"), filtered
+    /// both by shortcut name and by target file name.
     fn is_uninstaller(name: &str, target: &str) -> bool {
         let name = name.to_lowercase();
         let file = Path::new(target)
@@ -484,16 +487,16 @@ mod windows {
             .and_then(|value| value.to_str())
             .map(str::to_lowercase)
             .unwrap_or_default();
-        name.contains("uninstall") || name.contains("卸载") || file.starts_with("unins")
+        name.contains("uninstall") || file.starts_with("unins")
     }
 
-    /// 身份键 = 小写化目标路径（NTFS 不区分大小写）。
+    /// Identity key = lowercased target path (NTFS is case-insensitive).
     fn normalize_identity(path: &str) -> String {
         path.to_lowercase()
     }
 
-    /// COM 初始化守卫：成功才在 Drop 时配对 CoUninitialize；
-    /// RPC_E_CHANGED_MODE（线程已按其他模型初始化）视作可用、不配对。
+    /// COM initialization guard: CoUninitialize is paired on Drop only on success;
+    /// RPC_E_CHANGED_MODE (the thread was already initialized under another model) counts as usable and is not paired.
     struct ComInit {
         initialized: bool,
     }
@@ -516,9 +519,9 @@ mod windows {
         }
     }
 
-    /// 目标 exe 的系统图标 → 32px PNG data URL。取图标交给
-    /// `SHGetFileInfoW`（与 macOS 交给 NSWorkspace 同理，见模块注释），
-    /// HICON → GDI 位图取 BGRA 像素 → `image` crate 编码 PNG。
+    /// The target exe's system icon -> 32px PNG data URL. Icon retrieval is delegated to
+    /// `SHGetFileInfoW` (analogous to macOS delegating to NSWorkspace, see the module docs),
+    /// HICON -> GDI bitmap to get BGRA pixels -> `image` crate encodes PNG.
     fn app_icon_data_url(target: &Path) -> Option<String> {
         use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
         use std::os::windows::ffi::OsStrExt;
@@ -553,8 +556,8 @@ mod windows {
         ))
     }
 
-    /// HICON → PNG 字节。彩色位图按 32bpp 顶朝下取出（BGRA），alpha
-    /// 全零说明是老式掩码图标——再取掩码位图补出透明度。
+    /// HICON -> PNG bytes. The color bitmap is fetched as 32bpp top-down (BGRA); an all-zero
+    /// alpha means a legacy mask icon - fetch the mask bitmap to reconstruct transparency.
     fn icon_to_png(icon: windows_sys::Win32::UI::WindowsAndMessaging::HICON) -> Option<Vec<u8>> {
         use windows_sys::Win32::Graphics::Gdi::DeleteObject;
         use windows_sys::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO};
@@ -566,7 +569,7 @@ mod windows {
         let color = icon_info.hbmColor;
         let mask = icon_info.hbmMask;
         let png = bitmaps_to_png(color, mask);
-        // GetIconInfo 的位图归调用方释放（两只都可能非空）。
+        // The bitmaps from GetIconInfo are owned by the caller and must be released (either may be non-null).
         if !color.is_null() {
             unsafe { DeleteObject(color) };
         }
@@ -582,7 +585,7 @@ mod windows {
     ) -> Option<Vec<u8>> {
         use windows_sys::Win32::Graphics::Gdi::{GetObjectW, BITMAP};
 
-        // hbmColor 为空是 1bpp 全掩码图标（Win16 时代产物），不值得支持。
+        // A null hbmColor is a 1bpp all-mask icon (a Win16-era artifact) and not worth supporting.
         if color.is_null() {
             return None;
         }
@@ -601,12 +604,12 @@ mod windows {
         let height = bitmap.bmHeight as u32;
 
         let mut pixels = bitmap_pixels_bgra(color, width, height)?;
-        // BGRA → RGBA。
+        // BGRA -> RGBA.
         for chunk in pixels.chunks_exact_mut(4) {
             chunk.swap(0, 2);
         }
         if pixels.chunks_exact(4).all(|chunk| chunk[3] == 0) {
-            // alpha 通道全零：老式图标靠掩码表达透明（掩码位 1 = 透明）。
+            // All-zero alpha channel: legacy icons express transparency via the mask (mask bit 1 = transparent).
             match (!mask.is_null())
                 .then(|| bitmap_pixels_bgra(mask, width, height))
                 .flatten()
@@ -635,7 +638,7 @@ mod windows {
         Some(png)
     }
 
-    /// 任意 GDI 位图 → 32bpp 顶朝下 BGRA 像素（GetDIBits 负责格式转换）。
+    /// Any GDI bitmap -> 32bpp top-down BGRA pixels (GetDIBits handles the format conversion).
     fn bitmap_pixels_bgra(
         bitmap: windows_sys::Win32::Graphics::Gdi::HBITMAP,
         width: u32,
@@ -652,7 +655,7 @@ mod windows {
         let mut info: BITMAPINFO = unsafe { std::mem::zeroed() };
         info.bmiHeader.biSize = std::mem::size_of_val(&info.bmiHeader) as u32;
         info.bmiHeader.biWidth = width as i32;
-        // 负高度 = 顶朝下行序，免去手动翻转。
+        // Negative height = top-down row order, avoiding a manual flip.
         info.bmiHeader.biHeight = -(height as i32);
         info.bmiHeader.biPlanes = 1;
         info.bmiHeader.biBitCount = 32;
@@ -680,8 +683,8 @@ mod tests {
 
     #[test]
     fn excluded_bundle_id_never_appears() {
-        // 非 macOS 平台列表恒空，断言自然成立；macOS 上跑真实扫描，
-        // 用一个必然存在的系统应用当宿主替身验证剔除逻辑。
+        // The list is always empty on non-macOS platforms, so the assertion holds trivially; on macOS
+        // it runs a real scan, using a system app that must exist as a host stand-in to verify the exclusion logic.
         let apps = list_installed_apps("com.apple.finder");
         assert!(apps
             .iter()
@@ -716,7 +719,7 @@ mod tests {
         identities.dedup();
         assert_eq!(identities.len(), apps.len());
         for app in &apps {
-            // Windows 无 bundle id：身份由 path 承担，前端以 path 兜底。
+            // Windows has no bundle id: identity is carried by the path, and the frontend falls back to the path.
             assert!(app.bundle_id.is_empty());
             assert!(app.path.to_lowercase().ends_with(".exe"));
             if let Some(icon) = &app.icon_data_url {
@@ -725,9 +728,9 @@ mod tests {
         }
     }
 
-    /* ---- .lnk 解析（纯字节，跨平台跑） ---- */
+    /* ---- .lnk parsing (pure bytes, runs cross-platform) ---- */
 
-    /// 最小合法 ShellLinkHeader：HeaderSize + LinkCLSID + LinkFlags。
+    /// Minimal valid ShellLinkHeader: HeaderSize + LinkCLSID + LinkFlags.
     fn lnk_header(flags: u32) -> Vec<u8> {
         let mut data = vec![0u8; 0x4C];
         data[0..4].copy_from_slice(&0x4Cu32.to_le_bytes());
@@ -743,14 +746,14 @@ mod tests {
     fn lnk_parser_reads_link_info_local_base_path() {
         let path = b"C:\\Program Files\\Demo\\demo.exe\0";
         let path_offset = 0x1Cu32;
-        // 后缀偏移指向路径的结尾 NUL → 空后缀。
+        // The suffix offset points to the path's trailing NUL -> empty suffix.
         let suffix_offset = path_offset + path.len() as u32 - 1;
         let total = 0x1C + path.len();
         let mut link_info = Vec::new();
         link_info.extend((total as u32).to_le_bytes());
-        link_info.extend(0x1Cu32.to_le_bytes()); // LinkInfoHeaderSize：无 Unicode 偏移
+        link_info.extend(0x1Cu32.to_le_bytes()); // LinkInfoHeaderSize: no Unicode offsets
         link_info.extend(1u32.to_le_bytes()); // VolumeIDAndLocalBasePath
-        link_info.extend(0u32.to_le_bytes()); // VolumeIDOffset（解析器不读）
+        link_info.extend(0u32.to_le_bytes()); // VolumeIDOffset (not read by the parser)
         link_info.extend(path_offset.to_le_bytes());
         link_info.extend(0u32.to_le_bytes()); // CommonNetworkRelativeLinkOffset
         link_info.extend(suffix_offset.to_le_bytes());
@@ -767,19 +770,19 @@ mod tests {
     #[test]
     fn lnk_parser_prefers_unicode_local_base_path() {
         let ansi = b"C:\\legacy\\demo.exe\0";
-        let unicode: Vec<u8> = "C:\\应用\\演示.exe\0"
+        let unicode: Vec<u8> = "C:\\Café\\demo.exe\0"
             .encode_utf16()
             .flat_map(u16::to_le_bytes)
             .collect();
         let ansi_offset = 0x24u32;
         let unicode_offset = ansi_offset + ansi.len() as u32;
-        // 两个后缀偏移各指向对应字符串的结尾 NUL → 空后缀。
+        // Both suffix offsets point to the trailing NUL of the corresponding string -> empty suffix.
         let suffix_ansi_offset = ansi_offset + ansi.len() as u32 - 1;
         let suffix_unicode_offset = unicode_offset + unicode.len() as u32 - 2;
         let total = 0x24 + ansi.len() + unicode.len();
         let mut link_info = Vec::new();
         link_info.extend((total as u32).to_le_bytes());
-        link_info.extend(0x24u32.to_le_bytes()); // 带 Unicode 偏移对
+        link_info.extend(0x24u32.to_le_bytes()); // with Unicode offset pair
         link_info.extend(1u32.to_le_bytes());
         link_info.extend(0u32.to_le_bytes());
         link_info.extend(ansi_offset.to_le_bytes());
@@ -794,14 +797,14 @@ mod tests {
         data.extend(link_info);
         assert_eq!(
             lnk::resolve_target(&data, &|_| None).as_deref(),
-            Some("C:\\应用\\演示.exe"),
+            Some("C:\\Café\\demo.exe"),
         );
     }
 
     #[test]
     fn lnk_parser_expands_environment_block_after_string_data() {
-        // HasName | IsUnicode：先正确跳过一段 UTF-16 StringData，再命中
-        // EnvironmentVariableDataBlock 并展开 %VAR%。
+        // HasName | IsUnicode: correctly skip a UTF-16 StringData section first, then hit the
+        // EnvironmentVariableDataBlock and expand %VAR%.
         let mut data = lnk_header((1 << 2) | (1 << 7));
         let name: Vec<u16> = "Demo App".encode_utf16().collect();
         data.extend((name.len() as u16).to_le_bytes());
@@ -819,7 +822,7 @@ mod tests {
         data.extend(0xA000_0001u32.to_le_bytes());
         data.extend_from_slice(&ansi);
         data.extend_from_slice(&unicode);
-        data.extend(0u32.to_le_bytes()); // 终结哨兵块
+        data.extend(0u32.to_le_bytes()); // terminating sentinel block
 
         let resolved = lnk::resolve_target(&data, &|name| {
             (name == "ProgramFiles").then(|| "C:\\Program Files".to_owned())
@@ -833,7 +836,7 @@ mod tests {
     #[test]
     fn lnk_parser_rejects_non_lnk_payloads() {
         assert_eq!(lnk::resolve_target(b"not a shortcut", &|_| None), None);
-        // 头合法但没有任何可用目标段。
+        // Header is valid but has no usable target section.
         assert_eq!(lnk::resolve_target(&lnk_header(0), &|_| None), None);
     }
 }

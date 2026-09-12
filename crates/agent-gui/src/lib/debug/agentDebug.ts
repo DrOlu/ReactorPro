@@ -176,7 +176,7 @@ function enqueueDebugLog(conversationId: string, entry: Record<string, unknown>)
       }),
     )
     .catch((error) => {
-      console.warn("写入 Agent dev 调试日志失败", error);
+      console.warn("Failed to write Agent dev debug log", error);
     });
   writeQueues.set(conversationId, next);
   return next;
@@ -206,8 +206,9 @@ export function buildRuntimeDebugInfo(runtime: RuntimeDebugInput) {
     nativeWebSearchEnabled: runtime.nativeWebSearchEnabled,
     useSystemProxy: runtime.useSystemProxy,
     hasApiKey: runtime.apiKey.trim().length > 0,
-    // 只记 key：取值继续整体脱敏。这是端到端确认「自定义请求头是否真的走到了
-    // 这条链路」的唯一低成本手段——配置一旦在中途被丢弃，这里就是空数组。
+    // Only keys are recorded; values remain fully redacted. This is the only low-cost way to confirm
+    // end to end "whether the custom request headers actually reached this pipeline" -- if the config were
+    // dropped midway, this would be an empty array.
     customHeaderKeys: (runtime.customHeaders ?? []).map((header) => header.key),
   };
 }
@@ -218,8 +219,8 @@ export function buildStreamRequestDebugPayload(params: {
   options?: unknown;
   round?: number;
   /**
-   * 前缀哈希对账结果。与 usage 里的 cacheRead / cacheWrite 并列:那两个是结果,
-   * 这个是归因 —— miss 时能直接读出是 system 还是 tools 把前缀顶掉了。
+   * Prefix hash reconciliation result. Parallel to usage's cacheRead / cacheWrite: those two are outcomes,
+   * while this is attribution -- on a miss you can read directly whether system or tools displaced the prefix.
    */
   prefixCache?: PrefixCacheDiagnostics;
 }) {

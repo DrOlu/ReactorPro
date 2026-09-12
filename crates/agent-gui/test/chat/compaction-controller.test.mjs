@@ -73,7 +73,8 @@ function summaryResponse() {
   };
 }
 
-// 3 个用户消息绕开 MIN_COMPACTION_USER_MESSAGES 冷却窗，方便连续压缩场景。
+// Three user messages bypass the MIN_COMPACTION_USER_MESSAGES cooldown window,
+// easing consecutive-compaction scenarios.
 function bigState(extraMessages = []) {
   return conversationState.createConversationStateFromContext({
     systemPrompt: "sys",
@@ -170,7 +171,8 @@ test("pre-send compaction: checkpoint, persist, re-appended user message, paired
   const statuses = recorder.byKind("publishStatus").map(([, status]) => status.phase);
   assert.deepEqual(statuses, ["running", "completed"]);
 
-  // persist 的是 checkpoint 状态（新 segment、无待发送消息）；apply 的是补回用户消息的状态。
+  // What is persisted is the checkpoint state (new segment, no pending message);
+  // what is applied is the state with the user message restored.
   const [, persistedState] = recorder.byKind("persist")[0];
   assert.equal(persistedState.segments.length, 2);
   assert.equal(persistedState.segments[1].messages.length, 0);
@@ -180,9 +182,10 @@ test("pre-send compaction: checkpoint, persist, re-appended user message, paired
 
   assert.equal(recorder.byKind("queueCheckpoint").length, 1);
 
-  // bridge 状态成对：running 时 isCompaction=true，结束后清 null。
+  // Bridge states come in pairs: isCompaction=true while running, cleared to null
+  // after it ends.
   const bridgeEvents = recorder.byKind("bridge");
-  assert.match(bridgeEvents[0][1], /正在压缩历史/);
+  assert.match(bridgeEvents[0][1], /compacting history/);
   assert.equal(bridgeEvents[0][2], true);
   assert.equal(bridgeEvents.at(-1)[1], null);
 });
@@ -277,11 +280,12 @@ test("user stop chains into the summarizer; handleTurnAbort rolls back and persi
 
   const [, restoredState] = recorder.byKind("applyStateMidRun")[0];
   assert.equal(restoredState, state);
-  // mid-run 回滚必须补持久化（旧 persistOnRollback 语义）。
+  // A mid-run rollback must re-persist (the old persistOnRollback semantics).
   assert.equal(recorder.byKind("persistRollback").length, 1);
   const statuses = recorder.byKind("publishStatus").map(([, status]) => status.phase);
   assert.deepEqual(statuses, ["running", "idle"]);
-  // 回滚后 bridge 状态已清，isCompaction 不悬挂。
+  // After rollback the bridge state is cleared and isCompaction is not left
+  // dangling.
   assert.equal(recorder.byKind("bridge").at(-1)[1], null);
   assert.equal(observed.length, 2);
   assert.equal(observed[0][0], "start");
@@ -292,7 +296,8 @@ test("user stop chains into the summarizer; handleTurnAbort rolls back and persi
   assert.equal(observed[1][1].tokensBefore, observed[0][1].tokensBefore);
   assert.equal(observed[1][1].tokensAfter, undefined);
 
-  // 快照与观察区间都已消费，再次调用不会重复发终态。
+  // Both the snapshot and the observation range have been consumed; another call
+  // will not re-emit a terminal state.
   assert.equal(await controller.handleTurnAbort(), false);
   assert.equal(observed.length, 2);
 });
@@ -381,7 +386,8 @@ test("a late result cannot settle a newer compaction with the same trigger", asy
 
 test("summarizer failure degrades to prune and still returns a usable context", async () => {
   const controller = new CompactionController();
-  // 大工具输出（200k 字符 ≈ 50k tokens > 40k 保护额度）必须在"最近 2 个用户轮次"之前才可被裁剪。
+  // A large tool output (200k chars ~ 50k tokens > the 40k protection budget) can
+  // only be pruned if it precedes the "last 2 user turns".
   const state = conversationState.createConversationStateFromContext({
     systemPrompt: "sys",
     messages: [
@@ -413,7 +419,7 @@ test("summarizer failure degrades to prune and still returns a usable context", 
     .byKind("publishStatus")
     .map(([, status]) => status)
     .find((status) => status.phase === "failed");
-  assert.match(failedStatus.message, /prune 降级/);
+  assert.match(failedStatus.message, /prune degradation/);
   assert.equal(recorder.byKind("bridge").at(-1)[1], null);
 });
 
@@ -511,7 +517,8 @@ test("escalation ladder: consecutive ineffective compactions advise but never ha
       completeCalls += 1;
       return summaryResponse();
     },
-    // 压缩后的恢复上下文仍然巨大 → 判定为低效压缩，推动压力升级。
+    // The post-compaction recovery context is still huge -> judged inefficient
+    // compaction, pushing the pressure escalation.
     buildResumeContext: () => ({
       systemPrompt: "sys",
       messages: [assistantWithUsage("still huge", 190_000, 99)],
@@ -534,9 +541,10 @@ test("escalation ladder: consecutive ineffective compactions advise but never ha
     .filter(([, , isCompaction]) => isCompaction === true)
     .map(([, text]) => text);
   assert.equal(runningTexts.length, 3);
-  assert.doesNotMatch(runningTexts[0], /建议适时开启新会话/);
-  // 连续两次低效后顶格，第三次给出建议性提示但仍执行压缩。
-  assert.match(runningTexts[2], /建议适时开启新会话/);
+  assert.doesNotMatch(runningTexts[0], /starting a new conversation soon/);
+  // After two consecutive inefficient compactions the ladder tops out; the third
+  // gives an advisory notice but still performs compaction.
+  assert.match(runningTexts[2], /starting a new conversation soon/);
 });
 
 test("two consecutive compaction checkpoints preserve the exact authoritative task state", async () => {
@@ -642,7 +650,7 @@ test("beginRequest exposes the current total and dynamic fixed-token snapshot", 
   });
 });
 
-// —— 手动压缩（用量环入口）——
+// -- Manual compaction (usage ring entry point) --
 
 function manualBinding(overrides = {}) {
   const cancellation = cancellationModule.createTurnCancellation();
@@ -675,8 +683,9 @@ function manualBinding(overrides = {}) {
 
 test("compactManually skips below the 50% manual threshold", async () => {
   const controller = new CompactionController();
-  // 锚点 = usage 纯算术（prompt 侧 + 可见输出，本例 output 为 0），99_000
-  // 保证读数停在 100_000（50%）门槛之下。
+  // The anchor = pure arithmetic on usage (prompt side + visible output; output
+  // is 0 in this case); 99_000 keeps the reading below the 100_000 (50%)
+  // threshold.
   const state = conversationState.createConversationStateFromContext({
     systemPrompt: "sys",
     messages: [
@@ -720,11 +729,12 @@ test("compactManually compacts at 50%, bypasses the automatic threshold, and unb
   assert.ok(checkpointTokens > 0);
   const [, appliedState] = recorder.byKind("applyStateMidRun")[0];
   assert.equal(appliedState.segments.length, 2);
-  // running 时 bridge isCompaction=true，结束后清 null。
+  // Bridge isCompaction=true while running, cleared to null after it ends.
   const bridgeEvents = recorder.byKind("bridge");
   assert.equal(bridgeEvents[0][2], true);
   assert.equal(bridgeEvents.at(-1)[1], null);
-  // 解绑后可再次手动压缩（不被残留 binding 卡成 busy）。
+  // After unbinding, manual compaction can run again (not stuck as busy by a
+  // leftover binding).
   assert.notEqual(
     (await controller.compactManually(manualBinding().binding, bigState())).status,
     "busy",
@@ -757,10 +767,13 @@ test("compactManually honors the persisted usage snapshot and fixed-token anchor
   );
 });
 
-// 压缩后的无锚点窗口（新 segment 尚无真实 usage）：空闲环显示检查点权威值，
-// 发送后运行中环改读账本。现算估算的任何输入漂移（激活工具子集收窄、memory
-// 段重冻结、重启丢 overhead）都可能低于检查点值——账本必须以检查点为 fixed
-// 下界，否则环先倒退、首个真实 usage 到达再跳涨。
+// The post-compaction anchorless window (the new segment has no real usage yet):
+// the idle ring shows the checkpoint authoritative value, and after sending the
+// running ring switches to reading the ledger. Any input drift in the live
+// estimate (narrowed active-tool subset, re-frozen memory segment, overhead lost
+// on restart) may fall below the checkpoint value -- the ledger must use the
+// checkpoint as a fixed lower bound, otherwise the ring first regresses and then
+// jumps up when the first real usage arrives.
 test("post-compaction beginRequest never dips below the checkpoint anchor", async () => {
   const controller = new CompactionController();
   const state = conversationState.createConversationStateFromContext({
@@ -771,7 +784,8 @@ test("post-compaction beginRequest never dips below the checkpoint anchor", asyn
     ],
   });
   const { binding, recorder } = manualBinding();
-  // 大 fixedTokens 快照抬高检查点权威值，模拟“检查点值 > 下一次发送的现算估算”。
+  // A large fixedTokens snapshot raises the checkpoint authoritative value,
+  // simulating "checkpoint value > the live estimate of the next send".
   const result = await controller.compactManually(binding, state, {
     totalTokens: 100_000,
     fixedTokens: 40_000,
@@ -780,9 +794,10 @@ test("post-compaction beginRequest never dips below the checkpoint anchor", asyn
   const [, checkpointState, checkpointTokens] = recorder.byKind("queueCheckpoint")[0];
   assert.ok(checkpointTokens >= 40_000);
 
-  // 压缩后下一次发送：现算 fixed（sys + 摘要）远低于检查点值。
+  // The next send after compaction: the live fixed (sys + summary) is far below
+  // the checkpoint value.
   const nextState = conversationState.appendMessagesToConversation(checkpointState, [
-    user("接着做下一件事", 30),
+    user("do the next thing", 30),
   ]);
   const nextContext = conversationState.buildRequestContext(nextState);
   const total = controller.beginRequest(nextContext, nextState);
@@ -791,7 +806,8 @@ test("post-compaction beginRequest never dips below the checkpoint anchor", asyn
     `post-compaction beginRequest total ${total} must not dip below checkpoint ${checkpointTokens}`,
   );
 
-  // 跨重启：全新控制器（无 overhead、无账本快照）从持久化状态恢复同一下界。
+  // Across restart: a brand-new controller (no overhead, no ledger snapshot)
+  // recovers the same lower bound from persisted state.
   const freshController = new CompactionController();
   const freshTotal = freshController.beginRequest(nextContext, nextState);
   assert.ok(
@@ -799,7 +815,8 @@ test("post-compaction beginRequest never dips below the checkpoint anchor", asyn
     `fresh-controller beginRequest total ${freshTotal} must not dip below checkpoint ${checkpointTokens}`,
   );
 
-  // 真实 usage 锚点出现后，下界退场、读数回到锚点算术。
+  // Once a real usage anchor appears, the lower bound retires and the reading
+  // returns to anchor arithmetic.
   controller.observeContextMessages([assistantWithUsage("done", 41_000, 31)]);
   assert.equal(controller.contextUsageTokens, 41_000);
 });
@@ -831,8 +848,10 @@ test("compactManually keeps the disabled hard guard (zero context window)", asyn
 
 test("manual compaction failure never prunes or applies state to an idle conversation", async () => {
   const controller = new CompactionController();
-  // 含可剪枝大工具输出的状态：run 时触发会走 prune 降级，manual（空闲会话）
-  // 绝不允许——prune 结果不持久化，一旦 apply 即内存与磁盘分叉。
+  // A state containing a prunable large tool output: triggering while running
+  // follows prune degradation, but manual (idle conversation) must never allow
+  // it -- prune results are not persisted, so applying one forks memory from
+  // disk.
   const state = conversationState.createConversationStateFromContext({
     systemPrompt: "sys",
     messages: [
@@ -867,7 +886,8 @@ test("manual compaction failure never prunes or applies state to an idle convers
 
 test("manual compaction skip after a prior completed compaction is not misreported", async () => {
   const controller = new CompactionController();
-  // 第一次成功压缩把控制器的 statusPhase 留在 completed（生命周期字段，跨操作残留）。
+  // The first successful compaction leaves the controller's statusPhase at
+  // completed (a lifecycle field that persists across operations).
   const firstState = conversationState.createConversationStateFromContext({
     systemPrompt: "sys",
     messages: [
@@ -879,8 +899,9 @@ test("manual compaction skip after a prior completed compaction is not misreport
     status: "compacted",
   });
 
-  // 第二次低于 50% 门槛：探针拒绝。结果必须按本次调用的显式 outcome 报告，
-  // 不得被残留的 completed 误报成 compacted。
+  // The second is below the 50% threshold: the probe refuses. The result must be
+  // reported by this call's explicit outcome and must not be misreported as
+  // compacted by the leftover completed.
   const secondState = conversationState.createConversationStateFromContext({
     systemPrompt: "sys",
     messages: [user("hi", 1), assistantWithUsage("hello", 42_000, 2)],
@@ -892,8 +913,10 @@ test("manual compaction skip after a prior completed compaction is not misreport
   assert.equal(recorder.byKind("publishStatus").length, 0);
   assert.equal(recorder.byKind("persist").length, 0);
 
-  // 更深一层：执行路径自身的二次裁决 skip 也必须走显式 outcome 通道——
-  // 决策拒绝不 publish 任何状态，残留的 completed 不得参与结果判定。
+  // One level deeper: the execution path's own secondary skip decision must also
+  // go through the explicit outcome channel -- a decision refusal publishes no
+  // state, and the leftover completed must not participate in the result
+  // decision.
   const { binding: directBinding } = manualBinding();
   controller.bindTurn(directBinding);
   const direct = await controller.compactDuringRun({
@@ -921,7 +944,8 @@ test("a rejected manual probe leaves the shared usage ledger untouched", async (
   const result = await controller.compactManually(manualBinding().binding, probeState);
 
   assert.equal(result.status, "skipped");
-  // 共享账本是用量环的读数真源：被拒的探测不得在其上留下任何残留。
+  // The shared ledger is the usage ring's source of truth for readings: a refused
+  // probe must leave no residue on it.
   assert.equal(controller.contextUsageTokens, before);
 });
 
@@ -948,15 +972,16 @@ test("compactManually threads tools into probe and checkpoint builds and fires o
     tools,
     onProceed: () => {
       proceedCalls += 1;
-      // onProceed 在探针通过之后、running 状态发布之前同步触发。
+      // onProceed fires synchronously after the probe passes and before the running
+      // status is published.
       assert.equal(recorder.byKind("publishStatus").length, 0);
     },
   });
 
   assert.deepEqual(result, { status: "compacted" });
   assert.equal(proceedCalls, 1);
-  // 探针、预算、checkpoint 三次构建都拿到同一份工具集（checkpoint 估值
-  // 缺了工具重量会系统性偏低）。
+  // The probe, budget, and checkpoint builds all receive the same tool set (a
+  // checkpoint estimate missing tool weight would be systematically low).
   assert.ok(seenTools.length >= 3);
   assert.ok(seenTools.every((entry) => entry === tools));
 });
@@ -1005,17 +1030,20 @@ test("compactManually reports aborted=true when the user stops mid-compaction", 
   const result = await pending;
 
   assert.deepEqual(result, { status: "failed", aborted: true });
-  // 统一善后：回滚快照消费（补持久化）、running 复位 idle、bridge 清空。
+  // Unified cleanup: rollback snapshot consumption (re-persist), running reset to
+  // idle, bridge cleared.
   const statuses = recorder.byKind("publishStatus").map(([, status]) => status.phase);
   assert.deepEqual(statuses, ["running", "idle"]);
   assert.equal(recorder.byKind("persistRollback").length, 1);
   assert.equal(recorder.byKind("bridge").at(-1)[1], null);
 });
 
-// —— revision 盖章：persist sink 返回带 revision 的持久化状态时，落地（apply/
-// queueCheckpoint）的必须是那份盖章状态。压缩 checkpoint 状态出自
-// appendMessagesToConversation（revision 恒 null），若照原样 apply，运行时缓存
-// 失去 replace/分页的 CAS 令牌，压缩后 edit-resend 报"历史会话缺少 revision"。
+// -- revision stamping: when the persist sink returns a persisted state with a
+// revision, what lands (apply / queueCheckpoint) must be that stamped state.
+// The compaction checkpoint state comes from appendMessagesToConversation
+// (revision always null); applying it as-is would make the runtime cache lose
+// its CAS token for replace/pagination, and after compaction edit-resend
+// reports "history conversation is missing revision".
 
 function stampingPersist(recorder, revision) {
   recorder.sinks.persist = async (state) => {
@@ -1069,7 +1097,8 @@ test("pre-send compaction re-stamps the revision after composeAppliedState clear
 
   assert.equal(applied, true);
   const [, appliedState] = recorder.byKind("applyState")[0];
-  // compose 补回了用户消息（内存追加，DB 仍是 checkpoint 版本），revision 保留。
+  // compose restored the user message (in-memory append; the DB is still the
+  // checkpoint version), and the revision is kept.
   assert.equal(appliedState.segments.at(-1).messages.at(-1).content, "next question");
   assert.equal(appliedState.transcript.revision, "conv:200:1:2:4");
 });

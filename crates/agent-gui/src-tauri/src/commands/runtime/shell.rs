@@ -14,8 +14,9 @@ pub struct ShellCancelResponse {
     cancelled: bool,
 }
 
-/// 请求侧的沙箱声明只是"上限之下的加严",最终生效值由后端与持久化的
-/// commandSafetyMode 取更严格者(P1#3)。任何 host 都无法靠传 `sandbox=false` 绕过围栏。
+/// The request-side sandbox declaration is only a "tightening below the ceiling"; the
+/// effective value is the stricter of it and the persisted commandSafetyMode (P1#3). No
+/// host can bypass the fence by passing `sandbox=false`.
 fn effective_sandbox_options(
     sandbox: bool,
     sandbox_allow_network: bool,

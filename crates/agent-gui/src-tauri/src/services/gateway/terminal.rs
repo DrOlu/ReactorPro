@@ -24,8 +24,9 @@ use super::gateway_proto::v2;
 use super::*;
 
 impl GatewayController {
-    /// v2 终端数据面（/ws/v2/terminal，角色 AGENT）：PTY/注册表侧播种口与 WebSocket 版完全一致；
-    /// 由 connect_and_serve 在主链路建立后生成本任务，与主链路同生命周期。
+    /// v2 terminal data plane (/ws/v2/terminal, role AGENT): the PTY/registry-side seeding entry is identical to
+    /// the WebSocket version; connect_and_serve spawns this task after the main link is established, and it shares
+    /// the main link's lifetime.
     pub(crate) fn spawn_terminal_stream_ws(
         self: &Arc<Self>,
         config: RemoteSettingsPayload,
@@ -37,7 +38,7 @@ impl GatewayController {
         })
     }
 
-    /// v2 终端流重连主循环，骨架与 WebSocket 版一致（同一组退避常量）。
+    /// v2 terminal stream reconnect main loop; its skeleton matches the WebSocket version (same set of backoff constants).
     pub(crate) async fn run_terminal_stream_ws(
         self: Arc<Self>,
         config: RemoteSettingsPayload,
@@ -85,8 +86,8 @@ impl GatewayController {
         self.set_terminal_stream_sender(None);
     }
 
-    /// 单次 v2 终端流连接：hello ok=true 即就绪，随后双向透传
-    /// TerminalStreamFrame，并通过周期 WS Ping 保活。
+    /// A single v2 terminal stream connection: ready once hello ok=true, then transparently relays
+    /// TerminalStreamFrame in both directions and keeps alive via periodic WS Ping.
     pub(crate) async fn run_terminal_stream_ws_once(
         self: Arc<Self>,
         config: RemoteSettingsPayload,
@@ -162,7 +163,7 @@ impl GatewayController {
                                 }
                             }
                             Some(Ok(WsMessage::Close(_))) => return Ok(()),
-                            // Ping/Pong 由 tungstenite 自动处理。
+                            // Ping/Pong is handled automatically by tungstenite.
                             Some(Ok(_)) => {}
                         }
                     }

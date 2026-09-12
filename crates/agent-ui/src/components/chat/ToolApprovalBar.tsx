@@ -1,8 +1,12 @@
-// 集中式工具审批面板:策略为 ask 的工具在执行前挂起等待用户批准。待审批时直接替换
-// 输入卡片；一次只呈现最早的一项，其余数量与批量动作收进极简的计数/下拉入口。
+// Centralized tool approval panel: tools with the ask policy suspend before
+// execution and wait for user approval. While awaiting approval it directly
+// replaces the input card; only the earliest item is shown at a time, with the
+// remaining count and bulk actions tucked into a minimal count/dropdown entry.
 //
-// 纯展示 + 决定回调;数据(pending 列表)与提交动作由各端注入:GUI 直连桌面审批服务,
-// WebUI 走网关 tool_approval，端差异一律留在各端宿主。
+// Pure presentation + decision callback; the data (pending list) and submit
+// action are injected by each client: the GUI connects directly to the desktop
+// approval service, while the WebUI goes through the gateway tool_approval.
+// Platform differences stay in each client's host.
 
 import { ChevronDown, Loader2, Terminal } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
@@ -17,7 +21,7 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { useEffect, useRef, useState } from "react";
 import { ASK_USER_QUESTION_TIMEOUT_MS } from "../../lib/chat/askUserQuestion";
 
-/** approve:本次放行;deny:本次拒绝;approve_session:本会话内该工具后续免审。 */
+/** approve: allow this time; deny: reject this time; approve_session: skip approval for this tool for the rest of the session. */
 export type ToolApprovalDecision = "approve" | "deny" | "approve_session";
 
 export type ToolApprovalSubmitOutcome = { ok: boolean; message?: string };
@@ -25,9 +29,9 @@ export type ToolApprovalSubmitOutcome = { ok: boolean; message?: string };
 export type PendingApprovalItem = {
   toolCallId: string;
   toolName: string;
-  /** 命令/参数摘要(Bash 显示命令等);空则只显示工具名。 */
+  /** Command/argument summary (e.g. the command shown for Bash); when empty, only the tool name is shown. */
   summary?: string;
-  /** 权威应答截止时间戳(毫秒);缺省以挂载时刻近似。 */
+  /** Authoritative response deadline timestamp (ms); when absent, approximated from mount time. */
   deadlineAt?: number;
 };
 
@@ -38,8 +42,10 @@ function formatCountdown(remainingMs: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-// 倒计时取列表中最早的 deadline(最紧迫者驱动整栏)。缺失时以挂载时刻近似。
-// 超时后桌面按“拒绝”落定,pending 消失,本栏随之隐藏。
+// The countdown uses the earliest deadline in the list (the most urgent one
+// drives the whole bar). When absent, it is approximated from mount time.
+// After the timeout the desktop settles on "deny", the pending item disappears,
+// and this bar hides along with it.
 function useEarliestCountdown(active: boolean, deadlines: number[]) {
   const [fallbackDeadline] = useState(() => Date.now() + ASK_USER_QUESTION_TIMEOUT_MS);
   const earliest = deadlines.length > 0 ? Math.min(...deadlines) : fallbackDeadline;

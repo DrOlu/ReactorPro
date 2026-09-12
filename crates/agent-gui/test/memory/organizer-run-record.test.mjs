@@ -36,13 +36,13 @@ test("v4 report round-trips through readRunReport", () => {
 test("legacy blobs degrade to read-only summaries", () => {
   const parsed = readRunReport(
     runWithReport({
-      clusterSummaries: ["旧总结"],
+      clusterSummaries: ["old summary"],
       reviewNotes: ["cluster c1: something skipped"],
       safeDecisions: [{ op: "delete", slug: "x" }],
     }),
   );
   assert.equal(parsed.version, "legacy");
-  assert.deepEqual(parsed.clusterSummaries, ["旧总结"]);
+  assert.deepEqual(parsed.clusterSummaries, ["old summary"]);
   assert.equal(parsed.reviewItems.length, 1);
   assert.equal(parsed.reviewItems[0].message, "cluster c1: something skipped");
   assert.equal("safeDecisions" in parsed, false);

@@ -39,15 +39,15 @@ const markdownModule = loader.loadModule("@liveagent/ui/components/Markdown.tsx"
 
 test("webui markdown image syntax also falls back to alt text", () => {
   const node = markdownModule.markdownComponents.img({
-    alt: "东门老街",
-    title: "深圳夜景",
+    alt: "Dongmen Old Street",
+    title: "Shenzhen Night View",
   });
 
   assert.ok(node);
   assert.equal(node.type, "span");
   assert.equal(node.props["data-liveagent-markdown-image"], "text-fallback");
-  assert.equal(node.props.title, "东门老街");
-  assert.equal(node.props.children, "东门老街");
+  assert.equal(node.props.title, "Dongmen Old Street");
+  assert.equal(node.props.children, "Dongmen Old Street");
 
   const empty = markdownModule.markdownComponents.img({});
   assert.equal(empty, null);

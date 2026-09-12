@@ -21,23 +21,26 @@ import {
 } from "../../../lib/chat-floor-nav/floorModel";
 import { cn } from "../../../lib/shared/utils";
 
-/** 收起态短横线数量上限的绝对边界（实际数量随可用高度自适应）。 */
+/** Absolute bound on the maximum number of collapsed-state tick marks (the actual count adapts to the available height). */
 const MIN_COLLAPSED_MARKERS = 8;
 const MAX_COLLAPSED_MARKERS = 40;
 /**
- * 触屏端收起态上限单独收紧：手机视口高而窄，高度自适应会直接摸到桌面上限，
- * 超长会话下整列标记撑满全屏高度、视觉噪音大；压成短列后配合 nav 的垂直
- * 居中布局只占屏幕中段一小截。楼层再多也只是采样更稀，首尾仍然保留。
+ * The touch-device collapsed-state cap is tightened separately: a phone viewport is tall and
+ * narrow, so height adaptation would immediately hit the desktop cap, and in very long
+ * conversations the whole column of markers would fill the full screen height with heavy visual
+ * noise; compressed into a short column, together with nav's vertical centering it occupies only
+ * a small stretch in the middle of the screen. More floors just means sparser sampling - the first
+ * and last markers are still kept.
  */
 const MAX_COLLAPSED_MARKERS_TOUCH = 12;
-/** 单根短横线（2px）+ 间距（7.5px）的占位高度。 */
+/** Slot height for one tick mark (2px) + gap (7.5px). */
 const MARKER_SLOT_PX = 9.5;
 const BASE_MARKER_WIDTH_PX = 6;
 const WAVE_MARKER_WIDTHS_PX = [26, 20, 14, 10] as const;
 const PREVIEW_CARD_HALF_HEIGHT_PX = 56;
-/** 鼠标移出后延迟收起，避免指针在轨道与面板间移动时闪烁。 */
+/** Delay collapsing after the mouse leaves, to avoid flicker as the pointer moves between the rail and the panel. */
 const COLLAPSE_DELAY_MS = 160;
-/** 触屏端：滚动停止后导航栏保持可见的时长，随后淡出避免遮挡内容。 */
+/** Touch devices: how long the navigation rail stays visible after scrolling stops, then fades out to avoid covering content. */
 const TOUCH_SCROLL_REVEAL_MS = 1400;
 
 function useFloorBookmarks(conversationId: string): ReadonlySet<string> {
@@ -55,13 +58,15 @@ export function FloorNavRail(props: {
   floors: FloorEntry[];
   activeRowKey: string | null;
   /**
-   * 导航栏底缘的 CSS 偏移（避开底部输入框悬浮区）。桌面端传计算好的像素值
-   * （如 "196px"），WebUI 传 CSS 变量表达式（如 "calc(var(--x) + 12px)"）。
+   * The CSS offset of the navigation rail's bottom edge (to avoid the floating bottom input area).
+   * Desktop passes a computed pixel value (e.g. "196px"), and the WebUI passes a CSS variable
+   * expression (e.g. "calc(var(--x) + 12px)").
    */
   bottomOffset?: string;
   /**
-   * 转写滚动视口。触屏端用于「滚动时显现、静止后淡出」——不传则触屏端也
-   * 常显（桌面端 hover 交互不依赖此元素）。
+   * The transcript scroll viewport. On touch devices it drives "appear while scrolling, fade out
+   * when idle" - when omitted, touch devices also stay visible (desktop hover interaction does not
+   * depend on this element).
    */
   scrollViewport?: HTMLElement | null;
   onJump: (rowKey: string) => void;
@@ -81,12 +86,13 @@ export function FloorNavRail(props: {
   const [hoveredMarkerKey, setHoveredMarkerKey] = useState<string | null>(null);
   const collapseTimerRef = useRef<number | null>(null);
   const panelScrollRef = useRef<HTMLDivElement | null>(null);
-  // nav 元素走 callback ref → state（与 ChatTranscript 绑定 scrollViewport 同一
-  // 模式）：楼层 <2 时 rail 渲染为 null，nav 在组件已挂载后才出现/消失，一次性
-  // 挂载 effect 会错过它——按元素身份重跑，观察器才始终挂在活着的节点上。
+  // The nav element uses a callback ref -> state (the same pattern as ChatTranscript binding
+  // scrollViewport): when there are <2 floors the rail renders as null, and the nav appears
+  // or disappears only after the component has mounted, so a one-shot mount effect would miss it -
+  // re-running by element identity keeps the observer attached to a live node.
   const [navEl, setNavEl] = useState<HTMLElement | null>(null);
 
-  // 触屏（无 hover）环境：展开/收起改由点按驱动，跳转后主动收起面板。
+  // Touch (no hover) environments: expand/collapse is driven by tap instead, and the panel is collapsed actively after a jump.
   const isCoarsePointer = useMemo(
     () =>
       typeof window !== "undefined" &&
@@ -95,8 +101,9 @@ export function FloorNavRail(props: {
     [],
   );
 
-  // 触屏端滚动显隐：平时整体隐藏不遮内容，滚动中显现、静止一段时间后淡出。
-  // 面板展开期间不淡出（用户正在交互）；隐藏态关闭指针事件，透传给转写区。
+  // Touch-device scroll visibility: normally hidden so it does not cover content, appearing while
+  // scrolling and fading out after a period of rest. It does not fade while the panel is open (the
+  // user is interacting); the hidden state disables pointer events, passing them through to the transcript.
   const [touchRevealed, setTouchRevealed] = useState(false);
   const revealTimerRef = useRef<number | null>(null);
   const touchPanelOpenRef = useRef(false);
@@ -109,7 +116,7 @@ export function FloorNavRail(props: {
       }
       revealTimerRef.current = window.setTimeout(() => {
         revealTimerRef.current = null;
-        // 面板展开中不淡出；面板收起时（handleLeave/外点）会重新走到这里。
+        // Do not fade while the panel is open; when the panel collapses (handleLeave/outside click) it comes back through here.
         if (!touchPanelOpenRef.current) setTouchRevealed(false);
       }, TOUCH_SCROLL_REVEAL_MS);
     };
@@ -123,8 +130,9 @@ export function FloorNavRail(props: {
     };
   }, [isCoarsePointer, scrollViewport]);
 
-  // 收起态标记数随聊天区可用高度自适应：矮视口（小窗口/高输入框）少放几根，
-  // 保证最新楼层的标记不被裁掉。触屏端上限另行收紧（见常量注释）。
+  // The collapsed marker count adapts to the chat area's available height: a short viewport (small
+  // window/tall input) gets fewer marks, ensuring the newest floor's marker is not clipped. The
+  // touch-device cap is tightened separately (see the constant's comment).
   const maxMarkers = isCoarsePointer ? MAX_COLLAPSED_MARKERS_TOUCH : MAX_COLLAPSED_MARKERS;
   const [markerBudget, setMarkerBudget] = useState(maxMarkers);
   useLayoutEffect(() => {
@@ -139,7 +147,7 @@ export function FloorNavRail(props: {
     return () => observer.disconnect();
   }, [navEl, maxMarkers]);
 
-  // 展开时把当前楼层滚到面板中间，楼层很多时不必从头找。
+  // When expanded, scroll the current floor to the middle of the panel, so with many floors there is no need to search from the top.
   useLayoutEffect(() => {
     if (!touchPanelOpen) return;
     panelScrollRef.current
@@ -147,10 +155,10 @@ export function FloorNavRail(props: {
       ?.scrollIntoView({ block: "center" });
   }, [touchPanelOpen]);
 
-  // 触屏自动隐藏仅在提供了滚动视口时启用。
+  // Touch auto-hide is enabled only when a scroll viewport is provided.
   const touchAutoHide = isCoarsePointer && scrollViewport !== null;
 
-  // 面板展开期间强制可见并挂起淡出计时；收起后重新计时淡出。
+  // While the panel is open it is forced visible and the fade timer is suspended; after collapsing the fade timer restarts.
   useEffect(() => {
     touchPanelOpenRef.current = touchPanelOpen;
     if (!touchAutoHide) return;
@@ -176,19 +184,20 @@ export function FloorNavRail(props: {
 
   const railVisible = !touchAutoHide || touchRevealed;
 
-  const railLabel = isEn ? "Message navigation" : "楼层导航";
+  const railLabel = isEn ? "Message navigation" : "Message navigation";
 
-  const pinnedTitle = isEn ? "Pinned" : "收藏";
-  const pinLabel = isEn ? "Pin" : "收藏";
-  const unpinLabel = isEn ? "Unpin" : "取消收藏";
+  const pinnedTitle = isEn ? "Pinned" : "Pinned";
+  const pinLabel = isEn ? "Pin" : "Pin";
+  const unpinLabel = isEn ? "Unpin" : "Unpin";
 
   const bookmarkedFloors = useMemo(
     () => floors.filter((floor) => bookmarks.has(floor.messageId)),
     [floors, bookmarks],
   );
 
-  // 采样集合只由楼层与收藏决定（滚动不改变集合，整列不会随滚动抖动）；
-  // 当前楼层未被采样时，高亮落到最近的已采样标记上。
+  // The sampled set is determined only by floors and bookmarks (scrolling does not change the set,
+  // so the column does not jitter while scrolling); when the current floor is not sampled, the
+  // highlight falls on the nearest sampled marker.
   const collapsedMarkers = useMemo(() => {
     const mustKeep = new Set(bookmarkedFloors.map((floor) => floor.rowKey));
     return sampleFloorEntries(floors, markerBudget, mustKeep);
@@ -241,7 +250,7 @@ export function FloorNavRail(props: {
 
   useEffect(() => () => cancelCollapse(), [cancelCollapse]);
 
-  // 触屏没有 mouseleave：面板展开期间点按导航栏以外任意位置立即收起。
+  // Touch has no mouseleave: while the panel is open, tapping anywhere outside the navigation rail collapses it immediately.
   useEffect(() => {
     if (!touchPanelOpen || !navEl) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -256,7 +265,7 @@ export function FloorNavRail(props: {
   const handleJump = useCallback(
     (rowKey: string) => {
       onJump(rowKey);
-      // 触屏跳转后面板不会因指针移出而收起，这里主动收；桌面保持展开便于连跳。
+      // After a touch jump the panel does not collapse from the pointer leaving, so it is collapsed actively here; desktop stays expanded to allow consecutive jumps.
       if (isCoarsePointer) {
         cancelCollapse();
         setTouchPanelOpen(false);
@@ -273,7 +282,7 @@ export function FloorNavRail(props: {
     return (
       <div
         key={isPinnedCopy ? `pinned-${floor.rowKey}` : floor.rowKey}
-        // 收藏区的副本不带定位锚点，展开自动居中永远对准主列表里的当前行。
+        // Copies in the bookmark section carry no positioning anchor, so auto-centering on expand always targets the current row in the main list.
         data-floor-active={(isActive && !isPinnedCopy) || undefined}
         className={cn(
           "group/floor flex items-center gap-1 rounded-lg pr-1 transition-colors",
@@ -301,7 +310,7 @@ export function FloorNavRail(props: {
             isBookmarked
               ? "text-amber-500 hover:text-amber-600"
               : "text-muted-foreground/50 opacity-0 hover:text-foreground group-hover/floor:opacity-100 focus-visible:opacity-100",
-            // 触屏没有 hover 显隐，收藏按钮常显。
+            // Touch has no hover show/hide, so the bookmark button is always visible.
             isCoarsePointer && "opacity-100",
           )}
         >
@@ -317,8 +326,9 @@ export function FloorNavRail(props: {
       aria-label={railLabel}
       aria-hidden={!railVisible || undefined}
       className={cn(
-        // 极窄容器(如 280px 以下的分屏 Pane)整条隐藏:短横线列会压住正文,
-        // 面板展开更无从谈起。容器查询挂在转录根的 @container 上。
+        // Very narrow containers (e.g. a split Pane under 280px) hide the whole rail: the tick
+        // column would press on the body text, and a panel expansion is out of the question. The
+        // container query is attached to the transcript root's @container.
         "pointer-events-none absolute right-4 top-2 z-10 flex items-center transition-opacity duration-200 @max-[280px]:hidden",
         railVisible ? "opacity-100" : "opacity-0",
       )}
@@ -343,10 +353,11 @@ export function FloorNavRail(props: {
       {isCoarsePointer && touchPanelOpen ? (
         <div
           className={cn(
-            // 宽度按容器(转录区/Pane)钳制而非视口:分屏窄 Pane 下面板不得
-            // 溢出 Pane。无容器祖先时 cqw 按视口回退,行为与旧 100vw 一致。
+            // The width is clamped by the container (transcript area/Pane) rather than the viewport:
+            // in a narrow split Pane the panel must not overflow the Pane. With no container ancestor,
+            // cqw falls back to the viewport, matching the old 100vw behavior.
             "floor-nav-panel flex max-h-[min(78%,560px)] w-60 max-w-[calc(100cqw-2rem)] touch-manipulation flex-col overflow-hidden rounded-xl border border-border/50 bg-background/85 shadow-[0_12px_32px_-16px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.06]",
-            // 隐藏态不吃指针事件：触摸透传给转写区，不会点到看不见的控件。
+            // The hidden state does not consume pointer events: touches pass through to the transcript, so invisible controls are never tapped.
             railVisible ? "pointer-events-auto" : "pointer-events-none",
           )}
         >
@@ -369,9 +380,10 @@ export function FloorNavRail(props: {
             "flex max-h-full touch-manipulation flex-col items-end gap-[7.5px] overflow-visible py-2 pl-2 pr-0.5",
             railVisible ? "pointer-events-auto" : "pointer-events-none",
           )}
-          // 触屏收起态：2px 的短横线没法精确点按，整列点按一律先展开面板，
-          // 跳转都发生在面板行上。preventDefault 掐掉后续合成 mouse/click，
-          // 避免展开瞬间面板行吃到同一次点按误触跳转。
+          // Touch collapsed state: a 2px tick mark cannot be tapped precisely, so tapping the column
+          // always expands the panel first, and jumps happen on panel rows. preventDefault suppresses the
+          // subsequent synthesized mouse/click so the panel row does not consume the same tap and jump
+          // accidentally right as it expands.
           onTouchEnd={
             isCoarsePointer
               ? (event) => {
@@ -396,7 +408,7 @@ export function FloorNavRail(props: {
                 onMouseEnter={() => handleMarkerEnter(floor.rowKey)}
                 onFocus={() => handleMarkerEnter(floor.rowKey)}
                 className={cn(
-                  // after 伪元素把命中区扩到整条槽位高度，覆盖标记间 7.5px 间隙。
+                  // The after pseudo-element expands the hit area to the full slot height, covering the 7.5px gaps between markers.
                   "relative h-0.5 rounded-full outline-none transition-[width,background-color,opacity] duration-150 ease-out after:absolute after:-inset-x-2 after:-inset-y-1 after:content-[''] motion-reduce:transition-none",
                   isBookmarked
                     ? "bg-amber-500/90"

@@ -69,16 +69,16 @@ test("user message skill mentions style only skill-like tokens", () => {
 
 test("slash skill mentions tokenize at word boundaries but leave paths alone", () => {
   assert.deepEqual(
-    compactSegments(userMessageContent.tokenizeUserMessage("请用 /code-review 检查", [])),
+    compactSegments(userMessageContent.tokenizeUserMessage("Use /code-review to check", [])),
     [
-      { type: "text", value: "请用 " },
+      { type: "text", value: "Use " },
       { type: "skill" },
-      { type: "text", value: " 检查" },
+      { type: "text", value: " to check" },
     ],
   );
   assert.deepEqual(
-    compactSegments(userMessageContent.tokenizeUserMessage("查看 /usr/bin 目录", [])),
-    [{ type: "text", value: "查看 /usr/bin 目录" }],
+    compactSegments(userMessageContent.tokenizeUserMessage("Check the /usr/bin directory", [])),
+    [{ type: "text", value: "Check the /usr/bin directory" }],
   );
 });
 
@@ -92,8 +92,8 @@ test("file mention markdown references round trip through transcript tokenizatio
     token,
     "[AppUpdateButton.tsx](crates/agent-gui/src/components/AppUpdateButton.tsx)",
   );
-  assert.deepEqual(compactSegments(userMessageContent.tokenizeUserMessage(`查看 ${token}`, [])), [
-    { type: "text", value: "查看 " },
+  assert.deepEqual(compactSegments(userMessageContent.tokenizeUserMessage(`View ${token}`, [])), [
+    { type: "text", value: "View " },
     {
       type: "mention",
       path: "crates/agent-gui/src/components/AppUpdateButton.tsx",
@@ -105,17 +105,17 @@ test("file mention markdown references round trip through transcript tokenizatio
 test("conversation mention references preserve the selected id and render as a chip", () => {
   const reference = {
     id: "conversation/previous-42",
-    title: "修复登录流程",
+    title: "Fix login flow",
   };
   const token = mentionReferences.formatConversationMentionToken(reference);
 
   assert.equal(
     token,
-    "[conversation: 修复登录流程](conversation:conversation%2Fprevious-42)",
+    "[conversation: Fix login flow](conversation:conversation%2Fprevious-42)",
   );
-  const segments = userMessageContent.tokenizeUserMessage(`继续 ${token}`, []);
+  const segments = userMessageContent.tokenizeUserMessage(`Continue ${token}`, []);
   assert.deepEqual(compactSegments(segments), [
-    { type: "text", value: "继续 " },
+    { type: "text", value: "Continue " },
     { type: "conversation" },
   ]);
   assert.deepEqual(segments[1].reference, reference);
@@ -123,7 +123,7 @@ test("conversation mention references preserve the selected id and render as a c
   const html = renderToStaticMarkup(
     jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, { text: token }),
   );
-  assert.match(html, /修复登录流程/);
+  assert.match(html, /Fix login flow/);
   assert.doesNotMatch(html, /conversation%2Fprevious-42/);
 });
 
@@ -221,15 +221,15 @@ test("directory mention markdown references require slashless labels", () => {
 
 test("inline file mention tokens remain plain text", () => {
   assert.deepEqual(
-    compactSegments(userMessageContent.tokenizeUserMessage("打开 @src/main.tsx 和 @docs/", [])),
-    [{ type: "text", value: "打开 @src/main.tsx 和 @docs/" }],
+    compactSegments(userMessageContent.tokenizeUserMessage("Open @src/main.tsx and @docs/", [])),
+    [{ type: "text", value: "Open @src/main.tsx and @docs/" }],
   );
 });
 
 test("rendered commit mentions do not include native title tooltips", () => {
   const html = renderToStaticMarkup(
     jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, {
-      text: "看看 [commit 0e1a4fc: init](https://github.com/example/repo/commit/0e1a4fc1234567890)",
+      text: "Look at [commit 0e1a4fc: init](https://github.com/example/repo/commit/0e1a4fc1234567890)",
     }),
   );
 
@@ -253,12 +253,12 @@ test("trailing newlines render a visual line anchor without changing DOM text", 
 test("plain user message text is wrapped in an inline selection boundary", () => {
   const html = renderToStaticMarkup(
     jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, {
-      text: "只用 Edit 工具把第 1000 行改成 line 1000 changed，不要重写整个文件。",
+      text: "Use only the Edit tool to change line 1000 to line 1000 changed; do not rewrite the whole file.",
     }),
   );
 
   assert.match(html, /^<span class="chat-user-message-content">/);
-  assert.match(html, /不要重写整个文件。<\/span>$/);
+  assert.match(html, /do not rewrite the whole file\.<\/span>$/);
 });
 
 test("code mention tokens round trip through transcript tokenization", () => {
@@ -271,11 +271,11 @@ test("code mention tokens round trip through transcript tokenization", () => {
 
   assert.equal(token, "[ChatPage.tsx:12-20](src/pages/ChatPage.tsx#L12-L20)");
 
-  const segments = userMessageContent.tokenizeUserMessage(`帮我解释 ${token} 这段逻辑`, []);
+  const segments = userMessageContent.tokenizeUserMessage(`Explain ${token} logic`, []);
   assert.deepEqual(compactSegments(segments), [
-    { type: "text", value: "帮我解释 " },
+    { type: "text", value: "Explain " },
     { type: "codeRef" },
-    { type: "text", value: " 这段逻辑" },
+    { type: "text", value: " logic" },
   ]);
   const codeSegment = segments.find((segment) => segment.type === "codeRef");
   assert.deepEqual(codeSegment.reference, reference);
@@ -320,7 +320,7 @@ test("plain fenced code blocks without the line header stay text", () => {
   );
 });
 
-test("rendered code mentions show 文件名：行区间 tags without the referenced content", () => {
+test("rendered code mentions show filename:line-range tags without the referenced content", () => {
   const reference = mentionReferences.createCodeMentionReference({
     path: "crates/agent-gui/src/pages/ChatPage.tsx",
     startLine: 100,

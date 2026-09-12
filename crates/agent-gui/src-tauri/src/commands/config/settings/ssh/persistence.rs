@@ -3,28 +3,28 @@ fn ssh_payload_string(payload: &Map<String, Value>, key: &str) -> Result<String,
         .get(key)
         .and_then(Value::as_str)
         .map(ToString::to_string)
-        .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.{key} 必须是字符串"))
+        .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.{key} must be a string"))
 }
 
 fn ssh_payload_i64(payload: &Map<String, Value>, key: &str) -> Result<i64, String> {
     payload
         .get(key)
         .and_then(Value::as_i64)
-        .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.{key} 必须是整数"))
+        .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.{key} must be an integer"))
 }
 
 fn ssh_payload_bool(payload: &Map<String, Value>, key: &str) -> Result<bool, String> {
     payload
         .get(key)
         .and_then(Value::as_bool)
-        .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.{key} 必须是布尔值"))
+        .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.{key} must be a boolean"))
 }
 
 fn ssh_payload_proxy_json(payload: &Map<String, Value>) -> Result<String, String> {
     let proxy = payload
         .get("proxy")
         .cloned()
-        .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.proxy 不能为空"))?;
+        .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.proxy must not be empty"))?;
     serialize_json(&proxy, SSH_SETTINGS_TABLE)
 }
 
@@ -57,7 +57,7 @@ fn insert_ssh_settings_row(
             updated_at
         ],
     )
-    .map_err(|e| format!("写入 {SSH_SETTINGS_TABLE} 失败：{e}"))?;
+    .map_err(|e| format!("failed to write {SSH_SETTINGS_TABLE}: {e}"))?;
     Ok(())
 }
 
@@ -72,9 +72,9 @@ fn save_ssh_rows(conn: &Connection, payload: Value) -> Result<(), String> {
         .unwrap_or(Value::Object(Map::new()));
     let updated_at = now_ms();
     conn.execute(SSH_SETTINGS_DELETE_SQL, [])
-        .map_err(|e| format!("清空 {SSH_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to clear {SSH_SETTINGS_TABLE}: {e}"))?;
     conn.execute(SSH_PROJECT_HOST_ASSOCIATIONS_DELETE_SQL, [])
-        .map_err(|e| format!("清空 {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to clear {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE}: {e}"))?;
 
     let mut seen = HashSet::new();
     for (sort_index, host) in hosts.into_iter().enumerate() {
@@ -83,7 +83,7 @@ fn save_ssh_rows(conn: &Connection, payload: Value) -> Result<(), String> {
             "settings_save_ssh payload.hosts[]",
         )?;
         if !seen.insert(host_id.clone()) {
-            return Err(format!("{SSH_SETTINGS_TABLE}.host_id 重复：{host_id}"));
+            return Err(format!("duplicate {SSH_SETTINGS_TABLE}.host_id: {host_id}"));
         }
 
         insert_ssh_settings_row(conn, &host_id, &payload, sort_index as i64, updated_at)?;
@@ -100,7 +100,7 @@ fn save_ssh_rows(conn: &Connection, payload: Value) -> Result<(), String> {
                 updated_at
             ],
         )
-        .map_err(|e| format!("写入 {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to write {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE}: {e}"))?;
     }
     Ok(())
 }
@@ -108,11 +108,11 @@ fn save_ssh_rows(conn: &Connection, payload: Value) -> Result<(), String> {
 fn save_ssh(conn: &mut Connection, payload: Value) -> Result<(), String> {
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启 {SSH_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin {SSH_SETTINGS_TABLE} transaction: {e}"))?;
     save_ssh_rows(&tx, payload)?;
 
     tx.commit()
-        .map_err(|e| format!("提交 {SSH_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("failed to commit {SSH_SETTINGS_TABLE} transaction: {e}"))?;
     Ok(())
 }
 

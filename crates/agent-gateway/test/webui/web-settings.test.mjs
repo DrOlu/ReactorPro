@@ -28,74 +28,6 @@ async function withNavigator(value, task) {
   }
 }
 
-test("gateway settings sync publishes redacted STT state and enables WebUI STT", () => {
-  const desktop = settings.normalizeSettings({
-    stt: {
-      enabled: true,
-      provider: "aliyun_dashscope",
-      providers: {
-        aliyun_dashscope: {
-          id: "aliyun_dashscope",
-          configured: true,
-          websocketUrl: "wss://dashscope.aliyuncs.com/api-ws/v1/inference/",
-          model: "paraformer-realtime-v2",
-          apiKey: "desktop-secret",
-        },
-      },
-    },
-  });
-
-  const payload = settingsSync.buildGatewaySettingsSyncPayload(desktop);
-  assert.equal(payload.stt.provider, "aliyun_dashscope");
-  assert.equal(payload.stt.enabled, true);
-  assert.equal(payload.stt.providers.aliyun_dashscope.configured, true);
-  assert.equal(payload.stt.providers.aliyun_dashscope.apiKey, "");
-
-  const web = settingsSync.applyGatewaySettingsSyncPayload(settings.normalizeSettings({}), payload);
-  assert.equal(web.stt.provider, "aliyun_dashscope");
-  assert.equal(web.stt.enabled, true);
-  assert.equal(web.stt.providers.aliyun_dashscope.configured, true);
-  assert.equal(web.stt.providers.aliyun_dashscope.apiKey, "");
-});
-
-test("WebUI STT secret sidecar reaches desktop state but never enters public payload", () => {
-  const current = settings.normalizeSettings({
-    stt: {
-      provider: "aliyun_dashscope",
-      providers: {
-        aliyun_dashscope: {
-          id: "aliyun_dashscope",
-          configured: true,
-          apiKey: "existing-desktop-secret",
-        },
-      },
-    },
-  });
-  const incoming = settings.normalizeSettings({
-    stt: {
-      provider: "aliyun_dashscope",
-      providers: {
-        aliyun_dashscope: {
-          id: "aliyun_dashscope",
-          configured: true,
-          apiKey: "",
-          clearSecrets: true,
-        },
-      },
-    },
-  }).stt;
-
-  const desktop = settingsSync.applyGatewaySettingsSyncPayload(current, {
-    sttSecretUpdate: incoming,
-  });
-  assert.equal(desktop.stt.providers.aliyun_dashscope.clearSecrets, true);
-  assert.equal(desktop.stt.providers.aliyun_dashscope.apiKey, "");
-
-  const publicPayload = settingsSync.buildGatewaySettingsSyncPayload(desktop);
-  assert.equal(publicPayload.stt.providers.aliyun_dashscope.clearSecrets, undefined);
-  assert.equal(publicPayload.stt.providers.aliyun_dashscope.apiKey, "");
-});
-
 test("web settings normalize and preserve workspace project groups", () => {
   const normalized = settings.normalizeSettings({
     system: {
@@ -285,7 +217,7 @@ test("agent management validates generated IDs and uses the single-record API", 
   };
 
   try {
-    const issued = await adminApi.issueAdminToken(" gateway-token ", agentId, "  办公室电脑  ");
+    const issued = await adminApi.issueAdminToken(" gateway-token ", agentId, "  Office Computer  ");
     await adminApi.updateAdminAgentName("gateway-token", agentId, "   ");
     await adminApi.deleteAdminAgent("gateway-token", agentId);
 
@@ -295,7 +227,7 @@ test("agent management validates generated IDs and uses the single-record API", 
     assert.equal(requests[0].init.method, "POST");
     assert.equal(requests[0].init.headers.Authorization, "Bearer gateway-token");
     assert.equal(requests[0].init.headers["Content-Type"], "application/json");
-    assert.equal(requests[0].init.body, JSON.stringify({ name: "办公室电脑" }));
+    assert.equal(requests[0].init.body, JSON.stringify({ name: "Office Computer" }));
     assert.equal(requests[1].url.pathname, `/api/agents/${agentId}`);
     assert.equal(requests[1].init.method, "PATCH");
     assert.equal(requests[1].init.body, JSON.stringify({ name: "" }));
@@ -325,10 +257,10 @@ test("web settings initialize from browser language and normalize invalid saved 
     assert.equal(webSettings.loadWebSettings("token").locale, "en-US");
 
     storage.set("liveagent.gateway.webui.settings.v1", JSON.stringify({ locale: null }));
-    assert.equal(webSettings.loadWebSettings("token").locale, "zh-CN");
+    assert.equal(webSettings.loadWebSettings("token").locale, "en-US");
 
     storage.set("liveagent.gateway.webui.settings.v1", JSON.stringify({ locale: "fr-FR" }));
-    assert.equal(webSettings.loadWebSettings("token").locale, "zh-CN");
+    assert.equal(webSettings.loadWebSettings("token").locale, "en-US");
   });
 });
 
@@ -489,7 +421,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
   });
 
   assert.deepEqual(settings.getChatRuntimeReasoningLevelsForProvider({}), []);
-  // 档位全部来自生成目录（models.dev）：adaptive 世代无 minimal 档。
+  // Levels all come from the generated catalog (models.dev): the adaptive generation has no minimal level.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "claude_code",
@@ -527,8 +459,9 @@ test("web chat runtime controls default and follow model-aware reasoning support
     }),
     ["minimal", "low", "medium", "high"],
   );
-  // 中转挂载的国产厂商模型走跨供应商回查命中真实形态；DeepSeek 正式供应商
-  // 只暴露 Responses V4 模型，档位为官方 none/low/high/max 映射。
+  // Domestic-vendor models mounted through a relay hit their real shape via cross-provider
+  // lookup; the official DeepSeek provider exposes only Responses V4 models, with levels mapped
+  // to the official none/low/high/max.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "codex",
@@ -557,8 +490,9 @@ test("web chat runtime controls default and follow model-aware reasoning support
   assert.equal(settings.isThinkingAlwaysOnForModel("claude_code", "claude-opus-4-8"), false);
   assert.equal(settings.isThinkingAlwaysOnForModel("claude_code", undefined), false);
 
-  // 中转装饰过的 Anthropic id（日期后缀/大小写/@版本）按规范化后的目录条目解析，
-  // xhigh/max 档位与"思考不可关"语义不丢失；与桌面端 modelFactory 同步。
+  // An Anthropic id decorated by a relay (date suffix/casing/@version) resolves via the
+  // normalized catalog entry, so the xhigh/max levels and the "thinking cannot be turned off"
+  // semantics are not lost; kept in sync with the desktop modelFactory.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "claude_code",
@@ -574,7 +508,8 @@ test("web chat runtime controls default and follow model-aware reasoning support
     ["low", "medium", "high", "max"],
   );
   assert.equal(settings.isThinkingAlwaysOnForModel("claude_code", "Claude-Fable-5"), true);
-  // 目录彻底未命中的三方改名 id 走 id 启发式补 xhigh/max（adaptive 世代无 minimal）。
+  // A third-party renamed id that completely misses the catalog falls back to id heuristics
+  // that add xhigh/max (the adaptive generation has no minimal).
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "claude_code",
@@ -589,7 +524,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
     }),
     ["low", "medium", "high", "xhigh", "max"],
   );
-  // 旧世代 id 不误判。
+  // Legacy-generation ids are not misidentified.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "claude_code",
@@ -646,8 +581,9 @@ test("web chat runtime controls default and follow model-aware reasoning support
         claude_code: "xhigh",
         codex_openai_responses: "xhigh",
         codex_openai_completions: "xhigh",
-        // gemini / xai 未在 reasoningByProvider 输入里显式给出，也未参与本次调用
-        // 的当前 provider key，因此只继承顶层 reasoning 原值，不做钳制。
+        // gemini / xai are not explicitly given in the reasoningByProvider input and do not
+        // participate in this call's current provider key, so they merely inherit the top-level
+        // reasoning value without clamping.
         gemini: "xhigh",
         xai: "xhigh",
         deepseek: "xhigh",
@@ -1862,19 +1798,19 @@ test("web right dock migrates the legacy tabs shape", () => {
 test("xai model limits use the generated catalog without changing thinking detection", () => {
   const grok45 = settings.getProviderModelDefaults("xai", "grok-4.5");
   assert.equal(grok45.contextWindow, 500_000);
-  // 上游"输出=窗口"的退化条目在生成期统一钳到 32K。
+  // Upstream degenerate entries where "output = window" are uniformly clamped to 32K at generation time.
   assert.equal(grok45.maxOutputToken, 32_000);
-  // 上游（models.dev）已下架的旧模型与未收录模型一样吃供应商兜底值。
+  // Old models delisted by upstream (models.dev) take the vendor fallback value just like unlisted models.
   assert.equal(settings.getProviderModelDefaults("xai", "grok-3").contextWindow, 400_000);
   assert.equal(settings.getProviderModelDefaults("xai", "grok-unknown").contextWindow, 400_000);
-  // 思考档位与限额同吃生成目录（见下一个用例）。
+  // Thinking levels and limits both draw from the generated catalog (see the next test case).
   assert.ok(settings.getKnownModelThinkingLevels("xai", "grok-4.5").includes("high"));
 });
 
 test("xai thinking levels come from the catalog per model, thinking always on", () => {
-  // 档位按型号差异化（目录真值）：grok-4.5 只有 low/medium/high；
-  // grok-4.20-multi-agent-0309 声明到 xhigh。xai 思考一律恒开
-  //（wire 无法表达 off），目录的 off 声明对 xai 供应商不生效。
+  // Levels are differentiated per model (catalog ground truth): grok-4.5 has only
+  // low/medium/high; grok-4.20-multi-agent-0309 declares up to xhigh. xai thinking is always on
+  // (wire cannot express off), so the catalog's off declaration does not apply to the xai provider.
   assert.deepEqual(settings.getKnownModelThinkingLevels("xai", "grok-4.5"), [
     "low",
     "medium",
@@ -1884,7 +1820,7 @@ test("xai thinking levels come from the catalog per model, thinking always on", 
   const multiAgent = settings.getKnownModelThinkingLevels("xai", "grok-4.20-multi-agent-0309");
   assert.ok(multiAgent.includes("xhigh"));
   assert.equal(settings.isThinkingAlwaysOnForModel("xai", "grok-4.3"), true);
-  // 钳制路径：xhigh 超出 grok-4.5 档位表时压回默认 high。
+  // Clamping path: xhigh beyond grok-4.5's level table is pressed back to the default high.
   const clamped = settings.normalizeChatRuntimeControlsForProvider(
     { reasoning: "xhigh", reasoningByProvider: { xai: "xhigh" } },
     { providerId: "xai", modelId: "grok-4.5" },

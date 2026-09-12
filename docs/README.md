@@ -1,59 +1,59 @@
-# LiveAgent 架构文档
+# ReactorPro architecture documentation
 
-本文档树用于从当前代码实现出发，系统梳理 LiveAgent 的桌面 GUI、Tauri 后端、Gateway 服务与浏览器 WebUI。这里的 `docs/` 定位为全局架构索引；仓库已有的 `doc/` 仍保留为历史方案、专项设计与实验文档，不在本次整理中迁移或改名。
+This documentation tree systematically lays out ReactorPro's desktop GUI, Tauri backend, Gateway service, and browser WebUI starting from the current code implementation. This `docs/` is positioned as the global architecture index; the repository's existing `doc/` is still retained as historical proposals, special-topic designs, and experimental documents, and is not being migrated or renamed in this effort.
 
-## 项目一句话
+## Project in one sentence
 
-LiveAgent 是一个以桌面端为本地执行核心的 Agent 应用：GUI 负责用户体验与本地工具执行，Tauri/Rust 负责系统能力与持久化，Go Gateway 负责远程连接与协议中继，WebUI 通过 Gateway 操作同一个本地 Agent 会话。
+ReactorPro is an Agent application with the desktop as the local execution core: the GUI handles the user experience and local tool execution, Tauri/Rust handles system capabilities and persistence, the Go Gateway handles remote connectivity and protocol relay, and the WebUI operates the same local Agent session through the Gateway.
 
-## 文档目录
+## Documentation directory
 
-| 文档 | 覆盖范围 | 推荐读者 |
+| Document | Coverage | Recommended reader |
 |---|---|---|
-| [architecture/overview.md](architecture/overview.md) | 系统总览、进程边界、数据流、持久化地图 | 新接手项目者 |
-| [architecture/gui.md](architecture/gui.md) | 桌面 GUI、Tauri commands/services/runtime、设置与本地执行 | 前端与桌面端开发 |
-| [architecture/gateway.md](architecture/gateway.md) | Go Gateway 的 HTTP/WebSocket（v2）、Session Manager、缓冲与认证 | Gateway 开发与排障 |
-| [architecture/webui.md](architecture/webui.md) | 浏览器 WebUI、socket 客户端、会话流订阅、状态与安全边界 | WebUI 开发 |
-| [architecture/protocols.md](architecture/protocols.md) | GUI 与 Gateway、WebUI 与 Gateway 的协议合同 | 联调与协议改造 |
-| [features/chat-runtime.md](features/chat-runtime.md) | 对话运行时、模型层、流式、压缩、hooks、上传与重发 | Chat 功能开发 |
-| [features/tools.md](features/tools.md) | builtin tools、MCP 动态工具、subagent（Agent/SendMessage）、工具执行边界 | 工具系统开发 |
-| [features/memory.md](features/memory.md) | MemoryStore、MemoryManager、Settings Memory、自动学习与召回 | 记忆系统开发 |
-| [features/skills-and-mcp.md](features/skills-and-mcp.md) | Skills root/builtin/ClawHub 与 MCP Hub/registry/runtime | Skills/MCP 开发 |
-| [features/history-compaction.md](features/history-compaction.md) | V3 历史分段、FTS、分享、上下文压缩 checkpoint | 历史与上下文开发 |
-| [features/config-backup-sync.md](features/config-backup-sync.md) | 配置快照、本地导入导出、WebDAV 同步与自动上传 | 设置与同步开发 |
-| [design/workbench-project-tool-panes.md](design/workbench-project-tool-panes.md) | 审查 / 内网穿透 / SSH / 后台任务脱离 Right Dock 成为可拖拽拼接的 Workbench Pane（桌面端与 Web 端共用实现） | Workbench 与项目工具开发 |
-| [operations/development.md](operations/development.md) | 本地开发、构建、测试、端口、运行路径 | 日常开发 |
-| [operations/deployment.md](operations/deployment.md) | CI/CD、Gateway Docker、用户自部署、桌面 Release 自动化 | 发布维护 |
-| [operations/multi-agent.md](operations/multi-agent.md) | 多桌面 Agent 部署、每 Agent 凭证签发/轮换/删除、安全模型 | 多设备部署 |
-| [reference/source-map.md](reference/source-map.md) | 按功能域列出的源码路径索引 | 快速定位源码 |
+| [architecture/overview.md](architecture/overview.md) | System overview, process boundaries, data flow, persistence map | Newcomers to the project |
+| [architecture/gui.md](architecture/gui.md) | Desktop GUI, Tauri commands/services/runtime, settings and local execution | Frontend and desktop developers |
+| [architecture/gateway.md](architecture/gateway.md) | Go Gateway's HTTP/WebSocket (v2), Session Manager, buffering and auth | Gateway development and troubleshooting |
+| [architecture/webui.md](architecture/webui.md) | Browser WebUI, socket client, conversation stream subscription, state and security boundaries | WebUI developers |
+| [architecture/protocols.md](architecture/protocols.md) | Protocol contracts between GUI and Gateway, and between WebUI and Gateway | Integration and protocol changes |
+| [features/chat-runtime.md](features/chat-runtime.md) | Conversation runtime, model layer, streaming, compaction, hooks, upload and resend | Chat feature development |
+| [features/tools.md](features/tools.md) | Builtin tools, MCP dynamic tools, subagent (Agent/SendMessage), tool execution boundaries | Tool system development |
+| [features/memory.md](features/memory.md) | MemoryStore, MemoryManager, Settings Memory, automatic learning and recall | Memory system development |
+| [features/skills-and-mcp.md](features/skills-and-mcp.md) | Skills root/builtin/ClawHub and MCP Hub/registry/runtime | Skills/MCP development |
+| [features/history-compaction.md](features/history-compaction.md) | V3 history segmentation, FTS, sharing, context compaction checkpoints | History and context development |
+| [features/config-backup-sync.md](features/config-backup-sync.md) | Config snapshots, local import/export, WebDAV sync and automatic upload | Settings and sync development |
+| [design/workbench-project-tool-panes.md](design/workbench-project-tool-panes.md) | Review / tunneling / SSH / background tasks move out of the Right Dock to become draggable, tileable Workbench Panes (shared implementation for desktop and Web) | Workbench and project tool development |
+| [operations/development.md](operations/development.md) | Local development, build, test, ports, run paths | Day-to-day development |
+| [operations/deployment.md](operations/deployment.md) | CI/CD, Gateway Docker, user self-deployment, desktop Release automation | Release maintenance |
+| [operations/multi-agent.md](operations/multi-agent.md) | Multi-desktop Agent deployment, per-Agent credential issuance/rotation/deletion, security model | Multi-device deployment |
+| [reference/source-map.md](reference/source-map.md) | A source path index organized by feature domain | Quickly locating source code |
 
-## 架构阅读顺序
+## Architecture reading order
 
-| 顺序 | 目标 | 文档 |
+| Order | Goal | Document |
 |---:|---|---|
-| 1 | 先建立整体进程和边界模型 | [architecture/overview.md](architecture/overview.md) |
-| 2 | 理解桌面端为什么是执行真相源 | [architecture/gui.md](architecture/gui.md) |
-| 3 | 理解远程访问如何转发到桌面端 | [architecture/gateway.md](architecture/gateway.md)、[architecture/protocols.md](architecture/protocols.md) |
-| 4 | 理解 WebUI 的状态机与限制 | [architecture/webui.md](architecture/webui.md) |
-| 5 | 按功能域深入 Chat、Tools、Memory、Skills/MCP、History/Compaction、配置备份同步 | `features/` |
-| 6 | 需要动手时查运行命令和源码索引 | [operations/development.md](operations/development.md)、[reference/source-map.md](reference/source-map.md) |
+| 1 | First build an overall process and boundary model | [architecture/overview.md](architecture/overview.md) |
+| 2 | Understand why the desktop is the source of execution truth | [architecture/gui.md](architecture/gui.md) |
+| 3 | Understand how remote access is forwarded to the desktop | [architecture/gateway.md](architecture/gateway.md), [architecture/protocols.md](architecture/protocols.md) |
+| 4 | Understand the WebUI's state machine and limits | [architecture/webui.md](architecture/webui.md) |
+| 5 | Go deeper by feature domain into Chat, Tools, Memory, Skills/MCP, History/Compaction, and config backup sync | `features/` |
+| 6 | When you need to get hands-on, consult the run commands and source index | [operations/development.md](operations/development.md), [reference/source-map.md](reference/source-map.md) |
 
-## 当前实现的核心边界
+## Core boundaries of the current implementation
 
-| 边界 | 当前结论 |
+| Boundary | Current conclusion |
 |---|---|
-| Agent 执行位置 | 桌面 GUI/Tauri 本地执行模型请求、工具调用、文件系统、Shell、MCP、Skills、Memory、Cron prompt。 |
-| Gateway 职责 | 认证、连接保持、请求路由、事件广播、有界 Chat relay window、WebUI 静态资源与公网分享页承载。 |
-| WebUI 职责 | 浏览器端操作台。它不直接执行工具，也不持有本地文件系统权限，所有高权限能力都经 Gateway 回到桌面端。 |
-| 设置同步 | GUI 是真实设置来源；WebUI 存脱敏快照，敏感 key 只允许用户显式输入新值后单向传回 GUI。 |
-| 历史同步 | GUI 写 SQLite 历史，Gateway 只转发 history request 与 sync event；WebUI 维护本地可见缓存。 |
-| 文档来源 | 本文档基于当前 checkout 的源码路径、入口文件、协议定义与运行脚本整理。 |
+| Agent execution location | The desktop GUI/Tauri locally executes model requests, tool calls, filesystem, Shell, MCP, Skills, Memory, and Cron prompts. |
+| Gateway responsibilities | Authentication, connection keep-alive, request routing, event broadcasting, a bounded Chat relay window, and serving WebUI static assets and public share pages. |
+| WebUI responsibilities | The browser-side console. It does not execute tools directly and holds no local filesystem permissions; all high-privilege capabilities return to the desktop through the Gateway. |
+| Settings sync | The GUI is the source of truth for settings; the WebUI stores a redacted snapshot, and sensitive keys can only be sent one-way back to the GUI after the user explicitly enters a new value. |
+| History sync | The GUI writes SQLite history; the Gateway only forwards history requests and sync events; the WebUI maintains a local visible cache. |
+| Documentation source | This document is compiled from the current checkout's source paths, entry files, protocol definitions, and run scripts. |
 
-## 与 `doc/` 的关系
+## Relationship with `doc/`
 
-| 目录 | 定位 |
+| Directory | Positioning |
 |---|---|
-| `docs/` | 当前实现的全局架构说明、模块地图、运行说明和源码索引。 |
-| `doc/` | 既有专项文档与历史设计资料，例如 memory 方案、Gateway 协议草案、上下文压缩策略等。 |
+| `docs/` | Global architecture descriptions, module maps, run instructions, and source index for the current implementation. |
+| `doc/` | Existing special-topic documents and historical design materials, such as the memory proposal, Gateway protocol drafts, and context compaction strategies. |
 
-后续如果某个专项文档已经稳定成为当前实现的一部分，可以在 `docs/` 中建立摘要与导航，但不建议把 `doc/` 直接重命名为 `docs/`，以免丢失历史上下文。
+In the future, if a special-topic document has stably become part of the current implementation, a summary and navigation can be established in `docs/`, but it is not advisable to directly rename `doc/` to `docs/`, to avoid losing historical context.

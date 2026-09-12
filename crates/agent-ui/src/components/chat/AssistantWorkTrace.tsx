@@ -30,8 +30,9 @@ type LoadingPixelStyle = CSSProperties & {
 
 function WorkPixelGrid({ active }: { active: boolean }) {
   return (
-    // 3×4px + 2×1.5px = 15px，比下方活动行的 12px 图标列宽：居中溢出到图标列
-    // 宽度的盒子里，表头的像素格才和思考/工具图标共用同一条竖中轴。
+    // 3x4px + 2x1.5px = 15px, wider than the 12px icon column of the activity rows below:
+    // centering it so it overflows into a box the width of the icon column is what makes the
+    // header's pixel grid share the same vertical axis as the thinking/tool icons.
     <span
       aria-hidden="true"
       className="flex w-3 shrink-0 items-center justify-center"
@@ -75,9 +76,10 @@ export function AssistantWorkTrace({
 }: {
   children: ReactNode;
   /**
-   * 当前正在进行的活动区块（运行中的工具组 / 思考中 / 正在流式输出的
-   * 进度文本）。仅在「运行中且用户手动折叠了本区块」时渲染在折叠头下方，
-   * 这样折叠后外面不至于空无一物；展开时内容本就可见，不再重复。
+   * The currently ongoing activity block (a running tool group / thinking / streaming
+   * progress text). It renders below the collapse header only when "the turn is running and the
+   * user manually collapsed this block", so that collapsing does not leave nothing visible
+   * outside; when expanded the content is already visible, so it is not repeated.
    */
   collapsedTail?: ReactNode;
   className?: string;
@@ -85,20 +87,22 @@ export function AssistantWorkTrace({
   hasDetails: boolean;
   attentionRequired?: boolean;
   /**
-   * 回合停在用户决策上（提问 / 计划审批 / 工具审批）：进度还在，但没有任何
-   * 东西在跑。此时像素格与标题冻结成静态，避免用闪烁把「等你」误报成「在忙」。
+   * The turn is stopped on a user decision (a question / plan approval / tool approval): the
+   * progress is still there, but nothing is running. In this case the pixel grid and title freeze
+   * static, to avoid blinking misreporting "waiting for you" as "busy".
    */
   awaitingDecision?: boolean;
   running: boolean;
-  /** 回复有总结文案（answer）时：回合结束（流停止）后自动折叠一次。 */
+  /** When the reply has summary text (answer): auto-collapse once after the turn ends (the stream stops). */
   collapseAfterAnswer?: boolean;
 }) {
   const { t } = useLocale();
   const [expanded, setExpanded] = useAttentionDisclosure(attentionRequired, running);
 
-  // 有总结文案时，回合完成（running 变 false）后自动折叠「处理中」区块一次；
-  // 之后 disclosure 所有权交还给用户，手动展开/折叠不再被强制收回，
-  // 也不会和 attentionRequired（待用户交互的卡片）的强制展开打架。
+  // When there is summary text, auto-collapse the "processing" block once after the turn
+  // completes (running becomes false); after that, disclosure ownership returns to the user, so
+  // manual expand/collapse is no longer forcibly reversed and does not fight with the forced
+  // expansion of attentionRequired (cards awaiting user interaction).
   useEffect(() => {
     if (!running && !attentionRequired && collapseAfterAnswer) setExpanded(false);
   }, [running, attentionRequired, collapseAfterAnswer, setExpanded]);
@@ -121,8 +125,9 @@ export function AssistantWorkTrace({
       if (startedAt !== null) setElapsedMs(Math.max(0, Date.now() - startedAt));
     };
     updateElapsed();
-    // 不可见时停表：work trace 的秒表只服务于"看着它跑"的观感，隐藏窗口里的
-    // 每秒重渲染纯属白烧 CPU；重新可见时 effect 重跑，读数立即补上。
+    // Stop the clock while hidden: the work trace stopwatch only serves the feel of "watching it
+    // run", and re-rendering every second in a hidden window just burns CPU for nothing; when it
+    // becomes visible again the effect re-runs and the reading catches up immediately.
     const timer = window.setInterval(() => {
       if (isDocumentHidden()) return;
       updateElapsed();
@@ -177,8 +182,8 @@ export function AssistantWorkTrace({
       {hasDetails ? (
         <LazyCollapse className="[contain:layout_paint]" open={expanded}>
           {() => (
-            // 行距由本容器统一负责：各行组件不再自带 pb/my，
-            // 否则不同行类型会凑出不同的间隙。
+            // Row spacing is handled uniformly by this container: the row components no longer
+            // carry their own pb/my, otherwise different row types would produce different gaps.
             <div className="mt-1 space-y-2 [scrollbar-gutter:stable]">{children}</div>
           )}
         </LazyCollapse>

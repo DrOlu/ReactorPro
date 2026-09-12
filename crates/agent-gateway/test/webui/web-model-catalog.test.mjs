@@ -5,8 +5,9 @@ import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 const loader = createWebModuleLoader();
 const catalog = loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts");
 
-// 数据不变量由 agent-gui/test/models/model-catalog.test.mjs 全量覆盖；
-// 这里只冒烟验证 Web 宿主能加载共享目录且关键数值一致。
+// The data invariants are fully covered by
+// agent-gui/test/models/model-catalog.test.mjs; here we only smoke-test that the
+// Web host can load the shared catalog and that the key values match.
 test("web shared model catalog resolves limits and fallbacks", () => {
   assert.deepEqual(catalog.resolveModelLimits("xai", "grok-4.5"), {
     contextWindow: 500_000,

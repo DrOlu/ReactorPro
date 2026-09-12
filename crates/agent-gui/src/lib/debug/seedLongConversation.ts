@@ -31,14 +31,14 @@ const CODE_SAMPLE = `export function createLedger(entries: LedgerEntry[]): Ledge
 }`;
 
 const PROSE_SAMPLE = [
-  "这里是一段较长的说明文字，模拟真实回复中的多段 Markdown 内容。",
-  "它包含**加粗**、`inline code`、以及一个列表：",
+  "Here is a longer block of explanatory text, simulating multi-paragraph Markdown content in a real reply.",
+  "It contains **bold**, `inline code`, and a list:",
   "",
-  "- 第一个要点，解释实现思路与取舍",
-  "- 第二个要点，说明边界条件与失败模式",
-  "- 第三个要点，给出后续可以验证的步骤",
+  "- The first point, explaining the implementation approach and trade-offs",
+  "- The second point, describing boundary conditions and failure modes",
+  "- The third point, giving follow-up steps that can be verified",
   "",
-  "结尾再补充一句总结，让段落高度更接近真实回复。",
+  "A closing summary sentence to make the paragraph height closer to a real reply.",
 ].join("\n");
 
 function repeatLines(line: string, count: number) {
@@ -51,8 +51,8 @@ function userMessage(turn: number, timestamp: number): Message {
     id: `seed-user-${turn}`,
     content:
       turn % 7 === 0
-        ? `这是第 ${turn} 轮的长提问：${PROSE_SAMPLE}`
-        : `第 ${turn} 轮提问：请继续优化上一步的实现，并解释关键改动。`,
+        ? `This is a long question for turn ${turn}: ${PROSE_SAMPLE}`
+        : `Question for turn ${turn}: please continue optimizing the previous implementation and explain the key changes.`,
     timestamp,
   } as Message;
 }
@@ -110,14 +110,14 @@ function buildTurnMessages(turn: number, baseTimestamp: number): Message[] {
   if (turn % 6 === 0) {
     blocks.push({
       type: "thinking",
-      thinking: `思考第 ${turn} 轮：\n\n${PROSE_SAMPLE}`,
+      thinking: `Thinking for turn ${turn}:\n\n${PROSE_SAMPLE}`,
     } as AssistantMessage["content"][number]);
   }
-  blocks.push({ type: "text", text: `第 ${turn} 轮回复。${PROSE_SAMPLE}` });
+  blocks.push({ type: "text", text: `Reply for turn ${turn}. ${PROSE_SAMPLE}` });
   if (turn % 4 === 0) {
     blocks.push({
       type: "text",
-      text: `下面是本轮的核心代码：\n\n\`\`\`ts\n${CODE_SAMPLE}\n\n${repeatLines("// padding line", 24)}\n\`\`\`\n\n代码后的收尾说明。`,
+      text: `Here is the core code for this turn:\n\n\`\`\`ts\n${CODE_SAMPLE}\n\n${repeatLines("// padding line", 24)}\n\`\`\`\n\nClosing notes after the code.`,
     });
   }
 
@@ -188,7 +188,7 @@ function compactionCheckpoint(turn: number, timestamp: number): AssistantMessage
     provider: "liveagent",
     model: "summary",
     stopReason: "stop",
-    content: [{ type: "text", text: `压缩检查点：覆盖前 ${turn} 轮。\n\n${PROSE_SAMPLE}` }],
+    content: [{ type: "text", text: `Compaction checkpoint: covering the first ${turn} turns.\n\n${PROSE_SAMPLE}` }],
     usage: {
       input: 0,
       output: 0,
@@ -229,7 +229,7 @@ export async function seedLongConversation(options: SeedLongConversationOptions 
     providerId: "seed",
     model: "seed-model",
     cwd: options.cwd,
-    title: options.title ?? `种子会话 ${turns} 轮（${state.meta.totalMessageCount} 条）`,
+    title: options.title ?? `Seed conversation ${turns} turns (${state.meta.totalMessageCount} messages)`,
     createdAt: startedAt,
     updatedAt: Date.now(),
     state,
@@ -238,7 +238,7 @@ export async function seedLongConversation(options: SeedLongConversationOptions 
   });
 
   console.info(
-    `[seedLongConversation] 已写入会话 ${conversationId}：${state.meta.totalMessageCount} 条消息、${state.segments.length} 个分段。刷新侧边栏后打开。`,
+    `[seedLongConversation] Wrote conversation ${conversationId}: ${state.meta.totalMessageCount} messages, ${state.segments.length} segments. Refresh the sidebar and open it.`,
   );
   return conversationId;
 }

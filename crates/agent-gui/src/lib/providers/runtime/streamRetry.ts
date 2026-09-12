@@ -62,7 +62,7 @@ function buildStatusCodePattern(codes: readonly number[]): RegExp | undefined {
 }
 
 /**
- * Whether a failed assistant message matches the LiveAgent retry extension
+ * Whether a failed assistant message matches the ReactorPro retry extension
  * (preset HTTP status codes + user-defined substrings), independently of
  * pi-ai's `isRetryableAssistantError`. Does not re-check pi-ai's own patterns
  * — callers OR the two together so the union is retryable.
@@ -236,7 +236,7 @@ export function withStreamRetry(
       if (terminal?.type === "error" && !committed && !disabled && attempt < maxAttempts) {
         const failedMessage = terminalMessage(terminal);
         // pi-ai's classifier first (preserves its non-retryable quota/billing
-        // guard), then LiveAgent's extension: preset HTTP status codes (Cloudflare
+        // guard), then ReactorPro's extension: preset HTTP status codes (Cloudflare
         // 520-527 for relays, #608) + user-defined substrings from settings.
         if (
           isRetryableAssistantError(failedMessage) ||

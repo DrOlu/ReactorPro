@@ -81,9 +81,10 @@ test("OpenAI Responses native attachment adapter adds input_image and input_file
 });
 
 test("DeepSeek Responses native attachment adapter inlines images only", async () => {
-  // DeepSeek 的 Responses wire 与 OpenAI 同形，官方《图像理解》指南明确
-  // input_image 只允许出现在 user 消息里，file / input_file 只用于图片（没有
-  // 承诺 PDF 的 document 结构），所以图片内联、PDF 一律退回 Read。
+  // DeepSeek's Responses wire has the same shape as OpenAI's; the official "Image
+  // Understanding" guide states that input_image is only allowed in user messages and
+  // file / input_file are used only for images (no document structure for PDFs is
+  // promised), so images are inlined and PDFs always fall back to Read.
   const calls = [];
   const loader = createLoader(async (command, args) => {
     calls.push({ command, args });

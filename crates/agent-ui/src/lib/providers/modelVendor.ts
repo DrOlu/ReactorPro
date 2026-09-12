@@ -1,6 +1,6 @@
 import type { ProviderModelConfig } from "@liveagent/app/lib/settings";
 
-export const OTHER_MODEL_VENDOR = "其他" as const;
+export const OTHER_MODEL_VENDOR = "Other" as const;
 
 export const MODEL_VENDOR_ORDER = [
   "OpenAI",
@@ -8,16 +8,16 @@ export const MODEL_VENDOR_ORDER = [
   "Google",
   "Qwen",
   "DeepSeek",
-  "智谱",
+  "Zhipu",
   "Moonshot",
-  "字节豆包",
+  "ByteDance Doubao",
   "Meta",
   "Mistral",
   "xAI",
   "MiniMax",
-  "百度",
-  "腾讯",
-  "零一万物",
+  "Baidu",
+  "Tencent",
+  "01.AI",
 ] as const;
 
 export type KnownModelVendor = (typeof MODEL_VENDOR_ORDER)[number];
@@ -39,16 +39,16 @@ const MODEL_ID_PREFIX_RULES: ReadonlyArray<{
   { vendor: "Google", prefixes: ["gemini", "gemma"] },
   { vendor: "Qwen", prefixes: ["qwen", "qwq", "qvq"] },
   { vendor: "DeepSeek", prefixes: ["deepseek"] },
-  { vendor: "智谱", prefixes: ["glm", "chatglm"] },
+  { vendor: "Zhipu", prefixes: ["glm", "chatglm"] },
   { vendor: "Moonshot", prefixes: ["kimi", "moonshot"] },
-  { vendor: "字节豆包", prefixes: ["doubao"] },
+  { vendor: "ByteDance Doubao", prefixes: ["doubao"] },
   { vendor: "Meta", prefixes: ["llama"] },
   { vendor: "Mistral", prefixes: ["mistral", "mixtral", "codestral"] },
   { vendor: "xAI", prefixes: ["grok"] },
   { vendor: "MiniMax", prefixes: ["minimax", "abab"] },
-  { vendor: "百度", prefixes: ["ernie"] },
-  { vendor: "腾讯", prefixes: ["hunyuan"] },
-  { vendor: "零一万物", prefixes: ["yi-"] },
+  { vendor: "Baidu", prefixes: ["ernie"] },
+  { vendor: "Tencent", prefixes: ["hunyuan"] },
+  { vendor: "01.AI", prefixes: ["yi-"] },
 ];
 
 const MODEL_OWNER_RULES: ReadonlyArray<{
@@ -60,16 +60,16 @@ const MODEL_OWNER_RULES: ReadonlyArray<{
   { vendor: "Google", aliases: ["google", "deepmind"] },
   { vendor: "Qwen", aliases: ["qwen", "alibaba", "aliyun", "dashscope"] },
   { vendor: "DeepSeek", aliases: ["deepseek"] },
-  { vendor: "智谱", aliases: ["zhipu", "bigmodel", "chatglm", "glm"] },
+  { vendor: "Zhipu", aliases: ["zhipu", "bigmodel", "chatglm", "glm"] },
   { vendor: "Moonshot", aliases: ["moonshot", "kimi"] },
-  { vendor: "字节豆包", aliases: ["bytedance", "byte-dance", "volcengine", "doubao"] },
+  { vendor: "ByteDance Doubao", aliases: ["bytedance", "byte-dance", "volcengine", "doubao"] },
   { vendor: "Meta", aliases: ["meta", "facebook"] },
   { vendor: "Mistral", aliases: ["mistral"] },
   { vendor: "xAI", aliases: ["xai", "x.ai"] },
   { vendor: "MiniMax", aliases: ["minimax"] },
-  { vendor: "百度", aliases: ["baidu", "ernie"] },
-  { vendor: "腾讯", aliases: ["tencent", "hunyuan"] },
-  { vendor: "零一万物", aliases: ["01.ai", "zero-one", "lingyi", "yi"] },
+  { vendor: "Baidu", aliases: ["baidu", "ernie"] },
+  { vendor: "Tencent", aliases: ["tencent", "hunyuan"] },
+  { vendor: "01.AI", aliases: ["01.ai", "zero-one", "lingyi", "yi"] },
 ];
 
 const MODEL_VENDOR_RANK = new Map<ModelVendor, number>(

@@ -1,23 +1,28 @@
-// 会话级 skills 显式提及注入控制器:持有「哪条 user 消息该挂哪段显式提及块」。
+// Session-level skills explicit-mention injection controller: holds "which user message should carry which explicit-mention block".
 //
-// 为什么要有这层状态:显式提及块必须在后续轮次原样重放。若只在发生的那一轮挂、
-// 下一轮撤掉,那条 user 消息的字节就变了,历史区间从它开始整段作废 —— 这正是把
-// 内容留在 system prompt 里要躲的问题,换个位置再犯一遍没有意义。
+// Why this state layer is needed: the explicit-mention block must be replayed verbatim in
+// subsequent turns. If it were attached only in the turn where it occurs and removed the next
+// turn, the bytes of that user message would change, and the whole history range from it onward
+// would be invalidated --- exactly the problem that keeping content in the system prompt is meant
+// to avoid; repeating it in another place would be pointless.
 //
-// 与 memory 的 injectionController 是同一套形状(按会话 key 存取、按消息 id 绑定、
-// 会话删除时清理、LRU 封顶),但刻意分开存:memory 的基线带 systemText 语义,
-// 手动压缩会读它来复用冻结快照,把 skills 的块塞进那份状态会让基线凭空出现。
+// Same shape as memory's injectionController (stored by session key, bound by message id,
+// cleaned up on session deletion, LRU-capped), but stored separately on purpose: memory's
+// baseline carries systemText semantics, and manual compaction reads it to reuse the frozen
+// snapshot, so stuffing the skills blocks into that state would make them appear out of nowhere in the baseline.
 //
-// 块只活在内存里,不落库也不进历史:它是发给模型的上下文,不是用户真的打了这些字。
-// 进程重启/会话恢复后随之丢失,后续轮次不再重放 —— 那时前缀本来就要重建,不亏。
+// The blocks live only in memory, are never persisted or written into history: they are context
+// sent to the model, not text the user actually typed. They are lost after a process restart /
+// session restore, and subsequent turns no longer replay them --- at that point the prefix has to
+// be rebuilt anyway, so nothing is lost.
 
-/** 缓存的会话数量上限,与 memory 注入控制器保持同量级。 */
+/** Upper bound on the number of cached sessions, on the same order as the memory injection controller. */
 const SKILL_MENTION_CONVERSATION_STATE_LIMIT = 32;
 
 export type SkillMentionUpdateMap = ReadonlyMap<string, string>;
 
 type ConversationSkillMentionState = {
-  /** messageId → 显式提及块。一旦写入就不再改动,后续轮次原样重放。 */
+  /** messageId -> explicit-mention block. Once written it is never modified and is replayed verbatim in subsequent turns. */
   updates: Map<string, string>;
   lastTouchedAt: number;
 };
@@ -34,8 +39,9 @@ function pruneStates() {
 
 export const skillMentionInjection = {
   /**
-   * 记录本轮的显式提及块。block 为空串表示这轮没有 `/skill-name` 提及 —— 此时
-   * 什么都不做,连状态都不创建,保证「没有提及就不产生任何额外内容」。
+   * Record this turn's explicit-mention block. An empty block string means there was no
+   * `/skill-name` mention this turn --- in that case do nothing and do not even create state,
+   * guaranteeing that "no mention produces no extra content".
    */
   record(params: { conversationId: string; messageId?: string; block: string }) {
     const block = params.block;
@@ -43,8 +49,8 @@ export const skillMentionInjection = {
 
     const key = params.conversationId.trim();
     const messageId = params.messageId?.trim() ?? "";
-    // 没有会话 key 或没有可挂载的消息 id 就丢掉这次提及:宁可少挂一次,也不能
-    // 挂到对不上的消息上。
+    // If there is no session key or no mountable message id, drop this mention: better to skip
+    // attaching once than to attach it to a message it does not match.
     if (!key || !messageId) return;
 
     const existing = states.get(key);
@@ -57,17 +63,17 @@ export const skillMentionInjection = {
     }
   },
 
-  /** 组装请求上下文时读取:messageId → 显式提及块。 */
+  /** Read when assembling the request context: messageId -> explicit-mention block. */
   getMessageUpdates(conversationId: string): SkillMentionUpdateMap | undefined {
     return states.get(conversationId.trim())?.updates;
   },
 
-  /** 会话删除/被裁掉:连同已记录的块一起丢弃。 */
+  /** Session deleted/trimmed: discard along with the recorded block. */
   dispose(conversationId: string) {
     states.delete(conversationId.trim());
   },
 
-  /** 应用退出。 */
+  /** App exit. */
   disposeAll() {
     states.clear();
   },

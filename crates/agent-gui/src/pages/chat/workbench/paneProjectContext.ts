@@ -1,13 +1,13 @@
 import { type WorkspaceProject, workspaceProjectPathKey } from "../../../lib/settings";
 
 /**
- * focusedPane → activeProject 的解析核心:聚焦 Pane(或其兜底目标)携带的
- * projectPathKey 映射到 Right Dock 应跟随的工作区项目。
+ * Core of focusedPane -> activeProject resolution: the projectPathKey carried by the focused Pane (or its fallback
+ * target) maps to the workspace project the Right Dock should follow.
  *
- * 不变量(docs/design/session-workbench-pane-architecture.md §30.2):
- * - archived / missing 项目不激活——Pane 进 blocked 态,dock 保持原项目;
- * - 陈旧的 ProjectRef(合成 key、已删除项目)绝不回退到另一个项目;
- * - 匹配按规范化 path key,与 blocked 判定使用同一套键空间。
+ * Invariants (docs/design/session-workbench-pane-architecture.md §30.2):
+ * - archived / missing projects are not activated -- the Pane enters the blocked state and the dock keeps its original project;
+ * - a stale ProjectRef (synthetic key, deleted project) never falls back to another project;
+ * - matching is by normalized path key, using the same key space as the blocked determination.
  */
 export function resolveWorkbenchPaneProject(
   projectPathKey: string | undefined,

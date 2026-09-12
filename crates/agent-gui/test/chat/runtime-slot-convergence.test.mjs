@@ -4,12 +4,17 @@ import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// R-2(单槽位收敛)不变量:
-// 1. 会话身份(sessionId/createdAt)与模型选择不再是页面级镜像 state —— registry
-//    entry 是唯一事实来源,页面值经 useConversationRuntimeEntrySnapshot 派生;
-// 2. syncVisibleConversationRuntime 只同步仍镜像的 5 个瞬态字段;
-// 3. 非当前会话的 runtime 写入绝不触碰可见 state(双 Pane 隔离);
-// 4. Send/Stop/Compact/Retry 按显式 conversationId 路由,不经全局 current ref。
+// R-2 (single-slot convergence) invariants:
+// 1. Conversation identity (sessionId/createdAt) and model selection are no
+//    longer page-level mirrored state -- the registry entry is the single
+//    source of truth, and page values are derived via
+//    useConversationRuntimeEntrySnapshot;
+// 2. syncVisibleConversationRuntime only syncs the 5 transient fields that are
+//    still mirrored;
+// 3. Runtime writes for a non-current conversation never touch visible state
+//    (dual-pane isolation);
+// 4. Send/Stop/Compact/Retry route by explicit conversationId, not through a
+//    global current ref.
 // (docs/design/session-workbench-pane-architecture.md §30.3)
 
 function createHookHarness() {

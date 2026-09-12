@@ -6,7 +6,7 @@ export const PROTECTION_THRESHOLD_FACTOR = 1.2;
 export const MIN_COMPACTION_INTERVAL_MS = 60_000;
 export const MIN_COMPACTION_USER_MESSAGES = 3;
 export const RECENT_COMPACTION_WINDOW_MS = 5 * 60_000;
-// 压缩后仍高于阈值的 90% 视为"低效压缩"，推动压力升级。
+// Still being above 90% of the threshold after compaction counts as an "ineffective compaction" and drives pressure escalation.
 export const INEFFECTIVE_COMPACTION_RATIO = 0.9;
 export const MAX_PRESSURE_LEVEL = 2;
 
@@ -17,9 +17,10 @@ const PRUNE_PROTECT_USER_TURNS_BY_LEVEL = [2, 2, 1] as const;
 export type PressureLevel = 0 | 1 | 2;
 
 /**
- * 压力升级阶梯：替代旧的 MAX_SESSION_COMPACTIONS 硬顶。连续低效压缩推高
- * level（加大 prune 力度、收紧保护阈值、给出建议性提示），但永不硬性拒绝。
- * 纯数据 + 纯转移函数，由 controller 持有并推进。
+ * Pressure escalation ladder: replaces the old MAX_SESSION_COMPACTIONS hard cap.
+ * Consecutive ineffective compactions push the level up (more aggressive pruning,
+ * tighter protection thresholds, advisory hints) but never hard-reject.
+ * Pure data + pure transition function, held and advanced by the controller.
  */
 export type CompactionPressure = {
   level: PressureLevel;
@@ -92,10 +93,12 @@ export function resolvePruneOptions(pressure: CompactionPressure): PruneOptions 
   };
 }
 
-// contextWindow 是含输出的总窗口语义（目录/兜底统一口径；Codex 源的输入侧
-// 预算已在目录生成期换算），因此"窗口 − 输出预留"对所有供应商一致成立。
-// OpenAI 系"输入上限 = 总窗口 − 输出上限"（GPT-5：400K = 272K + 128K），
-// factor ≥ 1 保证阈值恒不超过真实输入上限。
+// contextWindow uses the total-window-including-output semantics (consistent across
+// the catalog/fallback; the Codex source's input-side budget is already converted at
+// catalog generation time), so "window - output reserve" holds uniformly for all
+// providers. For OpenAI-family models "input cap = total window - output cap"
+// (GPT-5: 400K = 272K + 128K), and factor >= 1 ensures the threshold never exceeds
+// the real input cap.
 export function resolveCompactionThreshold(params: {
   intent: CompactionIntent;
   contextWindow: number;
@@ -115,13 +118,14 @@ export function decideCompaction(params: {
   modelConfig?: ProviderModelConfig;
   activeMessageCount: number;
   userMessageCount: number;
-  // 上一次 checkpoint 的时间（无则 0）；controller 传 max(段 summary 时间, 压力 lastCompactionAt)。
+  // Time of the last checkpoint (0 if none); the controller passes max(segment summary time, pressure lastCompactionAt).
   lastCompactionAt: number;
   pressure: CompactionPressure;
   inFlight: boolean;
   now: number;
-  // 手动触发：用户明确要压，跳过阈值与冷却两个短路；disabled /
-  // no-active-messages / in-flight 硬守卫仍然生效。
+  // Manual trigger: the user explicitly wants compaction, so the threshold and
+  // cooldown short-circuits are skipped; the disabled / no-active-messages /
+  // in-flight hard guards still apply.
   bypassThresholdAndCooldown?: boolean;
 }): CompactionDecision {
   const contextWindow = Math.max(0, Math.floor(params.modelConfig?.contextWindow ?? 0));
@@ -167,7 +171,8 @@ export function decideCompaction(params: {
     return { ...base, shouldCompact: false, reason: "below-threshold", threshold };
   }
 
-  // 冷却窗只拦"刚压缩完又立即越阈值"的超大单轮；正常自触发已被账本重置阻断。
+  // The cooldown window only blocks an oversized single turn that crosses the
+  // threshold again right after compacting; normal self-triggering is already blocked by the ledger reset.
   if (
     !params.bypassThresholdAndCooldown &&
     params.lastCompactionAt > 0 &&

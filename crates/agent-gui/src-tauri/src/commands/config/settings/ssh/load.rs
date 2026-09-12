@@ -1,7 +1,7 @@
 fn load_ssh(conn: &Connection) -> Result<Option<Value>, String> {
     let mut stmt = conn
         .prepare(SSH_SETTINGS_SELECT_SQL)
-        .map_err(|e| format!("准备读取 {SSH_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare reading {SSH_SETTINGS_TABLE}: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let proxy_json = row.get::<_, String>(14)?;
@@ -63,11 +63,11 @@ fn load_ssh(conn: &Connection) -> Result<Option<Value>, String> {
                 ("proxy".to_string(), proxy),
             ])))
         })
-        .map_err(|e| format!("读取 {SSH_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to read {SSH_SETTINGS_TABLE}: {e}"))?;
 
     let mut hosts = Vec::new();
     for row in rows {
-        hosts.push(row.map_err(|e| format!("读取 {SSH_SETTINGS_TABLE} 行失败：{e}"))?);
+        hosts.push(row.map_err(|e| format!("failed to read {SSH_SETTINGS_TABLE} row: {e}"))?);
     }
 
     let project_host_associations = load_ssh_project_host_associations(conn, &hosts)?;
@@ -93,17 +93,17 @@ fn load_ssh_project_host_associations(
         .collect::<HashSet<_>>();
     let mut stmt = conn
         .prepare(SSH_PROJECT_HOST_ASSOCIATIONS_SELECT_SQL)
-        .map_err(|e| format!("准备读取 {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare reading {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE}: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
-        .map_err(|e| format!("读取 {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to read {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE}: {e}"))?;
     let mut associations = Map::new();
     let mut canonical_keys = HashSet::new();
     for row in rows {
         let (project_path_key, host_ids_json) =
-            row.map_err(|e| format!("读取 {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE} 行失败：{e}"))?;
+            row.map_err(|e| format!("failed to read {SSH_PROJECT_HOST_ASSOCIATIONS_TABLE} row: {e}"))?;
         let normalized_project_path_key = normalize_project_path_key(&project_path_key);
         if normalized_project_path_key.is_empty() {
             continue;
@@ -169,7 +169,7 @@ pub(crate) fn load_runtime_ssh_host(host_id: &str) -> Result<Option<RuntimeSshHo
         },
     )
     .optional()
-    .map_err(|e| format!("读取 {SSH_SETTINGS_TABLE} runtime host 失败：{e}"))?
+    .map_err(|e| format!("failed to read {SSH_SETTINGS_TABLE} runtime host: {e}"))?
     .map(
         |(
             id,
@@ -189,7 +189,7 @@ pub(crate) fn load_runtime_ssh_host(host_id: &str) -> Result<Option<RuntimeSshHo
             let port = u16::try_from(port)
                 .ok()
                 .filter(|port| *port >= 1)
-                .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.port 无效：{port}"))?;
+                .ok_or_else(|| format!("{SSH_SETTINGS_TABLE}.port is invalid: {port}"))?;
             Ok(RuntimeSshHostConfig {
                 id,
                 name,
@@ -244,7 +244,7 @@ fn check_runtime_ssh_known_host_with_conn(
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
         .optional()
-        .map_err(|e| format!("读取 {SSH_KNOWN_HOSTS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to read {SSH_KNOWN_HOSTS_TABLE}: {e}"))?;
     let Some((stored_key_base64, stored_fingerprint)) = stored else {
         return Ok(RuntimeSshKnownHostStatus::Unknown);
     };
@@ -293,7 +293,7 @@ fn trust_runtime_ssh_known_host_with_conn(
             now
         ],
     )
-    .map_err(|e| format!("写入 {SSH_KNOWN_HOSTS_TABLE} 失败：{e}"))?;
+    .map_err(|e| format!("failed to write {SSH_KNOWN_HOSTS_TABLE}: {e}"))?;
     Ok(())
 }
 
@@ -315,5 +315,5 @@ fn reset_runtime_ssh_known_host_with_conn(
         return Err("SSH port is required".to_string());
     }
     conn.execute(SSH_KNOWN_HOSTS_DELETE_SQL, params![host, i64::from(port)])
-        .map_err(|e| format!("重置 {SSH_KNOWN_HOSTS_TABLE} 失败：{e}"))
+        .map_err(|e| format!("failed to reset {SSH_KNOWN_HOSTS_TABLE}: {e}"))
 }

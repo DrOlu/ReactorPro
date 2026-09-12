@@ -47,7 +47,6 @@ export type GatewaySettingsSyncProvider = Omit<AppSettings["customProviders"][nu
   apiKeyConfigured?: boolean;
 };
 export type GatewaySettingsSyncCustomSettings = Partial<AppSettings["customSettings"]>;
-export type GatewaySttSecretUpdate = AppSettings["stt"];
 
 export type GatewaySettingsSyncPayload = {
   system: AppSettings["system"];
@@ -59,8 +58,6 @@ export type GatewaySettingsSyncPayload = {
     AppSettings["remote"],
     "enableWebTerminal" | "enableWebSshTerminal" | "enableWebGit" | "enableWebTunnels"
   >;
-  /** STT 元数据与 configured 标记；所有云厂商凭据在同步出口均为空串。 */
-  stt: AppSettings["stt"];
   memory: AppSettings["memory"];
   modelFailover: AppSettings["modelFailover"];
   customSettings: GatewaySettingsSyncCustomSettings;
@@ -73,11 +70,10 @@ export type GatewaySettingsSyncPayload = {
   providerApiKeyUpdates?: GatewayProviderApiKeyUpdates;
   providerUsageQuerySecretUpdates?: GatewayProviderUsageQuerySecretUpdates;
   sshSecretUpdates?: GatewaySshSecretUpdates;
-  // systemProxy 密码回传 sidecar（仿 providerApiKeyUpdates 的简化范式）：
-  // system 字段本身出口必被脱敏，明文密码只经此通道回到桌面端落库。
+  // systemProxy password return sidecar (a simplified pattern modeled on providerApiKeyUpdates):
+  // the system field itself is always redacted on egress, and the plaintext password returns to the
+  // desktop for persistence only through this channel.
   systemProxyPasswordUpdate?: string;
-  /** WebUI → 桌面端的一次性 STT 凭据更新；任何公开广播前必须移除。 */
-  sttSecretUpdate?: GatewaySttSecretUpdate;
 };
 export type GatewaySettingsSyncUpdatePayload = Partial<GatewaySettingsSyncPayload>;
 
@@ -88,7 +84,6 @@ const GATEWAY_SETTINGS_SYNC_FIELDS = [
   "agents",
   "ssh",
   "remote",
-  "stt",
   "memory",
   "modelFailover",
   "customSettings",
@@ -185,32 +180,7 @@ export function redactSettingsForWebStorage(settings: AppSettings): AppSettings 
     },
     customProviders: redactCustomProvidersForWebStorage(settings.customProviders),
     ssh: redactSshSettingsForWebStorage(settings.ssh),
-    stt: redactSttSettingsForWebStorage(settings.stt),
   });
-}
-
-export function redactSttSettingsForWebStorage(stt: AppSettings["stt"]): AppSettings["stt"] {
-  const { allowIncomplete: _allowIncomplete, ...publicStt } = stt;
-  return {
-    enabled: publicStt.enabled,
-    provider: publicStt.provider,
-    providers: Object.fromEntries(
-      Object.entries(stt.providers).map(([id, provider]) => {
-        const { clearSecrets: _clearSecrets, ...publicProvider } = provider;
-        return [
-          id,
-          {
-            ...publicProvider,
-            apiKey: "",
-            secretId: "",
-            secretKey: "",
-            accessToken: "",
-            baiduApiKey: "",
-          },
-        ];
-      }),
-    ) as AppSettings["stt"]["providers"],
-  };
 }
 
 function redactSystemProxyConfig(
@@ -305,8 +275,9 @@ function collectChangedProviderUsageQuerySecretUpdates(
     const previousUsageQuery = previousProvider ? usageQueryConfig(previousProvider) : undefined;
     const usageQuery = usageQueryConfig(provider);
     const update: GatewayProviderUsageQuerySecretUpdates[string] = {};
-    // WebUI 侧秘密恒被脱敏为空串,值比较发现不了"删除已配置密钥";
-    // Configured true→false 是显式清除信号(对齐 SSH passwordConfiguredCleared)。
+    // On the WebUI side secrets are always redacted to an empty string, so a value comparison cannot
+    // detect "a configured key was deleted"; Configured true->false is the explicit clear signal
+    // (aligned with SSH passwordConfiguredCleared).
     const apiKeyCleared =
       previousUsageQuery?.apiKeyConfigured === true && usageQuery.apiKeyConfigured === false;
     if (usageQuery.apiKey !== previousUsageQuery?.apiKey || apiKeyCleared) {
@@ -515,7 +486,7 @@ function syncableCustomSettings(
 function syncableSystemSettings(system: AppSettings["system"]): AppSettings["system"] {
   const syncableSystem = {
     ...system,
-    // systemProxy 密码不随 system 字段出站（明文只走 systemProxyPasswordUpdate sidecar）。
+    // The systemProxy password does not go out with the system field (plaintext only travels via the systemProxyPasswordUpdate sidecar).
     systemProxy: redactSystemProxyConfig(system.systemProxy),
   };
   delete syncableSystem.activeWorkspaceProjectId;
@@ -574,8 +545,9 @@ function resolveSyncedActiveWorkspaceProjectId(
   return explicitActiveProjectId || currentActiveProjectId;
 }
 
-/// 镜像 SSH 代理密码的同步规则：sidecar 优先；脱敏值（空密码 + passwordConfigured=true）
-/// 不清空既有密码；passwordConfigured === false 是显式清除信号。
+/// Sync rules mirroring the SSH proxy password: sidecar takes precedence; a redacted value (empty
+/// password + passwordConfigured=true) does not clear an existing password; passwordConfigured === false
+/// is the explicit clear signal.
 function mergeSyncedSystemProxy(
   current: AppSettings["system"]["systemProxy"] | undefined,
   incoming: AppSettings["system"]["systemProxy"] | undefined,
@@ -885,35 +857,6 @@ function mergeSyncedRemoteSettings(
   };
 }
 
-const STT_SECRET_FIELDS = [
-  "apiKey",
-  "secretId",
-  "secretKey",
-  "accessToken",
-  "baiduApiKey",
-] as const satisfies readonly (keyof AppSettings["stt"]["providers"][keyof AppSettings["stt"]["providers"]])[];
-
-/**
- * 合并脱敏后的 STT 快照。configured 由权威端给出；空白秘密只表示“已脱敏”，
- * 不能清除接收端可能持有的本地凭据。
- */
-function mergeSyncedSttSettings(
-  current: AppSettings["stt"],
-  incoming: unknown,
-): AppSettings["stt"] {
-  const normalized = normalizeSettings({ stt: incoming as AppSettings["stt"] }).stt;
-  for (const [id, provider] of Object.entries(normalized.providers)) {
-    const currentProvider = current.providers[id as keyof typeof current.providers];
-    if (!currentProvider) continue;
-    for (const field of STT_SECRET_FIELDS) {
-      if (provider.clearSecrets !== true && !provider[field].trim()) {
-        provider[field] = currentProvider[field];
-      }
-    }
-  }
-  return normalized;
-}
-
 function mergeSyncedSshSettings(
   current: AppSettings["ssh"],
   incoming: unknown,
@@ -1162,10 +1105,6 @@ export function buildGatewaySettingsSyncPayload(
   settings: AppSettings,
   options: { includeProviderApiKeyUpdates?: boolean } = {},
 ): GatewaySettingsSyncPayload {
-  const stt = redactSttSettingsForWebStorage(settings.stt);
-  if (settings.stt.allowIncomplete === true) {
-    stt.allowIncomplete = true;
-  }
   const payload: GatewaySettingsSyncPayload = {
     system: syncableSystemSettings(settings.system),
     customProviders: redactCustomProvidersForGateway(settings.customProviders),
@@ -1178,7 +1117,6 @@ export function buildGatewaySettingsSyncPayload(
       enableWebGit: settings.remote.enableWebGit,
       enableWebTunnels: settings.remote.enableWebTunnels,
     },
-    stt,
     memory: settings.memory,
     modelFailover: settings.modelFailover,
     customSettings: syncableCustomSettings(settings.customSettings),
@@ -1262,7 +1200,7 @@ export function buildGatewaySettingsSyncUpdatePayload(
     ? collectSystemProxyPasswordUpdate(next.system)
     : undefined;
   if (systemProxyPasswordUpdate !== undefined) {
-    // sidecar 必须与（脱敏后的）system 字段成对出现，接收端才能定位回填目标。
+    // The sidecar must appear paired with the (redacted) system field, so the receiver can locate the backfill target.
     update.system ??= nextPayload.system;
     update.systemProxyPasswordUpdate = systemProxyPasswordUpdate;
   }
@@ -1328,16 +1266,17 @@ export function applyGatewaySettingsSyncPayload(
           )
         : current.customSettings.rightDock,
       chatSidebar: current.customSettings.chatSidebar,
-      // 入口可见性跨端同步；旧端未携带此字段时保留当前状态。
+      // Entry visibility is synced across ends; when the old end does not carry this field, keep the current state.
       sidebarShortcuts:
         incomingCustomSettings.sidebarShortcuts ?? current.customSettings.sidebarShortcuts,
-      // 展示样式是全局偏好，随同步走；老对端的 payload 没有该字段时保留本地值，
-      // 不得被重置回默认。
+      // The display style is a global preference and follows sync; when an old peer's payload lacks
+      // this field, keep the local value and never reset it to the default.
       composerContextDisplay:
         incomingCustomSettings.composerContextDisplay ??
         current.customSettings.composerContextDisplay,
-      // 澄清提示词总开关同上（全局偏好 + 老对端兼容）；promptClarifyModel
-      // 经上方展开随同步走——缺省即「跟随当前对话模型」，与标题/commit 模型同轨。
+      // The clarify-prompt master switch is the same (global preference + old-peer compatibility);
+      // promptClarifyModel rides along with sync via the spread above -- its default is "follow the
+      // current conversation model", on the same track as the title/commit models.
       promptClarifyEnabled:
         incomingCustomSettings.promptClarifyEnabled ?? current.customSettings.promptClarifyEnabled,
       // Typography, scale, and transcript width are local UI preferences, never gateway-synced.
@@ -1357,10 +1296,5 @@ export function applyGatewaySettingsSyncPayload(
     remote: Object.hasOwn(source, "remote")
       ? mergeSyncedRemoteSettings(current.remote, source.remote)
       : current.remote,
-    stt: Object.hasOwn(source, "sttSecretUpdate")
-      ? mergeSyncedSttSettings(current.stt, source.sttSecretUpdate)
-      : Object.hasOwn(source, "stt")
-        ? mergeSyncedSttSettings(current.stt, source.stt)
-        : current.stt,
   });
 }

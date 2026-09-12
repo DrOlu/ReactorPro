@@ -23,34 +23,34 @@ test("renders invalid environment names as error markup when errors are non-thro
 });
 
 test("normalizes LaTeX display and inline delimiters for Streamdown math", () => {
-  const content = String.raw`2. 拉普拉斯形式
+  const content = String.raw`2. Laplace form
 
 \[
 H = 18400(1 + \frac{t}{273})\log_{10}\frac{p_0}{p}
 \]
 
-其中 \(p_0\) 是海平面气压。`;
+where \(p_0\) is sea-level pressure.`;
 
   assert.equal(
     normalizeLatexDelimiters(content),
-    String.raw`2. 拉普拉斯形式
+    String.raw`2. Laplace form
 
 $$
 H = 18400(1 + \frac{t}{273})\log_{10}\frac{p_0}{p}
 $$
 
-其中 $$p_0$$ 是海平面气压。`,
+where $$p_0$$ is sea-level pressure.`,
   );
 });
 
 test("preserves existing dollar math and escaped LaTeX delimiters", () => {
-  const content = String.raw`已有 $$x^2$$，字面量 \\(x\\) 和 \\[x\\]。`;
+  const content = String.raw`Existing $$x^2$$, literals \\(x\\) and \\[x\\].`;
   assert.equal(normalizeLatexDelimiters(content), content);
 });
 
 test("does not normalize delimiters inside Markdown or HTML code", () => {
   const content = [
-    "正文 \\(x\\)。",
+    "Body \\(x\\).",
     "",
     "`inline \\(x\\)`",
     "",
@@ -71,7 +71,7 @@ test("does not normalize delimiters inside Markdown or HTML code", () => {
   ].join("\n");
 
   const expected = [
-    "正文 $$x$$。",
+    "Body $$x$$.",
     "",
     "`inline \\(x\\)`",
     "",
@@ -113,51 +113,51 @@ test("preserves fenced code nested in blockquotes and lists", () => {
 });
 
 test("keeps incomplete delimiters static and enables streaming completion", () => {
-  const content = String.raw`推导中：\[
+  const content = String.raw`Deriving: \[
 H = 18400`;
   assert.equal(normalizeLatexDelimiters(content), content);
-  assert.equal(normalizeLatexDelimiters(content, true), String.raw`推导中：$$
+  assert.equal(normalizeLatexDelimiters(content, true), String.raw`Deriving: $$
 H = 18400`);
 });
 
 test("converts single-dollar inline math to double-dollar", () => {
-  const content = String.raw`质能方程 $E = mc^2$，求根公式 $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$。`;
+  const content = String.raw`Mass-energy equation $E = mc^2$, quadratic formula $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$.`;
   assert.equal(
     normalizeLatexDelimiters(content),
-    String.raw`质能方程 $$E = mc^2$$，求根公式 $$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$。`,
+    String.raw`Mass-energy equation $$E = mc^2$$, quadratic formula $$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$.`,
   );
 });
 
 test("keeps currency, shell variables, and escaped dollars literal", () => {
-  const currency = "价格 $5，成本 $10。总共 $15 元。";
+  const currency = "Price $5, cost $10. Total $15.";
   assert.equal(normalizeLatexDelimiters(currency), currency);
 
-  const shell = "检查 $PATH 和 $HOME 是否已导出。";
+  const shell = "Check whether $PATH and $HOME are exported.";
   assert.equal(normalizeLatexDelimiters(shell), shell);
 
-  const escaped = String.raw`费用 \$5 和 \$10。`;
+  const escaped = String.raw`Cost \$5 and \$10.`;
   assert.equal(normalizeLatexDelimiters(escaped), escaped);
 
-  const digitAfterClose = "单价 $3$5 促销。";
+  const digitAfterClose = "Unit price $3$5 promo.";
   assert.equal(normalizeLatexDelimiters(digitAfterClose), digitAfterClose);
 });
 
 test("single-dollar math must close on the same line", () => {
-  const content = "起价 $99\n次日 $x$ 恢复原价。";
-  assert.equal(normalizeLatexDelimiters(content), "起价 $99\n次日 $$x$$ 恢复原价。");
+  const content = "Starting at $99\nnext day $x$ returns to full price.";
+  assert.equal(normalizeLatexDelimiters(content), "Starting at $99\nnext day $$x$$ returns to full price.");
 });
 
 test("mixed currency and math on one line converts only the math pair", () => {
-  const content = "价格 $5，令 $x$ 表示价格。";
-  assert.equal(normalizeLatexDelimiters(content), "价格 $5，令 $$x$$ 表示价格。");
+  const content = "Price $5, let $x$ denote the price.";
+  assert.equal(normalizeLatexDelimiters(content), "Price $5, let $$x$$ denote the price.");
 });
 
 test("existing double-dollar spans stay opaque next to single-dollar math", () => {
-  assert.equal(normalizeLatexDelimiters("已有 $$x^2$$ 与 $y$。"), "已有 $$x^2$$ 与 $$y$$。");
+  assert.equal(normalizeLatexDelimiters("Existing $$x^2$$ and $y$."), "Existing $$x^2$$ and $$y$$.");
 });
 
 test("streaming leaves unterminated dollar math untouched", () => {
-  const inline = "计算 $E = mc^";
+  const inline = "Compute $E = mc^";
   assert.equal(normalizeLatexDelimiters(inline, true), inline);
 
   const display = "$$\nE = mc^2";
@@ -166,14 +166,14 @@ test("streaming leaves unterminated dollar math untouched", () => {
 
 test("does not convert dollars inside code spans or fences", () => {
   const content = [
-    "行内 `sum $a$ b` 保留，公式 $c$ 转换。",
+    "Inline `sum $a$ b` preserved, formula $c$ converted.",
     "",
     "```sh",
     "echo $HOME $USER",
     "```",
   ].join("\n");
   const expected = [
-    "行内 `sum $a$ b` 保留，公式 $$c$$ 转换。",
+    "Inline `sum $a$ b` preserved, formula $$c$$ converted.",
     "",
     "```sh",
     "echo $HOME $USER",

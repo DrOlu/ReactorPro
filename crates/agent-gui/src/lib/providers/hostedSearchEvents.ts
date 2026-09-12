@@ -136,7 +136,8 @@ function requestBodyMatchesProbe(probe: FetchProbe, body: unknown) {
 
   if (probe.providerId === "codex" || probe.providerId === "xai") {
     const promptCacheKey = readString(body.prompt_cache_key);
-    // xAI Responses 会剥离 prompt_cache_key；有 requestId 头时已在上游匹配。
+    // xAI Responses strips prompt_cache_key; when a requestId header is present
+    // it has already been matched upstream.
     if (!promptCacheKey && probe.providerId === "xai") return true;
     return promptCacheKey === probe.sessionId;
   }

@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
-// ConversationStatsBar 组件行为验收
-// (docs/design/composer-context-stats-bar.md §4.2、§9 组件层)：
-// 空态占位（保留高度，不 null）、四档容器收缩、≈ 前缀、role="status" 完整 aria-label、
-// 运行中心跳折算、approvalBar 互斥（插槽源码断言）。
+// ConversationStatsBar component behaviour acceptance
+// (docs/design/composer-context-stats-bar.md §4.2, §9 component layer):
+// empty-state placeholder (keeps height, not null), four-tier container shrink, ≈ prefix, full
+// role="status" aria-label, running-center heartbeat conversion, approvalBar mutual exclusion
+// (slot source assertion).
 
 const env = await createDomTestEnv();
 const { React, act, createRoot } = env;
@@ -62,22 +63,22 @@ async function render(statsValue, extraProps = {}) {
   };
 }
 
-test("空态与全零读数渲染为占位容器（保留高度，避免统计浮现时布局跳动）", async () => {
+test("empty state and all-zero readings render as a placeholder container (keep height to avoid layout shift when stats appear)", async () => {
   for (const statsValue of [null, EMPTY_CONVERSATION_STATS]) {
     const { container, unmount } = await render(statsValue);
     const placeholder = container.firstElementChild;
-    assert.ok(placeholder, `stats=${JSON.stringify(statsValue)} 应渲染占位容器`);
-    assert.equal(placeholder.getAttribute("role"), null, "占位态不带 role=status");
-    assert.match(placeholder.className, /h-5/, "占位容器高度需与有数据态一致");
+    assert.ok(placeholder, `stats=${JSON.stringify(statsValue)} should render a placeholder container`);
+    assert.equal(placeholder.getAttribute("role"), null, "placeholder state has no role=status");
+    assert.match(placeholder.className, /h-5/, "placeholder container height must match the with-data state");
     await unmount();
   }
 });
 
-test("完整读数：role=status + aria-label 拼出全部分组", async () => {
+test("full readings: role=status + aria-label compose all groups", async () => {
   const { container, unmount } = await render(sampleStats());
   const bar = container.querySelector('[role="status"]');
-  assert.ok(bar, "必须有 role=status 容器");
-  assert.equal(bar.getAttribute("aria-live"), "off", "数字变化不做 aria-live 播报");
+  assert.ok(bar, "must have a role=status container");
+  assert.equal(bar.getAttribute("aria-live"), "off", "number changes are not announced via aria-live");
 
   const label = bar.getAttribute("aria-label");
   assert.equal(
@@ -87,21 +88,21 @@ test("完整读数：role=status + aria-label 拼出全部分组", async () => {
   await unmount();
 });
 
-test("容器分档：时间/token/性能分组分别挂 28/40/52rem 断点", async () => {
+test("container tiers: time/token/perf groups attach 28/40/52rem breakpoints respectively", async () => {
   const { container, unmount } = await render(sampleStats());
-  // 按 data-stats-group 定位，不依赖 DOM 层级：整条可点击时会多包一层 button。
+  // Locate by data-stats-group, not DOM hierarchy: when the whole row is clickable it is wrapped in an extra button.
   const classesOf = (group) =>
     container.querySelector(`[data-stats-group="${group}"]`)?.className ?? "";
 
   assert.match(classesOf("scale"), /flex/);
-  assert.doesNotMatch(classesOf("scale"), /@min-/, "轮·步恒显，不挂断点");
+  assert.doesNotMatch(classesOf("scale"), /@min-/, "turns·steps always visible, no breakpoint");
   assert.match(classesOf("time"), /hidden @min-\[28rem\]:flex/);
   assert.match(classesOf("tokens"), /hidden @min-\[40rem\]:flex/);
   assert.match(classesOf("perf"), /hidden @min-\[52rem\]:flex/);
   await unmount();
 });
 
-test("提供 contextWindow 时 context 分组恒显，与 scale 同级不挂断点", async () => {
+test("when contextWindow is provided the context group is always visible at the same level as scale with no breakpoint", async () => {
   const { container, unmount } = await render(sampleStats(), {
     contextUsageTokens: 50_000,
     contextWindow: 200_000,
@@ -112,13 +113,13 @@ test("提供 contextWindow 时 context 分组恒显，与 scale 同级不挂断�
     "51 turns · 672 steps ｜ Context 25% ｜ LLM 12m34s · Tools 42s ｜ In 111M tok · Out 2.3M tok ｜ Avg TTFT 20.9s · 170 tok/s · Cache hit 85%",
   );
   const contextEl = container.querySelector('[data-stats-group="context"]');
-  assert.ok(contextEl, "应渲染 context 分组");
+  assert.ok(contextEl, "should render the context group");
   assert.match(contextEl.className, /flex/);
-  assert.doesNotMatch(contextEl.className, /@min-/, "上下文占用恒显，不挂断点，移动端才能露出");
+  assert.doesNotMatch(contextEl.className, /@min-/, "context usage always visible, no breakpoint, so it shows on mobile");
   await unmount();
 });
 
-test("未提供合法 contextWindow 时 context 分组不存在（不影响其余分组的 aria-label）", async () => {
+test("when no valid contextWindow is provided the context group is absent (without affecting the other groups' aria-label)", async () => {
   for (const contextWindow of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
     const { container, unmount } = await render(sampleStats(), {
       contextUsageTokens: 50_000,
@@ -128,24 +129,24 @@ test("未提供合法 contextWindow 时 context 分组不存在（不影响其�
     assert.doesNotMatch(
       label,
       /Context/,
-      `contextWindow=${contextWindow} 时不应出现 context 分组，实际：${label}`,
+      `with contextWindow=${contextWindow} no context group should appear; actual: ${label}`,
     );
     assert.equal(container.querySelector('[data-stats-group="context"]'), null);
     await unmount();
   }
 });
 
-test("contextWindow 有效但 contextUsageTokens 缺省时 context 分组按 0% 展示", async () => {
+test("when contextWindow is valid but contextUsageTokens is omitted the context group shows 0%", async () => {
   const { container, unmount } = await render(sampleStats(), { contextWindow: 200_000 });
   const label = container.querySelector('[role="status"]').getAttribute("aria-label");
-  assert.match(label, /Context 0%/, `未提供 tokens 时应按 0% 展示：${label}`);
+  assert.match(label, /Context 0%/, `with tokens omitted it should show 0%: ${label}`);
   await unmount();
 });
 
-test("approximate 读数带 ≈ 前缀；精确读数不带", async () => {
+test("approximate readings carry the ≈ prefix; exact readings do not", async () => {
   const approx = await render(sampleStats({ approximate: true }));
   const label = approx.container.querySelector('[role="status"]').getAttribute("aria-label");
-  assert.ok(label.startsWith("≈ "), `近似读数应带前缀，实际：${label}`);
+  assert.ok(label.startsWith("≈ "), `an approximate reading should carry the prefix; actual: ${label}`);
   await approx.unmount();
 
   const exact = await render(sampleStats());
@@ -154,7 +155,7 @@ test("approximate 读数带 ≈ 前缀；精确读数不带", async () => {
   await exact.unmount();
 });
 
-test("provider 未返回 usage 时 token 与性能分组整组隐藏", async () => {
+test("when the provider returns no usage the token and perf groups are hidden entirely", async () => {
   const { container, unmount } = await render(
     sampleStats({
       ttftAvgMs: null,
@@ -169,7 +170,7 @@ test("provider 未返回 usage 时 token 与性能分组整组隐藏", async () 
   await unmount();
 });
 
-test("运行中把 RunningSinceAt 折算进显示值并启动心跳", async () => {
+test("while running, RunningSinceAt is folded into the displayed value and a heartbeat starts", async () => {
   const originalSetInterval = globalThis.setInterval;
   let intervalCount = 0;
   globalThis.setInterval = (...args) => {
@@ -187,16 +188,16 @@ test("运行中把 RunningSinceAt 折算进显示值并启动心跳", async () =
       }),
     );
     const label = container.querySelector('[role="status"]').getAttribute("aria-label");
-    // 60s 已完成 + 约 90s 运行中 ≈ 2m30s；容许秒级误差。
-    assert.match(label, /LLM 2m(29|30|31)s/, `折算后的 LLM 时长不对：${label}`);
-    assert.equal(intervalCount, 1, "运行中必须注册 1s 心跳");
+    // 60s completed + ~90s running ≈ 2m30s; second-level error tolerated.
+    assert.match(label, /LLM 2m(29|30|31)s/, `converted LLM duration is wrong: ${label}`);
+    assert.equal(intervalCount, 1, "a running state must register a 1s heartbeat");
     await unmount();
   } finally {
     globalThis.setInterval = originalSetInterval;
   }
 });
 
-test("空闲时零定时器：无运行段不注册心跳 interval", async () => {
+test("zero timers when idle: with no running segment no heartbeat interval is registered", async () => {
   const originalSetInterval = globalThis.setInterval;
   let intervalCount = 0;
   globalThis.setInterval = (...args) => {
@@ -205,29 +206,31 @@ test("空闲时零定时器：无运行段不注册心跳 interval", async () =>
   };
   try {
     const { unmount } = await render(sampleStats());
-    assert.equal(intervalCount, 0, "无 RunningSinceAt 时不应注册任何 interval");
+    assert.equal(intervalCount, 0, "with no RunningSinceAt no interval should be registered");
     await unmount();
   } finally {
     globalThis.setInterval = originalSetInterval;
   }
 });
 
-test("占用 ≥50% 且提供 onManualCompactConfirm 时整条渲染为确认弹层触发按钮", async () => {
+test("when usage ≥50% and onManualCompactConfirm is provided, the whole row renders as a confirm-popover trigger button", async () => {
   const { container, unmount } = await render(sampleStats(), {
     contextUsageTokens: 150_000,
-    contextWindow: 200_000, // 75%，越过 canManualCompact 的 50% 门槛
+    contextWindow: 200_000, // 75%, past the 50% canManualCompact threshold
     onManualCompactConfirm: () => {},
   });
 
   const button = container.querySelector("button");
-  assert.ok(button, "应渲染为可点击按钮");
+  assert.ok(button, "should render as a clickable button");
   assert.equal(button.getAttribute("aria-label"), "Compact context manually?");
-  // 读数由外层 role=status 播报，内层行对辅助技术隐藏，避免同串数字读两遍。
+  // Readings are announced by the outer role=status; the inner row is hidden from assistive tech
+  // so the same numbers are not read twice.
   assert.equal(button.querySelector("[aria-hidden]")?.getAttribute("aria-hidden"), "true");
-  // Base UI Popover 在此 jsdom 测试环境下点击展开会抛错（ContextUsageRing 用
-  // 同样的 ConfirmActionPopover 复现同一崩溃，与本次改动无关，context-usage.
-  // test.mjs 也因此从未真的点开过那层），故不在此驱动真实点击；用下面的源码
-  // 断言代替，验证压缩只能从弹层内部确认触发，不会被整行点击绕过。
+  // Expanding the Base UI Popover on click throws in this jsdom test environment (ContextUsageRing
+  // reproduces the same crash with the same ConfirmActionPopover, unrelated to this change, which
+  // is also why context-usage.test.mjs never actually opened that layer), so we do not drive a real
+  // click here; the source assertions below substitute for it, verifying that compaction can only
+  // be triggered by confirming inside the popover and cannot be bypassed by clicking the whole row.
   const source = readFileSync(
     new URL("../../../agent-ui/src/components/chat/ConversationStatsBar.tsx", import.meta.url),
     "utf8",
@@ -235,65 +238,66 @@ test("占用 ≥50% 且提供 onManualCompactConfirm 时整条渲染为确认弹
   assert.match(
     source,
     /onConfirm=\{\(\) => void onManualCompactConfirm\?\.\(\)\}/,
-    "压缩必须经 ConfirmActionPopover 的 onConfirm 触发，而不是按钮 onClick 直接调用",
+    "compaction must be triggered via ConfirmActionPopover's onConfirm, not called directly from the button's onClick",
   );
   assert.match(
     source,
     /<button[\s\S]*?onClick=\{open\}/,
-    "触发按钮的 onClick 只应打开确认弹层（open），不能直接调用压缩回调",
+    "the trigger button's onClick should only open the confirm popover (open), and must not call the compaction callback directly",
   );
 
   await unmount();
 });
 
-test("占用 <50% 时是纯展示，不渲染按钮（即使提供了 onManualCompactConfirm）", async () => {
+test("when usage <50% it is pure display and renders no button (even if onManualCompactConfirm is provided)", async () => {
   const { container, unmount } = await render(sampleStats(), {
     contextUsageTokens: 50_000,
-    contextWindow: 200_000, // 25%，未达 canManualCompact 的 50% 门槛
+    contextWindow: 200_000, // 25%, below the 50% canManualCompact threshold
     onManualCompactConfirm: () => {},
   });
-  assert.equal(container.querySelector("button"), null, "占用未达门槛时不应有按钮");
-  // 分组仍在，只是不可点。
+  assert.equal(container.querySelector("button"), null, "no button when usage is below the threshold");
+  // The group is still there, just not clickable.
   assert.ok(container.querySelector('[data-stats-group="scale"]'));
   await unmount();
 });
 
-test("未提供 onManualCompactConfirm 时是纯展示，不渲染按钮（即使占用达标）", async () => {
+test("when onManualCompactConfirm is not provided it is pure display and renders no button (even if usage qualifies)", async () => {
   const { container, unmount } = await render(sampleStats(), {
     contextUsageTokens: 150_000,
     contextWindow: 200_000,
   });
-  assert.equal(container.querySelector("button"), null, "未提供回调时不应有按钮");
+  assert.equal(container.querySelector("button"), null, "no button when the callback is not provided");
   await unmount();
 });
 
-test("manualCompactBlocked 为 true 时即使占用达标也不可点", async () => {
+test("when manualCompactBlocked is true it is not clickable even if usage qualifies", async () => {
   const { container, unmount } = await render(sampleStats(), {
     contextUsageTokens: 150_000,
     contextWindow: 200_000,
     onManualCompactConfirm: () => {},
     manualCompactBlocked: true,
   });
-  assert.equal(container.querySelector("button"), null, "压缩被阻塞时不应有按钮");
+  assert.equal(container.querySelector("button"), null, "no button when compaction is blocked");
   await unmount();
 });
 
-test("压缩次数只在 tooltip 露出，不占用单行宽度", async () => {
+test("the compaction count is exposed only in the tooltip and does not consume single-row width", async () => {
   const withCompactions = await render(sampleStats({ compactions: 3 }));
   const label = withCompactions.container
     .querySelector('[role="status"]')
     .getAttribute("aria-label");
-  assert.doesNotMatch(label, /compactions/, "单行不展示压缩次数");
-  // tooltip 内容由 Base UI 按需挂载，这里断言其数据来源：hover 前不在 DOM 里。
+  assert.doesNotMatch(label, /compactions/, "the single row does not display the compaction count");
+  // The tooltip content is mounted on demand by Base UI; here we assert its data source: it is not
+  // in the DOM before hover.
   assert.equal(
     withCompactions.container.textContent.includes("3 compactions"),
     false,
-    "未悬停时 tooltip 内容不应已渲染",
+    "tooltip content should not be rendered before hover",
   );
   await withCompactions.unmount();
 });
 
-test("approvalBar 可见时状态栏让位（ChatComposerBar 插槽互斥）", () => {
+test("the stats bar yields when approvalBar is visible (ChatComposerBar slot mutual exclusion)", () => {
   const composerSource = readFileSync(
     new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
     "utf8",
@@ -301,30 +305,32 @@ test("approvalBar 可见时状态栏让位（ChatComposerBar 插槽互斥）", (
   assert.match(
     composerSource,
     /\{statsBar && approvalBar == null && contextDisplayMode !== "ring" \? statsBar : null\}/,
-    "statsBar 插槽必须保持 approvalBar 互斥，且只在 ring 展示模式下不挂载（§4.7 三档）",
+    "the statsBar slot must keep approvalBar mutual exclusion and mount only when not in ring display mode (§4.7 three tiers)",
   );
 });
 
-test("读数下是全宽毛玻璃裙边：盖住整行并上探填掉卡片圆角外的缺口", async () => {
-  // 验证反馈：正文滚进输入区下方时，读数与底下的文字重叠到难以辨认，卡片
-  // 圆角外侧的弧形缺口也会漏出正文。裙边与卡片同宽，-top-8（= rounded-4xl
-  // 半径 2rem）藏到卡片身后，-z-10 保证压在卡片之下、正文之上。
+test("under the readings is a full-width frosted-glass skirt: it covers the whole row and reaches up to fill the gap outside the card's rounded corners", async () => {
+  // Verification feedback: when body text scrolls under the input area, the readings overlap the
+  // text beneath until it is unreadable, and the arc-shaped gap outside the card's rounded corners
+  // lets body text leak through. The skirt is as wide as the card, with -top-8 (= rounded-4xl
+  // radius 2rem) tucked behind the card, and -z-10 keeps it below the card and above the body text.
   const { container, unmount } = await render(sampleStats());
   const skirt = container.querySelector('[role="status"] > div[aria-hidden="true"]');
-  assert.ok(skirt, "读数下应有一层毛玻璃裙边");
+  assert.ok(skirt, "there should be a frosted-glass skirt under the readings");
   for (const cls of [
     "pointer-events-none",
     "absolute inset-x-0 -top-8 bottom-0 -z-10",
     "bg-background/70",
     "backdrop-blur-md",
   ]) {
-    assert.ok(skirt.className.includes(cls), `裙边缺少 ${cls}：${skirt.className}`);
+    assert.ok(skirt.className.includes(cls), `skirt is missing ${cls}: ${skirt.className}`);
   }
-  // 用户反馈：裙边自带的底部圆角又会在两角漏字——裙边不做圆角，方角全覆盖。
-  assert.equal(skirt.className.includes("rounded"), false, "裙边不许带圆角");
+  // User feedback: the skirt's own bottom rounding leaked text at both corners — the skirt uses
+  // no rounding and square corners cover everything.
+  assert.equal(skirt.className.includes("rounded"), false, "the skirt must not have rounded corners");
   await unmount();
 
-  // 空态占位不带裙边：无数据时不显示一条空的毛玻璃。
+  // The empty-state placeholder has no skirt: with no data it does not show an empty strip of frosted glass.
   const empty = await render(null);
   assert.equal(empty.container.querySelector('[role="status"]'), null);
   assert.equal(empty.container.firstElementChild.children.length, 0);

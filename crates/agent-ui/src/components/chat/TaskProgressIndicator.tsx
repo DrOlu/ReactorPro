@@ -85,8 +85,9 @@ function getTaskDisplayState(task: TaskItem, isConversationRunning: boolean): Di
 }
 
 /**
- * line-clamp 只在视觉上裁掉多余行，scrollHeight 仍是完整文本的高度；两者出现差值
- * 就说明这一行被截断了。只有这种行才值得弹 tooltip，完整可见的短句悬停不打扰。
+ * line-clamp only visually clips the extra lines; scrollHeight is still the height of the full
+ * text. A difference between the two means the line was truncated. Only such lines deserve a
+ * tooltip; fully visible short phrases are not disturbed on hover.
  */
 function isTaskSubjectClamped(element: Element | undefined): boolean {
   if (!element) return false;
@@ -104,7 +105,8 @@ export function TaskProgressIndicator({
 }) {
   const instanceId = useId();
   const panelId = `${instanceId}-tasks`;
-  // 整个列表共用一个 tooltip 实例：每一行只是它的分离式触发器，payload 带上完整标题。
+  // The whole list shares one tooltip instance: each row is merely its detached trigger, with
+  // the full title in the payload.
   const [subjectTooltip] = useState(() => createTooltipHandle<string>());
   const displayState: DisplayState =
     snapshot.state === "completed"
@@ -145,8 +147,9 @@ export function TaskProgressIndicator({
         </span>
       </button>
 
-      {/* 悬浮层脱离常规流：触发药丸之外不占据任何布局高度，指针移开即收起。
-          pb-2 把触发器与卡片之间的空隙纳入悬浮区，避免移动途中丢失 hover。 */}
+      {/* The floating layer is out of the normal flow: it takes no layout height beyond the
+          trigger pill and collapses when the pointer leaves. pb-2 includes the gap between the
+          trigger and the card in the hover area, so hover is not lost while moving. */}
       <div
         className="pointer-events-none absolute bottom-full left-1/2 z-40 w-[min(320px,calc(100vw-3rem))] -translate-x-1/2 translate-y-1 pb-2 opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover/task-progress:pointer-events-auto group-hover/task-progress:translate-y-0 group-hover/task-progress:opacity-100 group-focus-within/task-progress:pointer-events-auto group-focus-within/task-progress:translate-y-0 group-focus-within/task-progress:opacity-100 motion-reduce:transition-none"
         data-task-progress-panel=""
@@ -174,7 +177,8 @@ export function TaskProgressIndicator({
                 key={task.id}
               >
                 <TaskStatusIcon className="mt-[3px]" state={taskDisplayState} />
-                {/* 标题最多两行，超长路径/URL 之类无空格串强制折行，绝不再把列表撑出横向滚动条。 */}
+                {/* The title is at most two lines; space-less strings such as extra-long paths/URLs
+                    are force-wrapped and never push a horizontal scrollbar out of the list. */}
                 <TooltipTrigger
                   closeOnClick={false}
                   delay={300}
@@ -208,8 +212,9 @@ export function TaskProgressIndicator({
         onOpenChange={(open, details) => {
           if (!open || isTaskSubjectClamped(details.trigger)) return;
           details.cancel();
-          // 指针从一条被截断的行直接滑到相邻的完整行时，hover 逻辑会把这次移动视作
-          // "换触发器"而不主动关闭；这里既否决了新行的打开，就得顺手把旧弹层收掉。
+          // When the pointer slides directly from a truncated row to an adjacent full row, the
+          // hover logic treats the move as "switching triggers" and does not actively close;
+          // since this rejects opening the new row, it should also dismiss the old popup.
           if (subjectTooltip.isOpen) queueMicrotask(() => subjectTooltip.close());
         }}
       >

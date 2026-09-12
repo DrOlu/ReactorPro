@@ -41,7 +41,7 @@ fn parse_history_time_mode(input: Option<&str>) -> Result<HistorySearchTimeMode,
         Some("updated") | Some("segment") => Ok(HistorySearchTimeMode::Updated),
         Some("conversation") => Ok(HistorySearchTimeMode::Conversation),
         Some(other) => Err(format!(
-            "historyTimeMode 只能是 message、updated 或 conversation，当前是 {other}"
+            "historyTimeMode must be message, updated, or conversation, but was {other}"
         )),
     }
 }
@@ -66,22 +66,22 @@ fn local_datetime_to_ms(value: chrono::NaiveDateTime, latest: bool) -> Result<i6
             };
             Ok(timestamp)
         }
-        LocalResult::None => Err("本地日期边界无效，无法转换为时间戳".to_string()),
+        LocalResult::None => Err("local date boundary is invalid and cannot be converted to a timestamp".to_string()),
     }
 }
 
 fn local_date_bounds_ms(date: &str) -> Result<(i64, i64), String> {
     let date = NaiveDate::parse_from_str(date.trim(), "%Y-%m-%d")
-        .map_err(|_| "historyDateLocal 必须是 YYYY-MM-DD".to_string())?;
+        .map_err(|_| "historyDateLocal must be YYYY-MM-DD".to_string())?;
     let start = date
         .and_hms_opt(0, 0, 0)
-        .ok_or_else(|| "historyDateLocal 起始时间无效".to_string())?;
+        .ok_or_else(|| "historyDateLocal start time is invalid".to_string())?;
     let next_date = date
         .succ_opt()
-        .ok_or_else(|| "historyDateLocal 结束日期无效".to_string())?;
+        .ok_or_else(|| "historyDateLocal end date is invalid".to_string())?;
     let end = next_date
         .and_hms_opt(0, 0, 0)
-        .ok_or_else(|| "historyDateLocal 结束时间无效".to_string())?;
+        .ok_or_else(|| "historyDateLocal end time is invalid".to_string())?;
     Ok((
         local_datetime_to_ms(start, false)?,
         local_datetime_to_ms(end, true)?,
@@ -106,7 +106,7 @@ fn resolve_history_search_filter(
     }
     if let (Some(since), Some(until)) = (since, until) {
         if since >= until {
-            return Err("历史搜索时间范围无效：historySince 必须早于 historyUntil".to_string());
+            return Err("invalid history search time range: historySince must be earlier than historyUntil".to_string());
         }
     }
     Ok(HistorySearchFilter {
@@ -139,23 +139,19 @@ fn expand_history_search_terms(query: &str) -> Vec<String> {
     }
 
     let lower = trimmed.to_lowercase();
-    if lower.contains("我是谁")
-        || lower.contains("我的名字")
-        || lower.contains("我叫什么")
-        || lower.contains("who am i")
+    if lower.contains("who am i")
         || lower.contains("my name")
+        || lower.contains("what is my name")
     {
         terms.extend([
-            "我叫".to_string(),
-            "叫我".to_string(),
-            "称呼我".to_string(),
-            "我的名字是".to_string(),
-            "my name is".to_string(),
+            "i am called".to_string(),
             "call me".to_string(),
+            "address me as".to_string(),
+            "my name is".to_string(),
         ]);
     }
-    if lower.contains("偏好") || lower.contains("习惯") || lower.contains("preference") {
-        terms.extend(["偏好".to_string(), "习惯".to_string(), "prefer".to_string()]);
+    if lower.contains("preference") || lower.contains("habit") {
+        terms.extend(["preference".to_string(), "habit".to_string(), "prefer".to_string()]);
     }
 
     let mut deduped = Vec::new();
@@ -227,7 +223,7 @@ fn search_chat_history_message_plain(
     );
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("准备历史消息纯文本回退查询失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare history message plain-text fallback query: {e}"))?;
     let rows = stmt
         .query_map(
             params![pattern, filter.since, filter.until, limit as i64],
@@ -249,11 +245,11 @@ fn search_chat_history_message_plain(
                 })
             },
         )
-        .map_err(|e| format!("执行历史消息纯文本回退查询失败：{e}"))?;
+        .map_err(|e| format!("failed to execute history message plain-text fallback query: {e}"))?;
     for row in rows {
         push_history_search_match(
             out,
-            row.map_err(|e| format!("读取历史消息纯文本回退结果失败：{e}"))?,
+            row.map_err(|e| format!("failed to read history message plain-text fallback result: {e}"))?,
         );
     }
     Ok(())
@@ -287,7 +283,7 @@ fn search_chat_history_segment_plain(
     );
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("准备历史分段纯文本回退查询失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare history segment plain-text fallback query: {e}"))?;
     let rows = stmt
         .query_map(
             params![pattern, filter.since, filter.until, limit as i64],
@@ -309,11 +305,11 @@ fn search_chat_history_segment_plain(
                 })
             },
         )
-        .map_err(|e| format!("执行历史分段纯文本回退查询失败：{e}"))?;
+        .map_err(|e| format!("failed to execute history segment plain-text fallback query: {e}"))?;
     for row in rows {
         push_history_search_match(
             out,
-            row.map_err(|e| format!("读取历史分段纯文本回退结果失败：{e}"))?,
+            row.map_err(|e| format!("failed to read history segment plain-text fallback result: {e}"))?,
         );
     }
     Ok(())
@@ -329,19 +325,19 @@ fn is_history_time_overview_query(query: &str) -> bool {
         .is_match(&trimmed);
     has_date
         || [
-            "今天",
-            "昨天",
-            "前天",
-            "当天",
-            "那天",
-            "最近",
-            "做了什么",
-            "干了什么",
-            "活动",
-            "回顾",
-            "时间线",
-            "工作",
-            "进展",
+            "today",
+            "yesterday",
+            "the day before yesterday",
+            "that day",
+            "on that day",
+            "lately",
+            "what have i done",
+            "what did i do",
+            "activity",
+            "review",
+            "timeline",
+            "work",
+            "progress",
             "timeline",
             "activity",
             "review",
@@ -379,7 +375,7 @@ fn search_chat_history_time_window(
     );
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("准备历史时间窗口查询失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare history time-window query: {e}"))?;
     let rows = stmt
         .query_map(params![filter.since, filter.until, limit as i64], |row| {
             Ok(MemoryHistorySearchMatch {
@@ -398,10 +394,10 @@ fn search_chat_history_time_window(
                 updated_at: row.get(6)?,
             })
         })
-        .map_err(|e| format!("执行历史时间窗口查询失败：{e}"))?;
+        .map_err(|e| format!("failed to execute history time-window query: {e}"))?;
     let mut matches = Vec::new();
     for row in rows {
-        matches.push(row.map_err(|e| format!("读取历史时间窗口结果失败：{e}"))?);
+        matches.push(row.map_err(|e| format!("failed to read history time-window result: {e}"))?);
     }
     Ok(matches)
 }
@@ -437,7 +433,7 @@ fn search_chat_history_message_fts(
     );
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("准备历史消息 FTS 查询失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare history message FTS query: {e}"))?;
     let rows = stmt
         .query_map(
             params![query, filter.since, filter.until, limit as i64],
@@ -461,12 +457,12 @@ fn search_chat_history_message_fts(
                 })
             },
         )
-        .map_err(|e| format!("执行历史消息 FTS 查询失败：{e}"))?;
+        .map_err(|e| format!("failed to execute history message FTS query: {e}"))?;
 
     for row in rows {
         push_history_search_match(
             out,
-            row.map_err(|e| format!("读取历史消息 FTS 结果失败：{e}"))?,
+            row.map_err(|e| format!("failed to read history message FTS result: {e}"))?,
         );
     }
     Ok(())
@@ -500,7 +496,7 @@ fn search_chat_history_segment_fts(
     );
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("准备历史分段 FTS 查询失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare history segment FTS query: {e}"))?;
     let rows = stmt
         .query_map(
             params![query, filter.since, filter.until, limit as i64],
@@ -524,12 +520,12 @@ fn search_chat_history_segment_fts(
                 })
             },
         )
-        .map_err(|e| format!("执行历史分段 FTS 查询失败：{e}"))?;
+        .map_err(|e| format!("failed to execute history segment FTS query: {e}"))?;
 
     for row in rows {
         push_history_search_match(
             out,
-            row.map_err(|e| format!("读取历史分段 FTS 结果失败：{e}"))?,
+            row.map_err(|e| format!("failed to read history segment FTS result: {e}"))?,
         );
     }
     Ok(())

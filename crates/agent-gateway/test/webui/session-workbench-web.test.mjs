@@ -1,9 +1,13 @@
-// Web 端 Session Workbench 合同测试：
-// 1) 网关中转的会话隔离——ConversationStreamClient 按 conversation_id 路由，
-//    多 Pane 并存时事件绝不串流；聚焦切换瞬间同会话「后订阅替换先订阅」，
-//    被替换方的清理不会误删新订阅（GatewayConversationPaneHost 依赖此语义）。
-// 2) 草稿转正的 Pane 原位重绑——renameWorkbenchConversation 保持拓扑/焦点/
-//    paneId 不变，只换会话 id；违反「一个会话最多一个 Pane」时拒绝。
+// Web-side Session Workbench contract tests:
+// 1) Conversation isolation through the gateway relay -- ConversationStreamClient
+//    routes by conversation_id, and events never cross streams when multiple Panes
+//    coexist; at the moment focus switches, the same conversation's "later
+//    subscription replaces the earlier one", and cleanup of the replaced side does
+//    not mistakenly delete the new subscription (GatewayConversationPaneHost relies
+//    on this semantics).
+// 2) In-place rebinding of a Pane when a draft is promoted -- renameWorkbenchConversation
+//    keeps the topology/focus/paneId unchanged and only swaps the conversation id;
+//    it refuses when "at most one Pane per conversation" would be violated.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -28,7 +32,7 @@ const { resolveConversationRuntimeControls } = loader.loadModule(
   "src/app/gatewayChatCommandActions.ts",
 );
 
-// --- 流客户端测试支架（与 conversation-stream-client.test.mjs 同构）---------
+// --- Stream client test harness (isomorphic with conversation-stream-client.test.mjs) ---
 
 function createTransport() {
   const calls = [];
@@ -79,7 +83,7 @@ async function flushMicrotasks() {
   }
 }
 
-// --- 布局测试支架 -----------------------------------------------------------
+// --- Layout test harness ----------------------------------------------------
 
 function conversationPane(paneId, conversationId) {
   return {
@@ -118,7 +122,7 @@ function twoPaneLayout(firstConversationId, secondConversationId) {
   };
 }
 
-// --- 会话隔离 ----------------------------------------------------------------
+// --- Conversation isolation -------------------------------------------------
 
 test("multi-pane gateway streams stay isolated per conversation", async () => {
   const transport = createTransport();
@@ -137,7 +141,7 @@ test("multi-pane gateway streams stay isolated per conversation", async () => {
   client.handleChatEvent({ type: "token", conversation_id: "conv-a", seq: 1, text: "a1" });
   client.handleChatEvent({ type: "token", conversation_id: "conv-b", seq: 1, text: "b1" });
   client.handleChatEvent({ type: "token", conversation_id: "conv-a", seq: 2, text: "a2" });
-  // 未订阅会话的事件被丢弃，不落进任何 handler。
+  // Events for unsubscribed conversations are dropped and do not reach any handler.
   client.handleChatEvent({ type: "token", conversation_id: "conv-c", seq: 1, text: "c1" });
 
   assert.deepEqual(
@@ -161,7 +165,8 @@ test("focus handoff: re-subscribing replaces the old registration; stale cleanup
   client.handleConnected();
   await flushMicrotasks();
 
-  // 聚焦切换：主视图对同一会话再次订阅，替换预览的注册。
+  // Focus switch: the main view subscribes to the same conversation again, replacing
+  // the preview's registration.
   client.subscribe("conv-a", mainView.handlers);
   await flushMicrotasks();
 
@@ -172,7 +177,8 @@ test("focus handoff: re-subscribing replaces the old registration; stale cleanup
     ["x"],
   );
 
-  // 预览组件随后卸载：被替换的清理不得删除新注册、不得向网关发 unsubscribe。
+  // The preview component then unmounts: the replaced cleanup must not delete the
+  // new registration nor send unsubscribe to the gateway.
   const callsBefore = transport.calls.length;
   unsubscribePreview();
   await flushMicrotasks();
@@ -184,7 +190,7 @@ test("focus handoff: re-subscribing replaces the old registration; stale cleanup
   );
 });
 
-// --- 草稿转正的原位重绑 --------------------------------------------------------
+// --- In-place rebinding when a draft is promoted -----------------------------
 
 test("draft promotion rebinds the hosting pane in place", () => {
   const layout = twoPaneLayout("draft-local-1", "conversation-b");
@@ -193,11 +199,13 @@ test("draft promotion rebinds the hosting pane in place", () => {
   assert.ok(next);
   assert.ok(isWorkbenchLayoutValid(next));
   assert.equal(next.revision, layout.revision + 1);
-  // 拓扑与焦点保持引用不变：Pane 不重挂载，分栏比例不动。
+  // Topology and focus keep their references: the Pane is not remounted and the
+  // split ratio does not change.
   assert.equal(next.root, layout.root);
   assert.equal(next.focusedPaneId, layout.focusedPaneId);
   assert.equal(next.panes["pane-b"], layout.panes["pane-b"]);
-  // 同一个 Pane 原位换绑到真实会话 id，草稿 id 不再被任何 Pane 承载。
+  // The same Pane is rebound in place to the real conversation id; the draft id is
+  // no longer hosted by any Pane.
   assert.equal(findPaneIdByConversationId(next, "conversation-real"), "pane-a");
   assert.equal(findPaneIdByConversationId(next, "draft-local-1"), null);
   assert.equal(next.panes["pane-a"].surface.project, layout.panes["pane-a"].surface.project);
@@ -206,14 +214,15 @@ test("draft promotion rebinds the hosting pane in place", () => {
 test("rename refuses no-op and invariant-breaking inputs", () => {
   const layout = twoPaneLayout("conversation-a", "conversation-b");
 
-  // 源会话没有 Pane / 空 id / 同 id：无事发生。
+  // Source conversation has no Pane / empty id / same id: nothing happens.
   assert.equal(renameWorkbenchConversation(layout, "conversation-x", "conversation-y"), null);
   assert.equal(renameWorkbenchConversation(layout, "", "conversation-y"), null);
   assert.equal(
     renameWorkbenchConversation(layout, "conversation-a", "conversation-a"),
     null,
   );
-  // 目标会话已有 Pane：拒绝，维持「一个会话最多一个 Pane」。
+  // Target conversation already has a Pane: refuse, preserving "at most one Pane
+  // per conversation".
   assert.equal(
     renameWorkbenchConversation(layout, "conversation-a", "conversation-b"),
     null,
@@ -255,10 +264,11 @@ test("background pane runtime controls resolve from that conversation's provider
 });
 
 test("workbench pane composer wires the clarify runner (web default path)", () => {
-  // sessionWorkbench 默认开启：Web 聊天一律经 GatewayConversationPaneHost 渲染，
-  // 澄清按钮必须在这条路径接线（GatewayAppView 的内联 composer 只是
-  // VITE_LIVEAGENT_SESSION_WORKBENCH=0 的逃生路径）。runner 按本 Pane 会话
-  // 解析供应商/模型（桌面端背景 Pane 口径）。
+  // sessionWorkbench is enabled by default: Web chat is always rendered through
+  // GatewayConversationPaneHost, and the clarify button must be wired on this path
+  // (GatewayAppView's inline composer is only the VITE_LIVEAGENT_SESSION_WORKBENCH=0
+  // escape hatch). The runner resolves the provider/model from this Pane's
+  // conversation (the desktop background Pane convention).
   const webRoot = fileURLToPath(new URL("../../web", import.meta.url));
   const paneHostSource = readFileSync(
     path.join(webRoot, "src/app/workbench/GatewayConversationPaneHost.tsx"),
@@ -267,9 +277,10 @@ test("workbench pane composer wires the clarify runner (web default path)", () =
   assert.match(paneHostSource, /executeClarifyPromptTurn\(\s*context\.api,\s*context\.settings,/);
   assert.match(paneHostSource, /\(messages, _signal, onTextDelta\) =>/);
   assert.match(paneHostSource, /onTextDelta,/);
-  // 总开关（settings.customSettings.promptClarifyEnabled）关闭时不传执行器，
-  // ChatComposerBar 随之隐藏澄清按钮；模型覆盖/回退收敛在两宿主共用的
-  // executeClarifyPromptTurn（内部走 resolvePromptClarifyModel）。
+  // When the master switch (settings.customSettings.promptClarifyEnabled) is off,
+  // no executor is passed and ChatComposerBar hides the clarify button accordingly;
+  // model override/fallback converges in executeClarifyPromptTurn (which internally
+  // goes through resolvePromptClarifyModel), shared by both hosts.
   assert.match(
     paneHostSource,
     /context\.settings\.customSettings\.promptClarifyEnabled \? runClarifyTurn : undefined/,

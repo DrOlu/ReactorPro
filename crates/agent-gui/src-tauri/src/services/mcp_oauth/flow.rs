@@ -1,8 +1,8 @@
-//! 授权码流机械件（docs/design/mcp-oauth.md §4.1/§6）。
+//! Authorization-code flow machinery (docs/design/mcp-oauth.md §4.1/§6).
 //!
-//! PKCE(S256)/state 生成、`127.0.0.1:随机端口` loopback 回调（RFC 8252，
-//! one-shot、5 分钟超时、state 恒等校验）、authorize URL 拼装、token
-//! 交换与刷新（RFC 8707 `resource` 参数绑定受众）。
+//! PKCE(S256)/state generation, `127.0.0.1:random port` loopback callback (RFC 8252,
+//! one-shot, 5-minute timeout, state equality check), authorize URL assembly, and token
+//! exchange/refresh (RFC 8707 `resource` parameter binding the audience).
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -20,7 +20,7 @@ pub const AUTHORIZE_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub fn random_b64url(bytes: usize) -> Result<String, String> {
     let mut buf = vec![0u8; bytes];
-    getrandom::fill(&mut buf).map_err(|e| format!("获取随机熵失败：{e}"))?;
+    getrandom::fill(&mut buf).map_err(|e| format!("failed to obtain random entropy: {e}"))?;
     Ok(URL_SAFE_NO_PAD.encode(buf))
 }
 
@@ -31,7 +31,7 @@ pub struct Pkce {
 }
 
 pub fn new_pkce() -> Result<Pkce, String> {
-    // RFC 7636：32 字节熵 → base64url 43 字符 verifier；challenge = S256(verifier)。
+    // RFC 7636: 32 bytes of entropy → a 43-character base64url verifier; challenge = S256(verifier).
     let verifier = random_b64url(32)?;
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
     Ok(Pkce { verifier, challenge })
@@ -47,7 +47,7 @@ pub fn build_authorize_url(
     scope: Option<&str>,
 ) -> Result<String, String> {
     let mut url = Url::parse(authorization_endpoint)
-        .map_err(|e| format!("authorization_endpoint 无效：{authorization_endpoint}（{e}）"))?;
+        .map_err(|e| format!("invalid authorization_endpoint: {authorization_endpoint} ({e})"))?;
     {
         let mut query = url.query_pairs_mut();
         query
@@ -65,8 +65,8 @@ pub fn build_authorize_url(
     Ok(url.to_string())
 }
 
-/// 授权 URL 只允许在系统浏览器里打开 https 或 loopback http（阻断
-/// `javascript:` 等注入面，见设计 §6）。
+/// The authorization URL may only be opened in the system browser as https or loopback http
+/// (blocking `javascript:` and similar injection surfaces, see design §6).
 pub fn is_safe_browser_url(raw: &str) -> bool {
     let Ok(url) = Url::parse(raw) else {
         return false;
@@ -78,27 +78,27 @@ pub fn is_safe_browser_url(raw: &str) -> bool {
     }
 }
 
-// ---- loopback 回调 ----
+// ---- loopback callback ----
 
 pub struct Loopback {
     listener: TcpListener,
     port: u16,
 }
 
-const CALLBACK_OK_HTML: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><title>LiveAgent</title></head><body style=\"font-family:system-ui;display:flex;align-items:center;justify-content:center;height:90vh\"><div style=\"text-align:center\"><h2>授权完成 / Authorization complete</h2><p>可以关闭此页面，回到 LiveAgent。/ You can close this page and return to LiveAgent.</p></div></body></html>";
+const CALLBACK_OK_HTML: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><title>ReactorPro</title></head><body style=\"font-family:system-ui;display:flex;align-items:center;justify-content:center;height:90vh\"><div style=\"text-align:center\"><h2>Authorization complete</h2><p>You can close this page and return to ReactorPro.</p></div></body></html>";
 
-const CALLBACK_FAIL_HTML: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><title>LiveAgent</title></head><body style=\"font-family:system-ui;display:flex;align-items:center;justify-content:center;height:90vh\"><div style=\"text-align:center\"><h2>授权未完成 / Authorization failed</h2><p>请回到 LiveAgent 查看详情并重试。/ Return to LiveAgent for details and retry.</p></div></body></html>";
+const CALLBACK_FAIL_HTML: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><title>ReactorPro</title></head><body style=\"font-family:system-ui;display:flex;align-items:center;justify-content:center;height:90vh\"><div style=\"text-align:center\"><h2>Authorization failed</h2><p>Return to ReactorPro for details and retry.</p></div></body></html>";
 
 impl Loopback {
     pub fn bind() -> Result<Self, String> {
         let listener = TcpListener::bind(("127.0.0.1", 0))
-            .map_err(|e| format!("绑定 loopback 回调端口失败：{e}"))?;
+            .map_err(|e| format!("failed to bind the loopback callback port: {e}"))?;
         listener
             .set_nonblocking(true)
-            .map_err(|e| format!("设置 loopback 监听非阻塞失败：{e}"))?;
+            .map_err(|e| format!("failed to set the loopback listener to non-blocking: {e}"))?;
         let port = listener
             .local_addr()
-            .map_err(|e| format!("读取 loopback 端口失败：{e}"))?
+            .map_err(|e| format!("failed to read the loopback port: {e}"))?
             .port();
         Ok(Self { listener, port })
     }
@@ -107,13 +107,15 @@ impl Loopback {
         format!("http://127.0.0.1:{}{}", self.port, CALLBACK_PATH)
     }
 
-    /// 阻塞等待浏览器回调，返回授权码。one-shot：拿到结果即返回，listener 随
-    /// self drop 关闭。state 不符的请求回 400 并继续等待（防 CSRF 抢答）。
+    /// Blocks waiting for the browser callback and returns the authorization code. One-shot:
+    /// it returns as soon as a result is obtained, and the listener closes when self drops.
+    /// Requests with a mismatched state get a 400 and the wait continues (guarding against a
+    /// CSRF race).
     pub fn wait_for_code(&self, expected_state: &str, timeout: Duration) -> Result<String, String> {
         let deadline = Instant::now() + timeout;
         loop {
             if Instant::now() >= deadline {
-                return Err("等待浏览器授权回调超时（5 分钟）".to_string());
+                return Err("timed out waiting for the browser authorization callback (5 minutes)".to_string());
             }
             let (stream, peer) = match self.listener.accept() {
                 Ok(pair) => pair,
@@ -121,7 +123,7 @@ impl Loopback {
                     std::thread::sleep(Duration::from_millis(100));
                     continue;
                 }
-                Err(e) => return Err(format!("loopback accept 失败：{e}")),
+                Err(e) => return Err(format!("loopback accept failed: {e}")),
             };
             if !peer.ip().is_loopback() {
                 continue;
@@ -182,7 +184,7 @@ fn handle_callback_connection(stream: TcpStream, expected_state: &str) -> Callba
     }
 
     if state.as_deref() != Some(expected_state) {
-        // CSRF/串台：不接受也不终止，继续等真正的回调。
+        // CSRF/cross-talk: neither accept nor terminate; keep waiting for the real callback.
         respond(reader.into_inner(), "400 Bad Request", CALLBACK_FAIL_HTML);
         return CallbackOutcome::Ignored;
     }
@@ -190,9 +192,9 @@ fn handle_callback_connection(stream: TcpStream, expected_state: &str) -> Callba
     if let Some(error) = error {
         respond(reader.into_inner(), "200 OK", CALLBACK_FAIL_HTML);
         let detail = error_description
-            .map(|d| format!("：{d}"))
+            .map(|d| format!(": {d}"))
             .unwrap_or_default();
-        return CallbackOutcome::OauthError(format!("授权服务器返回错误 {error}{detail}"));
+        return CallbackOutcome::OauthError(format!("authorization server returned an error {error}{detail}"));
     }
 
     match code {
@@ -229,7 +231,7 @@ fn respond(mut stream: TcpStream, status: &str, body: &str) {
     let _ = stream.flush();
 }
 
-// ---- token 端点 ----
+// ---- token endpoint ----
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TokenResponse {
@@ -283,7 +285,7 @@ fn token_request(
             builder = builder.basic_auth(credentials.client_id, Some(secret));
         }
         (_, Some(secret)) => {
-            // 未知 method 但持有 secret 时按 client_secret_post 处理。
+            // An unknown method that holds a secret is treated as client_secret_post.
             form.push(("client_secret", secret.to_string()));
         }
         _ => {}
@@ -293,31 +295,31 @@ fn token_request(
         .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
         .body(encode_form(&form))
         .send()
-        .map_err(|e| format!("token 请求失败（{token_endpoint}）：{e}"))?;
+        .map_err(|e| format!("token request failed ({token_endpoint}): {e}"))?;
     let status = resp.status();
     let text = resp
         .text()
-        .map_err(|e| format!("读取 token 响应失败：{e}"))?;
+        .map_err(|e| format!("failed to read the token response: {e}"))?;
 
     if !status.is_success() {
         if let Ok(err) = serde_json::from_str::<OauthErrorBody>(&text) {
             let detail = err
                 .error_description
-                .map(|d| format!("：{d}"))
+                .map(|d| format!(": {d}"))
                 .unwrap_or_default();
-            return Err(format!("token 端点返回 {}（{}{detail}）", status, err.error));
+            return Err(format!("token endpoint returned {} ({}{detail})", status, err.error));
         }
-        return Err(format!("token 端点返回 {status}"));
+        return Err(format!("token endpoint returned {status}"));
     }
 
     let parsed: TokenResponse =
-        serde_json::from_str(&text).map_err(|e| format!("解析 token 响应失败：{e}"))?;
+        serde_json::from_str(&text).map_err(|e| format!("failed to parse the token response: {e}"))?;
     if parsed.access_token.trim().is_empty() {
-        return Err("token 响应缺少 access_token".to_string());
+        return Err("token response is missing access_token".to_string());
     }
     if let Some(token_type) = parsed.token_type.as_deref() {
         if !token_type.eq_ignore_ascii_case("bearer") {
-            return Err(format!("不支持的 token_type：{token_type}（仅支持 Bearer）"));
+            return Err(format!("unsupported token_type: {token_type} (only Bearer is supported)"));
         }
     }
     Ok(parsed)
@@ -373,10 +375,10 @@ mod tests {
     #[test]
     fn pkce_challenge_matches_rfc7636_s256() {
         let pkce = new_pkce().expect("pkce");
-        assert!(pkce.verifier.len() >= 43, "32 字节熵应产出 ≥43 字符 verifier");
+        assert!(pkce.verifier.len() >= 43, "32 bytes of entropy should produce a verifier of ≥43 characters");
         let expected = URL_SAFE_NO_PAD.encode(Sha256::digest(pkce.verifier.as_bytes()));
         assert_eq!(pkce.challenge, expected);
-        // 不重复（熵源有效）。
+        // Not repeated (the entropy source is effective).
         assert_ne!(new_pkce().expect("pkce2").verifier, pkce.verifier);
     }
 
@@ -437,7 +439,8 @@ mod tests {
         let port = Url::parse(&uri).expect("uri").port().expect("port");
 
         let hit = std::thread::spawn(move || {
-            // 先来一个 state 不符的请求（应被 400 拒绝且不终止等待），再来正确回调。
+            // First send a request with a mismatched state (which should be rejected with 400
+            // without terminating the wait), then the correct callback.
             let send = |path: &str| {
                 let mut s = TcpStream::connect(("127.0.0.1", port)).expect("connect");
                 s.write_all(format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes())
@@ -458,8 +461,8 @@ mod tests {
             .expect("code");
         assert_eq!(code, "good-code");
         let (first, second) = hit.join().expect("join");
-        assert!(first.contains("400"), "state 不符必须 400：{first}");
-        assert!(second.contains("200"), "正确回调必须 200：{second}");
+        assert!(first.contains("400"), "a state mismatch must be 400: {first}");
+        assert!(second.contains("200"), "the correct callback must be 200: {second}");
     }
 
     #[test]

@@ -393,10 +393,12 @@ async function runExtractionRound(params: {
     runtime: params.model.runtime,
     context,
     workdir: params.workdir,
-    // 稳定 sessionId:codex 路径上它就是 prompt_cache_key(缓存分片路由)。同一
-    // 会话的多次抽取共享 system prompt / 工具定义 / 对话前缀,带时间戳会每次换
-    // 分片、全量 miss;去掉后后续抽取直接吃前一次的前缀。诊断侧的 prefixShape
-    // LRU 也不再被一次性键挤占(prompt-cache-stability.md 残留风险 #2)。
+    // Stable sessionId: on the codex path it is the prompt_cache_key (cache shard routing).
+    // Multiple extractions of the same session share the system prompt / tool definitions /
+    // conversation prefix; including a timestamp would switch shards every time and miss
+    // entirely, while removing it lets later extractions feed directly on the previous
+    // extraction's prefix. The diagnostic-side prefixShape LRU also stops being crowded out by
+    // one-off keys (prompt-cache-stability.md residual risk #2).
     sessionId: `${params.sessionId}:memory:${params.conversationId}`,
     tools,
     executeToolCall,
@@ -465,10 +467,13 @@ export async function runMemoryExtraction(
 
   const workspaceMutations = deriveWorkspaceMutations(params.messages, workdir || undefined);
   const summaryBlock = buildConversationSummaryBlock(params.conversationSummary);
-  // 块序按「稳定 → 易变」排:指令 prompt(约 4KB,会话内静态)打头,对话窗口
-  // (每轮必变)垫底。前缀缓存是字节级匹配,最易变的块排前面会让同会话的多次
-  // 抽取在第一行就分叉 —— sessionId 已稳定(见 runExtractionRound),块序对了
-  // 才真能吃到前一次抽取的前缀。指令里的方位措辞(above/below)与此序同步。
+  // Block order goes "stable -> volatile": the instruction prompt (about 4KB, static within a
+  // session) leads, and the conversation window (changing every turn) trails. Prefix caching is
+  // byte-level matching, so putting the most volatile block first would make multiple extractions
+  // of the same session diverge on the very first line -- the sessionId is already stable (see
+  // runExtractionRound), and only with the right block order can it actually feed on the previous
+  // extraction's prefix. The directional wording in the instructions (above/below) is kept in sync
+  // with this order.
   const hiddenPromptText = [
     buildExtractionInstructionPrompt({
       localDate,

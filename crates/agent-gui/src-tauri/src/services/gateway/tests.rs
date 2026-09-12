@@ -1,6 +1,6 @@
 use super::{
-    attach_stt_secret_sync, build_gateway_runtime_status_envelope,
-    build_local_settings_update_event_payload, effective_agent_id,
+    build_gateway_runtime_status_envelope, build_local_settings_update_event_payload,
+    effective_agent_id,
     gateway_connection_needs_restart, gateway_connection_stale_after, gateway_reconnect_backoff,
     history_share_resolve_error_code, is_chat_runtime_wake_request_id,
     merge_settings_sync_snapshot, merge_settings_update_into_snapshot, proto,
@@ -347,17 +347,17 @@ fn conversation_cancel_preserves_gui_queued_remote_requests() {
 
 #[test]
 fn history_share_resolve_error_code_maps_public_share_failures() {
-    assert_eq!(history_share_resolve_error_code("分享 token 不能为空"), 400);
+    assert_eq!(history_share_resolve_error_code("Share token must not be empty"), 400);
     assert_eq!(
-        history_share_resolve_error_code("分享链接不存在或已关闭"),
+        history_share_resolve_error_code("Share link does not exist or has been closed"),
         404
     );
     assert_eq!(
-        history_share_resolve_error_code("未找到对应的历史对话"),
+        history_share_resolve_error_code("No matching history conversation found"),
         404
     );
     assert_eq!(
-        history_share_resolve_error_code("读取历史对话分享链接失败：db"),
+        history_share_resolve_error_code("Failed to read history conversation share link: db"),
         500
     );
 }
@@ -450,46 +450,6 @@ fn merge_settings_sync_snapshot_without_cache_leaves_ui_only_fields_absent() {
     assert!(!merged_map.contains_key("locale"));
     assert!(!merged_map.contains_key("selectedModel"));
     assert_eq!(merged["system"], json!({ "executionMode": "agent-dev" }));
-}
-
-#[test]
-fn settings_sync_attaches_private_stt_only_to_the_outbound_payload() {
-    let public_snapshot = json!({
-        "theme": "dark",
-        "stt": {
-            "provider": "tencent_cloud",
-            "providers": {
-                "tencent_cloud": {
-                    "id": "tencent_cloud",
-                    "configured": true,
-                    "appId": "123",
-                    "secretId": "",
-                    "secretKey": ""
-                }
-            }
-        }
-    });
-    let raw_stt = json!({
-        "provider": "tencent_cloud",
-        "providers": {
-            "tencent_cloud": {
-                "id": "tencent_cloud",
-                "appId": "123",
-                "secretId": "desktop-secret-id",
-                "secretKey": "desktop-secret-key"
-            }
-        }
-    });
-
-    let outbound = attach_stt_secret_sync(public_snapshot.clone(), Some(raw_stt.clone()))
-        .expect("attach private STT settings");
-
-    assert_eq!(outbound["sttSecretSync"], raw_stt);
-    assert_eq!(
-        public_snapshot["stt"]["providers"]["tencent_cloud"]["secretId"],
-        ""
-    );
-    assert!(public_snapshot.get("sttSecretSync").is_none());
 }
 
 #[test]

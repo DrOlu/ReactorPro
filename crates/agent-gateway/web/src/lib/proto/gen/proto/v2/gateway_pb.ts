@@ -881,9 +881,10 @@ export type ChatRuntimeControls = Message<"liveagent.gateway.v2.ChatRuntimeContr
   reasoning: string;
 
   /**
-   * Plan mode(计划模式):true 表示本轮只注入只读工具 + ExitPlanMode。
-   * 限制性开关,桌面端按"只能收紧"合并(任一来源为 true 即生效);缺省 false
-   * 不得关闭桌面本地已开启的 plan mode。
+   * Plan mode: true means this turn injects only read-only tools + ExitPlanMode.
+   * A restrictive switch; the desktop merges it on a "can only tighten" basis
+   * (any source being true takes effect); the default false must not turn off
+   * plan mode already enabled locally on the desktop.
    *
    * @generated from field: bool plan_mode_enabled = 4;
    */
@@ -898,10 +899,12 @@ export const ChatRuntimeControlsSchema: GenMessage<ChatRuntimeControls> = /*@__P
   messageDesc(file_proto_v2_gateway, 3);
 
 /**
- * 澄清轮次（Web 计划 2）：浏览器经 gateway 转发到桌面 agent 的一次纯文本补全。
- * messages 走 JSON 字符串（ClarifyMessage[]，见 agent-ui clarifyTypes），system
- * 提示词（含工作区上下文）已在 Web 侧拼入 messages，无需单独字段；provider/
- * model/runtime 由 Web 当前选中下发，桌面端按 provider_id 查本地配置构造 runtime。
+ * Clarification turn (Web plan 2): a single plain-text completion forwarded from the
+ * browser through the gateway to the desktop agent. messages is carried as a JSON string
+ * (ClarifyMessage[], see agent-ui clarifyTypes); the system prompt (including workspace
+ * context) is already assembled into messages on the Web side, so no separate field is
+ * needed; provider/model/runtime are sent as currently selected by the Web, and the
+ * desktop looks up local config by provider_id to construct the runtime.
  *
  * @generated from message liveagent.gateway.v2.ClarifyTurnRequest
  */
@@ -962,8 +965,9 @@ export const ClarifyTurnResponseSchema: GenMessage<ClarifyTurnResponse> = /*@__P
   messageDesc(file_proto_v2_gateway, 5);
 
 /**
- * 澄清轮次流式增量。与 ClarifyTurnRequest 共用 request_id，但不结束 unary
- * 等待：gateway 拦截后转给发起该轮的浏览器，最终仍以 clarify_turn_resp 收束。
+ * Streaming delta for a clarification turn. It shares request_id with ClarifyTurnRequest
+ * but does not end the unary wait: the gateway intercepts it and routes it to the browser
+ * that initiated the turn, and it is still ultimately concluded with clarify_turn_resp.
  *
  * @generated from message liveagent.gateway.v2.ClarifyTurnDelta
  */
@@ -1095,15 +1099,16 @@ export const UploadReadableFilesResponseSchema: GenMessage<UploadReadableFilesRe
   messageDesc(file_proto_v2_gateway, 10);
 
 /**
- * 浏览器拖入的整个文件夹经 HTTP 上传后由网关转发到 Agent 宿主机落盘。
- * target 决定落盘基目录："workspace" 创建为新工作空间目录，
- * "project-root" 创建为待挂载的附属目录。
+ * An entire folder dragged into the browser is uploaded over HTTP and then forwarded by
+ * the gateway to the Agent host for writing to disk. target determines the base directory
+ * on disk: "workspace" creates a new workspace directory, while "project-root" creates an
+ * attached directory pending mount.
  *
  * @generated from message liveagent.gateway.v2.ImportDirectoryFile
  */
 export type ImportDirectoryFile = Message<"liveagent.gateway.v2.ImportDirectoryFile"> & {
   /**
-   * 文件夹内的相对路径，正斜杠分隔
+   * relative path within the folder, separated by forward slashes
    *
    * @generated from field: string relative_path = 1;
    */
@@ -1127,21 +1132,22 @@ export const ImportDirectoryFileSchema: GenMessage<ImportDirectoryFile> = /*@__P
  */
 export type ImportDirectoryRequest = Message<"liveagent.gateway.v2.ImportDirectoryRequest"> & {
   /**
-   * START：拖入的文件夹名（单个路径组件）
+   * START: name of the dragged folder (a single path component)
    *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * START："workspace" | "project-root"
+   * START: "workspace" | "project-root"
    *
    * @generated from field: string target = 2;
    */
   target: string;
 
   /**
-   * 旧版整目录信封，仅保留兼容；新客户端必须使用下面的分块字段。
+   * Legacy whole-directory envelope, kept only for compatibility; new clients must use
+   * the chunked fields below.
    *
    * @generated from field: repeated liveagent.gateway.v2.ImportDirectoryFile files = 3 [deprecated = true];
    * @deprecated
@@ -1159,42 +1165,42 @@ export type ImportDirectoryRequest = Message<"liveagent.gateway.v2.ImportDirecto
   operation: ImportDirectoryOperation;
 
   /**
-   * START：目录文件总数
+   * START: total number of files in the directory
    *
    * @generated from field: uint32 total_files = 6;
    */
   totalFiles: number;
 
   /**
-   * START：目录内容总字节数（不含协议开销）
+   * START: total bytes of directory content (excluding protocol overhead)
    *
    * @generated from field: uint64 total_bytes = 7;
    */
   totalBytes: bigint;
 
   /**
-   * WRITE_CHUNK：目录内相对路径
+   * WRITE_CHUNK: relative path within the directory
    *
    * @generated from field: string relative_path = 8;
    */
   relativePath: string;
 
   /**
-   * WRITE_CHUNK：当前文件内的连续字节偏移
+   * WRITE_CHUNK: contiguous byte offset within the current file
    *
    * @generated from field: uint64 offset = 9;
    */
   offset: bigint;
 
   /**
-   * WRITE_CHUNK：单块最多 1 MiB
+   * WRITE_CHUNK: at most 1 MiB per chunk
    *
    * @generated from field: bytes chunk = 10;
    */
   chunk: Uint8Array;
 
   /**
-   * WRITE_CHUNK：当前块是该文件最后一块
+   * WRITE_CHUNK: this chunk is the last chunk of the file
    *
    * @generated from field: bool file_complete = 11;
    */
@@ -1213,7 +1219,7 @@ export const ImportDirectoryRequestSchema: GenMessage<ImportDirectoryRequest> = 
  */
 export type ImportDirectoryResponse = Message<"liveagent.gateway.v2.ImportDirectoryResponse"> & {
   /**
-   * Agent 宿主机上创建的目录绝对路径
+   * absolute path of the directory created on the Agent host
    *
    * @generated from field: string root_path = 1;
    */
@@ -1866,7 +1872,7 @@ export type ManagedProcessRecord = Message<"liveagent.gateway.v2.ManagedProcessR
   running: boolean;
 
   /**
-   * survives LiveAgent exit
+   * survives ReactorPro exit
    *
    * @generated from field: bool isolated = 12;
    */
@@ -3215,8 +3221,9 @@ export type ChatRequest = Message<"liveagent.gateway.v2.ChatRequest"> & {
   queuePolicy: string;
 
   /**
-   * 命令安全模式(ask/auto/sandbox/sandboxOffline)。远端 WebUI 直带,桌面端据此
-   * 覆盖本地 settings.system.commandSafetyMode;空串表示未指定(回落本地设置)。
+   * Command safety mode (ask/auto/sandbox/sandboxOffline). The remote WebUI sends it
+   * directly, and the desktop uses it to override the local settings.system.commandSafetyMode;
+   * an empty string means unspecified (fall back to local settings).
    *
    * @generated from field: string command_safety_mode = 11;
    */
@@ -3291,7 +3298,8 @@ export type CancelChatRequest = Message<"liveagent.gateway.v2.CancelChatRequest"
   conversationId: string;
 
   /**
-   * 可选运行 id 提示：v2 浏览器链路用它消除同会话并发运行的歧义；桌面端可忽略。
+   * Optional run id hint: the v2 browser link uses it to disambiguate concurrent runs in
+   * the same conversation; the desktop may ignore it.
    *
    * @generated from field: string run_id = 2;
    */
@@ -3535,8 +3543,9 @@ export enum ChatEvent_ChatEventType {
   USER_MESSAGE = 8,
 
   /**
-   * 轨迹骨架事件；data 是一条紧凑 TrajectoryEvent 的 JSON。分段全文不走这里，
-   * 由 TrajectoryFetchRequest 按需拉取，避免几十 KB 的 payload 撑爆中继窗口。
+   * Trajectory skeleton event; data is the JSON of a compact TrajectoryEvent. Full
+   * section text does not go through here, but is fetched on demand via
+   * TrajectoryFetchRequest, avoiding tens of KB payloads overflowing the relay window.
    *
    * @generated from enum value: TRAJECTORY = 9;
    */
@@ -4007,15 +4016,19 @@ export const HistoryGetResponseSchema: GenMessage<HistoryGetResponse> = /*@__PUR
   messageDesc(file_proto_v2_gateway, 73);
 
 /**
- * 轨迹按需拉取。这是一次只做一件事的 tagged union，不是可组合查询：
- *   include_subagent_runs=true → 只返回子代理运行，其余字段忽略；
- *   否则 section_ids 非空       → 只返回这些分段全文；
- *   否则                        → 只返回事件窗口。
- * 桌面端 handler 对三种形态互斥短路，组合字段不会得到合并结果 —— 调用方
- * 需要三类数据时必须分开请求。
+ * On-demand trajectory fetch. This is a tagged union that does exactly one thing, not a
+ * composable query:
+ *   include_subagent_runs=true -> returns only subagent runs, other fields ignored;
+ *   otherwise, if section_ids is non-empty -> returns only the full text of those sections;
+ *   otherwise -> returns only the event window.
+ * The desktop handler short-circuits the three forms mutually exclusively, so combining
+ * fields will not produce merged results -- callers that need all three kinds of data must
+ * make separate requests.
  *
- * 刻意不把事件挂在 history_get 上：轨迹是偶尔打开的诊断视图，长会话的事件数组
- * 可达 MB 级，随每次开会话白传一遍不划算。分段更是只在展开 SYSTEM 行时才要。
+ * Events are deliberately not attached to history_get: trajectories are a diagnostic view
+ * opened occasionally, and the event array of a long conversation can reach the MB range,
+ * so transferring it on every open is not worthwhile. Sections in particular are only
+ * needed when a SYSTEM row is expanded.
  *
  * @generated from message liveagent.gateway.v2.TrajectoryFetchRequest
  */
@@ -4026,14 +4039,14 @@ export type TrajectoryFetchRequest = Message<"liveagent.gateway.v2.TrajectoryFet
   conversationId: string;
 
   /**
-   * 非空 → 本请求只查这些分段全文（与事件窗口互斥）。
+   * Non-empty -> this request queries only the full text of these sections (mutually exclusive with the event window).
    *
    * @generated from field: repeated string section_ids = 2;
    */
   sectionIds: string[];
 
   /**
-   * 仅事件窗口形态生效：按 segment 逆向分页；0 由 Agent 使用默认窗口。
+   * Effective only for the event-window form: pages backward by segment; 0 makes the Agent use the default window.
    *
    * @generated from field: int32 max_segments = 3;
    */
@@ -4045,14 +4058,14 @@ export type TrajectoryFetchRequest = Message<"liveagent.gateway.v2.TrajectoryFet
   beforeSegmentIndex?: number | undefined;
 
   /**
-   * true → 本请求只查子代理运行快照，优先级最高（section_ids 被忽略）。
+   * true -> this request queries only subagent run snapshots, with the highest priority (section_ids is ignored).
    *
    * @generated from field: bool include_subagent_runs = 5;
    */
   includeSubagentRuns: boolean;
 
   /**
-   * include_subagent_runs=true 时按这些 run id 精确读取；与 prompt section id 分域。
+   * When include_subagent_runs=true, reads precisely by these run ids; a separate domain from prompt section ids.
    *
    * @generated from field: repeated string subagent_run_ids = 6;
    */
@@ -4113,7 +4126,7 @@ export type TrajectoryFetchResponse = Message<"liveagent.gateway.v2.TrajectoryFe
   eventsJson: string;
 
   /**
-   * 有分段损坏或触顶时为 true，UI 据此提示轨迹不完整。
+   * True when a section is corrupted or hits the cap; the UI uses this to indicate the trajectory is incomplete.
    *
    * @generated from field: bool truncated = 3;
    */
@@ -4268,7 +4281,7 @@ export const HistoryRenameResponseSchema: GenMessage<HistoryRenameResponse> = /*
 /**
  * Copies the conversation prefix up to and including the assistant response
  * that answers the anchored user message (base_message_ref) into a brand-new
- * conversation titled "新分支".
+ * conversation titled "New Branch".
  *
  * @generated from message liveagent.gateway.v2.HistoryBranchRequest
  */
@@ -5034,9 +5047,10 @@ export const FileMentionListResponseSchema: GenMessage<FileMentionListResponse> 
   messageDesc(file_proto_v2_gateway, 117);
 
 /**
- * 桌面宿主的已安装应用（computer use 操作目标），供 WebUI 的 @ 弹层展示
- * 应用分组。Gateway 只直通转发，不自己枚举；字段对齐桌面 InstalledApp
- * 的序列化契约（services/cua_driver/installed_apps.rs）。
+ * Installed applications on the desktop host (computer use operation targets), for the
+ * WebUI @ popup to display app grouping. The Gateway only forwards directly and does not
+ * enumerate; the fields align with the desktop InstalledApp serialization contract
+ * (services/cua_driver/installed_apps.rs).
  *
  * @generated from message liveagent.gateway.v2.InstalledAppsListRequest
  */
@@ -5060,7 +5074,7 @@ export type InstalledAppEntry = Message<"liveagent.gateway.v2.InstalledAppEntry"
   name: string;
 
   /**
-   * macOS bundle id；Windows 等无 bundle id 的平台留空，身份以 path 兜底。
+   * macOS bundle id; left empty on platforms without a bundle id such as Windows, where identity falls back to path.
    *
    * @generated from field: string bundle_id = 2;
    */
@@ -5072,7 +5086,7 @@ export type InstalledAppEntry = Message<"liveagent.gateway.v2.InstalledAppEntry"
   path: string;
 
   /**
-   * `data:image/png;base64,…` 应用图标；取不到时留空。
+   * `data:image/png;base64,...` application icon; left empty when unavailable.
    *
    * @generated from field: string icon_data_url = 4;
    */
@@ -5104,19 +5118,22 @@ export const InstalledAppsListResponseSchema: GenMessage<InstalledAppsListRespon
   messageDesc(file_proto_v2_gateway, 120);
 
 /**
- * Computer Use（CUA）驱动的只读引导状态，供 WebUI 的 Computer Use 设置页
- * 展示桌面宿主上装没装 cua-driver、macOS 的 TCC 授权给了没有。Gateway 只
- * 直通转发，不自己探测。
+ * Read-only bootstrap status of the Computer Use (CUA) driver, for the WebUI Computer Use
+ * settings page to show whether cua-driver is installed on the desktop host and whether
+ * macOS TCC permission has been granted. The Gateway only forwards directly and does not
+ * probe on its own.
  *
- * 安装与授权**有意不在这条通道上**：安装是在宿主上联网下载并执行 shell
- * 脚本，授权会在宿主屏幕上弹 macOS 系统对话框——浏览器这端的人既确认不了
- * 前者的命令全文，也点不到后者的弹窗，只能在桌面端做。
+ * Installation and authorization are **intentionally not on this channel**: installation
+ * downloads from the network and executes a shell script on the host, and authorization
+ * pops up a macOS system dialog on the host screen -- the person on the browser side can
+ * neither confirm the full command of the former nor click the dialog of the latter, so
+ * it can only be done on the desktop.
  *
  * @generated from message liveagent.gateway.v2.CuaDriverRequest
  */
 export type CuaDriverRequest = Message<"liveagent.gateway.v2.CuaDriverRequest"> & {
   /**
-   * "probe" | "permissions_status"。写动作不走这里，网关侧亦按白名单拒绝。
+   * "probe" | "permissions_status". Write actions do not go through here, and the gateway side also rejects them via its allowlist.
    *
    * @generated from field: string action = 1;
    */
@@ -5140,9 +5157,9 @@ export type CuaDriverResponse = Message<"liveagent.gateway.v2.CuaDriverResponse"
   action: string;
 
   /**
-   * 与桌面 invoke 同一份序列化：services/cua_driver 的 CuaDriverProbe /
-   * CuaDriverPermissions（camelCase）。走 JSON 而不是在 proto 里再刻一份
-   * 结构化镜像，是为了让两端拿到的就是同一个对象，不会各自漂移。
+   * The same serialization as the desktop invoke: services/cua_driver's CuaDriverProbe /
+   * CuaDriverPermissions (camelCase). Using JSON instead of carving out another structured
+   * mirror in proto ensures both ends get the exact same object and do not drift apart.
    *
    * @generated from field: string result_json = 2;
    */
@@ -6001,9 +6018,11 @@ export const ProviderCustomHeaderSchema: GenMessage<ProviderCustomHeader> = /*@_
   messageDesc(file_proto_v2_gateway, 151);
 
 /**
- * 包一层 message 只为拿到字段存在性：repeated 无法区分「草稿没带」与「草稿把头
- * 清空了」，而这两种情况在已保存供应商分支上的处理相反（前者沿用落库的头，
- * 后者按空集发请求）。与 is_full_url 的 optional 同一套三态语义。
+ * The wrapper message exists only to obtain field presence: repeated cannot distinguish
+ * "the draft omitted it" from "the draft emptied the headers", and these two cases are
+ * handled oppositely on the saved-provider branch (the former reuses the persisted headers,
+ * while the latter sends a request with an empty set). The same tri-state semantics as
+ * is_full_url's optional.
  *
  * @generated from message liveagent.gateway.v2.ProviderCustomHeaders
  */
@@ -6046,29 +6065,30 @@ export type ProviderModelsRequest = Message<"liveagent.gateway.v2.ProviderModels
   useSystemProxy: boolean;
 
   /**
-   * 可选的模型列表完整地址；非空时跳过基于 base_url 的端点推导。
+   * Optional full URL of the model list; when non-empty, skips endpoint derivation based on base_url.
    *
    * @generated from field: string models_url = 5;
    */
   modelsUrl: string;
 
   /**
-   * WebUI 编辑已保存供应商时用于让桌面端复用本地密钥；密钥不返回浏览器。
+   * Used when the WebUI edits a saved provider to let the desktop reuse the local key; the key is not returned to the browser.
    *
    * @generated from field: string provider_id = 6;
    */
   providerId: string;
 
   /**
-   * 当前草稿是否把 base_url 作为完整聊天端点解释；未提供时沿用已保存配置。
+   * Whether the current draft interprets base_url as a full chat endpoint; when not provided, the saved config is used.
    *
    * @generated from field: optional bool is_full_url = 7;
    */
   isFullUrl?: boolean | undefined;
 
   /**
-   * 用户在供应商设置里显式配置的自定义请求头；未提供时沿用已保存配置。
-   * 鉴权头与 host/content-length 等仍由落地侧的保留头名单兜底，不可被覆盖。
+   * Custom request headers explicitly configured by the user in provider settings; when
+   * not provided, the saved config is used. Auth headers and host/content-length etc. are
+   * still guarded by the reserved-header list on the implementing side and cannot be overridden.
    *
    * @generated from field: liveagent.gateway.v2.ProviderCustomHeaders custom_headers = 8;
    */
@@ -6114,8 +6134,9 @@ export type ProviderUsageRequest = Message<"liveagent.gateway.v2.ProviderUsageRe
   refresh: boolean;
 
   /**
-   * 非空时为「按草稿测试」:桌面端按此 JSON 配置(UsageQueryConfig 形状)执行
-   * 一次查询——忽略启用开关、不落库、不读写缓存;空串为常规查询。
+   * When non-empty, this is a "test as draft": the desktop executes one query using this
+   * JSON config (UsageQueryConfig shape), ignoring the enable switch, not persisting, and
+   * not reading or writing the cache; an empty string is a regular query.
    *
    * @generated from field: string config_json = 3;
    */

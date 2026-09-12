@@ -150,10 +150,11 @@ test("retry provider labels survive into the ledger", () => {
   assert.equal(retry.delayMs, 200);
 });
 
-test("failover 后各候选的重试按发生时刻排序，不按 attempt 交错", () => {
-  // 真实时间线:P1 重试 1 → P1 重试 2 → failover 切到 P2 → P2 重试 1。
-  // 各候选的 withStreamRetry attempt 独立从 1 起,按 attempt 排会得到
-  // P1/1, P2/1, P1/2 的交错;账本必须还原时间线。
+test("after failover, each candidate's retries are ordered by occurrence time, not interleaved by attempt", () => {
+  // Real timeline: P1 retry 1 -> P1 retry 2 -> failover to P2 -> P2 retry 1.
+  // Each candidate's withStreamRetry attempt independently starts at 1; sorting
+  // by attempt would interleave as P1/1, P2/1, P1/2. The ledger must restore the
+  // timeline.
   const ledger = buildTrajectoryLedger([
     ...turnEvents(),
     { k: "retry", t: 1, s: 1, at: BASE + 50, n: 1, max: 5, p: "P1 · claude-x" },
@@ -192,7 +193,7 @@ test("failover events converge into the owning step sorted by attempt", () => {
       ti: 1,
       err: "503 from primary",
     },
-    // 重复投递(实时+落盘)收敛为一条。
+    // Duplicate delivery (live + persisted) converges to one entry.
     {
       k: "failover",
       t: 1,
@@ -359,25 +360,29 @@ test("legacy tool_end events pair correctly when a provider reuses call ids acro
 });
 
 // ---------------------------------------------------------------------------
-// liveIdentities 中断收敛：崩溃/强退后遗留的 running 不再永久悬挂。
+// liveIdentities interruption convergence: a leftover running state after a
+  // crash/force-quit no longer hangs forever.
 // ---------------------------------------------------------------------------
 
 function crashedAndLiveEvents() {
   return [
-    // turn 1：完整结束（任何模式下都必须保持 complete）。
+    // turn 1: completes fully (must stay complete in any mode).
     { k: "user", t: 1, at: BASE, tx: "done turn" },
     { k: "step_start", t: 1, s: 1, at: BASE + 10 },
     { k: "tool_start", t: 1, s: 1, at: BASE + 20, id: "c-ok", n: "Read" },
     { k: "tool_end", at: BASE + 30, id: "c-ok" },
     { k: "step_end", t: 1, s: 1, at: BASE + 40, st: "complete" },
     { k: "turn_end", t: 1, at: BASE + 50, st: "complete" },
-    // turn 2：进程崩溃 —— 有开头没有终态，也不在 live 流里。
+    // turn 2: the process crashed -- it has a start but no terminal state, and is
+    // not in the live stream either.
     { k: "user", t: 2, at: BASE + 100, tx: "crashed turn" },
     { k: "step_start", t: 2, s: 1, at: BASE + 110 },
     { k: "tool_start", t: 2, s: 1, at: BASE + 120, id: "c-dead", n: "Bash" },
-    // 崩溃前遗留的独立手动压缩（t=null，无 compaction_end）。
+    // A standalone manual compaction left over before the crash (t=null, no
+    // compaction_end).
     { k: "compaction_start", t: null, at: BASE + 130 },
-    // turn 3：本进程正在运行 —— 全部在 live 流里，必须保持 running。
+    // turn 3: this process is running -- it is all in the live stream and must stay
+    // running.
     { k: "user", t: 3, at: BASE + 200, tx: "live turn" },
     { k: "step_start", t: 3, s: 1, at: BASE + 210 },
     { k: "tool_start", t: 3, s: 1, at: BASE + 220, id: "c-live", n: "Grep" },
@@ -401,7 +406,8 @@ test("entries without live coverage converge to aborted when liveIdentities is p
   assert.equal(liveTurn.steps[0].status, "running");
   assert.equal(liveTurn.steps[0].tools[0].status, "running");
 
-  // 独立压缩不在 live 流里 → aborted；完整 turn 1 的终态不受影响。
+  // The standalone compaction is not in the live stream -> aborted; turn 1's
+  // terminal state of a full completion is unaffected.
   assert.equal(ledger.standaloneCompactions[0].status, "aborted");
   assert.equal(ledger.turns[0].status, "complete");
 });
@@ -436,7 +442,8 @@ test("mergeTrajectoryEventWindows dedups by convergence identity and keeps enric
   assert.equal(merged.length, 4);
   assert.ok(merged.some((event) => event.k === "user" && event.id === "u-1"));
 
-  // 合并结果与一次全量读取在账本层完全等价。
+  // The merged result is entirely equivalent at the ledger layer to one full
+  // read.
   assert.deepEqual(
     buildTrajectoryLedger(merged),
     buildTrajectoryLedger([...olderPage, ...tail, legacy]),

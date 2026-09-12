@@ -1,11 +1,12 @@
 /**
- * 事件流 → 规范化账本。
+ * Event stream -> normalized ledger.
  *
- * 这一层必须对**乱序、重复、截断**三种输入都稳健：实时事件经中继下发，断线重连
- * 会重放窗口内的事件；桌面落盘与 WebUI 实时合并的结果最终要收敛到同一份账本。
+ * This layer must be robust against all three of **out-of-order, duplicate, truncated** input: live events are
+ * delivered via the relay, and reconnecting replays events within the window; the results of desktop persistence
+ * and WebUI live merging must ultimately converge to the same ledger.
  *
- * 因此不做全局排序，而是按语义键归位（turn 号、step 号、callId），并用事件身份
- * 键去重——同一条事件应用两次是无操作。
+ * It therefore does not do a global sort, but places events by semantic key (turn number, step number, callId) and
+ * deduplicates by event identity key -- applying the same event twice is a no-op.
  */
 
 import type {
@@ -77,11 +78,12 @@ function convergenceIdentity(event: TrajectoryEvent): string {
 }
 
 /**
- * 收集实时事件的收敛身份集合，供 `buildTrajectoryLedger` 的 `liveIdentities` 使用。
+ * Collect the convergence identity set of live events, for use as `buildTrajectoryLedger`'s `liveIdentities`.
  *
- * 桌面端应无条件传入（空集 = 本进程不持有任何实时尾巴，是「进程已重启」的权威证据）；
- * 观察端（WebUI）建议仅在已吸收过该会话的实时事件时传入，避免页面刚重载、
- * 尚未收到任何实时数据时把仍在运行的回合误判为中断。
+ * The desktop side should always pass it (an empty set = this process holds no live tail, authoritative evidence that
+ * "the process has restarted"); the observing side (WebUI) should only pass it once it has already absorbed live
+ * events for that conversation, to avoid misjudging a still-running turn as interrupted right after a page reload
+ * when no live data has been received yet.
  */
 export function trajectoryLiveEventIdentities(
   events: readonly TrajectoryEvent[],
@@ -95,11 +97,11 @@ export function trajectoryLiveEventIdentities(
 }
 
 /**
- * 合并同一会话两个读窗口的事件（向前分页前缀 + 尾部刷新）。
+ * Merge events from two read windows of the same conversation (the backward-paging prefix + the tail refresh).
  *
- * 以收敛身份去重，保留 `existing` 里的版本（SQLite 读边界增强过的 `user.id`
- * 不会被无 id 的重放副本挤掉）；`fresh` 只补齐尚未出现的条目。顺序对账本
- * 无意义 —— `buildTrajectoryLedger` 会重排 —— 但保持 existing 在前使数组稳定。
+ * Deduplicates by convergence identity, keeping the version in `existing` (the `user.id` enriched at the SQLite read
+ * boundary is not displaced by an id-less replayed copy); `fresh` only fills in entries not yet present. Order is
+ * meaningless to the ledger -- `buildTrajectoryLedger` reorders -- but keeping existing first keeps the array stable.
  */
 export function mergeTrajectoryEventWindows(
   existing: readonly TrajectoryEvent[],
@@ -212,9 +214,9 @@ type MutableTool = {
   isError: boolean;
   summary?: string;
   subagentRunIds: string[];
-  /** 到达序，用于同 `at` 时保持稳定排序。 */
+  /** Arrival order, used to keep sorting stable when `at` values are equal. */
   order: number;
-  /** 当前进程的 live 事件流里出现过该条目的任意事件。 */
+  /** Any event of this entry has appeared in the current process's live event stream. */
   sawLive: boolean;
 };
 
@@ -236,7 +238,7 @@ type MutableStep = {
   failovers: LedgerFailover[];
   transports: LedgerTransport[];
   tools: MutableTool[];
-  /** 当前进程的 live 事件流里出现过该条目的任意事件。 */
+  /** Any event of this entry has appeared in the current process's live event stream. */
   sawLive: boolean;
 };
 
@@ -248,7 +250,7 @@ type MutableCompaction = {
   tokensBefore?: number;
   tokensAfter?: number;
   error?: string;
-  /** 当前进程的 live 事件流里出现过该条目的任意事件。 */
+  /** Any event of this entry has appeared in the current process's live event stream. */
   sawLive: boolean;
 };
 
@@ -260,9 +262,9 @@ type MutableTurn = {
   endedAt: number | null;
   endStatus: TrajectoryStatus | null;
   error?: string;
-  /** 首个输入的到达序，用于没有 turn 号语义时的稳定排序。 */
+  /** Arrival order of the first input, used for stable sorting when there is no turn-number semantics. */
   order: number;
-  /** 当前进程的 live 事件流里出现过该条目的任意事件。 */
+  /** Any event of this entry has appeared in the current process's live event stream. */
   sawLive: boolean;
 };
 
@@ -323,8 +325,8 @@ function ensureTool(step: MutableStep, callId: string, order: number): MutableTo
 }
 
 /**
- * 未闭合操作的终态由**上下文**推导，不需要外部传 live 标记：
- * 所属 turn 已结束 ⇒ 中断；否则仍在运行。
+ * The terminal state of an unclosed operation is derived from **context**, with no need for an external live flag:
+ * its owning turn has ended => interrupted; otherwise it is still running.
  */
 function resolveStatus(
   endStatus: TrajectoryStatus | null,
@@ -335,23 +337,24 @@ function resolveStatus(
 }
 
 /**
- * 把事件流收敛成账本。
+ * Converge the event stream into a ledger.
  *
- * @param events - 任意顺序、可含重复的事件。
- * @param options.liveIdentities - 当前进程实时事件的身份集合（`trajectoryLiveEventIdentities`）。
- *   提供时，仍处 running 且没有任何 live 事件覆盖的条目（turn / step / tool / compaction）
- *   收敛为 aborted：进程崩溃或强退后，重开视图不再显示永远运行中的僵尸条目。
- *   live 事件按「条目内任意事件被实时流覆盖」判定——正在执行的条目总会持续收到
- *   本进程事件，因此不会被误收敛；唯一的误收敛窗口是单会话 live 上限裁掉了仍打开
- *   条目的全部事件（极端长 turn），影响仅为展示层状态。
- * @returns 规范化账本；无事件时 turns 为空且 hasTiming 为 false。
+ * @param events - events in any order, possibly containing duplicates.
+ * @param options.liveIdentities - identity set of the current process's live events (`trajectoryLiveEventIdentities`).
+ *   When provided, entries that are still running and covered by no live event (turn / step / tool / compaction)
+ *   converge to aborted: after a process crash or force-quit, reopening the view no longer shows zombie entries that
+ *   run forever. A live event is judged by "any event within the entry is covered by the live stream" -- a running
+ *   entry always keeps receiving this process's events, so it will not be wrongly converged; the only false
+ *   convergence window is when the per-conversation live cap trims away all events of an entry still open (an
+ *   extremely long turn), and the impact is only display-layer state.
+ * @returns the normalized ledger; with no events, turns is empty and hasTiming is false.
  */
 export function buildTrajectoryLedger(
   events: readonly TrajectoryEvent[],
   options?: { liveIdentities?: ReadonlySet<string> },
 ): TrajectoryLedger {
   const liveIdentities = options?.liveIdentities;
-  /** 仅当调用方给出了 live 身份集合时才启用中断收敛；未提供时行为与旧版完全一致。 */
+  /** Interruption convergence is enabled only when the caller supplies the live identity set; when absent, behavior is identical to the old version. */
   const isInterrupted = (sawLive: boolean): boolean => liveIdentities !== undefined && !sawLive;
   const turns = new Map<number, MutableTurn>();
   const headers = new Map<string, LedgerHeader>();
@@ -378,7 +381,7 @@ export function buildTrajectoryLedger(
     order += 1;
 
     const isLiveEvent = liveIdentities?.has(convergenceIdentity(event)) ?? false;
-    /** 把「该事件属于本进程实时流」标注到它归属的所有条目上。 */
+    /** Mark "this event belongs to this process's live stream" onto all entries it belongs to. */
     const markLive = (...entries: Array<{ sawLive: boolean } | undefined>) => {
       if (!isLiveEvent) return;
       for (const entry of entries) {
@@ -541,7 +544,7 @@ export function buildTrajectoryLedger(
                 (right.at ?? Number.NEGATIVE_INFINITY) - (left.at ?? Number.NEGATIVE_INFINITY) ||
                 right.order - left.order,
             )[0];
-        // 没有对应的 tool_start 就无法在账本里定位这次调用，只能丢弃。
+        // Without a matching tool_start the call cannot be located in the ledger, so it can only be dropped.
         if (host === undefined) break;
         const hostTurn = ensureTurn(turns, host.turn);
         const tool = ensureTool(ensureStep(hostTurn, host.step), event.id, order);
@@ -576,7 +579,7 @@ export function buildTrajectoryLedger(
       case "compaction_end": {
         const target: MutableCompaction[] =
           event.t === null ? standalone : ensureTurn(turns, event.t).compactions;
-        // 控制器串行执行压缩；仍按 FIFO 匹配，使乱序传输归一后结果确定。
+        // The controller performs compactions serially; matching is still FIFO so the result is deterministic after out-of-order delivery is normalized.
         const pending = target.find((entry) => entry.endStatus === null);
         const entry = pending ?? {
           turn: event.t,
@@ -618,8 +621,8 @@ export function buildTrajectoryLedger(
   );
 
   const finalizedTurns: LedgerTurn[] = orderedTurns.map((turnEntry) => {
-    // 进程已不再持有这个 turn（崩溃/强退后的遗留 running），按中断收敛，
-    // 并让子级 step/tool/compaction 沿用「宿主已结束」的既有级联路径。
+    // The process no longer holds this turn (a leftover running after crash/force-quit), so converge it as
+    // interrupted, and let the child step/tool/compaction follow the existing "host has finished" cascade path.
     const turnInterrupted = turnEntry.endStatus === null && isInterrupted(turnEntry.sawLive);
     const turnFinished = turnEntry.endStatus !== null || turnInterrupted;
     const orderedSteps = [...turnEntry.steps.values()].sort(
@@ -627,7 +630,7 @@ export function buildTrajectoryLedger(
     );
     const lastStep = orderedSteps.at(-1)?.step;
     const steps: LedgerStep[] = orderedSteps.map((step) => {
-      // 同一轮里已经有更靠后的 step 开跑，说明这一步不可能还在运行。
+      // A later step in the same turn has already started, so this step cannot still be running.
       const supersededByLaterStep = lastStep !== undefined && step.step < lastStep;
       const stepInterrupted = step.endStatus === null && isInterrupted(step.sawLive);
       const stepFinished = turnFinished || supersededByLaterStep || stepInterrupted;
@@ -651,8 +654,9 @@ export function buildTrajectoryLedger(
           ...(tool.args === undefined ? {} : { args: tool.args }),
           startedAt: tool.startedAt,
           endedAt: tool.endedAt,
-          // 有 tool_end 就是终态；没有则跟随宿主 step：step 已收尾说明这次调用
-          // 被中断，step 仍在跑则调用还在执行；条目自身失去 live 覆盖时同理。
+          // A tool_end means terminal; otherwise it follows the host step: if the step has wrapped up, this call was
+          // interrupted, and if the step is still running the call is still executing; likewise when the entry itself
+          // loses live coverage.
           status:
             tool.endedAt !== null
               ? tool.isError
@@ -680,9 +684,9 @@ export function buildTrajectoryLedger(
         ...(step.stopReason === undefined ? {} : { stopReason: step.stopReason }),
         ...(step.usage === undefined ? {} : { usage: step.usage }),
         ...(step.headerId === undefined ? {} : { headerId: step.headerId }),
-        // failover 切换后各候选的流内重试 attempt 各自从 1 重新计数，按 attempt
-        // 排会把后一候选的重试插进前一候选中间；按发生时刻排序还原真实时间线，
-        // attempt 仅作同毫秒兜底。
+        // After a failover switch, each candidate's in-stream retry attempt restarts from 1, so sorting by attempt
+        // would insert the next candidate's retries in the middle of the previous one's; sorting by occurrence time
+        // restores the real timeline, with attempt only as a same-millisecond tiebreaker.
         retries: [...step.retries].sort(
           (left, right) => left.at - right.at || left.attempt - right.attempt,
         ),
@@ -756,13 +760,13 @@ function finalizeCompaction(
 }
 
 /**
- * 解析落盘的事件 JSON。
+ * Parse the persisted event JSON.
  *
- * 单个 segment 的轨迹损坏时只让该段降级为空，不连累其它 segment——轨迹是诊断
- * 视图，永远不该因为自身数据问题挡住会话。
+ * When a single segment's trajectory is corrupt, only that segment degrades to empty without affecting the others --
+ * the trajectory is a diagnostic view and should never block the conversation due to its own data problems.
  *
- * @param raw - `trajectory_json` 原文。
- * @returns 解析出的事件数组；无法解析时为空数组。
+ * @param raw - the raw `trajectory_json`.
+ * @returns the parsed event array; an empty array when parsing fails.
  */
 export function parseTrajectoryEvents(raw: string | null | undefined): TrajectoryEvent[] {
   if (typeof raw !== "string" || raw.trim() === "") return [];

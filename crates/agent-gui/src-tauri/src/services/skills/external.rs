@@ -1,5 +1,6 @@
-//! 扫描本机其他 CLI 工具（Claude Code / Codex / CodeBuddy）与 AGENTS 规范
-//! 已安装的 Skills，供 UI 展示后由用户勾选导入（导入本身复用既有 install 动作，source = 技能目录）。
+//! Scan Skills installed by other local CLI tools (Claude Code / Codex / CodeBuddy) and
+//! under the AGENTS convention, for the UI to display and let the user select for import
+//! (the import itself reuses the existing install action, source = the skill directory).
 
 use super::library::discover_skill_dirs;
 use super::metadata::{read_skill_metadata_from_dir, standard_metadata_file_for};
@@ -9,9 +10,9 @@ use crate::runtime::platform::expand_tilde_path;
 const EXTERNAL_TOOL_ROOTS: &[(&str, &str)] = &[
     ("claude-code", "~/.claude/skills"),
     ("codex", "~/.codex/skills"),
-    // CodeBuddy 的技能市场缓存目录：可能包含未安装的技能，由 UI 提示用户。
+    // CodeBuddy's skill marketplace cache directory: may contain uninstalled skills, which the UI flags to the user.
     ("codebuddy", "~/.codebuddy/skills-marketplace/skills"),
-    // AGENTS 规范定义的通用全局技能目录，不绑定单一编码工具。
+    // The generic global skills directory defined by the AGENTS convention, not tied to any single coding tool.
     ("agents", "~/.agents/skills"),
 ];
 
@@ -25,8 +26,9 @@ pub(crate) fn scan_external_skills() -> Vec<SystemExternalToolScan> {
             let mut errors = Vec::new();
             if exists {
                 for dir in discover_skill_dirs(&root) {
-                    // 仅接受带标准元数据（skill.json / SKILL.md / skill.md）的技能：
-                    // 纯 README 回退的目录名会在 install 的暂存目录校验中必然失败。
+                    // Only accept skills with standard metadata (skill.json / SKILL.md / skill.md):
+                    // a directory name that falls back to a plain README would inevitably fail
+                    // install's staging-directory validation.
                     if standard_metadata_file_for(&dir).is_none() {
                         errors.push(format!(
                             "No SKILL.md, skill.md, or skill.json found in {}",

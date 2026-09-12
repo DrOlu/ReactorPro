@@ -1,8 +1,8 @@
 import type { SystemToolRuntimeScope } from "./systemToolOptions";
 
 /**
- * Agent runtime 内置工具的纯展示目录。该共享模块必须保持纯数据，不得导入
- * WebUI 不具备的桌面 runtime bundle。
+ * Pure display catalog of the Agent runtime's built-in tools. This shared module must remain pure
+ * data and must not import a desktop runtime bundle the WebUI does not have.
  */
 
 export type BuiltinToolCategoryId =
@@ -49,9 +49,10 @@ export type BuiltinToolCatalogEntry = {
   /** Registered only when its feature is enabled/associated (shown as a hint). */
   conditional?: boolean;
   /**
-   * 无显式配置时的审批缺省。绝大多数内置工具缺省 allow(字段缺省);与
-   * agent-gui resolveToolPolicy 的缺省分支保持一致——设置页据此展示真实
-   * 缺省值,并在用户选中缺省值时删除显式键(选非缺省值则显式写入)。
+   * Approval default when there is no explicit configuration. The vast majority of built-in tools
+   * default to allow (the field is optional); consistent with the default branch of agent-gui
+   * resolveToolPolicy -- the settings page uses this to show the real default and deletes the
+   * explicit key when the user selects the default (a non-default selection is written explicitly).
    */
   defaultPolicy?: "ask" | "deny";
 };
@@ -300,7 +301,7 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     isReadOnly: false,
     runtimeScopes: CHAT_AND_CRON,
     conditional: true,
-    // 与 resolveToolPolicy 的 group:browser 缺省 ask 分支同步。
+    // Kept in sync with resolveToolPolicy's group:browser default ask branch.
     defaultPolicy: "ask",
   },
   {

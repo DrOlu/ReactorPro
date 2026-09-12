@@ -1,4 +1,4 @@
-//! 已安装 Skill 库：目录发现、列表、文本读取、删除、打包与 `_meta.json` 源信息。
+//! Installed Skill library: directory discovery, listing, text reading, deletion, packaging, and `_meta.json` source info.
 
 use serde_json::Value;
 use std::fs;

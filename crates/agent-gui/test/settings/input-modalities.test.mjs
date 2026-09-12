@@ -2,19 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// inputModalities（模型输入模态用户覆盖）的反漂移锁：
-// 1. normalizer 的过滤/补齐/规范顺序契约；
-// 2. 设置加载往返不丢字段；
-// 3. modelFactory 只在附件发送确实受 model.input 门控的分支（codex/gemini/
-//    deepseek）应用覆盖，anthropic 不适用（避免虚假能力声明）。
+// Anti-drift lock for inputModalities (user override of model input modalities):
+// 1. the normalizer's filter/fill-in/canonical-order contract;
+// 2. settings load round-trips without dropping fields;
+// 3. modelFactory applies the override only on branches where attachment sending is actually
+//    gated by model.input (codex/gemini/deepseek); it does not apply to anthropic (to avoid
+//    false capability claims).
 const loader = createTsModuleLoader();
 const { normalizeInputModalities, normalizeProviderModelConfig, normalizeProviderModelConfigs } =
   loader.loadModule("src/lib/settings/index.ts");
 const { createModelFromConfig } = loader.loadModule(
   "src/lib/providers/runtime/modelFactory.ts",
 );
-// providerUtils 依赖 tauri invoke；normalizeFetchedModels 本身不触发网络，
-// mock 仅为满足模块加载。
+// providerUtils depends on tauri invoke; normalizeFetchedModels itself does not trigger network
+// access, so the mock exists only to satisfy module loading.
 const providerUtilsLoader = createTsModuleLoader({
   mocks: { "@tauri-apps/api/core": { invoke: async () => ({}) } },
 });
@@ -41,7 +42,7 @@ test("normalizeInputModalities filters mixed arrays and dedupes", () => {
 });
 
 test("normalizeInputModalities auto-adds text and emits canonical order", () => {
-  // 聊天协议始终发送文本：image-only 覆盖自动补齐 text
+  // The chat protocol always sends text: an image-only override auto-fills text
   assert.deepEqual(normalizeInputModalities(["image"]), ["text", "image"]);
   assert.deepEqual(normalizeInputModalities(["image", "text"]), ["text", "image"]);
   assert.deepEqual(normalizeInputModalities(["text"]), ["text"]);
@@ -84,7 +85,8 @@ test("modelFactory: codex completions custom model honors the override", () => {
     maxOutputToken: 32000,
     inputModalities: ["text", "image"],
   });
-  // 构造带覆盖的模型不能反向污染此前创建的无覆盖模型实例。
+  // Constructing a model with an override must not retroactively pollute previously created
+  // no-override model instances.
   assert.deepEqual(withoutOverride.input, ["text"]);
   assert.deepEqual(withOverride.input, ["text", "image"]);
 });
@@ -138,7 +140,8 @@ test("modelFactory: gemini custom model honors the override", () => {
 });
 
 test("modelFactory: deepseek infers image input from the model id and honors the override", () => {
-  // 官方《图像理解》指南只承诺 flash 家族吃图，Pro 与更早的模型不跟着放开。
+  // The official "Image Understanding" guide only promises image input for the flash family;
+  // Pro and earlier models are not opened up along with it.
   const flash = createModelFromConfig(
     "deepseek",
     "deepseek-v4-flash",
@@ -149,7 +152,8 @@ test("modelFactory: deepseek infers image input from the model id and honors the
   const pro = createModelFromConfig("deepseek", "deepseek-v4-pro", "https://api.deepseek.com");
   assert.deepEqual(pro.input, ["text"]);
 
-  // 中转端点不吃图时用覆盖改回纯文本（覆盖优先于 id 推断）。
+  // When a relay endpoint does not accept images, use the override to switch back to text-only
+  // (the override takes precedence over id inference).
   const forcedText = createModelFromConfig(
     "deepseek",
     "deepseek-v4-flash",
@@ -164,7 +168,7 @@ test("modelFactory: deepseek infers image input from the model id and honors the
   );
   assert.deepEqual(forcedText.input, ["text"]);
 
-  // 反向：用户明确知道自家端点支持时，也能给 Pro 开图。
+  // The reverse: when the user knows their endpoint supports it, they can enable images for Pro too.
   const forcedImage = createModelFromConfig(
     "deepseek",
     "deepseek-v4-pro",
@@ -206,7 +210,7 @@ test("gemini persisted model survives the ProviderModal open/save round trip", (
       inputModalities: ["text", "image"],
     },
   ];
-  // ProviderModal 初始化（持久化归一化）：所有用户字段原样往返
+  // ProviderModal initialization (persistence normalization): all user fields round-trip as-is
   const viaModal = normalizeProviderModelConfigs(persisted, "gemini");
   assert.deepEqual(viaModal[0], {
     id: "gemini-custom",
@@ -218,8 +222,9 @@ test("gemini persisted model survives the ProviderModal open/save round trip", (
 });
 
 test("gemini fetch-path normalization preserves the inputModalities override", () => {
-  // API 响应形状的条目（inputTokenLimit/outputTokenLimit）混有用户覆盖字段时，
-  // 刷新后覆盖不得丢失（此前 normalizeGeminiFetchedModels 重建对象会洗掉它）。
+  // When an API-response-shaped entry (inputTokenLimit/outputTokenLimit) also carries user
+  // override fields, the override must not be lost after refresh (previously
+  // normalizeGeminiFetchedModels rebuilding the object would wash it out).
   const fetched = [
     {
       name: "models/gemini-custom",

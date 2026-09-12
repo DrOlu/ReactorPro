@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" class="dark">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -37,7 +37,7 @@
         key: "summary-seg-1",
         summaryId: "sum-1",
         content:
-          "## 已完成\n- 第 1～3 轮内置工具回归全部通过（Read/Write/Edit/Glob/Grep/Bash）。\n- 临时产物位于 `tool-test-round3/`，待清理。\n\n## 待办\n- 清理临时目录并写入记忆。",
+          "## Completed\n- Built-in tool regression rounds 1-3 all passed (Read/Write/Edit/Glob/Grep/Bash).\n- Temporary artifacts are in `tool-test-round3/`, pending cleanup.\n\n## TODO\n- Clean up the temporary directory and write to memory.",
         coveredMessageCount: 94,
         generatedBy: { providerId: "deepseek", model: "deepseek-v4-flash" },
         contextUsageTokens: 18_400,
@@ -75,7 +75,7 @@
           round: 1,
           key: "r1",
           blocks: [
-            thinking("th-1", "先确认工作区里有哪些内置工具可以测。"),
+            thinking("th-1", "First confirm which built-in tools are available in the workspace to test."),
             write("w1", "tool-test-round3/data.json", '{\n  "ok": true,\n  "round": 3\n}\n'),
             write("w2", "tool-test-round3/notes.md", "# notes\n\n- a\n- b\n- c\n"),
             bash("b1", "ls -la tool-test-round3"),
@@ -88,7 +88,7 @@
           round: 1,
           key: "p1:r1",
           blocks: [
-            thinking("th-2", "上下文已压缩，继续把剩下的两个文件写完并清理。"),
+            thinking("th-2", "Context has been compacted; continue finishing the remaining two files and clean up."),
             write("w3", "tool-test-round3/sub/nested.txt", "nested\n"),
             write("w4", "tool-test-round3/test-image.svg", "<svg/>\n"),
           ],
@@ -101,7 +101,7 @@
             {
               kind: "text",
               id: "text-1",
-              text: "第 3 轮内置系统工具回归测试已全部完成（6 项任务全数 completed），临时产物已清理，结论已写入记忆。\n\n### 总体结论\n\n| 维度 | 结果 |\n| --- | --- |\n| 文件读写 | ✅ |\n| 命令执行 | ✅ |",
+              text: "Round 3 of the built-in system tool regression tests is fully complete (all 6 tasks completed); temporary artifacts have been cleaned up and the conclusions written to memory.\n\n### Overall conclusion\n\n| Dimension | Result |\n| --- | --- |\n| File read/write | ✅ |\n| Command execution | ✅ |",
             },
           ],
           meta: { stopReason: "stop" },
@@ -127,7 +127,7 @@
           round: 1,
           key: "p1:r1",
           blocks: [
-            thinking("th-2", "上下文已压缩，继续把剩下的两个文件写完并清理。"),
+            thinking("th-2", "Context has been compacted; continue finishing the remaining two files and clean up."),
             {
               kind: "tool",
               item: {
@@ -160,7 +160,7 @@
           isLive: true,
           isStreaming: true,
           renderMode: "streaming",
-          toolStatus: "正在压缩上下文",
+          toolStatus: "Compacting context",
           toolStatusVariant: "compaction",
           workdir: "/tmp/ws",
         }),

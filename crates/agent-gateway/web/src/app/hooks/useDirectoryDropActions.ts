@@ -27,7 +27,7 @@ type UseDirectoryDropActionsParams = {
   addNotify: (type: NotifyType, message: string) => void;
   activeWorkspaceProject: WorkspaceProject | undefined;
   workspaceProjectRootClient: WorkspaceProjectRootClient | undefined;
-  /** 上传完成后的工作空间激活（与目录选择器选中同一条路径的行为一致）。 */
+  /** Workspace activation after upload completes (behaves the same as selecting the same path in the directory picker). */
   onWorkspaceCreated: (rootPath: string) => void;
   onWorkspaceDirectoriesMounted?: () => void;
 };
@@ -48,9 +48,10 @@ function directoryErrorMessage(error: unknown, locale: AppSettings["locale"], fa
 }
 
 /**
- * 浏览器无法暴露拖入文件夹的本机路径，Web 端的“拖入创建工作空间/挂载附属
- * 目录”统一走：递归收集 → 上传到 Agent 宿主机 → 用返回的服务器路径完成
- * 激活或授权。
+ * Browsers cannot expose the local path of a dropped folder, so the web client's
+ * "drop to create a workspace / mount an attached directory" flows all go through:
+ * recursively collect -> upload to the Agent host -> use the returned server path to
+ * activate or authorize.
  */
 export function useDirectoryDropActions(params: UseDirectoryDropActionsParams) {
   const {

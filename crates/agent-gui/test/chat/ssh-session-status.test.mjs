@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// SSH 会话状态推导与端点标签:SshTerminalPaneSurface / WorkspaceSshTerminalOverlay 共用。
+// SSH session status derivation and endpoint labels: shared by SshTerminalPaneSurface / WorkspaceSshTerminalOverlay.
 
 const loader = createTsModuleLoader();
 const { sshSessionStatus, sshSessionEndpointLabel } = loader.loadModule(

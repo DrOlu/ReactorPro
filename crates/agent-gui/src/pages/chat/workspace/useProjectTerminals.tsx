@@ -70,9 +70,12 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
     });
   }, [terminalProjectPathKey]);
 
-  // 幽灵会话自愈:前端列表可能残留后端已不存在的记录(closed 事件丢失、
-  // dock 写回竞态等)。终端视口报错时按后端权威列表校验一次;确认消失则
-  // 整表刷新,幽灵从 dock 与 Pane 同步退场。会话仍在则视为瞬时错误,不动列表。
+  // Ghost-session self-healing: the frontend list may retain records the backend
+  // no longer has (lost closed event, dock write-back race, etc.). When a terminal
+  // viewport reports an error, validate once against the backend's authoritative
+  // list; if the session is confirmed gone, refresh the whole list and the ghost
+  // leaves the dock and Pane together. If the session still exists, treat it as a
+  // transient error and leave the list alone.
   const verifyTerminalSessionAlive = useCallback((sessionId: string) => {
     const key = sessionId.trim();
     if (!key) return;
@@ -123,15 +126,16 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
           closeLabel: t("chat.exitConfirmClose"),
         }));
       if (!confirmed || cancelled) return;
-      // 退出路径的 close_all 会广播 closed;先置位护栏,ChatPage 的
-      // closed→关 Pane 联动停摆,布局落盘保住全部终端 Pane。
+      // The exit path's close_all broadcasts closed; set the guard first so
+      // ChatPage's closed->close-Pane linkage stalls and the layout persist keeps
+      // all terminal Panes.
       terminalAppExitGuard.mark();
       try {
         await invoke("app_confirmed_exit");
       } catch (error) {
         terminalAppExitGuard.reset();
         if (!cancelled) {
-          setErrorMessage(asErrorMessage(error, "退出 LiveAgent 失败"));
+          setErrorMessage(asErrorMessage(error, "Failed to exit ReactorPro"));
         }
       }
     })

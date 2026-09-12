@@ -162,8 +162,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const [installedSort, setInstalledSort] = useState<InstalledSkillSort>(
     readInstalledSortPreference,
   );
-  // 批量选择模式：仅在「已安装」「本地导入」页可用。用于在大量技能中快速圈选
-  // 一段连续区间（点首项、Shift+点末项）而不必逐个勾选。
+  // Bulk selection mode: available only on the "Installed" and "Local import" pages. Used to
+  // quickly select a contiguous range among many skills (click the first item, Shift+click the
+  // last) without checking each one.
   const [bulkMode, setBulkMode] = useState(false);
   // Temporary multi-select set (not persisted). Independent from enable state.
   const [bulkSelection, setBulkSelection] = useState<ReadonlySet<string>>(() => new Set());
@@ -258,8 +259,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     [],
   );
 
-  // 唯一写入点：setState 与 discoverySignatureRef 必须同步更新，防止签名与状态漂移。
-  // 签名未变时跳过 setState，保持 skills 数组引用稳定（下游 memo 链与 store 轮询零重渲）。
+  // The single write point: setState and discoverySignatureRef must be updated in sync to prevent
+  // signature/state drift. When the signature is unchanged, skip setState to keep the skills array
+  // reference stable (zero re-renders for the downstream memo chain and store polling).
   const applyDiscovery = useCallback((nextRootDir: string, nextSkills: SkillSummary[]) => {
     const signature = buildSkillDiscoverySignature(nextRootDir, nextSkills);
     const changed = discoverySignatureRef.current !== signature;
@@ -355,8 +357,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     () => new Set(mergeAlwaysEnabledSkillNames(settings.skills.selected)),
     [settings.skills.selected],
   );
-  // React 19 的 initialValue 让 Hub 外壳先独立提交；大量卡片在可中断的后台
-  // render 中准备，全部完成后再原子替换加载态，避免页面切换被首屏列表挂载阻塞。
+  // React 19's initialValue lets the Hub shell commit independently first; the large batch of
+  // cards is prepared in an interruptible background render and atomically replaces the loading
+  // state once complete, avoiding page switches being blocked by mounting the first-screen list.
   const deferredSkills = useDeferredValue(skills, EMPTY_SKILLS);
   const installedContentPending = deferredSkills !== skills;
   useEffect(() => {
@@ -383,8 +386,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     [requestInstalledFlip, rootDir],
   );
 
-  // 过滤走 deferred 值：技能多时每击键的 filter→classify→sort 链在低优先级
-  // 渲染中执行，输入框本身保持即时响应（输入框与空态提示仍绑同步 filter）。
+  // Filtering uses the deferred value: with many skills, the filter→classify→sort chain per
+  // keystroke runs in a low-priority render while the input box itself stays instantly responsive
+  // (the input box and empty-state hint still bind the synchronous filter).
   const deferredFilter = useDeferredValue(filter);
   const textFilteredInstalled = useMemo(() => {
     return rankFuzzySearchResults(deferredSkills, deferredFilter, (skill) => [
@@ -397,8 +401,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     ]);
   }, [deferredFilter, deferredSkills]);
 
-  // 已安装技能同样按 ClawHub 分区分类，让两个页签体验一致。始终启用（内置）
-  // 技能没有真正的用途归属，统一归到 other 一栏而不参与语义分类。
+  // Installed skills are categorized by ClawHub sections too, keeping the two tabs consistent.
+  // Always-enabled (built-in) skills have no real usage attribution, so they are uniformly placed
+  // in the other column and excluded from semantic classification.
   const categorizedInstalled = useMemo(
     () =>
       textFilteredInstalled.map((skill) => ({
@@ -451,7 +456,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     try {
       const scans = await scanExternalSkills();
       setExternalScans((previous) => reconcileExternalToolScans(previous, scans));
-      // 剔除本次扫描已不存在的勾选项，避免按钮计数虚高或静默空导入
+      // Remove checked items no longer present in this scan, avoiding an inflated button count
+      // or a silent empty import
       const validBaseDirs = new Set(scans.flatMap((scan) => scan.skills.map((s) => s.baseDir)));
       setSelectedExternal((prev) => {
         const next = new Set([...prev].filter((baseDir) => validBaseDirs.has(baseDir)));
@@ -511,7 +517,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     [bulkMode, isExternalSkillInstalled, selectedExternal],
   );
 
-  // 批量区间勾选：已安装技能跳过，且不会进入 selectedExternal。
+  // Bulk range selection: installed skills are skipped and never enter selectedExternal.
   const batchToggleExternalSkills = useCallback(
     (baseDirs: string[], on: boolean) => {
       const next = new Set(selectedExternal);
@@ -1067,7 +1073,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     [clearBulkUndoTimer, exitBulkMode],
   );
 
-  // 批量选择模式下点击卡片：只改 bulkSelection，不改启用状态、不打开预览。
+  // Clicking a card in bulk selection mode: only changes bulkSelection, not the enabled state,
+  // and does not open a preview.
   function handleBulkInstalledCardClick(name: string, orderedNames: string[], shiftKey: boolean) {
     if (isAlwaysEnabledSkillName(name)) return;
     const currentlySelected = bulkSelection.has(name);
@@ -1087,9 +1094,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     toggleBulkSelectionName(name);
   }
 
-  // 批量启用/禁用：作用于 bulkSelection，成功后清空选择并弹出 Undo。
-  // 副作用（Undo 快照/定时器/清空选择）都放在 setSettings 之外：
-  // 传给 setSettings 的 updater 必须是纯函数（StrictMode 会双调用）。
+  // Bulk enable/disable: applies to bulkSelection, and on success clears the selection and shows
+  // Undo. Side effects (Undo snapshot/timer/clearing the selection) are all kept outside
+  // setSettings: the updater passed to setSettings must be a pure function (StrictMode
+  // double-invokes it).
   const applyBulkEnableState = useCallback(
     (target: boolean) => {
       const names = [...bulkSelection].filter((name) => !isAlwaysEnabledSkillName(name));
@@ -1230,8 +1238,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
   useEffect(() => clearBulkUndoTimer, [clearBulkUndoTimer]);
 
-  // 切换视图时退出批量模式并清空选择与锚点。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 只需在 view 变化时触发；exitBulkMode 是稳定回调
+  // Exiting bulk mode and clearing the selection and anchor when switching views.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only needs to trigger when view changes; exitBulkMode is a stable callback
   useEffect(() => {
     exitBulkMode();
   }, [view]);
@@ -1252,7 +1260,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         ) {
           return;
         }
-        // 「全选当前筛选」只对已安装页有定义；其余视图保留浏览器默认 Ctrl+A。
+        // "Select all current filter" is only defined for the installed page; other views keep
+        // the browser's default Ctrl+A.
         if (view !== "installed") return;
         event.preventDefault();
         setBulkSelectionRange(filteredSelectableInstalledNames, true);
@@ -1318,8 +1327,9 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     setPreviewInstalledSkill(skill);
   }
 
-  // memo 卡片的回调走 latest-ref（先例 file-tree）：引用恒定使 memo 不失效，
-  // 实现经 ref 每渲染更新到最新闭包。
+  // The memo card's callback uses a latest-ref (precedent: file-tree): a constant reference keeps
+  // the memo from invalidating, while the implementation updates to the latest closure via the
+  // ref on every render.
   const sortedInstalledNames = useMemo(
     () => sortedFiltered.map(({ skill }) => skill.name),
     [sortedFiltered],

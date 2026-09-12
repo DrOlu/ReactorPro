@@ -72,13 +72,15 @@ type RightDockPanelProps = {
   sessions?: TerminalSession[];
   sessionsLoaded?: boolean;
   /**
-   * 被工作台 Pane 租用的会话:tab 保留并标记,视口换成"聚焦面板"占位。
-   * 视口互斥(绝不同时挂两个 XTermViewport)是这里唯一的硬不变量。
+   * Sessions leased by a workbench Pane: the tab is kept and marked, and the viewport is replaced
+   * with a "focused panel" placeholder. Viewport exclusivity (never mounting two XTermViewports at
+   * once) is the only hard invariant here.
    */
   leasedSessionIds?: ReadonlySet<string>;
   /**
-   * 被工作台 Pane 租用的项目工具(文件树/审查/内网穿透/SSH/后台任务):
-   * dock 不再挂其 tab、内容与新建入口;Pane 关闭后自动回归。
+   * Project tools leased by a workbench Pane (file tree/review/tunnel/SSH/background tasks):
+   * the dock no longer mounts their tab, content, or new-entry point; they return automatically
+   * once the Pane closes.
    */
   leasedTools?: ReadonlySet<RightDockLeasedToolKind>;
   width: number;
@@ -107,7 +109,7 @@ type RightDockPanelProps = {
   onSshProjectHostIdsChange?: (hostIds: string[]) => void;
   onOpenSshSession?: (session: TerminalSession, kind?: "bash" | "sftp") => void;
   onSessionsChange?: (sessions: TerminalSession[]) => void;
-  /** 存在时终端 tab 可拖出 dock(工作台宿主);默认无行为。 */
+  /** When present, terminal tabs can be dragged out of the dock (workbench host); no behavior by default. */
   onTerminalTabDragStart?: (
     session: TerminalSession,
     event: {
@@ -117,16 +119,16 @@ type RightDockPanelProps = {
       currentTarget?: EventTarget | null;
     },
   ) => void;
-  /** 存在时空态"新建终端"入口可拖出到工作台画板;点击行为不变。 */
+  /** When present, the empty-state "new terminal" entry can be dragged out to the workbench canvas; click behavior is unchanged. */
   onNewTerminalDragStart?: (event: {
     pointerId: number;
     clientX: number;
     clientY: number;
     currentTarget?: EventTarget | null;
   }) => void;
-  /** 终端 tab 右键菜单「在工作台打开」;省略时菜单不出现(拖拽仍可用)。 */
+  /** The terminal tab context menu's "Open in workbench"; when omitted the menu does not appear (dragging still works). */
   onOpenTerminalInWorkbench?: (session: TerminalSession) => void;
-  /** 项目工具 tab / 空态入口拖出到 Workbench(落点打开该工具 Pane)。 */
+  /** Project tool tab / empty-state entry dragged out to the Workbench (the drop point opens that tool's Pane). */
   onToolDragStart?: (
     kind: RightDockLeasedToolKind,
     event: {
@@ -136,13 +138,15 @@ type RightDockPanelProps = {
       currentTarget?: EventTarget | null;
     },
   ) => void;
-  /** 项目工具 tab 菜单式“在分屏中打开”。 */
+  /** The project tool tab's menu-style "Open in split view". */
   onOpenToolInWorkbench?: (kind: RightDockLeasedToolKind) => void;
-  /** 新建菜单「在分屏中新建终端」;与拖拽 newTerminal 走同一提交语义。 */
+  /** The new menu's "New terminal in split view"; shares the same commit semantics as dragging newTerminal. */
   onOpenNewTerminalInWorkbench?: () => void;
   /**
-   * dock 视口报错时上抛 sessionId,由宿主按后端权威列表校验:会话确认
-   * 消失(幽灵记录)则整表刷新,坏 tab 自动退场;仍存活的瞬时错误不动列表。
+   * When the dock viewport reports an error, the sessionId is thrown up for the host to verify
+   * against the backend's authoritative list: if the session is confirmed gone (a ghost record),
+   * the whole table refreshes and the bad tab exits automatically; a transient error on a still-alive
+   * session leaves the list untouched.
    */
   onSessionGhost?: (sessionId: string) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
@@ -524,8 +528,9 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
         next.set(sessionId, message);
         return next;
       });
-      // attach 持续失败最常见的根因是幽灵会话(后端已丢、前端列表还在)。
-      // 上抛给宿主做权威校验;瞬时错误在校验中会被识别为仍存活而不动列表。
+      // The most common root cause of persistent attach failures is a ghost session (lost on the
+      // backend but still in the frontend list). Throw it up to the host for authoritative
+      // verification; a transient error is identified as still alive during verification and leaves the list untouched.
       if (message) onSessionGhost?.(sessionId);
     },
     [onSessionGhost],

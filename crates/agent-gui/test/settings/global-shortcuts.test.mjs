@@ -95,7 +95,7 @@ test("readGlobalShortcutBindings keeps enabled flags and drops invalid entries",
     const { readGlobalShortcutBindings } = loadGlobalShortcuts();
     assert.deepEqual(readGlobalShortcutBindings(), {
       summon: { accelerator: "Ctrl+KeyA", enabled: false },
-      // enabled 缺省视为启用（legacy 对象无该字段）。
+      // A missing enabled flag is treated as enabled (legacy objects lack the field).
       toggle: { accelerator: "Alt+KeyT", enabled: true },
       searchConversations: { accelerator: "Super+Shift+KeyK", enabled: true },
     });
@@ -178,7 +178,7 @@ test("applyStoredGlobalShortcuts skips the backend when nothing is bound", async
 });
 
 test("applyStoredGlobalShortcuts still applies when every binding is disabled", async () => {
-  // 有绑定但全部停用时仍要走一次全量替换，把上次会话的注册清掉。
+  // With bindings present but all disabled, a full replacement must still run to clear the previous session's registrations.
   const calls = [];
   const storage = createMemoryLocalStorage({
     [STORAGE_KEY]: JSON.stringify({

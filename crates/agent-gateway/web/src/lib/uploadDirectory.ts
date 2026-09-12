@@ -4,16 +4,17 @@ import { readFetchError } from "./uploadReadableFiles";
 export type ImportDirectoryTarget = "workspace" | "project-root";
 
 export type ImportDirectoryResult = {
-  /** Agent 宿主机上创建的目录绝对路径。 */
+  /** Absolute path of the directory created on the Agent host. */
   rootPath: string;
   fileCount: number;
   skipped: string[];
 };
 
 /**
- * 把浏览器收集到的文件夹内容上传到 Agent 宿主机（经网关
- * /api/files/import-directory 转发落盘）。multipart 的 filename 会被服务端
- * 削成末段，相对路径经与 files 按序对齐的 paths 字段传递。
+ * Uploads the folder contents gathered by the browser to the Agent host (forwarded
+ * and written to disk via the gateway's /api/files/import-directory). The server
+ * trims the multipart filename down to its last segment; relative paths are passed
+ * through the paths field, which stays aligned with files by order.
  */
 export async function importDirectory(
   token: string,
@@ -34,10 +35,10 @@ export async function importDirectory(
     throw new Error("agent_id is required");
   }
   if (!normalizedName) {
-    throw new Error("文件夹名称不能为空。");
+    throw new Error("Folder name cannot be empty.");
   }
   if (params.files.length === 0) {
-    throw new Error("文件夹为空，无法导入。");
+    throw new Error("The folder is empty and cannot be imported.");
   }
   const totalBytes = params.files.reduce((sum, entry) => sum + entry.file.size, 0);
   if (totalBytes > MAX_DIRECTORY_UPLOAD_BYTES) {
@@ -64,7 +65,7 @@ export async function importDirectory(
   });
 
   if (!response.ok) {
-    throw new Error(await readFetchError(response, "导入文件夹失败"));
+    throw new Error(await readFetchError(response, "Failed to import folder"));
   }
 
   const payload = (await response.json()) as {
@@ -74,7 +75,7 @@ export async function importDirectory(
   };
   const rootPath = typeof payload.rootPath === "string" ? payload.rootPath.trim() : "";
   if (!rootPath) {
-    throw new Error("导入文件夹失败：服务端未返回目录路径");
+    throw new Error("Failed to import folder: the server did not return a directory path");
   }
 
   return {

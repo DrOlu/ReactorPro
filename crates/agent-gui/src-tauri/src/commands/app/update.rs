@@ -8,7 +8,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Url};
 use tauri_plugin_updater::UpdaterExt;
 
-const DEFAULT_UPDATE_REPOSITORY: &str = "Stack-Cairn/LiveAgent";
+const DEFAULT_UPDATE_REPOSITORY: &str = "DrOlu/ReactorPro";
 const UPDATE_MANIFEST_ASSET: &str = "latest.json";
 
 #[derive(Debug, Clone, Serialize)]
@@ -292,8 +292,9 @@ fn selected_release_candidates_from_entries(
 }
 
 fn github_client() -> Result<reqwest::Client, String> {
-    // 应用代理启用时更新检查随之走应用代理；未启用时回退 reqwest 默认代理探测
-    // （OS 代理环境变量/系统代理设置），无系统代理即直连，尽可能保证 GitHub 可达。
+    // When the app proxy is enabled, update checks follow it as well; when disabled, fall
+    // back to reqwest's default proxy detection (OS proxy env vars/system proxy settings),
+    // connecting directly when there is no system proxy, so GitHub stays reachable where possible.
     crate::services::system_proxy::client_builder_with_os_proxy_fallback()?
         .timeout(Duration::from_secs(20))
         .build()
@@ -303,7 +304,7 @@ fn github_client() -> Result<reqwest::Client, String> {
 async fn manifest_exists(client: &reqwest::Client, manifest_url: &str) -> Result<bool, String> {
     let response = client
         .head(manifest_url)
-        .header(USER_AGENT, "LiveAgent-Updater")
+        .header(USER_AGENT, "ReactorPro-Updater")
         .send()
         .await
         .map_err(|error| format!("failed to probe updater manifest: {error}"))?;
@@ -315,7 +316,7 @@ async fn manifest_exists(client: &reqwest::Client, manifest_url: &str) -> Result
     if status == StatusCode::METHOD_NOT_ALLOWED {
         let response = client
             .get(manifest_url)
-            .header(USER_AGENT, "LiveAgent-Updater")
+            .header(USER_AGENT, "ReactorPro-Updater")
             .header(RANGE, "bytes=0-0")
             .send()
             .await
@@ -406,7 +407,7 @@ async fn select_release_manifest(
     let feed_url = release_feed_url(repository)?;
     let response = client
         .get(feed_url)
-        .header(USER_AGENT, "LiveAgent-Updater")
+        .header(USER_AGENT, "ReactorPro-Updater")
         .header(
             ACCEPT,
             "application/atom+xml, application/xml;q=0.9, */*;q=0.8",
@@ -453,9 +454,10 @@ fn build_updater(
         builder = builder.pubkey(public_key);
     }
 
-    // 更新下载/安装与 github_client() 的探测请求保持同一份代理语义：应用代理
-    // 启用时显式走应用代理；未启用时不调 no_proxy()，让插件内部 client 走
-    // reqwest 默认代理探测（OS 代理环境变量/系统代理设置），无系统代理即直连。
+    // Update download/install keeps the same proxy semantics as github_client()'s probe
+    // requests: when the app proxy is enabled, use it explicitly; when disabled, do not call
+    // no_proxy(), letting the plugin's internal client use reqwest's default proxy detection
+    // (OS proxy env vars/system proxy settings), connecting directly when there is no system proxy.
     if let Some(proxy_url) = crate::services::system_proxy::current_proxy_url()? {
         builder = builder.proxy(proxy_url);
     }
@@ -602,9 +604,9 @@ mod tests {
     fn feed_entry(tag_name: &str) -> ReleaseFeedEntry {
         ReleaseFeedEntry {
             tag_name: tag_name.to_string(),
-            title: Some(format!("LiveAgent {tag_name}")),
+            title: Some(format!("ReactorPro {tag_name}")),
             html_url: Some(format!(
-                "https://github.com/Stack-Cairn/LiveAgent/releases/tag/{tag_name}"
+                "https://github.com/DrOlu/ReactorPro/releases/tag/{tag_name}"
             )),
             updated: Some("2026-05-25T12:27:41Z".to_string()),
         }
@@ -617,8 +619,8 @@ mod tests {
 <feed xmlns="http://www.w3.org/2005/Atom">
   <entry>
     <updated>2026-05-25T16:00:34Z</updated>
-    <link rel="alternate" type="text/html" href="https://github.com/Stack-Cairn/LiveAgent/releases/tag/v0.1.2"/>
-    <title>LiveAgent v0.1.2</title>
+    <link rel="alternate" type="text/html" href="https://github.com/DrOlu/ReactorPro/releases/tag/v0.1.2"/>
+    <title>ReactorPro v0.1.2</title>
   </entry>
 </feed>"#,
         )
@@ -628,9 +630,9 @@ mod tests {
             entries,
             vec![ReleaseFeedEntry {
                 tag_name: "v0.1.2".to_string(),
-                title: Some("LiveAgent v0.1.2".to_string()),
+                title: Some("ReactorPro v0.1.2".to_string()),
                 html_url: Some(
-                    "https://github.com/Stack-Cairn/LiveAgent/releases/tag/v0.1.2".to_string()
+                    "https://github.com/DrOlu/ReactorPro/releases/tag/v0.1.2".to_string()
                 ),
                 updated: Some("2026-05-25T16:00:34Z".to_string()),
             }]
@@ -661,7 +663,7 @@ mod tests {
         assert_eq!(selected[0].tag_name, "v0.1.2-beta.1");
         assert_eq!(
             selected[0].manifest_url,
-            "https://github.com/Stack-Cairn/LiveAgent/releases/download/v0.1.2-beta.1/latest.json"
+            "https://github.com/DrOlu/ReactorPro/releases/download/v0.1.2-beta.1/latest.json"
         );
         assert!(selected[0].prerelease);
     }

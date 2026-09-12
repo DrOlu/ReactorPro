@@ -1,6 +1,8 @@
-// WebUI 端 AskUserQuestion 应答桥：卡片位于 transcript 深处，提交动作由
-// GatewayApp 注册（经 gateway chat_queue.tool_answer 送达桌面端工具挂起表）。
-// 模块级单例避免跨 5 层组件做 props 透传，模式同 uploadedImagePreview 缓存。
+// WebUI-side AskUserQuestion answer bridge: the card sits deep inside the transcript, and the
+// submit action is registered by GatewayApp (delivered to the desktop tool suspension table via
+// gateway chat_queue.tool_answer).
+// A module-level singleton avoids prop drilling through 5 component layers, following the same
+// pattern as the uploadedImagePreview cache.
 import type { AskUserQuestionAnswer } from "@liveagent/ui/lib/chat/askUserQuestion";
 
 export type AskUserQuestionSubmitOutcome = { ok: boolean; message?: string };

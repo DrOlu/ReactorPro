@@ -1,9 +1,9 @@
-// Web 端终端 Pane 的窗口级运行时单例。租约(View Lease)与绑定
-// (Runtime Binding)必须全窗口共享:useGatewayWorkbench、终端 Pane 宿主
-// 与 Right Dock 引用同一实例。
+// Window-level runtime singleton for the Web-side terminal Pane. The lease (View Lease) and the binding
+// (Runtime Binding) must be shared across the whole window: useGatewayWorkbench, the terminal Pane host
+// and the Right Dock reference the same instance.
 //
-// Web 每次打开都从单 Pane 首页开始，因此运行时绑定也只保留在本次页面
-// 生命周期内；Desktop 继续使用 sessionStorage 支持 webview reload 重挂。
+// Web always starts from the single-Pane home page on each open, so the runtime binding is kept only for the lifetime
+// of this page; Desktop continues to use sessionStorage to support re-mounting across webview reloads.
 
 import { createTerminalPaneBindingStore } from "@liveagent/ui/lib/workbench/terminalPaneBindingStore";
 import { createTerminalPaneLeaseStore } from "@liveagent/ui/lib/workbench/terminalPaneLeaseStore";

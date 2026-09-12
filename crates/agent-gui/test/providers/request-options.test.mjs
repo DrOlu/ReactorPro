@@ -157,7 +157,8 @@ test("provider request helpers normalize auth, metadata, errors, and model value
     session_id: "conversation-1",
     conversation_id: "conversation-1",
   });
-  // Responses 格式显式指定时保持 Codex CLI 的会话身份头。
+  // When the Responses format is explicitly specified, the Codex CLI session identity headers are
+  // kept.
   assert.deepEqual(
     providers.buildProviderRequestHeaders("codex", "secret", "conversation-1", "openai-responses"),
     {
@@ -169,8 +170,8 @@ test("provider request helpers normalize auth, metadata, errors, and model value
       conversation_id: "conversation-1",
     },
   );
-  // 标准 Chat Completions 是无状态协议：只带 Authorization，
-  // 不带 session_id/conversation_id。
+  // Standard Chat Completions is a stateless protocol: it carries only Authorization, with no
+  // session_id/conversation_id.
   assert.deepEqual(
     providers.buildProviderRequestHeaders(
       "codex",
@@ -185,7 +186,7 @@ test("provider request helpers normalize auth, metadata, errors, and model value
   assert.deepEqual(providers.buildProviderRequestHeaders("gemini", "secret", "conversation-1"), {
     "x-goog-api-key": "secret",
   });
-  // xai：Bearer，不带 Codex CLI 的 session 头。
+  // xai: Bearer, without the Codex CLI session headers.
   assert.deepEqual(providers.buildProviderRequestHeaders("xai", "secret", "conversation-1"), {
     Authorization: "Bearer secret",
   });
@@ -296,7 +297,8 @@ function decodeUpstreamHeaderOverrides(encoded) {
 }
 
 test("upstream override channel carries every non-auth header for the local proxy hop", () => {
-  // 这些头名里 user-agent 会被 WebView 的 fetch 静默丢弃，靠覆盖包才能送达上游。
+  // Among these header names, user-agent is silently dropped by the WebView's fetch and can only
+  // reach the upstream via the override package.
   const encoded = proxy.encodeUpstreamHeaderOverrides({
     "user-agent": "custom-agent/1.0",
     "CONTENT-TYPE": "application/custom+json",
@@ -332,8 +334,9 @@ test("upstream override channel rejects oversized custom header sets", () => {
 });
 
 test("anthropic-beta never enters the upstream override package", () => {
-  // 覆盖包在 prepareProxyRequest 时刻构建，早于长上下文中间件算出 anthropic-beta；
-  // 它是保留头（用户填不进来），因此绝不会回头压掉中间件的 beta 串。
+  // The override package is built at prepareProxyRequest time, earlier than the long-context middleware
+  // computes anthropic-beta; it is a reserved header (users cannot fill it in), so it never
+  // subsequently clobbers the middleware's beta string.
   const base = providers.buildProviderRequestHeaders("claude_code", "secret");
   const merged = customHeaderHelpers.mergeCustomHeaders(base, [
     { key: "anthropic-beta", value: "hijacked" },
@@ -530,8 +533,9 @@ test("Codex Chat Completions streams forward reasoning effort", async () => {
   const result = localProviders.streamSimpleByApi(
     model,
     {
-      // toolChoice 只在请求真正携带 tools 时下发（无工具下发会被严格
-      // OpenAI 兼容端点 400），透传断言需要一个非空 tools。
+      // toolChoice is only sent when the request actually carries tools (sending it without tools
+      // would get a 400 from strict OpenAI-compatible endpoints), so the passthrough assertion needs
+      // a non-empty tools.
       tools: [{ name: "echo", description: "Echo tool", parameters: { type: "object" } }],
       messages: [],
     },
@@ -1173,7 +1177,7 @@ test("custom provider headers filter invalid HTTP token keys", () => {
   assert.equal(customHeaderHelpers.isReservedCustomHeaderKey("Anthropic-Beta"), true);
   assert.equal(providers.isValidCustomHeaderKey("X-Request-ID"), true);
   assert.equal(providers.isValidCustomHeaderKey("Bad Header"), false);
-  // 本地反代的内部命名空间不可被自定义头注入。
+  // The local reverse proxy's internal namespace must not be injectable via custom headers.
   assert.equal(customHeaderHelpers.isReservedCustomHeaderKey("X-LiveAgent-Proxy-Token"), true);
   assert.equal(customHeaderHelpers.isReservedCustomHeaderKey("x-liveagent-anything"), true);
 });
@@ -1181,11 +1185,11 @@ test("custom provider headers filter invalid HTTP token keys", () => {
 test("custom provider headers reject values fetch() cannot transmit", () => {
   assert.equal(customHeaderHelpers.isValidCustomHeaderValue("plain-ascii/1.0"), true);
   assert.equal(customHeaderHelpers.isValidCustomHeaderValue(""), true);
-  assert.equal(customHeaderHelpers.isValidCustomHeaderValue("中文"), false);
+  assert.equal(customHeaderHelpers.isValidCustomHeaderValue("café"), false);
   assert.equal(customHeaderHelpers.isValidCustomHeaderValue("a\r\nb"), false);
   assert.deepEqual(
     customHeaderHelpers.mergeCustomHeaders({}, [
-      { key: "X-Bad", value: "中文" },
+      { key: "X-Bad", value: "café" },
       { key: "X-Injected", value: "a\r\nHost: evil" },
       { key: "X-Good", value: "kept" },
     ]),
@@ -1205,12 +1209,13 @@ test("resolveProviderCacheRetention maps provider settings and per-request overr
   assert.equal(resolve("claude_code", undefined), "short");
   assert.equal(resolve("claude_code", true, undefined, "long"), "long");
   assert.equal(resolve("claude_code", false, undefined, "long"), "none");
-  // 请求级 override（压缩/标题等辅助请求）永远优先于供应商偏好。
+  // Request-level overrides (auxiliary requests such as compaction/title) always take priority over
+  // provider preferences.
   assert.equal(resolve("claude_code", true, "none", "long"), "none");
   assert.equal(resolve("codex", undefined), "short");
   assert.equal(resolve("codex", false), "short");
   assert.equal(resolve("codex", true, "none"), "none");
-  // long 档位仅对 Anthropic 生效。
+  // The long tier takes effect only for Anthropic.
   assert.equal(resolve("codex", true, undefined, "long"), "short");
   assert.equal(resolve("gemini", true), undefined);
 });
@@ -1223,8 +1228,8 @@ test("codex automatic cache hint resolution follows request format before endpoi
     "openrouter-session",
   );
   assert.equal(resolve("auto", "https://relay.example/v1", "openai-completions"), "none");
-  // Responses 链路对齐 Codex CLI:所有端点都发会话级 key(PR#436 的有意选择,
-  // 逃生通道是供应商级/模型级显式设 none)。
+  // The Responses link aligns with Codex CLI: all endpoints send a session-level key (a deliberate
+  // choice in PR#436; the escape hatch is explicitly setting none at the provider/model level).
   assert.equal(resolve("auto", "https://relay.example/v1", "openai-responses"), "openai-key");
   assert.equal(resolve("auto", "https://openrouter.ai/api/v1", "openai-responses"), "openai-key");
   assert.equal(resolve("auto", "not-a-url", "openai-completions"), "none");
@@ -1418,8 +1423,8 @@ test("codex explicit cache hints respect overrides, user values, and limits", as
   );
   assert.equal(Object.hasOwn(relayExplicitNoCachePayload, "prompt_cache_options"), false);
 
-  // mode=none 必须把 retention 一并压成 none：pi-ai 会按 retention 生成缓存
-  // 提示（如 OpenRouter anthropic/* 的 cache_control 断点），剥 payload 拦不住。
+  // mode=none must also force retention to none: pi-ai generates cache hints from retention (such as
+  // the cache_control breakpoints for OpenRouter anthropic/*), which stripping the payload cannot stop.
   const explicitNone = providers.finalizeProviderStreamOptions({
     providerId: "codex",
     baseUrl: "https://openrouter.ai/api/v1",
@@ -1429,7 +1434,8 @@ test("codex explicit cache hints respect overrides, user values, and limits", as
   assert.equal(explicitNone.cacheRetention, "none");
   assert.equal(explicitNone.headers?.["x-session-id"], undefined);
 
-  // pi-ai 恒显式写 prompt_cache_key: undefined；值为 undefined 时无须拷贝剥离。
+  // pi-ai always explicitly writes prompt_cache_key: undefined; when the value is undefined there is
+  // no need to copy/strip it.
   const undefinedKeyPayload = { messages: [], prompt_cache_key: undefined };
   const passthrough = await explicitNone.onPayload(undefinedKeyPayload, {
     api: "openai-completions",
@@ -1456,8 +1462,9 @@ test("codex explicit cache hints respect overrides, user values, and limits", as
 });
 
 test("runtime models always carry zero pricing (billing removed)", () => {
-  // 计费功能已移除：pi-ai 的 Model.cost 是结构必填字段，构造侧统一喂零价，
-  // 目录内外模型一致，usage.cost 恒为 0。
+  // Billing has been removed: pi-ai's Model.cost is a structurally required field, the construction
+  // side uniformly feeds a zero price, and both in-catalog and out-of-catalog models are consistent,
+  // so usage.cost is always 0.
   const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
   const customModel = providers.createModelFromConfig(

@@ -8,7 +8,7 @@ pub(crate) fn load_memory(conn: &Connection) -> Result<Option<Value>, String> {
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|e| format!("读取 {MEMORY_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("Failed to read {MEMORY_SETTINGS_TABLE}: {e}"))?;
 
     match payload_json {
         Some(raw) => Ok(Some(parse_json(&raw, MEMORY_SETTINGS_TABLE)?)),
@@ -20,20 +20,20 @@ fn save_memory(conn: &mut Connection, payload: Value) -> Result<(), String> {
     let updated_at = now_ms();
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启 {MEMORY_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin transaction for {MEMORY_SETTINGS_TABLE}: {e}"))?;
     tx.execute(
         &format!("DELETE FROM {MEMORY_SETTINGS_TABLE} WHERE config_id = 'default'"),
         [],
     )
-    .map_err(|e| format!("清空 {MEMORY_SETTINGS_TABLE} 失败：{e}"))?;
+    .map_err(|e| format!("Failed to clear {MEMORY_SETTINGS_TABLE}: {e}"))?;
     tx.execute(
         &format!(
             "INSERT INTO {MEMORY_SETTINGS_TABLE} (config_id, payload_json, updated_at) VALUES ('default', ?1, ?2)"
         ),
         params![serialize_json(&memory, MEMORY_SETTINGS_TABLE)?, updated_at],
     )
-    .map_err(|e| format!("写入 {MEMORY_SETTINGS_TABLE} 失败：{e}"))?;
+    .map_err(|e| format!("Failed to write {MEMORY_SETTINGS_TABLE}: {e}"))?;
     tx.commit()
-        .map_err(|e| format!("提交 {MEMORY_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit transaction for {MEMORY_SETTINGS_TABLE}: {e}"))?;
     Ok(())
 }

@@ -22,7 +22,7 @@ export type SkillSummary = {
   skillFile: string;
   /** relative directory of the skill (from app skills root) */
   baseDir: string;
-  /** true only when the backend verified LiveAgent ownership metadata */
+  /** true only when the backend verified ReactorPro ownership metadata */
   builtIn?: boolean;
   /** skill directory creation/modification time in epoch milliseconds */
   installedAt?: number | null;
@@ -158,7 +158,7 @@ type SystemManageSkillResponse = {
 export type ExternalSkillEntry = {
   name: string;
   description: string;
-  /** 技能目录绝对路径，可直接作为 install 动作的 source */
+  /** Absolute path of the skill directory; can be used directly as the source for the install action */
   baseDir: string;
   skillFile: string;
 };
@@ -181,7 +181,7 @@ export type ExternalMcpServerEntry = {
   headers: Record<string, string>;
   cwd?: string | null;
   timeoutMs?: number | null;
-  /** 来源作用域："user" 或项目路径（Claude Code 的项目级配置） */
+  /** Source scope: "user" or a project path (Claude Code's project-level config) */
   origin: string;
 };
 
@@ -474,8 +474,8 @@ async function managedSkillListToDiscovery(
       source: normalizeSkillSourceMetadata(raw.source),
     });
   }
-  // README 回退型 skill 的富化各需两次串行往返；数量多时串行等待主导加载耗时，
-  // 这里做有界并发（保序），失败兜底在 maybeAttachReadmeFallbackInline 内部。
+  // README-fallback skill enrichment each requires two serial round-trips; with many of them the serial wait dominates load time,
+  // so bounded concurrency (order-preserving) is used here, with the failure fallback inside maybeAttachReadmeFallbackInline.
   const skills = await mapWithConcurrency(
     rawSkills,
     README_INLINE_ENRICH_CONCURRENCY,
@@ -490,7 +490,7 @@ async function managedSkillListToDiscovery(
   if (discovery.skills.length === 0 && (managed.invalid?.length ?? 0) > 0) {
     const invalid = managed.invalid?.[0];
     throw new Error(
-      `发现 Skill 元数据无效：${invalid?.path ?? "unknown"}（${invalid?.error ?? "unknown error"}）`,
+      `Invalid Skill metadata discovered: ${invalid?.path ?? "unknown"} (${invalid?.error ?? "unknown error"})`,
     );
   }
 
@@ -572,7 +572,7 @@ export async function scanExternalMcpServers(): Promise<ExternalMcpToolScan[]> {
   return response.externalMcp ?? [];
 }
 
-/** 解析用户手选的本地 MCP 配置文件（mcpServers JSON 或 Codex config.toml） */
+/** Parse a user-selected local MCP config file (mcpServers JSON or Codex config.toml) */
 export async function scanMcpConfigFile(path: string): Promise<ExternalMcpToolScan> {
   const response = await manageSkill({ action: "scan_mcp_file", path });
   const scan = response.externalMcp?.[0];
@@ -658,19 +658,19 @@ const EXPLICIT_SKILL_MENTIONS_OPEN = "<skill-mentions>";
 const EXPLICIT_SKILL_MENTIONS_CLOSE = "</skill-mentions>";
 
 /**
- * 渲染「用户显式提及的 Skills」块。
+ * Render the "Skills explicitly mentioned by the user" block.
  *
- * 这段内容原先直接拼在 skills system prompt 里,但它只对当轮有效:用户打一次
- * `/skill-name`,system 段这轮多出一段、下轮又撤回去 —— 一次输入连废两次缓存
- * 前缀。system prompt 排在所有消息之前,它变一个字节,system 块连同其后全部
- * 历史一起作废,代价远大于这段文字本身。
+ * This content was originally concatenated directly into the skills system prompt, but it is only valid for the current turn: a user typing
+ * `/skill-name` once makes the system segment gain a section this turn and remove it next turn — one input wastes the cached
+ * prefix twice. The system prompt precedes all messages; changing one byte of it invalidates the system block together with all
+ * subsequent history, at a cost far greater than this text itself.
  *
- * 因此改由 host 把它挂到当轮 user 消息尾部:那里复用 pi-ai 已经打在最后一条
- * user 消息上的 cache_control 断点,不额外占用 Anthropic 的 4 个名额。
+ * So the host instead mounts it at the tail of the current turn's user message: that reuses the cache_control breakpoint pi-ai already places on the last
+ * user message, without consuming an extra one of Anthropic's 4 slots.
  *
- * 纯函数:不含时间量与随机量,同一输入永远得到同一输出,也不 import 任何 host。
- * 入参应当是 resolveExplicitSkillMentions 的结果(已按 enabled Skills 过滤过);
- * explicit 为空时返回空串 —— 调用方据此保证「没有提及就不产生任何额外内容」。
+ * Pure function: contains no time or random quantities, the same input always yields the same output, and it imports no host.
+ * The argument should be the result of resolveExplicitSkillMentions (already filtered by enabled Skills);
+ * when explicit is empty it returns an empty string — callers use this to guarantee "no mention produces no extra content".
  */
 export function formatExplicitSkillMentions(explicit: SkillSummary[]): string {
   if (explicit.length === 0) return "";

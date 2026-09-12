@@ -11,9 +11,9 @@ const loader = createTsModuleLoader();
 const providers = loader.loadModule("src/lib/providers/runtime/payloadPipeline.ts");
 
 // ---------------------------------------------------------------------------
-// 会话构造:一段稳定前缀 + 逐轮追加的历史。这是缓存友好写法的标准形状。
+// Conversation construction: a stable prefix + history appended turn by turn. This is the standard shape for cache-friendly writing.
 
-const SYSTEM_PROMPT = `You are LiveAgent, a local-first AI agent.
+const SYSTEM_PROMPT = `You are ReactorPro, a local-first AI agent.
 ${"Follow the workspace conventions carefully. ".repeat(40)}`;
 
 const TOOLS = [
@@ -22,7 +22,7 @@ const TOOLS = [
   { name: "Write", description: "Write a file to disk", input_schema: { type: "object" } },
 ];
 
-/** 第 n 轮的消息列表:前 n-1 轮的历史原样保留,只在尾部追加。 */
+/** Message list for turn n: the history from the first n-1 turns is kept as-is, with appends only at the tail. */
 function buildMessages(turnCount, { mutateHistory = false, perTurnRepeat = 30 } = {}) {
   const messages = [];
   for (let turn = 1; turn <= turnCount; turn += 1) {
@@ -45,7 +45,7 @@ function buildMessages(turnCount, { mutateHistory = false, perTurnRepeat = 30 } 
   return messages;
 }
 
-/** 把一轮请求跑过真实的 payload 中间件链,拿到实际会上线的请求体。 */
+/** Run one round of a request through the real payload middleware chain to get the request body that would actually go out. */
 async function runPipeline(payload, { baseUrl, cacheRetention = "short" }) {
   const options = providers.finalizeProviderStreamOptions({
     providerId: "claude_code",
@@ -57,13 +57,14 @@ async function runPipeline(payload, { baseUrl, cacheRetention = "short" }) {
 }
 
 /**
- * 复刻 pi-ai 上游 buildParams 撒断点的位置,作为对照组。
+ * Replicates the breakpoint placement of pi-ai's upstream buildParams as a control group.
  *
- * 证据(本机装的 0.80.10 dist):
- *   anthropic-messages.js:715 system 身份块 / :722 systemPrompt 块
- *   anthropic-messages.js:996 tools 最后一个(index === tools.length - 1)
- *   anthropic-messages.js:962 最后一条 user message 的最后一个 block
- * 这里只复刻**断点位置**,不复刻其余请求体细节 —— 本文件比较的就是断点分布。
+ * Evidence (from the locally installed 0.80.10 dist):
+ *   anthropic-messages.js:715 system identity block / :722 systemPrompt block
+ *   anthropic-messages.js:996 the last tool (index === tools.length - 1)
+ *   anthropic-messages.js:962 the last block of the last user message
+ * Only the **breakpoint positions** are replicated here, not the other request body details -
+ * what this file compares is the breakpoint distribution.
  */
 function applyUpstreamBreakpoints(payload) {
   const cacheControl = { type: "ephemeral" };
@@ -112,14 +113,17 @@ async function simulateConversation(options) {
 }
 
 /**
- * 前缀稳定性断言 —— 借鉴 grok-build 的做法(`xai-chat-state` 的 actor 测试):
- * 不去猜命中率该是多少,只断言「第 n 轮上线的字节序列是第 n+1 轮的前缀」,
- * 一旦不是,就报出**第一个分叉的字节位置**并把上下文打印出来。
+ * Prefix stability assertion - borrowing the approach from grok-build (the `xai-chat-state`
+ * actor test): instead of guessing what the hit rate should be, it only asserts that "the byte
+ * sequence that went out on turn n is a prefix of turn n+1", and when it is not, it reports the
+ * **first diverging byte position** and prints the surrounding context.
  *
- * 这比阈值断言强在两点:一是无阈值可调,不存在把数字调好看的空间;二是失败时
- * 直接给出归因位置,而不是只告诉你「命中率掉了」。追加式会话本该满足这个性质,
- * 任何违反都意味着我们在请求体里塞了非确定性内容(时间戳、随机 id、重排的
- * 工具列表),那才是真正会毁掉缓存的东西。
+ * This is stronger than a threshold assertion in two ways: first, there is no threshold to tune,
+ * so there is no room to make the numbers look good; second, on failure it directly gives the
+ * attribution position rather than only telling you "the hit rate dropped". An append-only
+ * conversation should satisfy this property, and any violation means we stuffed non-deterministic
+ * content (timestamps, random ids, reordered tool lists) into the request body - which is exactly
+ * what really destroys the cache.
  */
 function assertPrefixStable(payloads) {
   const flattened = payloads.map(flattenAnthropicPayload);
@@ -130,26 +134,26 @@ function assertPrefixStable(payloads) {
     if (shared === previous.length) continue;
 
     assert.fail(
-      `第 ${index} 轮与第 ${index + 1} 轮在第 ${shared} 字节处分叉(上一轮总长 ${previous.length})\n` +
-        `  上一轮: ${JSON.stringify(previous.slice(shared, shared + 60))}\n` +
-        `  本一轮: ${JSON.stringify(current.slice(shared, shared + 60))}`,
+      `Turn ${index} and turn ${index + 1} diverge at byte ${shared} (previous turn total length ${previous.length})\n` +
+        `  Previous turn: ${JSON.stringify(previous.slice(shared, shared + 60))}\n` +
+        `  Current turn: ${JSON.stringify(current.slice(shared, shared + 60))}`,
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// 模拟器自身的自检。标尺不先校准,后面所有数字都不可信。
+// The simulator's own self-check. If the ruler is not calibrated first, every later number is untrustworthy.
 
-test("模拟器:完全相同的两轮请求命中全部前缀", () => {
+test("Simulator: two identical rounds hit the entire prefix", () => {
   const payload = applyUpstreamBreakpoints(buildBasePayload(3));
   const result = runCacheSimulation([payload, payload], { model: "anthropic" });
 
-  assert.equal(result.rounds[0].hit, 0, "首轮没有可比对象,必然全 miss");
-  assert.equal(result.rounds[1].hit, result.rounds[1].total, "第二轮应命中全部");
+  assert.equal(result.rounds[0].hit, 0, "the first round has nothing to compare against, so it must be all miss");
+  assert.equal(result.rounds[1].hit, result.rounds[1].total, "the second round should hit everything");
   assert.equal(result.steadyStateHitRate, 1);
 });
 
-test("模拟器:首字节变动让命中归零", () => {
+test("Simulator: a change in the first byte zeroes the hits", () => {
   const first = applyUpstreamBreakpoints(buildBasePayload(3));
   const second = applyUpstreamBreakpoints({
     ...buildBasePayload(3),
@@ -157,37 +161,38 @@ test("模拟器:首字节变动让命中归零", () => {
   });
   const result = runCacheSimulation([first, second], { model: "anthropic" });
 
-  assert.equal(result.rounds[1].hit, 0, "system 首字节变了,后面全部作废");
+  assert.equal(result.rounds[1].hit, 0, "the first byte of system changed, so everything after is void");
 });
 
-test("模拟器:没有任何断点时命中恒为 0", () => {
-  const payload = buildBasePayload(3); // 未施加任何 cache_control
+test("Simulator: with no breakpoints the hit count is always 0", () => {
+  const payload = buildBasePayload(3); // no cache_control applied
   const result = runCacheSimulation([payload, payload], { model: "anthropic" });
 
   assert.equal(result.rounds[1].breakpointCount, 0);
-  assert.equal(result.rounds[1].hit, 0, "Anthropic 不会缓存没有断点的请求");
+  assert.equal(result.rounds[1].hit, 0, "Anthropic does not cache requests without breakpoints");
 });
 
 // ---------------------------------------------------------------------------
-// 上线路径的真实回归。这些跑的是 finalizeProviderStreamOptions,不是复刻品。
+// Real regressions on the production path. These run finalizeProviderStreamOptions, not a replica.
 //
-// 关于「99% 命中率」这个目标,先把话说清楚,否则下面的阈值会被误读:
+// Regarding the "99% hit rate" goal, let us be clear up front, otherwise the thresholds below will be misread:
 //
-// 纯追加会话的稳态命中率有一个纯数学上限 —— 第 n 轮最多只能命中第 n-1 轮的
-// 全量,本轮新增的内容上一轮根本不存在。展开即
+// A purely append-only conversation has a purely mathematical ceiling on its steady-state hit
+// rate - turn n can at most hit the full turn n-1, since the content added this turn did not exist
+// in the previous turn. Expanded:
 //     steady_max = Σ(n=2..N) T_{n-1} / Σ(n=2..N) T_n
-// 代入实测:要让它 ≥ 99%,需要 base/delta ≈ 74x(50 轮)到 98x(3 轮)。真实
-// coding agent 的形状(system+tools 40K 字符、每轮增量 2K)上限只有 95.7%~96.8%;
-// 就算工具表撑到 80K,也只到 98.0%。
+// Plugging in real numbers: to make it >= 99%, you need base/delta ~ 74x (50 turns) to 98x (3
+// turns). A realistic coding agent shape (system+tools 40K chars, 2K added per turn) only reaches
+// 95.7%~96.8%; even if the tool table grows to 80K, it only reaches 98.0%.
 //
-// 也就是说:**绝对命中率主要由会话形状决定,而不是由我们的实现决定**。同一份
-// 代码,把 system prompt 调大就能把数字刷到 99% —— 那测的是 fixture,不是代码。
-// 所以这里断言两件与形状无关的事:
-//   1. efficiency(实际命中 ÷ 理论上限)== 100%,即没有漏掉任何本可命中的字节;
-//   2. 字节级前缀稳定性,即我们没有往请求体里塞进非确定性内容。
-// 真实的百分比数字用 benchmark 去量(见 PR #489),不用单测去锁。
+// In other words: **the absolute hit rate is mainly determined by the conversation shape, not by
+// our implementation**. With the same code, enlarging the system prompt can push the number to 99%
+// - that tests the fixture, not the code. So this asserts two things independent of shape:
+//   1. efficiency (actual hits / theoretical ceiling) == 100%, i.e. no byte that could have been hit was missed;
+//   2. byte-level prefix stability, i.e. we did not stuff non-deterministic content into the request body.
+// The real percentage figures are measured with the benchmark (see PR #489), not pinned by unit tests.
 
-test("官方域名:追加式会话吃满理论上限,一个可命中的字节都没漏", async () => {
+test("Official domain: append-only conversations reach the theoretical ceiling with not a single hittable byte missed", async () => {
   const payloads = await buildConversation({
     turns: 5,
     baseUrl: "https://api.anthropic.com/v1",
@@ -199,11 +204,11 @@ test("官方域名:追加式会话吃满理论上限,一个可命中的字节都
   assert.equal(
     result.efficiency,
     1,
-    `efficiency ${(result.efficiency * 100).toFixed(2)}% —— 有本可命中的前缀没被断点覆盖`,
+    `efficiency ${(result.efficiency * 100).toFixed(2)}% - a hittable prefix was not covered by a breakpoint`,
   );
 });
 
-test("第三方代理:显式断点路径同样吃满理论上限", async () => {
+test("Third-party proxy: the explicit breakpoint path also reaches the theoretical ceiling", async () => {
   const payloads = await buildConversation({
     turns: 5,
     baseUrl: "https://proxy.example.com/anthropic",
@@ -215,16 +220,16 @@ test("第三方代理:显式断点路径同样吃满理论上限", async () => {
   assert.equal(
     result.efficiency,
     1,
-    `efficiency ${(result.efficiency * 100).toFixed(2)}% —— 代理路径漏掉了可命中前缀`,
+    `efficiency ${(result.efficiency * 100).toFixed(2)}% - the proxy path missed a hittable prefix`,
   );
 });
 
-test("高 base/低增量的会话形状确实能到 99% —— 证明上限公式与模拟器一致", async () => {
-  // 把 system prompt 撑大、每轮增量压小,即 base/delta 比拉高。这是「99%」真正
-  // 的来源:会话形状,不是断点策略。放在这里是为了让上面那段说明可被验证,
-  // 而不是留一句无法复核的断言。
+test("A high base/low delta conversation shape can indeed reach 99% - proving the ceiling formula matches the simulator", async () => {
+  // Enlarge the system prompt and shrink the per-turn delta, i.e. raise the base/delta ratio. This
+  // is the real source of "99%": conversation shape, not breakpoint strategy. It is here so the
+  // explanation above can be verified, rather than leaving an assertion that cannot be re-checked.
   const payloads = [];
-  const bigSystem = `You are LiveAgent.\n${"Follow the workspace conventions carefully. ".repeat(600)}`;
+  const bigSystem = `You are ReactorPro.\n${"Follow the workspace conventions carefully. ".repeat(600)}`;
   for (let turn = 1; turn <= 10; turn += 1) {
     const base = {
       system: [{ type: "text", text: bigSystem }],
@@ -235,14 +240,14 @@ test("高 base/低增量的会话形状确实能到 99% —— 证明上限公�
   }
 
   const result = runCacheSimulation(payloads, { model: "anthropic" });
-  assert.equal(result.efficiency, 1, "同样必须吃满上限");
+  assert.equal(result.efficiency, 1, "it must likewise reach the ceiling");
   assert.ok(
     result.steadyStateHitRate >= 0.99,
-    `稳态命中率 ${(result.steadyStateHitRate * 100).toFixed(2)}%,未达 99%`,
+    `steady-state hit rate ${(result.steadyStateHitRate * 100).toFixed(2)}%, below 99%`,
   );
 });
 
-test("改写历史消息会把命中率打穿 —— 这是回归的护栏,不是缺陷", async () => {
+test("Rewriting history messages punches through the hit rate - this is a regression guardrail, not a defect", async () => {
   const clean = await simulateConversation({
     turns: 5,
     baseUrl: "https://api.anthropic.com/v1",
@@ -254,29 +259,29 @@ test("改写历史消息会把命中率打穿 —— 这是回归的护栏,不�
   });
   const mutated = runCacheSimulation(mutatedPayloads, { model: "anthropic" });
 
-  // 每轮都把历史里的渲染标记重写一遍 → 公共前缀止步于第一条消息之前。
+  // The rendering marker in the history is rewritten every turn -> the common prefix stops before the first message.
   assert.ok(
     mutated.steadyStateHitRate < clean.steadyStateHitRate,
-    "改写历史必须表现为命中率下降,否则模拟器没有在真的比对字节",
+    "rewriting history must manifest as a hit-rate drop, otherwise the simulator is not really comparing bytes",
   );
   assert.ok(
     mutated.steadyStateHitRate < 0.5,
-    `改写历史后命中率应显著劣化,实际 ${(mutated.steadyStateHitRate * 100).toFixed(2)}%`,
+    `rewriting history should significantly degrade the hit rate; actual ${(mutated.steadyStateHitRate * 100).toFixed(2)}%`,
   );
 
-  // 反过来验证前缀稳定性检查器本身有效:它必须在这里失败。检查器如果永远
-  // 通过,上面那两个 assertPrefixStable 就是摆设。
+  // Conversely, verify the prefix stability checker itself works: it must fail here. If the checker
+  // always passed, the two assertPrefixStable calls above would be decoration.
   assert.throws(
     () => assertPrefixStable(mutatedPayloads),
-    /分叉/,
-    "前缀稳定性检查器必须能抓到改写历史,否则它没有在做事",
+    /diverge/,
+    "the prefix stability checker must catch history rewriting, otherwise it is not doing anything",
   );
 });
 
 // ---------------------------------------------------------------------------
-// 断点数量之争:1 个 vs 4 个,在同一把标尺下直接量。
+// The breakpoint-count debate: 1 vs 4, measured directly on the same ruler.
 
-test("追加式会话:单断点与上游多断点命中率完全相同", async () => {
+test("Append-only conversation: single breakpoint and upstream multiple breakpoints have exactly the same hit rate", async () => {
   const single = await simulateConversation({
     turns: 5,
     baseUrl: "https://proxy.example.com/anthropic",
@@ -286,22 +291,23 @@ test("追加式会话:单断点与上游多断点命中率完全相同", async (
     transform: applyUpstreamBreakpoints,
   });
 
-  // 纯追加时,上一轮末尾那个断点始终落在本轮公共前缀内,阶梯没有用武之地 ——
-  // 靠前的那几个断点覆盖的内容,末尾断点已经全覆盖了。所以这里是**严格相等**,
-  // 不是「相当」。写成不等式会掩盖掉一个有信息量的事实:在这个场景下,把 4 个
-  // 断点压成 1 个是零代价的。真正的代价在下一个测试里。
+  // In pure appends, the last breakpoint of the previous turn always falls within this turn's
+  // common prefix, so the ladder has nothing to do - the content covered by the earlier breakpoints
+  // is already fully covered by the last one. Hence this is **strict equality**, not "comparable".
+  // Writing it as an inequality would obscure an informative fact: in this scenario, collapsing 4
+  // breakpoints into 1 costs nothing. The real cost is in the next test.
   assert.equal(single.efficiency, 1);
   assert.equal(upstream.efficiency, 1);
   assert.equal(
     single.steadyStateHitRate,
     upstream.steadyStateHitRate,
-    "追加式会话下断点数量不影响命中率,两者应严格相等",
+    "in an append-only conversation the number of breakpoints does not affect the hit rate; the two should be strictly equal",
   );
 });
 
-test("前缀尾部变动:多断点保住阶梯,单断点全部归零", async () => {
-  // 构造一轮「历史尾部被改写、但 system 与 tools 纹丝不动」的请求。
-  // 这正是压缩、重试改写、工具结果回填等场景的形状。
+test("Prefix tail mutation: multiple breakpoints keep the ladder, a single breakpoint zeroes out entirely", async () => {
+  // Construct a round where "the tail of the history is rewritten, but system and tools are
+  // untouched". This is exactly the shape of compaction, retry rewrites, tool-result backfills, etc.
   const buildPair = async (transform) => {
     const first = buildBasePayload(4);
     const second = {
@@ -330,42 +336,43 @@ test("前缀尾部变动:多断点保住阶梯,单断点全部归零", async () 
   assert.equal(
     singleResult.rounds[1].hit,
     0,
-    "单断点在末尾:尾部一变,唯一的断点就落到公共前缀之外,命中归零",
+    "single breakpoint at the end: once the tail changes, the only breakpoint falls outside the common prefix and the hit count goes to zero",
   );
   assert.ok(
     upstreamResult.rounds[1].hit > 0,
-    "多断点:system / tools 上的断点仍在公共前缀内,阶梯生效",
+    "multiple breakpoints: the breakpoints on system / tools are still within the common prefix, so the ladder works",
   );
   assert.ok(
     upstreamResult.rounds[1].hitRate > singleResult.rounds[1].hitRate,
-    "这就是把 4 个断点压成 1 个所付出的代价",
+    "this is the cost of collapsing 4 breakpoints into 1",
   );
 });
 
 // ---------------------------------------------------------------------------
-// DeepSeek 隐式缓存:128 token 块量化,解释为什么实测停在 98.9% 而不是 100%
+// DeepSeek implicit caching: 128-token block quantization, explaining why measurements stop at 98.9% instead of 100%
 
-test("DeepSeek 隐式缓存:命中量始终是 128 的整数倍,且损耗不超过一个块", async () => {
+test("DeepSeek implicit caching: the hit count is always a multiple of 128, and the loss never exceeds one block", async () => {
   const payloads = [];
   for (let turn = 1; turn <= 5; turn += 1) payloads.push(buildBasePayload(turn));
   const result = runCacheSimulation(payloads, { model: "deepseek" });
 
   for (const round of result.rounds) {
-    assert.equal(round.hit % 128, 0, `第 ${round.round} 轮命中 ${round.hit} 不是 128 的整数倍`);
+    assert.equal(round.hit % 128, 0, `turn ${round.round} hit ${round.hit} is not a multiple of 128`);
 
-    // 与上限的差距必须**只**来自块量化,也就是严格小于一个块。
-    // 这比「命中率 > 0.9」有意义得多:0.9 是拍出来的,会随 fixture 形状漂移;
-    // 「损耗 < 128 token」是块量化这一机制的直接推论,换任何 fixture 都成立。
-    // 实测的 98.9% 上限就是这么来的 —— 不是实现有缺陷,是块边界吃不满。
+    // The gap from the ceiling must come **only** from block quantization, i.e. be strictly less
+    // than one block. This is far more meaningful than "hit rate > 0.9": 0.9 is arbitrary and drifts
+    // with the fixture shape, whereas "loss < 128 tokens" is a direct corollary of the
+    // block-quantization mechanism and holds for any fixture. The measured 98.9% ceiling comes from
+    // exactly this - not an implementation defect, just that block boundaries cannot be filled completely.
     const lost = round.ceiling - round.hit;
     assert.ok(
       lost >= 0 && lost < 128,
-      `第 ${round.round} 轮损失 ${lost} token,超出块量化能解释的范围`,
+      `turn ${round.round} lost ${lost} tokens, beyond what block quantization can explain`,
     );
   }
 
   assert.ok(
     result.efficiency < 1,
-    "块量化决定了永远吃不满上限 —— 这是上限,不是缺陷",
+    "block quantization means the ceiling can never be fully reached - this is a ceiling, not a defect",
   );
 });

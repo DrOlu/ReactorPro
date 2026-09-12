@@ -42,7 +42,7 @@ test("delta renders nothing and holds the cursor when no message is newer than s
 
   assert.deepEqual(delta(messages, 12), { text: "", lastSeq: 12 });
   assert.deepEqual(delta([], 7), { text: "", lastSeq: 7 });
-  // 游标领先于全部消息（压缩后重冻结的极端情况）也不得回退。
+  // A cursor ahead of every message (the extreme case of re-freezing after compaction) must not regress.
   assert.deepEqual(delta(messages, 99), { text: "", lastSeq: 99 });
 });
 
@@ -60,19 +60,19 @@ test("delta carries only messages after the cursor and advances it to the newest
   assert.doesNotMatch(result.text, /old two/);
   assert.match(result.text, /> fresh three/);
   assert.match(result.text, /> fresh four/);
-  assert.match(result.text, /^## LiveAgent Message Bus \(new messages\)/);
+  assert.match(result.text, /^## ReactorPro Message Bus \(new messages\)/);
   assert.match(result.text, /Current agent: `parent`/);
-  // 顺序按 seq 升序，与快照同口径。
+  // Ordered by ascending seq, on the same basis as the snapshot.
   assert.ok(result.text.indexOf("fresh three") < result.text.indexOf("fresh four"));
 });
 
 test("delta reuses the snapshot visibility filter", () => {
   const invisible = [
-    // 定向给别的 agent
+    // Directed at another agent
     makeMessage({ seq: 21, recipientId: "agent-b", bodyMarkdown: "secret for b" }),
-    // 空正文
+    // Empty body
     makeMessage({ seq: 22, bodyMarkdown: "   " }),
-    // 空会话归属
+    // Empty conversation ownership
     { ...makeMessage({ seq: 23, bodyMarkdown: "orphan" }), parentConversationId: "  " },
   ];
   assert.deepEqual(delta(invisible, 20), { text: "", lastSeq: 20 });
@@ -96,12 +96,12 @@ test("delta is pure: same input renders byte-identical output", () => {
   const first = makeMessage({ seq: 31, bodyMarkdown: "deterministic", createdAt: 1_700_000_000_001 });
   const second = makeMessage({ seq: 32, bodyMarkdown: "later", createdAt: 1_700_000_000_002 });
   assert.equal(delta([first], 30).text, delta([first], 30).text);
-  // 乱序输入不影响输出（内部按 seq 排序）。
+  // Out-of-order input does not affect output (sorted internally by seq).
   assert.equal(delta([first, second], 30).text, delta([second, first], 30).text);
 });
 
 test("overflow snapshot exposes renderedSeq so unrendered messages get re-delivered by delta", () => {
-  // 超过快照渲染上限（recent 桶 24 条）的可见消息：低 seq 的会被配额挤掉。
+  // Visible messages beyond the snapshot render cap (recent bucket of 24): low-seq ones are squeezed out by the quota.
   const messages = [];
   for (let i = 1; i <= 30; i += 1) {
     messages.push(
@@ -110,21 +110,23 @@ test("overflow snapshot exposes renderedSeq so unrendered messages get re-delive
   }
 
   const snapshot = bus.renderMessageBusSnapshot({ messages, currentAgentId: "parent" });
-  assert.ok(snapshot.omittedCount > 0, "30 条可见消息必须超出快照容量");
-  // 游标不得跳过未渲染的消息：连续已渲染前缀在第一条被挤掉的消息前停下。
+  assert.ok(snapshot.omittedCount > 0, "30 visible messages must exceed the snapshot capacity");
+  // The cursor must not skip unrendered messages: the contiguous rendered prefix stops before
+  // the first squeezed-out message.
   assert.ok(
     snapshot.renderedSeq < 30,
-    `renderedSeq(${snapshot.renderedSeq}) 不能用全体可见消息的最大 seq`,
+    `renderedSeq(${snapshot.renderedSeq}) must not be the max seq of all visible messages`,
   );
   assert.match(snapshot.text, new RegExp(`\\(${snapshot.omittedCount} messages omitted;`));
 
-  // 未进快照的消息必须能被 delta 按 renderedSeq 补投，不得静默丢失。
+  // Messages not in the snapshot must still be re-delivered by the delta from renderedSeq and
+  // must not be silently lost.
   const followUp = delta(messages, snapshot.renderedSeq);
   assert.equal(followUp.lastSeq, 30);
   for (const message of messages) {
     const inSnapshot = snapshot.text.includes(message.bodyMarkdown);
     const inDelta = followUp.text.includes(message.bodyMarkdown);
-    assert.ok(inSnapshot || inDelta, `seq=${message.seq} 既不在快照也不在 delta 里`);
+    assert.ok(inSnapshot || inDelta, `seq=${message.seq} is in neither the snapshot nor the delta`);
   }
 });
 
@@ -171,17 +173,18 @@ test("resolveTailBlockAnchorId picks the last safe tool result and attach pins t
     { anchorToolCallId, text: "BUS DELTA" },
   ]);
   assert.notEqual(next, messages);
-  assert.deepEqual(messages, snapshot, "入参消息不得被原地修改");
-  assert.equal(next[2], messages[2], "未命中的消息保持同一引用");
+  assert.deepEqual(messages, snapshot, "input messages must not be mutated in place");
+  assert.equal(next[2], messages[2], "unmatched messages keep the same reference");
   assert.deepEqual(next[4].content, [
     { type: "text", text: "second result" },
     { type: "text", text: "BUS DELTA" },
   ]);
-  assert.equal(next[4].toolCallId, "call-2", "toolCallId 原样保留");
+  assert.equal(next[4].toolCallId, "call-2", "toolCallId is preserved as-is");
 });
 
-// 关键回退防线：锚点一旦钉死，后续轮次工具循环推进也不得让块搬家——搬家会让
-// 上一轮挂过块的那条消息字节变回去，前缀从它开始整段作废。
+// Critical regression guard: once an anchor is pinned, later rounds advancing the tool loop must
+// not let the block move — moving would revert the bytes of the message the block was attached to
+// in the previous round, invalidating the whole prefix from that point on.
 test("pinned tail block stays on its original anchor as the tool loop grows", () => {
   const roundTwo = [
     { role: "user", content: "hi", timestamp: 1 },
@@ -194,19 +197,19 @@ test("pinned tail block stays on its original anchor as the tool loop grows", ()
 
   const outboundTwo = tailBlock.attachPinnedTailBlocks(roundTwo, pinned);
 
-  // 第 3 轮：工具循环又推进了一轮，"最后一条工具结果"已经变成 call-2。
+  // Round 3: the tool loop advanced another step, and the "last tool result" is now call-2.
   const roundThree = [...roundTwo, assistant(), toolResult("call-2", "second result")];
   const outboundThree = tailBlock.attachPinnedTailBlocks(roundThree, pinned);
 
   assert.deepEqual(
     outboundThree[2],
     outboundTwo[2],
-    "钉住的锚点消息必须逐字节稳定，块不得随工具循环搬到新消息上",
+    "the pinned anchor message must stay byte-stable; the block must not move to a new message as the tool loop advances",
   );
   assert.deepEqual(
     outboundThree[4].content,
     [{ type: "text", text: "second result" }],
-    "新的工具结果不得被搬过来的块污染",
+    "the new tool result must not be polluted by the moved block",
   );
 });
 
@@ -220,12 +223,12 @@ test("attachPinnedTailBlocks returns the same reference when there is nothing to
   assert.equal(
     tailBlock.attachPinnedTailBlocks(messages, [{ anchorToolCallId: "call-1", text: "" }]),
     messages,
-    "空文本不产生任何内容",
+    "empty text produces no content at all",
   );
   assert.equal(
     tailBlock.attachPinnedTailBlocks(messages, [{ anchorToolCallId: "gone", text: "BUS DELTA" }]),
     messages,
-    "锚点已不在消息列表里时本轮不挂，不搬家",
+    "when the anchor is no longer in the message list nothing is attached this round, and nothing moves",
   );
 });
 
@@ -254,7 +257,7 @@ test("anchor resolution refuses unsafe anchors and never crosses the last user m
   assert.equal(
     tailBlock.resolveTailBlockAnchorId(displayImage),
     null,
-    "display-image 工具结果的 content 会被净化整体替换，不能当锚点",
+    "a display-image tool result's content is sanitized by whole replacement, so it cannot be an anchor",
   );
 
   const subagentCard = [
@@ -264,7 +267,7 @@ test("anchor resolution refuses unsafe anchors and never crosses the last user m
   assert.equal(
     tailBlock.resolveTailBlockAnchorId(subagentCard),
     null,
-    "subagent 卡片工具结果会被整条过滤，不能当锚点",
+    "a subagent card tool result is filtered out entirely, so it cannot be an anchor",
   );
 
   const aborted = [
@@ -275,7 +278,7 @@ test("anchor resolution refuses unsafe anchors and never crosses the last user m
   assert.equal(
     tailBlock.resolveTailBlockAnchorId(aborted),
     null,
-    "aborted assistant 之后的工具结果会被丢弃，不能当锚点",
+    "tool results after an aborted assistant are discarded, so they cannot be an anchor",
   );
 
   const onlyUser = [
@@ -287,14 +290,14 @@ test("anchor resolution refuses unsafe anchors and never crosses the last user m
   assert.equal(
     tailBlock.resolveTailBlockAnchorId(onlyUser),
     null,
-    "不得越过最后一条 user 消息去改写已缓存前缀",
+    "must not cross the last user message to rewrite an already-cached prefix",
   );
 
   const noToolCallId = [assistant(), toolResult("", "anonymous")];
   assert.equal(
     tailBlock.resolveTailBlockAnchorId(noToolCallId),
     null,
-    "钉不住的锚点等于没有锚点，否则后续轮次会退化成重新搜索",
+    "an unpinnable anchor is as good as no anchor, otherwise later rounds degrade into searching again",
   );
 });
 
@@ -312,7 +315,7 @@ test("anchor resolution skips unsafe tail anchors and falls back to an earlier s
     { anchorToolCallId, text: "BUS DELTA" },
   ]);
   assert.notEqual(next, messages);
-  assert.equal(next[3], messages[3], "不安全的尾部锚点保持原样");
+  assert.equal(next[3], messages[3], "an unsafe tail anchor is left as-is");
   assert.deepEqual(next[2].content, [
     { type: "text", text: "safe result" },
     { type: "text", text: "BUS DELTA" },

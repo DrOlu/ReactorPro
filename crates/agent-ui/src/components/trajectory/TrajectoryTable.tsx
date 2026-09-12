@@ -1,8 +1,9 @@
 /**
- * 账本列表。
+ * Ledger list.
  *
- * 超过阈值才虚拟化：短会话直接渲染，省掉测量与滚动补偿的复杂度；长会话（几千行
- * 工具调用）必须虚拟化，否则一次布局就会掉帧。
+ * Virtualize only above the threshold: short sessions render directly, saving the
+ * complexity of measurement and scroll compensation; long sessions (thousands of
+ * tool-call rows) must be virtualized, or a single layout pass drops frames.
  */
 
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -46,8 +47,9 @@ export function TrajectoryTable(props: {
   );
 
   const virtualized = items.length >= VIRTUALIZATION_THRESHOLD;
-  // 滚动副作用只依赖选中值；列表与虚拟化开关通过 ref 读最新值，避免把它们
-  // 变成触发条件。
+  // The scroll side effect depends only on the selected value; the list and the
+  // virtualization switch are read for their latest values through refs, keeping
+  // them from becoming trigger conditions.
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const virtualizedRef = useRef(virtualized);
@@ -99,9 +101,11 @@ export function TrajectoryTable(props: {
     virtualizer,
   ]);
 
-  // 外部选中（时间轴点击、跨视图跳转）要把对应行带进视口——但只在**选中变化**时
-  // 做。若跟着 items 变化一起触发，实时回合里每来一条事件都会把视口拽回选中行，
-  // 用户根本没法往别处看。
+  // External selection (timeline click, cross-view jump) should bring the
+  // corresponding row into the viewport -- but only when **the selection changes**.
+  // If it also fired on items changes, every event arriving during a live turn
+  // would drag the viewport back to the selected row, leaving the user unable to
+  // look elsewhere.
   const selectedIndex = props.selectedIndex;
   const scrolledToRef = useRef<number | null>(null);
   useEffect(() => {

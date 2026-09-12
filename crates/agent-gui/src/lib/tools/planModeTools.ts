@@ -1,15 +1,19 @@
-// Plan Mode 桌面端权威实现:ExitPlanMode 工具 + 待决计划登记。
+// Plan Mode desktop authoritative implementation: the ExitPlanMode tool + pending plan registry.
 //
-// 交互范式(对话式,对齐 Codex plan mode——无挂起等待):
-//   1. 模型调用 ExitPlanMode(plan) → 工具立即返回并登记"待决计划",runner 的
-//      终止谓词使本轮 run 就地结束——没有转圈等待,没有审批超时。
-//   2. 用户以消息回复:纯批准短语("同意/开始/ok"等,见 isPlanApprovalMessage)
-//      或点卡片按钮 → 宿主批准 handler(关 plan 开关 + 直发执行续轮);
-//      其他任何消息 = 修改意见,作为普通用户消息发送,模型在 plan mode 修订
-//      计划后重新提交(新提交覆盖旧登记)。
-//   3. "保存计划到文件"等诉求同样走对话:模型把保存步骤写进计划,执行轮落盘。
-// 远端(WebUI)按钮经 gateway chat_queue.plan_decision 转发到桌面后走同一入口
-// answerPlanDecision(approve → 宿主批准 handler;reject → 反馈作为消息发送)。
+// Interaction paradigm (conversational, aligned with Codex plan mode -- no suspend-and-wait):
+//   1. The model calls ExitPlanMode(plan) -> the tool returns immediately and registers a "pending
+//      plan", and the runner's termination predicate ends this turn's run in place -- no spinning
+//      wait, no approval timeout.
+//   2. The user replies with a message: a pure approval phrase ("agree/start/ok", etc., see
+//      isPlanApprovalMessage) or clicks the card button -> the host approval handler (turn off the
+//      plan switch + directly send the execution continuation turn); any other message = revision
+//      feedback, sent as a normal user message, and the model revises the plan in plan mode and
+//      submits again (a new submission overwrites the old registration).
+//   3. Requests such as "save the plan to a file" likewise go through the conversation: the model
+//      writes the save step into the plan, and the execution turn writes it to disk.
+// Remote (WebUI) buttons are forwarded to the desktop via gateway chat_queue.plan_decision and
+// then go through the same entry point answerPlanDecision (approve -> host approval handler;
+// reject -> feedback sent as a message).
 
 import type { Message, Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
@@ -34,14 +38,15 @@ type PendingPlan = {
   plan: string;
 };
 
-// 每会话至多一个待决计划(新提交覆盖旧的——旧计划随之失效)。
+// At most one pending plan per conversation (a new submission overwrites the old one -- the old plan becomes invalid).
 const pendingPlanByConversation = new Map<string, PendingPlan>();
-// 已获批准的 ExitPlanMode 调用(卡片落定态展示用;随会话销毁清理)。批准会先清
-// pending 登记,故清理不能经由 pending 反查——按会话另记一份,销毁时整组删除。
+// Approved ExitPlanMode calls (used for the card's settled state; cleaned up when the conversation
+// is destroyed). Approval clears the pending registration first, so cleanup cannot look up via
+// pending -- a separate per-conversation record is kept and removed as a whole on destruction.
 const approvedToolCallIds = new Set<string>();
 const approvedToolCallIdsByConversation = new Map<string, Set<string>>();
 
-// useSyncExternalStore 订阅:登记/批准/覆盖时通知,驱动计划卡按钮态刷新。
+// useSyncExternalStore subscription: notifies on register/approve/overwrite, driving a refresh of the plan card's button state.
 const listeners = new Set<() => void>();
 let version = 0;
 function emitChange() {
@@ -60,7 +65,7 @@ export function getPlanDecisionVersion(): number {
   return version;
 }
 
-/** 该 ExitPlanMode 调用当前是否待决(卡片据此启用批准按钮)。 */
+/** Whether this ExitPlanMode call is currently pending (the card uses this to enable the approve button). */
 export function isPlanDecisionPending(toolCallId: string): boolean {
   const trimmed = toolCallId.trim();
   for (const pending of pendingPlanByConversation.values()) {
@@ -69,12 +74,12 @@ export function isPlanDecisionPending(toolCallId: string): boolean {
   return false;
 }
 
-/** 该 ExitPlanMode 调用是否已获批准(卡片落定态)。 */
+/** Whether this ExitPlanMode call has been approved (the card's settled state). */
 export function isPlanApprovalToolCall(toolCallId: string): boolean {
   return approvedToolCallIds.has(toolCallId.trim());
 }
 
-/** 某会话当前的待决计划;无则 null。 */
+/** The current pending plan for a conversation; null if none. */
 export function getPendingPlanForConversation(
   conversationId: string,
 ): { toolCallId: string; plan: string } | null {
@@ -83,25 +88,26 @@ export function getPendingPlanForConversation(
 }
 
 /**
- * 纯批准短语判定:整条输入(去空白/尾部标点后)是常见的"同意"表达才算批准。
- * 带任何附加内容("同意,但把第二步改一下")都不算——那是修改意见,应发给模型。
+ * Pure approval phrase detection: the entire input (after trimming whitespace/trailing punctuation)
+ * must be a common "agree" expression to count as approval. Any additional content ("agree, but
+ * change step two") does not count -- that is revision feedback and should be sent to the model.
  */
 const PLAN_APPROVAL_PHRASES = new Set([
-  "同意",
-  "批准",
-  "可以",
-  "好",
-  "好的",
-  "行",
-  "开始",
-  "开始吧",
-  "开始执行",
-  "执行",
-  "执行吧",
-  "开干",
-  "干吧",
-  "去吧",
-  "没问题",
+  "agree",
+  "approve",
+  "sure",
+  "good",
+  "alright",
+  "fine",
+  "start",
+  "let's start",
+  "start execution",
+  "execute",
+  "let's execute",
+  "get going",
+  "let's go",
+  "go for it",
+  "no problem",
   "ok",
   "okay",
   "yes",
@@ -124,8 +130,9 @@ export function isPlanApprovalMessage(text: string): boolean {
   return normalized.length > 0 && PLAN_APPROVAL_PHRASES.has(normalized);
 }
 
-/** 宿主批准/退回动作(ChatPage 注册):批准 = 关 plan 开关 + 直发执行续轮;
- *  退回 = 把反馈作为普通用户消息发送。模块级单例,模式同 WebUI 的 bridge。 */
+/** Host approve/reject actions (registered by ChatPage): approve = turn off the plan switch +
+ *  directly send the execution continuation turn; reject = send the feedback as a normal user
+ *  message. Module-level singleton, same pattern as the WebUI bridge. */
 export type PlanDecisionHandlers = {
   onApprove: (input: { conversationId: string; plan: string }) => void;
   onReject: (input: { conversationId: string; feedback: string }) => void;
@@ -140,15 +147,17 @@ export function registerPlanDecisionHandlers(next: PlanDecisionHandlers | null) 
 export type AnswerPlanDecisionOutcome = {
   ok: boolean;
   message?: string;
-  /** 失败分类:not_pending(已决定/被新提交覆盖——卡片应落定而非报错)/
-   * invalid(参数或会话不符)/unavailable(宿主 handler 未就绪)。 */
+  /** Failure classification: not_pending (already decided/superseded by a new submission -- the
+   * card should settle rather than error) / invalid (arguments or conversation mismatch) /
+   * unavailable (host handler not ready). */
   code?: "not_pending" | "invalid" | "unavailable";
 };
 
 /**
- * 应答某调用的待决计划(卡片按钮/批准短语/WebUI plan_decision 共用入口)。
- * approve → 宿主批准 handler;reject → 反馈经宿主作为消息发送(缺反馈则拒)。
- * 远端通道必须带 conversationId 防串会话应答。
+ * Answer a call's pending plan (shared entry point for the card button/approval phrase/WebUI
+ * plan_decision). approve -> host approval handler; reject -> feedback is sent as a message
+ * through the host (rejected when feedback is missing). A remote channel must carry a
+ * conversationId to prevent cross-conversation answers.
  */
 export function answerPlanDecision(
   toolCallId: string,
@@ -205,7 +214,7 @@ export function answerPlanDecision(
       message: "Rejection needs feedback — just type your changes as a message.",
     };
   }
-  // 反馈发出后旧计划即失效(模型将修订并重新提交,新提交重新登记)。
+  // Once feedback is sent the old plan is invalidated (the model will revise and resubmit, and the new submission is registered anew).
   pendingPlanByConversation.delete(pending.conversationId);
   emitChange();
   try {
@@ -216,8 +225,9 @@ export function answerPlanDecision(
   return { ok: true };
 }
 
-/** 会话销毁/放弃计划模式的兜底清理。批准态也一并清:批准发生时 pending 已删,
- *  只按 pending 反查会让 approvedToolCallIds 随进程无限增长。 */
+/** Fallback cleanup on conversation destruction/abandoning plan mode. Approved state is cleared
+ *  as well: approval deletes pending first, so looking up only via pending would let
+ *  approvedToolCallIds grow without bound over the process lifetime. */
 export function cancelPendingPlanDecisionsForConversation(conversationId: string) {
   const target = conversationId.trim();
   const pending = pendingPlanByConversation.get(target);
@@ -237,10 +247,12 @@ export function cancelPendingPlanDecisionsForConversation(conversationId: string
 }
 
 /**
- * Plan mode 的工具白名单谓词:只读工具放行,另放行计划提交与只读子代理协作。
- * Agent 工具在 plan mode 下由 parseSubagentBatch 强制 readonly(validate.ts),
- * SendMessage 只写会话内消息总线,不触及工作区。其余(Bash/Write/MCP/管理器
- * 写操作…)一律不进模型工具表——比"deny 再拦"更省 token,也绝无泄漏面。
+ * Plan mode tool allowlist predicate: read-only tools pass, plus plan submission and read-only
+ * subagent collaboration. Under plan mode the Agent tool is forced readonly by parseSubagentBatch
+ * (validate.ts), and SendMessage only writes to the in-conversation message bus without touching
+ * the workspace. Everything else (Bash/Write/MCP/manager write operations...) is kept out of the
+ * model's tool table entirely -- this saves more tokens than "deny then block" and leaves no
+ * leakage surface at all.
  */
 export function isPlanModeAllowedTool(
   toolName: string,
@@ -254,17 +266,20 @@ export function isPlanModeAllowedTool(
   );
 }
 
-/** Plan mode 的 system prompt 段;run 内恒定文本,冻结注入以保护前缀缓存。
- *  plan mode 规则的唯一权威表述——toolsSuffix 与工具 description 只作指引,
- *  不再复述,避免三处漂移与 token 浪费。措辞刻意不用"MUST before this turn
- *  ends"式高压:那会抬高提交门槛、诱导模型为求"完整"而无限调研。 */
+/** Plan mode's system prompt section; constant text within a run, injected frozen to protect the
+ *  prefix cache. The single authoritative statement of plan mode rules -- toolsSuffix and tool
+ *  descriptions only provide guidance and do not restate them, avoiding drift in three places and
+ *  wasted tokens. The wording deliberately avoids "MUST before this turn ends" style pressure:
+ *  that would raise the submission bar and induce the model to research endlessly in pursuit of
+ *  "completeness". */
 export function buildPlanModeSystemPromptSection(): string {
   return [
     "<plan-mode>",
     "Plan mode is ACTIVE. This is a read-only planning phase:",
     "- Research with the available read-only tools (and readonly subagents). Stop researching once you can produce the deliverable — do not re-read files you have already read; a re-read returns an unchanged stub, never new information.",
-    // AskUserQuestion 在 plan mode 恒可用(isReadOnly 白名单),且是 run 内挂起
-    // 语义——作答后本轮继续,不影响提交终止与有界升级。
+    // AskUserQuestion is always available in plan mode (isReadOnly allowlist) and has
+    // suspend-within-run semantics -- after answers arrive the turn continues, without affecting
+    // submission termination or bounded escalation.
     `- When a planning detail is genuinely the user's call — scope boundaries, mutually exclusive approaches, trade-offs, target behavior — proactively ask with ${ASK_USER_QUESTION_TOOL_NAME} during research instead of guessing or leaving open questions in the plan. Execution pauses for the answers and continues this turn. Resolve what the code itself can answer; batch the remaining decisions into one focused call.`,
     "- Mutation is impossible this turn: write-capable tools are not in your tool list. Do not promise edits you cannot make here.",
     `- Submit every complete answer through ${EXIT_PLAN_MODE_TOOL_NAME} — implementation plans, architecture summaries, research findings, Q&A, and recommendations alike — instead of plain assistant text. If no code changes are needed, the plan states that and carries the findings.`,
@@ -276,7 +291,7 @@ export function buildPlanModeSystemPromptSection(): string {
   ].join("\n");
 }
 
-// 只述工具自身的调用契约;plan mode 的行为规则统一由 <plan-mode> system 段承载。
+// Describes only the tool's own call contract; plan mode's behavioral rules are carried uniformly by the <plan-mode> system section.
 const EXIT_PLAN_MODE_TOOL_DESCRIPTION = `Present the complete user-facing deliverable for this turn (every finished answer, not only implementation plans). Only available in plan mode; call it once your research is complete.
 
 Submitting ends this turn immediately. The user replies as a normal message: approval starts execution automatically in the next turn (full tools); anything else is feedback — revise the plan and submit again.
@@ -324,8 +339,9 @@ export function createExitPlanModeTools(params: { conversationId: string }): Bui
       );
     }
 
-    // 登记待决计划并立即返回——runner 的终止谓词随后结束本轮 run。
-    // 新提交覆盖同会话旧登记(修订后的计划取代旧版)。
+    // Register the pending plan and return immediately -- the runner's termination predicate
+    // then ends this turn's run. A new submission overwrites the old registration for the same
+    // conversation (the revised plan replaces the previous version).
     pendingPlanByConversation.set(params.conversationId, {
       conversationId: params.conversationId,
       toolCallId: toolCall.id,
@@ -363,7 +379,7 @@ export function createExitPlanModeTools(params: { conversationId: string }): Bui
         {
           groupId: "system",
           kind: "exit_plan_mode",
-          // 只读:仅登记待决计划,不触碰任何外部状态;计划卡即审批面,不叠工具审批。
+          // Read-only: merely registers the pending plan without touching any external state; the plan card is the approval surface, so no tool approval is layered on.
           isReadOnly: true,
           displayCategory: "system",
         },
@@ -373,27 +389,31 @@ export function createExitPlanModeTools(params: { conversationId: string }): Bui
 }
 
 // ---------------------------------------------------------------------------
-// Plan mode 运行策略:有界升级状态机。
+// Plan mode run policy: bounded escalation state machine.
 //
-// 原则:绝不无界强制。常态 toolChoice=auto,模型可自由文本收尾;终止性由四道
-// **有界**防线保证:
-//   1. 终止谓词 —— ExitPlanMode 提交即结束本轮 run(runner resolveToolTermination);
-//   2. 轮数上限 —— 研究阶段 maxRounds 熔断,防失控循环(runner maxRounds);
-//   3. 补提交轮 —— run 以文本收尾且未提交时,追加一次 wire-only 提醒消息并定向
-//      强制 ExitPlanMode,只重试一次(nudging 态);
-//   4. 文本兜底 —— 补提交仍未产出时,把最后的助手文本注册为待决计划(合成
-//      ExitPlanMode 调用对),计划卡/审批/持久化零改动复用。
-// 任何模型行为都在有限步内收敛到计划卡。
+// Principle: never force without bound. Normally toolChoice=auto, so the model can freely wrap up
+// with text; termination is guaranteed by four **bounded** lines of defense:
+//   1. Termination predicate -- submitting ExitPlanMode ends this turn's run
+//      (runner resolveToolTermination);
+//   2. Round limit -- maxRounds circuit breaker during research to prevent runaway loops
+//      (runner maxRounds);
+//   3. Supplementary submission round -- when the run wraps up with text and has not submitted,
+//      append a wire-only reminder message and force ExitPlanMode in a targeted way, retrying only
+//      once (the nudging phase);
+//   4. Text fallback -- when the supplementary submission still produces nothing, register the
+//      last assistant text as the pending plan (a synthesized ExitPlanMode call pair), reusing the
+//      plan card/approval/persistence with zero changes.
+// Any model behavior converges to the plan card within a finite number of steps.
 // ---------------------------------------------------------------------------
 
-/** 研究阶段的模型轮数熔断值(含);达到后当前批执行完即优雅终止,进入补提交。 */
+/** Model round circuit-breaker value for the research phase (inclusive); once reached, the current batch finishes and terminates gracefully, entering supplementary submission. */
 export const PLAN_MODE_MAX_RESEARCH_ROUNDS = 32;
-/** 补提交轮的轮数上限:定向强制下 1 轮即提交,留余量兜供应商降级为 auto 的情况。 */
+/** Round limit for the supplementary submission: under targeted forcing one round suffices to submit, with headroom left for providers that degrade to auto. */
 export const PLAN_MODE_MAX_NUDGE_ROUNDS = 4;
-/** 同一 (工具名, 参数) 的重复调用放行次数;超过即拦截,引导提交计划。 */
+/** Number of times a repeated call with the same (tool name, arguments) is allowed; beyond this it is blocked, nudging toward plan submission. */
 export const PLAN_MODE_REPEAT_CALL_LIMIT = 2;
 
-/** 补提交轮注入的 wire-only 提醒(只进出站请求,不持久化、不进 UI)。 */
+/** Wire-only reminder injected in the supplementary submission round (goes only into outbound requests; not persisted, not shown in the UI). */
 export const PLAN_MODE_NUDGE_REMINDER = [
   "[plan-mode reminder] Your previous turn ended without submitting the deliverable.",
   `Call ${EXIT_PLAN_MODE_TOOL_NAME} now with the complete user-facing deliverable in markdown,`,
@@ -411,22 +431,23 @@ export type PlanModeFallbackPlan = {
 };
 
 export type PlanModeRunPolicy = {
-  /** ExitPlanMode 提交即终止本轮 run(交给 runner resolveToolTermination)。 */
+  /** Submitting ExitPlanMode terminates this turn's run (handed to runner resolveToolTermination). */
   resolveToolTermination: (toolCall: ToolCall) => boolean;
-  /** 当前 run 的 tool_choice:常态 undefined(缺省 auto);补提交轮定向强制。 */
+  /** tool_choice for the current run: normally undefined (defaults to auto); in the supplementary submission round it is forced in a targeted way. */
   resolveToolChoice: () => ToolChoice | undefined;
-  /** 当前 run 的轮数熔断值(交给 runner maxRounds)。 */
+  /** Round circuit-breaker value for the current run (handed to runner maxRounds). */
   maxRounds: () => number;
-  /** 防空转守卫:同参重复的研究调用超过放行次数即拦截(接入 resolveToolGate)。 */
+  /** Anti-spin guard: blocks repeated research calls with the same arguments beyond the allowed count (wired into resolveToolGate). */
   guardRepeatedToolCall: (toolCall: ToolCall) => { allow: true } | { allow: false; reason: string };
-  /** run 结束后的升级裁决:已提交 → done;首次未提交 → nudge;再次 → fallback。 */
+  /** Escalation decision after the run ends: submitted -> done; first non-submission -> nudge; again -> fallback. */
   decideAfterRun: (input: { emittedMessages: readonly Message[] }) => PlanModeRunDecision;
-  /** 文本兜底:把助手文本注册为待决计划并返回合成的 ExitPlanMode 调用对;
-   *  文本经 sanitize 后为空时返回 null(此时本轮无计划,turn 正常结束)。 */
+  /** Text fallback: registers the assistant text as the pending plan and returns the synthesized
+   *  ExitPlanMode call pair; returns null when the text is empty after sanitize (in that case
+   *  there is no plan this turn and the turn ends normally). */
   registerFallbackPlan: (input: { planText: string }) => PlanModeFallbackPlan | null;
 };
 
-/** 递归键排序的稳定序列化:重复调用判定不受对象键序影响。模型参数来自 JSON,无环。 */
+/** Stable serialization with recursive key sorting: repeated-call detection is unaffected by object key order. Model arguments come from JSON and are acyclic. */
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableStringify).join(",")}]`;
@@ -457,8 +478,9 @@ export function createPlanModeRunPolicy(params: { conversationId: string }): Pla
     resolveToolTermination: (toolCall) => toolCall.name === EXIT_PLAN_MODE_TOOL_NAME,
 
     resolveToolChoice: () =>
-      // 定向强制只出现在有界的补提交轮;供应商不支持时(如 Anthropic thinking、
-      // Google)由 provider 层降级为 auto,提醒消息仍然生效。
+      // Targeted forcing appears only in the bounded supplementary submission round; when a
+      // provider does not support it (such as Anthropic thinking, Google), the provider layer
+      // degrades it to auto, and the reminder message still takes effect.
       phase === "nudging" ? { type: "tool" as const, name: EXIT_PLAN_MODE_TOOL_NAME } : undefined,
 
     maxRounds: () =>
@@ -499,8 +521,9 @@ export function createPlanModeRunPolicy(params: { conversationId: string }): Pla
         name: EXIT_PLAN_MODE_TOOL_NAME,
         arguments: { plan },
       };
-      // 与真实 ExitPlanMode 执行完全同构:登记待决计划(覆盖旧登记)并通知订阅方,
-      // 计划卡按钮态、WebUI 预览、审批入口全部零改动复用。
+      // Fully isomorphic to a real ExitPlanMode execution: register the pending plan (overwriting
+      // the old registration) and notify subscribers, reusing the plan card button state, WebUI
+      // preview, and approval entry with zero changes.
       pendingPlanByConversation.set(params.conversationId, {
         conversationId: params.conversationId,
         toolCallId,

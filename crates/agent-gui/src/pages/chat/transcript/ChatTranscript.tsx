@@ -102,18 +102,20 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
   // the "near the top" trigger has to read the virtualizer's settled offset
   // rather than the parked DOM scrollTop.
 
-  // 楼层导航：从时间线派生用户消息楼层；当前楼层由 TranscriptList 上报。
-  // 不在此处按 conversationId 重置——TranscriptList 按会话重挂载后其挂载
-  // effect 会先于本组件的 effect 执行并上报新会话锚点，这里再置 null 会把
-  // 刚上报的值清掉且被子组件的去重永久抑制。行 key 含 segmentId，跨会话
-  // 不会误匹配，等待子组件上报即可。
+  // Floor navigation: derive user-message floors from the timeline; the current floor is
+  // reported by TranscriptList. Do not reset by conversationId here -- after TranscriptList
+  // remounts per conversation, its mount effect runs before this component's effect and
+  // reports the new conversation anchor; setting null here would wipe the just-reported value
+  // and the child's dedup would suppress it permanently. Row keys include segmentId, so they
+  // cannot mismatch across conversations; just wait for the child to report.
   const floors = useMemo(() => buildFloorEntries(historyItems), [historyItems]);
   const [activeFloorKey, setActiveFloorKey] = useState<string | null>(null);
   const transcriptNavRef = useRef<TranscriptNavHandle | null>(null);
   const handleFloorJump = useCallback(
     (rowKey: string) => {
-      // 粘底跟随激活时程序化滚动会被立即拽回底部——先按「跳入历史」语义解除
-      // 跟随，再执行跳转。
+      // With sticky-bottom follow active, programmatic scrolling is immediately yanked back
+      // to the bottom -- first break follow using the "jump into history" semantics, then
+      // perform the jump.
       scrollFollowHandle.breakFollow();
       transcriptNavRef.current?.scrollToRowKey(rowKey);
     },
@@ -239,18 +241,18 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
   const transcriptContextMenuPosition = renderedContextMenu
     ? clampTranscriptContextMenuPosition(renderedContextMenu.x, renderedContextMenu.y)
     : null;
-  const copySelectedTextLabel = locale === "en-US" ? "Copy selected text" : "复制选中文本";
-  const jumpToBottomLabel = locale === "en-US" ? "Scroll to bottom" : "回到底部";
+  const copySelectedTextLabel = locale === "en-US" ? "Copy selected text" : "Copy selected text";
+  const jumpToBottomLabel = locale === "en-US" ? "Scroll to bottom" : "Scroll to bottom";
   const resizeTranscriptLabel =
-    locale === "en-US" ? "Resize conversation content" : "调整对话正文宽度";
+    locale === "en-US" ? "Resize conversation content" : "Resize conversation content";
   const resetTranscriptWidthLabel =
-    locale === "en-US" ? "Double-click to reset" : "双击恢复默认宽度";
+    locale === "en-US" ? "Double-click to reset" : "Double-click to reset";
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: The transcript surface exposes a pointer context menu; transcript content and menu items retain their own keyboard semantics.
     <div
       ref={transcriptRootRef}
-      // `@container`: transcript overlays (FloorNavRail 等) size against the
+      // `@container`: transcript overlays (FloorNavRail, etc.) size against the
       // pane, not the viewport — a narrow pane in a wide split window must
       // degrade like a narrow window.
       className="@container relative min-h-0 flex-1"

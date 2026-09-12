@@ -16,7 +16,7 @@ export type CheckpointTurnSummary = {
   turnId: string;
   fileCount: number;
   dirCount: number;
-  /** 该轮存在捕获失败记录(前像不完整),回退可能遗漏部分文件。 */
+  /** This turn has capture-failure records (incomplete pre-image), so a rewind may miss some files. */
   incomplete: boolean;
   firstCapturedAt: number;
 };
@@ -28,7 +28,7 @@ export type CheckpointDiffStats = {
   cleanFiles: number;
   skippedDirs: number;
   missingBlobs: number;
-  /** 根已不在当前授权工作区集合内、或路径链上出现符号链接的条目：一律不回退。 */
+  /** Entries whose root is no longer in the current authorized workspace set, or with a symlink along the path chain: never rewound. */
   unresolvableFiles: number;
   captureErrors: number;
   entries: { path: string; key: string; action: string; currentHash?: string }[];
@@ -40,14 +40,14 @@ export type CheckpointRewindResult = {
   deletedFiles: number;
   cleanFiles: number;
   skippedDirs: number;
-  /** 目标范围内捕获阶段就失败的记录数:这些文件没有前像,回退没有碰它们。 */
+  /** Number of records that already failed during capture within the target range: these files have no pre-image, and the rewind did not touch them. */
   captureErrors: number;
-  /** 预览后被外部修改、被跳过未覆盖的文件(冲突检测)。 */
+  /** Files modified externally after the preview and skipped without overwrite (conflict detection). */
   conflicts: string[];
   failed: string[];
 };
 
-/** 两端各自实现的传输层:桌面端走 Tauri invoke,WebUI 走网关 checkpoint 直通臂。 */
+/** Transport layer implemented separately by each end: the desktop goes through Tauri invoke, the WebUI through the gateway's checkpoint passthrough arm. */
 export type CheckpointRewindClient = {
   list: (conversationId: string) => Promise<CheckpointTurnSummary[]>;
   preview: (params: {
@@ -69,15 +69,19 @@ export type CheckpointRewoundInfo = {
   deletedFiles: number;
   conflicts: number;
   failed: number;
-  /** 捕获阶段就失败的文件数:没有前像,回退没有碰它们。 */
+  /** Number of files that failed already during capture: no pre-image, and the rewind did not touch them. */
   captureErrors: number;
 };
 
 /**
- * 回退完成通知的共享文案:两端 onRewound 都用它,避免模板漂移。
- * - 零计数一律不展示;完全没有文件改动时明确说"没有文件需要改动"。
- * - 数字与量词之间用不换行空格(U+00A0)钉住,窄 toast 里"1 个"不会被折成两行。
- * - 问题项(冲突/失败/无前像)collect 进括号尾注,与主结果分层。
+ * Shared copy for the rewind-completion notification: both ends' onRewound use it to
+ * avoid template drift.
+ * - Zero counts are never shown; when there are no file changes at all, say plainly
+ *   "no file changes were needed".
+ * - Numbers and quantifiers are pinned with a non-breaking space (U+00A0) so that
+ *   "1 file" does not wrap onto two lines in a narrow toast.
+ * - Problem items (conflicts/failures/no pre-image) are collected into a parenthetical
+ *   trailing note, layered separately from the main result.
  */
 export function formatCheckpointRewoundNotification(
   info: CheckpointRewoundInfo,
@@ -88,13 +92,11 @@ export function formatCheckpointRewoundNotification(
   const changes: string[] = [];
   const issues: string[] = [];
   if (zh) {
-    if (info.restoredFiles > 0) changes.push(`恢复${nb(info.restoredFiles)}个`);
-    if (info.deletedFiles > 0) changes.push(`删除${nb(info.deletedFiles)}个`);
-    // 组尾统一补"文件":单项时"删除 1 个文件",双项时"恢复 2 个、删除 1 个文件"。
-    if (changes.length > 0) changes[changes.length - 1] += "文件";
-    if (info.conflicts > 0) issues.push(`冲突跳过${nb(info.conflicts)}个`);
-    if (info.failed > 0) issues.push(`失败${nb(info.failed)}个`);
-    if (info.captureErrors > 0) issues.push(`${info.captureErrors}\u00A0个无前像未回退`);
+    if (info.restoredFiles > 0) changes.push(`restored${nb(info.restoredFiles)}files`);
+    if (info.deletedFiles > 0) changes.push(`deleted${nb(info.deletedFiles)}files`);
+    if (info.conflicts > 0) issues.push(`${nb(info.conflicts)}conflicts skipped`);
+    if (info.failed > 0) issues.push(`${nb(info.failed)}failed`);
+    if (info.captureErrors > 0) issues.push(`${info.captureErrors}\u00A0without pre-image`);
   } else {
     if (info.restoredFiles > 0) changes.push(`restored ${files(info.restoredFiles)}`);
     if (info.deletedFiles > 0) changes.push(`deleted ${files(info.deletedFiles)}`);
@@ -105,15 +107,15 @@ export function formatCheckpointRewoundNotification(
   }
   const head = zh
     ? changes.length > 0
-      ? `已回退代码：${changes.join("、")}`
-      : "已回退代码：没有文件需要改动"
+      ? `Code rewound: ${changes.join(", ")}`
+      : "Code rewound: no file changes were needed"
     : changes.length > 0
       ? `Code rewound: ${changes.join(", ")}`
       : "Code rewound: no file changes were needed";
   const message =
     issues.length > 0
       ? zh
-        ? `${head}（${issues.join("、")}）`
+        ? `${head} (${issues.join(", ")})`
         : `${head} (${issues.join(", ")})`
       : head;
   return {
@@ -122,7 +124,7 @@ export function formatCheckpointRewoundNotification(
   };
 }
 
-/** 行内回退按钮所需的全部状态:null 表示当前 turn 无检查点(按钮禁用展示)。 */
+/** All state needed by the inline rewind button: null means the current turn has no checkpoint (button shown disabled). */
 export type CheckpointRewindAction = {
   available: boolean;
   pending: boolean;
@@ -140,19 +142,22 @@ type CheckpointRewindContextValue = {
 
 const CheckpointRewindContext = createContext<CheckpointRewindContextValue | null>(null);
 
-// 仅覆盖 Write/Edit/Delete 三个文件工具的改动;Bash 等 shell 写入不在检查点内。
-// 回退点 = 用户消息:turnId 就是用户消息 ID,行内按钮经 useCheckpointRewindAction
-// 按 messageId 命中本轮(对齐 Claude Code 的每消息回退)。
+// Covers only changes from the three file tools Write/Edit/Delete; shell writes such as
+// Bash are outside the checkpoint. Rewind point = user message: turnId is the user
+// message ID, and the inline button matches this turn by messageId via
+// useCheckpointRewindAction (matching Claude Code's per-message rewind).
 export function CheckpointRewindProvider(props: {
   children: ReactNode;
   conversationId?: string;
-  /** 发送/流式中为 true:行内按钮全体禁用,且暂停列表刷新。 */
+  /** True while sending/streaming: all inline buttons are disabled and list refresh is paused. */
   disabled?: boolean;
   client: CheckpointRewindClient;
   /**
-   * 回退授权的唯一来源:当前会话工作区根 + 仍处于 active 且可写的额外授权根。
-   * 后端只认这个集合里的 root,记录里存的绝对路径本身不构成授权;access 必须
-   * 由调用方过滤(回退是写操作,只读根不该被写)。
+   * The sole source of rewind authorization: the current conversation's workspace root
+   * plus additional authorized roots that are still active and writable. The backend
+   * only recognizes roots in this set; an absolute path stored in a record is not itself
+   * authorization. access must be filtered by the caller (rewind is a write operation,
+   * so read-only roots must not be written).
    */
   resolveAuthorizedRoots: () => Promise<string[]>;
   onRewound?: (info: CheckpointRewoundInfo) => void;
@@ -172,8 +177,9 @@ export function CheckpointRewindProvider(props: {
   const [loading, setLoading] = useState(false);
   const [busyTurn, setBusyTurn] = useState<number | null>(null);
 
-  // latest-ref:宿主通常内联传这两个回调(每渲染新身份)。若做依赖,rewind 与
-  // context value 会随宿主每帧重建,流式期间放大成全部用户行重渲染。
+  // latest-ref: hosts usually pass these two callbacks inline (new identity every
+  // render). If used as dependencies, rewind and the context value would be rebuilt
+  // every host frame, amplified during streaming into re-rendering all user rows.
   const resolveRootsRef = useRef(resolveAuthorizedRoots);
   const onRewoundRef = useRef(onRewound);
   const disabledRef = useRef(disabled);
@@ -183,7 +189,7 @@ export function CheckpointRewindProvider(props: {
     disabledRef.current = disabled;
   });
 
-  // 列表加载代际:慢响应(切会话前发出的)一律丢弃,防乱序覆盖。
+  // List-load generation: slow responses (issued before a conversation switch) are always discarded, preventing out-of-order overwrite.
   const loadEpochRef = useRef(0);
   const loadTurns = useCallback(async () => {
     const epoch = ++loadEpochRef.current;
@@ -202,20 +208,21 @@ export function CheckpointRewindProvider(props: {
     }
   }, [client, conversationId]);
 
-  // 切会话立刻清空旧列表:分支复制会保留消息 ID,旧会话的轮残留可能错配到
-  // 新会话的同 ID 气泡上。
+  // Switching conversations immediately clears the old list: branch copies preserve
+  // message IDs, so a stale turn from the old conversation could be mismatched onto a
+  // same-ID bubble in the new conversation.
   // biome-ignore lint/correctness/useExhaustiveDependencies: conversation identity intentionally clears stale rewind state
   useEffect(() => {
     loadEpochRef.current += 1;
     setTurns([]);
   }, [conversationId]);
 
-  // 空闲(挂载/切会话/轮次结束)时刷新;发送中不拉取,半截时间线没有展示价值。
+  // Refresh when idle (mount/conversation switch/turn end); do not fetch while sending — a half-formed timeline has no display value.
   useEffect(() => {
     if (!disabled) void loadTurns();
   }, [disabled, loadTurns]);
 
-  // busy 守卫走 ref:rewind 不依赖 busyTurn state,身份保持稳定。
+  // The busy guard goes through a ref: rewind does not depend on busyTurn state, so its identity stays stable.
   const busyTurnRef = useRef<number | null>(null);
   const rewind = useCallback(
     async (turn: CheckpointTurnSummary) => {
@@ -232,70 +239,75 @@ export function CheckpointRewindProvider(props: {
         const parts: string[] = [];
         if (stats.restoreFiles > 0)
           parts.push(
-            zh ? `将恢复 ${stats.restoreFiles} 个文件` : `Restore ${stats.restoreFiles} file(s)`,
+            zh ? `Restore ${stats.restoreFiles} file(s)` : `Restore ${stats.restoreFiles} file(s)`,
           );
         if (stats.deleteFiles > 0)
           parts.push(
-            zh ? `将删除 ${stats.deleteFiles} 个文件` : `Delete ${stats.deleteFiles} file(s)`,
+            zh ? `Delete ${stats.deleteFiles} file(s)` : `Delete ${stats.deleteFiles} file(s)`,
           );
         if (stats.cleanFiles > 0)
           parts.push(
-            zh ? `${stats.cleanFiles} 个文件无变化` : `${stats.cleanFiles} file(s) unchanged`,
+            zh ? `${stats.cleanFiles} file(s) unchanged` : `${stats.cleanFiles} file(s) unchanged`,
           );
         if (stats.skippedDirs > 0)
           parts.push(
             zh
-              ? `${stats.skippedDirs} 个已删除的目录无法恢复`
+              ? `${stats.skippedDirs} deleted director(ies) cannot be restored`
               : `${stats.skippedDirs} deleted director(ies) cannot be restored`,
           );
         if (stats.missingBlobs > 0)
           parts.push(
             zh
-              ? `${stats.missingBlobs} 个文件缺少改动前快照`
+              ? `${stats.missingBlobs} file(s) missing their pre-edit snapshot`
               : `${stats.missingBlobs} file(s) missing their pre-edit snapshot`,
           );
         if (stats.unresolvableFiles > 0)
           parts.push(
             zh
-              ? `${stats.unresolvableFiles} 个路径无法回退（目录未授权，或路径包含符号链接）`
+              ? `${stats.unresolvableFiles} path(s) cannot be rewound (directory unauthorized, or path contains a symlink)`
               : `${stats.unresolvableFiles} path(s) cannot be rewound (directory unauthorized, or path contains a symlink)`,
           );
         if (stats.captureErrors > 0 || turn.incomplete)
           parts.push(
             zh
-              ? `本轮有 ${Math.max(stats.captureErrors, 1)} 次快照记录失败，回退结果可能不完整`
+              ? `${Math.max(stats.captureErrors, 1)} snapshot(s) failed to record this turn; the rewind may be incomplete`
               : `${Math.max(stats.captureErrors, 1)} snapshot(s) failed to record this turn; the rewind may be incomplete`,
           );
         const actionable = stats.entries.filter(
           (entry) => entry.action === "restore" || entry.action === "delete",
         );
-        // 检查点只记录 agent 工具写入前的前像,编辑器/文件树里的手改既不入账、
-        // 也无法与工具写入区分。回退按前像整体覆盖,手改会被一并抹掉,先说清楚。
+        // Checkpoints record only the pre-images of agent tool writes; manual edits in
+        // the editor/file tree are neither recorded nor distinguishable from tool
+        // writes. A rewind overwrites wholesale from the pre-images, so manual edits are
+        // wiped along with them — state this up front.
         if (actionable.length > 0)
           parts.push(
             zh
-              ? "在编辑器或文件树中的手动修改不在检查点内，将被一并覆盖"
+              ? "Manual edits made in the editor or file tree are not checkpointed and will be overwritten"
               : "Manual edits made in the editor or file tree are not checkpointed and will be overwritten",
           );
         const confirmed = await confirm({
-          title: zh ? "回退到本轮开始前" : "Rewind to before this turn",
+          title: zh ? "Rewind to before this turn" : "Rewind to before this turn",
           subtitle: new Date(turn.firstCapturedAt).toLocaleString(),
           description:
             parts.length > 0
-              ? parts.join(zh ? "，" : ", ")
+              ? parts.join(zh ? ", " : ", ")
               : zh
-                ? "本轮没有可回退的文件改动"
+                ? "No file changes to rewind in this turn"
                 : "No file changes to rewind in this turn",
           detail:
             actionable.length > 0 ? actionable.map((entry) => entry.path).join("\n") : undefined,
-          confirmLabel: zh ? "回退" : "Rewind",
-          cancelLabel: zh ? "取消" : "Cancel",
+          confirmLabel: zh ? "Rewind" : "Rewind",
+          cancelLabel: zh ? "Cancel" : "Cancel",
         });
         if (!confirmed) return;
-        // 把预览时的现状哈希传回后端,回退前逐个复核:预览到执行之间被外部
-        // 修改的文件会被跳过并报告为冲突,绝不覆盖(TOCTOU 防护)。
-        // 必须回传全部可解析条目(含 clean)——后端对缺哈希的条目一律判冲突,
-        // 只带 restore/delete 会让确认期间被手改的 clean 文件被静默覆盖。
+        // Pass the current-state hashes from the preview back to the backend and
+        // re-verify each one before rewinding: a file modified externally between
+        // preview and execution is skipped and reported as a conflict, never overwritten
+        // (TOCTOU protection). All resolvable entries (including clean) must be sent
+        // back — the backend judges any entry missing a hash as a conflict, and sending
+        // only restore/delete would let a clean file hand-edited during confirmation be
+        // silently overwritten.
         const expected = stats.entries.flatMap((entry) =>
           entry.currentHash == null ? [] : [{ key: entry.key, currentHash: entry.currentHash }],
         );
@@ -313,7 +325,7 @@ export function CheckpointRewindProvider(props: {
           failed: result.failed.length,
           captureErrors: result.captureErrors,
         });
-        // 完整回退会在后端剪掉 turnSeq 及之后的轮,重拉让按钮态跟上。
+        // A full rewind trims turnSeq and later turns in the backend; re-fetch so the button state catches up.
         await loadTurns();
         if (
           result.failed.length > 0 ||
@@ -323,39 +335,39 @@ export function CheckpointRewindProvider(props: {
         ) {
           const issueLines = [
             ...result.conflicts.map((path) =>
-              zh ? `冲突(已跳过): ${path}` : `conflict (skipped): ${path}`,
+              zh ? `conflict (skipped): ${path}` : `conflict (skipped): ${path}`,
             ),
-            ...result.failed.map((path) => (zh ? `失败: ${path}` : `failed: ${path}`)),
+            ...result.failed.map((path) => (zh ? `failed: ${path}` : `failed: ${path}`)),
           ];
-          // 捕获缺口/不可恢复目录没有具体路径列表,单独一行说明。
+          // Capture gaps/unrestorable directories have no specific path list, so explain them on a separate line.
           if (result.captureErrors > 0)
             issueLines.push(
               zh
-                ? `该轮有 ${result.captureErrors} 个文件没有前像(捕获失败),未被回退`
+                ? `${result.captureErrors} file(s) had no pre-image (capture failed) and were not rewound`
                 : `${result.captureErrors} file(s) had no pre-image (capture failed) and were not rewound`,
             );
           if (result.skippedDirs > 0)
             issueLines.push(
               zh
-                ? `${result.skippedDirs} 个被删除目录无法恢复`
+                ? `${result.skippedDirs} deleted dir(s) could not be restored`
                 : `${result.skippedDirs} deleted dir(s) could not be restored`,
             );
           await confirm({
-            title: zh ? "回退部分未完成" : "Rewind partially completed",
+            title: zh ? "Rewind partially completed" : "Rewind partially completed",
             description: zh
-              ? `已恢复 ${result.restoredFiles} 个、删除 ${result.deletedFiles} 个；冲突跳过 ${result.conflicts.length} 个、失败 ${result.failed.length} 个`
+              ? `Restored ${result.restoredFiles}, deleted ${result.deletedFiles}; ${result.conflicts.length} conflict(s) skipped, ${result.failed.length} failed`
               : `Restored ${result.restoredFiles}, deleted ${result.deletedFiles}; ${result.conflicts.length} conflict(s) skipped, ${result.failed.length} failed`,
             detail: issueLines.join("\n"),
-            confirmLabel: zh ? "知道了" : "OK",
+            confirmLabel: zh ? "OK" : "OK",
             cancelLabel: "",
             hideCancel: true,
           });
         }
       } catch (error) {
         await confirm({
-          title: zh ? "回退失败" : "Rewind failed",
+          title: zh ? "Rewind failed" : "Rewind failed",
           description: String(error),
-          confirmLabel: zh ? "知道了" : "OK",
+          confirmLabel: zh ? "OK" : "OK",
           cancelLabel: "",
           hideCancel: true,
         });
@@ -387,8 +399,9 @@ export function CheckpointRewindProvider(props: {
 }
 
 /**
- * 按用户消息 ID 取本行的回退动作。Provider 之外返回 null(按钮以禁用态展示,
- * 只读页等不渲染动作区的场景自然无感)。
+ * Get this row's rewind action by user message ID. Returns null outside the Provider
+ * (the button is shown disabled, so scenarios that do not render the action area, such
+ * as read-only pages, are unaffected).
  */
 export function useCheckpointRewindAction(turnId?: string): CheckpointRewindAction | null {
   const context = useContext(CheckpointRewindContext);

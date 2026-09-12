@@ -1,9 +1,9 @@
-// skills「显式提及」后置到 user 消息尾部的端到端对账。
+// End-to-end verification of skills "explicit mentions" appended to the tail of the user message.
 //
-// 关注三件事：
-//  1. 用户打 `/skill-name` 的那轮及其下一轮，systemPrompt 字节必须不变；
-//  2. 没有提及时不产生任何额外内容（数组引用都不能变）；
-//  3. 已挂上的块在后续轮次原样重放，历史消息一个字节都不动。
+// Three things matter:
+//  1. On the turn where the user types `/skill-name` and the following turn, the systemPrompt bytes must be unchanged;
+//  2. When there is no mention, no extra content is produced (not even an array reference change);
+//  3. A block that has been attached is replayed verbatim in subsequent turns, without moving a single byte of history.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -78,7 +78,7 @@ function contextFor(conversationId, messages) {
   });
 }
 
-/** 复刻发送链路：解析提及 → 渲染块 → 记账到当轮 user 消息。 */
+/** Replicates the send path: resolve mentions -> render the block -> record it on that turn's user message. */
 function sendTurn(conversationId, turn, text) {
   const explicit = skills.resolveExplicitSkillMentions({ text, enabledSkills });
   skillMentionInjection.record({
@@ -101,14 +101,14 @@ function assistantTurn(index) {
   };
 }
 
-test("显式提及那轮及下一轮 systemPrompt 字节不变，块只挂在对应 user 消息尾部", (t) => {
+test("the mention turn and the next turn keep systemPrompt bytes unchanged, and the block attaches only to the tail of the matching user message", (t) => {
   const conversationId = "conv-skill-mentions";
   t.after(() => skillMentionInjection.dispose(conversationId));
 
   const messages = [];
   const shapes = [];
   const contexts = [];
-  // 第 2 轮用户打了 `/code-review`，其余三轮没有任何提及。
+  // The user typed `/code-review` on turn 2; the other three turns have no mention at all.
   const texts = ["plain turn", "please run /code-review now", "plain turn", "plain turn"];
 
   texts.forEach((text, index) => {
@@ -121,32 +121,32 @@ test("显式提及那轮及下一轮 systemPrompt 字节不变，块只挂在对
     messages.push(assistantTurn(turn));
   });
 
-  // 没有任何一轮凭空多出一条消息。
+  // No turn gains an extra message out of nowhere.
   assert.deepEqual(
     contexts.map((context) => context.messages.length),
     [1, 3, 5, 7],
   );
 
-  // 核心断言：提及轮（第 2 轮）与其下一轮（第 3 轮）都判定 unchanged。
+  // Core assertion: both the mention turn (turn 2) and the next turn (turn 3) are judged unchanged.
   const summaries = shapes.map((shape, index) =>
     comparePrefixShape(index === 0 ? null : shapes[index - 1], shape).prefixChangeSummary,
   );
   assert.deepEqual(summaries, ["initial", "unchanged", "unchanged", "unchanged"]);
 
-  // 第 1 轮没有提及：上下文里不该出现任何块。
+  // Turn 1 has no mention: no block should appear in the context.
   assert.ok(!JSON.stringify(contexts[0].messages).includes("<skill-mentions>"));
 
-  // 第 2 轮的块挂在第 2 轮那条 user 消息上，历史消息原样不动。
+  // Turn 2's block attaches to turn 2's user message, leaving history untouched.
   const mentionUser = contexts[1].messages.find((message) => message.id === "u2");
   assert.ok(mentionUser.content.includes("<skill-mentions>"));
   assert.ok(mentionUser.content.includes("code-review/SKILL.md"));
   assert.ok(
     mentionUser.content.startsWith("please run /code-review now"),
-    "用户原文必须留在最前面，块只追加在尾部",
+    "the original user text must stay first; the block is only appended at the tail",
   );
   assert.equal(contexts[1].messages[0].content, "plain turn");
 
-  // 第 3、4 轮重放同一份字节：历史区间保持可缓存。
+  // Turns 3 and 4 replay the same bytes: the history range stays cacheable.
   assert.equal(
     JSON.stringify(contexts[2].messages.slice(0, 3)),
     JSON.stringify(contexts[1].messages),
@@ -157,13 +157,13 @@ test("显式提及那轮及下一轮 systemPrompt 字节不变，块只挂在对
   );
 });
 
-test("没有显式提及时不产生任何额外内容：不建状态、数组引用不变", (t) => {
+test("no explicit mention produces no extra content: no state is created and array references are unchanged", (t) => {
   const conversationId = "conv-skill-mentions-empty";
   t.after(() => skillMentionInjection.dispose(conversationId));
 
   sendTurn(conversationId, 1, "no mentions at all, keep /usr/bin literal");
 
-  // 空块连状态都不该创建。
+  // An empty block should not even create state.
   assert.equal(skillMentionInjection.getMessageUpdates(conversationId), undefined);
 
   const messages = [userTurn(1, "no mentions at all, keep /usr/bin literal")];
@@ -178,18 +178,18 @@ test("没有显式提及时不产生任何额外内容：不建状态、数组�
   assert.equal(
     JSON.stringify(withEmptyUpdates.messages),
     JSON.stringify(baseline.messages),
-    "没有提及时上下文与不传 updates 时完全一致",
+    "with no mention the context is exactly the same as when updates are not passed",
   );
   assert.ok(!JSON.stringify(withEmptyUpdates.messages).includes("<skill-mentions>"));
 
-  // 没挂东西时必须原样返回同一个数组引用：调用方的引用相等短路依赖这一点。
+  // When nothing is attached it must return the same array reference as-is: the caller's reference-equality short-circuit depends on this.
   const raw = [userTurn(1, "plain"), assistantTurn(1)];
   assert.equal(attachMemoryTurnUpdates(raw, undefined), raw);
   assert.equal(attachMemoryTurnUpdates(raw, new Map()), raw);
   assert.equal(attachMemoryTurnUpdates(raw, new Map([["missing", "BLOCK"]])), raw);
 });
 
-test("缺少会话 id 或消息 id 时丢掉这次提及，不挂到对不上的消息上", (t) => {
+test("a missing conversation id or message id drops the mention instead of attaching it to a mismatched message", (t) => {
   t.after(() => {
     skillMentionInjection.dispose("conv-skill-mentions-guard");
     skillMentionInjection.dispose("");
@@ -204,7 +204,7 @@ test("缺少会话 id 或消息 id 时丢掉这次提及，不挂到对不上的
   assert.equal(skillMentionInjection.getMessageUpdates("conv-skill-mentions-guard"), undefined);
 });
 
-test("对照组：同样的提及若继续走 system prompt，前缀会被判定为 system 变更", () => {
+test("control group: if the same mention still went through the system prompt, the prefix would be judged a system change", () => {
   const block = skills.formatExplicitSkillMentions([enabledSkills[0]]);
   const before = capturePrefixShape({ systemPrompt: SKILLS_PROMPT, tools: TOOLS });
   const after = capturePrefixShape({

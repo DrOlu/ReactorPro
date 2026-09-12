@@ -1,16 +1,16 @@
-# LiveAgent Trajectory Integration Audit
+# ReactorPro Trajectory Integration Audit
 
 ## Scope
 
-This audit covers only the current LiveAgent worktree changes that integrate the trajectory
+This audit covers only the current ReactorPro worktree changes that integrate the trajectory
 experience inspired by `deepseek-harness/packages/client/ui-trajectory`. The reference project is
-used for information architecture and interaction design; LiveAgent owns a different runtime,
+used for information architecture and interaction design; ReactorPro owns a different runtime,
 persistence, history-pagination, edit-resend, subagent, desktop and Gateway architecture, so its
 implementation is intentionally native rather than a source copy.
 
-## Reference-to-LiveAgent mapping
+## Reference-to-ReactorPro mapping
 
-| DeepSeek Harness concern | LiveAgent implementation |
+| DeepSeek Harness concern | ReactorPro implementation |
 |---|---|
 | trajectory rows and record kinds | `crates/agent-ui/src/lib/trajectory/types.ts`, `layout.ts` |
 | event convergence | `crates/agent-ui/src/lib/trajectory/eventLog.ts` |

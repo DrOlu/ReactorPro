@@ -1,44 +1,44 @@
 # Durable task progress
 
-## 目标
+## Goal
 
-LiveAgent 的任务清单必须属于当前 Agent Run，而不是属于前端进程或某一段模型上下文。一次 Run 内无论发生多少次上下文压缩，任务的 ID、顺序、内容和状态都保持稳定；下一条用户消息开始新 Run 时才清空。
+ReactorPro's task checklist must belong to the current Agent Run, not to the frontend process or to a segment of model context. Within a single Run, no matter how many context compactions occur, the IDs, order, content, and status of tasks remain stable; they are cleared only when the next user message starts a new Run.
 
-## 权威状态
+## Authoritative state
 
-| 层级 | 设计 |
+| Layer | Design |
 |---|---|
-| 工具协议 | `TaskCreate` 创建单个任务，`TaskUpdate` 按稳定 `taskId` 更新，`TaskList` 返回完整快照；不存在整表替换接口。 |
-| 身份 | 执行器按 `nextTaskId` 分配单调递增数字 ID，模型不能指定或复用 ID。 |
-| 并发 | 三个任务工具共享串行队列，避免同一工具回合并发创建时重复分配 ID。 |
-| 持久化 | `TaskListState` 写入 `StoredChatContextMeta.taskList`，随现有 `context_meta_json` 和压缩 checkpoint 原子持久化；任务提交走非终态持久化通道，中途写盘失败只属于该次工具调用，不得把成功收尾的 Run 上报为 `history_persist_failed`。 |
-| 压缩恢复 | 每次模型请求都从当前会话状态动态注入同一份 `runId/revision/tasks` 权威 JSON，不依赖自由文本摘要恢复任务；注入与工具同口径按 `runId` 门控，异 Run 状态视为不存在。 |
-| Run 边界 | `useSendChatTurn` 在追加新用户消息前清除上一 Run 的 `taskList`，edit-resend 替换回来的历史状态同样清除；压缩、工具回合和流中恢复不清除。 |
-| Checkpoint 事务 | 追加新 Segment 时，在同一 SQLite 事务中先刷新刚封存的旧活跃 Segment，再插入带 summary 的新 Segment，保证工具消息、任务状态和总消息数同步推进。 |
+| Tool protocol | `TaskCreate` creates a single task, `TaskUpdate` updates by stable `taskId`, `TaskList` returns a complete snapshot; there is no whole-table replacement interface. |
+| Identity | The executor assigns monotonically increasing numeric IDs via `nextTaskId`; the model cannot specify or reuse an ID. |
+| Concurrency | The three task tools share a serial queue, avoiding duplicate ID assignment when the same tool creates tasks concurrently in one turn. |
+| Persistence | `TaskListState` is written to `StoredChatContextMeta.taskList` and atomically persisted alongside the existing `context_meta_json` and compaction checkpoints; task commits go through the non-terminal persistence channel, and a mid-flight disk write failure belongs only to that tool call and must not report a successfully completed Run as `history_persist_failed`. |
+| Compaction recovery | Every model request dynamically injects the same authoritative `runId/revision/tasks` JSON from the current session state, rather than recovering tasks from a free-text summary; injection is gated by `runId` on the same terms as the tools, and state from a different Run is treated as nonexistent. |
+| Run boundary | `useSendChatTurn` clears the previous Run's `taskList` before appending a new user message; the historical state restored by edit-resend is likewise cleared; compaction, tool turns, and mid-stream recovery do not clear it. |
+| Checkpoint transaction | When appending a new Segment, the just-sealed previous active Segment is first refreshed within the same SQLite transaction, then the new Segment with its summary is inserted, ensuring tool messages, task state, and the total message count advance in sync. |
 
-## UI 投影
+## UI projection
 
-GUI 与 Gateway WebUI 只读取成功 `TaskCreate`、`TaskUpdate`、`TaskList` 结果中的完整 canonical snapshot。投影不读取流式参数，不按文案或位置猜测身份，也不做延时序列兼容。任务工具块在 transcript 中保持 standalone 并统一隐藏，输入框上方的进度指示器以 `task.id` 作为 React key。
+The GUI and Gateway WebUI read only the complete canonical snapshot from successful `TaskCreate`, `TaskUpdate`, and `TaskList` results. The projection does not read streaming arguments, does not guess identity from text or position, and performs no delayed-sequence compatibility. Task tool blocks remain standalone in the transcript and are uniformly hidden, and the progress indicator above the input box uses `task.id` as its React key.
 
-指示器只常驻一个按内容收缩的步进药丸；任务清单是绝对定位的 hover 浮层，指针移开或焦点离开即收起，因此任何状态下都不占据 transcript 的布局高度，也不参与 composer 的高度预留。
+The indicator permanently hosts only one content-shrinking step pill; the task checklist is an absolutely positioned hover overlay that collapses when the pointer leaves or focus departs, so in any state it occupies no transcript layout height and does not participate in the composer's height reservation.
 
-## 不变量
+## Invariants
 
-| 不变量 | 保证方式 |
+| Invariant | How it is guaranteed |
 |---|---|
-| 压缩不能创建新计划 | 权威状态位于会话元数据；压缩摘要不拥有任务生命周期。 |
-| 更新不能改变其他任务身份 | `TaskUpdate` 必须提供现有 `taskId`，只修改明确给出的字段。 |
-| 最多一个进行中任务 | 执行器拒绝会产生多个 `in_progress` 的更新。 |
-| 工具成功必须可恢复 | 先落盘、成功后才应用到运行时状态；失败时状态从未变更，直接返回错误。 |
-| 损坏数据不阻塞会话 | 历史 `taskList` 解析失败按丢弃降级并告警，绝不让整个会话窗口无法打开。 |
-| 压缩成功必须已落盘 | checkpoint 持久化返回 `false` 时按压缩失败处理，禁止切换运行时 Segment 或发布 checkpoint。 |
-| 双端显示一致 | 共享 `taskProgress.ts` 只接受 canonical result details，GUI/WebUI 使用同一投影和组件。 |
+| Compaction cannot create a new plan | The authoritative state lives in session metadata; compaction summaries do not own the task lifecycle. |
+| An update cannot change another task's identity | `TaskUpdate` must provide an existing `taskId` and modifies only the explicitly given fields. |
+| At most one in-progress task | The executor rejects updates that would produce more than one `in_progress`. |
+| A successful tool must be recoverable | Persist first, apply to runtime state only after success; on failure the state was never changed and an error is returned directly. |
+| Corrupt data does not block the session | A failed parse of a historical `taskList` is downgraded to a drop with a warning, and must never prevent the entire session window from opening. |
+| A successful compaction must already be persisted | When checkpoint persistence returns `false`, it is treated as a compaction failure, and switching the runtime Segment or publishing the checkpoint is forbidden. |
+| Consistent display across both clients | The shared `taskProgress.ts` accepts only canonical result details, and the GUI/WebUI use the same projection and components. |
 
-## 验证
+## Verification
 
-- 任务工具测试覆盖 schema、稳定 ID、并发创建、按 ID 更新、单一进行中任务、只读列表和持久化失败。
-- 历史测试覆盖 `context_meta_json` 中任务状态的严格解析与恢复，以及损坏任务清单降级为丢弃而不阻塞窗口打开。
-- 压缩控制器测试覆盖连续两个 checkpoint 后 `runId/revision/tasks` 完全一致。
-- 历史持久化测试覆盖 checkpoint 原子刷新封存段并追加新段，以及持久化拒绝时不切换运行时 Segment。
-- GUI/WebUI 投影测试覆盖成功结果优先、忽略半截参数/失败结果、用户 Run 边界和 transcript 过滤。
-- GUI 与 WebUI 全量前端测试、双端 TypeScript、生产构建、镜像检查和 UI 边界检查均作为合入门禁。
+- Task tool tests cover schema, stable IDs, concurrent creation, update by ID, a single in-progress task, read-only listing, and persistence failure.
+- History tests cover strict parsing and recovery of task state in `context_meta_json`, and degradation of a corrupt task list to a drop without blocking the window from opening.
+- Compaction controller tests cover that `runId/revision/tasks` are fully identical after two consecutive checkpoints.
+- History persistence tests cover the checkpoint atomically refreshing the sealed segment and appending a new segment, and not switching the runtime Segment when persistence is rejected.
+- GUI/WebUI projection tests cover successful-result priority, ignoring partial arguments/failed results, user Run boundaries, and transcript filtering.
+- Full frontend tests for both GUI and WebUI, TypeScript for both clients, production builds, image checks, and UI boundary checks are all merge gates.

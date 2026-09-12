@@ -44,7 +44,7 @@ test("WebUI mode switch keeps per-mode scripts independent", () => {
   const filled = forms.applyUsageQueryModePreset({ ...usageQuery, script: "" }, "general");
   assert.equal(filled.script, generalPreset);
 
-  // newapi 里的编辑切到 general 再切回后原样恢复。
+  // Edits in newapi are restored intact after switching to general and back.
   const edited = forms.setUsageQueryScript(
     { ...usageQuery, mode: "newapi", script: "" },
     "(my newapi script)",

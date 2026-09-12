@@ -14,8 +14,9 @@ export type GatewayTerminalPaneHostProps = Omit<
 >;
 
 /**
- * Web 端终端 Pane 宿主:共享实现 + 网关注入(网关终端 client 与窗口级
- * 租约/绑定单例)。逻辑语义见 @liveagent/ui 的 TerminalPaneHost。
+ * Web terminal pane host: shared implementation plus gateway injection (the
+ * gateway terminal client and the window-level lease/binding singletons). For
+ * the logical semantics see TerminalPaneHost in @liveagent/ui.
  */
 export function GatewayTerminalPaneHost(props: GatewayTerminalPaneHostProps) {
   return (

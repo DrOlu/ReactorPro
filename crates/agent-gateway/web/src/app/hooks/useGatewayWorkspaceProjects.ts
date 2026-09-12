@@ -337,7 +337,7 @@ export function useGatewayWorkspaceProjects({
 
   const handleCloneWorkspaceProject = useCallback(
     async (remoteUrl: string, parent: string, name: string, branch: string) => {
-      if (!api) throw new Error("网关未连接。");
+      if (!api) throw new Error("Gateway is not connected.");
       const task = await api.gitRequest<WorkspaceCloneTask>("clone_start", parent, {
         name,
         remoteUrl,
@@ -416,7 +416,7 @@ export function useGatewayWorkspaceProjects({
     (remoteUrl: string) =>
       api?.gitRequest<{ defaultBranch: string; branches: string[] }>("list_remote_branches", "", {
         remoteUrl,
-      }) ?? Promise.reject(new Error("网关未连接。")),
+      }) ?? Promise.reject(new Error("Gateway is not connected.")),
     [api],
   );
   const handleWorkdirPickerSelect = useCallback(

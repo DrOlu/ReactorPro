@@ -35,9 +35,10 @@ type McpServersFormProps = {
 export function McpServersForm(props: McpServersFormProps) {
   const { settings, setSettings, query, onAddServer, onEditServer } = props;
   const { t } = useLocale();
-  // 由专属设置页托管的 server 不在 Hub 里露面（当前是 cua-driver，归
-  // 「设置 → CUA」管）。过滤后仍需拿到原始下标：McpServerCard 的编辑 /
-  // 删除都按 settings.mcp.servers 的位置写回。
+  // Servers managed by their own dedicated settings page do not show up in the
+  // Hub (currently cua-driver, managed by "Settings -> CUA"). After filtering we
+  // still need the original index: McpServerCard's edit / delete write back by
+  // position in settings.mcp.servers.
   const servers = useMemo(
     () =>
       settings.mcp.servers
@@ -105,9 +106,11 @@ export function McpServersForm(props: McpServersFormProps) {
                   setSettings((prev) => {
                     const current = { ...(prev.system.toolPolicies ?? {}) };
                     const key = serverPolicyKey(server.id);
-                    // 只有回到该 server 的缺省值才删 key——对普通 server 缺省是
-                    // allow，对硬编码为 ask 的 server（cua-driver）则相反：显式
-                    // 存下 "allow" 才能盖过缺省，删掉反而会退回 ask。
+                    // Delete the key only when returning to the server's
+                    // default -- for ordinary servers the default is allow, but
+                    // for a server hardcoded to ask (cua-driver) it is the
+                    // opposite: explicitly storing "allow" is what overrides the
+                    // default, while deleting it falls back to ask.
                     if (next === effectiveServerPolicyDefault(server)) delete current[key];
                     else current[key] = next;
                     return updateSystem(prev, {

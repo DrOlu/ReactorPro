@@ -1,6 +1,6 @@
 package websocket_test
 
-// v2 chat 命令编排与终端链路的集成测试。
+// Integration tests for v2 chat command orchestration and the terminal link.
 
 import (
 	"net/http"
@@ -15,8 +15,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// TestV2ChatCommandAcceptedFlow 覆盖 submit 编排：运行时探活（网关发 Ping、假 agent 回 Pong）
-// → 接受回执 → 命令信封投递到 agent。
+// TestV2ChatCommandAcceptedFlow covers submit orchestration: runtime liveness probe (gateway sends Ping, fake agent replies Pong)
+// → accept receipt → command envelope delivered to the agent.
 func TestV2ChatCommandAcceptedFlow(t *testing.T) {
 	t.Parallel()
 
@@ -39,7 +39,7 @@ func TestV2ChatCommandAcceptedFlow(t *testing.T) {
 		},
 	})
 
-	// 网关先发运行时探活；假 agent 应答 Pong。
+	// The gateway first sends a runtime liveness probe; the fake agent replies Pong.
 	answerChatRuntimeProbe(t, sm, agentSession)
 
 	frame := receiveWebFrameWithID(t, conn, "cmd-1")
@@ -48,7 +48,7 @@ func TestV2ChatCommandAcceptedFlow(t *testing.T) {
 		t.Fatalf("chat command reply = %#v, want chat_accepted", frame)
 	}
 
-	// 命令信封随后投递到 agent。
+	// The command envelope is then delivered to the agent.
 	outbound := readOutboundEnvelope(t, agentSession)
 	command := outbound.GetChatCommand()
 	if command.GetType() != "chat.submit" || command.GetRequest().GetMessage() != "hello v2" {
@@ -80,8 +80,8 @@ func TestV2TerminalBrowserRequiresAgentID(t *testing.T) {
 	}
 }
 
-// TestV2TerminalBrowserGating 覆盖终端链路浏览器角色：默认设置下 attach 被权限门控拒绝；
-// 开启 Web 终端后 attach 转发失败（agent 离线）也以 error 帧回报。
+// TestV2TerminalBrowserGating covers the terminal link browser role: under default settings attach is rejected by permission gating;
+// after enabling the Web terminal, a failed attach forward (agent offline) is also reported as an error frame.
 func TestV2TerminalBrowserGating(t *testing.T) {
 	t.Parallel()
 
@@ -119,7 +119,7 @@ func TestV2TerminalBrowserGating(t *testing.T) {
 		})
 	}
 
-	// 默认设置：Web 终端关闭 → 权限错误。
+	// Default settings: Web terminal off → permission error.
 	conn, cleanup := dialTerminal()
 	attach(conn)
 	frame := receiveTerminalServerFrame(t, conn).GetFrame()
@@ -128,7 +128,7 @@ func TestV2TerminalBrowserGating(t *testing.T) {
 	}
 	cleanup()
 
-	// 开启 Web 终端：attach 通过门控，但 agent 离线 → 离线错误。
+	// Web terminal on: attach passes the gate, but the agent is offline → offline error.
 	sm.ApplySettingsJSON("desktop-agent", `{"remote":{"enableWebTerminal":true}}`)
 	conn, cleanup = dialTerminal()
 	defer cleanup()
@@ -139,7 +139,7 @@ func TestV2TerminalBrowserGating(t *testing.T) {
 	}
 }
 
-// TestV2AgentHelloRejectsBrowserRole 确认角色错配被拒绝。
+// TestV2AgentHelloRejectsBrowserRole confirms that a role mismatch is rejected.
 func TestV2AgentHelloRejectsBrowserRole(t *testing.T) {
 	t.Parallel()
 

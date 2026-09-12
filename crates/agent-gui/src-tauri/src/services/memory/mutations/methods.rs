@@ -216,7 +216,7 @@ impl MemoryStore {
         let quarantine_path = if project_dir.exists() {
             let quarantine_dir = self.root.join(".quarantine");
             fs::create_dir_all(&quarantine_dir)
-                .map_err(|e| format!("创建项目记忆隔离目录失败：{e}"))?;
+                .map_err(|e| format!("Failed to create project memory quarantine directory: {e}"))?;
             let ts = now_ms();
             let mut target =
                 quarantine_dir.join(format!("deleted-project-{}-{}", workdir_hash, ts));
@@ -228,7 +228,7 @@ impl MemoryStore {
                 ));
                 suffix += 1;
             }
-            fs::rename(&project_dir, &target).map_err(|e| format!("隔离项目记忆目录失败：{e}"))?;
+            fs::rename(&project_dir, &target).map_err(|e| format!("Failed to quarantine project memory directory: {e}"))?;
             Some(target)
         } else {
             None
@@ -281,7 +281,7 @@ impl MemoryStore {
                 params![workdir_hash],
                 |row| row.get::<_, i64>(0),
             )
-            .map_err(|e| format!("读取项目记忆数量失败：{e}"))?;
+            .map_err(|e| format!("Failed to read project memory count: {e}"))?;
         Ok(count.max(0) as usize)
     }
 
@@ -344,9 +344,9 @@ impl MemoryStore {
             self.snapshot_entry_before_organize(&resolved.meta, &resolved.path)?;
         }
         let trash_dir = self.trash_dir_for(&resolved.meta)?;
-        fs::create_dir_all(&trash_dir).map_err(|e| format!("创建记忆回收站失败：{e}"))?;
+        fs::create_dir_all(&trash_dir).map_err(|e| format!("Failed to create memory trash: {e}"))?;
         let target = trash_dir.join(format!("{}.{}.md", resolved.meta.slug, now_ms()));
-        fs::rename(&resolved.path, &target).map_err(|e| format!("移动记忆到回收站失败：{e}"))?;
+        fs::rename(&resolved.path, &target).map_err(|e| format!("Failed to move memory to trash: {e}"))?;
         let mut conn = self.lock_conn()?;
         delete_index_rows(
             &mut conn,

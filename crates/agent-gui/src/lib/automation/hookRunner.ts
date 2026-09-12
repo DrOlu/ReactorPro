@@ -132,7 +132,7 @@ export function createHookRunScope(params: {
               hookName: hook.name,
               hookType: hook.type,
               event,
-              message: errorMessageWithFallback(error, "Hook 执行失败"),
+              message: errorMessageWithFallback(error, "Hook execution failed"),
             });
           }
         }

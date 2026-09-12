@@ -112,8 +112,8 @@ pub struct ShellRunResponse {
     pub platform: String,
     pub profile: String,
     pub shell_family: String,
-    /// 沙箱机制("seatbelt"/"bubblewrap"/"low-integrity-token"/"appcontainer"),
-    /// 未启用沙箱时为 None。
+    /// Sandbox mechanism ("seatbelt"/"bubblewrap"/"low-integrity-token"/"appcontainer"),
+    /// None when no sandbox is enabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sandbox: Option<String>,
     pub stdout: String,
@@ -384,8 +384,9 @@ fn windows_powershell_command(cmd: &str) -> String {
         "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)",
         "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
         "$OutputEncoding = [Console]::OutputEncoding",
-        // 重定向到文件时 PowerShell 的 Console.Out 默认块缓冲,ManagedProcess
-        // 周期性 Write-Output/echo 在进程退出前不会出现在日志里。
+        // When redirecting to a file, PowerShell's Console.Out is block-buffered by
+        // default, so periodic Write-Output/echo from a ManagedProcess does not appear
+        // in the log until the process exits.
         "try { [Console]::Out.AutoFlush = $true; [Console]::Error.AutoFlush = $true } catch {}",
         cmd,
     ]
@@ -440,8 +441,8 @@ fn is_windows_apps_alias_dir(dir: &Path) -> bool {
     )
 }
 
-/// Store 应用注册的 App-Execution-Alias 是 0 字节的 reparse point，`is_file()`
-/// 对它返回 true；真正的 Git Bash 可执行文件不可能是 0 字节。
+/// The App-Execution-Alias registered by Store apps is a 0-byte reparse point, and
+/// `is_file()` returns true for it; a real Git Bash executable can never be 0 bytes.
 #[cfg(windows)]
 fn is_app_execution_alias(path: &Path) -> bool {
     fs::metadata(path).is_ok_and(|md| md.len() == 0)
@@ -469,7 +470,7 @@ fn find_git_bash_on_path(path_var: &std::ffi::OsStr) -> Option<PathBuf> {
     None
 }
 
-/// Git Bash 解析（对标 Claude Code）：env 覆盖 → PATH → Git for Windows 默认安装路径。
+/// Git Bash resolution (matching Claude Code): env override → PATH → Git for Windows default install path.
 #[cfg(windows)]
 fn find_git_bash() -> Option<PathBuf> {
     for var in ["LIVEAGENT_GIT_BASH_PATH", "CLAUDE_CODE_GIT_BASH_PATH"] {
@@ -497,7 +498,7 @@ fn find_git_bash() -> Option<PathBuf> {
             PathBuf::from(r"C:\Program Files (x86)"),
         ]);
     for root in roots {
-        // bin\bash.exe 是带 MSYS 环境注入的启动器，优先于 usr\bin 的裸 bash。
+        // bin\bash.exe is a launcher with MSYS environment injection, preferred over the bare bash in usr\bin.
         for rel in [r"Git\bin\bash.exe", r"Git\usr\bin\bash.exe"] {
             let candidate = root.join(rel);
             if is_git_bash_candidate(&candidate) {
@@ -526,7 +527,7 @@ struct ShellCandidate {
 pub(crate) struct SpawnedPlatformShell {
     pub child: std::process::Child,
     pub profile: ShellExecutionProfile,
-    /// 生效的沙箱机制;None 表示未启用沙箱。
+    /// Effective sandbox mechanism; None means no sandbox is enabled.
     pub sandbox: Option<&'static str>,
 }
 
@@ -543,7 +544,7 @@ fn platform_shell_candidates(cmd: &str) -> Vec<ShellCandidate> {
                     display_shell: "bash",
                 },
                 program: bash,
-                // 非登录 -c：-lc 会执行 /etc/profile 并 cd $HOME，破坏 cwd 语义。
+                // Non-login -c: -lc would run /etc/profile and cd $HOME, breaking cwd semantics.
                 args: vec!["-c".to_string(), cmd.to_string()],
                 augment_macos_path: false,
             });
@@ -697,27 +698,32 @@ fn default_platform_shell_profile() -> ShellExecutionProfile {
         })
 }
 
-/// 沙箱下 shell 候选可用性的进程级缓存。key = (候选程序路径, 沙箱机制):同一 shell 在
-/// Low IL token 与 AppContainer 两种机制下兼容性可能不同,须分别记录;探测结果与工作区无关
-/// (loader 死亡源于令牌/内核对象语义,非路径),故 key 不含 write_root。
+/// Process-level cache of sandbox shell candidate usability. key = (candidate program
+/// path, sandbox mechanism): the same shell may differ in compatibility between the
+/// Low IL token and AppContainer mechanisms, so record them separately; probe results
+/// are independent of the workspace (loader death comes from token/kernel-object
+/// semantics, not paths), so the key excludes write_root.
 #[cfg(windows)]
 static SANDBOX_SHELL_PROBE_CACHE: std::sync::OnceLock<
     Mutex<HashMap<(PathBuf, &'static str), bool>>,
 > = std::sync::OnceLock::new();
 
-/// 子进程启动即死、不能当沙箱 shell 的退出码:
-/// - 0xC0000142 DLL 初始化失败(msys/cygwin 在沙箱上下文下的典型死法)
-/// - 0xC0000135 DLL 缺失
-/// - 0xC0000022 拒绝访问(NTSTATUS)
-/// - 0xE0434352 CLR 未处理异常(PowerShell 把 CNG NTE_PROVIDER_DLL_FAIL 包装成
-///   “BCrypt.dll 加载失败”;进程已进 CLR,故不是 NTSTATUS loader 码)
-/// - 0x8009001D NTE_PROVIDER_DLL_FAIL 本体
-/// - 0x80070005 HRESULT E_ACCESSDENIED(Windows PowerShell / .NET Framework
-///   写 CLR 用户缓存失败;与 0xC0000022 / 0xE0434352 不是同一条路径)
-/// - 0xFFFF0000 PowerShell 宿主在 CLR 初始化失败(内部 HRESULT 80070005)时的
-///   包装退出码。漏掉这两个码会把已崩溃的 powershell.exe 探测成可用
+/// Exit codes where the child dies immediately on startup and cannot serve as a
+/// sandbox shell:
+/// - 0xC0000142 DLL initialization failed (the typical way msys/cygwin dies in a sandbox context)
+/// - 0xC0000135 DLL not found
+/// - 0xC0000022 access denied (NTSTATUS)
+/// - 0xE0434352 unhandled CLR exception (PowerShell wraps CNG NTE_PROVIDER_DLL_FAIL as
+///   "BCrypt.dll failed to load"; the process already reached the CLR, so it is not an NTSTATUS loader code)
+/// - 0x8009001D NTE_PROVIDER_DLL_FAIL itself
+/// - 0x80070005 HRESULT E_ACCESSDENIED (Windows PowerShell / .NET Framework failed to
+///   write the CLR user cache; a different path from 0xC0000022 / 0xE0434352)
+/// - 0xFFFF0000 the wrapper exit code when the PowerShell host fails CLR initialization
+///   (inner HRESULT 80070005). Missing these two codes would probe an already-crashed
+///   powershell.exe as usable.
 ///
-/// 命中 ⇒ 该候选在此沙箱机制下起不来,落到下一候选。
+/// A hit means the candidate cannot start under this sandbox mechanism; fall through
+/// to the next candidate.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn is_loader_failure_exit(code: i32) -> bool {
     matches!(
@@ -732,15 +738,17 @@ fn is_loader_failure_exit(code: i32) -> bool {
     )
 }
 
-/// 探测裁决:给定探测进程的退出码(None = 超时/被杀/无退出码),该候选是否可用。
-/// 只有明确的启动即死码判不可用;其余(超时、普通非零退出)一律放行,由真实
-/// spawn 自行失败并走既有错误链——探测只负责识别“启动即死”这一类硬不兼容。
+/// Probe verdict: given the probe process's exit code (None = timeout/killed/no exit
+/// code), whether the candidate is usable. Only explicit startup-death codes are deemed
+/// unusable; everything else (timeout, ordinary non-zero exit) passes through, letting
+/// the real spawn fail on its own through the existing error chain — the probe only
+/// identifies the "dies immediately on startup" class of hard incompatibility.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn sandbox_probe_verdict(exit_code: Option<i32>) -> bool {
     !exit_code.is_some_and(is_loader_failure_exit)
 }
 
-/// PATH 上的第一个同名二进制若落在 WindowsApps,沙箱安全上下文无法直接启动它。
+/// If the first same-named binary on PATH lands in WindowsApps, the sandbox security context cannot launch it directly.
 #[cfg(windows)]
 fn candidate_resolves_to_windowsapps(program: &Path) -> bool {
     if sandbox::is_msix_windowsapps_path(program) {
@@ -752,13 +760,16 @@ fn candidate_resolves_to_windowsapps(program: &Path) -> bool {
         .is_some_and(|p| sandbox::is_msix_windowsapps_path(&p))
 }
 
-/// Windows 沙箱下探测某 shell 候选能否活过启动(结果进程级缓存)。
+/// Under the Windows sandbox, probe whether a shell candidate survives startup
+/// (result cached at process level).
 ///
-/// 经启动器 spawn 一条 `exit 0` 的最小命令,等待 ≤2s:退出码命中启动即死
-/// (Git Bash 的 0xC0000142,PowerShell/CNG 的 0xE0434352,或 CLR 的 0x80070005)⇒ 不可用,调用方落到
-/// 下一候选。pwsh/powershell 在写围栏下并不必然可用;cmd.exe 不走 CNG,通常是最后
-/// 兜底。探测本身失败(wrap/spawn 出错)判可用:让真实 spawn 复现错误并走既有
-/// fail-closed/错误报告路径,探测不吞错。
+/// Spawn a minimal `exit 0` command through the launcher and wait ≤2s: if the exit code
+/// hits a startup-death code (Git Bash's 0xC0000142, PowerShell/CNG's 0xE0434352, or the
+/// CLR's 0x80070005) ⇒ unusable, and the caller falls through to the next candidate.
+/// pwsh/powershell is not necessarily usable under the write fence; cmd.exe does not go
+/// through CNG and is usually the last fallback. If the probe itself fails (wrap/spawn
+/// error), judge it usable: let the real spawn reproduce the error and go through the
+/// existing fail-closed/error-reporting path — the probe does not swallow errors.
 #[cfg(windows)]
 fn sandbox_candidate_usable(
     spec: &SandboxSpec,
@@ -821,7 +832,7 @@ fn sandbox_candidate_usable(
     usable
 }
 
-/// `stdbuf` 在 Git Bash 上通常位于 `Git\usr\bin`,与 `Git\bin\bash.exe` 不在同一目录。
+/// `stdbuf` on Git Bash usually lives in `Git\usr\bin`, a different directory from `Git\bin\bash.exe`.
 fn find_stdbuf_near(shell: &Path) -> Option<PathBuf> {
     let names: &[&str] = if cfg!(windows) {
         &["stdbuf.exe", "stdbuf"]
@@ -883,9 +894,10 @@ fn path_for_posix_shell(path: &Path) -> String {
     }
 }
 
-/// POSIX 托管进程用 `stdbuf -oL` 包一层,让 echo 循环等周期输出在重定向到
-/// 日志文件时按行可见。映像仍是 bash/zsh/sh,Windows 沙箱对 Git Bash 的
-/// Everyone SID / msys 盖章才能继续命中。
+/// POSIX managed processes are wrapped in a `stdbuf -oL` layer so periodic output such
+/// as an echo loop remains line-visible when redirected to a log file. The image is
+/// still bash/zsh/sh, so only the Windows sandbox's Everyone SID / msys stamp for Git
+/// Bash keeps matching.
 fn posix_line_buffered_script(
     shell: &str,
     command: &str,
@@ -952,9 +964,11 @@ where
         } else {
             (candidate.args.clone(), Vec::new())
         };
-        // 沙箱包裹在 shell candidate 选定后、spawn 前进行,fail-closed:包裹
-        // 失败(平台不支持/依赖缺失)直接报错,绝不回退为无沙箱执行。
-        // sandbox-exec/bwrap 按名字解析 shell 时同样遵循 PATH,语义不变。
+        // Sandbox wrapping happens after the shell candidate is chosen and before
+        // spawn, fail-closed: a wrapping failure (unsupported platform / missing
+        // dependency) errors out directly and never falls back to unsandboxed
+        // execution. sandbox-exec/bwrap resolving the shell by name also follows PATH,
+        // so the semantics are unchanged.
         let (spawn_program, spawn_args, sandbox_mechanism) = match sandbox_spec {
             Some(spec) => {
                 let (program, args, mechanism) =
@@ -963,11 +977,15 @@ where
             }
             None => (candidate.program.clone(), candidate_args, None),
         };
-        // Windows 沙箱专属:候选回退链平时靠 spawn 失败推进,但沙箱下 spawn 的永远是
-        // LiveAgent.exe 启动器(总能成功),loader 级不兼容(如 Git Bash 的 msys 依赖
-        // 在沙箱上下文下 0xC0000142)只体现为命令“执行了但立即死”。用一次缓存的探测
-        // (`exit 0`)提前识别,落到下一候选,不给模型返回死 shell。pwsh 在沙箱里也会
-        // 因 CNG 用户证书库不可写而以 CLR 0xE0434352 崩溃,不能假定“原生 PE 必然可用”。
+        // Windows sandbox only: the candidate fallback chain normally advances on spawn
+        // failure, but under the sandbox spawn always launches the ReactorPro.exe
+        // launcher (which always succeeds), so loader-level incompatibility (e.g. Git
+        // Bash's msys dependency failing with 0xC0000142 in a sandbox context) only
+        // shows up as the command "ran but died immediately". A cached probe (`exit 0`)
+        // detects this early and falls through to the next candidate, rather than
+        // returning a dead shell to the model. pwsh also crashes with CLR 0xE0434352
+        // inside the sandbox because the CNG user certificate store is not writable, so
+        // one must not assume "a native PE is necessarily usable".
         #[cfg(windows)]
         if let (Some(spec), Some(mechanism)) = (sandbox_spec, sandbox_mechanism) {
             if !sandbox_candidate_usable(spec, &candidate, mechanism) {
@@ -984,7 +1002,7 @@ where
             stdio_factory().map_err(|err| format!("Failed to prepare shell stdio: {err}"))?;
         let mut c = Command::new(&spawn_program);
         c.args(&spawn_args);
-        // 系统代理 env 先注入，调用方 envs（如 LIVEAGENT_HOOK_*）后写保持更高优先级。
+        // Inject the system-proxy env first; caller envs (e.g. LIVEAGENT_HOOK_*) are written afterwards to keep higher priority.
         for (key, value) in &system_proxy_envs {
             c.env(key, value);
         }
@@ -1027,8 +1045,10 @@ where
     Err(ShellError::Other(format!("Failed to start command: {detail}")).to_string())
 }
 
-/// 无 env 注入、无沙箱的最简入口。生产链路一律走 `run_shell_script_with_envs` 并显式
-/// 传入沙箱参数(P1#2:Cron 曾因这里的 `None` 而恒以无沙箱方式执行),故此入口仅供测试。
+/// Simplest entry point with no env injection and no sandbox. The production path always
+/// goes through `run_shell_script_with_envs` and passes the sandbox parameter explicitly
+/// (P1#2: Cron used to always execute unsandboxed because of the `None` here), so this
+/// entry point is for tests only.
 #[cfg(test)]
 pub(crate) fn run_shell_script(
     workdir: String,
@@ -1075,8 +1095,8 @@ pub(crate) fn run_shell_script_with_envs(
     let timeout = Duration::from_millis(effective_timeout_ms);
     let start = Instant::now();
 
-    // 沙箱写围栏锚定 workdir(工作区根)而非 cwd:cwd 可能是子目录,但工具语义
-    // 允许写整个工作区。
+    // The sandbox write fence anchors on workdir (the workspace root) rather than cwd:
+    // cwd may be a subdirectory, but the tool semantics allow writing the whole workspace.
     let sandbox_spec = match sandbox_options {
         Some(options) => {
             let wd = canonicalize_workdir(&workdir).map_err(|e| e.to_string())?;
@@ -1159,13 +1179,13 @@ pub(crate) fn run_shell_script_with_envs(
         }
         if shell_profile.platform == "windows" {
             stderr_str.push_str(
-                "LiveAgent warning: command exited, but stdout/stderr remained open after exit. \
+                "ReactorPro warning: command exited, but stdout/stderr remained open after exit. \
 This usually means a background process inherited the tool pipes. Use ManagedProcess for \
-long-running Windows commands so LiveAgent can capture logs and stop the process tree.",
+long-running Windows commands so ReactorPro can capture logs and stop the process tree.",
             );
         } else {
             stderr_str.push_str(
-                "LiveAgent warning: command exited, but stdout/stderr remained open after exit. \
+                "ReactorPro warning: command exited, but stdout/stderr remained open after exit. \
 This usually means a background process inherited the tool pipes. Redirect long-running \
 process output to a log file, for example: `nohup command > /tmp/liveagent-task.log 2>&1 < /dev/null &`.",
             );
@@ -1203,34 +1223,35 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    // 沙箱候选探测的裁决逻辑(纯函数,平台无关):只有启动即死码判不可用;
-    // 超时/普通失败一律放行交由真实 spawn 走既有错误链。
+    // Verdict logic for sandbox candidate probing (a pure, platform-independent function):
+    // only startup-death codes are deemed unusable; timeout/ordinary failures pass through
+    // to the real spawn and the existing error chain.
     #[test]
     fn sandbox_probe_verdict_only_rejects_loader_ntstatus() {
-        // loader 死亡三码(as i32 后为负数,与 std ExitStatus::code() 的表示一致)。
+        // The three loader-death codes (negative once cast to i32, matching std ExitStatus::code()).
         assert!(is_loader_failure_exit(0xC000_0142_u32 as i32)); // STATUS_DLL_INIT_FAILED
         assert!(is_loader_failure_exit(0xC000_0135_u32 as i32)); // STATUS_DLL_NOT_FOUND
         assert!(is_loader_failure_exit(0xC000_0022_u32 as i32)); // STATUS_ACCESS_DENIED
         assert!(!sandbox_probe_verdict(Some(0xC000_0142_u32 as i32)));
-        // PowerShell/CNG:BCrypt“加载失败”其实是 CLR 未处理异常,不是 NTSTATUS。
+        // PowerShell/CNG: the BCrypt "load failure" is actually an unhandled CLR exception, not NTSTATUS.
         assert_eq!((-532_462_766i32) as u32, 0xE043_4352);
         assert!(is_loader_failure_exit(-532_462_766));
         assert!(!sandbox_probe_verdict(Some(-532_462_766)));
         assert!(is_loader_failure_exit(0x8009_001D_u32 as i32)); // NTE_PROVIDER_DLL_FAIL
         assert!(!sandbox_probe_verdict(Some(0x8009_001D_u32 as i32)));
-        // Windows PowerShell / .NET Framework:CLR 用户缓存写拒绝是 HRESULT,不是 NTSTATUS。
+        // Windows PowerShell / .NET Framework: the CLR user-cache write denial is an HRESULT, not NTSTATUS.
         assert_eq!((-2_147_024_891i32) as u32, 0x8007_0005);
         assert!(is_loader_failure_exit(-2_147_024_891));
         assert!(!sandbox_probe_verdict(Some(-2_147_024_891)));
-        // PowerShell 宿主把 CLR 80070005 包装成 0xFFFF0000(-65536)。
+        // The PowerShell host wraps CLR 80070005 as 0xFFFF0000 (-65536).
         assert_eq!((-65536i32) as u32, 0xFFFF_0000);
         assert!(is_loader_failure_exit(-65536));
         assert!(!sandbox_probe_verdict(Some(-65536)));
-        // 正常退出、普通失败、其它 NTSTATUS、超时(None)都不构成“候选不可用”。
+        // Normal exit, ordinary failure, other NTSTATUS codes, and timeout (None) do not constitute "candidate unusable".
         assert!(sandbox_probe_verdict(Some(0)));
         assert!(sandbox_probe_verdict(Some(1)));
         assert!(sandbox_probe_verdict(Some(127)));
-        assert!(sandbox_probe_verdict(Some(0xC000_0005_u32 as i32))); // ACCESS_VIOLATION:运行期崩溃,非启动即死
+        assert!(sandbox_probe_verdict(Some(0xC000_0005_u32 as i32))); // ACCESS_VIOLATION: a runtime crash, not startup death
         assert!(sandbox_probe_verdict(None));
     }
 
@@ -1271,7 +1292,7 @@ mod tests {
         let profile = default_platform_shell_profile();
         if cfg!(windows) {
             assert_eq!(profile.platform, "windows");
-            // 首候选取决于测试机是否装了 Git Bash。
+            // The first candidate depends on whether Git Bash is installed on the test machine.
             match profile.profile {
                 "windows-git-bash" => assert_eq!(profile.shell_family, "posix"),
                 "windows-pwsh" => assert_eq!(profile.shell_family, "powershell"),
@@ -1309,14 +1330,14 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_path_scan_skips_zero_byte_app_execution_alias() {
-        // WindowsApps 的 WSL bash.exe 别名是 0 字节 reparse point；用 0 字节
-        // 普通文件模拟“is_file() 为 true 但不是真 bash”的形态。
+        // The WindowsApps WSL bash.exe alias is a 0-byte reparse point; use a 0-byte
+        // regular file to simulate the shape "is_file() is true but it is not real bash".
         let alias_dir = tempfile::tempdir().expect("alias dir");
         let real_dir = tempfile::tempdir().expect("real dir");
         fs::write(alias_dir.path().join("bash.exe"), b"").unwrap();
         fs::write(real_dir.path().join("bash.exe"), b"MZfake-git-bash").unwrap();
 
-        // 别名目录在前：应跳过 0 字节候选，命中后面的真实文件。
+        // The alias directory comes first: it should skip the 0-byte candidate and hit the real file after it.
         let path_var =
             std::env::join_paths([alias_dir.path(), real_dir.path()]).expect("join paths");
         assert_eq!(
@@ -1324,7 +1345,7 @@ mod tests {
             Some(real_dir.path().join("bash.exe"))
         );
 
-        // 只有别名时不应误选，让候选链回退到 Program Files 探测 / PowerShell。
+        // With only the alias present it should not be chosen by mistake; the candidate chain falls back to the Program Files probe / PowerShell.
         let alias_only = std::env::join_paths([alias_dir.path()]).expect("join paths");
         assert_eq!(super::find_git_bash_on_path(&alias_only), None);
     }
@@ -1332,13 +1353,13 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_known_wsl_alias_dirs_are_rejected() {
-        // 即使 WindowsApps 目录下出现非 0 字节的 bash.exe，也不应从该目录选取。
+        // Even if a non-0-byte bash.exe appears under the WindowsApps directory, it must not be selected from there.
         let local_appdata = std::env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA");
         let windows_apps = std::path::Path::new(&local_appdata)
             .join("Microsoft")
             .join("WindowsApps");
         assert!(super::is_windows_apps_alias_dir(&windows_apps));
-        // 大小写与结尾斜杠不影响判定。
+        // Case and trailing slashes do not affect the decision.
         let with_slash = format!("{}\\", windows_apps.display().to_string().to_uppercase());
         assert!(super::is_windows_apps_alias_dir(std::path::Path::new(
             &with_slash
@@ -1354,7 +1375,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn find_git_bash_env_override_prefers_liveagent_var() {
-        // 单个测试函数串行覆盖所有 env 场景，避免并行 env 竞态。
+        // A single test function covers all env scenarios serially, avoiding parallel env races.
         let dir = tempfile::tempdir().expect("tempdir");
         let liveagent_bash = dir.path().join("liveagent-bash.exe");
         let claude_bash = dir.path().join("claude-bash.exe");
@@ -1367,11 +1388,11 @@ mod tests {
         std::env::set_var("CLAUDE_CODE_GIT_BASH_PATH", &claude_bash);
         assert_eq!(super::find_git_bash(), Some(liveagent_bash.clone()));
 
-        // LIVEAGENT 指向 App-Execution-Alias 时也必须回退 CLAUDE_CODE。
+        // When LIVEAGENT points at an App-Execution-Alias it must also fall back to CLAUDE_CODE.
         std::env::set_var("LIVEAGENT_GIT_BASH_PATH", &app_execution_alias);
         assert_eq!(super::find_git_bash(), Some(claude_bash.clone()));
 
-        // LIVEAGENT 指向不存在的文件时回退 CLAUDE_CODE。
+        // When LIVEAGENT points at a nonexistent file it falls back to CLAUDE_CODE.
         std::env::set_var(
             "LIVEAGENT_GIT_BASH_PATH",
             dir.path().join("missing-bash.exe"),

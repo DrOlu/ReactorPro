@@ -207,10 +207,13 @@ export function createSubagentTools(params: {
   additionalRoots?: readonly AdditionalProjectRoot[];
   createSubagentToolRegistry?: (workdir: string) => Promise<SubagentToolRegistry>;
   worktreeIpc?: SubagentWorktreeIpc;
-  /** 父对话检查点上下文;仅用于 worktree apply 合并回父工作区前捕获前像,
-   * 不下发给子代理自身的工具注册表(子代理 workdir 是临时目录)。 */
+  /** Parent conversation checkpoint context; used only to capture a pre-image
+   * before a worktree apply merges back into the parent workspace, and is not
+   * passed down to the subagent's own tool registry (the subagent workdir is a
+   * temp directory). */
   checkpoint?: { conversationId: string; turnId: string };
-  /** Plan mode:一切子代理强制 readonly,worktree 请求按参数错误拒绝。 */
+  /** Plan mode: all subagents are forced readonly, and worktree requests are
+   * rejected as a parameter error. */
   forceReadonly?: boolean;
 }): BuiltinToolBundle {
   const store = params.store;
@@ -220,8 +223,10 @@ export function createSubagentTools(params: {
   const readonlyTools = selectReadOnlyTools({
     tools: params.baseTools,
     metadataByName: params.metadataByName,
-    // Plan mode 承诺"本轮不可能发生变更";只读子代理据此也不得继承
-    // isReadOnly:false 的 MCP 业务工具(平时放行是为了调研便利)。
+    // Plan mode promises "no changes can happen this turn"; read-only
+    // subagents therefore must not inherit MCP business tools with
+    // isReadOnly:false (allowing them at other times is for research
+    // convenience).
     strictReadOnly: params.forceReadonly,
   });
   const enqueueWorktreeApply = createSequentialQueue();
@@ -255,7 +260,7 @@ export function createSubagentTools(params: {
       "mode=readonly (default for new agents) gives inspect-only tools — use it for research, review, and discussion. mode=worktree gives file+shell tools inside an isolated git worktree — use it only when file changes are expected or explicitly requested. A resumed agent keeps its previous mode unless you set mode.",
       "apply_policy controls merge-back from a worktree: none (default) never applies, auto applies the patch automatically, explicit applies only when every changed file matches allowed_output_paths.",
       "retain_worktree=true keeps a safely-cleanable worktree for review. Worktrees with unapplied changes or failed agents are always retained.",
-      "Subagents cannot call Agent recursively. Worktree mode must not modify global LiveAgent settings, MCP server configuration, cron tasks, or user-level skills.",
+      "Subagents cannot call Agent recursively. Worktree mode must not modify global ReactorPro settings, MCP server configuration, cron tasks, or user-level skills.",
       "Subagents communicate through SendMessage (to=parent is parent-private; to=* is a shared broadcast); do not use workspace files as a message channel.",
       "Include the new user request and any parent-conversation context each subagent needs in that agent's prompt. The parent conversation is not copied automatically.",
       "Invalid calls start no agents and return a structured error listing the roster and enabled templates — fix every issue and retry with one corrected call.",

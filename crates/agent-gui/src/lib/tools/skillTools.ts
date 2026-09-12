@@ -607,7 +607,7 @@ export function createSkillTools(
   const toolSkillsManager: Tool = {
     name: "SkillsManager",
     description:
-      "Read and manage Skills in LiveAgent's fixed user Skills directory. Use action=read to read a Skill entry file, action=list to inspect the enabled Skills visible to this chat, action=install to import a local directory/archive/HTTP(S) download/GitHub URL, action=clawhub_search to search or browse ClawHub, action=clawhub_install with a ClawHub slug to download and install a Skill from ClawHub, action=create to create a new Skill from a summarized workflow, action=validate to check an enabled managed Skill, action=package to create a .skill archive, and action=delete to permanently delete an installed user Skill. For files referenced inside an enabled Skill, use Read/List/Grep/Glob/Write/Edit/Delete with skill://<baseDir>/... paths; this allows maintaining or optimizing enabled Skills.",
+      "Read and manage Skills in ReactorPro's fixed user Skills directory. Use action=read to read a Skill entry file, action=list to inspect the enabled Skills visible to this chat, action=install to import a local directory/archive/HTTP(S) download/GitHub URL, action=clawhub_search to search or browse ClawHub, action=clawhub_install with a ClawHub slug to download and install a Skill from ClawHub, action=create to create a new Skill from a summarized workflow, action=validate to check an enabled managed Skill, action=package to create a .skill archive, and action=delete to permanently delete an installed user Skill. For files referenced inside an enabled Skill, use Read/List/Grep/Glob/Write/Edit/Delete with skill://<baseDir>/... paths; this allows maintaining or optimizing enabled Skills.",
     parameters: SKILL_MANAGER_PARAMETERS,
   };
 

@@ -155,7 +155,7 @@ export function useGatewaySharedHistory({
         return sharedHistoryItemsRef.current;
       } catch (error) {
         if (sharedHistoryListRequestRef.current === requestState) {
-          setSharedHistoryListError(asErrorMessage(error, "读取已分享历史列表失败"));
+          setSharedHistoryListError(asErrorMessage(error, "Failed to load the shared history list"));
         }
         return sharedHistoryItemsRef.current;
       } finally {
@@ -196,7 +196,7 @@ export function useGatewaySharedHistory({
       setShareStatus(null);
       setShareError(null);
       if (!api) {
-        setShareError("Gateway 尚未连接，无法读取分享状态。");
+        setShareError("Gateway is not connected, unable to read share status.");
         return;
       }
 
@@ -209,7 +209,7 @@ export function useGatewaySharedHistory({
           markSharedConversation(item.id, nextStatus.enabled === true, item);
         })
         .catch((error) => {
-          setShareError(asErrorMessage(error, "读取分享状态失败"));
+          setShareError(asErrorMessage(error, "Failed to read share status"));
         })
         .finally(() => {
           setShareLoading(false);
@@ -240,7 +240,7 @@ export function useGatewaySharedHistory({
           markSharedConversation(item.id, nextStatus.enabled === true, item);
         })
         .catch((error) => {
-          setShareError(asErrorMessage(error, enabled ? "开启分享失败" : "关闭分享失败"));
+          setShareError(asErrorMessage(error, enabled ? "Failed to enable sharing" : "Failed to disable sharing"));
         })
         .finally(() => {
           setShareUpdating(false);
@@ -263,7 +263,7 @@ export function useGatewaySharedHistory({
           markSharedConversation(item.id, nextStatus.enabled === true, item);
         })
         .catch((error) => {
-          setShareError(asErrorMessage(error, "更新分享脱敏设置失败"));
+          setShareError(asErrorMessage(error, "Failed to update share redaction settings"));
         })
         .finally(() => {
           setShareUpdating(false);
@@ -277,7 +277,7 @@ export function useGatewaySharedHistory({
       const id = item.id.trim();
       if (!id) return;
       if (!api) {
-        setSharedManagerError(id, "Gateway 尚未连接，无法读取分享状态。");
+        setSharedManagerError(id, "Gateway is not connected, unable to read share status.");
         return;
       }
 
@@ -290,7 +290,7 @@ export function useGatewaySharedHistory({
           markSharedConversation(id, nextStatus.enabled === true, item);
         })
         .catch((error) => {
-          setSharedManagerError(id, asErrorMessage(error, "读取分享状态失败"));
+          setSharedManagerError(id, asErrorMessage(error, "Failed to read share status"));
         })
         .finally(() => {
           updateIdSet(setSharedManagerLoadingIds, id, false);
@@ -317,7 +317,7 @@ export function useGatewaySharedHistory({
       const id = item.id.trim();
       if (!id) return;
       if (!api) {
-        setSharedManagerError(id, "Gateway 尚未连接，无法关闭分享。");
+        setSharedManagerError(id, "Gateway is not connected, unable to disable sharing.");
         return;
       }
 
@@ -333,7 +333,7 @@ export function useGatewaySharedHistory({
           }
         })
         .catch((error) => {
-          setSharedManagerError(id, asErrorMessage(error, "关闭分享失败"));
+          setSharedManagerError(id, asErrorMessage(error, "Failed to disable sharing"));
         })
         .finally(() => {
           updateIdSet(setSharedManagerUpdatingIds, id, false);
@@ -347,7 +347,7 @@ export function useGatewaySharedHistory({
       const id = item.id.trim();
       if (!id) return;
       if (!api) {
-        setSharedManagerError(id, "Gateway 尚未连接，无法更新分享脱敏设置。");
+        setSharedManagerError(id, "Gateway is not connected, unable to update the share redaction settings.");
         return;
       }
 
@@ -363,7 +363,7 @@ export function useGatewaySharedHistory({
           }
         })
         .catch((error) => {
-          setSharedManagerError(id, asErrorMessage(error, "更新分享脱敏设置失败"));
+          setSharedManagerError(id, asErrorMessage(error, "Failed to update share redaction settings"));
         })
         .finally(() => {
           updateIdSet(setSharedManagerUpdatingIds, id, false);

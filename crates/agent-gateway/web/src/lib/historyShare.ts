@@ -77,7 +77,7 @@ export function buildHistoryShareUrl(token: string, origin = getWindowLocationOr
 export async function fetchSharedHistory(token: string): Promise<SharedHistoryDetail> {
   const normalizedToken = token.trim();
   if (!normalizedToken) {
-    throw new Error("分享链接无效");
+    throw new Error("Invalid share link");
   }
 
   const response = await fetch(
@@ -91,7 +91,7 @@ export async function fetchSharedHistory(token: string): Promise<SharedHistoryDe
   );
 
   if (!response.ok) {
-    let message = response.status === 404 ? "分享链接不存在或已关闭" : "读取分享会话失败";
+    let message = response.status === 404 ? "Share link does not exist or has been closed" : "Failed to read shared conversation";
     try {
       const payload = (await response.json()) as { error?: unknown };
       if (typeof payload.error === "string" && payload.error.trim()) {

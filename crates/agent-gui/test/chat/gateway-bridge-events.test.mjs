@@ -157,7 +157,7 @@ test("gateway bridge retry attempts ride tool_status with the current status and
   controller.queueRetryAttempts([]);
   assert.deepEqual(sent, []);
 
-  controller.queueToolStatus("第 1 轮：模型生成中...");
+  controller.queueToolStatus("Round 1: model generating...");
   controller.queueRetryAttempts([
     { attempt: 1, maxAttempts: 5, errorMessage: "503 service unavailable" },
   ]);
@@ -173,20 +173,20 @@ test("gateway bridge retry attempts ride tool_status with the current status and
     [
       {
         type: "tool_status",
-        status: "第 1 轮：模型生成中...",
+        status: "Round 1: model generating...",
         isCompaction: false,
         conversation_id: "conversation-1",
       },
       {
         type: "tool_status",
-        status: "第 1 轮：模型生成中...",
+        status: "Round 1: model generating...",
         isCompaction: false,
         retryAttempts: [{ attempt: 1, maxAttempts: 5, errorMessage: "503 service unavailable" }],
         conversation_id: "conversation-1",
       },
       {
         type: "tool_status",
-        status: "第 1 轮：模型生成中...",
+        status: "Round 1: model generating...",
         isCompaction: false,
         retryAttempts: [],
         conversation_id: "conversation-1",

@@ -1,9 +1,9 @@
-# 外部链接确认偏好
+# External Link Confirmation Preference
 
-Markdown 外部链接默认显示“打开外部链接”弹框。勾选底部“不再提醒”并点击“打开链接”后，当前链接正常打开，之后所有 Markdown 外部链接直接交给当前平台的打开器；桌面端使用默认浏览器，WebUI 使用新标签页。
+Markdown external links show an "Open external link" dialog by default. After checking "Don't remind me again" at the bottom and clicking "Open link", the current link opens normally, and all subsequent Markdown external links are handed directly to the current platform's opener; the desktop uses the default browser, and WebUI uses a new tab.
 
-只有确认打开时保存偏好。复制链接、关闭弹框或按 Esc 均不保存，再次打开弹框时复选框恢复未勾选。文件链接导航、只读 Markdown 和未完成的流式链接继续沿用原有规则。
+The preference is saved only when opening is confirmed. Copying the link, closing the dialog, or pressing Esc does not save it, and the next time the dialog opens the checkbox is back to unchecked. File link navigation, read-only Markdown, and incomplete streaming links continue to follow the original rules.
 
-偏好由共享 `agent-ui` 组件读取，使用本地 `localStorage` 键 `liveagent:skip-external-link-confirmation:v1` 保存，因此刷新/重启后保留，并立即影响当前界面中已经渲染的其他链接。它属于当前应用/浏览器站点，不跨设备或远端 Agent 同步；清除应用/站点数据会恢复默认提醒。存储不可用时降级为本次运行有效，不阻止打开链接。
+The preference is read by the shared `agent-ui` component and saved under the local `localStorage` key `liveagent:skip-external-link-confirmation:v1`, so it persists across refreshes/restarts and immediately affects other links already rendered in the current interface. It belongs to the current app/browser site and does not sync across devices or to a remote Agent; clearing app/site data restores the default reminder. When storage is unavailable it degrades to being valid only for the current run, without preventing links from opening.
 
-回归测试：`crates/agent-gui/test/chat/external-link-preference.test.mjs`，覆盖默认确认、取消/复制不保存、确认持久化、跨链接生效、模块重载、存储不可用和打开器回退。
+Regression test: `crates/agent-gui/test/chat/external-link-preference.test.mjs`, covering default confirmation, cancel/copy not saving, confirmation persistence, cross-link effect, module reload, storage unavailable, and opener fallback.

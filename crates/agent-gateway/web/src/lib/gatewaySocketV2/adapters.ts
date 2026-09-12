@@ -1,7 +1,10 @@
-// v2 线协议适配层：把 gatewaySocket 公开 API 使用的请求类型字符串与 snake_case
-// UI 载荷编码为 protobuf 帧，并把服务端帧还原为现有归一化器需要的对象形状。
-// bigint 边界：本文件是 64 位整数（生成代码映射为 bigint）的唯一出入口——入站一律 Number()（均为
-// 时间戳/计数，远小于 2^53 无精度损失），出站 BigInt() 收窄；适配层之外不允许出现 bigint。
+// v2 wire-protocol adapter layer: encodes the request type strings and snake_case
+// UI payloads used by the gatewaySocket public API into protobuf frames, and
+// restores server frames to the object shape the existing normalizer expects.
+// bigint boundary: this file is the only entry/exit point for 64-bit integers
+// (generated code maps them to bigint) — inbound always uses Number() (all are
+// timestamps/counts, far below 2^53 so no precision loss), outbound narrows with
+// BigInt(); bigint must not appear outside the adapter layer.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type {
   AgentEnvelope,
@@ -122,9 +125,9 @@ import {
   WorkspaceUnsubscribeRequestSchema,
 } from "@/lib/proto/gen/proto/v2/gateway_ws_pb";
 
-// v2 WebSocket 子协议名（服务端必须回显）。
+// v2 WebSocket subprotocol name (the server must echo it).
 export const GATEWAY_V2_SUBPROTOCOL = "liveagent.v2.pb";
-// ClientHello.protocol_version 的当前取值。
+// Current value of ClientHello.protocol_version.
 export const GATEWAY_V2_PROTOCOL_VERSION = 2;
 
 const textDecoder = new TextDecoder();
@@ -132,7 +135,7 @@ const textDecoder = new TextDecoder();
 type J = Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
-// 基础读写小工具（入站 JSON 载荷是 unknown，出站 proto 需要窄化类型）
+// Basic read/write helpers (inbound JSON payloads are unknown; outbound proto needs narrowed types)
 // ---------------------------------------------------------------------------
 
 function rec(value: unknown): J {
@@ -147,7 +150,7 @@ function trimStr(value: unknown): string {
   return str(value).trim();
 }
 
-// 32 位整数出站：非法值一律回落为 0。
+// 32-bit integer outbound: invalid values always fall back to 0.
 function n32(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
@@ -166,13 +169,13 @@ function optPositiveU32(value: unknown): number | undefined {
   return Number.isInteger(parsed) && parsed > 0 && parsed <= 0xffff_ffff ? parsed : undefined;
 }
 
-// 64 位整数出站边界：number → bigint。
+// 64-bit integer outbound boundary: number → bigint.
 function toI64(value: unknown): bigint {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? BigInt(Math.trunc(parsed)) : 0n;
 }
 
-// 64 位整数入站边界：bigint → number（详见文件头注释）。
+// 64-bit integer inbound boundary: bigint → number (see the file header comment).
 function num(value: number | bigint | undefined): number {
   return Number(value ?? 0);
 }
@@ -181,15 +184,17 @@ function parseJson(text: string): unknown {
   return JSON.parse(text);
 }
 
-// WireBytes：可直接投递给 WebSocket.send 的二进制帧。toBinary 的泛型参数是 ArrayBufferLike，
-// 运行时总是普通 ArrayBuffer，此处统一收窄避免各调用点重复断言。
+// WireBytes: a binary frame that can be passed directly to WebSocket.send.
+// toBinary's generic parameter is ArrayBufferLike, but at runtime it is always a
+// plain ArrayBuffer, so narrow it uniformly here to avoid repeating assertions at
+// each call site.
 export type WireBytes = Uint8Array<ArrayBuffer>;
 
 function wireBytes(bytes: Uint8Array): WireBytes {
   return bytes as WireBytes;
 }
 
-// 网关本地或解码期错误，由 gatewaySocket 统一转为请求失败。
+// Gateway-local or decode-time error, uniformly turned into a request failure by gatewaySocket.
 class GatewayFrameError extends Error {}
 
 function frameError(message: string): never {
@@ -197,7 +202,7 @@ function frameError(message: string): never {
 }
 
 // ---------------------------------------------------------------------------
-// 出站：hello / pong / 请求编码
+// Outbound: hello / pong / request encoding
 // ---------------------------------------------------------------------------
 
 export function encodeHelloFrame(requestId: string, token: string): WireBytes {
@@ -224,8 +229,9 @@ export function encodePongFrame(timestamp: number): WireBytes {
   return wireBytes(toBinary(WebClientFrameSchema, frame));
 }
 
-// 把请求类型字符串与 UI 载荷编码为 WebClientFrame；未知类型抛错。
-// 目标型请求必须携带明确 agentId；目录与全局会话请求不需要目标。
+// Encode a request type string and UI payload into a WebClientFrame; throw on
+// unknown types. Targeted requests must carry an explicit agentId; directory and
+// global conversation requests need no target.
 export function encodeRequestFrame(
   requestId: string,
   type: string,
@@ -322,7 +328,9 @@ type WebFrameCase =
 function webFrame(requestId: string, frameCase: WebFrameCase, value: unknown): WebClientFrame {
   return create(WebClientFrameSchema, {
     requestId,
-    // 受控断言换取 switch 简洁：各分支 value 均为对应 schema 实例，oneof 判别类型无法自动收窄。
+    // A controlled assertion in exchange for a concise switch: each branch's
+    // value is an instance of the corresponding schema, and the oneof
+    // discriminant type cannot be narrowed automatically.
     payload: { case: frameCase, value } as WebClientFrame["payload"],
   });
 }
@@ -378,7 +386,7 @@ function buildChatCommand(body: J) {
   });
 }
 
-/** snake_case 载荷 → ChatRuntimeControls 消息（chat 与 clarify 请求共用）。 */
+/** snake_case payload → ChatRuntimeControls message (shared by chat and clarify requests). */
 function buildRuntimeControls(raw: unknown) {
   if (!raw) return undefined;
   const controls = rec(raw);
@@ -401,7 +409,7 @@ function buildMessageRef(ref: J) {
   });
 }
 
-// 构造直通 GatewayEnvelope，并把 UI 字段映射到对应 proto 载荷臂。
+// Build a passthrough GatewayEnvelope and map UI fields to the corresponding proto payload arm.
 function buildAgentRequest(type: string, body: J): GatewayEnvelope {
   return create(GatewayEnvelopeSchema, { payload: agentRequestPayload(type, body) });
 }
@@ -446,7 +454,7 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
     };
   }
   if (type.startsWith("sftp.")) {
-    // UI 载荷中的 side 与 direction 互为回落；proto 只保留 direction。
+    // In the UI payload, side and direction fall back to each other; proto keeps only direction.
     const direction = trimStr(body.direction) || trimStr(body.side);
     return {
       case: "sftpRequest",
@@ -526,7 +534,7 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
     case "history.workdirs":
       return { case: "historyWorkdirs", value: create(HistoryWorkdirsRequestSchema, {}) };
     case "history.shared_list":
-      // shared_list 通过 memory_manage 直通命令实现，并保持现有结果形状。
+      // shared_list is implemented via the memory_manage passthrough command and keeps the existing result shape.
       return {
         case: "memoryManage",
         value: create(MemoryManageRequestSchema, {
@@ -623,8 +631,9 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           modelsUrl: trimStr(body.models_url),
           providerId: trimStr(body.provider_id),
           isFullUrl: typeof body.is_full_url === "boolean" ? body.is_full_url : undefined,
-          // 字段存在性即语义：调用方没带 custom_headers 才回落到落库配置，带了空
-          // 数组表示草稿把头清空了，桌面端必须按空集发。
+          // Field presence is semantics: only when the caller omits custom_headers
+          // do we fall back to the stored config; passing an empty array means the
+          // draft cleared all headers, and the desktop must send an empty set.
           customHeaders: Array.isArray(body.custom_headers)
             ? create(ProviderCustomHeadersSchema, {
                 headers: body.custom_headers.map((header) =>
@@ -694,8 +703,9 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
       };
     case "apps.installed.list":
       return { case: "installedAppsList", value: create(InstalledAppsListRequestSchema, {}) };
-    // Computer Use 设置页的只读引导状态。action 与桌面端的两条 Tauri 命令同名，
-    // 写动作（安装 / 授权）不在这条通道上——见 proto 的 CuaDriverRequest 注释。
+    // Read-only onboarding state for the Computer Use settings page. action has
+    // the same name as the desktop's two Tauri commands; write actions (install /
+    // authorize) are not on this channel — see the CuaDriverRequest comment in the proto.
     case "cua.driver.probe":
       return {
         case: "cuaDriver",
@@ -927,7 +937,7 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
 }
 
 // ---------------------------------------------------------------------------
-// 入站：服务端帧解码
+// Inbound: server frame decoding
 // ---------------------------------------------------------------------------
 
 export type DecodedServerFrame =
@@ -957,8 +967,8 @@ export function decodeServerFrameBinary(data: ArrayBuffer | Uint8Array): WebServ
   return fromBinary(WebServerFrameSchema, bytes);
 }
 
-// 把一帧 WebServerFrame 归一化为分发单元。agentOnline 用于给 process.state
-// 补齐客户端从 status 事件维护的在线位。
+// Normalize a WebServerFrame into a dispatch unit. agentOnline is used to fill in
+// the online bit for process.state that the client maintains from status events.
 export function decodeServerFrame(
   frame: WebServerFrame,
   options: { agentOnline: boolean },
@@ -1013,7 +1023,8 @@ export function decodeServerFrame(
       }
     }
     case "status":
-      // status 臂身兼二职：带 request_id 是 status.get/chat.prepare 响应，空则为 status.event 广播。
+      // The status arm serves two purposes: with a request_id it is a
+      // status.get/chat.prepare response; empty means a status.event broadcast.
       return requestId
         ? { kind: "response", requestId, agentId, payload: statusPayload(payload.value) }
         : { kind: "event", type: "status.event", agentId, payload: statusPayload(payload.value) };
@@ -1093,7 +1104,7 @@ export function decodeServerFrame(
         payload: historyEventPayload(payload.value),
       };
     case "settingsEvent": {
-      // settings_json 在客户端解析为现有设置事件对象。
+      // settings_json is parsed on the client into the existing settings event object.
       const parsed = settingsEventPayload(payload.value);
       return parsed === null
         ? null
@@ -1162,7 +1173,7 @@ function parseJsonBytes(bytes: Uint8Array): unknown {
 }
 
 // ---------------------------------------------------------------------------
-// 直通响应（AgentEnvelope）→ gatewaySocket 响应对象
+// Passthrough response (AgentEnvelope) → gatewaySocket response object
 // ---------------------------------------------------------------------------
 
 function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: boolean }): unknown {
@@ -1172,7 +1183,7 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
       frameError(payload.value.message || "Request failed");
       break;
     case "historyListResp":
-      // running_conversations 由 gatewaySocket 侧经 chat.activities 帧合并。
+      // running_conversations is merged on the gatewaySocket side via chat.activities frames.
       return {
         conversations: payload.value.conversations.map(conversationSummaryPayload),
         total_count: payload.value.totalCount,
@@ -1460,11 +1471,12 @@ function unmarshalJsonPayload(raw: string): unknown {
 }
 
 // ---------------------------------------------------------------------------
-// gatewaySocket 载荷塑形
+// gatewaySocket payload shaping
 // ---------------------------------------------------------------------------
 
-// 对应 websocketConversationSummaryPayload：protojson UseProtoNames+EmitUnpopulated（全字段恒出现），
-// 64 位数字转 number。
+// Corresponds to websocketConversationSummaryPayload: protojson
+// UseProtoNames+EmitUnpopulated (all fields always present), 64-bit numbers
+// converted to number.
 function conversationSummaryPayload(conversation: ConversationSummary): J {
   return {
     id: conversation.id,
@@ -1535,7 +1547,7 @@ function workspaceActivityPayload(event: WorkspaceActivityEvent): J {
   };
 }
 
-// 对应 session.Status 的 json tag（含 omitempty 语义）。
+// Corresponds to the json tags of session.Status (including omitempty semantics).
 function statusPayload(status: StatusEvent): J {
   const payload: J = {
     online: status.online,
@@ -1560,7 +1572,7 @@ function statusPayload(status: StatusEvent): J {
   return payload;
 }
 
-// 对应 websocketRunActivityPayload（updated_at 为 Unix 毫秒）。
+// Corresponds to websocketRunActivityPayload (updated_at is Unix milliseconds).
 function runActivityPayload(activity: ChatRunActivity | undefined): J | null {
   if (!activity?.runId) return null;
   const payload: J = {
@@ -1610,7 +1622,7 @@ function chatSubscribedPayload(result: ChatSubscribeResult): J {
   };
 }
 
-// 对应 websocketRunningConversationsPayload（workdir 映射为 cwd）。
+// Corresponds to websocketRunningConversationsPayload (workdir maps to cwd).
 function runningConversationPayload(activity: ChatRunActivity): J {
   return {
     conversation_id: activity.conversationId,
@@ -1621,7 +1633,7 @@ function runningConversationPayload(activity: ChatRunActivity): J {
   };
 }
 
-// 对应 websocketChatActivityPayload（可选键仅在非空时出现）。
+// Corresponds to websocketChatActivityPayload (optional keys appear only when non-empty).
 function chatActivityPayload(event: ChatActivityEvent): J {
   const payload: J = {
     conversation_id: event.conversationId,
@@ -1648,7 +1660,7 @@ function chatCommandUpdatePayload(update: ChatCommandUpdate): J {
 }
 
 // ---------------------------------------------------------------------------
-// 终端 / SFTP / 隧道 / 进程载荷（对应 websocket_payloads.go 等）
+// Terminal / SFTP / tunnel / process payloads (corresponds to websocket_payloads.go etc.)
 // ---------------------------------------------------------------------------
 
 export function terminalSessionPayload(session: TerminalSession | undefined): J | null {
@@ -1923,7 +1935,7 @@ function tunnelStatePayload(snapshot: TunnelStateSnapshot): J {
   };
 }
 
-// 托管进程载荷；agent_online 由客户端维护的 status 在线位注入。
+// Managed process payload; agent_online is injected from the client-maintained status online bit.
 function processStatePayload(
   snapshot: ManagedProcessSnapshot | undefined,
   agentOnline: boolean,
@@ -1961,7 +1973,7 @@ function managedProcessResponsePayload(
   const action = resp.action.trim();
   switch (action) {
     case "snapshot":
-      // process.snapshot 返回扁平状态载荷。
+      // process.snapshot returns a flat status payload.
       return processStatePayload(resp.snapshot, agentOnline);
     case "stop":
       return {
@@ -1984,10 +1996,11 @@ function managedProcessResponsePayload(
 }
 
 // ---------------------------------------------------------------------------
-// 终端数据面（/ws/v2/terminal）帧编解码
+// Terminal data plane (/ws/v2/terminal) frame codec
 // ---------------------------------------------------------------------------
 
-// TerminalWireHeader 保持旧自定义帧头字段命名，上层 attach/snapshot/output/error 路由无需感知 proto 化。
+// TerminalWireHeader keeps the old custom frame-header field naming, so upper-layer
+// attach/snapshot/output/error routing needs no awareness of protobuf-ization.
 export type TerminalWireHeader = {
   kind?: string;
   streamId?: string;
@@ -2004,7 +2017,7 @@ export type TerminalWireHeader = {
   session?: unknown;
 };
 
-// agentId 通过 hello.agent_id 显式绑定终端数据面的目标 Agent。
+// agentId explicitly binds the terminal data plane's target Agent via hello.agent_id.
 export function encodeTerminalHelloFrame(token: string, agentId: string): WireBytes {
   const normalizedAgentId = agentId.trim();
   if (!normalizedAgentId) {

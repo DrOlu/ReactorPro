@@ -3,12 +3,13 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 // ============================================================================
-// PR-1 seam 骨架单元测试：注册表分发、未知协议错误文案等价、一次性分发、
-// dev 冻结/生产不冻结、兼容壳与统一入口 llm.stream() 的 wire payload 等价。
+// PR-1 seam skeleton unit tests: registry dispatch, error-message equivalence for unknown protocols,
+// one-shot dispatch, dev freeze / no freeze in production, and wire payload equivalence between the compat shell
+// and the unified llm.stream() entry.
 //
-// 行为等价的总判定基准是 PR-0 golden 两套件零修改通过（见
-// wire-payload-golden.test.mjs / transport-golden.test.mjs）；本文件补充
-// seam 自身的新契约。
+// The overall behavioral-equivalence criterion is that both PR-0 golden suites pass unmodified (see
+// wire-payload-golden.test.mjs / transport-golden.test.mjs); this file adds the new contracts of the
+// seam itself.
 // ============================================================================
 
 const realAnthropic = await import(
@@ -78,7 +79,7 @@ function buildContext() {
   };
 }
 
-/** 在 onPayload 截获 wire payload 后中断请求（同 golden 的捕获通道）。 */
+/** Interrupts the request after capturing the wire payload in onPayload (the same capture channel as golden). */
 async function captureViaEntry(entry, model, context, options = {}) {
   let captured;
   const stream = entry(model, context, {
@@ -92,7 +93,7 @@ async function captureViaEntry(entry, model, context, options = {}) {
   try {
     await stream.result();
   } catch {
-    // onPayload 抛错中断请求属预期。
+    // Throwing in onPayload to interrupt the request is expected.
   }
   assert.ok(captured, "expected wire payload capture");
   return JSON.parse(JSON.stringify(captured));
@@ -103,11 +104,11 @@ test.afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// 注册表分发
+// Registry dispatch
 // ---------------------------------------------------------------------------
 
-test("seam/registry: 五协议各归其所（4×pi-ai + deepseek 原生）", () => {
-  // 触发默认装配（llmService 模块加载即注册，此处显式断言注册表内容）。
+test("seam/registry: five protocols each map to their place (4x pi-ai + native deepseek)", () => {
+  // Triggers the default assembly (loading the llmService module registers them; the registry contents are asserted explicitly here).
   assert.deepEqual(registeredApis().sort(), [
     "anthropic-messages",
     DEEPSEEK_RESPONSES_API,
@@ -127,30 +128,30 @@ test("seam/registry: 五协议各归其所（4×pi-ai + deepseek 原生）", () 
   assert.equal(resolveAdapter(DEEPSEEK_RESPONSES_API), deepSeekAdapter);
 });
 
-test("seam/registry: 未注册协议错误文案与重构前逐字一致", () => {
+test("seam/registry: unregistered-protocol error message matches the pre-refactor text word for word", () => {
   assert.throws(() => resolveAdapter("mock-api"), /^Error: Unsupported model API: mock-api$/);
-  // 经兼容壳走同一路径、同一文案。
+  // Goes through the compat shell along the same path with the same message.
   assert.throws(
     () => streamSimpleByApi(buildModel("mock-api"), buildContext(), { apiKey: "k" }),
     /^Error: Unsupported model API: mock-api$/,
   );
 });
 
-test("seam/registry: 同一协议重复注册不同适配器立即抛错", () => {
+test("seam/registry: registering a different adapter for the same protocol throws immediately", () => {
   const rogue = { apis: ["anthropic-messages"], stream: () => {} };
   assert.throws(
     () => registerAdapter(rogue),
     /Duplicate LLM adapter registration for API: anthropic-messages/,
   );
-  // 同一适配器重复注册幂等（默认装配的 ensure 语义依赖它）。
+  // Re-registering the same adapter is idempotent (the default assembly's ensure semantics depend on it).
   registerAdapter(piAiAdapter);
 });
 
 // ---------------------------------------------------------------------------
-// llm.stream() 信封语义
+// llm.stream() envelope semantics
 // ---------------------------------------------------------------------------
 
-test("seam/llm.stream: 同一请求信封二次分发抛错（一次性分发）", async () => {
+test("seam/llm.stream: dispatching the same request envelope twice throws (one-shot dispatch)", async () => {
   const request = {
     model: buildModel("openai-completions"),
     context: buildContext(),
@@ -165,12 +166,12 @@ test("seam/llm.stream: 同一请求信封二次分发抛错（一次性分发）
   try {
     await first.result();
   } catch {
-    // 中断属预期。
+    // Interruption is expected.
   }
   assert.throws(() => llm.stream(request), /already dispatched/);
 });
 
-test("seam/llm.stream: dev 构建冻结请求信封，生产构建不冻结", async () => {
+test("seam/llm.stream: dev builds freeze the request envelope, production builds do not", async () => {
   setLlmServiceDevModeForTest(true);
   const devRequest = {
     model: buildModel("openai-completions"),
@@ -186,7 +187,7 @@ test("seam/llm.stream: dev 构建冻结请求信封，生产构建不冻结", as
   try {
     await devStream.result();
   } catch {
-    // 中断属预期。
+    // Interruption is expected.
   }
   assert.ok(Object.isFrozen(devRequest), "dev build must freeze the request envelope");
 
@@ -205,13 +206,13 @@ test("seam/llm.stream: dev 构建冻结请求信封，生产构建不冻结", as
   try {
     await prodStream.result();
   } catch {
-    // 中断属预期。
+    // Interruption is expected.
   }
   assert.equal(Object.isFrozen(prodRequest), false, "prod build must not freeze");
 });
 
-test("seam/llm.stream: 测试加载器环境自动探测落到不冻结（import.meta 空壳）", async () => {
-  // 不设 override：detectDevBuild 在 esbuild CJS 转译下 import.meta.env 不存在。
+test("seam/llm.stream: automatic detection in the test loader environment lands on no-freeze (empty import.meta shell)", async () => {
+  // No override is set: under esbuild CJS transpilation import.meta.env does not exist, so detectDevBuild ...
   const request = {
     model: buildModel("openai-completions"),
     context: buildContext(),
@@ -226,16 +227,16 @@ test("seam/llm.stream: 测试加载器环境自动探测落到不冻结（import
   try {
     await stream.result();
   } catch {
-    // 中断属预期。
+    // Interruption is expected.
   }
   assert.equal(Object.isFrozen(request), false);
 });
 
 // ---------------------------------------------------------------------------
-// 兼容壳与统一入口等价
+// Compat shell and unified entry equivalence
 // ---------------------------------------------------------------------------
 
-test("seam/equivalence: 兼容壳与 llm.stream() 产出同一 wire payload", async () => {
+test("seam/equivalence: the compat shell and llm.stream() produce the same wire payload", async () => {
   const context = buildContext();
   const viaShim = await captureViaEntry(
     streamSimpleByApi,
@@ -250,7 +251,7 @@ test("seam/equivalence: 兼容壳与 llm.stream() 产出同一 wire payload", as
   assert.deepEqual(viaService, viaShim);
 });
 
-test("seam/equivalence: deepseek 原生协议经两个入口同样等价", async () => {
+test("seam/equivalence: the native deepseek protocol is equally equivalent through both entries", async () => {
   const context = buildContext();
   const model = buildModel(DEEPSEEK_RESPONSES_API, { provider: "deepseek" });
   const viaShim = await captureViaEntry(streamSimpleByApi, model, context);

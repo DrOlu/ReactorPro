@@ -1,12 +1,14 @@
 /**
- * 子代理运行 → 轨迹 SUBTOOL 行的数据源。
+ * Data source for subagent runs -> trajectory SUBTOOL rows.
  *
- * 子代理的完整轨迹独立持久化在 `subagentRun` 表里，不进主会话事件流——否则一次
- * 8 路并行委托会把中继窗口占满。主事件流只在 `tool_end` 上记 runId，展开时由宿主
- * 预取运行并交给布局层。
+ * A subagent's full trajectory is persisted independently in the `subagentRun` table and does not
+ * enter the main conversation event stream - otherwise a single 8-way parallel delegation would
+ * fill the relay window. The main event stream only records the runId on `tool_end`, and on
+ * expansion the host prefetches the run and hands it to the layout layer.
  *
- * 这里直接解析原始消息数组而不复用 `buildUiMessages`：只需要工具调用的骨架，
- * 走完整的 UI 消息折叠既慢又把宿主类型拖进共享层。
+ * This parses the raw message array directly rather than reusing `buildUiMessages`: only the tool
+ * call skeleton is needed, and going through the full UI message folding is both slower and drags
+ * host types into the shared layer.
  */
 
 import type { TrajectoryStatus, TrajectorySubagentRun } from "./types";
@@ -19,7 +21,7 @@ function finiteOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** 把后端的运行状态字符串归一到轨迹状态；未知值按运行中处理。 */
+/** Normalize the backend's run status string to a trajectory status; unknown values are treated as running. */
 export function normalizeSubagentStatus(value: unknown): TrajectoryStatus {
   switch (value) {
     case "complete":
@@ -42,9 +44,9 @@ type ExtractedTool = {
   callId: string;
   name: string;
   isError: boolean;
-  /** toolCall 所在 assistant 消息的时间戳；消息缺时间时保持 null。 */
+  /** Timestamp of the assistant message containing the toolCall; stays null when the message has no timestamp. */
   startedAt: number | null;
-  /** toolResult 消息的时间戳；结果未回（仍在跑/被中断）时保持 null。 */
+  /** Timestamp of the toolResult message; stays null when the result has not come back (still running/interrupted). */
   endedAt: number | null;
 };
 
@@ -56,10 +58,10 @@ type ExtractedStep = {
 };
 
 /**
- * 从子代理的原始消息数组抽出逐 step 的工具骨架。
+ * Extract a per-step tool skeleton from the subagent's raw message array.
  *
- * @param messages - `messages_json` 解析后的数组，内容不受信任。
- * @returns 按 assistant 消息切分的 step 列表。
+ * @param messages - the array parsed from `messages_json`; its contents are untrusted.
+ * @returns the step list split by assistant message.
  */
 export function extractSubagentSteps(messages: unknown): ExtractedStep[] {
   if (!Array.isArray(messages)) return [];
@@ -78,8 +80,9 @@ export function extractSubagentSteps(messages: unknown): ExtractedStep[] {
         const callId = typeof block.id === "string" ? block.id : "";
         const name = typeof block.name === "string" ? block.name : "";
         if (callId === "" || name === "") continue;
-        // 工具的起点用 assistant 消息自身的时间戳；它是布局层能拿到的最接近
-        // 「这次调用何时发起」的真实信号，不再与整段 step 共用同一跨度。
+        // The tool's start uses the assistant message's own timestamp; it is the truest signal the
+        // layout layer can get for "when this call was initiated", so it no longer shares the same
+        // span as the whole step.
         const tool: ExtractedTool = {
           callId,
           name,
@@ -106,7 +109,7 @@ export function extractSubagentSteps(messages: unknown): ExtractedStep[] {
         tool.isError = message.isError === true;
         if (timestamp !== null) tool.endedAt = timestamp;
       }
-      // 工具结果的时间戳比 assistant 消息更接近这一步的真实结束点。
+      // The tool result's timestamp is closer to this step's real end point than the assistant message.
       const owner = steps.at(-1);
       if (owner !== undefined && timestamp !== null) owner.endedAt = timestamp;
     }
@@ -116,10 +119,10 @@ export function extractSubagentSteps(messages: unknown): ExtractedStep[] {
 }
 
 /**
- * 组装一次子代理运行的轨迹视图。
+ * Assemble the trajectory view for one subagent run.
  *
- * @param params - 运行元数据与其原始消息数组。
- * @returns 布局层可直接展开成 SUBTOOL 行的运行。
+ * @param params - the run metadata and its raw message array.
+ * @returns a run the layout layer can expand directly into SUBTOOL rows.
  */
 export function buildTrajectorySubagentRun(params: {
   runId: string;
@@ -144,10 +147,10 @@ export function buildTrajectorySubagentRun(params: {
 }
 
 /**
- * 合并一次运行的多个分段消息。
+ * Merge the multiple segment messages of one run.
  *
- * @param segments - 后端返回的分段，含 `messagesJson`。
- * @returns 按分段顺序拼接的消息数组；解析失败的分段被跳过。
+ * @param segments - the segments returned by the backend, containing `messagesJson`.
+ * @returns the message array concatenated in segment order; segments that fail to parse are skipped.
  */
 export function concatSubagentSegmentMessages(segments: unknown): unknown[] {
   if (!Array.isArray(segments)) return [];
@@ -160,7 +163,7 @@ export function concatSubagentSegmentMessages(segments: unknown): unknown[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) out.push(...parsed);
     } catch {
-      // 单个分段损坏只丢该段，其余照常展开。
+      // A single corrupt segment only drops that segment; the rest still expand normally.
     }
   }
   return out;

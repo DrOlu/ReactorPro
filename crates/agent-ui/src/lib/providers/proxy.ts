@@ -3,20 +3,27 @@ import { invoke } from "@liveagent/app/shims/tauriCore";
 
 export const LIVEAGENT_PROXY_TOKEN_HEADER = "x-liveagent-proxy-token";
 export const LIVEAGENT_UPSTREAM_ORIGIN_HEADER = "x-liveagent-upstream-origin";
-// 完整 URL 模式下携带最终上游地址。本地反代会忽略 SDK 自动追加的路径，
-// 但仍保留 SDK 请求所需的查询参数（例如 Gemini 的 alt=sse）。
+// In full-URL mode, carries the final upstream address. The local reverse proxy
+// ignores the path the SDK appends automatically, but still preserves the query
+// parameters the SDK request needs (e.g. Gemini's alt=sse).
 export const LIVEAGENT_UPSTREAM_URL_HEADER = "x-liveagent-upstream-url";
-// 上游头覆盖包：base64(utf8(JSON))。WebView 的 fetch 会静默丢弃 User-Agent /
-// Cookie / Referer 等 forbidden header names，SDK 也可能自行注入同名头，所以最终
-// 头集经这一条通道下发，由本地反代在转发前作为最后一步覆盖写入上游请求——
-// “自定义头覆盖内置默认头”的唯一裁决点就在那里。
+// Upstream header override package: base64(utf8(JSON)). The WebView's fetch
+// silently drops forbidden header names such as User-Agent / Cookie / Referer, and
+// the SDK may inject headers with the same names, so the final header set is sent
+// through this one channel and the local reverse proxy applies it to the upstream
+// request as the last step before forwarding -- that is the single decision point
+// for "custom headers override built-in defaults".
 export const LIVEAGENT_UPSTREAM_HEADERS_HEADER = "x-liveagent-upstream-headers";
-// 布尔标记头：声明该请求经系统代理出网。代理地址/凭据只存于桌面 Rust 侧，
-// 由本地反代按此头选择带代理的 client（x-liveagent-* 头不会转发给上游）。
+// Boolean flag header: declares that this request egresses through the system
+// proxy. The proxy address/credentials live only on the desktop Rust side, and the
+// local reverse proxy picks the proxied client based on this header (x-liveagent-*
+// headers are not forwarded upstream).
 export const LIVEAGENT_USE_SYSTEM_PROXY_HEADER = "x-liveagent-use-system-proxy";
 
-// 鉴权头不进覆盖包：它们不属浏览器禁止名（常规通道必然送达），且是保留头用户
-// 改不了，没有覆盖需求——不必把密钥再复制一份进旁路通道。
+// Auth headers do not go into the override package: they are not browser-forbidden
+// names (so the normal channel always delivers them) and are reserved headers the
+// user cannot change, so there is no override need -- no reason to copy the secret
+// into a side channel again.
 const UPSTREAM_HEADER_OVERRIDE_EXCLUDED_KEYS = new Set([
   "authorization",
   "x-api-key",
@@ -43,8 +50,9 @@ export function encodeUpstreamHeaderOverrides(headers: Record<string, string>): 
   }
   if (Object.keys(overrides).length === 0) return undefined;
 
-  // base64 而非裸 JSON：既杜绝取值里的 CR/LF 造成 header 注入，也免去引号与逗号
-  // 在 header 值里的解析歧义。
+  // base64 rather than raw JSON: it both prevents CR/LF in values from causing
+  // header injection and removes the parsing ambiguity of quotes and commas in a
+  // header value.
   const encoded = new TextEncoder().encode(JSON.stringify(overrides));
   if (encoded.byteLength > UPSTREAM_HEADER_OVERRIDE_MAX_BYTES) {
     throw new Error(
@@ -92,7 +100,7 @@ async function getProxyServerInfo(): Promise<ProxyServerInfo> {
   return proxyServerInfoPromise;
 }
 
-/** 各代理入口共用的 URL 安全校验：绝对地址 + http(s) + 禁内嵌凭据。 */
+/** URL safety validation shared by all proxy entry points: absolute address + http(s) + no embedded credentials. */
 function parseAbsoluteHttpUrl(rawUrl: string, label: string): URL {
   let parsed: URL;
   try {
@@ -182,27 +190,31 @@ export type PreparedUpstreamProxyRequest = {
   headers: Record<string, string>;
 };
 
-/** 本地反代的路径段仅用于区分链路（Rust 侧不校验取值），hub = 商店类出网。 */
+/** The local reverse proxy's path segment only distinguishes the link (the Rust side does not validate the value); hub = store-type egress. */
 const HUB_PROXY_ROUTE = "hub";
 
 /**
- * 把任意完整上游 URL 改写为经本地反代的请求：路径与查询原样保留，
- * origin 移入 upstream-origin 头。恒带 use-system-proxy —— 反代按应用代理
- * 配置出网（未启用=直连，配置异常 502 fail fast，绝不静默降级为直连）。
+ * Rewrite any complete upstream URL into a request through the local reverse
+ * proxy: path and query are preserved as-is, and origin moves into the
+ * upstream-origin header. use-system-proxy is always set -- the reverse proxy
+ * egresses per the app proxy config (disabled = direct, config error = 502 fail
+ * fast, never a silent fallback to direct).
  */
 export async function prepareUpstreamProxyRequest(
   targetUrl: string,
 ): Promise<PreparedUpstreamProxyRequest> {
   const parsed = parseAbsoluteHttpUrl(targetUrl, "Upstream URL");
-  // “//” 开头的 pathname 会被 Rust 侧 Url::join 当作 scheme-relative 引用
-  // 改写上游主机，必须拒绝（Rust build_target_url 另有同款后盾）。
+  // A pathname starting with "//" would be treated by the Rust side's Url::join as
+  // a scheme-relative reference rewriting the upstream host, so it must be rejected
+  // (Rust build_target_url has the same backstop).
   if (parsed.pathname.startsWith("//")) {
     throw new Error("Upstream URL path must not begin with //");
   }
 
   const proxyServerInfo = await getProxyServerInfo();
-  // 根路径映射为空串：/proxy/hub/ 不匹配任何反代路由（{*rest} 要求非空），
-  // /proxy/hub 才会被 build_target_url 还原成上游的 “/”。
+  // The root path maps to an empty string: /proxy/hub/ matches no reverse-proxy
+  // route ({*rest} requires non-empty), while /proxy/hub is restored by
+  // build_target_url to the upstream "/".
   const pathname = parsed.pathname === "/" ? "" : parsed.pathname;
   return {
     url: `${proxyServerInfo.baseUrl}/proxy/${HUB_PROXY_ROUTE}${pathname}${parsed.search}`,

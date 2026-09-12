@@ -4,18 +4,24 @@ import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 子 agent 消息总线的快照拼在 systemPrompt 里，而 systemPrompt 排在全部消息之前。
-// 每轮重刷快照 = 每次子 agent 投递都把 system 块连同其后的全部历史打穿。
-// 但总线不能像 taskList 那样整体冻结 —— 延迟投递是功能回退。
-// 因此：快照按“压缩纪元”冻结，run 内新到的消息渲染成增量块经 override.wireTailText
-// 交给 runner——runner 累积后只挂到每次出站请求上，agent 运行时状态、
-// emittedMessages 与持久化始终不含它。这组用例盯住：
-//   ① 无新增消息时不产生任何额外内容（onBeforeNextTurn 交回 null）
-//   ② 有新增消息时 systemPrompt 字节不变，增量当轮经 wireTailText 送达且不进消息列表
-//   ③ 已投递的增量在后续轮经累积器原样重放（防“一次性追加下一轮又变回去”的回退）
-//   ④ 没有安全锚点时不推进游标，下一轮补投，消息不丢
-//   ⑤ 压缩边界重新冻结快照与游标
-//   ⑥ 压缩边界重新冻结读失败时游标退回，增量下一轮经 wireTailText 补投
+// The sub-agent message bus snapshot is assembled into systemPrompt, and systemPrompt sits before
+// all messages. Refreshing the snapshot every round = every sub-agent delivery blows through the
+// system block together with all the history after it. But the bus cannot be frozen wholesale the
+// way taskList is -- delayed delivery is a functional regression. Therefore: the snapshot is frozen
+// per "compaction epoch", and messages arriving during the run are rendered as delta blocks handed
+// to the runner via override.wireTailText -- the runner accumulates them and attaches them only to
+// each outbound request; the agent runtime state, emittedMessages, and persistence never contain
+// them. This set of cases watches:
+//   1. No new messages -> no extra content is produced (onBeforeNextTurn returns null)
+//   2. With new messages -> systemPrompt bytes are unchanged, and the delta is delivered that round
+//      via wireTailText without entering the message list
+//   3. An already-delivered delta is replayed as-is in later rounds through the accumulator
+//      (guarding against the "append once, then revert next round" regression)
+//   4. With no safe anchor the cursor does not advance; it is delivered next round and no message
+//      is lost
+//   5. The compaction boundary re-freezes the snapshot and cursor
+//   6. When the re-freeze read fails at the compaction boundary, the cursor rolls back and the
+//      delta is delivered next round via wireTailText
 
 const agentRunnerPath = fileURLToPath(
   new URL("../../src/lib/chat/runner/agentRunner.ts", import.meta.url),
@@ -33,7 +39,7 @@ const fileToolStatePath = fileURLToPath(
   new URL("../../src/lib/tools/fileToolState.ts", import.meta.url),
 );
 
-// bus.ts 保持真实实现：冻结/增量的都是它的输出字节，mock 掉就测不到东西了。
+// bus.ts stays a real implementation: both the frozen and delta content are its output bytes, so mocking it out would leave nothing to test.
 let runAssistantWithToolsScenario = async () => {
   throw new Error("scenario was not installed");
 };
@@ -59,8 +65,9 @@ const loader = createTsModuleLoader({
       async resolveRuntimePlatform() {
         return "win32";
       },
-      // buildToolsSuffix（turn runner 起始的用量环 fixed 校准）会走到这三个
-      // 纯函数；整模块替换的桩必须补齐，否则 turn 一进门就抛错。
+      // buildToolsSuffix (the usage-ring fixed calibration at the start of the turn runner) reaches
+      // these three pure functions; the whole-module replacement stub must fill them in, otherwise
+      // the turn throws as soon as it starts.
       normalizeRuntimePlatform(value) {
         return value === "windows" || value === "macos" || value === "linux" ? value : undefined;
       },
@@ -99,7 +106,7 @@ const { runAgentConversationTurn } = loader.loadModule(
   "src/pages/chat/turns/runAgentConversationTurn.ts",
 );
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
-// 出站挂载模拟需要与 runner 完全同一份锚点判定逻辑，直接加载真实实现。
+// The outbound attachment simulation needs exactly the same anchor resolution logic as the runner, so load the real implementation directly.
 const { attachPinnedTailBlocks, resolveTailBlockAnchorId } = loader.loadModule(
   "src/lib/chat/context/contextTailBlock.ts",
 );
@@ -169,17 +176,17 @@ function createHookLifecycle() {
   };
 }
 
-/** 可变的 bus 存储：测试用例在轮次之间往里投递消息，模拟子 agent 送信。 */
+/** Mutable bus store: test cases deliver messages into it between rounds, simulating sub-agent sends. */
 function createBusStore(initialMessages = []) {
   let messages = [...initialMessages];
-  // -1 表示不注入失败；否则先放过 N 次读取，第 N+1 次抛错。
+  // -1 means no injected failure; otherwise let N reads pass, then throw on the N+1th.
   let readsBeforeFailure = -1;
   const calls = [];
   return {
     deliver(...next) {
       messages = [...messages, ...next];
     },
-    /** 放过 skip 次读取后让下一次读取抛错，用来精确命中压缩边界的那次重新冻结。 */
+    /** Let skip reads pass, then make the next read throw, to precisely hit the re-freeze at the compaction boundary. */
     failReadAfter(skip) {
       readsBeforeFailure = skip;
     },
@@ -223,7 +230,7 @@ function createHarness({ busMessages, compactDuringRun } = {}) {
     systemPrompts,
     requestMessages,
     overrides: [],
-    /** 每轮出站请求实际发出的消息列表（含 runner 挂载的累积尾部块）。 */
+    /** Message list actually sent in each round's outbound request (including the accumulated tail blocks attached by the runner). */
     outboundRequests: [],
     params: {
       providerId: "codex",
@@ -303,15 +310,18 @@ function createHarness({ busMessages, compactDuringRun } = {}) {
 }
 
 /**
- * 工具循环。`beforeRound[n]` 在第 n 轮的 onBeforeNextTurn 之前执行，
- * 用来模拟“子 agent 在这一轮投递了消息”。
+ * Tool loop. `beforeRound[n]` runs before the nth round's onBeforeNextTurn and is used to simulate
+ * "a sub-agent delivered a message in this round".
  *
- * 严格模拟 agentRunner 的运行时状态与尾部投递累积器，这是本组用例的关键保真点：
- * - stateMessages 对应 agent.state.messages，永不包含尾部块；
- * - accumulated 对应 accumulatedWireTailBlocks：带 wireTailText 的 override 追加
- *   （连同首次解析到的锚点 toolCallId 一起钉死），不带的（压缩/重冻结分支）清空；
- * - 每轮出站请求 = stateMessages 加上（若有累积）经 attachPinnedTailBlocks
- *   重挂到各自钉死锚点的尾部块，记录进 harness.outboundRequests 供断言。
+ * Faithfully simulates agentRunner's runtime state and tail-delivery accumulator; this is the key
+ * fidelity point of this test set:
+ * - stateMessages corresponds to agent.state.messages and never contains tail blocks;
+ * - accumulated corresponds to accumulatedWireTailBlocks: overrides with wireTailText append
+ *   (pinned down together with the anchor toolCallId resolved the first time); those without it
+ *   (the compaction/re-freeze branch) clear it;
+ * - each round's outbound request = stateMessages plus (if anything accumulated) the tail blocks
+ *   re-attached to their pinned anchors via attachPinnedTailBlocks, recorded into
+ *   harness.outboundRequests for assertions.
  */
 function toolRounds(harness, { rounds = 2, beforeRound = {}, anchorOverrides = {} } = {}) {
   return async (params) => {
@@ -348,8 +358,9 @@ function toolRounds(harness, { rounds = 2, beforeRound = {}, anchorOverrides = {
       });
       harness.overrides.push(override ?? null);
       if (override) {
-        // applyTurnContextOverride：wireTailText 只进累积器，并在此刻把锚点钉死；
-        // 运行时消息列表换成 override 的消息列表（不含尾部块）。
+        // applyTurnContextOverride: wireTailText goes only into the accumulator and pins the anchor
+        // at this moment; the runtime message list is swapped for the override's message list
+        // (without tail blocks).
         if (override.wireTailText) {
           const anchorToolCallId = resolveTailBlockAnchorId(override.context.messages);
           if (anchorToolCallId) {
@@ -391,37 +402,37 @@ function tailTexts(messages) {
 }
 
 // ---------------------------------------------------------------------------
-// ① 无新增消息：不产生任何额外内容
+// 1. No new messages: no extra content is produced
 
-test("run 内没有新增 bus 消息时不产生任何额外内容", async () => {
+test("no extra content is produced when no new bus messages arrive during the run", async () => {
   const harness = createHarness({ busMessages: [busMessage(1, "delivered before the run")] });
   await runWithScenario(toolRounds(harness), harness.params);
 
   assert.deepEqual(
     harness.overrides,
     [null, null],
-    "没有新增消息时 onBeforeNextTurn 必须交回 null，不得交回续跑上下文",
+    "When there are no new messages, onBeforeNextTurn must return null and must not return a continuation context",
   );
 
-  // run 起始的快照仍在 system 段里，且全程未变。
+  // The snapshot from the start of the run is still in the system section and unchanged throughout.
   const unique = new Set(harness.systemPrompts.map((entry) => entry.systemPrompt));
-  assert.equal(unique.size, 1, `systemPrompt 在 run 内发生了漂移：${[...unique].join("\n---\n")}`);
-  assert.match([...unique][0], /## LiveAgent Message Bus/);
+  assert.equal(unique.size, 1, `systemPrompt drifted during the run: ${[...unique].join("\n---\n")}`);
+  assert.match([...unique][0], /## ReactorPro Message Bus/);
   assert.match([...unique][0], /delivered before the run/);
 
-  // 消息尾部没有任何增量块。
+  // The message tail contains no delta blocks.
   for (const entry of harness.requestMessages) {
     assert.ok(
       !tailTexts(entry.messages).some((text) => text.includes("new messages")),
-      `${entry.label} 出现了不该有的增量块`,
+      `${entry.label} contained an unexpected delta block`,
     );
   }
 });
 
 // ---------------------------------------------------------------------------
-// ② 有新增消息：systemPrompt 字节不变，增量当轮经 wireTailText 送达
+// 2. New messages: systemPrompt bytes unchanged, delta delivered that round via wireTailText
 
-test("子 agent 投递后 systemPrompt 字节不变，增量当轮经 wireTailText 送达", async () => {
+test("after a sub-agent delivery systemPrompt bytes are unchanged and the delta is delivered that round via wireTailText", async () => {
   const harness = createHarness({ busMessages: [busMessage(1, "delivered before the run")] });
   await runWithScenario(
     toolRounds(harness, {
@@ -434,42 +445,42 @@ test("子 agent 投递后 systemPrompt 字节不变，增量当轮经 wireTailTe
   assert.equal(
     unique.size,
     1,
-    `增量投递不得改写 systemPrompt：${JSON.stringify(harness.systemPrompts, null, 2)}`,
+    `Delta delivery must not rewrite systemPrompt: ${JSON.stringify(harness.systemPrompts, null, 2)}`,
   );
   assert.ok(
     ![...unique][0].includes("arrived mid run"),
-    "run 内新到的消息不得被塞回 systemPrompt",
+    "Messages arriving during the run must not be pushed back into systemPrompt",
   );
 
   const continuation = harness.overrides[0];
-  assert.ok(continuation?.context, "有新增消息时必须交回续跑上下文");
-  assert.ok(continuation.wireTailText, "增量必须经 wireTailText 交给 runner");
-  assert.match(continuation.wireTailText, /^## LiveAgent Message Bus \(new messages\)/);
+  assert.ok(continuation?.context, "A continuation context must be returned when there are new messages");
+  assert.ok(continuation.wireTailText, "The delta must be handed to the runner via wireTailText");
+  assert.match(continuation.wireTailText, /^## ReactorPro Message Bus \(new messages\)/);
   assert.match(continuation.wireTailText, /arrived mid run/);
-  // 增量只走线上：override 的消息列表本身不得包含它，防止泄漏进持久化与记忆抽取。
+  // The delta goes online only: the override's message list must not contain it, preventing leakage into persistence and memory extraction.
   assert.ok(
     !tailTexts(continuation.context.messages).some((text) => text.includes("arrived mid run")),
-    "增量块不得写进 override 的消息列表",
+    "Delta blocks must not be written into the override's message list",
   );
   assert.equal(
     continuation.context.systemPrompt,
     [...unique][0],
-    "续跑上下文的 systemPrompt 必须与冻结值逐字节一致",
+    "The continuation context's systemPrompt must match the frozen value byte for byte",
   );
 
-  // 下一轮出站请求必须挂上这份增量，且只挂一份。
+  // The next round's outbound request must attach this delta, and only once.
   const nextOutbound = harness.outboundRequests.find((entry) => entry.round === 2);
-  assert.ok(nextOutbound, "第 2 轮必须发出出站请求");
+  assert.ok(nextOutbound, "Round 2 must issue an outbound request");
   const attached = tailTexts(nextOutbound.messages).filter((text) =>
     text.includes("arrived mid run"),
   );
-  assert.equal(attached.length, 1, "增量块必须挂到下一轮出站请求上，且只挂一份");
+  assert.equal(attached.length, 1, "The delta block must be attached to the next round's outbound request, and only once");
 });
 
 // ---------------------------------------------------------------------------
-// ③ 已挂上的增量在后续轮原样重放（关键回退防线）
+// 3. An attached delta is replayed as-is in later rounds (key regression guard)
 
-test("已投递的增量块在后续轮原样重放且不重复投递", async () => {
+test("a delivered delta block is replayed as-is in later rounds and not delivered twice", async () => {
   const harness = createHarness({ busMessages: [busMessage(1, "before the run")] });
   await runWithScenario(
     toolRounds(harness, {
@@ -480,24 +491,25 @@ test("已投递的增量块在后续轮原样重放且不重复投递", async ()
   );
 
   const roundOne = harness.overrides[0];
-  assert.ok(roundOne?.wireTailText, "第 1 轮必须经 wireTailText 交回增量");
+  assert.ok(roundOne?.wireTailText, "Round 1 must return the delta via wireTailText");
   const block = roundOne.wireTailText;
   assert.match(block, /arrived mid run/);
 
-  // 第 2、3 轮没有新增消息 → 不再交回 override，游标不重复投递。
+  // Rounds 2 and 3 have no new messages -> no override is returned, and the cursor does not re-deliver.
   assert.deepEqual(harness.overrides.slice(1), [null, null]);
 
-  // 但累积器让增量块留在后续每轮的出站请求上，且字节完全一致、只有一份。
+  // But the accumulator keeps the delta block on each later round's outbound request, byte-identical and present only once.
   const laterOutbound = harness.outboundRequests.filter((entry) => entry.round >= 2);
-  assert.ok(laterOutbound.length >= 3, `期望至少 3 次后续出站请求，实际 ${laterOutbound.length}`);
+  assert.ok(laterOutbound.length >= 3, `expected at least 3 subsequent outbound requests, got ${laterOutbound.length}`);
   for (const entry of laterOutbound) {
     const replayed = tailTexts(entry.messages).filter((text) => text.includes("arrived mid run"));
-    assert.equal(replayed.length, 1, `第 ${entry.round} 轮增量块必须原样重放且不得重复挂载`);
-    assert.equal(replayed[0], block, "重放的字节必须与首次投递完全一致");
+    assert.equal(replayed.length, 1, `Round ${entry.round}'s delta block must be replayed as-is and must not be attached more than once`);
+    assert.equal(replayed[0], block, "The replayed bytes must be exactly identical to the first delivery");
   }
 
-  // 只断言"内容一致"不够：块搬到另一条消息上时内容照样一致，但上一轮挂过它的
-  // 那条消息字节变回去了，前缀从它开始整段作废。锚点必须钉死在同一条消息上。
+  // Asserting "same content" is not enough: the content stays the same when a block moves to
+  // another message, but the message it was attached to in the previous round reverts its bytes,
+  // invalidating the whole prefix from that point on. The anchor must be pinned to the same message.
   const anchorOf = (entry) =>
     entry.messages.find(
       (message) =>
@@ -506,17 +518,17 @@ test("已投递的增量块在后续轮原样重放且不重复投递", async ()
         message.content.some((item) => item.type === "text" && item.text === block),
     )?.toolCallId;
   const anchors = laterOutbound.map(anchorOf);
-  assert.ok(anchors[0], "第 2 轮必须能定位到承载增量块的消息");
+  assert.ok(anchors[0], "Round 2 must be able to locate the message carrying the delta block");
   for (const [index, anchor] of anchors.entries()) {
     assert.equal(
       anchor,
       anchors[0],
-      `第 ${laterOutbound[index].round} 轮的增量块搬家了：锚点从 ${anchors[0]} 变成 ${anchor}，` +
-        "上一轮挂过块的消息字节随之变回去，前缀从它开始整段作废",
+      `Round ${laterOutbound[index].round}'s delta block moved: the anchor changed from ${anchors[0]} to ${anchor}, ` +
+        "so the message it was attached to last round reverts its bytes and the whole prefix from it is invalidated",
     );
   }
 
-  // 同一条锚点消息在各轮之间必须逐字节稳定。
+  // The same anchor message must be byte-stable across rounds.
   const anchorMessage = (entry) =>
     entry.messages.find(
       (message) => message.role === "toolResult" && message.toolCallId === anchors[0],
@@ -526,49 +538,49 @@ test("已投递的增量块在后续轮原样重放且不重复投递", async ()
     assert.equal(
       JSON.stringify(anchorMessage(entry)),
       baseline,
-      `第 ${entry.round} 轮的锚点消息字节与首次投递时不一致`,
+      `Round ${entry.round}'s anchor message bytes differ from the first delivery`,
     );
   }
 });
 
 // ---------------------------------------------------------------------------
-// ④ 没有安全锚点时不推进游标，下一轮重试
+// 4. With no safe anchor the cursor does not advance; retry next round
 
-test("尾部只有 display-image 工具结果时不投递，下一轮补投且不丢消息", async () => {
+test("with only a display-image tool result at the tail nothing is delivered; it is topped up next round without losing the message", async () => {
   const harness = createHarness();
   await runWithScenario(
     toolRounds(harness, {
       rounds: 2,
-      // 第 1 轮的工具结果是 display-image：净化会整体替换 content，不能当锚点。
+      // Round 1's tool result is display-image: sanitization replaces the content wholesale, so it cannot serve as an anchor.
       anchorOverrides: { 1: { toolName: "Image", details: { kind: "display_image" } } },
       beforeRound: { 1: () => harness.bus.deliver(busMessage(1, "must not be lost")) },
     }),
     harness.params,
   );
 
-  assert.equal(harness.overrides[0], null, "没有安全锚点时不得交回续跑上下文");
+  assert.equal(harness.overrides[0], null, "With no safe anchor, no continuation context may be returned");
 
   const secondRound = harness.overrides[1];
-  assert.ok(secondRound?.wireTailText, "下一轮出现安全锚点后必须经 wireTailText 补投");
+  assert.ok(secondRound?.wireTailText, "Once a safe anchor appears in the next round, it must be topped up via wireTailText");
   assert.match(secondRound.wireTailText, /must not be lost/);
   assert.ok(
     !tailTexts(secondRound.context.messages).some((text) => text.includes("must not be lost")),
-    "补投的增量同样只走线上，不得写进 override 的消息列表",
+    "The topped-up delta likewise goes online only and must not be written into the override's message list",
   );
 
-  // 补投后的出站请求必须挂上这条消息，且只挂一份。
+  // The outbound request after the top-up must attach this message, and only once.
   const finalOutbound = harness.outboundRequests.find((entry) => entry.round === 3);
-  assert.ok(finalOutbound, "补投后的一轮必须发出出站请求");
+  assert.ok(finalOutbound, "The round after the top-up must issue an outbound request");
   const attached = tailTexts(finalOutbound.messages).filter((text) =>
     text.includes("must not be lost"),
   );
-  assert.equal(attached.length, 1, "游标未推进，消息在下一轮原样补投");
+  assert.equal(attached.length, 1, "The cursor did not advance, so the message is topped up as-is next round");
 });
 
 // ---------------------------------------------------------------------------
-// ⑤ 压缩边界重新冻结快照与游标
+// 5. Compaction boundary re-freezes the snapshot and cursor
 
-test("run 内压缩后 bus 快照重新冻结，增量不重复投递", async () => {
+test("after in-run compaction the bus snapshot is re-frozen and the delta is not delivered twice", async () => {
   let compactionsLeft = 1;
   const harness = createHarness({
     compactDuringRun: () =>
@@ -588,25 +600,25 @@ test("run 内压缩后 bus 快照重新冻结，增量不重复投递", async ()
     harness.params,
   );
 
-  // 第 1 轮压缩：续跑上下文的 systemPrompt 必须带上重新冻结的快照。
+  // Round 1 compaction: the continuation context's systemPrompt must carry the re-frozen snapshot.
   const continuation = harness.overrides[0];
   assert.ok(continuation?.context);
-  assert.match(continuation.context.systemPrompt, /## LiveAgent Message Bus/);
+  assert.match(continuation.context.systemPrompt, /## ReactorPro Message Bus/);
   assert.match(continuation.context.systemPrompt, /arrived before compaction/);
-  assert.deepEqual(continuation.emittedMessages, [], "压缩分支交回的 emittedMessages 必须清空");
+  assert.deepEqual(continuation.emittedMessages, [], "The emittedMessages returned by the compaction branch must be emptied");
 
-  // run 起始时 bus 为空，快照段当时并不存在 —— 证明快照确实在压缩边界重算过。
+  // At the start of the run the bus was empty, so the snapshot section did not exist then -- proving the snapshot really was recomputed at the compaction boundary.
   const preSend = harness.systemPrompts.find((entry) => entry.label === "pre-send");
   assert.equal(preSend.systemPrompt, BASE_SYSTEM_PROMPT);
 
-  // 游标一并重置：第 2 轮不得把同一条消息再投递一次。
-  assert.equal(harness.overrides[1], null, "已进入快照的消息不得再以增量形式重复投递");
+  // The cursor is reset as well: round 2 must not deliver the same message again.
+  assert.equal(harness.overrides[1], null, "A message already in the snapshot must not be re-delivered as a delta");
 });
 
 // ---------------------------------------------------------------------------
-// ⑥ 压缩边界重新冻结时读失败：游标退回快照覆盖的位置，消息不丢
+// 6. Read failure during the compaction-boundary re-freeze: the cursor rolls back to the position covered by the snapshot, no message lost
 
-test("压缩边界重新冻结读失败时游标退回，增量下一轮补投", async () => {
+test("when the re-freeze read fails at the compaction boundary the cursor rolls back and the delta is topped up next round", async () => {
   let compactionsLeft = 1;
   const harness = createHarness({
     compactDuringRun: () =>
@@ -624,7 +636,7 @@ test("压缩边界重新冻结读失败时游标退回，增量下一轮补投",
       beforeRound: {
         1: () => {
           harness.bus.deliver(busMessage(1, "must survive the failed refreeze"));
-          // 放过本轮渲染增量的那次读取，让压缩之后的重新冻结读失败。
+          // Let this round's read that renders the delta pass, so the re-freeze after compaction fails to read.
           harness.bus.failReadAfter(1);
         },
       },
@@ -632,28 +644,29 @@ test("压缩边界重新冻结读失败时游标退回，增量下一轮补投",
     harness.params,
   );
 
-  // 前置条件：重新冻结失败 → 快照没能带上这条消息，而压缩分支不带 wireTailText，
-  // runner 累积器随之清空——挂着它的尾部投递就此消失。
+  // Precondition: the re-freeze fails -> the snapshot did not pick up this message, and the
+  // compaction branch carries no wireTailText, so the runner accumulator is cleared -- the tail
+  // delivery holding it disappears.
   const roundOne = harness.overrides[0];
-  assert.ok(roundOne?.context, "第 1 轮压缩后必须交回续跑上下文");
+  assert.ok(roundOne?.context, "After round 1's compaction a continuation context must be returned");
   assert.ok(
     !roundOne.context.systemPrompt.includes("must survive the failed refreeze"),
-    "读失败时快照不该凭空带上这条消息",
+    "On a read failure the snapshot should not pick up this message out of nowhere",
   );
-  assert.equal(roundOne.wireTailText, undefined, "压缩分支不得携带 wireTailText");
-  assert.deepEqual(roundOne.context.messages, [], "压缩已截断历史");
+  assert.equal(roundOne.wireTailText, undefined, "The compaction branch must not carry wireTailText");
+  assert.deepEqual(roundOne.context.messages, [], "Compaction already truncated the history");
 
   const roundTwo = harness.overrides[1];
-  assert.ok(roundTwo?.wireTailText, "游标必须退回到快照覆盖的位置，下一轮经 wireTailText 补投");
+  assert.ok(roundTwo?.wireTailText, "The cursor must roll back to the position covered by the snapshot, and the delta must be topped up next round via wireTailText");
   const occurrences =
     roundTwo.wireTailText.split("must survive the failed refreeze").length - 1;
-  assert.equal(occurrences, 1, "消息必须原样补投，且只投一份");
+  assert.equal(occurrences, 1, "The message must be topped up as-is, exactly once");
 
-  // 补投后的出站请求必须挂上这条消息，且只挂一份。
+  // The outbound request after the top-up must attach this message, and only once.
   const finalOutbound = harness.outboundRequests.find((entry) => entry.round === 3);
-  assert.ok(finalOutbound, "补投后的一轮必须发出出站请求");
+  assert.ok(finalOutbound, "The round after the top-up must issue an outbound request");
   const attached = tailTexts(finalOutbound.messages).filter((text) =>
     text.includes("must survive the failed refreeze"),
   );
-  assert.equal(attached.length, 1, "补投的消息必须挂到出站请求上，且只挂一份");
+  assert.equal(attached.length, 1, "The topped-up message must be attached to the outbound request, and only once");
 });

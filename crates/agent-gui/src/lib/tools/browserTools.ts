@@ -97,14 +97,15 @@ function formatResult(response: BrowserActionResponse): string {
 }
 
 export function createBrowserTools(params: { sandbox?: ShellSandboxSettings }): BuiltinToolBundle {
-  // sandboxOffline(enabled 且 !allowNetwork)语义必须覆盖浏览器出网。注册层
-  // 已在 builtinRegistry 里整体跳过本 bundle;这里是 executor 级的 fail-closed 兜底。
+  // The sandboxOffline (enabled and !allowNetwork) semantic must cover browser egress. The
+  // registry layer already skips this bundle entirely in builtinRegistry; this is the executor-level
+  // fail-closed fallback.
   const offlineSandboxed = params.sandbox?.enabled === true && !params.sandbox.allowNetwork;
 
   const toolBrowser: Tool = {
     name: "Browser",
     description:
-      "Automate a Chromium browser. Depending on the user's browser-mode setting, actions either run in a new tab of the user's own browser (sharing their login sessions, via the LiveAgent browser extension) or in a dedicated browser with an isolated profile (no logins). Actions: navigate (open URL), snapshot (a11y tree with element refs), click/type (interact via refs from the latest snapshot), screenshot (returns an image), eval (run JavaScript in the page), wait (selector or delay), back (history). Page-changing actions return a fresh snapshot automatically. The browser session starts on first use and persists across calls.",
+      "Automate a Chromium browser. Depending on the user's browser-mode setting, actions either run in a new tab of the user's own browser (sharing their login sessions, via the ReactorPro browser extension) or in a dedicated browser with an isolated profile (no logins). Actions: navigate (open URL), snapshot (a11y tree with element refs), click/type (interact via refs from the latest snapshot), screenshot (returns an image), eval (run JavaScript in the page), wait (selector or delay), back (history). Page-changing actions return a fresh snapshot automatically. The browser session starts on first use and persists across calls.",
     parameters: BROWSER_PARAMETERS,
   };
 

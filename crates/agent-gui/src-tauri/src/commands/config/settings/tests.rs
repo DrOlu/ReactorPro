@@ -421,57 +421,6 @@ mod tests {
     }
 
     #[test]
-    fn gateway_settings_snapshot_redacts_stt_and_private_sync_field() {
-        let mut conn = open_memory_db();
-        save_stt(
-            &mut conn,
-            json!({
-                "provider": "aliyun_dashscope",
-                "providers": {
-                    "aliyun_dashscope": {
-                        "id": "aliyun_dashscope",
-                        "websocketUrl": "wss://example.com/stt",
-                        "model": "paraformer-realtime-v2",
-                        "apiKey": "desktop-only-secret"
-                    }
-                }
-            }),
-        )
-        .expect("save STT settings");
-
-        let snapshot =
-            load_gateway_settings_sync_snapshot(&conn).expect("load gateway settings snapshot");
-        assert_eq!(snapshot["stt"]["provider"], "aliyun_dashscope");
-        assert_eq!(
-            snapshot["stt"]["providers"]["aliyun_dashscope"]["configured"],
-            true
-        );
-        assert_eq!(
-            snapshot["stt"]["providers"]["aliyun_dashscope"]["apiKey"],
-            ""
-        );
-        assert_eq!(
-            load_stt_secret(&conn, "aliyun_dashscope", "apiKey")
-                .expect("reveal local STT secret"),
-            "desktop-only-secret"
-        );
-        assert!(load_stt_secret(&conn, "aliyun_dashscope", "websocketUrl").is_err());
-
-        let redacted = redact_gateway_settings_sync_payload(json!({
-            "sttSecretSync": {
-                "providers": {"aliyun_dashscope": {"apiKey": "must-not-leak"}}
-            },
-            "stt": load_stt_raw(&conn).expect("load raw STT settings")
-        }))
-        .expect("redact gateway STT payload");
-        assert_eq!(redacted.get(STT_SECRET_SYNC_FIELD), None);
-        assert_eq!(
-            redacted["stt"]["providers"]["aliyun_dashscope"]["apiKey"],
-            ""
-        );
-    }
-
-    #[test]
     fn save_ssh_persists_hosts_and_redacts_sync_snapshot() {
         let mut conn = open_memory_db();
         save_ssh(
@@ -1125,16 +1074,16 @@ mod tests {
             json!([
                 {
                     "id": "reviewer",
-                    "name": "代码审查",
-                    "description": "用于审查 PR 和补测试缺口",
-                    "prompt": "你是一个严格的代码审查助手。",
+                    "name": "Code Review",
+                    "description": "Used to review PRs and fill test gaps",
+                    "prompt": "You are a strict code review assistant.",
                     "enabled": true
                 },
                 {
                     "id": "planner",
-                    "name": "任务规划",
+                    "name": "Task Planning",
                     "description": "",
-                    "prompt": "先拆任务，再执行。",
+                    "prompt": "Break down the tasks first, then execute.",
                     "enabled": false
                 }
             ]),
@@ -1162,23 +1111,23 @@ mod tests {
             Some(json!([
                 {
                     "id": "reviewer",
-                    "name": "代码审查",
-                    "description": "用于审查 PR 和补测试缺口",
-                    "prompt": "你是一个严格的代码审查助手。",
+                    "name": "Code Review",
+                    "description": "Used to review PRs and fill test gaps",
+                    "prompt": "You are a strict code review assistant.",
                     "enabled": true
                 },
                 {
                     "id": "planner",
-                    "name": "任务规划",
+                    "name": "Task Planning",
                     "description": "",
-                    "prompt": "先拆任务，再执行。",
+                    "prompt": "Break down the tasks first, then execute.",
                     "enabled": false
                 }
             ]))
         );
     }
 
-    /// 归一后的 systemProxy 默认值（save/load 全量断言共用）。
+    /// The normalized systemProxy default (shared by the full save/load assertions).
     fn default_system_proxy_json() -> Value {
         json!({
             "enabled": false,
@@ -1312,7 +1261,7 @@ mod tests {
                 "workspaceProjectGroups": [
                     {
                         "id": "g1",
-                        "name": "LiveAgent",
+                        "name": "ReactorPro",
                         "projectPaths": ["/tmp/repo", "/tmp/wt"],
                         "sourceProjectPath": "/tmp/repo",
                         "collapsed": true,
@@ -1333,7 +1282,7 @@ mod tests {
             Some(&json!([
                 {
                     "id": "g1",
-                    "name": "LiveAgent",
+                    "name": "ReactorPro",
                     "projectPaths": ["/tmp/repo", "/tmp/wt"],
                     "sourceProjectPath": "/tmp/repo",
                     "collapsed": true,
@@ -1666,11 +1615,12 @@ mod tests {
         );
     }
 
-    // P2#6:未识别的命令安全模式必须向严格侧(ask)收敛,不能静默降级成 auto ——
-    // save_system 会把归一结果破坏性地写回磁盘。
+    // P2#6: an unrecognized command safety mode must converge to the strict side
+    // (ask), not silently degrade to auto — save_system destructively writes the
+    // normalized result back to disk.
     #[test]
     fn command_safety_mode_unrecognized_value_fails_closed_to_ask() {
-        // 缺失 / null / 空串:正常缺省形态,沿用 auto。
+        // Missing / null / empty string: normal default forms, keep auto.
         assert_eq!(normalize_command_safety_mode_value(None), json!("auto"));
         assert_eq!(
             normalize_command_safety_mode_value(Some(&Value::Null)),
@@ -1680,14 +1630,14 @@ mod tests {
             normalize_command_safety_mode_value(Some(&json!("   "))),
             json!("auto")
         );
-        // 合法值原样保留(含空白裁剪)。
+        // Legal values are preserved as-is (including whitespace trimming).
         for mode in ["ask", "auto", "sandbox", "sandboxOffline"] {
             assert_eq!(
                 normalize_command_safety_mode_value(Some(&json!(format!(" {mode} ")))),
                 json!(mode)
             );
         }
-        // 未来新增的模式值 / 回退旧版本 / 手改笔误 / 类型错误:一律收敛到 ask。
+        // Future mode values / older-version rollback / manual typos / type errors: all converge to ask.
         assert_eq!(
             normalize_command_safety_mode_value(Some(&json!("sandboxStrictest"))),
             json!("ask")
@@ -1774,7 +1724,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn ccswitch_db_candidates_include_home_env_fallback_on_windows() {
-        // 候选列表必须覆盖 ccswitch v3.10.3 在 `%HOME%\.cc-switch\` 的遗留库位置。
+        // The candidate list must cover ccswitch v3.10.3's legacy database location under `%HOME%\.cc-switch\`.
         let previous = std::env::var("HOME").ok();
         std::env::set_var("HOME", "C:\\legacy-home");
         let candidates = ccswitch_db_candidates();
@@ -1971,8 +1921,8 @@ mod tests {
 
     #[test]
     fn ccs_imports_grokbuild_toml_config_fields() {
-        // 与 CC-Switch Grok Build 写入 providers.settings_config 的形状对齐：
-        // config 是 TOML 文本，含 [models].default 与 [model."<id>"] 表。
+        // Aligned with the shape CC-Switch Grok Build writes into providers.settings_config:
+        // config is TOML text containing the [models].default and [model."<id>"] tables.
         let config = json!({
             "config": "[models]\ndefault = \"grok-4.5\"\n\n[model]\n[model.\"grok-4.5\"]\nmodel = \"grok-4.5\"\nbase_url = \"https://api.x.ai/v1\"\nname = \"packy\"\napi_backend = \"responses\"\ncontext_window = 500000\napi_key = \"sk-test-key\"\n"
         });
@@ -2028,8 +1978,8 @@ mod tests {
 
     #[test]
     fn ccs_imports_claude_desktop_direct_mode_provider() {
-        // 与 cc-switch Claude Desktop 直连模式写库形状对齐：
-        // env 存 ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN，模型在 meta 的路由表里。
+        // Aligned with the shape cc-switch writes to the DB for Claude Desktop direct mode:
+        // env stores ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN, and models live in meta's routing table.
         let config = json!({
             "env": {
                 "ANTHROPIC_BASE_URL": "https://relay.example.test/",
@@ -2065,7 +2015,7 @@ mod tests {
 
     #[test]
     fn ccs_imports_claude_desktop_proxy_mode_anthropic_upstream() {
-        // 映射模式 + Anthropic 上游：模型取 route.model（真实上游模型）。
+        // Mapping mode + Anthropic upstream: the model comes from route.model (the real upstream model).
         let config = json!({
             "env": {
                 "ANTHROPIC_BASE_URL": "https://gateway.example.test",
@@ -2095,8 +2045,9 @@ mod tests {
 
     #[test]
     fn ccs_skips_claude_desktop_non_anthropic_upstreams() {
-        // 映射模式声明 openai_chat / openai_responses / gemini_native 上游时，
-        // 依赖 cc-switch 内置网关转协议，不能直接当 Anthropic 供应商导入。
+        // When mapping mode declares an openai_chat / openai_responses / gemini_native upstream,
+        // it relies on cc-switch's built-in gateway to translate protocols and cannot be imported
+        // directly as an Anthropic provider.
         let config = json!({
             "env": {
                 "ANTHROPIC_BASE_URL": "https://api.openai.example.test/v1",
@@ -2121,13 +2072,13 @@ mod tests {
 
     #[test]
     fn ccs_imports_claude_desktop_official_seed_without_meta_format() {
-        // 官方种子 settings_config 为 {"env":{}}，meta 无 apiFormat：
-        // 应按 Anthropic 处理并保留（前端以空 base_url/api_key 置灰）。
+        // The official seed settings_config is {"env":{}} with no apiFormat in meta:
+        // it should be treated as Anthropic and kept (the frontend greys it out with empty base_url/api_key).
         let config = json!({ "env": {} });
         let item = ccs_provider_from_value(
             "claude-desktop-official",
             "claude-desktop",
-            "Claude Desktop 官方",
+            "Claude Desktop Official",
             &config,
             &json!({}),
         )
@@ -2218,8 +2169,8 @@ mod tests {
 
     #[test]
     fn ccs_db_query_tolerates_missing_meta_column() {
-        // ccswitch v0 老库没有 meta 列；LiveAgent 只读打开、不做迁移，
-        // 查询需退化为空 meta 而不是整体失败。
+        // The old ccswitch v0 database has no meta column; ReactorPro opens it read-only and does
+        // not migrate, so the query should degrade to an empty meta rather than failing outright.
         let dir = tempfile::tempdir().expect("tempdir");
         let db_path = dir.path().join("cc-switch.db");
         {
@@ -2253,7 +2204,7 @@ mod tests {
         assert_eq!(providers[0].base_url, "https://legacy.example.test");
     }
 
-    // ===== 配置备份：采集 / 校验 / 应用 =====
+    // ===== Config backup: collect / validate / apply =====
 
     fn sample_backup_document() -> String {
         let snapshot = BackupSnapshot {
@@ -2264,10 +2215,6 @@ mod tests {
                 { "id": "t-1", "name": "T1", "prompt": "prompt", "enabled": true }
             ])),
             model_failover: Some(json!({ "claude_code": { "queue": ["p-1"] } })),
-            stt: Some(json!({
-                "provider": "aliyun_dashscope",
-                "providers": { "aliyun_dashscope": { "id": "aliyun_dashscope", "apiKey": "sk" } }
-            })),
         };
         let manifest = build_backup_manifest(&snapshot);
         serialize_backup_document(&snapshot, &manifest).expect("serialize document")
@@ -2281,24 +2228,23 @@ mod tests {
         assert_eq!(manifest.protocol_version, BACKUP_PROTOCOL_VERSION);
         assert_eq!(manifest.schema_version, BACKUP_SCHEMA_VERSION);
         assert_eq!(manifest.encryption, "none");
-        // 计数用于 UI 摘要：mcp 数服务器条目，stt 数已配置的供应商。
+        // Counts are for the UI summary: mcp counts server entries.
         assert_eq!(manifest.domains.providers, 1);
         assert_eq!(manifest.domains.mcp, 1);
         assert_eq!(manifest.domains.agents, 1);
         assert_eq!(manifest.domains.model_failover, 1);
-        assert_eq!(manifest.domains.stt, 1);
         assert_eq!(
             snapshot.model_failover,
             Some(json!({ "claude_code": { "queue": ["p-1"] } }))
         );
         assert!(snapshot.agents.is_some());
-        assert!(snapshot.stt.is_some());
     }
 
     #[test]
     fn parse_backup_document_ignores_v1_skills_and_survives_device_local_system() {
-        // v1 备份带 skills 域与 system 里的设备本地键；v2 解析时 skills 被
-        // serde 忽略，设备本地键在应用侧被白名单过滤（见 merge 测试）。
+        // A v1 backup carries a skills domain and device-local keys inside system; when parsing v2,
+        // skills is ignored by serde and device-local keys are whitelist-filtered on the apply side
+        // (see the merge test).
         let mut document: Value =
             serde_json::from_str(&sample_backup_document()).expect("parse json");
         document["_manifest"]["schemaVersion"] = json!(1);
@@ -2308,21 +2254,22 @@ mod tests {
         let (snapshot, manifest) =
             parse_backup_document(&document.to_string()).expect("v1 document must parse");
         assert_eq!(manifest.schema_version, 1);
-        // skills 不再是快照字段，序列化后不应再出现。
+        // skills is no longer a snapshot field and must not reappear after serialization.
         let reserialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
-        assert!(!reserialized.contains("skill-a"), "skills 域应被忽略");
+        assert!(!reserialized.contains("skill-a"), "the skills domain should be ignored");
     }
 
     #[test]
     fn parse_backup_document_rejects_future_versions() {
-        // 高版本必须拒绝，而不是把读不懂的域当成「空配置」写入而静默清库。
+        // A higher version must be rejected rather than writing the unreadable domain as an
+        // "empty config" and silently wiping the database.
         for field in ["protocolVersion", "schemaVersion"] {
             let mut document: Value =
                 serde_json::from_str(&sample_backup_document()).expect("parse json");
             document["_manifest"][field] = json!(99);
             let err = parse_backup_document(&document.to_string())
                 .expect_err("future version must be rejected");
-            assert!(err.contains("99"), "错误信息应含版本号：{err}");
+            assert!(err.contains("99"), "the error message should contain the version number: {err}");
         }
     }
 
@@ -2334,31 +2281,34 @@ mod tests {
 
         let err = parse_backup_document(&document.to_string())
             .expect_err("unknown encryption must be rejected");
-        assert!(err.contains("aes-256-gcm"), "错误信息应含加密方式：{err}");
+        assert!(err.contains("aes-256-gcm"), "the error message should contain the encryption method: {err}");
     }
 
     #[test]
     fn parse_backup_document_rejects_missing_manifest_and_malformed_domains() {
-        // 缺 manifest：可能是随便一个 JSON 文件，不是我们导出的备份。
+        // Missing manifest: it may just be an arbitrary JSON file, not a backup we exported.
         let err = parse_backup_document(r#"{"providers": []}"#).expect_err("manifest required");
-        assert!(err.contains("元信息"), "应提示缺少元信息：{err}");
+        assert!(err.contains("missing metadata"), "it should report missing metadata: {err}");
 
-        // 域结构不符：providers 必须是数组。
+        // Wrong domain structure: providers must be an array.
         let mut document: Value =
             serde_json::from_str(&sample_backup_document()).expect("parse json");
         document["providers"] = json!({ "not": "an array" });
         let err =
             parse_backup_document(&document.to_string()).expect_err("providers must be an array");
-        assert!(err.contains("providers"), "应指出出错的域：{err}");
+        assert!(err.contains("providers"), "it should point out the failing domain: {err}");
     }
 
     #[test]
     fn backup_snapshot_excludes_device_level_sync_config() {
-        // 同步配置（WebDAV 地址/凭据）是设备级的，若随快照流转会让 A 机器的
-        // 凭据覆盖 B 机器。它刻意存放在独立表，因此采集时天然取不到。
+        // Sync config (WebDAV address/credentials) is device-level; letting it flow
+        // with the snapshot would let machine A's credentials overwrite machine B's.
+        // It is deliberately kept in a separate table, so collection naturally cannot see it.
         //
-        // 这条断言只有在库里**确实存着**一份凭据、且快照本身非空时才有意义：
-        // 对着空库采集，快照里当然搜不到密码，字段真被塞进去也照样通过。
+        // This assertion is only meaningful when the database **actually holds** a
+        // credential and the snapshot itself is non-empty: collecting against an
+        // empty DB would of course find no password, and the test would still pass
+        // even if the field really were included.
         let conn = open_memory_db();
         let credentials = BackupSyncConfig {
             url: "https://dav.example.com/dav/".to_string(),
@@ -2371,7 +2321,8 @@ mod tests {
             last_error: Some("sentinel-error".to_string()),
         };
         persist_backup_sync_config(&conn, &credentials).expect("persist sync config");
-        // 前提自检：凭据确实进了库，否则下面的断言又变回空转。
+        // Precondition self-check: the credential really did enter the database,
+        // otherwise the assertions below become vacuous again.
         assert_eq!(
             load_backup_sync_config(&conn)
                 .expect("reload sync config")
@@ -2385,9 +2336,9 @@ mod tests {
 
         let snapshot = collect_backup_snapshot(&conn).expect("collect snapshot");
         let serialized = serde_json::to_string(&snapshot).expect("serialize snapshot");
-        assert!(snapshot.providers.is_some(), "前提：快照非空");
+        assert!(snapshot.providers.is_some(), "precondition: the snapshot is non-empty");
 
-        assert!(!serialized.contains("backupSync"), "快照不应含同步配置");
+        assert!(!serialized.contains("backupSync"), "the snapshot should not contain sync config");
         for leaked in [
             "sentinel-password-must-not-leak",
             "sentinel-user@example.com",
@@ -2396,15 +2347,16 @@ mod tests {
         ] {
             assert!(
                 !serialized.contains(leaked),
-                "快照泄漏了设备级同步配置字段 {leaked}：{serialized}"
+                "the snapshot leaked the device-level sync config field {leaked}: {serialized}"
             );
         }
     }
 
     #[test]
     fn collect_backup_snapshot_keeps_only_portable_system_keys() {
-        // system 域里 workdir / 工作区路径 / 系统代理是设备本地态：
-        // 绝对路径在另一台机器上不存在，代理密码明文外流也毫无意义。
+        // In the system domain, workdir / workspace paths / system proxy are device-local state:
+        // absolute paths do not exist on another machine, and leaking a proxy password in plaintext
+        // is meaningless anyway.
         let mut conn = open_memory_db();
         save_system_with_default_workdir(
             &mut conn,
@@ -2447,23 +2399,24 @@ mod tests {
         ] {
             assert!(
                 !system.contains_key(device_local),
-                "设备本地键 {device_local} 不应进快照"
+                "device-local key {device_local} should not enter the snapshot"
             );
         }
         assert!(
             !serialized.contains("proxy-sentinel-password"),
-            "代理密码不得进快照"
+            "the proxy password must not enter the snapshot"
         );
         assert!(
             !serialized.contains("secret-project"),
-            "本机路径不得进快照"
+            "local paths must not enter the snapshot"
         );
     }
 
     #[test]
     fn merge_portable_system_overlays_whitelist_and_preserves_device_local_values() {
-        // 应用快照时 system 走「可移植键叠加」：快照里的 executionMode 等
-        // 覆盖本机，workdir / 代理保持本机原值；v1 快照混入的设备本地键被丢弃。
+        // When applying a snapshot, system uses "portable-key overlay": executionMode and
+        // the like from the snapshot overwrite the local values, while workdir / proxy keep
+        // their local values; device-local keys mixed into a v1 snapshot are discarded.
         let mut conn = open_memory_db();
         save_system_with_default_workdir(
             &mut conn,
@@ -2487,7 +2440,8 @@ mod tests {
         let snapshot_system = json!({
             "executionMode": "chat",
             "commandSafetyMode": "ask",
-            // v1 快照可能带设备本地键，必须被忽略而不是覆盖本机。
+            // A v1 snapshot may carry device-local keys, which must be ignored rather than
+            // overwrite the local values.
             "workdir": "/remote/other-device",
             "systemProxy": { "enabled": false }
         });
@@ -2498,21 +2452,22 @@ mod tests {
         let system = load_system(&conn)
             .expect("load system")
             .expect("system present");
-        assert_eq!(system["executionMode"], json!("chat"), "可移植键应被覆盖");
+        assert_eq!(system["executionMode"], json!("chat"), "portable keys should be overwritten");
         assert_eq!(system["commandSafetyMode"], json!("ask"));
-        assert_eq!(system["workdir"], json!("/local/workdir"), "workdir 保持本机原值");
+        assert_eq!(system["workdir"], json!("/local/workdir"), "workdir keeps its local value");
         assert_eq!(
             system["systemProxy"]["password"],
             json!("local-proxy-password"),
-            "本机代理配置不受快照影响"
+            "the local proxy config is unaffected by the snapshot"
         );
         assert_eq!(system["systemProxy"]["enabled"], json!(true));
     }
 
     #[test]
     fn normalize_sync_config_strips_dot_segments() {
-        // `..` 不在 `join_url` 的 percent-encode 集合里，会原样留在 URL 路径中
-        // 由服务器解析为上级目录，请求因此可以打到 WebDAV 根之外。
+        // `..` is not in `join_url`'s percent-encode set and would stay verbatim in the URL path,
+        // where the server resolves it to the parent directory, letting requests escape outside the
+        // WebDAV root.
         let normalized = normalize_backup_sync_config(BackupSyncConfig {
             remote_dir: "../../etc".to_string(),
             profile: "a/../../b".to_string(),
@@ -2521,7 +2476,8 @@ mod tests {
         assert_eq!(normalized.remote_dir, "etc");
         assert_eq!(normalized.profile, "a/b");
 
-        // 全被剥掉时回落默认值，而不是留空拼出畸形 URL。
+        // When everything is stripped, fall back to the default rather than leaving it empty and
+        // building a malformed URL.
         let emptied = normalize_backup_sync_config(BackupSyncConfig {
             remote_dir: "..".to_string(),
             profile: "./.".to_string(),
@@ -2550,21 +2506,11 @@ mod tests {
                 { "id": "t-1", "name": "T1", "prompt": "prompt", "enabled": true }
             ])),
             model_failover: Some(json!({ "claude_code": { "queue": ["p-1"] } })),
-            stt: Some(json!({
-                "provider": "aliyun_dashscope",
-                "providers": {
-                    "aliyun_dashscope": {
-                        "id": "aliyun_dashscope",
-                        "websocketUrl": "wss://example.com/stt",
-                        "model": "m",
-                        "apiKey": "sk-stt"
-                    }
-                }
-            })),
         };
         apply_backup_snapshot_to_db(&mut conn, &snapshot).expect("apply snapshot");
 
-        // 整域覆盖：导入侧原有的 stale provider / 模板必须消失。
+        // Whole-domain overwrite: the importing side's pre-existing stale providers / templates
+        // must disappear.
         assert_eq!(
             load_providers(&conn).expect("load providers"),
             Some(json!([{ "id": "p-1", "name": "P1" }]))
@@ -2574,41 +2520,17 @@ mod tests {
         let agents = load_agents(&conn)
             .expect("load agents")
             .expect("agents present");
-        assert_eq!(agents[0]["id"], json!("t-1"), "旧模板应被整域覆盖");
+        assert_eq!(agents[0]["id"], json!("t-1"), "the old template should be overwritten by the whole-domain overwrite");
         assert_eq!(
             load_model_failover(&conn).expect("load model failover"),
             Some(json!({ "claude_code": { "queue": ["p-1"] } }))
         );
-        let stt = load_stt_raw(&conn).expect("load stt").expect("stt present");
-        assert_eq!(
-            stt["providers"]["aliyun_dashscope"]["apiKey"],
-            json!("sk-stt"),
-            "STT 密钥应随快照落库"
-        );
-    }
-
-    #[test]
-    fn apply_backup_snapshot_accepts_intentionally_incomplete_stt() {
-        // 源设备清空过密钥的 STT 配置当初已被源侧 save_stt 接受，
-        // 应用侧不应再按表单提交的标准复验（allowIncomplete 注入）。
-        let mut conn = open_memory_db();
-        let snapshot = BackupSnapshot {
-            stt: Some(json!({
-                "provider": "tencent_cloud",
-                "providers": {
-                    "tencent_cloud": { "id": "tencent_cloud", "appId": "", "secretId": "" }
-                }
-            })),
-            ..Default::default()
-        };
-        apply_backup_snapshot_to_db(&mut conn, &snapshot)
-            .expect("incomplete stt from a valid source must apply");
-        assert!(load_stt_raw(&conn).expect("load stt").is_some());
     }
 
     #[test]
     fn apply_backup_snapshot_to_db_leaves_config_intact_when_domain_absent() {
-        // 某域为 None 表示导出侧没有该配置，不应被当成「清空」。
+        // A domain being None means the exporting side had no such config and must not be treated
+        // as "clear it".
         let mut conn = open_memory_db();
         save_providers(&mut conn, json!([{ "id": "keep", "name": "Keep" }]))
             .expect("seed providers");
@@ -2623,9 +2545,10 @@ mod tests {
 
     #[test]
     fn apply_backup_snapshot_remaps_provider_ids_to_local_identity() {
-        // 两台设备各自「添加」过同一个服务商时 UUID 必不同。导入若原样落
-        // 源 id，本机会话 / 默认模型 / 记忆 / 定时任务里存的
-        // {customProviderId} 全部失配，规范化时被静默清空。
+        // When two devices each "added" the same provider, their UUIDs necessarily differ. If the
+        // import keeps the source id verbatim, every {customProviderId} stored in local sessions /
+        // default models / memory / scheduled tasks fails to match and is silently cleared during
+        // normalization.
         let mut conn = open_memory_db();
         save_providers(
             &mut conn,
@@ -2644,7 +2567,7 @@ mod tests {
 
         let snapshot = BackupSnapshot {
             providers: Some(json!([
-                // 身份相同（type+baseUrl+name）、id 不同 → 改写为本机 id。
+                // Same identity (type+baseUrl+name), different id → rewrite to the local id.
                 {
                     "id": "source-uuid-claude",
                     "type": "claude_code",
@@ -2652,9 +2575,9 @@ mod tests {
                     "name": "Claude",
                     "apiKey": "sk-source-new"
                 },
-                // id 相同（内置槽位）→ 原样保留。
+                // Same id (built-in slot) → keep as-is.
                 { "id": "builtin-codex", "type": "codex", "baseUrl": "", "name": "Codex" },
-                // 本机不存在的新 provider → 保留源 id。
+                // A new provider that does not exist locally → keep the source id.
                 {
                     "id": "source-uuid-fresh",
                     "type": "openai_compatible",
@@ -2681,11 +2604,12 @@ mod tests {
         assert_eq!(
             ids,
             vec!["local-uuid-claude", "builtin-codex", "source-uuid-fresh"],
-            "同身份 provider 应保留本机 id，其余保持不变"
+            "providers with the same identity should keep the local id; the rest stay unchanged"
         );
-        // id 保留本机，内容以备份为准。
+        // The id stays local while the content follows the backup.
         assert_eq!(providers[0]["apiKey"], json!("sk-source-new"));
-        // failover 队列随 providers 一起改写，域间引用保持一致。
+        // The failover queue is rewritten together with providers so cross-domain references stay
+        // consistent.
         assert_eq!(
             load_model_failover(&conn).expect("load model failover"),
             Some(json!({
@@ -2698,13 +2622,14 @@ mod tests {
     fn provider_id_map_matches_by_endpoint_and_refuses_ambiguity() {
         let as_array = |value: &Value| value.as_array().expect("array").clone();
 
-        // 第 3 级：仅改过显示名，type+baseUrl（尾斜杠归一）两侧唯一即可配对。
+        // Level 3: only the display name changed; type+baseUrl (with trailing-slash normalization)
+        // being unique on both sides is enough to pair them.
         let incoming = json!([
             {
                 "id": "source-a",
                 "type": "openai_compatible",
                 "baseUrl": "https://api.example.com/v1",
-                "name": "改名后"
+                "name": "After rename"
             }
         ]);
         let local = json!([
@@ -2712,41 +2637,44 @@ mod tests {
                 "id": "local-a",
                 "type": "openai_compatible",
                 "baseUrl": "https://api.example.com/v1/",
-                "name": "旧名"
+                "name": "Old name"
             }
         ]);
         let id_map = build_provider_id_map(&as_array(&incoming), &as_array(&local));
         assert_eq!(id_map.get("source-a"), Some(&"local-a".to_string()));
 
-        // 同端点出现两个本机候选（多账号）时无法分辨，宁可不配也不错配。
+        // When two local candidates share an endpoint (multiple accounts) they are
+        // indistinguishable; better to pair none than to pair wrongly.
         let ambiguous_local = json!([
             {
                 "id": "local-1",
                 "type": "openai_compatible",
                 "baseUrl": "https://api.example.com/v1",
-                "name": "账号一"
+                "name": "Account one"
             },
             {
                 "id": "local-2",
                 "type": "openai_compatible",
                 "baseUrl": "https://api.example.com/v1",
-                "name": "账号二"
+                "name": "Account two"
             }
         ]);
         let id_map = build_provider_id_map(&as_array(&incoming), &as_array(&ambiguous_local));
-        assert!(id_map.is_empty(), "歧义候选不得配对：{id_map:?}");
+        assert!(id_map.is_empty(), "ambiguous candidates must not be paired: {id_map:?}");
 
-        // 缺 type 的条目不参与身份配对，避免把碰巧同名的配置错认成同一个。
-        let untyped_incoming = json!([{ "id": "source-x", "name": "同名" }]);
-        let untyped_local = json!([{ "id": "local-x", "name": "同名" }]);
+        // Entries missing type do not participate in identity pairing, avoiding mistaking
+        // coincidentally same-named configs for the same one.
+        let untyped_incoming = json!([{ "id": "source-x", "name": "Same name" }]);
+        let untyped_local = json!([{ "id": "local-x", "name": "Same name" }]);
         let id_map =
             build_provider_id_map(&as_array(&untyped_incoming), &as_array(&untyped_local));
-        assert!(id_map.is_empty(), "缺 type 不得配对：{id_map:?}");
+        assert!(id_map.is_empty(), "entries missing type must not be paired: {id_map:?}");
     }
 
     #[test]
     fn provider_id_rewrite_updates_legacy_failover_queue_entries() {
-        // 旧版 failover queue 存 { customProviderId, model } 对象，改写需兼容。
+        // The legacy failover queue stores { customProviderId, model } objects; the rewrite must
+        // stay compatible.
         let mut snapshot = BackupSnapshot {
             providers: Some(json!([
                 { "id": "source-a", "type": "claude_code", "baseUrl": "", "name": "Claude" }
@@ -2821,23 +2749,16 @@ mod tests {
                 },
                 "modelFailover",
             ),
-            (
-                BackupSnapshot {
-                    stt: Some(json!("nope")),
-                    ..Default::default()
-                },
-                "stt",
-            ),
         ];
 
         for (snapshot, expected) in cases {
             let err =
                 validate_backup_snapshot(&snapshot).expect_err("malformed domain must be rejected");
-            assert!(err.contains(expected), "错误信息应含 {expected}：{err}");
+            assert!(err.contains(expected), "the error message should contain {expected}: {err}");
         }
     }
 
-    // ===== WebDAV 同步：配置解析 / 远端路径 / 完整性校验 =====
+    // ===== WebDAV sync: config parsing / remote paths / integrity verification =====
 
     fn sample_sync_config() -> BackupSyncConfig {
         BackupSyncConfig {
@@ -2867,11 +2788,12 @@ mod tests {
     #[test]
     fn sync_config_keeps_stored_password_when_untouched() {
         let persisted = sample_sync_config();
-        // UI 用掩码占位符回填密码框；用户没动它时不能当成新密码写库。
+        // The UI fills the password field with a masked placeholder; if the user leaves it alone it
+        // must not be written to the database as a new password.
         let resolved = resolve_backup_sync_config(sync_request("••••••••", false), &persisted);
         assert_eq!(resolved.password, "stored-secret");
         assert!(resolved.auto_sync);
-        // 保存配置不应改动同步时间。
+        // Saving the config should not change the sync time.
         assert_eq!(resolved.last_sync_at, persisted.last_sync_at);
     }
 
@@ -2885,23 +2807,25 @@ mod tests {
     #[test]
     fn sync_config_clearing_password_is_honored() {
         let persisted = sample_sync_config();
-        // 用户主动清空密码框 —— 必须真的清掉，不能回退到旧值，否则无法换账号。
+        // The user deliberately cleared the password field — it must really be cleared and must not
+        // fall back to the old value, otherwise the account cannot be switched.
         let resolved = resolve_backup_sync_config(sync_request("", true), &persisted);
         assert!(resolved.password.is_empty());
     }
 
-    /// 保存配置必须清掉遗留的自动同步错误。
+    /// Saving the config must clear a leftover auto-sync error.
     ///
-    /// 那条错误描述的是改动**之前**的配置状态；继续挂在界面上，用户会以为
-    /// 刚填好的新地址也是坏的，从而反复折腾一个已经修好的问题。
+    /// That error describes the config state **before** the change; if it kept showing in the UI,
+    /// the user would think the newly entered address is also broken and keep fussing over an
+    /// already-fixed problem.
     #[test]
     fn sync_config_save_clears_stale_auto_sync_error() {
         let mut persisted = sample_sync_config();
-        persisted.last_error = Some("认证失败（401）：请检查用户名与密码".to_string());
+        persisted.last_error = Some("Authentication failed (401): check the username and password".to_string());
 
         let resolved = resolve_backup_sync_config(sync_request("fresh-secret", true), &persisted);
-        assert!(resolved.last_error.is_none(), "保存后不应残留旧错误");
-        // 同步时间是既成事实，不能跟着一起清掉。
+        assert!(resolved.last_error.is_none(), "no stale error should remain after saving");
+        // The sync time is an established fact and must not be cleared along with it.
         assert_eq!(resolved.last_sync_at, persisted.last_sync_at);
     }
 
@@ -2916,7 +2840,8 @@ mod tests {
         let resolved = resolve_backup_sync_config(request, &persisted);
         assert_eq!(resolved.url, "https://dav.example.com/dav");
         assert_eq!(resolved.remote_dir, "backups");
-        // 空 profile 回落默认值，否则远端路径会出现空段。
+        // An empty profile falls back to the default, otherwise the remote path would contain an
+        // empty segment.
         assert_eq!(resolved.profile, "default");
     }
 
@@ -2931,7 +2856,8 @@ mod tests {
             backup_remote_file_segments(&config, "config.json"),
             vec!["liveagent", "v1", "work", "config.json"]
         );
-        // 不同 profile 必须落在不同远端目录，否则两套配置会互相覆盖。
+        // Different profiles must land in different remote directories, otherwise the two configs
+        // would overwrite each other.
         let mut other = sample_sync_config();
         other.profile = "personal".to_string();
         assert_ne!(
@@ -2952,23 +2878,24 @@ mod tests {
         let body = b"{\"providers\":[]}";
         let sha = backup_sha256_hex(body);
 
-        // PUT 中断留下的截断文件。
+        // A truncated file left by an interrupted PUT.
         let truncated = verify_backup_payload(body, body.len() + 8, &sha)
             .expect_err("size mismatch must be rejected");
-        assert!(truncated.contains("大小校验失败"), "{truncated}");
+        assert!(truncated.contains("size check failed"), "{truncated}");
 
         let corrupted = verify_backup_payload(body, body.len(), &"0".repeat(64))
             .expect_err("hash mismatch must be rejected");
-        assert!(corrupted.contains("校验和不匹配"), "{corrupted}");
+        assert!(corrupted.contains("checksum mismatch"), "{corrupted}");
     }
 
     #[test]
     fn verify_payload_rejects_manifest_without_size_or_hash() {
-        // 缺 size/sha256 不能当「无需校验」放行。`v1/` 布局随本功能一起引入，
-        // 没有写过无摘要 manifest 的历史版本，会命中这里的只有异常数据。
+        // A missing size/sha256 must not be allowed through as "no verification needed". The `v1/`
+        // layout was introduced together with this feature, no historical version ever wrote a
+        // manifest without a digest, and only abnormal data reaches here.
         let err = verify_backup_payload(b"anything", 0, "")
             .expect_err("manifest without size/sha256 must be rejected");
-        assert!(err.contains("缺少大小或校验和"), "{err}");
+        assert!(err.contains("missing a size or checksum"), "{err}");
 
         assert!(verify_backup_payload(b"anything", 8, "").is_err());
         assert!(verify_backup_payload(b"anything", 0, "abc").is_err());
@@ -3018,7 +2945,7 @@ mod tests {
 
         let err = parse_backup_remote_manifest(body.as_bytes())
             .expect_err("future protocol version must be rejected");
-        assert!(err.contains("升级应用"), "{err}");
+        assert!(err.contains("upgrade the app"), "{err}");
     }
 
     #[test]
@@ -3033,51 +2960,56 @@ mod tests {
         assert!(!empty.has_password);
     }
 
-    /// `last_error` 要能穿过「序列化落库 → 反序列化读回」这条来回。
+    /// `last_error` must survive the round trip of "serialize to the DB → deserialize back".
     ///
-    /// 它是自动同步失败在页面卸载后唯一的留存处，序列化时丢掉就等于没做。
+    /// It is the only trace of an auto-sync failure after the page unloads; losing it during
+    /// serialization means it was never recorded.
     #[test]
     fn sync_config_persists_auto_sync_error_across_serialization() {
         let mut config = sample_sync_config();
-        config.last_error = Some("远端存储空间不足".to_string());
+        config.last_error = Some("Insufficient remote storage space".to_string());
 
         let json = serde_json::to_string(&config).expect("serialize config");
         let restored: BackupSyncConfig = serde_json::from_str(&json).expect("deserialize config");
-        assert_eq!(restored.last_error.as_deref(), Some("远端存储空间不足"));
+        assert_eq!(restored.last_error.as_deref(), Some("Insufficient remote storage space"));
 
-        // 旧版本写入的记录没有这个字段，读回时必须回落 None 而不是解析失败。
+        // Records written by older versions lack this field; reading them back must fall back to
+        // None rather than fail to parse.
         let legacy = r#"{"url":"https://dav.example.com/dav","username":"alice",
             "password":"s","remoteDir":"liveagent","profile":"work","autoSync":true}"#;
         let parsed: BackupSyncConfig = serde_json::from_str(legacy).expect("parse legacy payload");
         assert!(parsed.last_error.is_none());
         assert!(parsed.last_sync_at.is_none());
 
-        // 错误必须随视图送到前端，否则 UI 仍然看不到。
+        // The error must be delivered to the frontend with the view, otherwise the UI still cannot
+        // see it.
         let view: BackupSyncConfigView = config.into();
-        assert_eq!(view.last_error.as_deref(), Some("远端存储空间不足"));
+        assert_eq!(view.last_error.as_deref(), Some("Insufficient remote storage space"));
     }
 
-    /// 真实服务器上的「两台设备」往返。**默认不跑**（`#[ignore]`）。
+    /// A "two devices" round trip against a real server. **Not run by default** (`#[ignore]`).
     ///
     /// ```text
     /// LIVEAGENT_WEBDAV_URL=... LIVEAGENT_WEBDAV_USER=... LIVEAGENT_WEBDAV_PASS=... \
     /// cargo test --lib settings::tests::live -- --ignored --nocapture
     /// ```
     ///
-    /// 为什么不直接调 `settings_backup_upload` / `settings_backup_download`：
-    /// 那两个命令读写真实的 `~/.liveagent/config.sqlite`，跑测试会改掉开发者
-    /// 自己的配置。这里用两个内存库扮演设备 A / B，复用同一套采集、序列化、
-    /// manifest 构造与校验函数，网络部分则完全走真实 `services::webdav`。
-    /// 因此覆盖的是 AC7（跨设备一致）与 AC9（校验和把关），而非命令壳。
+    /// Why not call `settings_backup_upload` / `settings_backup_download` directly:
+    /// those two commands read and write the real `~/.liveagent/config.sqlite`, and running tests
+    /// would modify the developer's own config. Here, two in-memory databases play devices A / B,
+    /// reusing the same collection, serialization, manifest construction and verification
+    /// functions, while the network part goes entirely through the real `services::webdav`.
+    /// So what is covered is AC7 (cross-device consistency) and AC9 (checksum gatekeeping), not
+    /// the command shell.
     #[tokio::test]
-    #[ignore = "需要真实 WebDAV 账号，通过 LIVEAGENT_WEBDAV_* 环境变量提供"]
+    #[ignore = "requires a real WebDAV account, provided via LIVEAGENT_WEBDAV_* environment variables"]
     async fn live_cross_device_snapshot_round_trip() {
         let (Ok(url), Ok(username), Ok(password)) = (
             std::env::var("LIVEAGENT_WEBDAV_URL"),
             std::env::var("LIVEAGENT_WEBDAV_USER"),
             std::env::var("LIVEAGENT_WEBDAV_PASS"),
         ) else {
-            eprintln!("跳过：未设置 LIVEAGENT_WEBDAV_URL / _USER / _PASS");
+            eprintln!("skipping: LIVEAGENT_WEBDAV_URL / _USER / _PASS are not set");
             return;
         };
 
@@ -3093,11 +3025,11 @@ mod tests {
         };
         let creds = backup_credentials(&config).expect("credentials");
 
-        // —— 设备 A：采集并上传 ——
+        // —— Device A: collect and upload ——
         let mut device_a = open_memory_db();
         save_providers(
             &mut device_a,
-            json!([{ "id": "p-live", "name": "实机 Provider", "apiKey": "sk-live-probe" }]),
+            json!([{ "id": "p-live", "name": "Live Provider", "apiKey": "sk-live-probe" }]),
         )
         .expect("seed providers on device A");
         save_mcp(
@@ -3108,7 +3040,7 @@ mod tests {
 
         save_agents(
             &mut device_a,
-            json!([{ "id": "t-live", "name": "实机模板", "prompt": "live prompt" }]),
+            json!([{ "id": "t-live", "name": "Live template", "prompt": "live prompt" }]),
         )
         .expect("seed agents on device A");
 
@@ -3127,7 +3059,7 @@ mod tests {
             "encryption": "none",
             "domains": {
                 "providers": 1, "mcp": 1, "system": 0,
-                "agents": 1, "modelFailover": 0, "stt": 0,
+                "agents": 1, "modelFailover": 0,
             },
             "size": body.len(),
             "sha256": backup_sha256_hex(&body),
@@ -3137,7 +3069,7 @@ mod tests {
         crate::services::webdav::ensure_remote_dirs(&creds, &backup_remote_segments(&config))
             .await
             .expect("ensure remote dirs");
-        // 与生产同序：先 config 再 manifest。
+        // Same order as production: config first, then manifest.
         crate::services::webdav::put_bytes(
             &creds,
             &backup_remote_file_segments(&config, WEBDAV_CONFIG_FILENAME),
@@ -3154,21 +3086,21 @@ mod tests {
         )
         .await
         .expect("put manifest.json");
-        eprintln!("上传完成：config {} 字节", body.len());
+        eprintln!("upload complete: config {} bytes", body.len());
 
-        // —— 设备 B：拉 manifest → 拉 config → 校验 → 应用 ——
+        // —— Device B: fetch manifest → fetch config → verify → apply ——
         let manifest_bytes = crate::services::webdav::get_bytes(
             &creds,
             &backup_remote_file_segments(&config, WEBDAV_MANIFEST_FILENAME),
             WEBDAV_MANIFEST_MAX_BYTES,
-            "远端备份元信息",
+            "remote backup metadata",
         )
         .await
         .expect("get manifest")
-        .expect("manifest 必须存在");
+        .expect("manifest must exist");
         let remote = parse_backup_remote_manifest(&manifest_bytes).expect("parse remote manifest");
         eprintln!(
-            "远端 manifest：设备 {} / {} 字节",
+            "remote manifest: device {} / {} bytes",
             remote.manifest.device_name, remote.size
         );
 
@@ -3176,54 +3108,54 @@ mod tests {
             &creds,
             &backup_remote_file_segments(&config, WEBDAV_CONFIG_FILENAME),
             WEBDAV_CONFIG_MAX_BYTES,
-            "远端配置",
+            "remote config",
         )
         .await
         .expect("get config")
-        .expect("config 必须存在");
+        .expect("config must exist");
 
-        // AC9 正向：真实服务器往返后校验和必须仍然吻合。
+        // AC9 positive: after a real server round trip the checksum must still match.
         verify_backup_payload(&config_bytes, remote.size, &remote.sha256)
-            .expect("真实往返后校验和应吻合");
-        eprintln!("校验通过：sha256 {}", &remote.sha256[..16]);
+            .expect("checksum should match after a real round trip");
+        eprintln!("verification passed: sha256 {}", &remote.sha256[..16]);
 
-        // AC9 反向：篡改一个字节必须被拦下。
+        // AC9 negative: tampering with a single byte must be caught.
         let mut tampered = config_bytes.clone();
         let last = tampered.len() - 1;
         tampered[last] ^= 0x01;
         let err = verify_backup_payload(&tampered, remote.size, &remote.sha256)
-            .expect_err("篡改后必须校验失败");
-        assert!(err.contains("校验和不匹配"), "{err}");
+            .expect_err("verification must fail after tampering");
+        assert!(err.contains("checksum mismatch"), "{err}");
 
-        // AC7：应用到设备 B，各域应与设备 A 一致。
+        // AC7: apply to device B; each domain should match device A.
         let text = String::from_utf8(config_bytes).expect("utf-8 config");
         let (parsed_snapshot, _) = parse_backup_document(&text).expect("parse document");
         let mut device_b = open_memory_db();
-        save_providers(&mut device_b, json!([{ "id": "stale-b", "name": "旧配置" }]))
+        save_providers(&mut device_b, json!([{ "id": "stale-b", "name": "Old config" }]))
             .expect("seed providers on device B");
         apply_backup_snapshot_to_db(&mut device_b, &parsed_snapshot).expect("apply on device B");
 
         assert_eq!(
             load_providers(&device_b).expect("load providers on B"),
             load_providers(&device_a).expect("load providers on A"),
-            "设备 B 的 providers 应与设备 A 一致"
+            "device B's providers should match device A's"
         );
         assert_eq!(
             load_mcp(&device_b).expect("load mcp on B"),
             load_mcp(&device_a).expect("load mcp on A"),
-            "设备 B 的 mcp 应与设备 A 一致"
+            "device B's mcp should match device A's"
         );
         assert_eq!(
             load_agents(&device_b).expect("load agents on B"),
             load_agents(&device_a).expect("load agents on A"),
-            "设备 B 的提示词模板应与设备 A 一致"
+            "device B's prompt templates should match device A's"
         );
-        // 设备级凭据绝不能随快照流转（S2）。
+        // Device-level credentials must never flow with the snapshot (S2).
         assert!(
             !text.contains(&config.username),
-            "快照不得含 WebDAV 用户名"
+            "the snapshot must not contain the WebDAV username"
         );
-        assert!(!text.contains("backupSync"), "快照不得含同步配置");
-        eprintln!("设备 B 还原一致，且快照不含 WebDAV 凭据");
+        assert!(!text.contains("backupSync"), "the snapshot must not contain sync config");
+        eprintln!("device B restored consistently, and the snapshot contains no WebDAV credentials");
     }
 }

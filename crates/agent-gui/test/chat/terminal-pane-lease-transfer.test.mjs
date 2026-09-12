@@ -13,18 +13,18 @@ const { createTerminalPaneAutoLaunchRegistry } = loader.loadModule(
   "src/pages/chat/workbench/terminalPaneRuntime.ts",
 );
 
-// 集成级时序:dock ↔ Pane 的租约转移链路(绑定先行 → 挂载取租 → dock 互斥集)。
+// Integration-level sequence: the dock ↔ Pane lease transfer path (binding first → mount acquires lease → dock mutual-exclusion set).
 
 test("dock drag-in sequence: bind, open, acquire — dock hidden set tracks the lease", () => {
   const lease = createTerminalPaneLeaseStore();
   const bindings = createTerminalPaneBindingStore({ storage: null });
 
-  // drop 事务:先写绑定再开 Pane(宿主挂载即复用会话)。
+  // Drop transaction: write the binding first, then open the Pane (mounting the host reuses the session).
   bindings.set("surface-1", "session-1");
   assert.equal(lease.paneIdFor("session-1"), null);
   assert.deepEqual([...lease.leasedSessionIds()], []);
 
-  // 宿主挂载:解析绑定 → acquire。
+  // Host mount: resolve binding → acquire.
   const release = lease.acquire(bindings.get("surface-1"), "pane-1");
   assert.equal(lease.paneIdFor("session-1"), "pane-1");
   assert.deepEqual([...lease.leasedSessionIds()], ["session-1"]);
@@ -35,11 +35,11 @@ test("dock drag-in sequence: bind, open, acquire — dock hidden set tracks the 
 
 test("rapid re-acquire: a stale release token never revokes the successor lease", () => {
   const lease = createTerminalPaneLeaseStore();
-  // effect 重跑序列:acquire → release → 立即 re-acquire(同 pane 新 effect)。
+  // Effect re-run sequence: acquire → release → immediately re-acquire (new effect on the same pane).
   const first = lease.acquire("session-1", "pane-1");
   first();
   const second = lease.acquire("session-1", "pane-1");
-  // 旧 release 迟到重放(cleanup 乱序):不得误释放新租约。
+  // A late replay of the old release (out-of-order cleanup) must not mistakenly release the new lease.
   first();
   assert.equal(lease.paneIdFor("session-1"), "pane-1");
   assert.deepEqual([...lease.leasedSessionIds()], ["session-1"]);
@@ -55,12 +55,12 @@ test("detach returns the session to the dock and allows a fresh drag-in", () => 
   const release = lease.acquire("session-1", "pane-1");
   assert.deepEqual([...lease.leasedSessionIds()], ["session-1"]);
 
-  // Detach:Pane 关闭释放租约;绑定语义上随 Pane 消失回收。
+  // Detach: closing the Pane releases the lease; semantically the binding is reclaimed along with the Pane's disappearance.
   release();
   bindings.delete("surface-1");
   assert.deepEqual([...lease.leasedSessionIds()], []);
 
-  // 再次拖入:新 surfaceId + 新 paneId,acquire 必须成功。
+  // Dragged in again: new surfaceId + new paneId, and acquire must succeed.
   bindings.set("surface-2", "session-1");
   lease.acquire("session-1", "pane-2");
   assert.equal(lease.paneIdFor("session-1"), "pane-2");
@@ -86,16 +86,16 @@ test("subscription fires across the transfer sequence for dock recomputation", (
   unsubscribe();
 });
 
-// 休眠占位与显式创建的区分:auto-launch 授权集。
+// Distinguishing dormant placeholders from explicit creation: the auto-launch authorization set.
 
 test("auto-launch registry authorizes explicitly created surfaces only", () => {
   const registry = createTerminalPaneAutoLaunchRegistry();
   assert.equal(registry.isAuthorized("surface-restored"), false);
   registry.authorize("surface-new");
   assert.equal(registry.isAuthorized("surface-new"), true);
-  // 非消费式:StrictMode 双挂载重复查询仍返回 true。
+  // Non-consuming: repeated queries from StrictMode double-mounting still return true.
   assert.equal(registry.isAuthorized("surface-new"), true);
-  // 空白输入忽略。
+  // Blank input is ignored.
   registry.authorize("   ");
   assert.equal(registry.isAuthorized(""), false);
 });

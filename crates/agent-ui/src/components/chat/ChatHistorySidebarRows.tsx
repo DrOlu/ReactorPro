@@ -994,7 +994,7 @@ export const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
   );
 }, areHistoryRowPropsEqual);
 
-// 项目分组标题行：折叠切换、成员计数、重命名与删除。
+// Project group header row: collapse toggle, member count, rename and delete.
 export function ProjectGroupHeader(props: {
   group: WorkspaceProjectGroup;
   memberCount: number;
@@ -1180,9 +1180,9 @@ export const ProjectRow = memo(function ProjectRow(props: {
   onArchiveProject: (project: WorkspaceProject) => void;
   onUnarchiveProject: (project: WorkspaceProject) => void;
   onSetPendingAction: (action: PendingWorkspaceProjectAction | null) => void;
-  // 分组内的项目行：相对组头缩进，形成层级视觉。
+  // Project rows inside a group: indented relative to the group header to form a visual hierarchy.
   indented?: boolean;
-  // 分组归属：菜单中提供“移动到分组”子菜单。
+  // Group membership: the menu provides a "Move to group" submenu.
   workspaceProjectGroups?: WorkspaceProjectGroup[];
   onMoveProjectToGroup?: (projectPath: string, groupId: string | null) => void;
   menuOpen: boolean;
@@ -1627,7 +1627,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       {isPinned ? t("chat.workspaceUnpin") : t("chat.workspacePin")}
                     </DropdownMenuItem>
                   )}
-                  {/* 第一组：管理 —— 配置、分组归属、归档状态。 */}
+                  {/* First group: management -- configuration, group membership, archive status. */}
                   <DropdownMenuItem
                     disabled={isInteractionDisabled}
                     onSelect={() => onConfigureProject(project)}
@@ -1636,7 +1636,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                     <Settings className="h-3.5 w-3.5 text-muted-foreground" />
                     {t("chat.workspaceConfigure")}
                   </DropdownMenuItem>
-                  {/* 无任何分组时隐藏“移动到分组”，避免展开空的子菜单。 */}
+                  {/* Hide "Move to group" when there are no groups, avoiding an empty submenu. */}
                   {onMoveProjectToGroup && workspaceProjectGroups.length > 0 ? (
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger
@@ -1703,7 +1703,7 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       {t("chat.workspaceUnarchive")}
                     </DropdownMenuItem>
                   ) : null}
-                  {/* 第二组：浏览定位 —— 在文件树 / 系统资源管理器中打开。 */}
+                  {/* Second group: browsing/locating -- open in the file tree / system file manager. */}
                   {onBrowseProjectInFileTree || onBrowseProjectInSystemFileManager ? (
                     <DropdownMenuSeparator />
                   ) : null}
@@ -1727,7 +1727,8 @@ export const ProjectRow = memo(function ProjectRow(props: {
                       {t("chat.workspaceBrowseInSystemFileManager")}
                     </DropdownMenuItem>
                   ) : null}
-                  {/* 第三组：危险操作 —— 固定在菜单底部并以分隔线隔开。 */}
+                  {/* Third group: destructive operations -- pinned at the bottom of the menu and
+                      separated by a divider. */}
                   {!isDefaultProject ? (
                     <>
                       <DropdownMenuSeparator />

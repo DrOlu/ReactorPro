@@ -10,7 +10,7 @@ use crate::services::automation::{
 pub async fn cron_validate_expression(expression: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || validate_cron_expression(&expression))
         .await
-        .map_err(|e| format!("cron_validate_expression join 失败：{e}"))?
+        .map_err(|e| format!("cron_validate_expression join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -20,7 +20,7 @@ pub async fn automation_snapshot(
     let store = Arc::clone(store.inner());
     tauri::async_runtime::spawn_blocking(move || store.snapshot())
         .await
-        .map_err(|e| format!("automation_snapshot join 失败：{e}"))?
+        .map_err(|e| format!("automation_snapshot join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -31,7 +31,7 @@ pub async fn automation_cron_apply(
     let store = Arc::clone(store.inner());
     tauri::async_runtime::spawn_blocking(move || store.cron_apply(input))
         .await
-        .map_err(|e| format!("automation_cron_apply join 失败：{e}"))?
+        .map_err(|e| format!("automation_cron_apply join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -42,7 +42,7 @@ pub async fn automation_hooks_apply(
     let store = Arc::clone(store.inner());
     tauri::async_runtime::spawn_blocking(move || store.hooks_apply(input))
         .await
-        .map_err(|e| format!("automation_hooks_apply join 失败：{e}"))?
+        .map_err(|e| format!("automation_hooks_apply join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -54,7 +54,7 @@ pub async fn automation_list_runs(
     let store = Arc::clone(store.inner());
     tauri::async_runtime::spawn_blocking(move || store.list_runs(&task_id, limit.unwrap_or(100)))
         .await
-        .map_err(|e| format!("automation_list_runs join 失败：{e}"))?
+        .map_err(|e| format!("automation_list_runs join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -65,7 +65,7 @@ pub async fn automation_clear_runs(
     let store = Arc::clone(store.inner());
     tauri::async_runtime::spawn_blocking(move || store.clear_runs(&task_id))
         .await
-        .map_err(|e| format!("automation_clear_runs join 失败：{e}"))?
+        .map_err(|e| format!("automation_clear_runs join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -76,7 +76,7 @@ pub async fn automation_run_cron_now(
     let store = Arc::clone(store.inner());
     tauri::async_runtime::spawn_blocking(move || store.run_cron_task_now(&task_id))
         .await
-        .map_err(|e| format!("automation_run_cron_now join 失败：{e}"))?
+        .map_err(|e| format!("automation_run_cron_now join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -86,7 +86,7 @@ pub async fn automation_claim_prompt_runs(
     let store = Arc::clone(store.inner());
     tauri::async_runtime::spawn_blocking(move || store.claim_prompt_runs())
         .await
-        .map_err(|e| format!("automation_claim_prompt_runs join 失败：{e}"))?
+        .map_err(|e| format!("automation_claim_prompt_runs join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -97,7 +97,7 @@ pub async fn automation_release_prompt_run(
     let store = Arc::clone(store.inner());
     tauri::async_runtime::spawn_blocking(move || store.release_prompt_run(&execution_id))
         .await
-        .map_err(|e| format!("automation_release_prompt_run join 失败：{e}"))?
+        .map_err(|e| format!("automation_release_prompt_run join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -108,5 +108,5 @@ pub async fn automation_complete_prompt_run(
     let store = Arc::clone(store.inner());
     tauri::async_runtime::spawn_blocking(move || store.complete_prompt_run(input))
         .await
-        .map_err(|e| format!("automation_complete_prompt_run join 失败：{e}"))?
+        .map_err(|e| format!("automation_complete_prompt_run join failed: {e}"))?
 }

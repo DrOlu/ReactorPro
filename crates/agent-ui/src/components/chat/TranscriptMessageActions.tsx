@@ -53,7 +53,7 @@ export function TranscriptUserMessageActions(
     editTitle: string;
     onEdit: () => void;
     readOnly?: boolean;
-    /** 本行用户消息的稳定 ID:检查点回退按 turnId=消息 ID 命中该轮。 */
+    /** Stable ID of this row's user message: checkpoint rewind matches the turn by turnId = message ID. */
     rewindTurnId?: string;
   },
 ) {
@@ -70,7 +70,7 @@ export function TranscriptUserMessageActions(
     rewindTurnId,
   } = props;
   const { t } = useLocale();
-  // Provider 外(只读分享页等)返回 null:整颗按钮不渲染。
+  // Outside the Provider (read-only share page, etc.) returns null: the whole button is not rendered.
   const rewind = useCheckpointRewindAction(rewindTurnId);
   const rewindTitle = rewind?.available ? t("chat.rewindCode") : t("chat.rewindUnavailable");
 

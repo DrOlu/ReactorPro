@@ -35,20 +35,20 @@ test("forwarder serializes sends and coalesces deltas arriving in flight", async
 
   forward("[CLARIFY");
   forward("_QUESTION]");
-  forward("\n要做");
+  forward("\nLet's do");
   await settle();
-  // 首帧在途，后两个增量合并等待下一次冲刷。
+  // The first frame is in flight; the next two deltas are merged and wait for the next flush.
   assert.deepEqual(sent, ["[CLARIFY"]);
 
   gates[0].resolve();
   await settle();
-  assert.deepEqual(sent, ["[CLARIFY", "_QUESTION]\n要做"]);
+  assert.deepEqual(sent, ["[CLARIFY", "_QUESTION]\nLet's do"]);
 
   gates[1].resolve();
   await settle();
-  forward("什么？");
+  forward("What?");
   await settle();
-  assert.deepEqual(sent, ["[CLARIFY", "_QUESTION]\n要做", "什么？"]);
+  assert.deepEqual(sent, ["[CLARIFY", "_QUESTION]\nLet's do", "What?"]);
   gates[2].resolve();
 });
 

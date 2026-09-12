@@ -1,8 +1,9 @@
 /**
- * 基于 `invoke` 的轨迹宿主实现，两端共用。
+ * Trace host implementation based on `invoke`, shared by both ends.
  *
- * 桌面端的 `invoke` 是真实 Tauri 调用，WebUI 的 `invoke` 由 shim 路由到 Gateway
- * 请求。轨迹只读，两端语义完全一致，所以实现只需要一份——差异全在注入的 invoke。
+ * On desktop, `invoke` is a real Tauri call; on the WebUI, `invoke` is routed by a shim to a Gateway
+ * request. The trace is read-only and the semantics are identical on both ends, so only one implementation is
+ * needed -- all the difference lives in the injected invoke.
  */
 
 import type { TrajectoryEventsWindowPayload, TrajectoryHost } from "../../contracts/trajectory";
@@ -10,7 +11,7 @@ import type { ChatFileLink } from "../chat/chatFileLinks";
 import { buildTrajectorySubagentRun, concatSubagentSegmentMessages } from "./subagentRuns";
 import type { TrajectorySection, TrajectorySectionSlot, TrajectorySubagentRun } from "./types";
 
-/** 宿主注入的命令通道；与 Tauri `invoke` 同形。 */
+/** Command channel injected by the host; same shape as Tauri `invoke`. */
 export type TrajectoryInvoke = <T = unknown>(
   command: string,
   args?: Record<string, unknown>,
@@ -49,11 +50,11 @@ function normalizeSections(value: unknown): TrajectorySection[] {
 }
 
 /**
- * 构造轨迹宿主。
+ * Builds the trace host.
  *
- * @param invoke - 命令通道。
- * @param options - 可选能力：打开工作区文件。
- * @returns 只读的轨迹宿主。
+ * @param invoke - command channel.
+ * @param options - optional capabilities: open a workspace file.
+ * @returns a read-only trace host.
  */
 export function createInvokeTrajectoryHost(
   invoke: TrajectoryInvoke,

@@ -1,10 +1,12 @@
 import { startTransition, useCallback, useRef, useState } from "react";
 
-// Base UI 的 Dialog 在挂载瞬间 open 已为 true 时不会进入 starting-style（无入场过渡），
-// 关闭时直接卸载 Root 也会丢掉 ending-style（无退场过渡）。
-// 因此抽屉需常驻挂载：open 由"是否有内容"驱动；关闭后父级立刻清空内容，
-// 这里保留最后一份快照渲染完退场动画（onOpenChangeComplete(false)）再释放。
-// entered 在入场动画完成后才为 true，调用方先用骨架屏顶替重内容，避免动画期掉帧。
+// Base UI's Dialog does not enter starting-style when open is already true at mount (no enter transition),
+// and unmounting Root directly on close also loses ending-style (no exit transition).
+// The drawer therefore must stay mounted: open is driven by "whether there is content"; after close the
+// parent immediately clears the content, and here we keep the last snapshot to finish rendering the exit
+// animation (onOpenChangeComplete(false)) before releasing.
+// entered becomes true only after the enter animation completes; callers use a skeleton to stand in for
+// heavy content first, avoiding dropped frames during the animation.
 export function useDrawerPresence<T>(current: T | null): {
   open: boolean;
   snapshot: T | null;

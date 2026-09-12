@@ -75,7 +75,7 @@ type HeaderImportErrorCode = CustomHeaderImportErrorCode | "no-valid" | "failed"
 type HeaderImportSummary = {
   importedCount: number;
   overwrittenCount: number;
-  /** 切换 CLI 身份时剥掉的上一家身份头数量；普通导入不产生。 */
+  /** Number of the previous vendor's identity headers stripped when switching CLI identity; ordinary imports do not produce one. */
   removedCount?: number;
   issues: CustomHeaderImportIssue[];
 };
@@ -144,8 +144,9 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const [customHeaders, setCustomHeaders] = useState(() =>
     (initialData?.customHeaders ?? []).map((header) => ({ ...header })),
   );
-  // 只有真会发出去的头才参与请求与去重 key：半截键名/保留头在 mergeCustomHeaders
-  // 里本就会被丢掉，让它们触发重新拉取只是白等 900ms 换回同一份结果。
+  // Only headers that would actually be sent participate in the request and the dedup key:
+  // truncated key names / reserved headers are dropped anyway in mergeCustomHeaders, so letting
+  // them trigger a refetch merely waits 900ms for the same result.
   const effectiveCustomHeaders = useMemo(
     () =>
       customHeaders.filter(
@@ -161,10 +162,11 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const [headerImportError, setHeaderImportError] = useState<HeaderImportErrorCode | null>(null);
   const [headerImportSummary, setHeaderImportSummary] = useState<HeaderImportSummary | null>(null);
   const [models, setModels] = useState<ProviderModelConfig[]>(() =>
-    // 弹窗初始化处理的是已持久化的模型配置，必须走持久化归一化（保留
-    // contextWindow/maxOutputToken/limitsSource/inputModalities 等用户字段）；
-    // normalizeFetchedModels 只用于供应商 API 刷新结果（如 Gemini 的
-    // inputTokenLimit 字段形状），混用会在“打开并保存”往返中重置用户配置。
+    // Modal initialization handles already-persisted model config, so it must go through
+    // persistent normalization (preserving user fields such as
+    // contextWindow/maxOutputToken/limitsSource/inputModalities); normalizeFetchedModels is only
+    // for provider API refresh results (such as Gemini's inputTokenLimit field shape), and mixing
+    // them would reset the user's config in an "open and save" round trip.
     normalizeProviderModelConfigs(initialData?.models ?? [], providerType),
   );
   const [modelOrder, setModelOrder] = useState<string[] | undefined>(() =>
@@ -186,7 +188,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
   const [streamRetryMode, setStreamRetryMode] = useState<"default" | "off" | "custom">(
     initialData?.retryPolicy?.mode ?? "default",
   );
-  // 数字输入用本地草稿字符串，blur 时 clamp（与 usageTimeoutInput 同范式）。
+  // Numeric inputs use a local draft string, clamped on blur (same pattern as usageTimeoutInput).
   const [streamRetryCountInput, setStreamRetryCountInput] = useState(() =>
     String(
       initialData?.retryPolicy?.mode === "custom"
@@ -210,7 +212,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
       initialData?.usageQuery ?? getDefaultUsageQueryConfig(),
       isGatewayWebui,
     );
-    // general/newapi 是可编辑脚本预设:脚本为空的存量配置打开时即在编辑器填充预设。
+    // general/newapi are editable script presets: when an existing config with an empty script
+    // is opened, the preset is filled into the editor right away.
     return applyUsageQueryModePreset(draft, draft.mode);
   });
   const [customUsageQueryConfirmed, setCustomUsageQueryConfirmed] = useState(
@@ -269,15 +272,15 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     error: string | null;
   }>({ status: "idle", data: [], error: null });
   const usageQueryTestSeqRef = useRef(0);
-  // 数字输入用本地草稿字符串,blur 时 clamp 后写回 usageQuery。
+  // Numeric input uses a local draft string, clamped on blur before being written back to usageQuery.
   const [usageTimeoutInput, setUsageTimeoutInput] = useState(() => String(usageQuery.timeoutSecs));
-  // 自定义模式的"支持的变量"面板:apiKey 打码,眼睛切换明文。
+  // The "supported variables" panel in custom mode: apiKey is masked, with an eye toggle for plaintext.
   const [showUsageVariableApiKey, setShowUsageVariableApiKey] = useState(false);
-  // 变量实际生效值:查询专用覆盖优先,留空回退供应商自身配置(与 Rust
-  // prepare_script_query 的解析顺序一致)。
+  // The effective value of a variable: the query-specific override takes priority, falling back
+  // to the provider's own config when empty (same resolution order as Rust prepare_script_query).
   const usageVariableBaseUrl = usageQuery.baseUrl.trim() || baseUrl.trim();
   const usageVariableApiKey = usageQuery.apiKey.trim() || apiKey.trim();
-  // Token Plan 供应商:显式选择优先,否则按 Base URL 自动检测。
+  // Token Plan provider: explicit selection takes priority, otherwise auto-detect from the Base URL.
   const activeCodingPlanProvider =
     usageQuery.codingPlanProvider || detectCodingPlanProvider(baseUrl);
   const matchedBalanceProviders = matchBalanceProviders(baseUrl);
@@ -301,7 +304,7 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setStreamRetryCountInput(String(clampStreamRetryCount(Number(streamRetryCountInput.trim()))));
   }
 
-  /** default 态不落字段：与 normalizeProviderRetryPolicy 的持久层形态一致。 */
+  /** The default state writes no field: consistent with normalizeProviderRetryPolicy's persisted shape. */
   function serializeStreamRetryPolicy(): ProviderRetryPolicy | undefined {
     if (streamRetryMode === "off") return { mode: "off" };
     if (streamRetryMode === "custom") {
@@ -639,9 +642,11 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     setHeaderImportError(null);
   }
 
-  // 一键模拟：换成所选 CLI 的整套身份头。先剥掉其它 CLI 家族的残留头，再并入所选
-  // CLI 的头——只做同名覆盖会留下上一家的 x-app / X-Stainless-* / originator，拼出
-  // 一份假指纹。不属于任何 CLI 家族的业务头原样保留。
+  // One-click impersonation: swap in the selected CLI's full set of identity headers. First
+  // strip leftover headers from other CLI families, then merge in the selected CLI's headers —
+  // a same-name overwrite alone would leave the previous vendor's x-app / X-Stainless-* /
+  // originator, assembling a fake fingerprint. Business headers belonging to no CLI family are
+  // preserved as-is.
   function applyCliIdentityHeaders(identity: CliIdentityProviderId) {
     const result = applyCliIdentity(customHeaders, identity);
     setCustomHeaders(result.headers);
@@ -694,7 +699,8 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     if (invalidHeaderIndex >= 0) {
       setHeaderValidationSubmitted(true);
       setActivePanel("request");
-      // 导入视图会顶掉请求头列表,先切回列表再聚焦,否则目标输入框尚未挂载。
+      // The import view replaces the request-header list; switch back to the list before
+      // focusing, otherwise the target input is not mounted yet.
       setHeaderImportOpen(false);
       focusCustomHeader(
         invalidHeaderIndex,
@@ -765,8 +771,9 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
     const seq = ++usageQueryTestSeqRef.current;
     setUsageQueryTest({ status: "running", data: [], error: null });
     try {
-      // 测试永远以编辑器里的草稿为准(忽略启用开关,不落库、不进缓存);
-      // 秘密占位符经 serialize 还原为空串,由桌面端按 *Configured 沿用已存密钥。
+      // Tests always use the draft in the editor (ignoring the enable toggle; no DB write, no
+      // cache); secret placeholders are restored to empty strings by serialize, and the desktop
+      // side reuses the stored key according to *Configured.
       const draft = serializeUsageQueryDraft(usageQuery, isGatewayWebui);
       const result = await testProviderUsage(persistedUsageQueryProviderId, draft);
       if (usageQueryTestSeqRef.current !== seq) return;
@@ -822,8 +829,9 @@ function useProviderModalController({ providerType, initialData, onSave, onClose
         : orderedModels,
     [orderedModels, modelSearchQuery],
   );
-  // 表头总开关：作用于当前可见（含搜索过滤）的模型。全部启用时视为“开”，
-  // 再点一次全部禁用；部分启用时点击补全为全部启用。
+  // The master header toggle: applies to currently visible models (including search filtering).
+  // When all are enabled it reads as "on" and clicking again disables all; when partially
+  // enabled, clicking completes to all-enabled.
   const visibleActiveCount = useMemo(
     () => visibleModels.reduce((count, model) => count + (activeModels.has(model.id) ? 1 : 0), 0),
     [visibleModels, activeModels],

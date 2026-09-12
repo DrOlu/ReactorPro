@@ -185,8 +185,9 @@ export function serializeMessageForCompaction(
   };
 }
 
-// fileLedger 是给下游模型（注入 system prompt）的，summarizer 不需要它；且它不受 payload
-// 裁剪覆盖，故从发给 summarizer 的 summaryMeta 中剔除，避免超大账本膨胀压缩请求本身。
+// fileLedger is for the downstream model (injected into the system prompt); the summarizer does
+// not need it, and it is not covered by payload trimming, so it is removed from the summaryMeta
+// sent to the summarizer to keep an oversized ledger from bloating the compaction request itself.
 function summaryMetaForPayload(meta: StoredSummaryMessage["summaryMeta"]) {
   const { fileLedger, ...rest } = meta;
   void fileLedger;
@@ -317,7 +318,8 @@ function aggressivelyTrimCompactionPayloadMessages(payload: CompactionPayload): 
   });
 }
 
-// 保尾弃中：溢出重试时收缩 payload；有 previous_summary 时头部信息已被覆盖，不留头。
+// Keep the tail, drop the middle: shrink the payload on overflow retry; with a previous_summary
+// the head information is already covered, so keep no head.
 export function shrinkCompactionPayload(payload: CompactionPayload): CompactionPayload | null {
   const messages = payload.active_segment_messages;
   if (messages.length <= 6) return null;

@@ -56,14 +56,14 @@ export type ConversationPaneIdentity = {
 };
 
 export type ConversationPaneCheckpointRewind = {
-  /** 授权根来源项目;背景 Pane 传 null 表示仅用会话工作区根。 */
+  /** Authorized root source project; a background Pane passes null to use only the conversation workspace root. */
   project: Pick<WorkspaceProject, "id" | "path"> | null;
   disabled: boolean;
   onRewound: (info: CheckpointRewoundInfo) => void;
 };
 
 export type ConversationPaneTrajectory = {
-  /** 每个会话独立持有视图状态；后台 Pane 也能保持自己的轨迹投影。 */
+  /** Each conversation holds its view state independently; a background Pane can also keep its own trajectory projection. */
   active: boolean;
   renderContent: (snapshot: ConversationSurfaceSnapshot) => ReactNode;
 };
@@ -76,12 +76,12 @@ export type ConversationPaneBinding = {
   checkpointRewind: ConversationPaneCheckpointRewind;
   isConversationRunning: boolean;
   fileDrop: ConversationPaneFileDropState;
-  /** 轨迹视图（只读分析），按会话实例独立绑定。 */
+  /** Trajectory view (read-only analysis), bound independently per conversation instance. */
   trajectory?: ConversationPaneTrajectory;
   /**
-   * 背景 Pane 的发送通路：按本 Pane 的 conversationId 路由（运行中则入队），
-   * 与 Stop 的按会话路由语义一致。未提供时沿用 composer.onSend（焦点 Pane
-   * 走页面级 handleSend 管线）。
+   * The background Pane's send path: routed by this Pane's conversationId (enqueued when running),
+   * consistent with Stop's per-conversation routing semantics. When not provided, composer.onSend
+   * is used (the focused Pane goes through the page-level handleSend pipeline).
    */
   sendDraft?: (draft: MentionComposerDraft) => Promise<boolean>;
 };

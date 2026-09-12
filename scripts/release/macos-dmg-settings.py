@@ -1,4 +1,4 @@
-"""Deterministic Finder layout for the LiveAgent release DMG.
+"""Deterministic Finder layout for the ReactorPro release DMG.
 
 Unlike Finder/AppleScript-based DMG builders, dmgbuild writes the Finder
 metadata directly. This keeps the release layout stable on hosted CI runners.

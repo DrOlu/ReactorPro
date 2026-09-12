@@ -1,7 +1,7 @@
-//! v2 线协议（WebSocket+Protobuf）客户端传输层：URL 推导、子协议建连、hello 握手、prost 帧编解码。
-//! 一切失败（建连、握手、鉴权被拒）均以错误消息上抛，由连接层统一退避重连。
-//! 本模块刻意不依赖 tauri，
-//! 便于纯 tokio 测试；业务信封收发主循环由 connection.rs / terminal.rs 驱动。
+//! v2 wire protocol (WebSocket+Protobuf) client transport layer: URL derivation, subprotocol connect, hello handshake, prost frame encode/decode.
+//! All failures (connect, handshake, auth rejected) are surfaced as error messages, and the connection layer handles unified backoff/reconnect.
+//! This module deliberately does not depend on tauri,
+//! which keeps it testable with pure tokio; the main business envelope send/receive loops are driven by connection.rs / terminal.rs.
 
 use std::time::Duration;
 
@@ -19,27 +19,27 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use super::ensure_rustls_crypto_provider;
 use super::gateway_proto::v2;
 
-/// v2 WebSocket 子协议名（与 Go 侧 `pbws.Subprotocol` 一致；服务端必须回显）。
+/// v2 WebSocket subprotocol name (matches Go-side `pbws.Subprotocol`; the server must echo it).
 pub(crate) const GATEWAY_WS_SUBPROTOCOL: &str = "liveagent.v2.pb";
-/// v2 协议版本号（`ClientHello.protocol_version`）。
+/// v2 protocol version number (`ClientHello.protocol_version`).
 pub(crate) const GATEWAY_WS_PROTOCOL_VERSION: u32 = 2;
-/// 可靠聊天镜像协议的能力标识。
+/// Capability marker for the reliable chat mirror protocol.
 pub(crate) const CHAT_INGRESS_V1_CAPABILITY: &str = "CHAT_INGRESS_V1";
-/// 当前消息可授权按需读取所引用历史会话的能力标识。
+/// Capability marker for authorized on-demand reads of historical conversations referenced by the current message.
 pub(crate) const CONVERSATION_REFERENCES_V1_CAPABILITY: &str = "CONVERSATION_REFERENCES_V1";
-/// 桌面端主链路路径。
+/// Desktop main link path.
 pub(crate) const GATEWAY_WS_AGENT_PATH: &str = "/ws/v2/agent";
-/// 终端数据面路径。
+/// Terminal data-plane path.
 pub(crate) const GATEWAY_WS_TERMINAL_PATH: &str = "/ws/v2/terminal";
-/// 鉴权失败时服务端的自定义关闭码（Go 侧 `closeCodeUnauthorized`）。
+/// Server-defined close code on auth failure (Go-side `closeCodeUnauthorized`).
 pub(crate) const GATEWAY_WS_CLOSE_CODE_UNAUTHORIZED: u16 = 4401;
-/// 建连 + hello 应答的整体超时。
+/// Overall timeout for connect + hello response.
 pub(crate) const GATEWAY_WS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(crate) type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
-/// 从网关基址推导 v2 WS URL：http→ws、https→wss，保留路径前缀（反代子路径），丢弃查询串与片段。
-/// 端口取设置里的 `gateway_port`，非零时覆盖基址端口，与界面预览拼法一致。
+/// Derives the v2 WS URL from the gateway base: http→ws, https→wss, preserving the path prefix (reverse-proxy subpath) and dropping query string and fragment.
+/// The port comes from the `gateway_port` setting; when nonzero it overrides the base port, matching how the UI preview builds it.
 pub(crate) fn build_ws_url(
     gateway_url: &str,
     gateway_port: u16,
@@ -68,7 +68,7 @@ pub(crate) fn build_ws_url(
     Ok(url.to_string())
 }
 
-/// 构造 v2 hello 载荷：桌面端两条链路均以 CLIENT_ROLE_AGENT 建连。
+/// Builds the v2 hello payload: both desktop links connect with CLIENT_ROLE_AGENT.
 pub(crate) fn build_client_hello(
     token: &str,
     agent_id: String,
@@ -89,17 +89,17 @@ pub(crate) fn build_client_hello(
     }
 }
 
-/// prost 编码为一条 WS 二进制消息（v2 约定：一帧一消息，无长度前缀）。
+/// prost-encodes into a single WS binary message (v2 convention: one frame per message, no length prefix).
 pub(crate) fn encode_ws_frame<M: ProstMessage>(frame: &M) -> Message {
     Message::Binary(frame.encode_to_vec().into())
 }
 
-/// 从 WS 二进制消息解码一条 prost 帧。
+/// Decodes a single prost frame from a WS binary message.
 pub(crate) fn decode_ws_frame<M: ProstMessage + Default>(data: &[u8]) -> Result<M, String> {
     M::decode(data).map_err(|error| format!("decode gateway v2 frame failed: {error}"))
 }
 
-/// ServerHello 校验：ok=false 即鉴权被拒（服务端随即以 4401 关闭），透传服务端消息。
+/// ServerHello validation: ok=false means auth was rejected (the server then closes with 4401); the server message is passed through.
 pub(crate) fn vet_server_hello(hello: v2::ServerHello) -> Result<v2::ServerHello, String> {
     if hello.ok {
         if hello
@@ -121,7 +121,7 @@ pub(crate) fn vet_server_hello(hello: v2::ServerHello) -> Result<v2::ServerHello
     })
 }
 
-/// hello 应答前收到关闭帧的错误消息：4401 透传鉴权拒绝原因，其余带上关闭码。
+/// Error message for a close frame received before the hello response: 4401 passes through the auth-rejection reason, others include the close code.
 pub(crate) fn pre_hello_close_error(frame: Option<&CloseFrame>) -> String {
     match frame {
         Some(frame) if u16::from(frame.code) == GATEWAY_WS_CLOSE_CODE_UNAUTHORIZED => {
@@ -140,7 +140,7 @@ pub(crate) fn pre_hello_close_error(frame: Option<&CloseFrame>) -> String {
     }
 }
 
-/// 建立 v2 主链路（/ws/v2/agent）：建连并完成 hello 握手，返回流与 ServerHello。
+/// Establishes the v2 main link (/ws/v2/agent): connects and completes the hello handshake, returning the stream and ServerHello.
 pub(crate) async fn connect_agent_ws(
     url: &str,
     hello: v2::ClientHello,
@@ -151,7 +151,7 @@ pub(crate) async fn connect_agent_ws(
     connect_and_hello(url, frame, decode_agent_server_hello).await
 }
 
-/// 建立 v2 终端数据面链路：连接 /ws/v2/terminal（角色 AGENT），流程同主链路。
+/// Establishes the v2 terminal data-plane link: connects to /ws/v2/terminal (role AGENT), same flow as the main link.
 pub(crate) async fn connect_terminal_ws(
     url: &str,
     hello: v2::ClientHello,
@@ -178,7 +178,7 @@ fn decode_terminal_server_hello(data: &[u8]) -> Result<Option<v2::ServerHello>, 
     })
 }
 
-/// 建连 + hello 握手的公共骨架，整体受 [`GATEWAY_WS_HANDSHAKE_TIMEOUT`] 约束。
+/// Shared skeleton for connect + hello handshake, bounded overall by [`GATEWAY_WS_HANDSHAKE_TIMEOUT`].
 async fn connect_and_hello(
     url: &str,
     hello_frame: Message,
@@ -198,10 +198,10 @@ async fn connect_and_hello(
         .map_err(|_| "gateway v2 handshake timed out".to_string())?
 }
 
-/// 以 v2 子协议发起 WS 升级并校验服务端回显（旧网关兜底路由可能接受升级却不认识 v2 帧）。
+/// Initiates the WS upgrade with the v2 subprotocol and validates the server echo (an old gateway's fallback route may accept the upgrade without understanding v2 frames).
 async fn connect_ws(url: &str) -> Result<WsStream, String> {
     if url.starts_with("wss://") {
-        // rustls 连接器复用进程级默认 crypto provider（ensure_rustls_crypto_provider 负责唯一一次 ring 安装）。
+        // The rustls connector reuses the process-level default crypto provider (ensure_rustls_crypto_provider handles the single ring installation).
         ensure_rustls_crypto_provider();
     }
     let mut request = url
@@ -227,7 +227,7 @@ async fn connect_ws(url: &str) -> Result<WsStream, String> {
     Ok(stream)
 }
 
-/// 等待 ServerHello；hello 前容忍 Ping/Pong 控制帧，其余帧按协议错误（hello 必为首帧）。
+/// Waits for ServerHello; Ping/Pong control frames are tolerated before hello, and any other frame is a protocol error (hello must be the first frame).
 async fn await_server_hello(
     stream: &mut WsStream,
     decode_hello: fn(&[u8]) -> Result<Option<v2::ServerHello>, String>,
@@ -243,7 +243,7 @@ async fn await_server_hello(
                 };
             }
             Some(Ok(Message::Close(frame))) => return Err(pre_hello_close_error(frame.as_ref())),
-            // WS 控制帧（Ping/Pong）不参与握手语义。
+            // WS control frames (Ping/Pong) are not part of handshake semantics.
             Some(Ok(_)) => continue,
         }
     }
@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn build_ws_url_maps_http_to_ws() {
-        // 端口框（gateway_port）与界面预览一致：无条件覆盖基址端口。
+        // The port field (gateway_port) matches the UI preview: it unconditionally overrides the base port.
         assert_eq!(
             build_ws_url(
                 "http://gateway.example.com:8080",
@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn build_ws_url_applies_configured_port_to_portless_base() {
-        // 回归用例：端口单独存于 gateway_port、基址不带端口时，曾因未补端口导致 v2 拨到 80。
+        // Regression case: with the port stored separately in gateway_port and a portless base, v2 once dialed port 80 because the port wasn't appended.
         assert_eq!(
             build_ws_url("http://127.0.0.1", 50052, GATEWAY_WS_AGENT_PATH)
                 .expect("build ws url with configured port"),
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn build_ws_url_overrides_explicit_base_port() {
-        // 界面预览的语义：端口框优先于基址里写的端口。
+        // UI preview semantics: the port field takes precedence over the port written in the base.
         assert_eq!(
             build_ws_url(
                 "http://gateway.example.com:9999",
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn pre_hello_close_error_surfaces_unauthorized_reason() {
-        // 4401 透传服务端拒绝原因；其余关闭码/无关闭帧给出带上下文的握手失败消息。
+        // 4401 passes through the server's rejection reason; other close codes / no close frame yield a context-rich handshake failure message.
         let unauthorized = CloseFrame {
             code: CloseCode::from(GATEWAY_WS_CLOSE_CODE_UNAUTHORIZED),
             reason: "unauthorized".into(),
@@ -415,7 +415,7 @@ mod tests {
                 .await
                 .expect("accept ws");
 
-            // 首帧必须是携带 AGENT 角色与令牌的 hello。
+            // The first frame must be a hello carrying the AGENT role and token.
             let hello_frame: v2::AgentClientFrame =
                 decode_ws_frame(&read_binary(&mut ws).await).expect("decode hello frame");
             let Some(v2::agent_client_frame::Payload::Hello(hello)) = hello_frame.payload else {
@@ -445,7 +445,7 @@ mod tests {
             .await
             .expect("send server hello");
 
-            // 回显一条信封（request_id 原样带回）。
+            // Echo an envelope (request_id carried back verbatim).
             let envelope_frame: v2::AgentClientFrame =
                 decode_ws_frame(&read_binary(&mut ws).await).expect("decode envelope frame");
             let Some(v2::agent_client_frame::Payload::Envelope(envelope)) = envelope_frame.payload
@@ -554,7 +554,7 @@ mod tests {
 
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.expect("accept tcp");
-            // 不回显子协议：模拟旧网关上恰好接受任意升级的兜底路由。
+            // Don't echo the subprotocol: simulates an old gateway's fallback route that happens to accept any upgrade.
             let _ws = tokio_tungstenite::accept_async(stream)
                 .await
                 .expect("accept ws");

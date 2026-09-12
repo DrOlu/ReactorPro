@@ -34,16 +34,16 @@ export function resolveEffectiveChatModelSelection(params: {
   const resolveLocalSelection = (): EffectiveChatModelSelection => {
     const activeSelectedModel = resolveActiveModelSelection(settings, conversationSelectedModel);
     if (!activeSelectedModel) {
-      throw new Error("请先在输入框左下角选择一个模型（或先去设置添加模型）。");
+      throw new Error("Please select a model at the bottom-left of the input box first (or add one in Settings).");
     }
 
     const { customProviderId, model } = activeSelectedModel;
     const provider = settings.customProviders.find((item) => item.id === customProviderId);
     if (!provider) {
-      throw new Error("所选供应商不存在，请重新选择模型。");
+      throw new Error("The selected provider does not exist; please select a model again.");
     }
     if (!provider.activeModels.includes(model)) {
-      throw new Error("所选模型未启用，请重新选择模型。");
+      throw new Error("The selected model is not enabled; please select a model again.");
     }
 
     return {
@@ -62,22 +62,22 @@ export function resolveEffectiveChatModelSelection(params: {
   const model = gatewaySelectedModel.model.trim();
   const providerType = normalizeGatewayProviderType(gatewaySelectedModel.providerType);
   if (!customProviderId || !model || !providerType) {
-    throw new Error("远程请求携带的模型配置无效，请在 WebUI 重新选择模型后重试。");
+    throw new Error("The model config carried by the remote request is invalid; please select the model again in the WebUI and retry.");
   }
 
   const provider = settings.customProviders.find((item) => item.id === customProviderId);
   if (!provider) {
     throw new Error(
-      "远程请求所选模型对应的供应商不存在，请同步桌面端设置后在 WebUI 重新选择模型。",
+      "The provider for the model selected by the remote request does not exist; please sync the desktop settings and select the model again in the WebUI.",
     );
   }
   if (provider.type !== providerType) {
     throw new Error(
-      "远程请求所选模型的供应商类型与桌面端配置不一致，请同步桌面端设置后在 WebUI 重新选择模型。",
+      "The provider type of the model selected by the remote request does not match the desktop configuration; please sync the desktop settings and select the model again in the WebUI.",
     );
   }
   if (!provider.activeModels.includes(model)) {
-    throw new Error("远程请求所选模型未在桌面端启用，请同步桌面端设置后在 WebUI 重新选择模型。");
+    throw new Error("The model selected by the remote request is not enabled on the desktop; please sync the desktop settings and select the model again in the WebUI.");
   }
 
   return {

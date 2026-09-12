@@ -106,7 +106,8 @@ export function SkillsImportView(props: {
 
   const [activeTool, setActiveTool] = useState<string>(scans[0]?.tool ?? "claude-code");
   const userChoseToolRef = useRef(false);
-  // 扫描结果就绪后自动定位到第一个有技能的工具；用户手动切换后不再干预
+  // Once scan results are ready, automatically focus the first tool that has
+  // skills; after the user switches manually, stop intervening.
   useEffect(() => {
     if (userChoseToolRef.current || scans.length === 0) return;
     const preferred =
@@ -116,7 +117,7 @@ export function SkillsImportView(props: {
     }
   }, [scans, activeTool]);
   const activeScan = filteredScans.find((scan) => scan.tool === activeTool);
-  // 「已选 X / Y」与全选按钮都只统计可导入项：已安装项不可选，不计入分子分母。
+  // Both "X / Y selected" and the select-all button count only importable items: installed items are not selectable and do not count toward the numerator or denominator.
   const selectableVisibleBaseDirs = useMemo(
     () =>
       activeScan?.skills

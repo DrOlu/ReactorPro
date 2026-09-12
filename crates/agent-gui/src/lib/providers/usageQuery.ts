@@ -1,5 +1,7 @@
-// 平台传输适配层:GUI 端用量查询直接走 Tauri invoke,由桌面端执行 API-only 查询。
-// 共享的状态归约/协调器/hook 逻辑在 usageQueryCore.ts(两端字节镜像),本文件只放平台差异。
+// Platform transport adapter layer: on the GUI side usage queries go directly through Tauri
+// invoke, with the desktop side performing an API-only query. The shared state reduction /
+// coordinator / hook logic lives in usageQueryCore.ts (a byte-for-byte mirror on both sides);
+// this file holds only platform differences.
 
 import {
   type ProviderUsageResult,
@@ -19,8 +21,9 @@ export async function queryProviderUsage(
 }
 
 /**
- * 「测试查询」:按编辑器草稿配置试查询——忽略启用开关、不落库、不进缓存。
- * WebUI 草稿的秘密为脱敏空串,靠 *Configured 标志让桌面端沿用已存密钥。
+ * "Test query": try a query using the editor's draft config -- ignore the enable switch, do not
+ * persist, do not cache. A WebUI draft's secret is a redacted empty string, and the *Configured
+ * flag makes the desktop side reuse the already-stored key.
  */
 export async function testProviderUsage(
   providerId: string,

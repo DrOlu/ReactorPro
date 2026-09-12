@@ -20,7 +20,7 @@ Keep the active assistant turn structurally stable while thinking, tools, tool r
 3. Desktop live content is split into several outer virtual rows; only the mutable tail is force-mounted. The active turn therefore changes the virtual row set as blocks arrive.
 4. `anchorTo: "end"` in the transcript virtualizer and `useScrollFollow` both compensate the same bottom growth. Resize measurement and bottom pin writes can land sequentially and create a visible direction reversal.
 5. Gateway already keeps one outer assistant row per turn, but shares the inline thinking expansion, tool grouping transition, end anchoring, and scroll-follow competition.
-6. Runtime frame sampling exposed a second height oscillator after scroll ownership was unified: the live status footer was conditionally removed between tool phases, and long `正在执行…` text wrapped to two lines before returning to one-line `Vibing...`. Each cycle changed the measured height by about 15.2px, so the browser clamped upward before the next bottom pin.
+6. Runtime frame sampling exposed a second height oscillator after scroll ownership was unified: the live status footer was conditionally removed between tool phases, and long `Executing…` text wrapped to two lines before returning to one-line `Vibing...`. Each cycle changed the measured height by about 15.2px, so the browser clamped upward before the next bottom pin.
 7. Desktop settlement cleared the active activity before its persisted history twin was guaranteed to exist. A one-render persistence lag therefore removed the whole live row; a second turn could also discard the first turn's unresolved stream-origin alias.
 
 ## Approved implementation direction
@@ -45,7 +45,7 @@ Keep the active assistant turn structurally stable while thinking, tools, tool r
 
 ## Task tool compatibility
 
-Task tools remain standalone render units, so hiding `TaskCreate`、`TaskUpdate`、`TaskList` cannot hide adjacent ordinary tools or alter their activity identity.
+Task tools remain standalone render units, so hiding `TaskCreate`, `TaskUpdate`, `TaskList` cannot hide adjacent ordinary tools or alter their activity identity.
 
 ## Verification status
 
@@ -59,7 +59,7 @@ Task tools remain standalone render units, so hiding `TaskCreate`、`TaskUpdate`
 - Focused activity/identity/scroll tests: passed, including 100 appended tools, stable live-to-settled keys, interleaved reasoning/tool/result order, and one-frame pin coalescing.
 - Mirrored live-caret regression tests assert that neither GUI nor WebUI round content requests a Markdown caret; both focused tests and both builds pass.
 - GUI/WebUI status-width regression tests assert the non-expanding container chain and full-width truncation target; focused tests, touched-file lint, both builds, Mirror Check, and diff hygiene pass.
-- Coverage audit follow-up: mirrored special-tool identity tests now cover `TaskCreate`、`TaskUpdate`、`TaskList`、`AskUserQuestion`、`Image`、`Agent`, and hosted-search singleton-to-group stability. Gateway row tests explicitly apply result B before result A, repeat result B, and assert the original A/B order, result ownership, error status, and outer assistant key remain stable.
+- Coverage audit follow-up: mirrored special-tool identity tests now cover `TaskCreate`, `TaskUpdate`, `TaskList`, `AskUserQuestion`, `Image`, `Agent`, and hosted-search singleton-to-group stability. Gateway row tests explicitly apply result B before result A, repeat result B, and assert the original A/B order, result ownership, error status, and outer assistant key remain stable.
 - GUI lint: 419 errors / 358 warnings / 9 infos versus baseline 428 / 358 / 9. A final targeted Biome check of all 14 touched GUI source files exited successfully with three existing warnings and no errors.
 - Gateway WebUI lint: 289 errors / 310 warnings / 10 infos versus baseline 296 / 310 / 10. A final targeted Biome check of all 11 touched WebUI source files exited successfully with 22 existing warnings and no errors.
 - Mirror Check: 122/122 passed.
@@ -73,7 +73,7 @@ Task tools remain standalone render units, so hiding `TaskCreate`、`TaskUpdate`
 - An older Tauri instance from `target\codex-transcript-order-scroll-jitter-worktree` owned port 1420. Only its verified running process tree was stopped; the old worktree was not modified or cleaned.
 - Tauri was launched from this task worktree with `pnpm --dir crates/agent-gui tauri dev`; `LIBCLANG_PATH` was resolved from the local Python clang runtime without changing repository configuration.
 - Task Vite's command line was rooted at this task worktree and listened on `127.0.0.1:1420`.
-- The desktop binary resolved to this worktree's `target\debug\liveagent.exe`, was rebuilt for the acceptance run, and Windows reported the `LiveAgent` window responsive. Source HEAD remained `849daf269762846557cc8243c5fe6e7fb155ed72` plus the uncommitted task diff.
+- The desktop binary resolved to this worktree's `target\debug\liveagent.exe`, was rebuilt for the acceptance run, and Windows reported the `ReactorPro` window responsive. Source HEAD remained `849daf269762846557cc8243c5fe6e7fb155ed72` plus the uncommitted task diff.
 - Gateway was started from this task source with `go run ./cmd/gateway`, listening at `127.0.0.1:18080` with an isolated temporary agent database; no credential value is recorded in this worklog.
 - WebUI Vite was rooted in this task worktree. Because the package script forwarded an extra literal `--`, Vite ignored the requested 15173 value; with an older unrelated server already on 5173, this verified task server selected `http://127.0.0.1:5174`. Its root returned HTTP 200 and the expected title.
 - A headed Playwright browser authenticated against the task Gateway, and the desktop agent connected to that independent Gateway. The real acceptance conversation executed tools from the task worktree and reported the required branch and baseline HEAD.
@@ -101,10 +101,10 @@ All prompts below are read-only unless the row explicitly asks the user to press
 | Tool failure and recovery | GUI + WebUI | Send the failure prompt below. | The failed tool changes to failed in place, later successful tool appends after it, and the activity container remains stable. |
 | Stop/cancel | GUI + WebUI | Send the stop prompt; after the long-running tool begins, press Stop once. | Running item becomes cancelled/aborted in place; no duplicate status row; turn settles once without a final jump. |
 | Retry | GUI + WebUI | Use the existing retry action on the failed turn exactly once. | A new attempt is represented without reordering the settled prior turn; repeated click is not duplicated. |
-| AskUserQuestion | GUI + WebUI | Send the question prompt; wait five seconds, select “继续”, submit once. | Pending card and surrounding activities do not move; answering resumes the same turn; duplicate submission is blocked. |
+| AskUserQuestion | GUI + WebUI | Send the question prompt; wait five seconds, select "Continue", submit once. | Pending card and surrounding activities do not move; answering resumes the same turn; duplicate submission is blocked. |
 | Task tool compatibility | GUI + WebUI | The twelve-step prompt creates tasks once and updates each by stable ID. | Hidden task tools never split adjacent ordinary tools or change their identity; the progress snapshot retains stable task IDs. |
 | Image | GUI + WebUI | Attach a small image and ask the agent to inspect its dimensions/read visible text, without editing files. | Image tool/activity stays at its original position as result arrives; preview/details still open. |
-| Hosted search | GUI + WebUI | Ask: “使用 hosted search 查找 LiveAgent 仓库主页，只返回标题和 URL。” | Search row updates in place and does not regroup neighboring shell/file tools. |
+| Hosted search | GUI + WebUI | Ask: "Use hosted search to find the ReactorPro repository homepage; return only the title and URL." | Search row updates in place and does not regroup neighboring shell/file tools. |
 | Subagent | GUI + WebUI | Use the parallel-subagent prompt. | Both subagent activities keep stable identity, progress/result details remain accessible. |
 | Narrow/light/dark/reduced motion | WebUI + GUI | Repeat overlay and live-list checks at ~390px, light and dark theme, with reduced motion enabled. | No horizontal overflow; overlay is clamped; no layout-height animation. |
 | Conversation switch/history restore | GUI + WebUI | While idle, switch to another conversation and back; reload WebUI once. | Restored settled order equals the live order and no duplicate/remounted activity appears. |
@@ -116,49 +116,49 @@ All prompts below are read-only unless the row explicitly asks the user to press
 ### Sequential twelve-step prompt
 
 ```text
-这是实时活动稳定性验收。不要修改任何文件，不要并行、合并、跳过或批量完成步骤。
+This is the live activity stability acceptance. Do not modify any files, and do not complete steps in parallel, merged, skipped, or batched form.
 
-1. 首先为下面 12 项工作分别调用 TaskCreate，并记录执行器返回的稳定 taskId；创建完成后用 TaskUpdate 将第 1 项设为 in_progress。
-2. 每完成一项，立即用 TaskUpdate 按 taskId 将刚完成项设为 completed、下一项设为 in_progress；不要重建或重排任务。
-3. 每次 TaskUpdate 后执行 Start-Sleep -Seconds 2，再执行下一项。
-4. 每项必须使用一次独立工具调用，严格串行：
-   1) 获取当前工作目录
-   2) 获取当前 Git 分支
-   3) 获取当前 HEAD SHA
-   4) 查看 git status --short
-   5) 获取 Node.js 版本
-   6) 获取 pnpm 版本
-   7) 获取 rustc 版本
-   8) 获取 Cargo 版本
-   9) 获取 Go 版本
-   10) 检查 crates/agent-gui/package.json 是否存在
-   11) 检查 crates/agent-gateway/web/package.json 是否存在
-   12) 只读汇总前面结果
-5. 在相邻工具之间可以简短说明当前进度，但不要修改文件，不要调用 AskUserQuestion。
+1. First call TaskCreate separately for the 12 items below, and record the stable taskId returned by the executor; after creation, use TaskUpdate to set item 1 to in_progress.
+2. Each time an item is completed, immediately use TaskUpdate by taskId to set the just-completed item to completed and the next item to in_progress; do not recreate or reorder tasks.
+3. After each TaskUpdate, run Start-Sleep -Seconds 2 before executing the next item.
+4. Each item must use one separate tool call, strictly serial:
+   1) Get the current working directory
+   2) Get the current Git branch
+   3) Get the current HEAD SHA
+   4) Inspect git status --short
+   5) Get the Node.js version
+   6) Get the pnpm version
+   7) Get the rustc version
+   8) Get the Cargo version
+   9) Get the Go version
+   10) Check whether crates/agent-gui/package.json exists
+   11) Check whether crates/agent-gateway/web/package.json exists
+   12) Summarize the preceding results read-only
+5. Between adjacent tools you may briefly state current progress, but do not modify files and do not call AskUserQuestion.
 ```
 
 ### Parallel/out-of-order subagent prompt
 
 ```text
-只读验收，不修改文件。连续启动两个独立 Agent/subagent 活动，保持首次出现顺序：第一个等待 4 秒后读取当前分支；第二个等待 1 秒后读取当前 HEAD。允许并行并让第二个先返回。两者完成后再用一个普通 shell 工具汇总结果。不得重排或重新命名已有活动。
+Read-only acceptance, do not modify files. Start two independent Agent/subagent activities consecutively, preserving first-seen order: the first waits 4 seconds and then reads the current branch; the second waits 1 second and then reads the current HEAD. Parallelism is allowed, and let the second return first. After both complete, use one ordinary shell tool to summarize the results. Do not reorder or rename existing activities.
 ```
 
 ### Failure/recovery prompt
 
 ```text
-只读验收。先执行一个必然失败且不修改系统的命令，输出固定错误并以非零状态退出；失败后不要重试该命令，继续用新的独立工具调用执行 git rev-parse HEAD，最后说明两个结果。不要并行。
+Read-only acceptance. First execute a command that is guaranteed to fail and does not modify the system, emitting a fixed error and exiting with a non-zero status; after the failure, do not retry that command, and continue with a new separate tool call running git rev-parse HEAD, then explain both results. Do not parallelize.
 ```
 
 ### Stop prompt
 
 ```text
-只读验收。先说明将开始等待，然后执行一个持续 30 秒的等待命令；等待结束后才允许读取当前分支。不要后台运行，不要并行。我会在等待期间按一次 Stop。
+Read-only acceptance. First state that you are about to begin waiting, then execute a wait command lasting 30 seconds; only after the wait ends may you read the current branch. Do not run in the background and do not parallelize. I will press Stop once during the wait.
 ```
 
 ### AskUserQuestion prompt
 
 ```text
-只读验收。先调用 AskUserQuestion 询问“是否继续稳定性验收？”，只提供“继续”和“取消”两个选项。在我回答前不要调用其他工具；选择继续后读取当前 HEAD 并结束。
+Read-only acceptance. First call AskUserQuestion to ask "Proceed with the stability acceptance?", offering only the two options "Continue" and "Cancel". Do not call other tools before I answer; after I choose Continue, read the current HEAD and finish.
 ```
 
 ## Frame-level evidence protocol
@@ -185,4 +185,4 @@ The original 2026-08-01 manual acceptance is complete. The 2026-08-06 maintenanc
 - `cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests` passes using the existing local Python clang runtime, with five unchanged unused/dead-code warnings.
 - Mirror Check passes for 118 files and `git diff --check upstream/main..HEAD` passes. Independent Git and GUI/WebUI semantic reviews found no P0/P1/P2 blocker; the details overlay remains intentionally user-activated while `thinkingOpen` drives only the compact running state, matching Issue #349 and the original acceptance matrix.
 - Fresh same-HEAD Tauri acceptance ran from `chore-pr-350-rebase@e61a2bdf`: Vite returned HTTP 200 and the current-workspace `target/debug/liveagent.exe` window remained responsive.
-- The user explicitly confirmed `PR #350 通过` on 2026-08-06 after the rebase acceptance matrix covering stable streaming identity/order, bottom-follow and detached-reader anchoring, thinking overlay interactions, parallel/out-of-order tools, failure/retry, Stop/cancel, AskUserQuestion, history/reconnect restoration, narrow layout, themes, and reduced motion. This authorizes the guarded amend and exact force-with-lease update of the PR branch.
+- The user explicitly confirmed "PR #350 passed" on 2026-08-06 after the rebase acceptance matrix covering stable streaming identity/order, bottom-follow and detached-reader anchoring, thinking overlay interactions, parallel/out-of-order tools, failure/retry, Stop/cancel, AskUserQuestion, history/reconnect restoration, narrow layout, themes, and reduced motion. This authorizes the guarded amend and exact force-with-lease update of the PR branch.

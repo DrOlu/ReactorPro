@@ -3,23 +3,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export type SettingsOverlayState = "closed" | "entering" | "open" | "leaving";
 
 /**
- * 进场 / 退场的兜底时长。
+ * Fallback duration for entering / leaving.
  *
- * 需要兜底是因为两条推进路径在文档隐藏时都不发生：`requestAnimationFrame`
- * 的回调被挂起，`transitionend` 被 WebKit 抑制。后台启动或最小化时打开设置
- * 页，进场会永远停在 opacity-0（整页看起来是空白），退场会永远停在 leaving
- * （面板不卸载）。
+ * A fallback is needed because neither advance path happens while the document is hidden:
+ * `requestAnimationFrame` callbacks are suspended, and `transitionend` is suppressed by WebKit.
+ * If the settings page is opened while backgrounded or minimized, entering would stay at opacity-0
+ * forever (the whole page looks blank) and leaving would stay at leaving forever (the panel never
+ * unmounts).
  *
- * 350ms 略大于 300ms 的 CSS 过渡：前台时正常路径总是先到，兜底只在异常时生效。
+ * 350ms is slightly longer than the 300ms CSS transition: in the foreground the normal path always
+ * arrives first, so the fallback only takes effect in abnormal cases.
  */
 const OVERLAY_FALLBACK_MS = 350;
 
 /**
- * 设置页浮层的开合状态机。
+ * Open/close state machine for the settings overlay.
  *
- * 只有一个状态：`settingsOpen` 由 `overlay` 推导（非 closed 即为开）。曾经是
- * 两个 useState 并行维护，于是需要一个 ref 去读最新的 overlay、还要小心
- * StrictMode 下重复调用 setter——都是同一份事实存两遍带来的负担。
+ * There is only one state: `settingsOpen` is derived from `overlay` (anything not closed is open).
+ * It used to be two useState values maintained in parallel, which required a ref to read the latest
+ * overlay and careful handling of duplicate setter calls under StrictMode -- all the burden of
+ * storing the same fact twice.
  */
 export function useSettingsOverlay() {
   const [overlay, setOverlay] = useState<SettingsOverlayState>("closed");
@@ -33,8 +36,9 @@ export function useSettingsOverlay() {
   }, []);
 
   /**
-   * 把状态从 `from` 推进到 `to`。用函数式更新，因此谁先到都一样：rAF 链、
-   * 350ms 兜底、visibilitychange 三条路径彼此幂等。
+   * Advance the state from `from` to `to`. It uses a functional update, so arrival order does not
+   * matter: the rAF chain, the 350ms fallback, and visibilitychange are idempotent with respect to
+   * one another.
    */
   const promote = useCallback((from: SettingsOverlayState, to: SettingsOverlayState) => {
     setOverlay((current) => (current === from ? to : current));
@@ -56,8 +60,8 @@ export function useSettingsOverlay() {
     armFallback("entering", "open");
 
     if (typeof document === "undefined" || document.visibilityState !== "visible") {
-      // 隐藏状态下 rAF 不会回调。直接推进，等用户把窗口切到前台时浮层已经
-      // 处于可见状态，而不是停在 opacity-0。
+      // rAF does not call back while hidden. Advance directly, so by the time the user switches the
+      // window to the foreground the overlay is already visible rather than stuck at opacity-0.
       promote("entering", "open");
       return;
     }
@@ -78,8 +82,9 @@ export function useSettingsOverlay() {
     setOverlay("closed");
   }, [clearFallback]);
 
-  // 文档重新可见时立刻推进，不必再等兜底计时器——后台时计时器会被浏览器
-  // 降频，用户切回来可能正好卡在那一段。
+  // Advance immediately when the document becomes visible again, without waiting for the fallback
+  // timer -- background timers are throttled by the browser, and the user switching back could land
+  // right inside that stretch.
   useEffect(() => {
     if (typeof document === "undefined") return;
     const onVisibilityChange = () => {
@@ -91,7 +96,7 @@ export function useSettingsOverlay() {
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [promote]);
 
-  // 卸载后不该再有计时器落地。
+  // No timer should fire after unmount.
   useEffect(() => clearFallback, [clearFallback]);
 
   return {

@@ -35,7 +35,8 @@ const MEMORY_SCORE_WEIGHT_REFERENCE: f64 = 1.0;
 const MEMORY_SCORE_WEIGHT_DAILY: f64 = 0.35;
 const MEMORY_CONFIDENCE_UNKNOWN: &str = "unknown";
 const ORGANIZE_RUN_STALE_AFTER_MS: i64 = 6 * 60 * 60 * 1000;
-const ORGANIZE_RUN_STALE_SUMMARY: &str = "上一次记忆整理长时间未完成，已自动标记为失败。";
+const ORGANIZE_RUN_STALE_SUMMARY: &str =
+    "The previous memory organization run did not finish for a long time and has been automatically marked as failed.";
 
 const MEMORY_SCHEMA_DDL: &str = r#"
 PRAGMA journal_mode = WAL;

@@ -7,7 +7,7 @@ use serde_json::Value;
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const MAX_PROVIDER_MODELS_RESPONSE_BYTES: usize = 2 << 20;
 const PROVIDER_MODELS_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-const PROVIDER_MODELS_TIMEOUT_MESSAGE: &str = "供应商模型列表请求超时（10 秒）";
+const PROVIDER_MODELS_TIMEOUT_MESSAGE: &str = "Provider models list request timed out (10 seconds)";
 const CODEX_MODELS_SUFFIXES: [&str; 3] = ["/chat/completions", "/responses", "/response"];
 
 #[derive(Clone, Debug)]
@@ -31,8 +31,8 @@ pub async fn fetch_provider_models(
     is_full_url: bool,
     custom_headers: &[(String, String)],
 ) -> Result<String, String> {
-    // 与本地反代的 x-liveagent-use-system-proxy 语义一致：勾选时代理配置异常
-    // fail fast，绝不静默降级；未勾选一律直连（忽略环境代理）。
+    // Matches the local reverse proxy's x-liveagent-use-system-proxy semantics: when checked, a proxy config error
+    // fails fast and never silently degrades; when unchecked, always connect directly (ignoring environment proxies).
     let client = if use_system_proxy {
         crate::services::system_proxy::cached_client()
             .map_err(|error| format!("App proxy unavailable: {error}"))?
@@ -62,7 +62,7 @@ fn direct_client() -> Result<Client, String> {
     let client = Client::builder()
         .no_proxy()
         .build()
-        .map_err(|_| "创建直连 HTTP 客户端失败".to_string())?;
+        .map_err(|_| "Failed to create direct HTTP client".to_string())?;
     Ok(CLIENT.get_or_init(|| client).clone())
 }
 
@@ -96,7 +96,7 @@ async fn fetch_provider_models_with_client(
             Err(_) => {
                 failures.push(ProviderModelsFailure {
                     status: None,
-                    message: "无法通过桌面端代理请求供应商模型列表".to_string(),
+                    message: "Unable to request provider models list through the desktop proxy".to_string(),
                 });
                 continue;
             }
@@ -124,13 +124,13 @@ async fn fetch_provider_models_with_client(
             Err(_) => {
                 failures.push(ProviderModelsFailure {
                     status: Some(status),
-                    message: "供应商模型列表响应不是有效 JSON".to_string(),
+                    message: "Provider models list response is not valid JSON".to_string(),
                 });
                 continue;
             }
         };
         let serialized = serde_json::to_string(&payload)
-            .map_err(|error| format!("序列化供应商模型列表失败：{error}"))?;
+            .map_err(|error| format!("Failed to serialize provider models list: {error}"))?;
         if provider_models_payload_has_entries(&payload) {
             return Ok(serialized);
         }
@@ -157,14 +157,14 @@ async fn read_limited_response(response: reqwest::Response) -> Result<Vec<u8>, S
         .content_length()
         .is_some_and(|length| length > MAX_PROVIDER_MODELS_RESPONSE_BYTES as u64)
     {
-        return Err("供应商模型列表响应过大".to_string());
+        return Err("Provider models list response too large".to_string());
     }
     let mut body = Vec::new();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|_| "读取供应商模型列表响应失败".to_string())?;
+        let chunk = chunk.map_err(|_| "Failed to read provider models list response".to_string())?;
         if body.len().saturating_add(chunk.len()) > MAX_PROVIDER_MODELS_RESPONSE_BYTES {
-            return Err("供应商模型列表响应过大".to_string());
+            return Err("Provider models list response too large".to_string());
         }
         body.extend_from_slice(&chunk);
     }
@@ -172,13 +172,13 @@ async fn read_limited_response(response: reqwest::Response) -> Result<Vec<u8>, S
 }
 
 fn parse_http_url(raw: &str, label: &str) -> Result<Url, String> {
-    let url = Url::parse(raw.trim()).map_err(|_| format!("{label} 必须是绝对 URL"))?;
+    let url = Url::parse(raw.trim()).map_err(|_| format!("{label} must be an absolute URL"))?;
     if !matches!(url.scheme(), "http" | "https")
         || !url.has_host()
         || !url.username().is_empty()
         || url.password().is_some()
     {
-        return Err(format!("{label} 必须是有效的 HTTP(S) 绝对 URL"));
+        return Err(format!("{label} must be a valid absolute HTTP(S) URL"));
     }
     Ok(url)
 }
@@ -187,7 +187,7 @@ fn normalize_provider_base_url(provider_type: &str, raw: &str) -> Result<Url, St
     validate_provider_type(provider_type)?;
     let mut url = parse_http_url(raw, "Base URL")?;
     if url.query().is_some() || url.fragment().is_some() {
-        return Err("Base URL 不能包含查询参数或片段".to_string());
+        return Err("Base URL must not contain query parameters or a fragment".to_string());
     }
 
     let mut path = url.path().trim_end_matches('/').to_string();
@@ -225,14 +225,14 @@ fn validate_provider_type(provider_type: &str) -> Result<(), String> {
     ) {
         Ok(())
     } else {
-        Err("不支持的供应商类型".to_string())
+        Err("Unsupported provider type".to_string())
     }
 }
 
 fn normalize_provider_models_url(raw: &str) -> Result<Url, String> {
-    let url = parse_http_url(raw, "模型列表 URL")?;
+    let url = parse_http_url(raw, "Models list URL")?;
     if url.fragment().is_some() {
-        return Err("模型列表 URL 不能包含片段".to_string());
+        return Err("Models list URL must not contain a fragment".to_string());
     }
     Ok(url)
 }
@@ -311,7 +311,7 @@ fn build_provider_models_attempts_with_override(
             custom_headers,
         ),
     });
-    // codex/xai/deepseek 的官方形式与统一首次尝试完全一致，重复请求同一端点没有意义，收敛为一次。
+    // The official form for codex/xai/deepseek is identical to the unified first attempt, so repeating a request to the same endpoint is pointless; collapse it to one.
     let mut attempts = vec![default_attempt];
     if official_attempt.url != attempts[0].url || official_attempt.headers != attempts[0].headers {
         attempts.push(official_attempt);
@@ -319,8 +319,8 @@ fn build_provider_models_attempts_with_override(
     Ok(attempts)
 }
 
-// 完整端点模式：从聊天端点推导 models API 根。与前端
-// deriveModelsBaseUrlFromFullUrl 逻辑一致（优先截到 /v1/，否则去掉末段）。
+// Full-endpoint mode: derive the models API root from the chat endpoint. Matches the frontend
+// deriveModelsBaseUrlFromFullUrl logic (prefer truncating to /v1/, otherwise drop the last segment).
 fn normalize_provider_full_url(raw: &str) -> Result<Url, String> {
     let mut url = parse_http_url(raw, "Base URL")?;
     url.set_query(None);
@@ -342,8 +342,8 @@ fn normalize_provider_full_url(raw: &str) -> Result<Url, String> {
     Ok(url)
 }
 
-// 首次尝试统一 /v1/models + authorization Bearer；失败后回退到各家官方形式
-// （gemini v1beta + x-goog-api-key、claude_code x-api-key）。每次请求仍只带单一鉴权头。
+// The first attempt is unified /v1/models + authorization Bearer; on failure it falls back to each provider's official form
+// (gemini v1beta + x-goog-api-key, claude_code x-api-key). Each request still carries only a single auth header.
 fn build_provider_models_headers(
     provider_type: &str,
     api_key: &str,
@@ -369,9 +369,9 @@ fn build_provider_models_headers(
     headers
 }
 
-// KEEP IN SYNC: crates/agent-ui/src/lib/providers/customHeaders.ts 的
-// RESERVED_CUSTOM_HEADER_KEYS / RESERVED_CUSTOM_HEADER_KEY_PREFIX。鉴权头与
-// host/content-length 属保留头：用户改不了，自定义头也不得顶掉它们。
+// KEEP IN SYNC: crates/agent-ui/src/lib/providers/customHeaders.ts's
+// RESERVED_CUSTOM_HEADER_KEYS / RESERVED_CUSTOM_HEADER_KEY_PREFIX. Auth headers and
+// host/content-length are reserved headers: users cannot change them, and custom headers must not override them.
 const RESERVED_CUSTOM_HEADER_KEYS: [&str; 6] = [
     "authorization",
     "x-api-key",
@@ -390,7 +390,7 @@ fn is_valid_custom_header_key(key: &str) -> bool {
         })
 }
 
-// 取值只允许可见 ASCII 与水平制表符：CR/LF 会造成 header 注入。
+// Values allow only visible ASCII and horizontal tab: CR/LF would cause header injection.
 fn is_valid_custom_header_value(value: &str) -> bool {
     value
         .chars()
@@ -403,8 +403,8 @@ fn is_reserved_custom_header_key(key: &str) -> bool {
         || normalized.starts_with(RESERVED_CUSTOM_HEADER_KEY_PREFIX)
 }
 
-/// 把用户显式配置的自定义请求头并入自动装配的头集合。非法键名/取值与保留头
-/// 直接丢弃（与前端 mergeCustomHeaders 同语义），同名头大小写不敏感地覆盖。
+/// Merges the user's explicitly configured custom request headers into the auto-assembled header set. Invalid key names / values and reserved headers
+/// are dropped outright (same semantics as the frontend mergeCustomHeaders); headers with the same name are overridden case-insensitively.
 fn merge_custom_headers(
     base: Vec<(&'static str, String)>,
     custom_headers: &[(String, String)],
@@ -456,7 +456,7 @@ fn extract_provider_models_error(body: &[u8], status: StatusCode) -> String {
     let raw = String::from_utf8_lossy(body);
     let raw = raw.trim();
     if raw.is_empty() {
-        format!("供应商模型列表请求返回 HTTP {status}")
+        format!("Provider models list request returned HTTP {status}")
     } else {
         raw.chars().take(2048).collect()
     }
@@ -474,7 +474,7 @@ fn pick_provider_models_failure(failures: Vec<ProviderModelsFailure>) -> String 
         })
         .or_else(|| failures.last())
         .map(|failure| failure.message.clone())
-        .unwrap_or_else(|| "请求供应商模型列表失败".to_string())
+        .unwrap_or_else(|| "Failed to request provider models list".to_string())
 }
 
 #[cfg(test)]
@@ -502,14 +502,14 @@ mod tests {
             "https://relay.example.com/v1beta/models"
         );
 
-        // claude_code URL 不随 official 变化，但官方鉴权头不同，保留重试。
+        // The claude_code URL doesn't vary with official, but the official auth header differs, so keep the retry.
         let claude =
             build_provider_models_attempts("claude_code", "https://relay.example.com", "key")
                 .expect("claude attempts");
         assert_eq!(claude.len(), 2);
         assert_eq!(claude[0].url, claude[1].url);
 
-        // codex/xai/deepseek 官方形式与统一首次尝试完全一致，收敛为一次请求。
+        // The official form for codex/xai/deepseek is identical to the unified first attempt; collapse to one request.
         let codex = build_provider_models_attempts(
             "codex",
             "https://relay.example.com/v1/responses",
@@ -616,8 +616,8 @@ mod tests {
                     .map(|(name, _)| name.to_ascii_lowercase())
                     .collect::<Vec<_>>();
 
-                // 不开启伪装就照实发：既不带 UA，也不带 SDK 指纹头。伪装只能由用户
-                // 在设置里显式写进自定义请求头，经 merge_custom_headers 落到请求上。
+                // Without spoofing enabled, send it as-is: neither a UA nor SDK fingerprint headers. Spoofing can only be put
+                // explicitly into custom request headers by the user in settings, landing on the request via merge_custom_headers.
                 assert!(
                     !names.iter().any(|name| name == "user-agent"),
                     "{provider_type}"
@@ -646,11 +646,11 @@ mod tests {
         let custom = [
             ("User-Agent".to_string(), "my-relay-client/9.9".to_string()),
             ("X-Request-ID".to_string(), "abc123".to_string()),
-            // 保留头：鉴权与 host/content-length 不可被顶掉。
+            // Reserved headers: auth and host/content-length must not be overridden.
             ("authorization".to_string(), "Bearer stolen".to_string()),
             ("Host".to_string(), "evil.example.com".to_string()),
             ("x-liveagent-proxy-token".to_string(), "leak".to_string()),
-            // 非法键名/取值直接丢弃（CR/LF 会造成 header 注入）。
+            // Invalid key names / values are dropped outright (CR/LF would cause header injection).
             ("Bad Key".to_string(), "value".to_string()),
             ("X-Inject".to_string(), "a\r\nX-Evil: 1".to_string()),
         ];
@@ -672,7 +672,7 @@ mod tests {
                     .find(|(name, _)| name.eq_ignore_ascii_case(wanted))
                     .map(|(_, value)| value.clone())
             };
-            // UA 只可能来自用户显式配置——这里就是它落到请求上的唯一路径。
+            // The UA can only come from explicit user config—this is the only path by which it lands on the request.
             assert_eq!(get("user-agent").as_deref(), Some("my-relay-client/9.9"));
             assert_eq!(get("x-request-id").as_deref(), Some("abc123"));
             assert_eq!(get("host"), None);
@@ -681,7 +681,7 @@ mod tests {
             assert_eq!(get("x-inject"), None);
             assert_ne!(get("authorization").as_deref(), Some("Bearer stolen"));
         }
-        // 鉴权头仍恰好一条，自定义头不得让 attempts 分裂成重复请求。
+        // There is still exactly one auth header; custom headers must not split attempts into duplicate requests.
         assert_eq!(attempts.len(), 2);
     }
 

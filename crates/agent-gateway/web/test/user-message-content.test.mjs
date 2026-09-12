@@ -44,21 +44,21 @@ function compactSegments(segments) {
 }
 
 test("WebUI preserves legacy inline file mentions without changing the shared default", () => {
-  const text = "打开 @src/main.tsx 和 @docs/";
+  const text = "Open @src/main.tsx and @docs/";
 
   assert.deepEqual(compactSegments(sharedUserMessageContent.tokenizeUserMessage(text, [])), [
     { type: "text", value: text },
   ]);
   assert.deepEqual(compactSegments(webUserMessageContent.tokenizeUserMessage(text, [])), [
-    { type: "text", value: "打开 " },
+    { type: "text", value: "Open " },
     { type: "mention", path: "src/main.tsx", kind: "file" },
-    { type: "text", value: " 和 " },
+    { type: "text", value: " and " },
     { type: "mention", path: "docs", kind: "dir" },
   ]);
 });
 
 test("WebUI legacy inline file mentions reject unsafe paths", () => {
-  for (const text of ["打开 @/etc/passwd", "打开 @../secret", "打开 @https://example.com/a"]) {
+  for (const text of ["Open @/etc/passwd", "Open @../secret", "Open @https://example.com/a"]) {
     assert.deepEqual(compactSegments(webUserMessageContent.tokenizeUserMessage(text, [])), [
       { type: "text", value: text },
     ]);
@@ -68,7 +68,7 @@ test("WebUI legacy inline file mentions reject unsafe paths", () => {
 test("WebUI history rendering emits legacy inline file mention chips", () => {
   const html = renderToStaticMarkup(
     jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, {
-      text: "打开 @src/main.tsx 和 @docs/",
+      text: "Open @src/main.tsx and @docs/",
       legacyInlineFileMentions: true,
     }),
   );

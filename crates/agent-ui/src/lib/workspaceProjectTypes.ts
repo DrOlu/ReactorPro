@@ -1,9 +1,10 @@
 /**
- * 侧边栏项目分组。成员用原始路径存储（匹配时经
- * `workspaceProjectPathKey` 归一化），与 hidden/missing/archived 一致。
+ * Sidebar project grouping. Members are stored with their raw paths (normalized via
+ * `workspaceProjectPathKey` on match), consistent with hidden/missing/archived.
  *
- * `sourceProjectPath` 标记自动分组（git worktree 聚合）：指向原始仓库
- * 项目的路径，重命名分组后仍可据此复用，避免重复建组。
+ * `sourceProjectPath` marks an automatic group (git worktree aggregation): the path of
+ * the original repository project, which can still be used to reuse the group after it
+ * is renamed, avoiding duplicate groups.
  */
 export type WorkspaceProjectGroup = {
   id: string;

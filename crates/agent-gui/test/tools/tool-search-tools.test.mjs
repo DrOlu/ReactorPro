@@ -21,7 +21,7 @@ function mcpTool(name, description, big = false) {
         ? Object.fromEntries(
             Array.from({ length: 40 }, (_, index) => [
               `field_${index}`,
-              { type: "string", description: `冗长的字段描述占位内容 ${index} `.repeat(20) },
+              { type: "string", description: `Verbose field description placeholder content ${index} `.repeat(20) },
             ]),
           )
         : { q: { type: "string" } },
@@ -41,7 +41,7 @@ test("shouldDeferMcpTools compares estimated schema tokens with the threshold", 
     mcpTool(`mcp_srv_tool_${index}`, "heavy schema", true),
   );
   assert.equal(tools.shouldDeferMcpTools(heavy), true);
-  // 阈值可注入:同一批工具在极小阈值下必然延迟。
+  // The threshold is injectable: the same batch of tools is necessarily deferred under a tiny threshold.
   assert.equal(tools.shouldDeferMcpTools([mcpTool("mcp_a_x", "small")], 1), true);
 });
 
@@ -74,7 +74,7 @@ test("search ranks by name/server/description and activates matches", async () =
   const result = await bundle.executeToolCall(createToolCall({ query: "github issue" }));
   assert.equal(result.isError, false);
   assert.equal(result.details.kind, "tool_search");
-  // 名称+描述双命中的 create_issue 排最前且被激活。
+  // create_issue, matching on both name and description, ranks first and is activated.
   assert.equal(result.details.activated[0], "mcp_github_create_issue");
   assert.match(result.content[0].text, /mcp_github_create_issue/);
   assert.match(result.content[0].text, /callable directly/);
@@ -82,13 +82,13 @@ test("search ranks by name/server/description and activates matches", async () =
   assert.ok(activation.has("mcp_github_create_issue"));
   assert.ok(!activation.has("mcp_db_query"));
 
-  // 空命中给出引导而非报错。
+  // An empty match gives guidance rather than an error.
   const miss = await bundle.executeToolCall(createToolCall({ query: "zzzz-nothing" }, "call-2"));
   assert.equal(miss.isError, false);
   assert.deepEqual(miss.details.activated, []);
   assert.match(miss.content[0].text, /No deferred MCP tools matched/);
 
-  // 缺 query 报参数错误。
+  // A missing query reports an argument error.
   const invalid = await bundle.executeToolCall(createToolCall({}, "call-3"));
   assert.equal(invalid.isError, true);
 });
@@ -112,8 +112,8 @@ test("buildMcpRequestToolFilter hides only deactivated MCP business tools", () =
     ["Read", { groupId: "fs", isReadOnly: true }],
     ["mcp_docs_search", { groupId: "mcp", kind: "mcp", isReadOnly: false }],
     ["mcp_db_query", { groupId: "mcp", kind: "mcp", isReadOnly: false }],
-    // McpManager 与业务工具同在 groupId "mcp",但不是延迟对象——它不在
-    // ToolSearch 目录里,被隐藏就永远无法激活,必须恒可见。
+    // McpManager shares groupId "mcp" with the business tools but is not a deferred object - it is
+    // not in the ToolSearch catalog, so once hidden it can never be activated and must stay always visible.
     ["McpManager", { groupId: "mcp", kind: "manage_mcp", isReadOnly: false }],
   ]);
   const filter = tools.buildMcpRequestToolFilter({ conversationId, metadataByName });
@@ -122,7 +122,7 @@ test("buildMcpRequestToolFilter hides only deactivated MCP business tools", () =
   assert.equal(filter("McpManager"), true);
   assert.equal(filter("mcp_docs_search"), false);
 
-  // 激活集是活引用:激活后同一谓词立即放行(runner 每轮重估)。
+  // The active set is a live reference: once activated, the same predicate passes immediately (the runner re-evaluates each round).
   tools.getMcpToolActivation(conversationId).add("mcp_docs_search");
   assert.equal(filter("mcp_docs_search"), true);
   assert.equal(filter("mcp_db_query"), false);

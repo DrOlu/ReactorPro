@@ -6,23 +6,25 @@ import {
 } from "./catalog.generated";
 
 // ---------------------------------------------------------------------------
-// 模型元信息目录（限额的单一真源）
+// Model metadata catalog (the single source of truth for limits)
 // ---------------------------------------------------------------------------
-// 数据来自 catalog.generated.ts（构建期由 scripts/generate-model-catalog.mjs
-// 对 OpenAI 采用 Codex models.json 优先、models.dev 补充，其余供应商来自
-// models.dev；由 update-model-catalog.yml 定时刷新）。本文件与生成文件均由共享包提供。
-// 思考档位/API 选择/compat 等请求路径行为不归这里管——那些是流式运行时
-// （pi-ai）的领域；这里只回答"这个模型的窗口/输出上限与输入模态是什么"。
+// Data comes from catalog.generated.ts (at build time scripts/generate-model-catalog.mjs
+// prefers Codex models.json for OpenAI with models.dev as a supplement, and takes other providers
+// from models.dev; refreshed on a schedule by update-model-catalog.yml). This file and the
+// generated file are both provided by the shared package.
+// Request-path behavior such as thinking tiers/API selection/compat is not managed here -- that is
+// the domain of the streaming runtime (pi-ai); this file only answers "what are this model's
+// window/output limits and input modalities".
 
 export { MODEL_CATALOG, MODEL_CATALOG_SNAPSHOT_DATE } from "./catalog.generated";
 export type { CatalogInputModality, CatalogModelEntry, CatalogProviderId };
 
-// 与 settings 的 ProviderId 结构相同；本模块不 import settings（避免环）。
+// Same shape as settings' ProviderId; this module does not import settings (to avoid a cycle).
 export type CatalogAppProviderId = "claude_code" | "codex" | "gemini" | "xai" | "deepseek";
 
 export type ModelLimits = { contextWindow: number; maxOutputToken: number };
 
-/** 应用供应商类型 → 目录 provider 的唯一映射点。 */
+/** The single mapping point from app provider type -> catalog provider. */
 export const CATALOG_PROVIDER_BY_APP_PROVIDER: Record<CatalogAppProviderId, CatalogProviderId> = {
   claude_code: "anthropic",
   codex: "openai",
@@ -32,11 +34,13 @@ export const CATALOG_PROVIDER_BY_APP_PROVIDER: Record<CatalogAppProviderId, Cata
 };
 
 /**
- * 目录未命中时的供应商兜底限额（xai 与 codex 同为 OpenAI 兼容生态，共用兜底值）。
- * contextWindow 一律为含输出的总窗口语义（与目录一致）：codex/xai 的 400K =
- * 258K 输入侧预算 + 142K 输出，与生成期对 Codex context_window 的换算同源。
- * 旧值直接存 258K 输入预算，"窗口 − 输出预留"型的压缩阈值会被 142K 的大输出
- * 挤到 45K，几乎每轮都触发压缩。
+ * Provider fallback limits when the catalog misses (xai and codex are both OpenAI-compatible
+ * ecosystems and share a fallback value). contextWindow always means the total window including
+ * output (consistent with the catalog): codex/xai's 400K = a 258K input-side budget + 142K output,
+ * from the same source as the build-time conversion of Codex context_window. An old value that
+ * stored the 258K input budget directly would let a "window minus output reservation" compaction
+ * threshold be squeezed down to 45K by the large 142K output, triggering compaction almost every
+ * round.
  */
 export const PROVIDER_FALLBACK_LIMITS: Record<CatalogAppProviderId, ModelLimits> = {
   claude_code: { contextWindow: 200_000, maxOutputToken: 32_000 },
@@ -46,11 +50,13 @@ export const PROVIDER_FALLBACK_LIMITS: Record<CatalogAppProviderId, ModelLimits>
   deepseek: { contextWindow: 128_000, maxOutputToken: 32_000 },
 };
 
-// 唯一的目录数据语义规则：社区目录对不公布独立输出上限的供应商一律记
-// "输出 == 窗口"（models.dev/LiteLLM 皆然），照单全收会把"窗口 − 输出预留"
-// 型的输入预算挤成零。凡输出吃满窗口视为退化数据，钳到统一预留上限
-// （与 OpenCode 的 OUTPUT_TOKEN_MAX 同值），并保底给输入留出 3/4 窗口。
-// 生成脚本在生成期应用同一规则，目录不变量测试锁两处一致。
+// The single catalog data semantics rule: community catalogs record "output == window" for every
+// provider that does not publish a separate output limit (both models.dev and LiteLLM do this), and
+// taking that at face value would squeeze a "window minus output reservation" input budget to zero.
+// Any output that fills the whole window is treated as degraded data and clamped to the unified
+// reservation cap (the same value as OpenCode's OUTPUT_TOKEN_MAX), guaranteeing the input at least
+// 3/4 of the window. The generation script applies the same rule at build time, and a catalog
+// invariant test locks the two places together.
 export const MAX_OUTPUT_TOKEN_CAP = 32_000;
 
 export function normalizeModelLimits(limits: ModelLimits): ModelLimits {
@@ -64,9 +70,11 @@ export function normalizeModelLimits(limits: ModelLimits): ModelLimits {
   };
 }
 
-// 中转/网关常给官方模型 id 加装饰（日期后缀、@版本、大小写变化、AnyRouter 系
-// 的 [1m] 长上下文后缀），逐字匹配会漏检目录。先精确查，再按候选链回查；
-// 命中方保留用户配置的原始 id（是否剥 [1m] 由请求侧策略决定，与目录无关）。
+// Relays/gateways often decorate official model ids (date suffixes, @versions, case changes, and
+// AnyRouter's [1m] long-context suffix), and literal matching would miss the catalog. Look up
+// exactly first, then fall back through the candidate chain; the match keeps the user-configured
+// original id (whether to strip [1m] is decided by request-side policy and is unrelated to the
+// catalog).
 export function normalizeModelIdCandidates(modelId: string): string[] {
   const candidates: string[] = [];
   const push = (value: string) => {
@@ -80,9 +88,10 @@ export function normalizeModelIdCandidates(modelId: string): string[] {
   const withoutContextSuffix = withoutAtVersion.replace(/\[1m\]$/i, "");
   push(withoutContextSuffix);
   push(withoutContextSuffix.replace(/-20\d{6}$/, ""));
-  // 中转聚合商常在模型 id 前加自家路径前缀（bailian/deepseek-v4-pro、
-  // openrouter/xxx 等），目录里存的是裸 id。放链尾——所有精确形态、
-  // 全部分区都查空后才尝试剥前缀，避免裸段误撞目录里无关的同名模型。
+  // Relay aggregators often prepend their own path prefix to model ids (bailian/deepseek-v4-pro,
+  // openrouter/xxx, etc.), while the catalog stores bare ids. Put this at the end of the chain --
+  // only after all exact forms and partitions miss do we try stripping the prefix, avoiding a bare
+  // segment accidentally hitting an unrelated same-named model in the catalog.
   const lastSegment = withoutContextSuffix.split("/").pop() ?? "";
   if (lastSegment !== withoutContextSuffix) {
     push(lastSegment);
@@ -99,8 +108,9 @@ function getCatalogIndex(catalogProvider: CatalogProviderId): Map<string, Catalo
     index = new Map();
     for (const entry of MODEL_CATALOG[catalogProvider]) {
       index.set(entry.id, entry);
-      // 目录含混合大小写 id（MiniMax-M2/LongCat-2.0 等）：补小写别名，让候选链
-      // 的 lower 候选可命中；生成期按小写去重保证别名不会跨条目歧义。
+      // The catalog contains mixed-case ids (MiniMax-M2/LongCat-2.0, etc.): add a lowercase alias
+      // so the chain's lower candidate can hit; build-time dedup by lowercase ensures aliases are
+      // not ambiguous across entries.
       const lower = entry.id.toLowerCase();
       if (!index.has(lower)) index.set(lower, entry);
     }
@@ -123,13 +133,15 @@ export function findCatalogModel(
   return undefined;
 }
 
-// 中转聚合常把 A 家模型挂在 B 家供应商类型下（grok/deepseek/glm/qwen 等挂在
-// Anthropic/OpenAI 兼容中转），供应商作用域查不到时按 id 跨供应商回查，避免
-// 真实限额被本供应商兜底值顶掉。国内厂商分区（deepseek/zhipuai/alibaba 等）
-// 没有对应的应用供应商类型，只经这里消费。目录 id 全局小写唯一（生成期跨
-// 分区去重+目录不变量测试锁死）；候选链放外层——更精确的 id 形态优先于
-// 供应商声明序。已有正式应用供应商的模型也允许出现在通用中转端点中，因此仍可
-// 经这条协议无关的元数据回查路径命中。
+// Relay aggregators often host provider A's models under provider type B (grok/deepseek/glm/qwen
+// under Anthropic/OpenAI-compatible relays); when the provider scope misses, look up across
+// providers by id so the real limits are not displaced by this provider's fallback value. Domestic
+// vendor partitions (deepseek/zhipuai/alibaba, etc.) have no corresponding app provider type and are
+// consumed only through here. Catalog ids are globally lowercase-unique (build-time cross-partition
+// dedup plus a catalog invariant test lock this down); the candidate chain is the outer loop -- a
+// more precise id form takes priority over provider declaration order. Models that already have a
+// formal app provider are also allowed to appear in generic relay endpoints, so they can still be
+// hit through this protocol-agnostic metadata lookup path.
 const CATALOG_PROVIDER_IDS = Object.keys(MODEL_CATALOG) as CatalogProviderId[];
 
 export function findCatalogModelAcrossProviders(
@@ -146,10 +158,11 @@ export function findCatalogModelAcrossProviders(
   return undefined;
 }
 
-// 展示用的输入模态查询：先按供应商作用域查，未命中再跨供应商回查（与限额
-// 解析同一回查策略——中转聚合常把别家模型挂在本供应商类型下）。返回目录
-// 快照数据；用户的 inputModalities 覆盖是否优先由调用方决定（覆盖只表达
-// text/image 门控，与目录的完整模态集合语义不同）。
+// Input modality lookup for display: look up by provider scope first, then across providers if it
+// misses (the same fallback strategy as limit resolution -- relay aggregators often host other
+// vendors' models under this provider type). Returns catalog snapshot data; whether the user's
+// inputModalities override takes priority is up to the caller (the override only expresses
+// text/image gating, which differs in meaning from the catalog's full modality set).
 export function resolveModelInputModalities(
   providerId: CatalogAppProviderId,
   modelId: string | undefined,
@@ -172,7 +185,7 @@ export function resolveModelLimits(
 ): ModelLimits | undefined {
   const entry = findCatalogModel(providerId, modelId);
   if (!entry) return undefined;
-  // 目录数据在生成期已过 normalizeModelLimits，直接透传。
+  // Catalog data already passed through normalizeModelLimits at build time, so pass it through directly.
   return { contextWindow: entry.contextWindow, maxOutputToken: entry.maxOutputToken };
 }
 
@@ -181,11 +194,12 @@ export function getProviderFallbackLimits(providerId: CatalogAppProviderId): Mod
   return { contextWindow: fallback.contextWindow, maxOutputToken: fallback.maxOutputToken };
 }
 
-// 供应商 /v1/models 接口自带的真实限额字段——比本地静态目录更新、更准（目录是
-// 构建期快照，供应商接口是该次部署的实时数据）。识别几种真实世界常见写法：
-// OpenRouter 风格顶层 context_length，以及嵌套在 top_provider 下的同名字段。
-// 只在这些字段解析为正整数时才采信，识别不出来的字段名回退到目录/兜底流程，
-// 与 normalizeGeminiFetchedModels 读 inputTokenLimit/outputTokenLimit 同一思路。
+// Real limit fields carried by a provider's /v1/models API -- newer and more accurate than the
+// local static catalog (the catalog is a build-time snapshot, while the provider API is live data
+// for that deployment). Recognizes several common real-world forms: the OpenRouter-style top-level
+// context_length, and the same-named field nested under top_provider. Only trust these fields when
+// they parse as positive integers; unrecognized field names fall back to the catalog/fallback flow,
+// the same approach as normalizeGeminiFetchedModels reading inputTokenLimit/outputTokenLimit.
 export function extractProviderDeclaredLimits(
   obj: Record<string, unknown>,
 ): ModelLimits | undefined {
@@ -206,7 +220,7 @@ export function extractProviderDeclaredLimits(
   const maxOutputToken =
     asPositiveInt(topProvider?.max_completion_tokens) ??
     asPositiveInt(obj.max_completion_tokens) ??
-    // 部分中转商不单独公布输出上限，仅给窗口——按目录同一规则钳到保守预留值。
+    // Some relay vendors do not publish a separate output limit and only give the window -- clamp to the conservative reservation value by the same catalog rule.
     normalizeModelLimits({ contextWindow, maxOutputToken: contextWindow }).maxOutputToken;
 
   return normalizeModelLimits({ contextWindow, maxOutputToken });

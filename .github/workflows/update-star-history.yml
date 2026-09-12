@@ -18,7 +18,7 @@ env:
 
 jobs:
   update:
-    if: github.repository == 'Stack-Cairn/LiveAgent'
+    if: github.repository == 'DrOlu/ReactorPro'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository

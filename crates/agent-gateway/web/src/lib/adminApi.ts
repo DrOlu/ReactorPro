@@ -1,9 +1,9 @@
-// 网关管理平面 REST 客户端：Agent 目录、名称与独立凭证管理。
-// 与聊天/控制平面（gatewaySocket）分离——管理操作是 REST + 网关 Token（Bearer），
-// 参照 uploadReadableFiles.ts / gatewayAuth.ts 的既有范式。
+// Gateway admin-plane REST client: Agent directory, name, and per-agent credential management.
+// Kept separate from the chat/control plane (gatewaySocket) — admin operations are REST + gateway
+// Token (Bearer), following the existing patterns of uploadReadableFiles.ts / gatewayAuth.ts.
 import { normalizeGatewayAccessToken } from "@/lib/gatewayAuth";
 
-// AdminAgentEntry 是目录条目（对应 Go agentDirectoryEntry 的 JSON 形状）。
+// AdminAgentEntry is a directory entry (matching the JSON shape of Go agentDirectoryEntry).
 export type AdminAgentEntry = {
   agent_id: string;
   online: boolean;
@@ -15,7 +15,7 @@ export type AdminAgentEntry = {
   connected_since?: number;
 };
 
-// AdminAgentsPage 是数据库分页的一页 Agent 目录及实时状态。
+// AdminAgentsPage is one database-paginated page of the Agent directory plus live status.
 export type AdminAgentsPage = {
   agents: AdminAgentEntry[];
   page: number;
@@ -55,7 +55,7 @@ async function readError(response: Response, fallback: string): Promise<string> 
 function authHeaders(token: string): HeadersInit {
   const normalized = normalizeGatewayAccessToken(token);
   if (!normalized) {
-    throw new Error("请输入管理 Token。");
+    throw new Error("Please enter an admin Token.");
   }
   return { Authorization: `Bearer ${normalized}` };
 }
@@ -72,12 +72,14 @@ export async function listAdminAgents(
   url.searchParams.set("status", status);
   const response = await fetch(url, { headers: authHeaders(token) });
   if (!response.ok) {
-    throw new Error(await readError(response, "加载 Agent 目录失败。"));
+    throw new Error(await readError(response, "Failed to load the Agent directory."));
   }
   return (await response.json()) as AdminAgentsPage;
 }
 
-// issueAdminToken 签发/轮换凭证并让当前 Agent 会话立即下线；明文只在本次响应返回，调用方须立即展示且不可再取。
+// issueAdminToken issues/rotates a credential and immediately takes the current Agent session
+// offline; the plaintext is returned only in this response, so the caller must display it
+// immediately and cannot retrieve it again.
 export async function issueAdminToken(
   token: string,
   agentId: string,
@@ -90,11 +92,11 @@ export async function issueAdminToken(
     body: JSON.stringify({ name: name.trim() }),
   });
   if (!response.ok) {
-    throw new Error(await readError(response, "签发凭证失败。"));
+    throw new Error(await readError(response, "Failed to issue the credential."));
   }
   const payload = (await response.json()) as { token?: string };
   if (!payload.token) {
-    throw new Error("签发响应缺少凭证明文。");
+    throw new Error("The issue response is missing the credential plaintext.");
   }
   return payload.token;
 }
@@ -111,7 +113,7 @@ export async function updateAdminAgentName(
     body: JSON.stringify({ name: name.trim() }),
   });
   if (!response.ok) {
-    throw new Error(await readError(response, "修改客户端名称失败。"));
+    throw new Error(await readError(response, "Failed to update the client name."));
   }
 }
 
@@ -119,6 +121,6 @@ export async function deleteAdminAgent(token: string, agentId: string): Promise<
   const url = `${window.location.origin}/api/agents/${encodeURIComponent(agentId)}`;
   const response = await fetch(url, { method: "DELETE", headers: authHeaders(token) });
   if (!response.ok) {
-    throw new Error(await readError(response, "删除客户端失败。"));
+    throw new Error(await readError(response, "Failed to delete the client."));
   }
 }

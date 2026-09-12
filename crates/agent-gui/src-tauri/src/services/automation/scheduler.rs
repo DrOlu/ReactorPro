@@ -89,7 +89,7 @@ impl AutomationScheduler {
         }
 
         if let Err(error) = self.ensure_scheduler().await {
-            eprintln!("启动 automation scheduler 失败：{error}");
+            eprintln!("Failed to start automation scheduler: {error}");
             return;
         }
         self.request_reload();
@@ -101,7 +101,7 @@ impl AutomationScheduler {
                 _ = self.reload_notify.notified() => {
                     while self.reload_pending.swap(false, Ordering::SeqCst) {
                         if let Err(error) = self.reload().await {
-                            eprintln!("热重载 automation cron 任务失败：{error}");
+                            eprintln!("Failed to hot-reload automation cron tasks: {error}");
                         }
                     }
                 }
@@ -128,11 +128,11 @@ impl AutomationScheduler {
         }
         let scheduler = JobScheduler::new()
             .await
-            .map_err(|e| format!("创建 cron scheduler 失败：{e}"))?;
+            .map_err(|e| format!("Failed to create cron scheduler: {e}"))?;
         scheduler
             .start()
             .await
-            .map_err(|e| format!("启动 cron scheduler 失败：{e}"))?;
+            .map_err(|e| format!("Failed to start cron scheduler: {e}"))?;
         *guard = Some(scheduler);
         Ok(())
     }
@@ -146,7 +146,7 @@ impl AutomationScheduler {
         let store = Arc::clone(&self.store);
         let tasks = tauri::async_runtime::spawn_blocking(move || store.runnable_cron_tasks())
             .await
-            .map_err(|e| format!("automation reload join 失败：{e}"))??;
+            .map_err(|e| format!("automation reload join failed: {e}"))??;
 
         let desired: HashMap<String, CronTask> = tasks
             .into_iter()
@@ -156,7 +156,7 @@ impl AutomationScheduler {
         let mut scheduler_guard = self.scheduler.lock().await;
         let scheduler = scheduler_guard
             .as_mut()
-            .ok_or_else(|| "cron scheduler 尚未初始化".to_string())?;
+            .ok_or_else(|| "cron scheduler is not initialized yet".to_string())?;
         let mut jobs = self.jobs.lock().await;
 
         let stale: Vec<String> = jobs
@@ -180,7 +180,7 @@ impl AutomationScheduler {
                 Err(error) => {
                     // Keep the map entry so the next reload retries the
                     // removal — dropping it here would orphan a live job.
-                    eprintln!("移除 cron 任务失败：{task_id} ({error})");
+                    eprintln!("Failed to remove cron task: {task_id} ({error})");
                 }
             }
         }
@@ -222,13 +222,13 @@ impl AutomationScheduler {
                         Err(error) => {
                             self.report_task_error(
                                 task_id,
-                                Some(format!("注册 Cron 任务失败：{error}")),
+                                Some(format!("Failed to register Cron task: {error}")),
                             );
                         }
                     }
                 }
                 Err(error) => {
-                    self.report_task_error(task_id, Some(format!("无效 Cron 表达式：{error}")));
+                    self.report_task_error(task_id, Some(format!("Invalid Cron expression: {error}")));
                 }
             }
         }
@@ -245,8 +245,8 @@ impl AutomationScheduler {
             })
             .await;
             match result {
-                Ok(Err(error)) => eprintln!("记录 cron 任务错误失败：{error}"),
-                Err(error) => eprintln!("记录 cron 任务错误 join 失败：{error}"),
+                Ok(Err(error)) => eprintln!("Failed to record cron task error: {error}"),
+                Err(error) => eprintln!("cron task error record join failed: {error}"),
                 _ => {}
             }
         });
@@ -433,8 +433,8 @@ impl AutomationScheduler {
             })
             .await;
             match result {
-                Ok(Err(error)) => eprintln!("禁用 cron 任务失败：{error}"),
-                Err(error) => eprintln!("禁用 cron 任务 join 失败：{error}"),
+                Ok(Err(error)) => eprintln!("Failed to disable cron task: {error}"),
+                Err(error) => eprintln!("cron task disable join failed: {error}"),
                 _ => {}
             }
         });
@@ -446,8 +446,8 @@ impl AutomationScheduler {
             let result =
                 tauri::async_runtime::spawn_blocking(move || store.record_completed_run(run)).await;
             match result {
-                Ok(Err(error)) => eprintln!("Cron run 记录失败：{error}"),
-                Err(error) => eprintln!("Cron run 记录 join 失败：{error}"),
+                Ok(Err(error)) => eprintln!("Failed to record Cron run: {error}"),
+                Err(error) => eprintln!("Cron run record join failed: {error}"),
                 _ => {}
             }
         });
@@ -517,10 +517,11 @@ fn execute_bash(task: &CronTask, workdir: String) -> CompletedRun {
         Ok(cwd) => cwd,
         Err(error) => return failed_run(&task.id, error, true),
     };
-    // P1#2:Cron bash 脚本此前恒以 sandbox_options=None 执行,于是"模型建一个 bash
-    // 任务 → 调度器无沙箱触发"成为绕过沙箱围栏的持久化通道(还能跨应用重启存活)。
-    // 现在与 Bash / ManagedProcess 共用同一个后端下限:回查持久化的
-    // commandSafetyMode,读不出来则直接失败,绝不无沙箱执行。
+    // P1#2: Cron bash scripts previously always executed with sandbox_options=None, so "the model
+    // creates a bash task -> the scheduler triggers it without a sandbox" became a persistent
+    // channel for bypassing the sandbox fence (and it survived app restarts). Now it shares the
+    // same backend lower bound as Bash / ManagedProcess: look up the persisted commandSafetyMode,
+    // and fail outright if it cannot be read -- never execute without a sandbox.
     let sandbox_options = match sandbox::resolve_effective_options(None) {
         Ok(options) => options,
         Err(error) => return failed_run(&task.id, error, true),

@@ -4,17 +4,25 @@ import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// subagent roster 原本把身份字段（id/name/role）与运行状态
-// （status/mode/last_task/last_summary）拼在同一行塞进 systemPrompt。子代理 run 状态一推进，
-// 整个 reminder 就变，systemPrompt 随之失稳，system 块连同其后的全部历史一并作废。
-// 拆开之后：稳定段留在 systemPrompt；易变段与 bus 增量合并成同一段 wireTailText，
-// 只随出站请求投递，绝不写进 agent 状态消息（否则会经 emittedMessages 泄漏到
-// 持久化 / UI / 记忆抽取）。
-// 这组用例盯住接线层：
-//   ① 易变段（含 mode）不得出现在 systemPrompt，run 内 systemPrompt 字节恒定
-//   ② 状态未变的轮次不产生任何额外内容（onBeforeNextTurn 交回 null）
-//   ③ 状态推进当轮以 wireTailText 送达，override.context.messages 不含尾部文本
-//   ④ 与 bus 增量合并成一段 wireTailText，不是各投各的
+// The subagent roster used to pack identity fields (id/name/role) and run state
+// (status/mode/last_task/last_summary) into the same line stuffed into
+// systemPrompt. As soon as a subagent run's status advanced, the whole reminder
+// changed, systemPrompt became unstable, and the system block was invalidated
+// along with all the history after it.
+// After the split: the stable section stays in systemPrompt; the volatile section
+// is merged with bus increments into a single wireTailText segment, delivered only
+// with the outbound request and never written into agent state messages
+// (otherwise it would leak through emittedMessages into persistence / UI / memory
+// extraction).
+// This group of cases focuses on the wiring layer:
+//   1. The volatile section (including mode) must not appear in systemPrompt, and
+//      systemPrompt bytes stay constant within a run.
+//   2. Rounds whose state is unchanged produce no additional content
+//      (onBeforeNextTurn returns null).
+//   3. When state advances, it is delivered that round as wireTailText, and
+//      override.context.messages contains no tail text.
+//   4. It merges with bus increments into one wireTailText segment, not separate
+//      deliveries.
 
 const agentRunnerPath = fileURLToPath(
   new URL("../../src/lib/chat/runner/agentRunner.ts", import.meta.url),
@@ -32,7 +40,7 @@ const fileToolStatePath = fileURLToPath(
   new URL("../../src/lib/tools/fileToolState.ts", import.meta.url),
 );
 
-// roster.ts 保持真实实现：被冻结/被投递的就是它的输出字节。
+// roster.ts keeps its real implementation: what gets frozen/delivered is exactly its output bytes.
 let runAssistantWithToolsScenario = async () => {
   throw new Error("scenario was not installed");
 };
@@ -58,8 +66,9 @@ const loader = createTsModuleLoader({
       async resolveRuntimePlatform() {
         return "win32";
       },
-      // buildToolsSuffix（turn runner 起始的用量环 fixed 校准）会走到这三个
-      // 纯函数；整模块替换的桩必须补齐，否则 turn 一进门就抛错。
+      // buildToolsSuffix (the usage-ring fixed calibration at the start of the
+      // turn runner) reaches these three pure functions, so the whole-module
+      // replacement stub must supply them or the turn throws the moment it enters.
       normalizeRuntimePlatform(value) {
         return value === "windows" || value === "macos" || value === "linux" ? value : undefined;
       },
@@ -186,7 +195,7 @@ function createHookLifecycle() {
   };
 }
 
-/** 可变 roster + bus 存储：用例在轮次之间推进 run 状态，模拟子代理跑动。 */
+/** Mutable roster + bus storage: cases advance run state between rounds to simulate subagent activity. */
 function createSubagentStore({ identities = [], runs = [], busMessages = [] } = {}) {
   let identityList = [...identities];
   let runList = [...runs];
@@ -199,7 +208,7 @@ function createSubagentStore({ identities = [], runs = [], busMessages = [] } = 
       if (!runList.some((entry) => entry.agentId === summary.agentId)) {
         runList = [...runList, summary];
       }
-      // run 推进会 bump 身份的 updatedAt，listIdentities() 的顺序随之改变。
+      // Advancing a run bumps the identity's updatedAt, changing listIdentities()' order.
       identityList = [...identityList]
         .map((entry) =>
           entry.agentId === summary.agentId ? { ...entry, updatedAt: entry.updatedAt + 100 } : entry,
@@ -211,7 +220,7 @@ function createSubagentStore({ identities = [], runs = [], busMessages = [] } = 
     },
     store: {
       async ready() {},
-      // 真实实现按 updatedAt 倒序返回。
+      // The real implementation returns in reverse updatedAt order.
       listIdentities: () => [...identityList].sort((a, b) => b.updatedAt - a.updatedAt),
       latestRunsByAgent: () => new Map(runList.map((entry) => [entry.agentId, entry])),
       async listBusMessages() {
@@ -317,7 +326,7 @@ function createHarness(subagents) {
   };
 }
 
-/** 工具循环。`beforeRound[n]` 在第 n 轮 onBeforeNextTurn 之前执行。 */
+/** Tool loop. `beforeRound[n]` runs before onBeforeNextTurn of round n. */
 function toolRounds(harness, { rounds = 2, beforeRound = {} } = {}) {
   return async (params) => {
     let emitted = [];
@@ -364,7 +373,7 @@ function runWithScenario(scenario, params) {
   });
 }
 
-/** 返回锚点工具结果上被追加的文本块（原始的 `result N` 块不算）。 */
+/** Returns the text blocks appended to the anchor tool results (the original `result N` blocks do not count). */
 function appendedBlocks(messages) {
   return messages.flatMap((message) =>
     message.role === "toolResult" && Array.isArray(message.content)
@@ -381,15 +390,15 @@ function uniqueSystemPrompt(harness) {
   assert.equal(
     unique.size,
     1,
-    `systemPrompt 在 run 内发生了漂移：${[...unique].join("\n---\n")}`,
+    `systemPrompt drifted within the run: ${[...unique].join("\n---\n")}`,
   );
   return [...unique][0];
 }
 
 // ---------------------------------------------------------------------------
-// ① + ② 稳定段进 systemPrompt；状态未变的轮次不产生任何额外内容
+// 1 + 2: the stable section goes into systemPrompt; rounds with unchanged state produce no extra content
 
-test("身份段进 systemPrompt，运行状态不进；状态未变的轮次不产生额外内容", async () => {
+test("identity section goes into systemPrompt while run state does not; unchanged rounds produce no extra content", async () => {
   const subagents = createSubagentStore({
     identities: [identity("agent-b", { updatedAt: 20 }), identity("agent-a", { updatedAt: 10 })],
     runs: [run("agent-a", { status: "running", prompt: "audit the parser" })],
@@ -399,38 +408,39 @@ test("身份段进 systemPrompt，运行状态不进；状态未变的轮次不�
 
   const systemPrompt = uniqueSystemPrompt(harness);
   assert.match(systemPrompt, /Existing delegated agents in this parent conversation:/);
-  // listIdentities() 交回的是 updatedAt 倒序（agent-b 在前），systemPrompt 里必须是 id 序。
+  // listIdentities() returns reverse updatedAt order (agent-b first), but systemPrompt must be in id order.
   assert.ok(systemPrompt.indexOf("id=agent-a") < systemPrompt.indexOf("id=agent-b"));
   assert.doesNotMatch(systemPrompt, /status=/);
   assert.doesNotMatch(systemPrompt, /last_task=/);
   assert.doesNotMatch(systemPrompt, /audit the parser/);
-  // mode 随每次 Agent 调用变化，属易变字段，不得进稳定段。
+  // mode changes with every Agent call and is a volatile field, so it must not enter the stable section.
   assert.doesNotMatch(systemPrompt, /mode=/);
 
-  // 第 1 轮首投运行状态（run 起始时尾部还没有锚点，此前无处可挂）。
+  // Round 1 delivers the run state first (at run start the tail has no anchor yet, so there was nowhere to attach it before).
   const first = harness.overrides[0];
-  assert.ok(first?.wireTailText, "第 1 轮必须把运行状态作为 wireTailText 交给 runner");
+  assert.ok(first?.wireTailText, "round 1 must hand the run state to the runner as wireTailText");
   assert.match(first.wireTailText, /^Latest run state of the delegated agents/);
   assert.match(
     first.wireTailText,
     /- id=agent-a status=running mode=readonly last_task=audit the parser/,
   );
-  // 尾部文本只随出站请求投递：不得写进 override.context.messages，
-  // 否则会经 emittedMessages 泄漏到持久化 / UI / 记忆抽取。
+  // Tail text is delivered only with the outbound request: it must not be written
+  // into override.context.messages, or it would leak through emittedMessages into
+  // persistence / UI / memory extraction.
   assert.deepEqual(appendedBlocks(first.context.messages), []);
 
-  // 第 2、3 轮状态未变 → 一个字节都不许再加。
+  // Rounds 2 and 3 have unchanged state → not a single byte may be added.
   assert.deepEqual(
     harness.overrides.slice(1),
     [null, null],
-    "内容未变的轮次必须交回 null，不得产生任何额外内容",
+    "rounds with unchanged content must return null and produce no extra content",
   );
 });
 
 // ---------------------------------------------------------------------------
-// ③ 状态推进当轮送达，且 systemPrompt 字节不变
+// 3: state advancement is delivered that round, and systemPrompt bytes are unchanged
 
-test("run 状态推进当轮送达，systemPrompt 字节不变", async () => {
+test("run-state advancement is delivered that round while systemPrompt bytes stay unchanged", async () => {
   const subagents = createSubagentStore({
     identities: [identity("agent-a", { updatedAt: 10 })],
     runs: [run("agent-a", { status: "running" })],
@@ -452,25 +462,26 @@ test("run 状态推进当轮送达，systemPrompt 字节不变", async () => {
   const systemPrompt = uniqueSystemPrompt(harness);
   assert.ok(
     !systemPrompt.includes("found three issues"),
-    "run 内推进的状态不得被塞回 systemPrompt",
+    "state advanced within the run must not be stuffed back into systemPrompt",
   );
 
   assert.match(harness.overrides[0].wireTailText, /status=running/);
 
   const second = harness.overrides[1];
-  assert.ok(second?.wireTailText, "状态推进的那一轮必须当轮送达");
+  assert.ok(second?.wireTailText, "the round where state advances must deliver it that round");
   assert.match(second.wireTailText, /status=completed .*last_summary=found three issues/);
-  // 每个 override 只携带本轮增量；跨请求的累积重挂由 runner 负责，
-  // agent 状态消息里始终不含尾部文本。
+  // Each override carries only this round's increment; the runner handles
+  // cumulative re-attachment across requests, and agent state messages never
+  // contain the tail text.
   assert.deepEqual(appendedBlocks(second.context.messages), []);
 
-  assert.equal(harness.overrides[2], null, "推进后又没变的轮次不得再投");
+  assert.equal(harness.overrides[2], null, "rounds unchanged after an advance must not be delivered again");
 });
 
 // ---------------------------------------------------------------------------
-// ④ 与 bus 增量合并成同一个块
+// 4: merges with bus increments into the same block
 
-test("同一轮内 bus 增量与运行状态合并成一个尾部块", async () => {
+test("within one round the bus increment and run state merge into a single tail block", async () => {
   const subagents = createSubagentStore({
     identities: [identity("agent-a")],
     runs: [run("agent-a", { status: "running" })],
@@ -486,10 +497,11 @@ test("同一轮内 bus 增量与运行状态合并成一个尾部块", async () 
 
   const first = harness.overrides[0];
   assert.ok(first?.wireTailText);
-  assert.match(first.wireTailText, /^## LiveAgent Message Bus \(new messages\)/);
+  assert.match(first.wireTailText, /^## ReactorPro Message Bus \(new messages\)/);
   assert.match(first.wireTailText, /report is ready/);
   assert.match(first.wireTailText, /Latest run state of the delegated agents/);
   assert.match(first.wireTailText, /- id=agent-a status=running/);
-  // 两者合并成同一段 wireTailText（一段一个尾部块），且不落入 agent 状态消息。
+  // The two merge into the same wireTailText segment (one tail block per
+  // segment) and do not fall into agent state messages.
   assert.deepEqual(appendedBlocks(first.context.messages), []);
 });

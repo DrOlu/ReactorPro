@@ -1,21 +1,22 @@
-/* 用户气泡宽度由外层控制，正文只负责保留换行并安全断开长路径。 */
+/* The user bubble width is controlled by the outer layer; the body only preserves newlines and safely breaks long paths. */
 .chat-user-bubble {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-/* 浏览器不会为结尾的保留换行分配最后一行，用零宽字符保留该行。 */
+/* Browsers do not allocate a final line for a trailing preserved newline; a zero-width character keeps that line. */
 .chat-user-trailing-newline-anchor::before {
   content: "\200b";
 }
 
 /*
- * 消息操作条（复制/编辑/时间戳）：只要设备上有任意可悬停指针
- * （含触屏笔记本外接鼠标），就默认隐藏、真正 :hover / :focus-within 再显示。
- * Tailwind 的 group-hover 被关在主指针 `hover: hover` 里，触屏主指针的
- * 笔记本即使用着鼠标也不会触发，所以这里用 any-hover + 原生 :hover。
- * 纯触屏（any-hover: none）保持常显。规则放在 @layer 外，才能压过 utilities。
+ * Message action bar (copy/edit/timestamp): as long as the device has any hoverable pointer
+ * (including a mouse attached to a touch laptop), it is hidden by default and only shown on real
+ * :hover / :focus-within. Tailwind's group-hover is gated behind the primary pointer's
+ * `hover: hover`, so a touch-primary laptop does not trigger it even when a mouse is in use;
+ * hence any-hover + native :hover here. Pure touch (any-hover: none) keeps it always visible.
+ * The rules sit outside @layer so they can override utilities.
  */
 .chat-row-hover-chrome {
   transition-property: opacity;

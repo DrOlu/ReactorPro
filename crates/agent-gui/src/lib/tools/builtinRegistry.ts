@@ -50,23 +50,28 @@ export type BuiltinToolRegistry = {
   ) => Promise<ToolResultMessage>;
   metadataByName: Map<string, BuiltinToolMetadata>;
   hasTool: (toolName: string) => boolean;
-  /** MCP 懒加载已启用:调用方应给 runner 挂 requestToolFilter(未激活的 MCP
-   * 工具不进模型请求)。工具仍全量在 tools 里——执行层必须找得到它们。 */
+  /** MCP lazy loading is active: the caller should attach requestToolFilter to the runner
+   * (inactive MCP tools do not enter model requests). The tools are still all present in
+   * `tools` -- the execution layer must be able to find them. */
   mcpToolDeferralActive?: boolean;
 };
 
-// 第三方来源(MCP server / 插件)的工具名不受我们控制,可能撞车。撞车时不能像
-// 内置工具那样 throw 打断整轮——那等于让一个坏插件废掉整个对话。改为:先到先
-// 得、跳过后来者并告警;仅当两侧都是可信内置组时才 throw(那是编译期的开发 bug)。
+// Tool names from third-party sources (MCP server / plugins) are outside our control and may
+// collide. On collision we must not throw and abort the whole turn like builtin tools do -- that
+// would let one bad plugin kill the entire conversation. Instead: first come, first served, skip
+// later comers and warn; only throw when both sides are trusted builtin groups (that is a
+// compile-time development bug).
 const UNTRUSTED_TOOL_GROUPS: ReadonlySet<BuiltinToolBundle["groupId"]> = new Set(["mcp"]);
-// 不再给内置工具声明 JSON-schema 约束采样(strict)。曾经声明过 "prefer"
-// (pi 0.84.2 升级时引入),但部分 OpenAI 兼容 provider(如 Moonshot/Kimi)在
-// strict 模式下按白名单校验 schema 关键字,内置工具常用的 minimum / maxItems
-// 等一律 400,一个工具的 schema 就打死整轮请求;而 pi-ai 的本地预检
-// (makeStrictJsonSchema)只拦结构性问题,拦不住这类关键字白名单差异,
-// "prefer" 的降级判定在这里完全失效。v1.2.4 及之前不声明 strict,各家都能用
-// ——回到那个行为。约束采样能消灭的"参数名写错、必填漏传"坏调用,由工具
-// 实现自身的参数校验兜底。
+// We no longer declare JSON-schema constrained sampling (strict) for builtin tools. "prefer" was
+// declared at one point (introduced with the pi 0.84.2 upgrade), but some OpenAI-compatible
+// providers (such as Moonshot/Kimi) validate schema keywords against an allowlist in strict mode,
+// so keywords commonly used by builtin tools such as minimum / maxItems always return 400, and a
+// single tool's schema kills the whole turn; pi-ai's local pre-check (makeStrictJsonSchema) only
+// catches structural problems and cannot intercept this kind of keyword-allowlist discrepancy, so
+// the "prefer" degradation check fails entirely here. v1.2.4 and earlier declared no strict, and
+// every provider worked -- return to that behavior. Bad calls that constrained sampling could
+// eliminate ("misspelled parameter name, omitted required argument") are backstopped by the tools'
+// own parameter validation.
 
 function createBuiltinToolRegistry(bundles: BuiltinToolBundle[]): BuiltinToolRegistry {
   const tools: BuiltinToolBundle["tools"] = [];
@@ -101,10 +106,10 @@ function createBuiltinToolRegistry(bundles: BuiltinToolBundle[]): BuiltinToolReg
           existingGroup !== undefined &&
           !UNTRUSTED_TOOL_GROUPS.has(existingGroup);
         if (bothTrusted) {
-          // 两个内置工具同名:编译期就该修的开发 bug,继续保持强失败。
+          // Two builtin tools share a name: a development bug that should be fixed at compile time; keep failing hard.
           throw new Error(`Duplicate builtin tool name detected: ${tool.name}`);
         }
-        // 涉及 MCP/插件的撞车:先到先得,跳过后来者,绝不打断整轮。
+        // A collision involving MCP/plugins: first come, first served, skip later comers, never abort the whole turn.
         console.warn(
           `[tools] Tool name "${tool.name}" from group "${bundle.groupId}" collides with an ` +
             `already-registered tool (group "${existingGroup ?? "unknown"}"); skipping the newcomer.`,
@@ -165,7 +170,7 @@ type BuildBuiltinBaseToolRegistryParams = {
   providerId: ProviderId;
   runtimePlatform?: RuntimePlatform;
   fileState: FileToolState;
-  /** OS 级沙箱设置;透传给 Bash / ManagedProcess 执行层。 */
+  /** OS-level sandbox settings; passed through to the Bash / ManagedProcess execution layer. */
   sandbox?: ShellSandboxSettings;
   skillsEnabled: boolean;
   skillsRootDir?: string;
@@ -176,8 +181,9 @@ type BuildBuiltinBaseToolRegistryParams = {
     baseDirs: string[];
   }) => void | Promise<void>;
   runtimeScope: SystemToolRuntimeScope;
-  /** 会话检查点上下文;chat 场景传入,Cron 等自动化场景缺省(不捕获前像)。
-   * turnId 是每用户轮唯一的稳定 ID(与时钟无关),序号由 Rust 侧分配。 */
+  /** Conversation checkpoint context; supplied in chat scenarios and absent in automation
+   * scenarios such as Cron (no before-image is captured). turnId is a stable ID unique to each
+   * user turn (independent of the clock), and sequence numbers are assigned by the Rust side. */
   checkpoint?: { conversationId: string; turnId: string };
   currentChatModel?: {
     customProviderId: string;
@@ -189,7 +195,7 @@ type BuildBuiltinBaseToolRegistryParams = {
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   onMcpLoadError?: (message: string) => void;
   mcpLoadFailureMode?: "continue" | "throw";
-  /** 允许 CUA 工具把 LiveAgent 自己当作操作目标；默认 false，见 cuaSelfGuard.ts。 */
+  /** Allows CUA tools to target ReactorPro itself; defaults to false, see cuaSelfGuard.ts. */
   cuaAllowSelfTargeting?: boolean;
   memoryToolMode?: "rw" | "ro";
   remoteWebTunnelsEnabled?: boolean;
@@ -208,8 +214,9 @@ type McpBusinessToolBundle = Awaited<ReturnType<typeof createMcpTools>>;
 
 type BaseBuiltinToolBundles = {
   bundles: BuiltinToolBundle[];
-  /** MCP 业务工具 bundle(懒加载判定与 ToolSearch 目录的输入)。McpManager 与它
-   * 同为 groupId "mcp",绝不能按 groupId 搜索定位——必须持有这份直接引用。 */
+  /** MCP business tool bundle (input to the lazy-loading decision and the ToolSearch catalog).
+   * McpManager shares groupId "mcp" with it, so it must never be located by searching on
+   * groupId -- this direct reference must be held. */
   mcpBusinessBundle: McpBusinessToolBundle | undefined;
 };
 
@@ -257,8 +264,8 @@ async function buildBaseBuiltinToolBundles(
       getMcpSettings: params.getMcpSettings,
       applyMcpOps: params.applyMcpOps,
       runtimeScope: params.runtimeScope,
-      // 沙箱模式下 McpManager 不得成为无围栏的 stdio spawn 入口(P1#1):
-      // 运行时探测与 create/update/enable 写入路径一律拒绝 stdio。
+      // In sandbox mode McpManager must not become an unfenced stdio spawn entry point (P1#1):
+      // runtime probing and the create/update/enable write paths all reject stdio.
       sandbox: params.sandbox,
       resolveHomeDir,
     }),
@@ -293,8 +300,9 @@ async function buildBaseBuiltinToolBundles(
           }),
         ]
       : []),
-    // sandboxOffline(enabled 且 !allowNetwork)下浏览器出网违背离线语义,
-    // 整个 bundle 不注册,模型工具表内不可见;executor 内另有 fail-closed 兜底。
+    // Under sandboxOffline (enabled and !allowNetwork), browser network egress violates offline
+    // semantics, so the whole bundle is not registered and is invisible in the model's tool table;
+    // the executor has an additional fail-closed backstop.
     ...(params.sandbox?.enabled === true && !params.sandbox.allowNetwork
       ? []
       : [
@@ -323,15 +331,16 @@ export async function buildBuiltinToolRegistry(
   params: BuildBuiltinBaseToolRegistryParams & {
     subagentRuntime?: SubagentRuntimeConfig;
     taskStateStore?: TaskStateStore;
-    /** chat 场景注入交互式提问工具；子代理/自动化场景无人值守，不注册。 */
+    /** Injects the interactive question tool in chat scenarios; not registered in unattended subagent/automation scenarios. */
     askUserQuestionConversationId?: string;
-    /** Plan mode:非只读工具不进注册表,注入 ExitPlanMode,子代理强制 readonly。 */
+    /** Plan mode: non-read-only tools do not enter the registry, ExitPlanMode is injected, and subagents are forced read-only. */
     planMode?: {
       conversationId: string;
     };
-    /** MCP 懒加载:schema 总量超阈值时注入 ToolSearch,MCP 工具延迟到激活后
-     * 才进模型请求(执行层始终全量注册)。仅 chat 场景;plan mode 下无意义
-     * (MCP 工具非只读,本就不在表内)。 */
+    /** MCP lazy loading: ToolSearch is injected when total schema size exceeds the threshold, and
+     * MCP tools enter model requests only after activation (the execution layer always registers
+     * them all). Chat scenarios only; meaningless under plan mode (MCP tools are not read-only and
+     * are already absent from the table). */
     toolSearch?: {
       conversationId: string;
     };
@@ -342,10 +351,12 @@ export async function buildBuiltinToolRegistry(
 ) {
   const planModeActive = Boolean(params.planMode);
   const { bundles: baseBundles, mcpBusinessBundle } = await buildBaseBuiltinToolBundles(params);
-  // MCP 懒加载判定:对"会进请求的 schema JSON"估算 token(与 tokenLedger 同
-  // 口径),超阈值才启用——多一次检索回合的代价只在真省下可观 context 时才值。
-  // 判定与目录的输入必须是 MCP 业务工具 bundle 的直接引用:McpManager 也注册在
-  // groupId "mcp" 下且先入列,按 groupId find 会命中它,让延迟判定永远失效。
+  // MCP lazy-loading decision: estimate tokens on the "schema JSON that would enter the request"
+  // (same measure as tokenLedger) and enable only above the threshold -- the cost of one extra
+  // retrieval turn is only worth it when it truly saves significant context. The decision and
+  // catalog input must be a direct reference to the MCP business tool bundle: McpManager is also
+  // registered under groupId "mcp" and is enqueued first, so finding by groupId would hit it and
+  // permanently defeat the deferral decision.
   const mcpToolDeferralActive = Boolean(
     params.toolSearch &&
       params.runtimeScope === "chat" &&
@@ -400,9 +411,10 @@ export async function buildBuiltinToolRegistry(
     ...toolSearchBundles,
   ];
 
-  // Plan mode:在注册表组装层裁掉非只读工具(而非 deny 后备拦截)——模型根本
-  // 看不到写工具,不浪费 token 也无泄漏面。子代理协作工具(Agent/SendMessage)
-  // 保留,Agent 由 forceReadonly 在 validate 层强制 readonly。
+  // Plan mode: trim non-read-only tools at the registry assembly layer (rather than a deny
+  // backstop) -- the model cannot see write tools at all, so no tokens are wasted and there is no
+  // leak surface. Subagent collaboration tools (Agent/SendMessage) are kept, and Agent is forced
+  // read-only by forceReadonly at the validate layer.
   const filterForPlanMode = (registry: ReturnType<typeof createBuiltinToolRegistry>) => {
     const withDeferralFlag: BuiltinToolRegistry = {
       ...registry,
@@ -464,10 +476,11 @@ export async function buildBuiltinToolRegistry(
         executeToolCall: baseRegistry.executeToolCall,
         metadataByName: baseRegistry.metadataByName,
         additionalRoots: subagentAdditionalRoots,
-        // Plan mode:子代理只许 readonly,worktree 请求按参数错误拒绝。
+        // Plan mode: subagents are read-only only, and worktree requests are rejected as parameter errors.
         forceReadonly: planModeActive,
-        // 仅供 worktree apply 在合并回父工作区前捕获前像(blocker-2),
-        // 不进入子代理自身的工具注册表(见下方 checkpoint: undefined)。
+        // Only for worktree apply to capture the before-image before merging back into the parent
+        // workspace (blocker-2); it does not enter the subagent's own tool registry (see
+        // checkpoint: undefined below).
         checkpoint: params.checkpoint,
         createSubagentToolRegistry: async (workdir) =>
           createBuiltinToolRegistry(
@@ -481,10 +494,12 @@ export async function buildBuiltinToolRegistry(
                 applyMcpOps: undefined,
                 mcpLoadFailureMode: "continue",
                 memoryToolMode: "ro",
-                // Worktree 子代理的 workdir 是临时 git worktree,改动经 apply
-                // 合并回父工作区后临时目录即被清理——若继承父轮 checkpoint,
-                // 捕获的是死路径的前像,rewind 会"恢复"已不存在的临时目录。
-                // 父工作区的真实前像由 subagent_worktree_apply 在合并前捕获。
+                // A worktree subagent's workdir is a temporary git worktree, and the temp directory
+                // is cleaned up once changes are merged back into the parent workspace via apply -- if
+                // the parent turn's checkpoint were inherited, the captured before-image would point
+                // to a dead path, and rewind would "restore" a temp directory that no longer exists.
+                // The parent workspace's real before-image is captured by subagent_worktree_apply
+                // before the merge.
                 checkpoint: undefined,
               })
             ).bundles,

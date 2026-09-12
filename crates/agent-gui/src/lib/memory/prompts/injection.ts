@@ -42,9 +42,10 @@ export const MEMORY_OVERVIEW_FINAL_LINE =
 export const MEMORY_PROMPT_TRUNCATION_SUFFIX =
   '... (truncated; use MemoryManager(action="search") for older entries)';
 
-// 桶截断行的稳定标记片段。turnInjection 用它判断「overview 是被展示截断了,不是
-// 条目真的没了」;生成处(appendSection)直接用该片段拼行,标记与文本天然同源,
-// 不存在两处抄写漂移的可能。
+// Stable marker fragment for the bucket-truncation line. turnInjection uses it to tell "the
+// overview was truncated for display" from "the entries are really gone"; the generation site
+// (appendSection) builds the line from this very fragment, so marker and text share one source
+// and there is no possibility of the two drifting apart.
 export const MEMORY_INDEX_HIDDEN_LINE_MARKER = "more entries hidden; call MemoryManager(";
 
 export function buildMemoryToolsSuffixSection() {
@@ -56,7 +57,7 @@ export function buildMemoryToolsSuffixSection() {
     '- For partial corrections to a compound memory, read the existing entry and use update mode="merge" so unchanged details survive; use mode="replace" only when intentionally rewriting the whole entry.',
     "- Include confidence + source_quote + reasoning on write/update. high requires an explicit signal word AND source_quote ≥5 chars (else auto-downgraded).",
     "- Do not store: secrets/credentials, raw code or large logs, facts derivable from the workspace, or memory-introspection answers.",
-    '- scope="project" gate: only write/update project-scope memory when (a) this turn produced a successful workspace mutation — a Write/Edit on a workspace file, a Bash command that modified workspace state, or a mutating MCP call on workspace files — OR (b) the user explicitly pinned the fact to this project (e.g. "记住本项目...", "for this repo always..."). Read-only chatter about the workspace is NOT enough. Otherwise route to scope="global" or skip. action="delete" on existing project memory is exempt when the user asks to forget. Cite the qualifying evidence (the tool call or the explicit pin quote) in reasoning.',
+    '- scope="project" gate: only write/update project-scope memory when (a) this turn produced a successful workspace mutation — a Write/Edit on a workspace file, a Bash command that modified workspace state, or a mutating MCP call on workspace files — OR (b) the user explicitly pinned the fact to this project (e.g. "remember this for the project...", "for this repo always..."). Read-only chatter about the workspace is NOT enough. Otherwise route to scope="global" or skip. action="delete" on existing project memory is exempt when the user asks to forget. Cite the qualifying evidence (the tool call or the explicit pin quote) in reasoning.',
     MEMORY_SELF_REVIEW_RULES,
     MEMORY_CONFLICT_ARBITRATION_LINES,
   ].join("\n");
@@ -91,16 +92,19 @@ function daysAgo(updatedAt: number | undefined, nowMs: number): number {
   return Math.max(0, Math.floor((nowMs - updatedAt) / 86_400_000));
 }
 
-// 新鲜度分桶。绝对天数(`12d`)让每条 entry 的尾缀天天漂移 —— 一次跨零点所有尾缀
-// 集体 +1,system prompt 哈希随之变化,整条缓存前缀(含全部对话历史)作废。
-// 分桶把漂移频率从「每天必变」降到「仅跨桶边界变」:一条 3 天前的记忆,第 7 天变
-// 一次、第 30 天再变一次,此后永不变。
+// Freshness bucketing. Absolute day counts (`12d`) make every entry's suffix drift daily -- a
+// single midnight crossing bumps all suffixes by one, the system prompt hash changes with them,
+// and the entire cache prefix (including all conversation history) is invalidated. Bucketing cuts
+// the drift frequency from "changes every day" to "changes only at bucket boundaries": a memory
+// from 3 days ago changes once on day 7, once more on day 30, and never again after that.
 //
-// 不直接删掉时间标记:system prompt 中没有任何当前日期锚点,这些相对标记是模型
-// 判断记忆新鲜度的唯一线索,删了会损害召回与冲突仲裁。分桶是在保留语义的前提下
-// 降低漂移频率。
+// The time marker is not simply deleted: the system prompt contains no current-date anchor, so
+// these relative markers are the model's only clue for judging memory freshness, and removing them
+// would hurt recall and conflict arbitration. Bucketing lowers the drift frequency while
+// preserving the semantics.
 //
-// 纯函数:天数由调用方传入,自身不含时间量,便于测试直接调用。
+// Pure function: the day count is passed in by the caller, it carries no time quantity itself,
+// which makes it easy to call directly from tests.
 export function freshnessBucket(days: number): string {
   if (!Number.isFinite(days) || days <= 0) return "d0";
   if (days < 7) return "w";
@@ -132,8 +136,8 @@ function lineFor(entry: MemoryOverviewEntry, nowMs: number): string {
   return `- ${label || "<no description>"} [${entry.slug}|${initial}${unreviewedFlag}|${freshness}]`;
 }
 
-// daily 条目按日期命名,`today` 是其核心语义,保留;其余绝对天数同样归并成粗粒度
-// 分桶,理由见 freshnessBucket。
+// daily entries are named by date, and `today` is their core semantic, so it is kept; other
+// absolute day counts are likewise merged into coarse buckets, for the reason given in freshnessBucket.
 function dayLabel(dateLocal?: string | null) {
   if (!dateLocal) return "recent";
   const today = new Date();

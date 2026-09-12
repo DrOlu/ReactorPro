@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-// @ 提及已安装应用（computer use 目标）的铺点检查：共享 composer 的
-// appMention 类型必须走全 chip 生命周期（建 chip / 序列化 / 剪贴板 /
-// 草稿恢复），GUI 侧的门控必须与 cua-driver 的安全裁决同源。
+// Coverage check for @-mentioning installed apps (computer use targets): the shared composer's
+// appMention type must go through the full chip lifecycle (create chip / serialize / clipboard /
+// draft restore), and the GUI-side gating must share the same source as cua-driver's security decision.
 
 const chatComponentsRoot = new URL("../../../agent-ui/src/components/chat/", import.meta.url);
 const agentUiRoot = new URL("../../../agent-ui/src/", import.meta.url);
@@ -12,8 +12,8 @@ const guiRoot = new URL("../../src/", import.meta.url);
 const tauriRoot = new URL("../../src-tauri/src/", import.meta.url);
 
 function source(root, relativePath) {
-  // Windows（autocrlf=true）检出下源码行尾是 CRLF，统一成 LF，保证
-  // extractFunction 的 indexOf("\n}\n") 等基于 LF 的切片在任何平台可复现。
+  // On Windows (autocrlf=true) checkouts, source lines end with CRLF; normalize to LF so that
+  // LF-based slicing such as extractFunction's indexOf("\n}\n") is reproducible on any platform.
   return readFileSync(new URL(relativePath, root), "utf8").replace(/\r\n/g, "\n");
 }
 
@@ -31,8 +31,8 @@ const composer = source(chatComponentsRoot, "MentionComposer.tsx");
 const overlays = source(chatComponentsRoot, "MentionComposerOverlays.tsx");
 
 test("the mention model declares the full appMention surface", () => {
-  // 建议、草稿段、草稿收集列表三处都必须有 app 臂，少一处就会出现
-  // "能选进编辑器但发送时丢失"或"能发送但草稿恢复丢 chip"的断层。
+  // The app arm must be present in all three places — suggestions, draft segments, and the draft collection list — missing one creates
+  // a gap where "it can be selected into the editor but is lost on send" or "it can be sent but draft restore loses the chip".
   assert.match(model, /\{ type: "app"; app: MentionComposerApp \}/);
   assert.match(model, /\{ type: "appMention"; app: MentionComposerAppMention \}/);
   assert.match(model, /appMentions: MentionComposerAppMention\[\];/);
@@ -42,25 +42,25 @@ test("the mention model declares the full appMention surface", () => {
 });
 
 test("app chips round-trip through DOM serialization and the clipboard payload", () => {
-  // DOM → 草稿段
+  // DOM -> draft segments
   assert.match(internals, /el\.hasAttribute\(APP_MENTION_NAME_ATTR\)/);
-  // 草稿段 → 发送文本
+  // draft segments -> send text
   assert.match(
     internals,
     /if \(segment\.type === "appMention"\) return formatAppMentionToken\(segment\.app\);/,
   );
-  // 私有剪贴板通道恢复
+  // private clipboard channel restore
   assert.match(internals, /if \(type === "appMention"\) \{/);
-  // 粘贴/setDraft 重建 chip
+  // paste/setDraft rebuilds the chip
   assert.match(internals, /if \(segment\.type === "appMention"\) \{\s*return createAppMentionChip\(segment\.app\);/);
-  // 光标原子步进/删除把 app chip 当作一个整体
+  // atomic cursor stepping/deletion treats the app chip as a single unit
   const chipGuard = extractFunction(internals, "isComposerChipElement");
   assert.match(chipGuard, /APP_MENTION_NAME_ATTR/);
 });
 
 test("the app token carries a stable identity the model can hand to CUA tools", () => {
-  // token 序列化只有 lib/chat/mentionReferences 一份实现，组件内序列化与
-  // 发送路径（composerDraft）都从这里导入——不允许再出现第二份拷贝。
+  // Token serialization has only one implementation, in lib/chat/mentionReferences; the in-component serialization and
+  // the send path (composerDraft) both import from here — no second copy is allowed.
   const references = source(agentUiRoot, "lib/chat/mentionReferences.ts");
   assert.doesNotMatch(internals, /function formatAppMentionToken/);
   assert.match(internals, /formatAppMentionToken,/);
@@ -75,7 +75,7 @@ test("the app token carries a stable identity the model can hand to CUA tools", 
     formatAppMentionToken({ name: "Safari", bundleId: "com.apple.Safari", path: "/Applications/Safari.app" }),
     'app "Safari" (com.apple.Safari)',
   );
-  // 无 bundle id 的平台回退到安装路径，无任何身份时只留名字。
+  // Platforms without a bundle id fall back to the install path; with no identity at all, only the name is kept.
   assert.equal(
     formatAppMentionToken({ name: "Tool", bundleId: "", path: "/opt/tool" }),
     'app "Tool" (/opt/tool)',
@@ -84,8 +84,8 @@ test("the app token carries a stable identity the model can hand to CUA tools", 
 });
 
 test("app suggestions ride the @ trigger and are host-gated by the mentionApps prop", () => {
-  // 应用候选只来自 prop——composer 自己绝不能去 invoke Tauri（组件是
-  // 双端共享的，WebUI 有意不接这条能力）。
+  // App candidates come only from props — composer itself must never invoke Tauri (the component is
+  // shared by both ends, and the WebUI intentionally does not wire up this capability).
   assert.match(composer, /mentionApps = \[\]/);
   assert.doesNotMatch(composer, /invoke\(["']cua_driver/);
   assert.match(composer, /next\.push\(\{ type: "app", app \}\)/);
@@ -93,8 +93,8 @@ test("app suggestions ride the @ trigger and are host-gated by the mentionApps p
 });
 
 test("the root popup folds available installed apps into a dedicated submenu", () => {
-  // 根级只呈现类别入口；应用候选和文件、会话候选一样，进入二级菜单后
-  // 才生成。应用子菜单沿用统一的 30 项上限，不再为根级混排而裁到 3 项。
+  // The root level shows only category entries; app candidates, like file and conversation candidates, are generated
+  // only after entering a second-level menu. The app submenu keeps the uniform 30-item cap and is no longer trimmed to 3 items for root-level mixing.
   assert.match(model, /category: "apps" \| "files" \| "conversations"/);
   assert.match(model, /MentionMenuMode = "root" \| "apps" \| "files" \| "conversations"/);
   assert.match(composer, /\{ type: "category", category: "apps" \}/);
@@ -107,15 +107,15 @@ test("the root popup folds available installed apps into a dedicated submenu", (
   assert.doesNotMatch(composer, /MAX_APP_SUGGESTIONS/);
   assert.match(overlays, /mode === "apps"/);
   assert.match(overlays, /category === "apps"/);
-  // 应用行优先渲染宿主提供的真实图标（data URL），缺失时回退占位图标。
+  // App rows preferentially render the real icon provided by the host (data URL), falling back to a placeholder icon when missing.
   assert.match(overlays, /app\?\.iconDataUrl \?/);
   assert.match(overlays, /img src=\{app\.iconDataUrl\}/);
   assert.match(overlays, /<AppWindow className/);
 });
 
 test("selecting an app records it and the next @ popup ranks recents first", () => {
-  // 选中即落榜单（localStorage 版本化键），下次 @ 会话开启时重读并把
-  // 最近使用的应用排到分组最前；未上榜的保持宿主的字母序。
+  // Selection writes to the leaderboard (a versioned localStorage key); the next time the @ conversation opens, it re-reads
+  // and moves the most recently used apps to the front of the group; apps not on the board keep the host's alphabetical order.
   assert.match(composer, /recordAppMentionUse\(suggestion\.app\)/);
   assert.match(
     composer,
@@ -123,12 +123,12 @@ test("selecting an app records it and the next @ popup ranks recents first", () 
   );
   const recency = source(agentUiRoot, "lib/chat/appMentionRecency.ts");
   assert.match(recency, /"liveagent\.app-mention-recents\.v1"/);
-  // 身份键必须复用图标注册表的同一份裁决（bundle id > path > name），
-  // 不允许在 recency 里再维护一份优先级。
+  // The identity key must reuse the same decision as the icon registry (bundle id > path > name);
+  // a second priority list must not be maintained in recency.
   assert.match(recency, /identityKeys\(identity\)\[0\] \?\? ""/);
 
-  // 执行式覆盖：身份键优先级 + 最近使用排序（上榜按榜单序在前，未上榜
-  // 保持入参原序）。类型注解在求值前剥掉。
+  // Executable override: identity key priority + recency ordering (listed entries first by leaderboard order, unlisted ones
+  // keep the input order). Type annotations are stripped before evaluation.
   const icons = source(agentUiRoot, "lib/chat/appMentionIcons.ts");
   const identityKeysFn = extractFunction(icons, "identityKeys")
     .replace(/\(identity: AppMentionIconIdentity\): string\[\]/, "(identity)")
@@ -174,7 +174,7 @@ test("selecting an app records it and the next @ popup ranks recents first", () 
     sorted.map((app) => app.name),
     ["Safari", "Mail", "Arc", "Terminal"],
   );
-  // 入参不被就地修改。
+  // Inputs are not modified in place.
   assert.deepEqual(
     apps.map((app) => app.name),
     ["Arc", "Mail", "Safari", "Terminal"],
@@ -191,12 +191,12 @@ test("an app already mentioned is excluded and cannot be inserted again", () => 
 });
 
 test("the chip shows the real app logo via the icon registry, never via DOM attributes", () => {
-  // 图标是几 KB 的 data URL：进 chip 属性会跟着进剪贴板 JSON 与草稿序列
-  // 化。所以 chip 渲染时按身份（name/bundleId/path）从进程级注册表查图，
-  // 序列化载荷保持只有身份三元组；chip 重建（setDraft/粘贴）重查即复原。
+  // The icon is a multi-KB data URL: putting it into a chip property would carry it into the clipboard JSON and draft serialization.
+  // So chip rendering looks up the image from the process-level registry by identity (name/bundleId/path),
+  // keeping the serialized payload to just the identity triple; chip rebuild (setDraft/paste) restores it by re-querying.
   assert.match(internals, /getAppMentionIconDataUrl\(app\)/);
   assert.match(internals, /createAppMentionIcon\(app\)/);
-  // 属性面固定为身份三元组——不得新增 icon 属性。
+  // The property surface is fixed to the identity triple — no new icon property may be added.
   const chipFactory = extractFunction(internals, "createAppMentionChip");
   const setAttrs = [...chipFactory.matchAll(/setAttribute\((APP_MENTION_[A-Z_]+)/g)].map(
     (m) => m[1],
@@ -206,7 +206,7 @@ test("the chip shows the real app logo via the icon registry, never via DOM attr
     "APP_MENTION_BUNDLE_ID_ATTR",
     "APP_MENTION_PATH_ATTR",
   ]);
-  // 注册表登记发生在宿主拉到列表时（GUI 与 WebUI 共用同一个 hook）。
+  // Registry registration happens when the host fetches the list (the GUI and WebUI share the same hook).
   const hook = source(agentUiRoot, "lib/chat/useMentionApps.ts");
   assert.match(hook, /registerAppMentionIcons\(mapped\)/);
 });
@@ -216,10 +216,10 @@ test("user bubbles tokenize app mention tokens back into chips", () => {
   assert.match(bubble, /\{ type: "app"; app: AppDisplayReference \}/);
   assert.match(bubble, /<AppMentionChip key=\{key\} app=\{part\.app\} \/>/);
   assert.match(bubble, /useAppMentionIcon\(app\)/);
-  // hasChip 少了 app 臂时，纯 app 提及的消息会整体走无 chip 快捷路径。
+  // When hasChip lacks the app arm, a pure app-mention message entirely takes the no-chip shortcut path.
   assert.match(bubble, /part\.type === "app" \|\|/);
 
-  // token 逆变换的语义：完整形态才识别，身份按 path 分隔符分类。
+  // Semantics of the token inverse transform: only the complete form is recognized, and identity is classified by the path separator.
   const stripTypes = (src) =>
     src
       .replace(/\(text: string, index: number\)/g, "(text, index)")
@@ -239,19 +239,19 @@ test("user bubbles tokenize app mention tokens back into chips", () => {
     bundleId: undefined,
     path: "/opt/tool",
   });
-  // 裸 `app "Name"` 是自然语言常见形态，不作 token。
+  // A bare `app "Name"` is a common natural-language form and is not treated as a token.
   assert.equal(inlineAppReferenceAt('app "Safari" is great', 0), null);
-  // 非词边界不触发（避免把 "myapp \"x\" (y)" 切碎）。
+  // Non-word boundaries do not trigger (avoiding splitting "myapp \"x\" (y)").
   assert.equal(inlineAppReferenceAt('myapp "Safari" (com.apple.Safari)', 2), null);
 
-  // 纯文本粘贴（剪贴板第三层）也经同一 token 还原成 chip。
+  // Plain-text paste (the clipboard's third layer) also restores into a chip via the same token.
   assert.match(internals, /segment\.type === "app"/);
   assert.match(internals, /type: "appMention",\s*app: normalizeAppMention\(/);
 });
 
 test("the send path serializes appMention segments in both draft pipelines", () => {
-  // buildDraft（组件内）与 buildTextFromComposerDraft（发送路径）各有一份
-  // 序列化，两边都必须有 app 臂。
+  // buildDraft (in-component) and buildTextFromComposerDraft (send path) each have their own
+  // serialization, and both must have the app arm.
   assert.match(composer, /appMentions\.push\(segment\.app\)/);
   const composerDraft = source(agentUiRoot, "lib/chat/composerDraft.ts");
   assert.match(
@@ -265,20 +265,20 @@ test("the send path serializes appMention segments in both draft pipelines", () 
 
 test("both hosts gate apps by the cua-driver identity ruling via the shared hook", () => {
   const hook = source(agentUiRoot, "lib/chat/useMentionApps.ts");
-  // 门控必须走 contracts 的同一份判定（按 id 或 command），不得自己
-  // 比较字符串——否则会与审批缺省/自指闸门的裁决错位。
+  // Gating must go through the same decision in contracts (by id or command); it must not
+  // compare strings itself — otherwise it would misalign with the approval-default/self-targeting gate decisions.
   assert.match(hook, /isCuaDriverServer\(server\)/);
   assert.match(hook, /from "@liveagent\/ui\/contracts\/mcpServerDefaults"/);
   assert.match(hook, /cua_driver_list_installed_apps/);
-  // invoke 必须经 @liveagent/app shim 解析：GUI 直连 Tauri 命令，WebUI
-  // 由 shim 把同名命令经 Gateway 直通中继到桌面宿主。hook 自身不得
-  // import @tauri-apps——那会把共享包焊死在桌面端。
+  // invoke must be resolved through the @liveagent/app shim: GUI talks to the Tauri command directly, while the WebUI
+  // uses the shim to relay the same-named command through the Gateway to the desktop host. The hook itself must not
+  // import @tauri-apps — that would weld the shared package to the desktop.
   assert.match(hook, /from "@liveagent\/app\/shims\/tauriCore"/);
   assert.doesNotMatch(hook, /@tauri-apps/);
   const chatPage = source(guiRoot, "pages/ChatPage.tsx");
   assert.match(chatPage, /useMentionApps\(activeWorkspaceResources\.mcpServers, isAgentMode\)/);
-  // WebUI 接线：门控入参同源（agent 模式 + 工作区 mcpServers），列表
-  // 传入 composer；列出的是已连接桌面宿主的应用（cua 工具操作桌面）。
+  // WebUI wiring: gating inputs come from the same source (agent mode + workspace mcpServers), and the list
+  // is passed into composer; it lists apps from the connected desktop host (cua tools operate the desktop).
   const gatewayApp = readFileSync(
     new URL("../../../agent-gateway/web/src/app/GatewayApp.tsx", import.meta.url),
     "utf8",
@@ -292,9 +292,9 @@ test("both hosts gate apps by the cua-driver identity ruling via the shared hook
 });
 
 test("the gateway relays installed apps as a vetted pass-through frame", () => {
-  // 直通链路：proto 臂（编号只增不改）→ Go 白名单 → 桌面分发与 bridge
-  // → WebUI shim 复用 GUI 的同名 invoke 命令。少一环 WebUI 的应用分组
-  // 就静默消失，所以每一环都铺点。
+  // Pass-through chain: proto arm (numbering only grows, never changes) -> Go allowlist -> desktop dispatch and bridge
+  // -> WebUI shim reusing the GUI's same-named invoke command. A missing link makes the WebUI's app group
+  // silently disappear, so every link is covered.
   const proto = readFileSync(
     new URL("../../../agent-gateway/proto/v2/gateway.proto", import.meta.url),
     "utf8",
@@ -321,12 +321,12 @@ test("the gateway relays installed apps as a vetted pass-through frame", () => {
 
 test("the Rust command excludes the host on every platform and is registered", () => {
   const service = source(tauriRoot, "services/cua_driver/installed_apps.rs");
-  // macOS 按宿主 bundle id 剔除；Windows 没有 bundle id，按当前进程的
-  // exe 路径剔除——两条路都必须在，缺一条宿主就会出现在自己的候选里。
+  // macOS excludes by host bundle id; Windows has no bundle id, so exclude by the current process's
+  // exe path — both paths must exist; missing one puts the host itself in its own candidates.
   assert.match(service, /eq_ignore_ascii_case\(exclude_bundle_id\)/);
   assert.match(service, /std::env::current_exe\(\)/);
   assert.match(service, /list_windows_apps/);
-  // Windows 身份由 path 承担：bundle_id 留空，经前端映射为 undefined。
+  // On Windows identity is carried by path: bundle_id is left empty and mapped to undefined by the frontend.
   assert.match(service, /bundle_id: String::new\(\)/);
   const command = source(tauriRoot, "commands/integration/cua_driver.rs");
   assert.match(command, /app\.config\(\)\.identifier\.clone\(\)/);

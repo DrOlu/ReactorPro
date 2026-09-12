@@ -4,13 +4,13 @@ import type { TerminalWorkbenchSurface, WorkbenchLayout } from "./types";
 
 let terminalSurfaceIdCounter = 0;
 
-/** 布局内稳定的终端 Surface 身份;与 useWindowWorkbench 的 paneId 生成风格一致。 */
+/** Stable terminal Surface identity within the layout; consistent with useWindowWorkbench's paneId generation style. */
 export function createTerminalSurfaceId(): string {
   terminalSurfaceIdCounter += 1;
   return `term-${Date.now().toString(36)}-${terminalSurfaceIdCounter.toString(36)}`;
 }
 
-/** SSH 建连返回交互提示(host key/认证)时抛出;Pane 内无法应答,需在项目工具面板完成。 */
+/** Thrown when SSH connection setup returns an interactive prompt (host key/auth); the Pane cannot answer it, so it must be completed in the project tools panel. */
 export class TerminalPaneSshPromptError extends Error {
   constructor() {
     super("SSH session requires an interactive prompt.");
@@ -19,9 +19,11 @@ export class TerminalPaneSshPromptError extends Error {
 }
 
 /**
- * 自动建会话授权集(窗口级内存):记录本窗口已经显式创建或重启过的
- * surfaceId。布局恢复出的 surface 不在集合中，宿主必须停在 dormant
- * 占位，直到用户显式点击恢复；这也阻止应用启动时静默建立 SSH 连接。
+ * Auto-create-session authorization set (window-level memory): records surfaceIds
+ * this window has already explicitly created or restarted. Surfaces restored from
+ * the layout are not in the set, so the host must stay in the dormant placeholder
+ * until the user explicitly clicks to restore; this also prevents silently
+ * establishing SSH connections at app startup.
  */
 export function createTerminalPaneAutoLaunchRegistry() {
   const authorized = new Set<string>();
@@ -48,10 +50,13 @@ export function isTerminalPaneAutoLaunchAuthorized(
 }
 
 /**
- * 应用退出护栏:退出流程会先关闭全部终端再退出进程,期间广播的 `closed`
- * 事件不代表用户关闭了单个终端。若照常联动关 Pane,退出前的布局落盘会把
- * 所有终端 Pane 剔除,重启后无法按 launchSpec 恢复。退出确认后置位,
- * closed→关 Pane 的联动随之停摆;失败时复位,应用继续可用。
+ * App exit guard: the exit flow closes all terminals before quitting the process,
+ * so the `closed` events broadcast during it do not mean the user closed an
+ * individual terminal. If the Pane-closing linkage ran as usual, the layout
+ * persist before exit would remove all terminal Panes and they could not be
+ * restored from launchSpec after restart. It is set after exit confirmation, which
+ * stalls the closed -> close-Pane linkage; on failure it resets and the app stays
+ * usable.
  */
 export function createTerminalAppExitGuard() {
   let exiting = false;
@@ -71,17 +76,19 @@ export function createTerminalAppExitGuard() {
 export type EnsureTerminalPaneSessionDeps = {
   client: TerminalClient;
   bindings: Pick<TerminalPaneBindingStore, "set">;
-  /** 测试注入;省略时使用模块级共享表。 */
+  /** Injected by tests; uses the module-level shared table when omitted. */
   inflight?: Map<string, Promise<TerminalSession>>;
 };
 
 const sharedEnsureInflight = new Map<string, Promise<TerminalSession>>();
 
 /**
- * 按 launchSpec 建立终端会话并写入绑定,返回创建的会话记录(调用方可在
- * `terminal:event` 尚未送达前直接渲染)。同一 surfaceId 的并发调用
- * (StrictMode 双挂载、快速重试)复用同一个 in-flight Promise,保证不会
- * 创建两个 PTY。失败的 Promise 结算后从表中移除,后续重试可再次发起。
+ * Create a terminal session from launchSpec and write the binding, returning the
+ * created session record (the caller can render it directly before
+ * `terminal:event` arrives). Concurrent calls for the same surfaceId (StrictMode
+ * double mount, fast retry) reuse the same in-flight Promise, guaranteeing two
+ * PTYs are never created. A failed Promise is removed from the table once settled,
+ * so a later retry can start again.
  */
 export function ensureTerminalPaneSession(
   surface: TerminalWorkbenchSurface,
@@ -132,10 +139,11 @@ export type FindTerminalPaneForSessionDeps = {
 };
 
 /**
- * 会话被显式关闭(registry `closed` 事件)时定位持有它的终端 Pane。
- * 用绑定而非租约查找:拖入事务先写绑定后开 Pane,宿主取得租约前的
- * "connecting" 窗口也必须命中,否则该窗口内的关闭会留下一个按
- * launchSpec 复活新 PTY 的孤儿 Pane。
+ * Locate the terminal Pane holding a session when it is explicitly closed (the
+ * registry's `closed` event). Look up by binding rather than lease: a drag-in
+ * transaction writes the binding before opening the Pane, and the "connecting"
+ * window before the host acquires the lease must also match; otherwise a close in
+ * that window leaves an orphan Pane that revives a new PTY from launchSpec.
  */
 export function findTerminalPaneForSession(
   sessionId: string,
@@ -157,11 +165,14 @@ export type ResolveLiveTerminalSurfaceIdsDeps = {
 };
 
 /**
- * 恢复期对账:用后端存活会话清理死绑定,返回仍然存活的 surfaceId 集合。
- * webview reload 时后端终端注册表仍在,这些 surfaceId 对应的 Pane 直接
- * 重挂会话;绑定被清掉的 Pane 按 launchSpec 自动重建。list 失败
- * 返回 null,绑定保持原样——宿主会在会话列表就绪后清理指向消失会话的
- * 陈旧绑定并自动重建,恢复流程不被阻塞。
+ * Reconciliation during restore: clean up dead bindings using sessions alive in
+ * the backend, and return the set of surfaceIds still alive. On webview reload the
+ * backend terminal registry is still there, so these surfaceIds' Panes remount
+ * their sessions directly; Panes whose binding was cleared are rebuilt
+ * automatically from launchSpec. On list failure, return null and keep bindings
+ * as-is -- the host will clean up stale bindings pointing at vanished sessions
+ * once the session list is ready and rebuild automatically, without blocking the
+ * restore flow.
  */
 export async function resolveLiveTerminalSurfaceIds(
   deps: ResolveLiveTerminalSurfaceIdsDeps,

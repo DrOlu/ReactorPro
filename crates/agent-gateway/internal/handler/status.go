@@ -7,7 +7,7 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// statusResponse 是全局鉴权检查与 Agent 目录响应，不承担具体 Agent 寻址。
+// statusResponse is the global auth check and Agent directory response; it does not handle addressing a specific Agent.
 type statusResponse struct {
 	Agents        []session.Status `json:"agents"`
 	ProtocolUsage map[string]int64 `json:"protocol_usage"`

@@ -132,8 +132,8 @@ export type UseWindowWorkbenchParams = {
    * and app/browser restarts preserve topology and terminal launch specs without persisting
    * terminal session ids, output, drafts, prompts, approvals, or secrets.
    *
-   * 首个非 false 值一经采样即固定:此后修改 storage/storageKey 或改回
-   * false 均不生效。调用方应在首渲染就确定持久化策略。
+   * The first non-false value is fixed once sampled: afterwards modifying storage/storageKey or changing back
+   * to false has no effect. Callers should decide the persistence strategy on the first render.
    */
   persistence?: false | { storage?: WorkbenchLayoutStorage | null; storageKey?: string };
 };
@@ -185,7 +185,7 @@ export type WindowWorkbench = {
  * focused pane's conversation by `syncCurrentConversation` plus the caller
  * selecting a conversation whenever focus moves to another pane.
  */
-/** 布局落盘防抖间隔:拖动分隔条等高频变更合并为尾随一次写入。 */
+/** Layout persistence debounce interval: high-frequency changes such as dragging the separator are merged into one trailing write. */
 const WORKBENCH_LAYOUT_PERSIST_DEBOUNCE_MS = 300;
 
 export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWorkbench {
@@ -226,9 +226,9 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
   const commandErrorRef = useRef(onCommandError);
   commandErrorRef.current = onCommandError;
 
-  // 拖动分隔条期间每个 pointermove 都会产生一次 layout 变更,而
-  // localStorage 写入是同步 IO:合并为尾随一次落盘,pagehide 与卸载前
-  // flush,保证窗口关闭时仍写入最后状态。
+  // Every pointermove while dragging the separator produces a layout change, and
+  // localStorage writes are synchronous IO: merge into one trailing persist, flushing on pagehide and before
+  // unmount, guaranteeing the final state is still written when the window closes.
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushPersistedLayout = useCallback(() => {
     if (persistTimerRef.current === null) return;
@@ -239,7 +239,7 @@ export function useWindowWorkbench(params: UseWindowWorkbenchParams): WindowWork
       writeStoredWorkbenchLayout(layoutRef.current, persisted.storage, persisted.storageKey);
     }
   }, []);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: layout 变化是落盘触发器;写入读取 layoutRef 以合并防抖窗口内的中间状态。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a layout change is the persist trigger; the write reads layoutRef to merge intermediate states within the debounce window.
   useEffect(() => {
     if (persistenceRef.current === null) return;
     if (persistTimerRef.current !== null) clearTimeout(persistTimerRef.current);

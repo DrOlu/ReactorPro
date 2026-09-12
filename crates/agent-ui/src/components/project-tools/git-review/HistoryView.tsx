@@ -377,7 +377,7 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
             if (index !== row.commitCol) {
               return (
                 <path
-                  // biome-ignore lint/suspicious/noArrayIndexKey: 同一行可有多条 lane 汇聚到同一提交且调色板循环导致 id+color 撞 key；lane 数组按行整体重建，索引 key 稳定唯一。
+                  // biome-ignore lint/suspicious/noArrayIndexKey: multiple lanes on the same row can converge on the same commit and the palette cycles, causing id+color key collisions; the lane array is rebuilt wholesale per row, so the index key is stably unique.
                   key={`join-${index}-${lane.id}`}
                   d={graphCommitJoinPath(index, row.commitCol)}
                   fill="none"
@@ -398,7 +398,7 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
               outputIndex++;
               return (
                 <path
-                  // biome-ignore lint/suspicious/noArrayIndexKey: lane 的 id+color 在同行内可重复（多 lane 指向同一提交、5 色调色板循环）；索引 key 稳定唯一。
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a lane's id+color can repeat within the same row (multiple lanes point to the same commit, 5-color palette cycling); the index key is stably unique.
                   key={`lane-${index}-${lane.id}`}
                   d={graphVerticalPath(index)}
                   fill="none"
@@ -427,7 +427,7 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
             outputIndex++;
             return (
               <path
-                // biome-ignore lint/suspicious/noArrayIndexKey: lane 的 id+color 在同行内可重复（多 lane 指向同一提交、5 色调色板循环）；索引 key 稳定唯一。
+                // biome-ignore lint/suspicious/noArrayIndexKey: a lane's id+color can repeat within the same row (multiple lanes point to the same commit, 5-color palette cycling); the index key is stably unique.
                 key={`lane-${index}-${lane.id}`}
                 d={d.join(" ")}
                 fill="none"
@@ -513,7 +513,7 @@ function GitGraphContinuationCell({ row }: { row: GraphRow }) {
       >
         {row.outputLanes.map((lane, index) => (
           <path
-            // biome-ignore lint/suspicious/noArrayIndexKey: lane 的 id+color 在同行内可重复（多 lane 指向同一提交、5 色调色板循环）；索引 key 稳定唯一。
+            // biome-ignore lint/suspicious/noArrayIndexKey: a lane's id+color can repeat within the same row (multiple lanes point to the same commit, 5-color palette cycling); the index key is stably unique.
             key={`c${index}:${lane.id}`}
             d={graphVerticalPath(index)}
             fill="none"
@@ -1253,7 +1253,7 @@ export function GitReviewHistoryView(props: {
       {historyContextMenu &&
       historyContextCommit &&
       (historyContextMenu.kind === "commit" || historyContextFile) ? (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。
+        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick only intercepts bubbling to prevent the window "click" from closing the menu; keyboard interactions go through Escape and menuitem buttons.
         <div
           ref={contextMenuRef}
           role="menu"

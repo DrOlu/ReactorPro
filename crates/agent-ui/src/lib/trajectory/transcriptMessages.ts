@@ -1,13 +1,14 @@
 /**
- * 转录行 → 共享 `UiMessage`。
+ * Transcript row -> shared `UiMessage`.
  *
- * 桌面端的 `RenderTimelineItem` 与 WebUI transcript row 都包含 user/assistant 结构，
- * 这里只读取轨迹汇合所需的最小字段，避免共享层依赖任一宿主的完整类型。
+ * Both the desktop's `RenderTimelineItem` and the WebUI transcript row contain
+ * user/assistant structure; here only the minimal fields needed for trajectory merging
+ * are read, avoiding a shared layer that depends on either host's full types.
  */
 
 import type { UiMessage, UiRound } from "../chat/uiMessages";
 
-/** 两端转录行的公共可读形状；其余字段一律忽略。 */
+/** The common readable shape of a transcript row on both sides; all other fields are ignored. */
 export type TrajectoryTranscriptItem = {
   kind: string;
   key?: unknown;

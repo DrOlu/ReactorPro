@@ -147,14 +147,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          dmg_path="$(find "target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -name 'LiveAgent_*.dmg' -print -quit)"
+          dmg_path="$(find "target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -name 'ReactorPro_*.dmg' -print -quit)"
           updater_path="$(find "target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app.tar.gz' -print -quit)"
           test -n "$dmg_path"
           test -n "$updater_path"
           test -f "$updater_path.sig"
-          cp "$dmg_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.dmg"
-          cp "$updater_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz"
-          cp "$updater_path.sig" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz.sig"
+          cp "$dmg_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.dmg"
+          cp "$updater_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz"
+          cp "$updater_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz.sig"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -224,14 +224,14 @@ jobs:
           test -n "$portable_exe_path"
           test -f "$msi_path.sig"
           test -f "$exe_path.sig"
-          cp "$msi_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Windows-x64.msi"
-          cp "$msi_path.sig" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Windows-x64.msi.sig"
-          cp "$exe_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Windows-x64-Setup.exe"
-          cp "$exe_path.sig" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Windows-x64-Setup.exe.sig"
-          mkdir -p dist/portable/LiveAgent
-          cp "$portable_exe_path" dist/portable/LiveAgent/LiveAgent.exe
-          portable_zip="dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Windows-x64-portable.zip"
-          powershell -NoProfile -Command "Compress-Archive -Path 'dist/portable/LiveAgent/*' -DestinationPath '$portable_zip' -Force"
+          cp "$msi_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64.msi"
+          cp "$msi_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64.msi.sig"
+          cp "$exe_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64-Setup.exe"
+          cp "$exe_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64-Setup.exe.sig"
+          mkdir -p dist/portable/ReactorPro
+          cp "$portable_exe_path" dist/portable/ReactorPro/ReactorPro.exe
+          portable_zip="dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Windows-x64-portable.zip"
+          powershell -NoProfile -Command "Compress-Archive -Path 'dist/portable/ReactorPro/*' -DestinationPath '$portable_zip' -Force"
           rm -rf dist/portable
           test "$(find dist -type f | wc -l)" -gt 0
 
@@ -243,9 +243,9 @@ jobs:
 
   linux:
     name: Linux x64
-    # 必须在 Ubuntu 22.04 (glibc 2.35) 上构建,产物才符合 README 承诺的 Ubuntu 22.04+ / Debian 12+。
-    # 若用 ubuntu-latest(24.04, glibc 2.39)构建,二进制会引用 GLIBC_2.38/2.39,在 22.04 上启动即退出 (#714)。
-    # 该 runner 与 Ubuntu 22.04 LTS 标准支持同在 2027-04 前退役;届时需迁移到 ubuntu:22.04 容器构建。
+    # Must be built on Ubuntu 22.04 (glibc 2.35) so the artifact matches the Ubuntu 22.04+ / Debian 12+ support promised in the README.
+    # If built with ubuntu-latest (24.04, glibc 2.39), the binary references GLIBC_2.38/2.39 and exits immediately at startup on 22.04 (#714).
+    # This runner and Ubuntu 22.04 LTS standard support both retire before 2027-04; by then the build must migrate to an ubuntu:22.04 container.
     runs-on: ubuntu-22.04
     needs: release-metadata
     env:
@@ -287,9 +287,9 @@ jobs:
             unzip \
             wget
 
-      # ubuntu-22.04 的 apt protobuf-compiler 是 3.12，不支持 proto3 `optional`
-      # （prost-build 不会传 --experimental_allow_proto3_optional），改装官方 release。
-      # protoc 只是宿主构建工具，不影响产物 glibc 基线。
+      # The apt protobuf-compiler on ubuntu-22.04 is 3.12, which does not support proto3 `optional`
+      # (prost-build does not pass --experimental_allow_proto3_optional), so install the official release instead.
+      # protoc is only a host build tool and does not affect the artifact's glibc baseline.
       - name: Install protobuf compiler
         env:
           PROTOC_VERSION: "34.0"
@@ -348,12 +348,12 @@ jobs:
           test -f "$appimage_path.sig"
           test -f "$deb_path.sig"
           test -f "$rpm_path.sig"
-          cp "$appimage_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.AppImage"
-          cp "$appimage_path.sig" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.AppImage.sig"
-          cp "$deb_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.deb"
-          cp "$deb_path.sig" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.deb.sig"
-          cp "$rpm_path" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.rpm"
-          cp "$rpm_path.sig" "dist/LiveAgent-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.rpm.sig"
+          cp "$appimage_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.AppImage"
+          cp "$appimage_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.AppImage.sig"
+          cp "$deb_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.deb"
+          cp "$deb_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.deb.sig"
+          cp "$rpm_path" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.rpm"
+          cp "$rpm_path.sig" "dist/ReactorPro-${LIVEAGENT_RELEASE_TAG}-Linux-x86_64.rpm.sig"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -401,19 +401,19 @@ jobs:
           if ! gh api "repos/$GH_REPO/releases/generate-notes" \
             -f tag_name="$RELEASE_TAG" \
             --jq ".body" > "$github_notes_path"; then
-            printf 'LiveAgent %s\n' "$RELEASE_TAG" > "$github_notes_path"
+            printf 'ReactorPro %s\n' "$RELEASE_TAG" > "$github_notes_path"
           fi
           if [ ! -s "$github_notes_path" ]; then
-            printf 'LiveAgent %s\n' "$RELEASE_TAG" > "$github_notes_path"
+            printf 'ReactorPro %s\n' "$RELEASE_TAG" > "$github_notes_path"
           fi
 
           node scripts/release/create-ai-release-notes.mjs "$RELEASE_TAG" "$notes_path" "$github_notes_path"
           if [ ! -s "$notes_path" ]; then
-            printf 'LiveAgent %s\n' "$RELEASE_TAG" > "$notes_path"
+            printf 'ReactorPro %s\n' "$RELEASE_TAG" > "$notes_path"
           fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            edit_args=(--title "LiveAgent $RELEASE_TAG" --notes-file "$notes_path")
+            edit_args=(--title "ReactorPro $RELEASE_TAG" --notes-file "$notes_path")
             if [ "$is_prerelease" = true ]; then
               edit_args+=(--prerelease)
             else
@@ -421,7 +421,7 @@ jobs:
             fi
             gh release edit "$RELEASE_TAG" "${edit_args[@]}"
           else
-            create_args=(--verify-tag --title "LiveAgent $RELEASE_TAG" --notes-file "$notes_path")
+            create_args=(--verify-tag --title "ReactorPro $RELEASE_TAG" --notes-file "$notes_path")
             if [ "$is_prerelease" = true ]; then
               create_args+=(--prerelease)
             fi

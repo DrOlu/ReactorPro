@@ -10,7 +10,7 @@ export type TerminalPaneSurfacePhase = "dormant" | "connecting" | "ready" | "exi
 export type LocalTerminalPaneSurfaceProps = {
   paneId: string;
   client: TerminalClient;
-  /** 会话未建立(connecting/失败)时为 null;非 null 时视口保持挂载以保留输出。 */
+  /** null when no session is established (connecting/failed); when non-null the viewport stays mounted to preserve output. */
   session: TerminalSession | null;
   phase: TerminalPaneSurfacePhase;
   theme: "light" | "dark";
@@ -21,9 +21,11 @@ export type LocalTerminalPaneSurfaceProps = {
 };
 
 /**
- * 终端 Pane 的纯受控展示层:本地与 SSH 首期共用。会话存在时始终渲染
- * XTermViewport(exited/error 只叠加提示条,不清屏),仅无会话可显示时
- * 才使用居中占位,保证 phase 切换不重挂视口。
+ * Pure controlled presentation layer for a terminal pane: shared by local and
+ * SSH initially. When a session exists it always renders XTermViewport
+ * (exited/error only overlays a hint bar without clearing the screen), and only
+ * when there is no displayable session does it use a centered placeholder,
+ * ensuring phase switches do not remount the viewport.
  */
 export function LocalTerminalPaneSurface(props: LocalTerminalPaneSurfaceProps) {
   const { paneId, client, session, phase, theme, isActive, errorMessage, onRetry, onError } = props;

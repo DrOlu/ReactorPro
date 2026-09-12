@@ -1,4 +1,4 @@
-//! 通用工具：临时目录、时间戳与 SkillsManager payload 字段读取。
+//! Common utilities: temp directory, timestamps, and SkillsManager payload field access.
 
 use serde_json::Value;
 use std::fs;

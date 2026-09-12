@@ -16,7 +16,7 @@ function userMessage(text) {
   return { role: "user", content: text, timestamp: Date.now() };
 }
 
-function baseRequest(conversationId, text = "请记住我以后都用中文写提交信息") {
+function baseRequest(conversationId, text = "Remember that I'll write commit messages in English from now on") {
   return {
     primary: { providerId: "openai", model: "test-model", runtime: { baseUrl: "x", apiKey: "y" } },
     sessionId: "session-1",
@@ -82,15 +82,15 @@ test("coalesced request with NEW user content runs after the in-flight one", asy
     return okResult();
   });
   try {
-    const first = memoryExtraction.requestExtraction(baseRequest(conversationId, "第一条要记的偏好内容"));
-    const request2 = baseRequest(conversationId, "第二条完全不同的偏好内容");
-    request2.messages = [userMessage("第一条要记的偏好内容"), userMessage("第二条完全不同的偏好内容")];
+    const first = memoryExtraction.requestExtraction(baseRequest(conversationId, "First preference to remember"));
+    const request2 = baseRequest(conversationId, "Second, completely different preference");
+    request2.messages = [userMessage("First preference to remember"), userMessage("Second, completely different preference")];
     void memoryExtraction.requestExtraction(request2);
     gate.resolve();
     await first;
     await new Promise((r) => setTimeout(r, 20));
     assert.equal(seenTexts.length, 2);
-    assert.ok(String(seenTexts[1]).includes("第二条"));
+    assert.ok(String(seenTexts[1]).includes("Second"));
   } finally {
     __setMemoryExtractionEngineForTests(null);
     memoryExtraction.dispose(conversationId);
@@ -156,7 +156,7 @@ test("gating skips run entirely for trivial messages", async () => {
   });
   try {
     const result = await memoryExtraction.requestExtraction(
-      baseRequest(conversationId, "谢谢啦老铁们"),
+      baseRequest(conversationId, "thanks a lot guys"),
     );
     assert.equal(result.skipped, "acknowledgement-thanks");
     assert.equal(engineCalls, 0);
@@ -174,7 +174,7 @@ test("short confirmation claims the run with deferral flag set", async () => {
     return okResult();
   });
   try {
-    const result = await memoryExtraction.requestExtraction(baseRequest(conversationId, "是的"));
+    const result = await memoryExtraction.requestExtraction(baseRequest(conversationId, "yes"));
     assert.equal(result.ok, true);
     assert.equal(deferralFlag, true);
   } finally {
@@ -193,12 +193,12 @@ test("written slugs accumulate in a ring and reset on turn boundary", async () =
     return okResult({ writtenSlugs: [`slug-${call}`] });
   });
   try {
-    const first = baseRequest(conversationId, "第一条要记的偏好内容");
+    const first = baseRequest(conversationId, "First preference to remember");
     await memoryExtraction.requestExtraction(first);
     // second request: new user message, throttle cleared via turn boundary
     memoryExtraction.noteTurnBoundary(conversationId);
-    const second = baseRequest(conversationId, "第二条完全不同的偏好内容");
-    second.messages = [userMessage("a"), userMessage("第二条完全不同的偏好内容")];
+    const second = baseRequest(conversationId, "Second, completely different preference");
+    second.messages = [userMessage("a"), userMessage("Second, completely different preference")];
     await memoryExtraction.requestExtraction(second);
     assert.deepEqual(observed[0], []);
     // turn boundary cleared slug tracking before the second run

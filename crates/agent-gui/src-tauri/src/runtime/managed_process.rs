@@ -33,11 +33,12 @@ const MAX_WAIT_MS: u64 = 300_000;
 const WAIT_POLL_MS: u64 = 50;
 /// Rate limit for pid-probing restored entries (no Child handle to poll).
 ///
-/// 每次探测都是一次 `fork/exec`（`ps -p <pid> -o etime=`），而这条 tick 是
-/// 常驻的：只要 journal 里还有上一轮遗留的 isolated 进程，就会一直每 2s 起一个
-/// 子进程。遗留进程的存活粒度不需要秒级——15s 足以在面板上及时反映它退出，
-/// 而空闲时少起 7 倍的短命进程（实测报告里主进程无操作也持续占用 CPU 的一条
-/// 来源）。
+/// Each probe is a `fork/exec` (`ps -p <pid> -o etime=`), and this tick is resident: as long
+/// as the journal still holds an isolated process left over from the previous round, it keeps
+/// spawning a child process every 2s. A leftover process's liveness granularity does not need
+/// second-level precision---15s is enough to reflect its exit promptly on the panel, while
+/// spawning 7x fewer short-lived processes when idle (a reported source of the main process
+/// continuously consuming CPU even when idle).
 const RESTORED_PROBE_INTERVAL_MS: u128 = 15_000;
 /// `ps -o etime` has second granularity; a restored pid whose probed start
 /// time drifts beyond this from the journaled one is a reused pid, not ours.
@@ -76,7 +77,7 @@ pub(crate) struct ManagedProcessRegistry {
     journal: Mutex<Option<Connection>>,
     revision: AtomicU64,
     notifier: Mutex<Option<ManagedProcessNotifier>>,
-    /// This LiveAgent instance's identity, stamped onto journal rows so a
+    /// This ReactorPro instance's identity, stamped onto journal rows so a
     /// concurrently running sibling instance never reaps our live children.
     owner_pid: u32,
     owner_started_at: i64,
@@ -281,9 +282,10 @@ fn spawn_shell_command(
         .try_clone()
         .map_err(|err| format!("Failed to clone process log: {err}"))?;
 
-    // POSIX(Git Bash) 不会把继承的 Win32 文件句柄接到 fd 1/2,所以把日志路径
-    // 交给脚本用 POSIX 路径自己打开,并用 stdbuf 按行刷盘。PowerShell/cmd 仍走
-    // 继承句柄。映像仍是平台 shell,Windows 沙箱对 Git Bash 的 SID 判定不变。
+    // POSIX (Git Bash) does not connect inherited Win32 file handles to fd 1/2, so the log path
+    // is handed to the script to open itself using a POSIX path, with stdbuf flushing per line.
+    // PowerShell/cmd still use inherited handles. The image remains the platform shell, and the
+    // Windows sandbox's SID decision for Git Bash is unchanged.
     let spawned = spawn_platform_shell_command(
         command,
         cwd,
@@ -597,9 +599,10 @@ impl ManagedProcessRegistry {
             .append(true)
             .open(&log_path)
             .map_err(|err| format!("Failed to open process log: {err}"))?;
-        // 写围栏锚定工作区根;dev server 等常驻进程通常要监听端口,是否放网络
-        // 由调用方经 SandboxOptions 决定。isolated 常驻进程须在 LiveAgent 退出后
-        // 存活,透传给沙箱规格以省略 Linux 的 --die-with-parent 死亡耦合。
+        // The write fence is anchored to the workspace root; resident processes such as dev servers
+        // usually need to listen on ports, and whether to allow network is decided by the caller via
+        // SandboxOptions. Isolated resident processes must survive after ReactorPro exits, so this is
+        // passed through to the sandbox spec to omit Linux's --die-with-parent death coupling.
         let sandbox_spec = sandbox_options.map(|options| {
             let mut spec = SandboxSpec::from_options(workdir.clone(), options);
             spec.isolated = isolated;
@@ -875,7 +878,7 @@ impl ManagedProcessRegistry {
         let mut drop_ids = Vec::new();
         let mut restored = Vec::new();
         for row in rows {
-            // A row owned by a still-running sibling LiveAgent instance is
+            // A row owned by a still-running sibling ReactorPro instance is
             // that instance's live child, not crash residue — leave it alone.
             let owner_alive = row.owner_pid != 0
                 && row.owner_pid != self.owner_pid

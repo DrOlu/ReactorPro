@@ -29,29 +29,29 @@ test("image viewer scales proportionally for buttons and wheel input", () => {
 
 test("image viewer copies absolute and workspace-relative paths", () => {
   assert.equal(
-    viewer.workspaceImageAbsolutePathForCopy("H:\\Codezone\\LiveAgent", "assets/preview.png"),
-    "H:\\Codezone\\LiveAgent\\assets\\preview.png",
+    viewer.workspaceImageAbsolutePathForCopy("H:\\Codezone\\ReactorPro", "assets/preview.png"),
+    "H:\\Codezone\\ReactorPro\\assets\\preview.png",
   );
   assert.equal(
     viewer.workspaceImageAbsolutePathForCopy("/workspace/liveagent", "assets/preview.png"),
     "/workspace/liveagent/assets/preview.png",
   );
   assert.equal(
-    viewer.workspaceImageAbsolutePathForCopy("H:\\Codezone\\LiveAgent", "H:\\images\\preview.png"),
+    viewer.workspaceImageAbsolutePathForCopy("H:\\Codezone\\ReactorPro", "H:\\images\\preview.png"),
     "H:\\images\\preview.png",
   );
   assert.equal(
-    viewer.workspaceImageAbsolutePathForCopy("H:\\Codezone\\LiveAgent", "\\\\server\\share\\preview.png"),
+    viewer.workspaceImageAbsolutePathForCopy("H:\\Codezone\\ReactorPro", "\\\\server\\share\\preview.png"),
     "\\\\server\\share\\preview.png",
   );
   assert.equal(
-    viewer.workspaceImageRelativePathForCopy("H:\\Codezone\\LiveAgent", "assets\\preview.png"),
+    viewer.workspaceImageRelativePathForCopy("H:\\Codezone\\ReactorPro", "assets\\preview.png"),
     "assets/preview.png",
   );
   assert.equal(
     viewer.workspaceImageRelativePathForCopy(
-      "H:\\Codezone\\LiveAgent",
-      "H:\\Codezone\\LiveAgent\\assets\\preview.png",
+      "H:\\Codezone\\ReactorPro",
+      "H:\\Codezone\\ReactorPro\\assets\\preview.png",
     ),
     "assets/preview.png",
   );

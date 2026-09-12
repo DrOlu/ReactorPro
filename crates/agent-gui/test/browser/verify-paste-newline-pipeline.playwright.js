@@ -20,7 +20,7 @@ async (page) => {
     ["Markdown table", "| a | b |\n| - | - |\n| 1 | 2 |", ""],
     ["Markdown link", "[OpenAI](https://openai.com)\nnext", ""],
     ["HTML-like plaintext", "<tag>& value\n\nnext", "<strong>must be ignored</strong>"],
-    ["Unicode and emoji", "你好🙂\n\nκαλημέρα", ""],
+    ["Unicode and emoji", "héllo🙂\n\nκαλημέρα", ""],
     ["long text", `${"x".repeat(20_000)}\n\n${"y".repeat(20_000)}`, ""],
   ];
 

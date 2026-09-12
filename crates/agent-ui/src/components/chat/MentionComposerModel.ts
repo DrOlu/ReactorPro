@@ -44,22 +44,24 @@ export type MentionComposerConversation = ConversationMentionReference & {
 export type MentionComposerConversationMention = ConversationMentionReference;
 
 /**
- * 一条可被 @ 提及的已安装应用（computer use 的操作目标）。宿主负责枚举与
- * 门控：只有当前工作区挂了 cua-driver 时才把列表传进来，WebUI 恒为空。
+ * An installed app that can be @-mentioned (a computer-use operation target). The host
+ * handles enumeration and gating: the list is passed in only when cua-driver is mounted
+ * in the current workspace, and is always empty on the WebUI.
  */
 export type MentionComposerApp = {
   name: string;
-  /** macOS bundle id；其他平台可能缺失，此时以 path 兜底标识。 */
+  /** macOS bundle id; may be absent on other platforms, in which case path is the fallback identifier. */
   bundleId?: string;
   path: string;
   /**
-   * `data:image/png;base64,…` 应用图标，仅用于弹层行渲染；chip 与剪贴板
-   * 序列化有意不携带（几 KB 的 data URL 进 DOM 属性会把复制载荷撑爆）。
+   * `data:image/png;base64,...` app icon, used only for popover row rendering; the chip
+   * and clipboard serialization deliberately omit it (a multi-KB data URL in a DOM
+   * attribute would blow up the copy payload).
    */
   iconDataUrl?: string;
 };
 
-/** chip / 草稿 / 剪贴板携带的应用身份——不含图标，见 iconDataUrl 注释。 */
+/** App identity carried by the chip / draft / clipboard -- no icon, see the iconDataUrl comment. */
 export type MentionComposerAppMention = Omit<MentionComposerApp, "iconDataUrl">;
 
 export type MentionComposerCommitMention = {
@@ -138,10 +140,6 @@ export interface MentionComposerHandle {
    * has landed in the editor (or the run was cancelled).
    */
   typeText: (text: string) => Promise<void>;
-  beginTransientText: () => boolean;
-  updateTransientText: (text: string) => void;
-  commitTransientText: (text?: string) => void;
-  cancelTransientText: (options?: { preserveLastText?: boolean }) => void;
 }
 
 export type MentionComposerLargePaste = {
@@ -208,13 +206,14 @@ export interface MentionComposerProps {
   /** Conversation references need the agent runtime's read-only history tool. */
   conversationMentionsEnabled?: boolean;
   /**
-   * 当前会话 ID：粘贴路径需要它执行与 @ 菜单/拖拽一致的自引用过滤；
-   * 缺省时粘贴仅做去重与数量上限校验。
+   * Current conversation ID: the paste path needs it to perform the same self-reference
+   * filtering as the @ menu/drag; when absent, paste only deduplicates and checks the count cap.
    */
   currentConversationId?: string;
   /**
-   * @ 弹层里的「应用」候选（computer use 目标）。由宿主门控：仅当会话挂着
-   * cua-driver 时非空；缺省/空数组时 @ 行为与从前完全一致。
+   * "App" candidates in the @ popover (computer-use targets). Gated by the host: non-empty
+   * only when cua-driver is mounted for the conversation; when absent/an empty array, @
+   * behavior is exactly as before.
    */
   mentionApps?: MentionComposerApp[];
   className?: string;
@@ -288,7 +287,7 @@ export const GITHUB_ICON_SVG =
 
 export const LARGE_PASTE_COUNT_FORMAT = new Intl.NumberFormat();
 
-/** lucide app-window，与 chip 内其他图标同为 12×12 currentColor。 */
+/** lucide app-window, 12x12 currentColor like the other icons in the chip. */
 export const APP_MENTION_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/></svg>';
 

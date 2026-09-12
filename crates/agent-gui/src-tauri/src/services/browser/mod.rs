@@ -1,12 +1,12 @@
-//! 浏览器自动化服务（原生 Browser 工具，见 docs/design/browser-automation.md）。
-//! BrowserManager 持有至多一个浏览器会话，两种接入模式：
-//! - extension：LiveAgent 浏览器扩展（browser-extension/）已连上桥接服务时，
-//!   直接驱动用户日常浏览器里新开的自动化标签页——复用用户登录态，不另起
-//!   浏览器进程（Claude Code in Chrome 的方式）；
-//! - launcher：扩展未连接时回退——按需以独立 profile 拉起新浏览器进程。
+//! Browser automation service (native Browser tool, see docs/design/browser-automation.md).
+//! BrowserManager holds at most one browser session, with two access modes:
+//! - extension: when the ReactorPro browser extension (browser-extension/) is already connected to the bridge service,
+//!   directly drive a newly opened automation tab in the user's everyday browser — reusing the user's login state without starting another
+//!   browser process (the Claude Code in Chrome approach);
+//! - launcher: fallback when the extension is not connected — launch a new browser process on demand with an isolated profile.
 //!
-//! launcher 进程随 app 退出或 browser_close 一并回收；extension 模式没有
-//! 子进程，close 只关自动化标签页（Target.closeTarget，由扩展映射为关 tab）。
+//! The launcher process is reclaimed when the app exits or on browser_close; extension mode has no
+//! child process, so close only closes the automation tab (Target.closeTarget, mapped by the extension to closing a tab).
 
 mod bridge;
 mod cdp;
@@ -33,7 +33,7 @@ use types::{
 };
 
 struct ActiveBrowser {
-    /// launcher 模式的子进程句柄；extension 模式（用户自己的浏览器）为 None。
+    /// Child process handle in launcher mode; None in extension mode (the user's own browser).
     launched: Option<LaunchedBrowser>,
     page: PageSession,
 }
@@ -51,34 +51,34 @@ impl ActiveBrowser {
 #[derive(Default)]
 pub struct BrowserManager {
     active: Mutex<Option<ActiveBrowser>>,
-    /// 当前浏览器进程 pid 的旁路记录：shutdown 时若 `active` 锁被执行中的
-    /// 动作占着（try_lock 失败），仍能按 pid 杀进程树，避免退出后残留。
-    /// extension 模式无子进程，恒为 None。
+    /// Side record of the current browser process pid: on shutdown, if the `active` lock is held by an in-flight
+    /// action (try_lock fails), the process tree can still be killed by pid, avoiding leftovers after exit.
+    /// Extension mode has no child process and is always None.
     child_pid: StdMutex<Option<u32>>,
     bridge: Arc<ExtensionBridge>,
 }
 
 impl BrowserManager {
-    /// 启动扩展桥接监听（lib.rs run() 里调一次）。桥接不可用不影响
-    /// launcher 回退路径。
+    /// Start the extension bridge listener (called once in lib.rs run()). Bridge unavailability does not affect
+    /// the launcher fallback path.
     pub fn start_extension_bridge(&self) {
         self.bridge.start();
     }
 
-    /// 桥接服务当前是否有存活的扩展连接（设置页引导 UI 轮询用）。
+    /// Whether the bridge service currently has a live extension connection (used by the settings page's onboarding UI polling).
     pub fn extension_connected(&self) -> bool {
         self.bridge.live_connection().is_some()
     }
 
-    /// app 真正退出时的清理钩子（Drop 不保证被调）。
+    /// Cleanup hook when the app truly exits (Drop is not guaranteed to be called).
     pub fn shutdown_cleanup(&self) {
         if let Ok(mut guard) = self.active.try_lock() {
-            // 取出即触发 LaunchedBrowser::drop → kill 进程树。
+            // Taking it out triggers LaunchedBrowser::drop -> kills the process tree.
             guard.take();
         }
-        // 兜底：退出瞬间恰有动作在执行时上面的 try_lock 拿不到锁，按记录的
-        // pid 直接杀进程树（已死进程重复 signal 无害），防止 profile 被残留
-        // 实例锁住导致下次启动失败。
+        // Fallback: if an action happens to be executing at the exact moment of exit, the try_lock above cannot acquire the lock, so
+        // kill the process tree directly by the recorded pid (re-signaling an already-dead process is harmless), preventing the profile from being
+        // locked by a leftover instance and failing the next startup.
         if let Ok(mut pid) = self.child_pid.lock() {
             if let Some(pid) = pid.take() {
                 signal_process_tree_by_pid(pid, true);
@@ -95,8 +95,8 @@ impl BrowserManager {
     pub async fn close(&self) -> Result<(), String> {
         let taken = self.active.lock().await.take();
         if let Some(active) = taken {
-            // extension 模式没有子进程可杀，收尾是关掉自动化标签页（尽力而为，
-            // 用户可能已手关）；launcher 模式由 LaunchedBrowser::drop kill 进程树。
+            // Extension mode has no child process to kill; cleanup closes the automation tab (best effort,
+            // the user may have closed it manually); in launcher mode LaunchedBrowser::drop kills the process tree.
             if active.launched.is_none() {
                 let _ = active.page.close_target().await;
             }
@@ -140,17 +140,17 @@ impl BrowserManager {
     pub async fn execute(&self, args: BrowserActionArgs) -> Result<BrowserActionResponse, String> {
         let requested_mode = RequestedMode::parse(args.browser_mode.as_deref());
         let mut guard = self.active.lock().await;
-        // 会话失效则丢弃重建。两类失效：WS 断开（用户整个退出浏览器），以及
-        // WS 仍在但页面 target 没了（用户只关掉自动化窗口/标签页、tab 崩溃——
-        // browser-level 连接不会因此断开）。target 探测走 browser-level 命令，
-        // 不受页面 JS 卡死影响。
+        // Discard and rebuild if the session is invalid. Two kinds of invalidation: WS disconnect (the user quit the browser entirely), and
+        // WS still alive but the page target is gone (the user closed only the automation window/tab, or the tab crashed —
+        // the browser-level connection is not dropped for that). Target probing uses browser-level commands
+        // and is unaffected by page JS hangs.
         let session_dead = match guard.as_ref() {
             Some(active) => !active.page.is_connected() || !active.page.target_alive().await,
             None => false,
         };
-        // 用户改了浏览器模式设置后，既有会话与新模式冲突时收掉重建
-        //（auto 不挑剔，沿用现有会话）：userProfile 只接受 extension 会话，
-        // isolated 只接受 launcher 会话。
+        // After the user changes the browser mode setting, tear down and rebuild when the existing session conflicts with the new mode
+        // (auto is not picky and reuses the existing session): userProfile only accepts extension sessions,
+        // isolated only accepts launcher sessions.
         let session_mismatch = match (guard.as_ref(), requested_mode) {
             (Some(active), RequestedMode::UserProfile) => active.launched.is_some(),
             (Some(active), RequestedMode::Isolated) => active.launched.is_none(),
@@ -159,8 +159,8 @@ impl BrowserManager {
         if session_dead || session_mismatch {
             if let Some(active) = guard.take() {
                 if session_mismatch && active.launched.is_none() {
-                    // 模式切换收掉 extension 会话时顺手关自动化标签页；
-                    // 失效会话（tab 已没了）无需也无法关。
+                    // When a mode switch tears down an extension session, close the automation tab along the way;
+                    // an invalid session (tab already gone) needs no and cannot be closed.
                     let _ = active.page.close_target().await;
                 }
             }
@@ -195,12 +195,12 @@ impl BrowserManager {
             }
             "type" => {
                 let ref_id = required(&args.ref_id, "type", "ref")?;
-                // text 只要求"有传"，不 trim 也不拒绝空串：前后空格可能是刻意
-                // 输入，空串则表示清空字段（page 层做全选删除）。
+                // text only requires that it "was passed", with no trim and no rejection of an empty string: leading/trailing spaces may be intentional
+                // input, and an empty string means clearing the field (the page layer does select-all delete).
                 let text = args
                     .text
                     .clone()
-                    .ok_or_else(|| "type 缺少必需参数 text".to_string())?;
+                    .ok_or_else(|| "type is missing the required parameter text".to_string())?;
                 active
                     .page
                     .type_text(&ref_id, &text, args.submit.unwrap_or(false), timeout)
@@ -216,25 +216,25 @@ impl BrowserManager {
             "wait" => match (&args.selector, args.time_ms) {
                 (Some(selector), _) if !selector.trim().is_empty() => {
                     active.page.wait_for_selector(selector, timeout).await?;
-                    result_text = Some(format!("selector \"{selector}\" 已出现"));
+                    result_text = Some(format!("selector \"{selector}\" has appeared"));
                 }
                 (_, Some(time_ms)) => {
                     tokio::time::sleep(Duration::from_millis(time_ms.min(60_000))).await;
-                    result_text = Some(format!("已等待 {}ms", time_ms.min(60_000)));
+                    result_text = Some(format!("Waited {}ms", time_ms.min(60_000)));
                 }
-                _ => return Err("wait 需要 selector 或 timeMs 之一".to_string()),
+                _ => return Err("wait requires either selector or timeMs".to_string()),
             },
             "back" => {
                 active.page.back(timeout).await?;
             }
             other => {
                 return Err(format!(
-                    "未知 action \"{other}\"（支持 navigate/snapshot/click/type/screenshot/eval/wait/back）"
+                    "Unknown action \"{other}\" (supported: navigate/snapshot/click/type/screenshot/eval/wait/back)"
                 ));
             }
         }
 
-        // 页面状态回传：改变页面的动作默认附带新 snapshot，供模型下一步定位。
+        // Page state feedback: actions that change the page include a new snapshot by default, for the model's next step.
         let default_include = matches!(
             action.as_str(),
             "navigate" | "snapshot" | "click" | "type" | "back" | "wait"
@@ -243,12 +243,12 @@ impl BrowserManager {
         let snapshot_text = if include_snapshot {
             match active.page.snapshot(timeout).await {
                 Ok(text) => Some(text),
-                // snapshot 本身就是动作目的时失败必须上抛；附带 snapshot 失败
-                // 则不能连累已成功执行的动作（如 click 触发导航后 AX 树短暂
-                // 不可用）——否则模型会误判动作失败而重试，重复副作用。
+                // When snapshot itself is the purpose of the action, failure must propagate; a failure of the attached snapshot
+                // must not drag down an action that already succeeded (e.g. after a click triggers navigation the AX tree is briefly
+                // unavailable) — otherwise the model would misjudge the action as failed and retry, duplicating side effects.
                 Err(err) if action == "snapshot" => return Err(err),
                 Err(err) => {
-                    let note = format!("动作已执行成功，但自动附带 snapshot 失败：{err}。可稍后单独执行 snapshot 重试。");
+                    let note = format!("The action succeeded, but the automatically attached snapshot failed: {err}. You can run snapshot separately later to retry.");
                     result_text = Some(match result_text.take() {
                         Some(prev) => format!("{prev}\n{note}"),
                         None => note,
@@ -282,17 +282,17 @@ fn required(value: &Option<String>, action: &str, field: &str) -> Result<String,
         .as_ref()
         .map(|raw| raw.trim().to_string())
         .filter(|raw| !raw.is_empty())
-        .ok_or_else(|| format!("{action} 缺少必需参数 {field}"))
+        .ok_or_else(|| format!("{action} is missing the required parameter {field}"))
 }
 
-/// 调用方要求的浏览器接入模式（settings.system.browserAutomationMode 透传）。
+/// The browser access mode requested by the caller (passed through from settings.system.browserAutomationMode).
 #[derive(Clone, Copy, PartialEq)]
 enum RequestedMode {
-    /// 扩展优先，未连接回退 launcher（缺省，含未知值）。
+    /// Prefer the extension, fall back to launcher when not connected (default, including unknown values).
     Auto,
-    /// 只用用户日常浏览器（扩展桥接）；未连接直接报错并引导安装。
+    /// Use only the user's everyday browser (extension bridge); if not connected, error out directly and guide installation.
     UserProfile,
-    /// 只用独立 profile 专用浏览器，即使扩展在线。
+    /// Use only the isolated-profile dedicated browser, even if the extension is online.
     Isolated,
 }
 
@@ -306,16 +306,16 @@ impl RequestedMode {
     }
 }
 
-/// userProfile 模式扩展未连接时的报错。TS 侧原样透传给模型/用户，须自含
-/// 安装路径引导；设置页另有可视化引导（browser_extension_install_info）。
-const EXTENSION_NOT_CONNECTED_ERROR: &str = "浏览器扩展未连接：当前设置要求在你的日常浏览器中操作（复用登录态），但 LiveAgent Browser Bridge 扩展尚未安装或未连上。请到「设置 → 系统工具 → 浏览器自动化」按引导安装扩展（chrome://extensions → 开发者模式 → 加载已解压的扩展程序），或将浏览器模式改为「自动」/「独立浏览器」。";
+/// Error when the extension is not connected in userProfile mode. Passed through verbatim to the model/user by the TS side; must be self-contained
+/// with installation-path guidance; the settings page also has visual guidance (browser_extension_install_info).
+const EXTENSION_NOT_CONNECTED_ERROR: &str = "Browser extension not connected: the current settings require operating in your everyday browser (reusing login state), but the ReactorPro Browser Bridge extension is not installed or not connected. Please go to Settings -> System Tools -> Browser Automation and follow the guide to install the extension (chrome://extensions -> Developer mode -> Load unpacked), or change the browser mode to Auto / Isolated Browser.";
 
 async fn start_browser(
     bridge: &ExtensionBridge,
     mode: RequestedMode,
 ) -> Result<ActiveBrowser, String> {
-    // 扩展桥接：直接在用户日常浏览器里开自动化标签页（带登录态、无独立
-    // 进程）。auto 下扩展不可用回退 launcher；userProfile 下则是硬性要求。
+    // Extension bridge: open an automation tab directly in the user's everyday browser (with login state, no separate
+    // process). Under auto, fall back to launcher if the extension is unavailable; under userProfile it is a hard requirement.
     if mode != RequestedMode::Isolated {
         if let Some(connection) = bridge.live_connection() {
             match PageSession::attach_new_tab(Arc::clone(&connection)).await {
@@ -327,10 +327,10 @@ async fn start_browser(
                 }
                 Err(error) => {
                     if mode == RequestedMode::UserProfile {
-                        return Err(format!("在日常浏览器中打开自动化标签页失败：{error}"));
+                        return Err(format!("Failed to open an automation tab in the everyday browser: {error}"));
                     }
-                    // auto：报因回退，不静默吞掉——launcher 模式语义不同
-                    //（无登录态），用户应可感知。
+                    // auto: report the reason and fall back, do not silently swallow — launcher mode has different semantics
+                    // (no login state) and the user should be able to perceive it.
                     eprintln!("browser extension bridge: attach_new_tab failed, falling back to launcher: {error}");
                 }
             }
@@ -339,14 +339,14 @@ async fn start_browser(
         }
     }
     let executable = discover_browser_executable().ok_or_else(|| {
-        "未检测到 Chrome/Edge/Chromium。浏览器自动化需要已安装的 Chromium 系浏览器，或安装 LiveAgent 浏览器扩展以复用现有浏览器。".to_string()
+        "No Chrome/Edge/Chromium detected. Browser automation requires an installed Chromium-based browser, or install the ReactorPro browser extension to reuse an existing browser.".to_string()
     })?;
     let launched = tauri::async_runtime::spawn_blocking({
         let executable = executable.clone();
         move || launch_browser(&executable)
     })
     .await
-    .map_err(|e| format!("启动浏览器任务 join 失败：{e}"))??;
+    .map_err(|e| format!("Failed to join browser launch task: {e}"))??;
 
     let ws_url = fetch_browser_ws_url(launched.debug_port).await?;
     let connection = CdpConnection::connect(&ws_url).await?;
@@ -357,30 +357,30 @@ async fn start_browser(
     })
 }
 
-/// `GET http://127.0.0.1:<port>/json/version` → webSocketDebuggerUrl。
+/// `GET http://127.0.0.1:<port>/json/version` -> webSocketDebuggerUrl.
 async fn fetch_browser_ws_url(port: u16) -> Result<String, String> {
     let url = format!("http://127.0.0.1:{port}/json/version");
     let client = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(5))
         .build()
-        .map_err(|e| format!("构建 HTTP 客户端失败：{e}"))?;
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
     let response = client
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("请求 DevTools 元数据失败：{e}"))?;
+        .map_err(|e| format!("Failed to request DevTools metadata: {e}"))?;
     let body: Value = response
         .json()
         .await
-        .map_err(|e| format!("解析 DevTools 元数据失败：{e}"))?;
+        .map_err(|e| format!("Failed to parse DevTools metadata: {e}"))?;
     body.get("webSocketDebuggerUrl")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .ok_or_else(|| "DevTools 元数据缺少 webSocketDebuggerUrl".to_string())
+        .ok_or_else(|| "DevTools metadata is missing webSocketDebuggerUrl".to_string())
 }
 
-/// 供状态查询暴露独立 profile 路径（诊断用）。
+/// Expose the isolated profile path for status queries (diagnostics).
 #[allow(dead_code)]
 pub fn profile_dir() -> Result<PathBuf, String> {
     launcher::automation_profile_dir()
@@ -391,10 +391,10 @@ mod e2e_tests {
     use super::*;
     use base64::Engine;
 
-    /// 验收闭环手动 e2e：导航文档站 → a11y snapshot → 截图落盘。
-    /// 需要本机已装 Chrome/Edge，不进 CI：
+    /// Manual e2e for the acceptance loop: navigate to the docs site -> a11y snapshot -> screenshot to disk.
+    /// Requires Chrome/Edge installed locally; not run in CI:
     /// `cargo test -p liveagent browser_e2e -- --ignored --nocapture`
-    /// 截图输出路径可用 LIVEAGENT_BROWSER_E2E_SHOT 覆盖。
+    /// The screenshot output path can be overridden with LIVEAGENT_BROWSER_E2E_SHOT.
     #[test]
     #[ignore = "requires an installed Chromium-family browser; manual acceptance evidence"]
     fn browser_e2e_manual() {

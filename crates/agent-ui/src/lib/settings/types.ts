@@ -15,17 +15,17 @@ export type ReasoningLevel = "off" | ThinkingLevel;
 export type McpTransport = "stdio" | "http" | "sse";
 
 /**
- * MCP OAuth 鉴权配置（docs/design/mcp-oauth.md）。缺省 = "none"（现状，静态
- * headers 继续生效）。token 永不落 settings——只存 keychain（Rust 侧），
- * 因此该结构可安全进 Gateway 同步与 WebDAV 备份。
+ * MCP OAuth authentication config (docs/design/mcp-oauth.md). Default = "none" (the status quo,
+ * with static headers still taking effect). The token never lands in settings - it is stored only
+ * in the keychain (Rust side), so this structure can safely go into Gateway sync and WebDAV backups.
  */
 export type McpAuthType = "none" | "oauth";
 
 export type McpAuthConfig = {
   type: McpAuthType;
-  /** 覆盖 PRM scopes_supported 的空格分隔 scope 列表。 */
+  /** A space-separated scope list that overrides PRM scopes_supported. */
   scope?: string;
-  /** 静态 client_id（企业 AS）；缺省走 RFC 7591 动态注册。 */
+  /** Static client_id (enterprise AS); by default it uses RFC 7591 dynamic registration. */
   clientId?: string;
 };
 
@@ -156,10 +156,12 @@ export type ChatTranscriptSettings = {
 };
 
 /**
- * Composer 上下文占用的三档展示样式（docs/design/composer-context-stats-bar.md §4.7）：
- * "statsBar" 只显示卡片下方的会话统计状态栏（含占用读数），用量环不渲染；
- * "both" 状态栏与常显用量环同时显示；
- * "ring" 只显示常显用量环（0% 起），状态栏不渲染。三档都保留 ≥50% 的手动压缩入口。
+ * The three display styles for composer context usage (docs/design/composer-context-stats-bar.md §4.7):
+ * "statsBar" shows only the conversation stats bar below the card (including the usage reading),
+ * with no usage ring rendered;
+ * "both" shows the stats bar and the always-visible usage ring together;
+ * "ring" shows only the always-visible usage ring (starting at 0%), with no stats bar rendered.
+ * All three keep the manual compaction entry point at >=50%.
  */
 export type ComposerContextDisplayMode = "statsBar" | "both" | "ring";
 
@@ -170,7 +172,7 @@ export type CustomSettings = {
   // the current conversation model"; a stored selection whose provider/model
   // is no longer active normalizes back to unset, restoring that fallback.
   commitMessageModel?: SelectedModel;
-  // Composer prompt-clarify (澄清提示词). The master switch hides the composer
+  // Composer prompt-clarify. The master switch hides the composer
   // wand button on both surfaces when off. The model override follows the
   // commitMessageModel contract: unset means "follow the current conversation
   // model", and a stored selection whose provider/model is no longer active
@@ -196,7 +198,7 @@ export type UpdateSettings = {
  * cc-switch style automatic provider failover: an ordered fallback queue of
  * same-vendor *providers* tried when the active model's request fails with a
  * provider-fault-class error, plus circuit breaker knobs mirroring cc-switch's
- * 失败阈值/冷却时间 settings.
+ * failure threshold / cooldown time settings.
  *
  * Failover switches providers, never models (matching cc-switch): the failed
  * request is re-sent to the next provider in the queue with the *same model
@@ -285,8 +287,9 @@ export const DEFAULT_RETRY_ERROR_SETTINGS: RetryErrorSettings = {
 
 export type SystemProxyType = "socks5" | "http";
 
-// 系统级出站代理：注入本地 shell 命令 env，并供勾选了 useSystemProxy 的
-// 供应商模型请求走代理（代理连接由桌面 Rust 侧完成，凭据不进前端请求）。
+// System-level outbound proxy: injected into the local shell command env, and used by provider
+// model requests that have useSystemProxy checked (the proxy connection is made on the desktop
+// Rust side, and credentials do not enter frontend requests).
 export type SystemProxyConfig = {
   enabled: boolean;
   type: SystemProxyType;
@@ -297,17 +300,19 @@ export type SystemProxyConfig = {
   passwordConfigured?: boolean;
 };
 
-/** 工具审批策略:allow 直接执行、ask 执行前请求用户批准、deny 直接拒绝。 */
+/** Tool approval policy: allow = execute directly, ask = request user approval before executing, deny = reject outright. */
 export type ToolPolicy = "allow" | "ask" | "deny";
 
-// 命令执行方式(对话框内切换,单一互斥维度):
-// - ask:每次带副作用的工具调用都请求用户批准(只读工具不拦)。
-// - auto:按工具审批策略直接执行(既有默认行为)。
-// - sandbox / sandboxOffline:Bash 与常驻进程在 OS 级沙箱内执行(macOS
-//   Seatbelt / Linux bubblewrap / Windows 受限令牌 WRITE_RESTRICTED),写入限
-//   工作区+临时目录;offline 变体额外断网。Windows 免管理员双后端:sandbox=受限
-//   令牌(只围栏写,读放行);sandboxOffline=AppContainer(WFP 内核级全断网含
-//   loopback,默认拒读 ⇒ 系统目录/工作区可读、用户主目录等敏感目录读掩蔽)。
+// Command execution mode (switched in the dialog, a single mutually exclusive dimension):
+// - ask: every tool call with side effects requests user approval (read-only tools are not blocked).
+// - auto: execute directly per the tool approval policy (the existing default behavior).
+// - sandbox / sandboxOffline: Bash and long-running processes execute inside an OS-level sandbox
+//   (macOS Seatbelt / Linux bubblewrap / Windows restricted token WRITE_RESTRICTED), with writes
+//   limited to the workspace + temp directory; the offline variant additionally cuts off the
+//   network. Windows has two admin-free backends: sandbox = restricted token (fences writes only,
+//   reads allowed); sandboxOffline = AppContainer (WFP kernel-level full network cut including
+//   loopback, denying reads by default => system directories/workspace readable, and reads of
+//   sensitive directories such as the user home are masked).
 export type CommandSafetyMode = "ask" | "auto" | "sandbox" | "sandboxOffline";
 
 export const COMMAND_SAFETY_MODES: readonly CommandSafetyMode[] = [
@@ -317,12 +322,15 @@ export const COMMAND_SAFETY_MODES: readonly CommandSafetyMode[] = [
   "sandboxOffline",
 ];
 
-// Browser 工具的浏览器接入模式:
-// - auto:扩展已连接则用用户日常浏览器(带登录态),否则回退独立 profile。
-// - userProfile:只用用户日常浏览器;扩展未连接时报错并引导安装,绝不回退
-//   (用户显式要登录态时,静默降级到无登录态的隔离浏览器会造成"看似在操作
-//   我的账号实际不是"的误判)。
-// - isolated:只用独立 profile 的专用浏览器,即使扩展在线也不碰用户浏览器。
+// Browser tool's browser access mode:
+// - auto: use the user's everyday browser (with login state) if the extension is connected,
+//   otherwise fall back to an isolated profile.
+// - userProfile: use only the user's everyday browser; if the extension is not connected it
+//   errors and guides installation, never falling back (when the user explicitly wants login
+//   state, silently degrading to an isolated browser without login state would create the false
+//   impression of "seemingly operating my account but actually not").
+// - isolated: use only a dedicated browser with an isolated profile, never touching the user's
+//   browser even if the extension is online.
 export type BrowserAutomationMode = "auto" | "userProfile" | "isolated";
 
 export const BROWSER_AUTOMATION_MODES: readonly BrowserAutomationMode[] = [
@@ -335,22 +343,24 @@ export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
   /**
-   * 按规范工具名(内置名 / `mcp_*`)覆盖审批策略;缺省由
-   * resolveToolPolicy 按来源推断(内置/mcp=allow、只读工具恒 allow)。
-   * 可选:旧快照缺失该字段时视为空表(全部走默认),保证零回归。
+   * Override approval policies by canonical tool name (built-in names / `mcp_*`); by default
+   * resolveToolPolicy infers by source (built-in/mcp = allow, read-only tools always allow).
+   * Optional: when an old snapshot lacks this field it is treated as an empty table (all go
+   * through defaults), ensuring zero regression.
    */
   toolPolicies?: Record<string, ToolPolicy>;
   /**
-   * 允许 CUA 工具把 LiveAgent 自己当作操作目标。缺省 false。
+   * Allow CUA tools to target ReactorPro itself. Default false.
    *
-   * 关闭时（默认）宿主的窗口既不会出现在 cua-driver 的枚举结果里，也不
-   * 能被直接寻址——模型操作宿主界面等于能点掉自己的审批弹窗、改写这份
-   * 权限设置、或者直接关掉应用。打开它的正当场景只有一个：用 LiveAgent
-   * 自动化测试 LiveAgent。实现见 `lib/tools/cuaSelfGuard.ts`。
+   * When off (the default) the host's windows neither appear in cua-driver's enumeration results
+   * nor can be addressed directly - letting the model operate the host UI would mean it could
+   * dismiss its own approval dialogs, rewrite this permission setting, or shut the app down
+   * outright. There is only one legitimate reason to turn it on: using ReactorPro to
+   * automatically test ReactorPro. See `lib/tools/cuaSelfGuard.ts` for the implementation.
    */
   cuaAllowSelfTargeting?: boolean;
   commandSafetyMode: CommandSafetyMode;
-  /** Browser 工具的浏览器接入模式;缺省 auto(旧快照缺失该字段时同 auto)。 */
+  /** Browser tool's browser access mode; defaults to auto (also auto when an old snapshot lacks the field). */
   browserAutomationMode: BrowserAutomationMode;
   workspaceProjects: WorkspaceProject[];
   workspaceProjectGroups: WorkspaceProjectGroup[];
@@ -423,40 +433,41 @@ export type SelectedModel = {
 export type PromptCacheHintMode = "auto" | "openai-key" | "openrouter-session" | "none";
 
 /**
- * 限额来源：catalog（目录命中）> provider（供应商接口自带声明值）
- * > fallback（兜底猜测）；user 是用户手改，任何时候都不被自动覆盖。
- * 缺失时（旧存档）按 normalizeProviderModelConfig 的迁移推断规则一次性补齐。
+ * Limit source: catalog (catalog hit) > provider (a declared value bundled with the provider API)
+ * > fallback (best-effort guess); user means manually changed by the user and is never
+ * automatically overwritten. When missing (old archives) it is filled in one go per
+ * normalizeProviderModelConfig's migration inference rules.
  */
 export type ModelLimitsSource = "catalog" | "provider" | "fallback" | "user";
 
-/** 模型输入模态的合法值全集（运行时校验与类型的单一来源）。 */
+/** The complete set of valid model input modalities (the single source for runtime validation and types). */
 export const MODEL_INPUT_MODALITIES = ["text", "image"] as const;
 
-/** 模型输入模态；缺省时按 provider 内置规则推断。 */
+/** Model input modality; when absent it is inferred from the provider's built-in rules. */
 export type ModelInputModality = (typeof MODEL_INPUT_MODALITIES)[number];
 
 /**
- * 归一化后的输入模态覆盖的规范形态：聊天协议始终发送文本，
- * 因此 "text" 恒在首位；normalizer 只会产出这两种形状。
+ * The canonical shapes of a normalized input-modality override: the chat protocol always sends
+ * text, so "text" is always first; the normalizer only produces these two shapes.
  */
 export type ModelInputModalitiesOverride = ["text"] | ["text", "image"];
 
 export type ProviderModelConfig = {
   id: string;
-  /** /models 元数据；缺失时保持旧设置格式兼容。 */
+  /** /models metadata; when absent, backward compatibility with the old settings format is preserved. */
   ownedBy?: string;
   contextWindow: number;
   maxOutputToken: number;
   limitsSource?: ModelLimitsSource;
-  /** OpenAI 兼容端点的缓存提示协议；缺失时继承供应商设置。 */
+  /** The cache hint protocol for OpenAI-compatible endpoints; when absent it inherits the provider setting. */
   promptCacheHintMode?: PromptCacheHintMode;
   /**
-   * 用户手动的输入模态覆盖（如 ["text","image"] 强制开启图片输入）。
-   * 缺失时按 provider 内置启发式推断（白名单/官方已知模型目录）。
-   * 生效范围：仅 codex/xai/gemini provider（这些路径的附件发送受
-   * model.input 门控）；deepseek wire 层硬拒绝图片、anthropic 附件
-   * 路径不读 model.input，这两类 provider 上本字段不起作用。
-   * 读取前须经 normalizeInputModalities 归一化。
+   * The user's manual input-modality override (e.g. ["text","image"] forces image input on).
+   * When absent it is inferred from the provider's built-in heuristics (allowlist/officially known
+   * model catalogs). Scope: only codex/xai/gemini providers (attachment sending on these paths is
+   * gated by model.input); the deepseek wire layer hard-rejects images, and the anthropic
+   * attachment path does not read model.input, so this field has no effect on those two provider
+   * types. It must be normalized via normalizeInputModalities before being read.
    */
   inputModalities?: ModelInputModalitiesOverride;
 };
@@ -464,7 +475,7 @@ export type ProviderModelConfig = {
 export type ChatRuntimeControls = {
   thinkingEnabled: boolean;
   nativeWebSearchEnabled: boolean;
-  /** Plan mode:本轮只注入只读工具,经 ExitPlanMode 批准后才进入执行。 */
+  /** Plan mode: only read-only tools are injected this turn, and execution begins only after ExitPlanMode approval. */
   planModeEnabled: boolean;
   reasoning: ReasoningLevel;
   reasoningByProvider: Partial<Record<ChatRuntimeReasoningProviderKey, ReasoningLevel>>;
@@ -497,7 +508,7 @@ export type SshProxyConfig = {
   username: string;
   password: string;
   passwordConfigured?: boolean;
-  /** 直接复用「系统设置 → 应用代理」（systemProxy）；开启时忽略手动代理字段。 */
+  /** Reuse "System Settings -> Application Proxy" (systemProxy) directly; when on, the manual proxy fields are ignored. */
   useSystemProxy: boolean;
 };
 
@@ -540,12 +551,12 @@ export type UsageQueryCodingPlanProvider =
 export type UsageQueryConfig = {
   enabled: boolean;
   mode: UsageQueryMode;
-  /** 当前模式的生效脚本(Rust 执行层只读这一个字段)。 */
+  /** The effective script for the current mode (the Rust execution layer reads only this field). */
   script: string;
-  /** 每种脚本模式各自的脚本:切换查询方式互不串扰,未填写过的显示模板预设。 */
+  /** A separate script per script mode: switching query modes does not cross-contaminate, and unset ones show the template preset. */
   scripts: UsageQueryScripts;
   baseUrl: string;
-  /** 查询专用 API Key 覆盖(空则回退供应商自身的 apiKey)。 */
+  /** Query-specific API Key override (empty falls back to the provider's own apiKey). */
   apiKey: string;
   apiKeyConfigured?: boolean;
   accessToken: string;
@@ -554,12 +565,12 @@ export type UsageQueryConfig = {
   accessKeyId: string;
   secretAccessKey: string;
   secretAccessKeyConfigured?: boolean;
-  /** Token Plan 供应商(空=按 Base URL 自动检测;智谱团队必须显式选择)。 */
+  /** Token Plan provider (empty = auto-detect from the Base URL; the Zhipu team plan must be selected explicitly). */
   codingPlanProvider: UsageQueryCodingPlanProvider;
-  /** 智谱团队套餐:组织/项目 ID(作为 bigmodel-organization / bigmodel-project 请求头)。 */
+  /** Zhipu team plan: organization/project ID (sent as the bigmodel-organization / bigmodel-project request headers). */
   teamOrganizationId: string;
   teamProjectId: string;
-  /** 请求超时(秒,2-30)。 */
+  /** Request timeout (seconds, 2-30). */
   timeoutSecs: number;
 };
 
@@ -596,9 +607,9 @@ export type CustomProvider = {
   name: string;
   type: ProviderId;
   baseUrl: string;
-  /** 将 baseUrl 作为最终请求地址，本地反代不再追加协议端点路径。 */
+  /** Treat baseUrl as the final request address; a local reverse proxy no longer appends the protocol endpoint path. */
   isFullUrl: boolean;
-  /** 可选的模型列表完整地址；留空时从 baseUrl 自动推导。 */
+  /** Optional full address of the model list; when empty it is derived automatically from baseUrl. */
   modelsUrl?: string;
   apiKey: string;
   apiKeyConfigured?: boolean;
@@ -609,26 +620,27 @@ export type CustomProvider = {
   requestFormat?: CodexRequestFormat;
   reasoning: ReasoningLevel;
   promptCachingEnabled: boolean;
-  /** OpenAI 兼容端点的缓存提示协议；旧配置由 promptCachingEnabled 迁移。 */
+  /** The cache hint protocol for OpenAI-compatible endpoints; old configs migrate from promptCachingEnabled. */
   promptCacheHintMode?: PromptCacheHintMode;
-  /** 仅 Anthropic：ephemeral 缓存保留档位；long 在官方 API 上映射为 1h TTL。 */
+  /** Anthropic only: the ephemeral cache retention tier; long maps to a 1h TTL on the official API. */
   promptCacheRetention?: "short" | "long";
   nativeWebSearchEnabled: boolean;
   useSystemProxy: boolean;
-  /** 流内重试策略；缺省 = 全局默认行为（等价于 mode:"default"）。 */
+  /** In-stream retry policy; default = global default behavior (equivalent to mode:"default"). */
   retryPolicy?: ProviderRetryPolicy;
   usageQuery: UsageQueryConfig;
 };
 
 /**
- * 供应商级流内重试策略。
+ * Provider-level in-stream retry policy.
  *
- * - default：沿用全局默认（5 次重试，即 DEFAULT_STREAM_RETRY_MAX_ATTEMPTS-1）
- *   ——与未配置等价，归一化时直接省略字段，保证旧配置零迁移；
- * - off：禁用流内重试（不影响跨供应商 failover）；
- * - custom：使用 maxRetries——首次失败后的重试次数，不含首次请求（钳位
- *   1..10；0 次重试请直接选 off）。与重试状态提示"正在重试 (n/m)"的 m
- *   同一口径。
+ * - default: use the global default (5 retries, i.e. DEFAULT_STREAM_RETRY_MAX_ATTEMPTS-1)
+ *   - equivalent to being unset, so normalization omits the field entirely, ensuring zero
+ *   migration for old configs;
+ * - off: disable in-stream retries (does not affect cross-provider failover);
+ * - custom: use maxRetries - the number of retries after the first failure, excluding the first
+ *   request (clamped to 1..10; for 0 retries choose off directly). Same denominator as the m in
+ *   the retry status prompt "retrying (n/m)".
  */
 export type ProviderRetryPolicy = { mode: "off" } | { mode: "custom"; maxRetries: number };
 
@@ -638,10 +650,10 @@ export const PROVIDER_RETRY_MAX_RETRIES_LIMITS = {
 } as const;
 
 /**
- * 全局默认流内重试次数（不含首次请求）的 UI 展示镜像。运行时真源是
- * agent-gui streamRetry.ts 的 DEFAULT_STREAM_RETRY_MAX_ATTEMPTS（总尝试
- * 数 = 重试数 + 1；UI 边界禁止反向依赖）；两者一致性由
- * provider-retry-policy 单测锁定。
+ * UI display mirror of the global default in-stream retry count (excluding the first request).
+ * The runtime source of truth is DEFAULT_STREAM_RETRY_MAX_ATTEMPTS in agent-gui streamRetry.ts
+ * (total attempts = retries + 1; the UI boundary forbids reverse dependencies); their consistency
+ * is pinned by the provider-retry-policy unit test.
  */
 export const PROVIDER_RETRY_DEFAULT_MAX_RETRIES = 5;
 
@@ -672,40 +684,6 @@ export type RemoteSettings = {
   enableWebTunnels: boolean;
 };
 
-export type SttProviderId =
-  | "tencent_cloud"
-  | "volcengine_seed_v3"
-  | "aliyun_dashscope"
-  | "baidu_cloud";
-
-export type SttProviderSettings = {
-  id: SttProviderId;
-  configured: boolean;
-  websocketUrl: string;
-  model: string;
-  apiKey: string;
-  appId: string;
-  secretId: string;
-  secretKey: string;
-  accessToken: string;
-  cluster: string;
-  resourceId: string;
-  engineModelType: string;
-  baiduAppId: string;
-  baiduApiKey: string;
-  devPid: string;
-  /** 一次性清密钥指令；保存端消费后必须移除，不得进入公开快照。 */
-  clearSecrets?: boolean;
-};
-
-export type SttSettings = {
-  enabled: boolean;
-  provider: SttProviderId | null;
-  providers: Record<SttProviderId, SttProviderSettings>;
-  /** 一次性允许仅切换语音输入开关，不因当前供应商未配置而拒绝保存。 */
-  allowIncomplete?: boolean;
-};
-
 export type AppSettings = {
   system: SystemSettings;
   customProviders: CustomProvider[];
@@ -713,7 +691,6 @@ export type AppSettings = {
   agents: AgentPromptTemplate[];
   ssh: SshSettings;
   remote: RemoteSettings;
-  stt: SttSettings;
   memory: MemorySettings;
   customSettings: CustomSettings;
   modelFailover: ModelFailoverSettings;

@@ -123,11 +123,11 @@ import type {
   RunningConversationSummary,
 } from "./gatewayTypes";
 
-const LEGACY_SETTINGS_CHANGED_MESSAGE = "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。";
+const LEGACY_SETTINGS_CHANGED_MESSAGE = "The SSH settings were updated on the other side; the latest state has been refreshed, please submit again.";
 
 export type GatewaySettingsUpdateErrorCode = "settings_changed";
 
-/** clarify.prompt_turn 的响应形态（snake_case 对齐 envelope 映射）。 */
+/** Response shape for clarify.prompt_turn (snake_case aligned with the envelope mapping). */
 export type ClarifyTurnResult = {
   final_text: string;
   error_code?: string;
@@ -180,8 +180,8 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     );
   }
 
-  // 用量环触发的手动压缩：中继到桌面端执行（受理即回包，进度与带
-  // operationId 的终态分别经聊天流回传）。
+  // Manual compaction triggered by the usage ring: relayed to the desktop for execution (accepted immediately with a reply; progress and
+  // the terminal state carrying operationId are sent back separately over the chat stream).
   async chatQueueCompactNow(
     conversationId: string,
     operationId: string,
@@ -253,7 +253,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     );
   }
 
-  /** 应答桌面端挂起的 AskUserQuestion：item_id 为 toolCallId，request_json 为选择数组。 */
+  /** Answer a desktop-side pending AskUserQuestion: item_id is the toolCallId, request_json is the array of choices. */
   async chatQueueToolAnswer(
     conversationId: string,
     toolCallId: string,
@@ -268,7 +268,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     );
   }
 
-  /** 提交对桌面端挂起工具审批的决定：item_id 为 toolCallId，request_json 为 {"decision":...}。 */
+  /** Submit a decision for a desktop-side pending tool approval: item_id is the toolCallId, request_json is {"decision":...}. */
   async chatQueueToolApproval(
     conversationId: string,
     toolCallId: string,
@@ -283,7 +283,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     );
   }
 
-  /** 提交对桌面端挂起计划的决定：item_id 为 toolCallId，request_json 为 {"decision":...,"feedback"?}。 */
+  /** Submit a decision for a desktop-side pending plan: item_id is the toolCallId, request_json is {"decision":...,"feedback"?}. */
   async chatQueuePlanDecision(
     conversationId: string,
     toolCallId: string,
@@ -995,7 +995,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     if (filter?.cwdEmpty === true) {
       payload.cwd_empty = true;
     }
-    // running_conversations 由 chat_activities 帧提供：并行取回合并，返回形状不变。
+    // running_conversations is provided by the chat_activities frame: fetched and merged in parallel, with the returned shape unchanged.
     const [list, runningConversations] = await Promise.all([
       this.requestWithRecovery<HistoryList>("history.list", payload),
       this.listChatActivities().catch(() => [] as RunningConversationSummary[]),
@@ -1151,8 +1151,8 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     });
   }
 
-  /** 桌面宿主的已安装应用（@ 应用提及）；返回条目数组，与 GUI 端
-   *  Tauri 命令 `cua_driver_list_installed_apps` 的载荷一致。 */
+  /** Installed apps on the desktop host (@ app mentions); returns an array of entries matching
+   *  the payload of the GUI-side Tauri command `cua_driver_list_installed_apps`. */
   async listInstalledApps(): Promise<InstalledAppsListResponse["apps"]> {
     const response = await this.requestWithRecovery<InstalledAppsListResponse>(
       "apps.installed.list",
@@ -1162,9 +1162,9 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
   }
 
   /**
-   * Computer Use 设置页的只读引导状态。`action` 与桌面端的 Tauri 命令同名，
-   * 返回的就是那条命令的原始返回值（camelCase JSON），由调用方按 CuaProbe /
-   * CuaPermissions 解读——两端读的是同一个对象。
+   * Read-only onboarding state for the Computer Use settings page. `action` shares its name with a desktop-side Tauri command,
+   * and what is returned is that command's raw return value (camelCase JSON), interpreted by the caller as CuaProbe /
+   * CuaPermissions -- both sides read the same object.
    */
   async cuaDriverStatus<T>(action: "probe" | "permissions_status"): Promise<T> {
     return this.requestWithRecovery<T>(`cua.driver.${action}`, {});
@@ -1404,7 +1404,7 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
   }
 
   async providerUsageTest<T = unknown>(providerId: string, configJson: string): Promise<T> {
-    // 按草稿测试:config_json 非空时桌面端忽略启用开关、不落库不进缓存。
+    // Test as a draft: when config_json is non-empty the desktop ignores the enable switch, neither persisting nor caching.
     return this.requestWithRecovery<T>("provider.usage.query", {
       provider_id: providerId,
       refresh: true,

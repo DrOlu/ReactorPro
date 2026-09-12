@@ -7,8 +7,10 @@ import (
 	"strings"
 )
 
-// OriginAllowed 是 WebSocket 升级的同源校验（v2 共用，自 internal/server/http_origin.go
-// 平移，行为不变）：无 Origin 头（非浏览器）、同源、或两端均为回环地址（本机开发）时放行。
+// OriginAllowed is the same-origin check for WebSocket upgrades (shared by v2, ported
+// from internal/server/http_origin.go, behavior unchanged): it allows requests with no
+// Origin header (non-browser), same-origin requests, or requests where both ends are
+// loopback addresses (local development).
 func OriginAllowed(r *http.Request) bool {
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
 	if origin == "" {

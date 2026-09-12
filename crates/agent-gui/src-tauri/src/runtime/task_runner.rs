@@ -59,27 +59,27 @@ impl std::error::Error for HttpExecutionFailure {}
 pub(crate) fn resolve_workdir(workdir: Option<String>) -> Result<PathBuf, String> {
     let raw = workdir.unwrap_or_default();
     let base = if raw.trim().is_empty() {
-        std::env::current_dir().map_err(|e| format!("读取应用 cwd 失败：{e}"))?
+        std::env::current_dir().map_err(|e| format!("Failed to read app cwd: {e}"))?
     } else {
         let path = expand_tilde_path(raw.trim());
         if path.is_absolute() {
             path
         } else {
             std::env::current_dir()
-                .map_err(|e| format!("读取应用 cwd 失败：{e}"))?
+                .map_err(|e| format!("Failed to read app cwd: {e}"))?
                 .join(path)
         }
     };
 
-    let metadata = fs::metadata(&base).map_err(|e| format!("Hook 工作目录无效：{e}"))?;
+    let metadata = fs::metadata(&base).map_err(|e| format!("Invalid Hook working directory: {e}"))?;
     if !metadata.is_dir() {
-        return Err("Hook 工作目录必须是目录".to_string());
+        return Err("Hook working directory must be a directory".to_string());
     }
     // The resolved path is stringified into PromptRunRequest.workdir and used
     // as a child-process cwd: keep it in classic Win32 form, not `\\?\`.
     fs::canonicalize(base)
         .map(strip_windows_verbatim_prefix)
-        .map_err(|e| format!("解析 Hook 工作目录失败：{e}"))
+        .map_err(|e| format!("Failed to resolve Hook working directory: {e}"))
 }
 
 fn build_header_map(headers: &Option<BTreeMap<String, String>>) -> Result<HeaderMap, String> {
@@ -90,9 +90,9 @@ fn build_header_map(headers: &Option<BTreeMap<String, String>>) -> Result<Header
 
     for (key, value) in headers {
         let name = HeaderName::from_bytes(key.as_bytes())
-            .map_err(|_| format!("无效 Hook header name：{key}"))?;
+            .map_err(|_| format!("Invalid Hook header name: {key}"))?;
         let value =
-            HeaderValue::from_str(value).map_err(|_| format!("无效 Hook header value：{key}"))?;
+            HeaderValue::from_str(value).map_err(|_| format!("Invalid Hook header value: {key}"))?;
         map.insert(name, value);
     }
 
@@ -102,17 +102,18 @@ fn build_header_map(headers: &Option<BTreeMap<String, String>>) -> Result<Header
 /// `timeout_ms` bounds every request made by the returned client; `None`
 /// keeps the legacy 10s default used by hooks.
 ///
-/// Hook / Cron HTTP 与其他应用出网点同策略：应用代理启用时经代理出网
-/// （环回地址豁免），配置异常 fail fast；未启用则直连并忽略环境代理，
-/// 避免 OS 级 HTTP(S)_PROXY 悄悄劫持自动化请求。
+/// Hook / Cron HTTP follows the same policy as other app egress points: when the app
+/// proxy is enabled, traffic goes out through the proxy (loopback addresses exempt)
+/// and misconfiguration fails fast; when disabled, it connects directly and ignores
+/// environment proxies, so an OS-level HTTP(S)_PROXY cannot silently hijack automation requests.
 pub(crate) fn build_http_client(timeout_ms: Option<u64>) -> Result<Client, String> {
     crate::services::system_proxy::blocking_client_builder()
-        .map_err(|e| format!("创建 Hook HTTP client 失败：{e}"))?
+        .map_err(|e| format!("Failed to create Hook HTTP client: {e}"))?
         .timeout(Duration::from_millis(
             timeout_ms.unwrap_or(DEFAULT_HTTP_TIMEOUT_MS).max(1),
         ))
         .build()
-        .map_err(|e| format!("创建 Hook HTTP client 失败：{e}"))
+        .map_err(|e| format!("Failed to create Hook HTTP client: {e}"))
 }
 
 pub(crate) fn run_single_http_request(
@@ -121,17 +122,17 @@ pub(crate) fn run_single_http_request(
 ) -> Result<HttpExecutionResult, HttpExecutionFailure> {
     let method_raw = request.method.trim().to_uppercase();
     let method = Method::from_bytes(method_raw.as_bytes()).map_err(|_| {
-        HttpExecutionFailure::new(0, format!("无效 Hook HTTP method：{method_raw}"))
+        HttpExecutionFailure::new(0, format!("Invalid Hook HTTP method: {method_raw}"))
     })?;
     let url = request.url.trim().to_string();
     if url.is_empty() {
         return Err(HttpExecutionFailure::new(
             0,
-            "Hook HTTP 请求 URL 不能为空".to_string(),
+            "Hook HTTP request URL must not be empty".to_string(),
         ));
     }
     Url::parse(&url)
-        .map_err(|e| HttpExecutionFailure::new(0, format!("无效 Hook HTTP URL：{url} ({e})")))?;
+        .map_err(|e| HttpExecutionFailure::new(0, format!("Invalid Hook HTTP URL: {url} ({e})")))?;
 
     let headers = build_header_map(&request.headers)
         .map_err(|message| HttpExecutionFailure::new(0, message))?;
@@ -152,14 +153,14 @@ pub(crate) fn run_single_http_request(
     let response = builder.send().map_err(|e| {
         HttpExecutionFailure::new(
             start.elapsed().as_millis(),
-            format!("Hook HTTP 请求失败：{} {} ({e})", method, url),
+            format!("Hook HTTP request failed: {} {} ({e})", method, url),
         )
     })?;
     let status = response.status();
     let response_body = response.text().map_err(|e| {
         HttpExecutionFailure::new(
             start.elapsed().as_millis(),
-            format!("读取 Hook HTTP 响应失败：{} {} ({e})", method, url),
+            format!("Failed to read Hook HTTP response: {} {} ({e})", method, url),
         )
     })?;
     let duration_ms = start.elapsed().as_millis();
@@ -169,10 +170,10 @@ pub(crate) fn run_single_http_request(
         return Err(HttpExecutionFailure::new(
             duration_ms,
             if preview.is_empty() {
-                format!("Hook HTTP 请求失败：{} {} -> {}", method, url, status)
+                format!("Hook HTTP request failed: {} {} -> {}", method, url, status)
             } else {
                 format!(
-                    "Hook HTTP 请求失败：{} {} -> {}\n{}",
+                    "Hook HTTP request failed: {} {} -> {}\n{}",
                     method, url, status, preview
                 )
             },

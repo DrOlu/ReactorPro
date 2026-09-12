@@ -3,16 +3,16 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 // ============================================================================
-// LLM seam 改造（golden 基线之一）：五协议最终 wire payload 整体快照。
+// LLM seam refactor (one of the golden baselines): whole-snapshot of the final wire payload for five protocols.
 //
-// 现有 provider 测试逐字段断言单个行为（tool_choice、缓存断点、thinking 档位…）；
-// 本文件的职责不同——把每条协议"固定输入 → 完整请求体"逐字段锁死，作为后续
-// seam 重构（PR-1 适配器包装 / PR-3 拦截器注册化）"行为等价"的判定基准。
-// 快照有意写成显式对象字面量而非 .snapshot 文件：diff 直接可读，且杜绝
-// 无意 re-record。
+// Existing provider tests assert individual behaviors field by field (tool_choice, cache breakpoints, thinking
+// levels...); this file's job is different -- it locks down "fixed input -> complete request body" per protocol,
+// field by field, as the "behavior-equivalent" benchmark for later seam refactors (PR-1 adapter wrapping /
+// PR-3 interceptor registration). The snapshots are intentionally written as explicit object literals rather than
+// .snapshot files: diffs are directly readable, and accidental re-recording is impossible.
 //
-// 捕获通道：走真实 pi-ai stream()（连同 finalizeProviderStreamOptions 全部
-// payload 中间件），用 onPayload 截获最终线格式后抛错中断，网络零触碰。
+// Capture channel: goes through the real pi-ai stream() (along with all finalizeProviderStreamOptions payload
+// middleware), intercepts the final wire format in onPayload, then throws to abort -- zero network contact.
 // ============================================================================
 
 const realAnthropic = await import(
@@ -55,8 +55,8 @@ const { finalizeProviderStreamOptions } = loader.loadModule(
   "src/lib/providers/runtime/payloadPipeline.ts",
 );
 
-// 固定 session id：payload 中所有会话关联字段（prompt_cache_key/metadata.user_id）
-// 由它派生，保证快照确定性。
+// Fixed session id: all session-related fields in the payload (prompt_cache_key/metadata.user_id)
+// derive from it, guaranteeing snapshot determinism.
 const SESSION_ID = "00000000-0000-4000-8000-000000000001";
 
 const TOOLS = [
@@ -80,8 +80,8 @@ function buildContext({ withTools = true } = {}) {
 }
 
 /**
- * 走真实装配链（finalizeProviderStreamOptions → streamSimpleByApi → 真实
- * pi-ai stream），在 onPayload 链尾截获最终 wire payload 后中断请求。
+ * Goes through the real assembly chain (finalizeProviderStreamOptions -> streamSimpleByApi -> real
+ * pi-ai stream), intercepts the final wire payload at the end of the onPayload chain, then aborts the request.
  */
 async function captureWirePayload(providerId, model, context, baseOptions) {
   let captured;
@@ -103,11 +103,11 @@ async function captureWirePayload(providerId, model, context, baseOptions) {
   try {
     await stream.result();
   } catch {
-    // onPayload 抛错中断请求属预期。
+    // Throwing in onPayload to abort the request is expected.
   }
   assert.ok(captured, `expected wire payload capture for ${model.id}`);
-  // JSON 往返归一化：golden 锁定的是线上 JSON 形态；值为 undefined 的键
-  // （如 responses 链路的 prompt_cache_retention）序列化后不存在，不入快照。
+  // JSON round-trip normalization: goldens lock the on-the-wire JSON shape; keys whose value is undefined
+  // (e.g. prompt_cache_retention on the responses path) do not exist after serialization and are not snapshotted.
   return JSON.parse(JSON.stringify(captured));
 }
 
@@ -117,7 +117,7 @@ const WIRE_TOOL_SCHEMA = {
   required: ["path"],
 };
 
-test("golden/anthropic-messages: 官方端点完整请求体（adaptive thinking + 缓存断点 + metadata）", async () => {
+test("golden/anthropic-messages: full request body for the official endpoint (adaptive thinking + cache breakpoint + metadata)", async () => {
   const baseUrl = "https://api.anthropic.com/v1";
   const model = createModelFromConfig(
     "claude_code",
@@ -158,7 +158,7 @@ test("golden/anthropic-messages: 官方端点完整请求体（adaptive thinking
   });
 });
 
-test("golden/openai-completions: 中转端点完整请求体（带工具 + reasoning_effort）", async () => {
+test("golden/openai-completions: full request body for a relay endpoint (with tools + reasoning_effort)", async () => {
   const baseUrl = "https://relay.example.com/v1";
   const model = createModelFromConfig(
     "codex",
@@ -200,7 +200,7 @@ test("golden/openai-completions: 中转端点完整请求体（带工具 + reaso
   });
 });
 
-test("golden/openai-completions: text-only 请求既不带 tools 也不带 tool_choice（严格网关 400 回归）", async () => {
+test("golden/openai-completions: a text-only request carries neither tools nor tool_choice (strict gateway 400 regression)", async () => {
   const baseUrl = "https://relay.example.com/v1";
   const model = createModelFromConfig(
     "codex",
@@ -229,7 +229,7 @@ test("golden/openai-completions: text-only 请求既不带 tools 也不带 tool_
   });
 });
 
-test("golden/openai-responses: codex 官方端点完整请求体（store + prompt_cache_key + encrypted reasoning）", async () => {
+test("golden/openai-responses: full request body for the official codex endpoint (store + prompt_cache_key + encrypted reasoning)", async () => {
   const baseUrl = "https://chatgpt.com/backend-api/codex";
   const model = createModelFromConfig(
     "codex",
@@ -269,7 +269,7 @@ test("golden/openai-responses: codex 官方端点完整请求体（store + promp
   });
 });
 
-test("golden/google-generative-ai: 官方端点完整请求体（thinkingLevel + functionCallingConfig）", async () => {
+test("golden/google-generative-ai: full request body for the official endpoint (thinkingLevel + functionCallingConfig)", async () => {
   const baseUrl = "https://generativelanguage.googleapis.com";
   const model = createModelFromConfig(
     "gemini",
@@ -309,7 +309,7 @@ test("golden/google-generative-ai: 官方端点完整请求体（thinkingLevel +
   });
 });
 
-test("golden/deepseek-responses: 原生适配器完整请求体（developer role + reasoning effort 直通）", async () => {
+test("golden/deepseek-responses: full request body for the native adapter (developer role + reasoning effort passthrough)", async () => {
   const baseUrl = "https://api.deepseek.com";
   const model = createModelFromConfig(
     "deepseek",

@@ -44,9 +44,9 @@ import {
   writeGlobalShortcutBindings,
 } from "../../lib/shortcuts/globalShortcuts";
 
-/* ============================== 键盘布局数据 ============================== */
+/* ============================== Keyboard layout data ============================== */
 
-// 布局行是模块级常量，平台分叉须在模块加载时判定（同步推断即可，无需等后端）。
+// Layout rows are module-level constants; the platform branch must be decided at module load (synchronous inference suffices, no need to wait for the backend).
 const IS_MAC = inferRuntimePlatform() === "macos";
 
 const KEY_UNIT = 40;
@@ -60,9 +60,9 @@ function keyWidth(units: number): number {
 }
 
 interface KeyDef {
-  /** 渲染 key（布局静态，模块加载时生成稳定 id） */
+  /** Render key (the layout is static; a stable id is generated at module load) */
   id: string;
-  /** KeyboardEvent.code；null 表示占位或不可录制键（Fn） */
+  /** KeyboardEvent.code; null indicates a placeholder or a non-recordable key (Fn) */
   code: string | null;
   units: number;
   label: string;
@@ -157,7 +157,7 @@ const ROW_Z: KeyDef[] = [
   k("/", "Slash"),
   k("Shift", "ShiftRight", 2.75),
 ];
-// 底排按平台分叉：macOS 用 fn ⌃ ⌥ ⌘ 排布与符号，其余平台用 Ctrl Win Alt。
+// The bottom row branches by platform: macOS uses the fn ⌃ ⌥ ⌘ arrangement and symbols, other platforms use Ctrl Win Alt.
 const ROW_CTL: KeyDef[] = IS_MAC
   ? [
       k("Fn", null, 1.25),
@@ -242,7 +242,7 @@ const MODIFIER_KEY_CODES: Record<ShortcutModifier, string[]> = {
   Super: ["MetaLeft", "MetaRight"],
 };
 
-/** 每个动作的高亮色（与 .ghk-cN 类一一对应，索引按 GLOBAL_SHORTCUT_ACTIONS 顺序取模） */
+/** Highlight color for each action (one-to-one with the .ghk-cN classes; the index is taken modulo the GLOBAL_SHORTCUT_ACTIONS order) */
 const ACTION_COLOR_HEX = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b"];
 
 interface ShortcutDraft {
@@ -259,7 +259,7 @@ interface BoundShortcutEntry {
   combo: string;
 }
 
-/* ============================== 组件 ============================== */
+/* ============================== Component ============================== */
 
 const GHK_STYLE = `
 .ghk-root{--ghk-cap-top:#fdfdfe;--ghk-cap-side:#c9d3e0;--ghk-cap-text:#475569;
@@ -306,7 +306,7 @@ box-shadow:0 0 0 var(--ghk-cap-side),0 1px 2px rgb(15 23 42/.2);}
 border:1px solid var(--ghk-cap-side);border-bottom-width:2.5px;background:var(--ghk-cap-top);color:var(--ghk-cap-text);}
 `;
 
-/** 键帽上的占用标注：bound=该键是某快捷键主键；hintDots=按下更多修饰键后此修饰键下有组合 */
+/** Occupancy annotation on a keycap: bound = the key is some shortcut's main key; hintDots = a combination exists under this modifier once more modifiers are held */
 interface KeyDecor {
   bound?: { colorClass: string; tag: string; title: string };
   hintDots?: string[];
@@ -354,7 +354,7 @@ function KeyCap(props: {
 const SHORTCUT_KEY_BUTTON_CLASS =
   "flex shrink-0 items-center gap-1.5 rounded-md px-2 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** 发送键和应用快捷键共用行结构，保持图标、文字、键帽与编辑状态一致。 */
+/** The send key and app shortcuts share the row structure, keeping icon, text, keycaps, and editing state consistent. */
 function ShortcutRow({
   id,
   icon,
@@ -594,8 +594,9 @@ export function GlobalShortcutsSection() {
 
   const commit = useCallback(
     (next: GlobalShortcutBindings) => {
-      // 同步镜像到 ref：同一事件序列里（如 mousedown 隐式保存 + click 其他操作）
-      // 后续回调要能立刻读到最新值，不等 React 重渲染。
+      // Mirror synchronously into the ref: within the same event sequence (e.g. mousedown implicit
+      // save + click on another control) later callbacks must read the latest value immediately,
+      // without waiting for a React re-render.
       bindingsRef.current = next;
       setBindings(next);
       writeGlobalShortcutBindings(next);
@@ -608,10 +609,11 @@ export function GlobalShortcutsSection() {
     [formatRegisterFailures],
   );
 
-  // 启动时 applyStoredGlobalShortcuts 的注册失败是静默的；进入本页时按当前
-  // 绑定重新注册一次（幂等的全量替换），把"被其他程序占用"等失败回显出来。
+  // Registration failures from applyStoredGlobalShortcuts at startup are silent; on entering this
+  // page, register once more from the current bindings (an idempotent full replacement), surfacing
+  // failures such as "already taken by another program".
   useEffect(() => {
-    // 录制期间注册处于挂起态（locale 变更会重跑本效果），此时绝不能重新注册。
+    // Registration is suspended during recording (a locale change re-runs this effect), so it must never re-register at that point.
     if (recordingRef.current) return;
     let disposed = false;
     void applyGlobalShortcuts(bindingsRef.current).then((failures) => {
@@ -630,13 +632,13 @@ export function GlobalShortcutsSection() {
     setRecording(action);
     setDraft({ mods: [], main: null });
     setStatus(null);
-    // 录制期间挂起全局快捷键，避免录制现有组合时窗口被隐藏/呼出。
+    // Suspend global shortcuts during recording, so the window is not hidden/summoned while recording an existing combination.
     void applyGlobalShortcuts({});
   }, []);
 
   /**
-   * 结束录制。confirm=按 Enter 显式确认（草稿无主键时报错）；
-   * implicit=点击别处/窗口失焦（有主键就保存，否则静默取消）；cancel=Esc/放弃。
+   * Ends recording. confirm = explicit confirmation via Enter (errors when the draft has no main key);
+   * implicit = clicking elsewhere / window losing focus (save if there is a main key, otherwise cancel silently); cancel = Esc/abandon.
    */
   const stopRecording = useCallback(
     (mode: "confirm" | "implicit" | "cancel") => {
@@ -696,7 +698,7 @@ export function GlobalShortcutsSection() {
     [commit],
   );
 
-  // 始终监听物理按键，驱动键帽按下动画（不拦截默认行为）。
+  // Always listen for physical key presses to drive the keycap press animation (without intercepting default behavior).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       setPressedCodes((prev) => {
@@ -725,7 +727,7 @@ export function GlobalShortcutsSection() {
     };
   }, []);
 
-  // 应用快捷键在行内录制：Enter 确认，Esc 取消。
+  // App shortcuts are recorded inline in the row: Enter confirms, Esc cancels.
   useEffect(() => {
     if (!recording) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -753,7 +755,7 @@ export function GlobalShortcutsSection() {
     const onMouseDown = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       const row = target?.closest("[data-ghk-row]");
-      // 点击的是正在录制的行本身：交给该行自己的 onClick 处理（同样是隐式确认）。
+      // The click is on the row currently being recorded: hand it to that row's own onClick (also an implicit confirmation).
       if (row && row.getAttribute("data-ghk-row") === recordingRef.current) return;
       stopRecording("implicit");
     };
@@ -768,7 +770,7 @@ export function GlobalShortcutsSection() {
     };
   }, [recording, stopRecording]);
 
-  // 卸载时若仍在录制，恢复既有注册。
+  // Restore the existing registration on unmount if recording is still in progress.
   useEffect(
     () => () => {
       setShortcutsSuspended(false);
@@ -779,7 +781,7 @@ export function GlobalShortcutsSection() {
     [],
   );
 
-  // 录制中要在键盘上驻留高亮的键：draft 修饰键(左右两侧) + 主键。
+  // Keys to keep highlighted on the keyboard while recording: draft modifiers (both left and right) + the main key.
   const heldCodes = useMemo(() => {
     const set = new Set<string>();
     if (!recording) return set;
@@ -796,9 +798,10 @@ export function GlobalShortcutsSection() {
     return tokens;
   }, [draft]);
 
-  // ===== 快捷键占用地图（非录制状态下渲染在键盘上）=====
-  // 无修饰键按住时显示"裸键"快捷键（如 F10）；按住修饰键（如 Alt）则切到该层，
-  // 显示修饰键完全匹配的组合；其余组合在缺失的修饰键键帽上以彩点提示。
+  // ===== Shortcut occupancy map (rendered on the keyboard when not recording) =====
+  // With no modifier held, shows "bare-key" shortcuts (e.g. F10); holding a modifier (e.g. Alt)
+  // switches to that layer and shows combinations whose modifiers match exactly; other combinations
+  // are hinted with colored dots on the keycaps of the missing modifiers.
   const actionLabelById: Record<GlobalShortcutAction, string> = {
     summon: t("settings.shortcutSummon"),
     toggle: t("settings.shortcutToggle"),
@@ -870,8 +873,9 @@ export function GlobalShortcutsSection() {
     return undefined;
   }
 
-  // 键盘随容器宽度等比缩放；缩放与容器高度直接写 DOM，
-  // 以便在同一次布局中量取变换后的实际视高（transform 不影响布局盒）。
+  // The keyboard scales proportionally to the container width; the scale and container height are
+  // written directly to the DOM, so the transformed actual visual height can be measured in the
+  // same layout pass (transform does not affect the layout box).
   const outerRef = useRef<HTMLDivElement | null>(null);
   const scalerRef = useRef<HTMLDivElement | null>(null);
   const naturalWidth = NATURAL_WIDTH[layout];
@@ -888,7 +892,7 @@ export function GlobalShortcutsSection() {
       scaler.style.transform = `scale(${nextScale})`;
       scaler.style.transformOrigin = "top center";
       scaler.style.marginLeft = `calc(50% - ${naturalWidth / 2}px)`;
-      // 底部预留投影空间，避免 overflow-hidden 裁掉键盘厚度阴影。
+      // Reserve space for the drop shadow at the bottom, so overflow-hidden does not clip the keyboard's depth shadow.
       outer.style.height = `${scaler.getBoundingClientRect().height + 44}px`;
     };
     update();

@@ -98,14 +98,14 @@ mod tests {
                 merged_count: Some(1),
                 parse_failures: Some(0),
                 error: None,
-                final_summary: Some("整理完成".to_string()),
-                report: Some(json!({ "clusterSummaries": ["完成"] })),
+                final_summary: Some("organization complete".to_string()),
+                report: Some(json!({ "clusterSummaries": ["done"] })),
                 ..Default::default()
             })
             .expect("update run")
             .expect("updated run");
         assert_eq!(updated.status, "succeeded");
-        assert_eq!(updated.final_summary.as_deref(), Some("整理完成"));
+        assert_eq!(updated.final_summary.as_deref(), Some("organization complete"));
         assert_eq!(updated.safe_applied, 3);
 
         let list = store
@@ -538,8 +538,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "用户叫 Kevin".to_string(),
-                body: "用户的名字是 Kevin，是计算机专业的大学生。".to_string(),
+                description: "The user is named Kevin".to_string(),
+                body: "The user's name is Kevin, and he is a computer science university student.".to_string(),
                 actor: None,
                 conversation_id: None,
                 model: None,
@@ -561,7 +561,7 @@ mod tests {
 
         let search = store
             .search(MemorySearchArgs {
-                query: "我是谁".to_string(),
+                query: "Who am I".to_string(),
                 scope: None,
                 workdir: None,
                 memory_type: None,
@@ -593,8 +593,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "feedback".to_string(),
-                description: "全局偏好".to_string(),
-                body: "用户偏好中文回答。".to_string(),
+                description: "Global preference".to_string(),
+                body: "The user prefers answers in English.".to_string(),
                 actor: None,
                 conversation_id: None,
                 model: None,
@@ -607,8 +607,8 @@ mod tests {
                 scope: "project".to_string(),
                 workdir: Some(workdir_text.clone()),
                 memory_type: "project".to_string(),
-                description: "项目目标".to_string(),
-                body: "当前项目是 LiveAgent。".to_string(),
+                description: "Project goal".to_string(),
+                body: "The current project is ReactorPro.".to_string(),
                 actor: None,
                 conversation_id: None,
                 model: None,
@@ -671,7 +671,7 @@ mod tests {
                 scope: "project".to_string(),
                 workdir: Some(workdir_a_text.clone()),
                 memory_type: "project".to_string(),
-                description: "项目 A 说明".to_string(),
+                description: "Project A description".to_string(),
                 body: "project A body".to_string(),
                 actor: None,
                 conversation_id: None,
@@ -685,7 +685,7 @@ mod tests {
                 scope: "project".to_string(),
                 workdir: Some(workdir_b_text.clone()),
                 memory_type: "project".to_string(),
-                description: "项目 B 说明".to_string(),
+                description: "Project B description".to_string(),
                 body: "project B body".to_string(),
                 actor: None,
                 conversation_id: None,
@@ -746,7 +746,7 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "reference".to_string(),
-                description: "全局说明".to_string(),
+                description: "Global description".to_string(),
                 body: "global body".to_string(),
                 actor: None,
                 conversation_id: None,
@@ -760,7 +760,7 @@ mod tests {
                 scope: "project".to_string(),
                 workdir: Some(workdir_a_text.clone()),
                 memory_type: "project".to_string(),
-                description: "项目 A 说明".to_string(),
+                description: "Project A description".to_string(),
                 body: "project A body".to_string(),
                 actor: None,
                 conversation_id: None,
@@ -774,7 +774,7 @@ mod tests {
                 scope: "project".to_string(),
                 workdir: Some(workdir_b_text.clone()),
                 memory_type: "project".to_string(),
-                description: "项目 B 说明".to_string(),
+                description: "Project B description".to_string(),
                 body: "project B body".to_string(),
                 actor: None,
                 conversation_id: None,
@@ -912,10 +912,10 @@ mod tests {
 
     #[test]
     fn build_snippet_handles_cjk_byte_offsets() {
-        let body = format!("{}但{}", "记".repeat(1069), "后续".repeat(80));
-        let snippet = build_snippet(&body, &["但".to_string()]);
+        let body = format!("{}✓{}", "→".repeat(1069), "≈".repeat(80));
+        let snippet = build_snippet(&body, &["✓".to_string()]);
 
-        assert!(snippet.contains("但"));
+        assert!(snippet.contains("✓"));
         assert!(snippet.is_char_boundary(snippet.len()));
     }
 
@@ -931,7 +931,7 @@ mod tests {
                 workdir_hash: None,
                 memory_type: None,
                 description: None,
-                body: Some("## 10:00 — conversation test — liveagent\n- 写入 daily".to_string()),
+                body: Some("## 10:00 — conversation test — liveagent\n- write daily".to_string()),
                 mode: Some("append".to_string()),
                 actor: None,
                 conversation_id: Some("conversation-a".to_string()),
@@ -947,7 +947,7 @@ mod tests {
                 workdir_hash: None,
                 memory_type: None,
                 description: None,
-                body: Some("## 11:00 — conversation test — liveagent\n- 完成验证".to_string()),
+                body: Some("## 11:00 — conversation test — liveagent\n- verification complete".to_string()),
                 mode: Some("append".to_string()),
                 actor: None,
                 conversation_id: Some("conversation-b".to_string()),
@@ -1073,21 +1073,21 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "北京找朋友玩的出行计划".to_string(),
+                description: "Trip plan to visit friends in Beijing".to_string(),
                 body: [
                     "---",
                     r#"confidence: high"#,
-                    r#"source_quote: "请你记住我的计划""#,
-                    r#"reasoning: "用户明确要求记住北京出行计划""#,
+                    r#"source_quote: "Please remember my plan""#,
+                    r#"reasoning: "The user explicitly asked to remember the Beijing trip plan""#,
                     "aliases: []",
                     "conflicts_with: []",
                     r#"supersedes: """#,
                     r#"override_reject: """#,
                     "---",
                     "",
-                    "7月去北京找朋友玩的出行计划。",
-                    "可能会去找大学同学，也有可能去找我的导师，但是一定会去故宫玩一玩。",
-                    "第一天故宫，第二天长城，第三天回去。",
+                    "Trip plan to visit friends in Beijing in July.",
+                    "I might visit my university classmates, or maybe my advisor, but I will definitely visit the Forbidden City.",
+                    "First day the Forbidden City, second day the Great Wall, third day back.",
                 ]
                 .join("\n"),
                 actor: None,
@@ -1104,20 +1104,20 @@ mod tests {
                 workdir: None,
                 workdir_hash: None,
                 memory_type: Some("user".to_string()),
-                description: Some("北京找朋友玩的出行计划（7月改至8月）".to_string()),
+                description: Some("Trip plan to visit friends in Beijing (moved from July to August)".to_string()),
                 body: Some(
                     [
                         "---",
                         r#"confidence: medium"#,
-                        r#"source_quote: "本来打算7月份去北京玩，但是现在要改到8月了，因为工作很忙""#,
-                        r#"reasoning: "用户明确修正了出发月份""#,
+                        r#"source_quote: "I originally planned to go to Beijing in July, but now it has to be moved to August because work is very busy""#,
+                        r#"reasoning: "The user explicitly corrected the departure month""#,
                         "aliases: []",
                         "conflicts_with: []",
                         r#"supersedes: """#,
                         r#"override_reject: """#,
                         "---",
                         "",
-                        "8月去北京找朋友玩的出行计划，原计划7月但因工作忙推迟到8月。",
+                        "Trip plan to visit friends in Beijing in August; originally planned for July but postponed to August due to work.",
                     ]
                     .join("\n"),
                 ),
@@ -1140,10 +1140,10 @@ mod tests {
             })
             .expect("read merged trip plan");
 
-        assert!(read.body.contains("8月去北京找朋友玩的出行计划"));
-        assert!(read.body.contains("第一天故宫，第二天长城，第三天回去"));
-        assert!(read.body.contains("一定会去故宫玩一玩"));
-        assert!(!read.body.contains("7月去北京找朋友玩的出行计划。"));
+        assert!(read.body.contains("Trip plan to visit friends in Beijing in August"));
+        assert!(read.body.contains("First day the Forbidden City, second day the Great Wall, third day back"));
+        assert!(read.body.contains("will definitely visit the Forbidden City"));
+        assert!(!read.body.contains("Trip plan to visit friends in Beijing in July."));
     }
 
     #[test]
@@ -1155,10 +1155,10 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "北京找朋友玩的出行计划".to_string(),
+                description: "Trip plan to visit friends in Beijing".to_string(),
                 body: [
-                    "7月去北京找朋友玩的出行计划。",
-                    "第一天故宫，第二天长城，第三天回去。",
+                    "Trip plan to visit friends in Beijing in July.",
+                    "First day the Forbidden City, second day the Great Wall, third day back.",
                 ]
                 .join("\n"),
                 actor: None,
@@ -1175,9 +1175,9 @@ mod tests {
                 workdir: None,
                 workdir_hash: None,
                 memory_type: Some("user".to_string()),
-                description: Some("北京找朋友玩的出行计划（7月改至8月）".to_string()),
+                description: Some("Trip plan to visit friends in Beijing (moved from July to August)".to_string()),
                 body: Some(
-                    "8月去北京找朋友玩的出行计划，原计划7月但因工作忙推迟到8月。".to_string(),
+                    "Trip plan to visit friends in Beijing in August; originally planned for July but postponed to August due to work.".to_string(),
                 ),
                 mode: None,
                 actor: Some("extractor".to_string()),
@@ -1198,8 +1198,8 @@ mod tests {
             })
             .expect("read merged trip plan");
 
-        assert!(read.body.contains("8月去北京找朋友玩的出行计划"));
-        assert!(read.body.contains("第一天故宫，第二天长城，第三天回去"));
+        assert!(read.body.contains("Trip plan to visit friends in Beijing in August"));
+        assert!(read.body.contains("First day the Forbidden City, second day the Great Wall, third day back"));
     }
 
     #[test]
@@ -1211,15 +1211,15 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "用户专业信息".to_string(),
+                description: "User major information".to_string(),
                 body: [
                     "---",
                     r#"confidence: low"#,
-                    r#"source_quote: "可能是计算机专业""#,
-                    r#"reasoning: "早期推断""#,
+                    r#"source_quote: "possibly a computer science major""#,
+                    r#"reasoning: "Early inference""#,
                     "---",
                     "",
-                    "用户可能是计算机专业学生。",
+                    "The user may be a computer science student.",
                 ]
                 .join("\n"),
                 actor: Some("extractor".to_string()),
@@ -1241,8 +1241,8 @@ mod tests {
                     [
                         "---",
                         r#"confidence: medium"#,
-                        r#"source_quote: "我是计算机专业学生""#,
-                        r#"reasoning: "用户在后续轮次自然复述了专业信息""#,
+                        r#"source_quote: "I am a computer science student""#,
+                        r#"reasoning: "The user naturally restated the major information in a later turn""#,
                         "---",
                     ]
                     .join("\n"),
@@ -1268,7 +1268,7 @@ mod tests {
         assert!(read.meta.unreviewed);
         assert_eq!(read.meta.confidence, "medium");
         assert!(read.body.contains("confidence: medium"));
-        assert!(read.body.contains("用户可能是计算机专业学生。"));
+        assert!(read.body.contains("The user may be a computer science student."));
         assert!(!read.body.contains("confidence: low"));
     }
 
@@ -1281,10 +1281,10 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "北京找朋友玩的出行计划".to_string(),
+                description: "Trip plan to visit friends in Beijing".to_string(),
                 body: [
-                    "7月去北京找朋友玩的出行计划。",
-                    "第一天故宫，第二天长城，第三天回去。",
+                    "Trip plan to visit friends in Beijing in July.",
+                    "First day the Forbidden City, second day the Great Wall, third day back.",
                 ]
                 .join("\n"),
                 actor: None,
@@ -1308,9 +1308,9 @@ mod tests {
                     scope: Some("global".to_string()),
                     workdir_hash: None,
                     memory_type: Some("user".to_string()),
-                    description: Some("北京找朋友玩的出行计划（7月改至8月）".to_string()),
+                    description: Some("Trip plan to visit friends in Beijing (moved from July to August)".to_string()),
                     body: Some(
-                        "8月去北京找朋友玩的出行计划，原计划7月但因工作忙推迟到8月。".to_string(),
+                        "Trip plan to visit friends in Beijing in August; originally planned for July but postponed to August due to work.".to_string(),
                     ),
                     reason: None,
                     group_id: None,
@@ -1334,8 +1334,8 @@ mod tests {
             })
             .expect("read merged batch plan");
 
-        assert!(read.body.contains("8月去北京找朋友玩的出行计划"));
-        assert!(read.body.contains("第一天故宫，第二天长城，第三天回去"));
+        assert!(read.body.contains("Trip plan to visit friends in Beijing in August"));
+        assert!(read.body.contains("First day the Forbidden City, second day the Great Wall, third day back"));
     }
 
     #[test]
@@ -1347,8 +1347,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "用户口音偏好".to_string(),
-                body: "用户 Kevin 之前让我用北京腔说话，后来改成要求用陕西口音交流，不习惯北京腔。"
+                description: "User accent preference".to_string(),
+                body: "The user Kevin previously asked me to speak with a Beijing accent, then changed to requesting a Shaanxi accent, and is not used to the Beijing accent."
                     .to_string(),
                 actor: None,
                 conversation_id: None,
@@ -1364,7 +1364,7 @@ mod tests {
                 workdir_hash: None,
                 memory_type: None,
                 description: None,
-                body: Some("## 07:19\n- User: 我希望你在跟我交流的时候带点北京腔儿～".to_string()),
+                body: Some("## 07:19\n- User: I'd like you to have a bit of a Beijing accent when talking with me~".to_string()),
                 mode: Some("append".to_string()),
                 actor: None,
                 conversation_id: None,
@@ -1375,7 +1375,7 @@ mod tests {
 
         let search = store
             .search(MemorySearchArgs {
-                query: "北京腔".to_string(),
+                query: "Beijing accent".to_string(),
                 scope: None,
                 workdir: None,
                 memory_type: None,
@@ -1415,7 +1415,7 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "并发搜索恢复测试".to_string(),
+                description: "Concurrent search recovery test".to_string(),
                 body: "memory sqlite mutex poison recovery marker".to_string(),
                 actor: None,
                 conversation_id: None,
@@ -1464,7 +1464,7 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "并发搜索测试".to_string(),
+                description: "Concurrent search test".to_string(),
                 body: "parallel search marker should be visible to every concurrent search"
                     .to_string(),
                 actor: None,
@@ -1585,7 +1585,7 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "reference".to_string(),
-                description: "全局说明".to_string(),
+                description: "Global description".to_string(),
                 body: "global".to_string(),
                 actor: None,
                 conversation_id: None,
@@ -1599,7 +1599,7 @@ mod tests {
                 scope: "project".to_string(),
                 workdir: Some(workdir_text.clone()),
                 memory_type: "project".to_string(),
-                description: "项目说明".to_string(),
+                description: "Project description".to_string(),
                 body: "project".to_string(),
                 actor: None,
                 conversation_id: None,
@@ -1628,15 +1628,15 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "用户可能是计算机专业学生".to_string(),
+                description: "The user may be a computer science student".to_string(),
                 body: [
                     "---",
                     r#"confidence: medium"#,
-                    r#"source_quote: "我是计算机专业学生""#,
-                    r#"reasoning: "用户陈述了身份信息""#,
+                    r#"source_quote: "I am a computer science student""#,
+                    r#"reasoning: "The user stated identity information""#,
                     "---",
                     "",
-                    "用户可能是计算机专业学生。",
+                    "The user may be a computer science student.",
                 ]
                 .join("\n"),
                 actor: Some("extractor".to_string()),
@@ -1651,8 +1651,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "feedback".to_string(),
-                description: "未审核偏好".to_string(),
-                body: "以后默认使用测试口吻。".to_string(),
+                description: "Unreviewed preference".to_string(),
+                body: "From now on, use the test tone by default.".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
                 model: None,
@@ -1665,8 +1665,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "reference".to_string(),
-                description: "未审核引用".to_string(),
-                body: "参考入口仍可作为弱证据。".to_string(),
+                description: "Unreviewed reference".to_string(),
+                body: "The reference entry can still serve as weak evidence.".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
                 model: None,
@@ -1716,7 +1716,7 @@ mod tests {
                 workdir: None,
                 memory_type: "reference".to_string(),
                 description: "soft risk".to_string(),
-                body: "排障步骤里提到 sudo apt install。".to_string(),
+                body: "The troubleshooting steps mention sudo apt install.".to_string(),
                 actor: Some("tool".to_string()),
                 conversation_id: None,
                 model: None,
@@ -1820,8 +1820,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "职业方向".to_string(),
-                body: "用户计划转销售".to_string(),
+                description: "Career direction".to_string(),
+                body: "The user plans to move into sales".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
                 model: None,
@@ -1835,7 +1835,7 @@ mod tests {
                 workdir: None,
                 workdir_hash: None,
                 actor: Some("user".to_string()),
-                reason: Some("用户不想保留这个旧结论".to_string()),
+                reason: Some("The user does not want to keep this old conclusion".to_string()),
                 conversation_id: None,
                 model: None,
             })
@@ -1847,7 +1847,7 @@ mod tests {
                 scope: "project".to_string(),
                 workdir: Some(workdir_a.clone()),
                 memory_type: "project".to_string(),
-                description: "当前项目计划".to_string(),
+                description: "Current project plan".to_string(),
                 body: "project A".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
@@ -1874,7 +1874,7 @@ mod tests {
                 scope: "project".to_string(),
                 workdir: Some(workdir_b.clone()),
                 memory_type: "project".to_string(),
-                description: "其他项目计划".to_string(),
+                description: "Other project plan".to_string(),
                 body: "project B".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
@@ -1901,7 +1901,7 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "reference".to_string(),
-                description: "工具清理".to_string(),
+                description: "Tool cleanup".to_string(),
                 body: "tool removed".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
@@ -1967,8 +1967,8 @@ mod tests {
                     scope: Some("global".to_string()),
                     workdir_hash: None,
                     memory_type: Some("user".to_string()),
-                    description: Some("用户是计算机专业学生".to_string()),
-                    body: Some("用户是计算机专业的大学生。".to_string()),
+                    description: Some("The user is a computer science student".to_string()),
+                    body: Some("The user is a computer science university student.".to_string()),
                     reason: None,
                     group_id: None,
                     evidence: None,
@@ -2005,8 +2005,8 @@ mod tests {
                     scope: Some("global".to_string()),
                     workdir_hash: None,
                     memory_type: Some("user".to_string()),
-                    description: Some("用户仍是计算机专业学生".to_string()),
-                    body: Some("用户是计算机专业的大学生，偏好工程化回答。".to_string()),
+                    description: Some("The user is still a computer science student".to_string()),
+                    body: Some("The user is a computer science university student who prefers engineering-oriented answers.".to_string()),
                     reason: None,
                     group_id: None,
                     evidence: None,
@@ -2027,8 +2027,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "整理目标".to_string(),
-                body: "旧内容".to_string(),
+                description: "Organization target".to_string(),
+                body: "old content".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
                 model: None,
@@ -2041,8 +2041,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "user".to_string(),
-                description: "整理删除".to_string(),
-                body: "将被删除".to_string(),
+                description: "Organization delete".to_string(),
+                body: "will be deleted".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
                 model: None,
@@ -2064,8 +2064,8 @@ mod tests {
                     scope: Some("global".to_string()),
                     workdir_hash: None,
                     memory_type: Some("user".to_string()),
-                    description: Some("整理目标更新".to_string()),
-                    body: Some("新内容".to_string()),
+                    description: Some("Organization target updated".to_string()),
+                    body: Some("new content".to_string()),
                     reason: Some("test update snapshot".to_string()),
                     group_id: None,
                     evidence: None,
@@ -2084,7 +2084,7 @@ mod tests {
                 length: None,
             })
             .expect("read organizer replacement");
-        assert_eq!(replaced.body, "新内容");
+        assert_eq!(replaced.body, "new content");
 
         let deleted = store
             .apply_batch(MemoryBatchArgs {
@@ -2128,8 +2128,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "reference".to_string(),
-                description: "整理目标".to_string(),
-                body: "旧内容".to_string(),
+                description: "Organization target".to_string(),
+                body: "old content".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
                 model: None,
@@ -2142,8 +2142,8 @@ mod tests {
                 scope: "global".to_string(),
                 workdir: None,
                 memory_type: "reference".to_string(),
-                description: "整理来源".to_string(),
-                body: "来源内容".to_string(),
+                description: "Organization source".to_string(),
+                body: "source content".to_string(),
                 actor: Some("extractor".to_string()),
                 conversation_id: None,
                 model: None,
@@ -2166,7 +2166,7 @@ mod tests {
                         scope: Some("global".to_string()),
                         workdir_hash: None,
                         memory_type: Some("reference".to_string()),
-                        description: Some("整理目标更新".to_string()),
+                        description: Some("Organization target updated".to_string()),
                         body: Some("x".repeat(MAX_BODY_BYTES + 1)),
                         reason: Some("oversized grouped update".to_string()),
                         group_id: Some("merge-test-group".to_string()),
@@ -2230,7 +2230,7 @@ mod tests {
                 model: None,
                 evidence: Some(MemoryEvidenceArgs {
                     confidence: Some("high".to_string()),
-                    source_quote: Some("我一直用 vim 的键位".to_string()),
+                    source_quote: Some("I have always used vim keybindings".to_string()),
                     reasoning: Some("explicit statement".to_string()),
                     ..Default::default()
                 }),
@@ -2313,7 +2313,7 @@ mod tests {
                 model: None,
                 evidence: Some(MemoryEvidenceArgs {
                     confidence: Some("medium".to_string()),
-                    source_quote: Some("其实我最近换 helix 了".to_string()),
+                    source_quote: Some("Actually I recently switched to helix".to_string()),
                     ..Default::default()
                 }),
             })
@@ -2595,7 +2595,7 @@ mod tests {
                     group_id: None,
                     evidence: Some(MemoryEvidenceArgs {
                         confidence: Some("high".to_string()),
-                        source_quote: Some("我只用 vim，别的都不用".to_string()),
+                        source_quote: Some("I only use vim and nothing else".to_string()),
                         ..Default::default()
                     }),
                 }]),

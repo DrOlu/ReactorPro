@@ -15,7 +15,6 @@ import {
   Lock,
   McpLogo,
   MessageSquare,
-  Mic,
   Plug,
   Save,
   ScrollText,
@@ -70,19 +69,19 @@ type Status = { kind: "ok" | "error"; text: string } | null;
 
 type SyncBusy = "load" | "test" | "save" | "upload" | "download" | null;
 
-/** 后端返回的错误已是可直接展示的中文文案。 */
+/** Errors returned by the backend are already display-ready text. */
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message.trim();
   return String(error ?? "").trim();
 }
 
-/** manifest.createdAt 是 RFC3339 UTC，按本地时区展示。 */
+/** manifest.createdAt is RFC3339 UTC, displayed in the local timezone. */
 function formatCreatedAt(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-/** lastSyncAt 是毫秒时间戳。 */
+/** lastSyncAt is a millisecond timestamp. */
 function formatTimestamp(value: number): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
@@ -95,7 +94,6 @@ function summarizeDomains(counts: BackupDomainCounts, t: (key: string) => string
     `${t("settings.backupDomainSystem")} ${counts.system}`,
     `${t("settings.backupDomainAgents")} ${counts.agents}`,
     `${t("settings.backupDomainModelFailover")} ${counts.modelFailover}`,
-    `${t("settings.backupDomainStt")} ${counts.stt}`,
   ].join(" · ");
 }
 
@@ -118,7 +116,7 @@ function describeSource(manifest: BackupManifest, t: (key: string) => string) {
   );
 }
 
-/** 即时反馈条：成功绿 / 失败红，替代裸文本。 */
+/** Immediate feedback strip: green on success / red on failure, replacing bare text. */
 function FeedbackStrip({ status }: { status: Status }) {
   if (!status) return null;
   const ok = status.kind === "ok";
@@ -153,7 +151,7 @@ function FieldLabel({ children, hint }: { children: ReactNode; hint?: string }) 
   );
 }
 
-/** 顶部状态横幅：未配置 / 已就绪 / 自动同步失败，聚合上次同步时间与自动同步开关态。 */
+/** Top status banner: not configured / ready / auto-sync failed, aggregating the last sync time and the auto-sync toggle state. */
 function SyncStatusBanner({
   view,
   loading,
@@ -172,7 +170,7 @@ function SyncStatusBanner({
     );
   }
 
-  // 加载失败时 view 为 null：按「未配置」展示，具体错误由表单区的反馈条给出。
+  // When loading fails, view is null: show it as "not configured"; the specific error is given by the feedback strip in the form area.
   const configured = view ? canTestSyncConnection(view) : false;
   const failed = Boolean(view?.lastError);
 
@@ -228,7 +226,7 @@ function SyncStatusBanner({
   );
 }
 
-/** 本地备份的大号操作磁贴。 */
+/** Large action tile for local backup. */
 function ActionTile({
   icon,
   busy,
@@ -263,10 +261,11 @@ function ActionTile({
 }
 
 /**
- * 备份范围条目：包含项常色，排除项弱化。
+ * Backup scope item: included entries in normal color, excluded ones dimmed.
  *
- * 紧凑 chip 形态，按内容宽度流式换行 —— 范围扩到 6+6 项后，两列大行的
- * 网格会把右栏撑得比左栏表单还高，整页跟着出滚动条。
+ * A compact chip layout that wraps based on content width — once the scope grows to
+ * 6+6 entries, a two-column grid of large rows would make the right column taller than
+ * the left form and give the whole page a scrollbar.
  */
 function ScopeItem({
   icon,
@@ -310,10 +309,13 @@ export function BackupSyncSection(props: SettingsSectionProps) {
   const syncLocked = syncBusy !== null;
 
   /**
-   * 还原（导入 / 下载）落库后从 SQLite 重载前端状态。
+   * After a restore (import / download) is written to the database, reload the frontend
+   * state from SQLite.
    *
-   * 不重载的后果不是「显示旧值」这么轻：`persistSettings` 按域 diff，
-   * 用户之后动任一域就会拿还原前的内存值写回库，把还原静默回滚掉。
+   * The consequence of not reloading is not as mild as "showing old values":
+   * `persistSettings` diffs per domain, so the next time the user touches any domain it
+   * writes the pre-restore in-memory value back to the database, silently rolling back
+   * the restore.
    */
   const syncStateAfterRestore = useCallback(async () => {
     await reloadSettings?.();
@@ -339,8 +341,9 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     };
   }, []);
 
-  // 后台自动同步的结果。手动同步的成败由命令返回值就地反馈，不经过这个事件，
-  // 所以这里收到的一定是「用户没主动点按钮时发生的同步」。
+  // Results of background auto-sync. Manual sync success/failure is reported in place by
+  // the command return value and does not go through this event, so what arrives here is
+  // always "a sync that happened when the user did not press the button".
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
@@ -350,7 +353,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         setSyncStatus({ kind: "ok", text: t("settings.backupSyncAutoDone") });
       }
     }).then((fn) => {
-      // 组件在 listen resolve 前就卸载时，拿到句柄立刻注销，避免泄漏。
+      // If the component unmounts before listen resolves, unregister the handle as soon as it is obtained, avoiding a leak.
       if (cancelled) fn();
       else unlisten = fn;
     });
@@ -369,17 +372,18 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     (value: PresetId) => {
       setPreset(value);
       const matched = SYNC_PRESETS.find((item) => item.id === value);
-      // 选「自定义」时保留当前 URL，只有选到具体预设才覆写。
+      // When "Custom" is selected, keep the current URL; only overwrite when a concrete preset is chosen.
       if (matched) patchForm({ url: matched.url });
     },
     [patchForm],
   );
 
   /**
-   * 开启自动同步前先确认一次。
+   * Confirm once before enabling auto-sync.
    *
-   * 开关一旦打开，此后每次改配置都会把含明文 API Key 的快照推到远端，
-   * 而且不再有任何逐次提示。这个后果值得一次显式点头；关闭方向无害，直接生效。
+   * Once the toggle is on, every subsequent config change pushes a snapshot containing
+   * the plaintext API Key to the remote, with no per-change prompt. That consequence
+   * deserves an explicit nod; turning it off is harmless and takes effect directly.
    */
   const handleAutoSyncChange = useCallback(
     async (checked: boolean) => {
@@ -399,7 +403,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     [confirm, patchForm, t],
   );
 
-  /** 保存后立即测一次连接：配置填错的话，此刻纠正的成本最低。 */
+  /** Test the connection immediately after saving: if the config is wrong, this is the cheapest moment to fix it. */
   const handleSaveSync = useCallback(async () => {
     setSyncBusy("save");
     setSyncStatus(null);
@@ -417,7 +421,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
       setForm(formFromView(view));
       setPreset(detectPreset(view.url));
 
-      // 凭据不全时没什么可测的，直接报保存成功即可。
+      // With incomplete credentials there is nothing to test; just report a successful save.
       if (!canTestSyncConnection(view)) {
         setSyncStatus({ kind: "ok", text: t("settings.backupSyncSaveDone") });
         return;
@@ -426,7 +430,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         await testSyncConnection();
         setSyncStatus({ kind: "ok", text: t("settings.backupSyncSaveAndTestDone") });
       } catch (error) {
-        // 保存本身是成功的，连接失败只是提醒 —— 不能让用户以为配置没存上。
+        // The save itself succeeded; the connection failure is only a warning — the user must not think the config was not stored.
         setSyncStatus({
           kind: "error",
           text: `${t("settings.backupSyncSaveAndTestFailed")}${errorText(error)}`,
@@ -442,7 +446,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     }
   }, [form, t]);
 
-  /** 测试连接读的是库里的配置，故未保存时不可用。 */
+  /** Test-connection reads the config in the database, so it is unavailable when unsaved. */
   const handleTestSync = useCallback(async () => {
     setSyncBusy("test");
     setSyncStatus(null);
@@ -463,7 +467,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     setSyncBusy("upload");
     setSyncStatus(null);
     try {
-      // 远端已有备份时先让用户看清会覆盖谁 —— 可能是另一台机器刚传的。
+      // When the remote already has a backup, first let the user see what will be overwritten — it may have just been uploaded by another machine.
       const remote = await fetchRemoteInfo();
       if (remote) {
         const confirmed = await confirm({
@@ -476,7 +480,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
         if (!confirmed) return;
       }
       const syncedAt = await uploadBackup();
-      // 后端在成功时清了 last_error，视图同步跟上，横幅立即消失。
+      // The backend cleared last_error on success; sync the view so the banner disappears immediately.
       setSyncView((prev) => (prev ? { ...prev, lastSyncAt: syncedAt, lastError: null } : prev));
       setSyncStatus({ kind: "ok", text: t("settings.backupSyncUploadDone") });
     } catch (error) {
@@ -509,7 +513,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
 
       const outcome = await downloadBackup();
       await syncStateAfterRestore();
-      // 下载成功证明这条链路是通的，后端已清 last_error，视图同步跟上。
+      // A successful download proves this path works; the backend already cleared last_error, so sync the view.
       setSyncView((prev) => (prev ? { ...prev, lastError: null } : prev));
       setSyncStatus({
         kind: "ok",
@@ -530,7 +534,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     setStatus(null);
     try {
       const path = await exportBackup();
-      // 用户在系统对话框里取消时返回 null，不算失败。
+      // Cancelling in the system dialog returns null and does not count as failure.
       if (path) {
         setStatus({ kind: "ok", text: `${t("settings.backupExportDone")}${path}` });
       }
@@ -545,7 +549,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     setBusy("import");
     setStatus(null);
     try {
-      // 先只解析校验、不写库，让用户看到来源摘要再决定是否覆盖。
+      // Parse and validate only, without writing to the database, so the user can see the source summary before deciding whether to overwrite.
       const preview = await peekBackupImport();
       if (!preview) return;
 
@@ -578,9 +582,9 @@ export function BackupSyncSection(props: SettingsSectionProps) {
     <div className="mx-auto w-full max-w-[980px] space-y-5">
       <SyncStatusBanner view={syncView} loading={syncBusy === "load"} t={t} />
 
-      {/* 两栏等高拉伸（默认 stretch），保证左右卡片底边始终对齐。 */}
+      {/* Two columns stretch to equal height (default stretch), keeping the bottom edges of the left and right cards aligned. */}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-        {/* 左栏：WebDAV 同步配置。弹性布局把底部操作区钉在底边，撑高时中间留白。 */}
+        {/* Left column: WebDAV sync config. The flex layout pins the bottom action area to the bottom edge, leaving a gap in the middle when stretched. */}
         <section className="flex flex-col rounded-2xl border border-border/60 bg-card">
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-5 py-4">
             <div className="flex items-center gap-2.5">
@@ -664,12 +668,16 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                     }
                     onChange={(event) => {
                       const password = event.target.value;
-                      // 清空密码框视为「没动过」，而不是「把密码改成空」。
-                      // 后端只在 passwordTouched 时采用新值，若这里对空串也置 true，
-                      // 用户输入几个字符再全删掉就会静默抹掉已存的密码 —— 与本框
-                      // 自己的「留空则不修改」占位提示直接矛盾，且此后自动同步因
-                      // 凭据不全而永久静默跳过（auto_upload 的 credentials 分支）。
-                      // 真要清空密码就关掉同步或改用户名，不该由删字符触发。
+                      // Clearing the password box is treated as "not touched", not as
+                      // "set the password to empty". The backend only adopts a new value
+                      // when passwordTouched is set; if an empty string also set it to
+                      // true here, a user typing a few characters and then deleting them
+                      // would silently wipe the stored password — directly contradicting
+                      // this box's own "leave blank to keep unchanged" placeholder hint,
+                      // and thereafter auto-sync would be permanently and silently
+                      // skipped for incomplete credentials (the credentials branch of
+                      // auto_upload). To actually clear the password, turn off sync or
+                      // change the username; it should not be triggered by deleting characters.
                       patchForm({ password, passwordTouched: password.length > 0 });
                     }}
                   />
@@ -785,7 +793,7 @@ export function BackupSyncSection(props: SettingsSectionProps) {
           </footer>
         </section>
 
-        {/* 右栏：本地备份 + 备份范围。范围卡弹性补足高度，与左栏底边对齐。 */}
+        {/* Right column: local backup + backup scope. The scope card flexes to fill the height, aligning with the left column's bottom edge. */}
         <aside className="flex flex-col gap-5">
           <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
             <div className="flex items-center gap-2.5">
@@ -858,10 +866,6 @@ export function BackupSyncSection(props: SettingsSectionProps) {
                 <ScopeItem
                   icon={<Layers className="h-3.5 w-3.5" />}
                   label={t("settings.backupDomainModelFailover")}
-                />
-                <ScopeItem
-                  icon={<Mic className="h-3.5 w-3.5" />}
-                  label={t("settings.backupDomainStt")}
                 />
               </div>
             </div>

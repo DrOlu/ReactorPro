@@ -12,11 +12,13 @@ import (
 	"github.com/liveagent/agent-gateway/internal/transport/wscore"
 )
 
-// 浏览器连接的订阅生命周期、九路广播转发与连接后快照回放：
-// 广播帧可掉（errWriteQueueFull 跳过继续），chat 会话流掉帧则发订阅重置信号让客户端按
-// after_seq 断点续传。
+// Subscription lifecycle for browser connections, nine-channel broadcast forwarding, and
+// post-connect snapshot replay:
+// Broadcast frames may be dropped (errWriteQueueFull skips and continues); when a chat
+// conversation stream drops a frame, a subscription reset signal is sent so the client can
+// resume from after_seq.
 
-// workspaceSubscription 是一个 workdir 的活动订阅。
+// workspaceSubscription is an active subscription for a workdir.
 type workspaceSubscription struct {
 	cancel func()
 	done   chan struct{}
@@ -30,8 +32,9 @@ func (s *workspaceSubscription) close() {
 	})
 }
 
-// releaseSubscriptions 由 core 关闭回调（恰好一次），释放 chat/workspace 订阅；
-// 九路广播转发器各自监听 done 退出并 defer cleanup。
+// releaseSubscriptions is called by the core close callback (exactly once) to release
+// chat/workspace subscriptions; each of the nine broadcast forwarders listens on done to exit
+// and defers cleanup.
 func (c *browserConn) releaseSubscriptions() {
 	c.chatStreamsMu.Lock()
 	for subKey, cancel := range c.chatStreams {
@@ -49,10 +52,10 @@ func (c *browserConn) releaseSubscriptions() {
 }
 
 // ---------------------------------------------------------------------------
-// chat 会话流订阅
+// chat conversation stream subscriptions
 // ---------------------------------------------------------------------------
 
-// handleChatSubscribe 处理 chat.subscribe（读循环内联执行以保帧序）。
+// handleChatSubscribe handles chat.subscribe (executed inline in the read loop to preserve frame ordering).
 func (c *browserConn) handleChatSubscribe(requestID, agentID string, req *gatewayv2.ChatSubscribeRequest) {
 	agentID = strings.TrimSpace(agentID)
 	conversationID := strings.TrimSpace(req.GetConversationId())
@@ -86,7 +89,7 @@ func (c *browserConn) handleChatSubscribe(requestID, agentID string, req *gatewa
 		EventsJson:     events,
 	}
 
-	// 先登记（替换同会话旧订阅）再应答，避免回放边界之后发布的事件被漏。
+	// Register first (replacing any previous subscription for the same conversation) and then acknowledge, so events published after the replay boundary are not missed.
 	c.chatStreamsMu.Lock()
 	if c.chatStreams == nil {
 		c.chatStreams = make(map[string]func())
@@ -104,10 +107,10 @@ func (c *browserConn) handleChatSubscribe(requestID, agentID string, req *gatewa
 	}); err != nil {
 		sub.Cleanup()
 		c.chatStreamsMu.Lock()
-		// Cleanup 幂等：仅当仍指向本次订阅时移除登记。
+		// Cleanup is idempotent: only deregister if the entry still points to this subscription.
 		delete(c.chatStreams, subKey)
 		c.chatStreamsMu.Unlock()
-		// 被掉帧的订阅响应会让客户端干等到超时且无人重订阅；控制队列上的重置信号重新武装其恢复循环。
+		// A dropped subscription response would leave the client waiting until timeout with nobody resubscribing; a reset signal on the control queue re-arms its recovery loop.
 		if errors.Is(err, wscore.ErrWriteQueueFull) {
 			c.sendSubscriptionResetOrClose(sub.AgentID, conversationID)
 		}
@@ -117,7 +120,7 @@ func (c *browserConn) handleChatSubscribe(requestID, agentID string, req *gatewa
 	go c.forwardConversationEvents(sub.AgentID, conversationID, sub)
 }
 
-// handleChatUnsubscribe 处理 chat.unsubscribe。
+// handleChatUnsubscribe handles chat.unsubscribe.
 func (c *browserConn) handleChatUnsubscribe(requestID, agentID string, req *gatewayv2.ChatUnsubscribeRequest) {
 	agentID = strings.TrimSpace(agentID)
 	conversationID := strings.TrimSpace(req.GetConversationId())
@@ -144,8 +147,10 @@ func (c *browserConn) sendAck(requestID string) error {
 	})
 }
 
-// forwardConversationEvents 推送订阅后的实时会话事件；订阅通道溢出或写队列持续拥塞时
-// 通知客户端重订阅（after_seq 从缓冲重放缺口），拥塞只牺牲该订阅、不牺牲连接。
+// forwardConversationEvents pushes live conversation events after subscription; when the
+// subscription channel overflows or the write queue stays congested, it notifies the client to
+// resubscribe (after_seq replays the gap from the buffer); congestion sacrifices only that
+// subscription, never the connection.
 func (c *browserConn) forwardConversationEvents(
 	agentID string,
 	conversationID string,
@@ -178,8 +183,8 @@ func (c *browserConn) forwardConversationEvents(
 				},
 			}); err != nil {
 				if errors.Is(err, wscore.ErrWriteQueueFull) || errors.Is(err, wscore.ErrWriteFrameTooLarge) {
-					// 重置帧走控制队列越过拥塞积压；客户端重同步后按 seq 去重在途旧事件。
-					// 超限单帧同样只牺牲该订阅：重订阅回放/快照与 history 收敛负责补内容。
+					// The reset frame goes through the control queue, bypassing the congested backlog; after resyncing, the client deduplicates in-flight old events by seq.
+					// An oversized single frame likewise sacrifices only that subscription: resubscribe replay/snapshot and history convergence fill in the missing content.
 					c.sendSubscriptionResetOrClose(agentID, conversationID)
 				}
 				return
@@ -188,8 +193,9 @@ func (c *browserConn) forwardConversationEvents(
 	}
 }
 
-// sendSubscriptionResetOrClose 送出恢复被掉订阅的唯一信号；连控制队列都容不下时关闭连接，
-// 重连后的重订阅（after_seq）是仅剩的不可丢路径。
+// sendSubscriptionResetOrClose sends the only signal that can recover a dropped subscription;
+// when even the control queue cannot accept it, the connection is closed, and resubscription
+// after reconnect (after_seq) is the only remaining lossless path.
 func (c *browserConn) sendSubscriptionResetOrClose(agentID string, conversationID string) {
 	if err := c.send(wscore.FrameControl, "chat_subscription_reset", &gatewayv2.WebServerFrame{
 		AgentId: agentID,
@@ -202,11 +208,11 @@ func (c *browserConn) sendSubscriptionResetOrClose(agentID string, conversationI
 }
 
 // ---------------------------------------------------------------------------
-// workspace 活动订阅
+// workspace activity subscriptions
 // ---------------------------------------------------------------------------
 
-// handleWorkspaceSubscribe 处理 workspace.subscribe（读循环内联）。订阅按
-// (agent, workdir) 作用域；分派层已保证 agent_id 非空。
+// handleWorkspaceSubscribe handles workspace.subscribe (inline in the read loop). Subscriptions
+// are scoped by (agent, workdir); the dispatch layer guarantees agent_id is non-empty.
 func (c *browserConn) handleWorkspaceSubscribe(requestID, agentID string, req *gatewayv2.WorkspaceSubscribeRequest) {
 	workdir := strings.TrimSpace(req.GetWorkdir())
 	if workdir == "" {
@@ -272,7 +278,7 @@ func (c *browserConn) handleWorkspaceSubscribe(requestID, agentID string, req *g
 	}()
 }
 
-// handleWorkspaceUnsubscribe 处理 workspace.unsubscribe。
+// handleWorkspaceUnsubscribe handles workspace.unsubscribe.
 func (c *browserConn) handleWorkspaceUnsubscribe(requestID, agentID string, req *gatewayv2.WorkspaceUnsubscribeRequest) {
 	subKey := strings.TrimSpace(agentID) + "\x00" + strings.TrimSpace(req.GetWorkdir())
 
@@ -287,12 +293,14 @@ func (c *browserConn) handleWorkspaceUnsubscribe(requestID, agentID string, req 
 }
 
 // ---------------------------------------------------------------------------
-// 广播事件扇出与快照回放
+// broadcast event fan-out and snapshot replay
 // ---------------------------------------------------------------------------
 
-// startEventForwarders 启动九路广播转发；
-// 泛型 forward 统一可掉帧广播骨架，各路只提供订阅与帧构造。广播帧盖来源
-// agent_id（服务端不过滤，客户端按活跃 Agent 过滤）；功能门控按来源 Agent 判定。
+// startEventForwarders starts the nine broadcast forwarders;
+// the generic forward unifies the droppable-frame broadcast skeleton, and each channel only
+// supplies a subscription and a frame builder. Broadcast frames carry the source agent_id (the
+// server does not filter; the client filters by active agent); feature gating is decided by the
+// source agent.
 func (c *browserConn) startEventForwarders() {
 	forward(c, c.sm.SubscribeHistorySync, func(event session.Tagged[*gatewayv2.HistorySyncEvent]) (*gatewayv2.WebServerFrame, bool) {
 		return &gatewayv2.WebServerFrame{
@@ -364,8 +372,9 @@ func (c *browserConn) startEventForwarders() {
 	}, "status")
 }
 
-// forward 是可掉帧广播转发的共用骨架：subscribe 建立订阅（cleanup 随 goroutine 退出执行），
-// build 过滤并构造帧；掉帧跳过继续，其他写错误结束转发。
+// forward is the shared skeleton for droppable-frame broadcast forwarding: subscribe establishes
+// the subscription (cleanup runs when the goroutine exits), build filters and constructs frames;
+// dropped frames skip and continue, other write errors end forwarding.
 func forward[T any](
 	c *browserConn,
 	subscribe func() (<-chan T, func()),
@@ -398,13 +407,14 @@ func forward[T any](
 	}()
 }
 
-// replaySnapshots 在鉴权后把当前状态画到新连接上，免去首轮轮询。
-// 逐个在线 Agent 回放各自快照并打标；每个在线 Agent 补发一条状态帧（目录渲染），
-// 所有回放帧均携带明确来源，不再发送无标的单 Agent 兼容帧。
+// replaySnapshots paints the current state onto a new connection after authentication,
+// avoiding the first polling round. It replays each online agent's snapshot individually and
+// tags it; each online agent also gets one status frame (for directory rendering). All replayed
+// frames carry an explicit source; untagged single-agent compatibility frames are no longer sent.
 func (c *browserConn) replaySnapshots() {
 	for _, agentID := range c.sm.ConnectedAgentIDs() {
 		view := c.sm.AgentView(agentID)
-		// 终端会话快照：以 created 事件逐条回放（按各 Agent 的门控独立判定）。
+		// Terminal session snapshot: replayed one by one as created events (gated independently per agent).
 		if shared.TerminalFeaturesEnabled(view) {
 			for _, terminalSession := range view.TerminalSessionSnapshot("") {
 				if !shared.TerminalSessionAllowed(view, terminalSession) {
@@ -425,14 +435,14 @@ func (c *browserConn) replaySnapshots() {
 				}
 			}
 		}
-		// 进程快照按 Agent 回放。
+		// Process snapshots are replayed per agent.
 		if processSnapshot := c.sm.ManagedProcessSnapshotCached(agentID); processSnapshot != nil {
 			_ = c.send(wscore.FrameData, "process_state", &gatewayv2.WebServerFrame{
 				AgentId: agentID,
 				Payload: &gatewayv2.WebServerFrame_ProcessState{ProcessState: processSnapshot},
 			})
 		}
-		// 每 Agent 一条状态帧：新客户端由此渲染 Agent 目录，无需先发 agent_list。
+		// One status frame per agent: new clients render the agent directory from this without sending agent_list first.
 		agentStatus := c.sm.Status(agentID)
 		_ = c.send(wscore.FrameData, "status", &gatewayv2.WebServerFrame{
 			AgentId: agentID,
@@ -440,7 +450,7 @@ func (c *browserConn) replaySnapshots() {
 		})
 	}
 
-	// 每个已登记 Agent 回放自己的隧道快照并打标；离线 Agent 也保留其隧道目录。
+	// Each registered agent replays its own tunnel snapshot and tags it; offline agents also retain their tunnel directory.
 	for _, status := range c.sm.AgentStatuses() {
 		agentID := strings.TrimSpace(status.AgentID)
 		if agentID == "" {

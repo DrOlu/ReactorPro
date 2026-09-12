@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
-// 用 web 自己的模块加载器：CI 的 webui job 只装本包依赖，
-// 借 agent-gui 的 helper 会在 runner 上找不到它的 node_modules。
+// Use web's own module loader: the CI webui job installs only this package's dependencies,
+// so borrowing agent-gui's helper would fail to find its node_modules on the runner.
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
 });

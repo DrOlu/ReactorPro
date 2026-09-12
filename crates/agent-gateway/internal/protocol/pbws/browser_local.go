@@ -15,9 +15,10 @@ import (
 	"github.com/liveagent/agent-gateway/internal/transport/wscore"
 )
 
-// 由网关状态直接应答（或由网关编排）的本地操作；chat 编排复用 internal/chatcmd。
+// Local operations answered directly from gateway state (or orchestrated by the
+// gateway); chat orchestration reuses internal/chatcmd.
 
-// handleStatusGet 处理指定 Agent 的 status.get。
+// handleStatusGet handles status.get for the given Agent.
 func (c *browserConn) handleStatusGet(requestID, agentID string) {
 	status := c.sm.Status(agentID)
 	_ = c.send(wscore.FrameResponse, "status", &gatewayv2.WebServerFrame{
@@ -29,8 +30,9 @@ func (c *browserConn) handleStatusGet(requestID, agentID string) {
 	})
 }
 
-// handleAgentList 返回全部已登记 Agent 的状态目录（含离线项）；持久化目录补全
-// 网关重启后尚未重连的 Agent，供 webui 渲染完整列表。
+// handleAgentList returns the status directory of all registered Agents
+// (including offline entries); the persisted directory fills in Agents that have
+// not reconnected since a gateway restart, so the webui can render the full list.
 func (c *browserConn) handleAgentList(requestID string) {
 	registered, err := c.srv.tokens.Registered()
 	if err != nil {
@@ -65,8 +67,9 @@ func (c *browserConn) handleAgentList(requestID string) {
 	})
 }
 
-// handleChatPrepare 处理 chat.prepare：探活/唤醒目标桌面运行时后返回与 status_get
-// 同构的状态（客户端共享一个状态归一化器）。
+// handleChatPrepare handles chat.prepare: after probing/waking the target desktop
+// runtime it returns a status isomorphic to status_get (clients share a single
+// status normalizer).
 func (c *browserConn) handleChatPrepare(requestID, agentID string, _ *gatewayv2.ChatPrepareRequest) {
 	if c.sm.IsOnline(agentID) && !c.sm.ChatIngressV1Ready(agentID) {
 		status := c.sm.Status(agentID)
@@ -86,7 +89,7 @@ func (c *browserConn) handleChatPrepare(requestID, agentID string, _ *gatewayv2.
 		return
 	}
 	status := c.sm.Status(agentID)
-	// 响应走控制队列，避免被数据积压饿死。
+	// Send the response on the control queue so a data backlog cannot starve it.
 	_ = c.send(wscore.FrameControl, "status", &gatewayv2.WebServerFrame{
 		RequestId: requestID,
 		AgentId:   status.AgentID,
@@ -96,7 +99,8 @@ func (c *browserConn) handleChatPrepare(requestID, agentID string, _ *gatewayv2.
 	})
 }
 
-// handleChatActivities 处理 chat.activities：仅由网关状态应答，桌面端离线时亦可用。
+// handleChatActivities handles chat.activities: answered purely from gateway
+// state, so it works even when the desktop is offline.
 func (c *browserConn) handleChatActivities(requestID string) {
 	activities := c.sm.ActiveConversationActivities()
 	running := make([]*gatewayv2.ChatRunActivity, 0, len(activities))
@@ -111,9 +115,10 @@ func (c *browserConn) handleChatActivities(requestID string) {
 	})
 }
 
-// handleChatCommand 处理 chat.command：submit / edit_resend 经网关编排
-// （去重、接受即回执、命令更新观察、启动看门狗、投递），cancel 单独处理。
-// agentID 是已由分派层校验过的显式目标 Agent。
+// handleChatCommand handles chat.command: submit / edit_resend are orchestrated
+// by the gateway (dedup, accept-as-receipt, watching command updates, starting
+// the watchdog, delivery), while cancel is handled separately.
+// agentID is the explicit target Agent already validated by the dispatch layer.
 func (c *browserConn) handleChatCommand(requestID, agentID string, cmd *gatewayv2.ChatCommandRequest) {
 	commandType := strings.TrimSpace(cmd.GetType())
 	body := chatcmd.RequestBodyFromProto(cmd.GetRequest())
@@ -194,8 +199,9 @@ func (c *browserConn) handleChatCommand(requestID, agentID string, cmd *gatewayv
 	)
 }
 
-// respondChatCommandDeduped 用既有运行应答重复的 client_request_id 并转发其（回放的）
-// 前置阶段更新；观察流由看门狗窗口兜底关闭。
+// respondChatCommandDeduped answers a duplicate client_request_id with the
+// existing run and forwards its (replayed) pre-stage updates; the update watch
+// stream is closed by the watchdog window as a fallback.
 func (c *browserConn) respondChatCommandDeduped(requestID string, start session.ChatCommandStart) {
 	updates, cleanupWatch := c.sm.WatchChatCommand(start.AgentID, start.RunID)
 	_ = c.sendChatCommandAccepted(requestID, start)
@@ -204,7 +210,7 @@ func (c *browserConn) respondChatCommandDeduped(requestID string, start session.
 }
 
 func (c *browserConn) sendChatCommandAccepted(requestID string, start session.ChatCommandStart) error {
-	// 接受回执延迟敏感，走控制队列。
+	// The accept receipt is latency-sensitive, so send it on the control queue.
 	return c.send(wscore.FrameControl, "chat_accepted", &gatewayv2.WebServerFrame{
 		RequestId: requestID,
 		AgentId:   start.AgentID,
@@ -219,8 +225,8 @@ func (c *browserConn) sendChatCommandAccepted(requestID string, start session.Ch
 	})
 }
 
-// forwardChatCommandUpdates 把前置阶段结果（bound / queued_in_gui / failed）推给
-// 发起命令的连接（走控制队列）。
+// forwardChatCommandUpdates pushes pre-stage results (bound / queued_in_gui /
+// failed) to the connection that issued the command (on the control queue).
 func (c *browserConn) forwardChatCommandUpdates(
 	updates <-chan session.ChatCommandUpdate,
 	cleanup func(),
@@ -248,8 +254,9 @@ func (c *browserConn) forwardChatCommandUpdates(
 	}
 }
 
-// cleanupChatCommandWatchAfter 为去重提交的更新观察流设兜底关闭窗口
-// （AfterFunc 不占 goroutine，cleanup 幂等）。
+// cleanupChatCommandWatchAfter sets a fallback close window for the update watch
+// stream of a deduped submit (AfterFunc does not hold a goroutine, and cleanup is
+// idempotent).
 func cleanupChatCommandWatchAfter(cfg *config.Config, cleanup func()) {
 	if cleanup == nil {
 		return
@@ -263,8 +270,9 @@ func cleanupChatCommandWatchAfter(cfg *config.Config, cleanup func()) {
 
 const chatCancelWatchdogTimeout = 15 * time.Second
 
-// handleChatCancel 处理 chat.cancel。取消只作用于请求显式声明的 Agent，
-// 即使其他 Agent 恰好有同名 conversation_id 也不会被跨 Agent 取消。
+// handleChatCancel handles chat.cancel. Cancellation only affects the Agent
+// explicitly named in the request; even if another Agent happens to have a
+// conversation_id with the same name, it is never cancelled across Agents.
 func (c *browserConn) handleChatCancel(requestID, agentID string, cancelReq *gatewayv2.CancelChatRequest) {
 	conversationID := strings.TrimSpace(cancelReq.GetConversationId())
 	if conversationID == "" {
@@ -276,7 +284,8 @@ func (c *browserConn) handleChatCancel(requestID, agentID string, cancelReq *gat
 		return
 	}
 
-	// 不终结运行：活动状态翻为 cancelling，以桌面端终态信号为准，超时由看门狗强制收尾。
+	// Do not terminate the run: flip the activity state to cancelling and let the
+	// desktop's terminal signal decide, with the watchdog forcing closure on timeout.
 	runID, active := c.sm.MarkConversationCancelling(agentID, conversationID, strings.TrimSpace(cancelReq.GetRunId()))
 	if !active {
 		_ = c.sendChatCancelResult(requestID, true, "", conversationID)

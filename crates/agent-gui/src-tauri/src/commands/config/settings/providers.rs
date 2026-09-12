@@ -1,17 +1,17 @@
 pub(crate) fn load_providers(conn: &Connection) -> Result<Option<Value>, String> {
     let mut stmt = conn
         .prepare(PROVIDER_SETTINGS_SELECT_SQL)
-        .map_err(|e| format!("准备读取 {PROVIDER_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare reading {PROVIDER_SETTINGS_TABLE}: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
-        .map_err(|e| format!("读取 {PROVIDER_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to read {PROVIDER_SETTINGS_TABLE}: {e}"))?;
 
     let mut providers = Vec::new();
     for row in rows {
         let (provider_id, payload_json) =
-            row.map_err(|e| format!("读取 {PROVIDER_SETTINGS_TABLE} 行失败：{e}"))?;
+            row.map_err(|e| format!("failed to read {PROVIDER_SETTINGS_TABLE} row: {e}"))?;
         let mut provider = expect_object(
             parse_json(&payload_json, PROVIDER_SETTINGS_TABLE)?,
             PROVIDER_SETTINGS_TABLE,
@@ -90,9 +90,9 @@ fn save_providers(conn: &mut Connection, payload: Value) -> Result<(), String> {
     let updated_at = now_ms();
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启 {PROVIDER_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin {PROVIDER_SETTINGS_TABLE} transaction: {e}"))?;
     tx.execute(PROVIDER_SETTINGS_DELETE_SQL, [])
-        .map_err(|e| format!("清空 {PROVIDER_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to clear {PROVIDER_SETTINGS_TABLE}: {e}"))?;
 
     let mut seen = HashSet::new();
     for (sort_index, provider) in providers.into_iter().enumerate() {
@@ -100,7 +100,7 @@ fn save_providers(conn: &mut Connection, payload: Value) -> Result<(), String> {
         let provider_id =
             extract_non_empty_string(&provider, "id", "settings_save_providers payload[]")?;
         if !seen.insert(provider_id.clone()) {
-            return Err(format!("provider_settings.provider_id 重复：{provider_id}"));
+            return Err(format!("duplicate provider_settings.provider_id: {provider_id}"));
         }
 
         tx.execute(
@@ -112,12 +112,12 @@ fn save_providers(conn: &mut Connection, payload: Value) -> Result<(), String> {
                 updated_at
             ],
         )
-        .map_err(|e| format!("写入 {PROVIDER_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to write {PROVIDER_SETTINGS_TABLE}: {e}"))?;
     }
 
     tx.commit()
-        .map_err(|e| format!("提交 {PROVIDER_SETTINGS_TABLE} 事务失败：{e}"))?;
-    // 标脏放在 commit 之后：事务回滚时不该触发自动同步。
+        .map_err(|e| format!("failed to commit {PROVIDER_SETTINGS_TABLE} transaction: {e}"))?;
+    // Mark dirty after commit: a transaction rollback should not trigger automatic sync.
     crate::services::webdav_auto_sync::mark_dirty();
     Ok(())
 }

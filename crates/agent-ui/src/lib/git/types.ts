@@ -45,7 +45,7 @@ export type GitBranch = {
 export type GitBranchesResponse = {
   state: GitRepositoryState;
   branches: GitBranch[];
-  // 仓库登记的 worktree（路径 + 检出分支），用于识别被 worktree 检出的分支。
+  // Worktrees registered by the repository (path + checked-out branch), used to identify branches checked out by a worktree.
   worktrees: GitWorktreeInfo[];
 };
 
@@ -479,11 +479,12 @@ export function normalizeGitOperationResponse(input: unknown, workdir = ""): Git
 }
 
 /**
- * Worktree 已成功移除，但其未完全合并的分支无法被普通删除；此时应
- * 直接引导用户确认强制删除分支，而不是重试已经注销的 Worktree。
+ * The worktree was removed successfully, but its not-fully-merged branch cannot be deleted
+ * normally; in this case the user should be prompted to confirm a forced branch deletion rather
+ * than retrying the already-unregistered worktree.
  */
 export function isGitWorktreeBranchNotFullyMergedError(message: string): boolean {
-  return /worktree .*分支删除失败/i.test(message) && /not fully merged/i.test(message);
+  return /worktree .*branch deletion failed/i.test(message) && /not fully merged/i.test(message);
 }
 
 export function normalizeGitWorktreeResponse(input: unknown, workdir = ""): GitWorktreeResponse {

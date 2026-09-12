@@ -1,6 +1,8 @@
 package httproutes
 
-// Agent 目录与凭证管理 API 测试：签发→轮换/删除→踢线的闭环，及管理 token 门禁。
+// Tests for the Agent directory and credential management API: the closed
+// loop of issue -> rotate/delete -> kick the connection, plus the management
+// token gate.
 
 import (
 	"encoding/json"
@@ -91,7 +93,7 @@ func TestAgentsAPIIssueRevokeKicksSession(t *testing.T) {
 	handler, sm, store := newAgentsAPIServer(t)
 	agentID := testAgentID(1)
 
-	// 签发：明文只出现在响应里。
+	// Issue: the plaintext token appears only in the response.
 	rec := doAgentsRequest(t, handler, http.MethodPost, "/api/agents/"+agentID+"/token", "admin-token")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("issue status = %d body=%s", rec.Code, rec.Body.String())
@@ -110,7 +112,7 @@ func TestAgentsAPIIssueRevokeKicksSession(t *testing.T) {
 		t.Fatal("issued token must validate")
 	}
 
-	// 模拟该 Agent 在线。
+	// Simulate the Agent being online.
 	sm.RecordAuthentication(agentID, "1.0.0", "session-a")
 	sess := session.NewAgentSession(sm.LatestAuthSnapshot(agentID))
 	sm.SetSession(sess)
@@ -118,7 +120,7 @@ func TestAgentsAPIIssueRevokeKicksSession(t *testing.T) {
 		t.Fatal("agent should be online")
 	}
 
-	// 目录能看到在线 + 已签发，并带分页元信息。
+	// The directory shows online + issued, with pagination metadata.
 	rec = doAgentsRequest(t, handler, http.MethodGet, "/api/agents", "admin-token")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"agent_id":"`+agentID+`"`) {
 		t.Fatalf("list status = %d body=%s", rec.Code, rec.Body.String())
@@ -140,7 +142,8 @@ func TestAgentsAPIIssueRevokeKicksSession(t *testing.T) {
 		t.Fatalf("agent should show online in directory: %#v", listResp.Agents[0])
 	}
 
-	// 删除：整条记录消失、凭证失效且活跃会话被踢。
+	// Delete: the whole record disappears, the credential is
+	// invalidated, and the active session is kicked.
 	rec = doAgentsRequest(t, handler, http.MethodDelete, "/api/agents/"+agentID, "admin-token")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("revoke status = %d body=%s", rec.Code, rec.Body.String())
@@ -221,7 +224,8 @@ func TestAgentsAPIRequiresManagementToken(t *testing.T) {
 		t.Fatalf("issue: %v", err)
 	}
 
-	// 无 token 与 Agent 凭证都不能访问管理 API（Agent 凭证不授权管理面）。
+	// Neither a missing token nor an Agent credential can access the
+	// management API (Agent credentials do not authorize the management plane).
 	if rec := doAgentsRequest(t, handler, http.MethodGet, "/api/agents", ""); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no-token list status = %d", rec.Code)
 	}
@@ -250,7 +254,7 @@ func TestAgentsAPIValidatesIDAndUpdatesOptionalName(t *testing.T) {
 		t.Fatalf("clear name status = %d body=%s", updated.Code, updated.Body.String())
 	}
 
-	tooLongName, _ := json.Marshal(map[string]string{"name": strings.Repeat("名", 65)})
+	tooLongName, _ := json.Marshal(map[string]string{"name": strings.Repeat("x", 65)})
 	tooLong := doAgentsJSONRequest(t, handler, http.MethodPatch, "/api/agents/"+agentID, "admin-token", string(tooLongName))
 	if tooLong.Code != http.StatusBadRequest {
 		t.Fatalf("long name status = %d body=%s", tooLong.Code, tooLong.Body.String())
@@ -301,7 +305,7 @@ func TestAgentsAPIPaginatesDirectory(t *testing.T) {
 	t.Parallel()
 
 	handler, _, _ := newAgentsAPIServer(t)
-	// 签发凭证会同时登记 120 个 Agent。
+	// Issuing credentials also registers 120 Agents.
 	for i := 0; i < 120; i++ {
 		rec := doAgentsRequest(t, handler, http.MethodPost,
 			"/api/agents/"+testAgentID(i)+"/token", "admin-token")
@@ -329,7 +333,7 @@ func TestAgentsAPIPaginatesDirectory(t *testing.T) {
 		t.Fatalf("page 2 = %#v", resp)
 	}
 
-	// 末页余 20 条、无更多。
+	// The last page has 20 remaining entries and no more.
 	rec = doAgentsRequest(t, handler, http.MethodGet, "/api/agents?page=3&page_size=50", "admin-token")
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 	if len(resp.Agents) != 20 || resp.HasMore {

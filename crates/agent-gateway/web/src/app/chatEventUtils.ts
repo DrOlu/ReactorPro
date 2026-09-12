@@ -22,7 +22,6 @@ export function isAbortError(error: unknown) {
   return (
     normalized.includes("cancelled") ||
     normalized.includes("canceled") ||
-    normalized.includes("已取消") ||
     normalized.includes("abort") ||
     normalized.includes("aborted")
   );
@@ -60,9 +59,9 @@ export function readTunnelManagerToolChange(event: ChatEvent): TunnelManagerTool
   return { action, projectPathKey };
 }
 
-// 会话生效模型的唯一派生点：本地未持久化的切换（override）>
-// history-sync 带回的会话持久化选择 > 全局默认（新会话语义）。
-// 前两级都按当前 providers 校验，失效则逐级回退。
+// The single derivation point for a session's effective model: a local unpersisted switch (override) >
+// the session's persisted choice brought back by history-sync > the global default (new-session semantics).
+// The first two levels are validated against the current providers, falling back level by level when invalid.
 export function resolveActiveModelSelection(params: {
   settings: AppSettings;
   override?: SelectedModel;

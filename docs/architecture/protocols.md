@@ -1,228 +1,228 @@
-# 协议与同步合同
+# Protocols and Sync Contracts
 
-## 协议总览
+## Protocol Overview
 
-自 v2 起，网关的全部实时链路统一为 **WebSocket + Protobuf**（下称 v2 协议）。
+Since v2, all real-time links in the gateway are unified under **WebSocket + Protobuf** (hereafter the v2 protocol).
 
-| 通道 | 端点 | 方向 | 用途 |
+| Channel | Endpoint | Direction | Purpose |
 |---|---|---|---|
-| **v2** WebSocket | `GET /ws/v2` | WebUI <-> Gateway | 浏览器主链路：本地操作 + `GatewayEnvelope` 直通请求 + 广播事件。 |
-| **v2** WebSocket | `GET /ws/v2/agent` | Desktop <-> Gateway | 桌面端常驻双向信封流。 |
-| **v2** WebSocket | `GET /ws/v2/terminal` | 两端 <-> Gateway | 终端专用数据面（角色由 hello 区分），承载 `TerminalStreamFrame`，避免终端 IO 与 chat/settings/history 队头阻塞。 |
-| HTTP API | `/api/status` | WebUI -> Gateway | Agent 在线状态 + `protocol_usage`（v2 使用计数）。 |
-| HTTP upload | `/api/files/import` | WebUI -> Gateway -> Desktop | 上传可读文件并导入桌面 workspace。 |
-| Public HTTP | `/api/public/history-shares/{token}` | Browser -> Gateway | 公开只读历史分享。 |
+| **v2** WebSocket | `GET /ws/v2` | WebUI <-> Gateway | Main browser link: local operations + `GatewayEnvelope` passthrough requests + broadcast events. |
+| **v2** WebSocket | `GET /ws/v2/agent` | Desktop <-> Gateway | Persistent bidirectional envelope stream for the desktop. |
+| **v2** WebSocket | `GET /ws/v2/terminal` | Both ends <-> Gateway | Terminal-specific data plane (role distinguished by hello), carrying `TerminalStreamFrame` to avoid head-of-line blocking of terminal IO behind chat/settings/history. |
+| HTTP API | `/api/status` | WebUI -> Gateway | Agent online status + `protocol_usage` (v2 usage counts). |
+| HTTP upload | `/api/files/import` | WebUI -> Gateway -> Desktop | Upload readable files and import them into the desktop workspace. |
+| Public HTTP | `/api/public/history-shares/{token}` | Browser -> Gateway | Public read-only history sharing. |
 
-## v2 统一线协议
+## v2 Unified Wire Protocol
 
-权威定义：`crates/agent-gateway/proto/v2/gateway_ws.proto`（帧壳），业务消息
-全部复用 `proto/v2/gateway.proto`（`GatewayEnvelope`/`AgentEnvelope`/
-`TerminalStreamFrame` 等——单一事实源，三端 Go/Rust/TS 均由它生成）。
+Authoritative definition: `crates/agent-gateway/proto/v2/gateway_ws.proto` (frame shell); all business
+messages reuse `proto/v2/gateway.proto` (`GatewayEnvelope`/`AgentEnvelope`/
+`TerminalStreamFrame` etc. — single source of truth, from which all three ends Go/Rust/TS are generated).
 
-### 传输与握手
+### Transport and Handshake
 
-- WebSocket 子协议：`liveagent.v2.pb`（服务端必回显）。
-- 一条 WS 二进制消息 = 一条 proto 帧消息，无长度前缀；v2 路径上文本帧被忽略。
-- 首帧必须为 `ClientHello{protocol_version=2, role, token, ...}`；服务端应答
-  `ServerHello{ok, session_id, heartbeat_period_seconds, max_message_bytes}`；
-  鉴权失败以 close code 4401 关闭。agent 角色的 hello 同时完成会话登记。
-- 消息大小上限按链路收紧并经 `ServerHello.max_message_bytes` 通告：`/ws/v2`
-  浏览器 4 MiB、`/ws/v2/agent` 沿用 `MaxMessageBytes`（默认 64 MiB，上传
-  需要）、`/ws/v2/terminal` 浏览器 1 MiB / Agent 16 MiB。并发连接上限
-  agent 256 / browser 128 / terminal 512（超限升级前 503）；浏览器链路另有
-  每连接在途派发上限 16 与入站令牌桶 100 帧/s（burst 200）。
+- WebSocket subprotocol: `liveagent.v2.pb` (the server must echo it back).
+- One WS binary message = one proto frame message, no length prefix; text frames are ignored on the v2 path.
+- The first frame must be `ClientHello{protocol_version=2, role, token, ...}`; the server replies with
+  `ServerHello{ok, session_id, heartbeat_period_seconds, max_message_bytes}`;
+  authentication failure closes with close code 4401. The hello for the agent role also completes session registration.
+- The message size limit is tightened per link and advertised via `ServerHello.max_message_bytes`: for `/ws/v2`
+  the browser is 4 MiB, `/ws/v2/agent` follows `MaxMessageBytes` (default 64 MiB, needed for uploads),
+  and `/ws/v2/terminal` is 1 MiB for browsers / 16 MiB for agents. Concurrent connection limits are
+  agent 256 / browser 128 / terminal 512 (503 before the limit is raised); the browser link additionally has
+  a per-connection in-flight dispatch limit of 16 and an inbound token bucket of 100 frames/s (burst 200).
 
-### 浏览器链路（/ws/v2）
+### Browser Link (/ws/v2)
 
-- 请求帧 `WebClientFrame{request_id, agent_id, oneof payload}`；响应帧回显同一
-  `request_id`；广播帧 `request_id` 为空。
-- **多 Agent 寻址**：目标型请求必须显式携带非空 `agent_id`，缺失时收到
-  `local_error: "agent_id is required"`。官方 WebUI 首次连接会先请求
-  `agent_list`，自动选择一个在线 Agent 并持久化选择，因此单 Agent 部署无需
-  手工操作；广播帧的 `agent_id` 标注事件来源，客户端严格过滤非活跃 Agent。
-  `agent_list` 返回全部已登记 Agent 的状态目录（含离线与仅签发凭证的条目）。
-- **直通请求** `agent_request`（浏览器直接构造 `GatewayEnvelope` 载荷臂）：
-  网关按白名单与限额校验（`internal/protocol/pbws/guard.go`；功能门控按目标 Agent 的 settings 快照判定）、把
-  `request_id` 按连接命名空间化后近乎原样转发目标桌面端，
-  响应以原始 `AgentEnvelope`（`agent_response` 臂）回送。原先约 90 个
-  “JSON 解码 → 手工组 proto → 手工拆 map” 处理器由这一条路径取代。
-- **本地帧**（网关状态直接应答/编排）：`status_get`、`chat_prepare`、
-  `chat_command`（携带 `ChatCommandRequest`）、`chat_subscribe`/
-  `chat_unsubscribe`/`chat_activities`、`workspace_subscribe`/`workspace_unsubscribe`。 其中 `chat.subscribe` 与 `chat.unsubscribe` 同样属于目标型操作，必须携带非空 `agent_id`；会话流按 `(agent_id, conversation_id)` 隔离，`chat.activities` 是全局目录查询。
-- **广播臂**：`history_event`/`settings_event`/`terminal_event`/`sftp_event`/
+- Request frame `WebClientFrame{request_id, agent_id, oneof payload}`; response frames echo the same
+  `request_id`; broadcast frames have an empty `request_id`.
+- **Multi-Agent addressing**: targeted requests must explicitly carry a non-empty `agent_id`; when missing, the client receives
+  `local_error: "agent_id is required"`. The official WebUI requests
+  `agent_list` on first connection, automatically selects an online Agent and persists the choice, so single-Agent deployments need no
+  manual operation; the `agent_id` of a broadcast frame marks the event source, and clients strictly filter out non-active Agents.
+  `agent_list` returns the status directory of all registered Agents (including offline entries and entries with only issued credentials).
+- **Passthrough request** `agent_request` (the browser directly constructs a `GatewayEnvelope` payload arm):
+  the gateway validates it against the allowlist and quotas (`internal/protocol/pbws/guard.go`; feature gating is determined from the target Agent's settings snapshot),
+  namespaces the `request_id` per connection, and forwards it nearly verbatim to the target desktop;
+  the response is sent back as the original `AgentEnvelope` (the `agent_response` arm). The former ~90
+  "JSON decode → manually assemble proto → manually unpack map" handlers are replaced by this single path.
+- **Local frames** (gateway status answered/orchestrated directly): `status_get`, `chat_prepare`,
+  `chat_command` (carrying `ChatCommandRequest`), `chat_subscribe`/
+  `chat_unsubscribe`/`chat_activities`, `workspace_subscribe`/`workspace_unsubscribe`. Among these, `chat.subscribe` and `chat.unsubscribe` are likewise targeted operations and must carry a non-empty `agent_id`; conversation streams are isolated by `(agent_id, conversation_id)`, and `chat.activities` is a global directory query.
+- **Broadcast arms**: `history_event`/`settings_event`/`terminal_event`/`sftp_event`/
   `chat_queue_event`/`tunnel_state`/`process_state`/`workspace_activity`
-  直转 session 层的 seam 消息；`status`/`chat_activity`/`chat_event`/
-  `chat_command_update`/`chat_subscription_reset` 为 proto 化载荷。
-  chat 事件载荷保持动态 JSON（`payload_json` bytes）。
-- **本地错误**：`local_error`（`ErrorResponse`）。
-- 心跳与背压：服务端 WS 控制帧 ping + 应用层 `PingFrame` 双通道；空闲驱逐
-  `3×心跳周期+宽限`；写侧为控制优先双队列 + 可掉帧数据 + 关联响应掉帧即
-  断连（`internal/transport/wscore` 连接运行时）。
+  are forwarded directly as session-layer seam messages; `status`/`chat_activity`/`chat_event`/
+  `chat_command_update`/`chat_subscription_reset` are proto-ized payloads.
+  chat event payloads remain dynamic JSON (`payload_json` bytes).
+- **Local errors**: `local_error` (`ErrorResponse`).
+- Heartbeat and backpressure: server WS control-frame ping + application-layer `PingFrame` dual channels; idle eviction
+  at `3× heartbeat period + grace`; the write side uses a control-priority dual queue + droppable data frames + correlation response drop means
+  disconnect (`internal/transport/wscore` connection runtime).
 
-### 桌面端链路（/ws/v2/agent）
+### Desktop Link (/ws/v2/agent)
 
-hello（role=AGENT）完成鉴权与会话登记后进入双向信封流：网关下行
-`GatewayEnvelope`（请求 + 周期 Ping），桌面端上行 `AgentEnvelope`
-（响应/事件/Pong）；心跳走独立通道不受数据拥塞影响；传输层保活由 WS 控制帧
-ping/pong 承担，客户端以 3×心跳周期无入站为断链判据。
+After hello (role=AGENT) completes authentication and session registration, the connection enters a bidirectional envelope stream: the gateway sends downstream
+`GatewayEnvelope` (requests + periodic Ping), and the desktop sends upstream `AgentEnvelope`
+(responses/events/Pong); heartbeats use an independent channel unaffected by data congestion; transport-layer keepalive is handled by WS control-frame
+ping/pong, and the client uses absence of inbound traffic for 3× the heartbeat period as the disconnect criterion.
 
-**多 Agent**：网关按 `agent_id` 维护多个并存的 Agent 会话（≤10 台规模），
-同 `agent_id` 重连只顶掉该 id 的旧连接，不同 Agent 互不影响。快照
-（settings/终端/提示队列/托管进程）与广播事件按 Agent 隔离，隧道帧拒绝
-跨 Agent 的 stream_id 伪造。每个桌面端首次初始化设置时自动生成并持久化规范的
-`agent-UUIDv4`；设置页只读展示该标识，不依赖 hostname 或用户手工命名。
+**Multi-Agent**: the gateway maintains multiple coexisting Agent sessions keyed by `agent_id` (scale ≤10),
+reconnecting with the same `agent_id` only evicts the old connection for that id, and different Agents do not affect each other. Snapshots
+(settings/terminal/prompt queue/managed processes) and broadcast events are isolated per Agent, and tunnel frames reject
+cross-Agent `stream_id` forgery. Each desktop automatically generates and persists a canonical
+`agent-UUIDv4` when settings are first initialized; the settings page displays this identifier read-only, without relying on hostname or manual user naming.
 
-### Agent 鉴权（每 Agent 独立凭证）
+### Agent Authentication (Independent Credentials per Agent)
 
-网关默认自动创建内嵌 SQLite 数据库（可用 `-agent-db` 或
-`LIVEAGENT_GATEWAY_AGENT_DB` 指定路径）并启用每 Agent 凭证存储：
+The gateway by default automatically creates an embedded SQLite database (the path can be specified with `-agent-db` or
+`LIVEAGENT_GATEWAY_AGENT_DB`) and enables per-Agent credential storage:
 
-- Agent 链路接受网关 Token 或按 `agent_id` 签发的独立凭证（`agt_` 前缀）；
-- Agent 独立凭证只授权绑定的 Agent 链路，不能冒充浏览器或调用 REST；网关 Token
-  同时授权浏览器、管理 API 和 Agent 链路；
-- 凭证可持续用于对应 Agent 连接，但明文只在签发响应展示一次，落盘仅存
-  SHA-256（SQLite 文件权限 0600）；
-- 管理 API（管理 token 门禁）：`GET /api/agents` 目录、
-  `POST /api/agents/{id}/token` 签发/轮换并设置可选名称；轮换会立即断开当前 Agent
-  会话、使旧凭证无法重连、
-  `PATCH /api/agents/{id}` 修改或清空名称、`DELETE /api/agents/{id}` 删除整条记录、
-  凭证并即时断开该 Agent 的活跃会话。
+- The Agent link accepts either the gateway Token or an independent credential issued for a given `agent_id` (`agt_` prefix);
+- An independent Agent credential only authorizes the bound Agent link; it cannot impersonate a browser or call REST; the gateway Token
+  authorizes the browser, the admin API, and the Agent link at the same time;
+- A credential can be used continuously for the corresponding Agent connection, but the plaintext is shown only once in the issuance response, and only the
+  SHA-256 hash is stored on disk (SQLite file permission 0600);
+- Admin API (gated by admin token): `GET /api/agents` directory,
+  `POST /api/agents/{id}/token` issues/rotates and sets an optional name; rotation immediately disconnects the current Agent
+  session, makes the old credential unable to reconnect,
+  `PATCH /api/agents/{id}` changes or clears the name, `DELETE /api/agents/{id}` deletes the entire record and
+  credential and immediately disconnects that Agent's active sessions.
 
-Gateway 数据库的首版 Agent 结构为单表 `agents`。`agent_id` 主键服务凭证点查、
-名称更新和删除；`(created_at, agent_id)` 组合索引服务数据库层目录分页。
+The first version of the Gateway database's Agent structure is a single table `agents`. The `agent_id` primary key serves credential point lookups,
+name updates, and deletion; the composite index `(created_at, agent_id)` serves database-layer directory pagination.
 
-网关 Token 与独立 Agent 凭证可以并存：使用网关 Token 的客户端必须提供稳定的
-`agent_id`，使用独立凭证的客户端还会受到 `agent_id` 绑定校验。
+Gateway Tokens and independent Agent credentials can coexist: clients using the gateway Token must provide a stable
+`agent_id`, while clients using independent credentials are additionally subject to `agent_id` binding validation.
 
-### 终端链路（/ws/v2/terminal）
+### Terminal Link (/ws/v2/terminal)
 
-两端共用一条路径，hello.role 区分浏览器/桌面端；hello 之后双向承载
-`TerminalStreamFrame`（proto 直传）。浏览器角色以 `hello.agent_id` 绑定数据面的
-目标 Agent；`agent_id` 必填，出站按绑定路由、入站只放行同源帧。
-attach/detach 维护本连接订阅集，input/resize 需已附着，output 只投递给
-已附着连接；桌面端侧就绪信号由 `ServerHello` 承担。
+Both ends share one path, and hello.role distinguishes browser/desktop; after hello, both directions carry
+`TerminalStreamFrame` (proto passthrough). The browser role binds the target Agent of the data plane via `hello.agent_id`;
+`agent_id` is required; outbound traffic is routed by binding, and inbound traffic only allows frames from the same source.
+attach/detach maintain this connection's subscription set; input/resize require an existing attachment; output is delivered only to
+attached connections; the desktop-side readiness signal is carried by `ServerHello`.
 
-## Chat 协议
+## Chat Protocol
 
-| 阶段 | WebUI -> Gateway | Gateway -> Desktop | Desktop -> Gateway -> WebUI |
+| Stage | WebUI -> Gateway | Gateway -> Desktop | Desktop -> Gateway -> WebUI |
 |---|---|---|---|
-| 唤醒 | `chat_prepare` | `PingRequest{request_id=chat-runtime-wake-*}` | Rust emit WebView wake，可靠返回关联 `PongResponse`；Gateway 完成真实原生往返后响应当前 status。 |
-| 提交 | `chat_command`，`type=chat.submit` | `ChatCommandRequest{type=chat.submit}` | `chat_accepted` 携带 `run_id`/`accepted_seq`；用户消息与 token 事件经会话订阅 `chat_event` 推送。 |
-| 编辑重发 | `chat_command`，`type=chat.edit_resend` | `ChatCommandRequest{type=chat.edit_resend, base_message_ref}` | Gateway 先发布 `rebased` 与新用户消息事件，桌面端随后原子截断并运行新 turn。 |
-| 恢复 | `chat_subscribe`，`{conversation_id, after_seq, stream_epoch}` | 无 | WebUI 先用 history snapshot/projection hydrate，订阅响应由 Gateway 进程内事件窗口按 conversation seq 跨 run 补发缺失事件（`events_json`/`latest_seq`/`reset`）；epoch 改变或窗口不足时返回 reset。订阅缓冲溢出时 Gateway 发 `chat_subscription_reset`，客户端按游标重新订阅。 |
-| 取消 | `chat_command`，`type=chat.cancel` | `ChatCommandRequest{type=chat.cancel}` | Gateway 置 `cancelling` 状态，桌面端真实终态优先，超时由 watchdog 兜底 `run_finished(cancelled)`。 |
-| 完成 | 无 | 无 | `ChatEvent.type=DONE` 映射为 `run.completed` 终态。 |
+| Wake | `chat_prepare` | `PingRequest{request_id=chat-runtime-wake-*}` | Rust emits a WebView wake, reliably returning the correlated `PongResponse`; the Gateway responds with the current status after completing the real native round trip. |
+| Submit | `chat_command`, `type=chat.submit` | `ChatCommandRequest{type=chat.submit}` | `chat_accepted` carries `run_id`/`accepted_seq`; user messages and token events are pushed via conversation subscription `chat_event`. |
+| Edit resend | `chat_command`, `type=chat.edit_resend` | `ChatCommandRequest{type=chat.edit_resend, base_message_ref}` | The Gateway first publishes `rebased` and the new user message event, then the desktop atomically truncates and runs the new turn. |
+| Resume | `chat_subscribe`, `{conversation_id, after_seq, stream_epoch}` | None | The WebUI first hydrates with a history snapshot/projection; the subscription response replays missing events across runs from the Gateway in-process event window by conversation seq (`events_json`/`latest_seq`/`reset`); returns reset when the epoch changes or the window is insufficient. When the subscription buffer overflows, the Gateway sends `chat_subscription_reset`, and the client resubscribes from its cursor. |
+| Cancel | `chat_command`, `type=chat.cancel` | `ChatCommandRequest{type=chat.cancel}` | The Gateway sets the `cancelling` state; the desktop's real terminal state takes priority, and a timeout falls back to the watchdog emitting `run_finished(cancelled)`. |
+| Complete | None | None | `ChatEvent.type=DONE` is mapped to the `run.completed` terminal state. |
 
-桌面端仍通过 `ChatEvent` 表达 `TOKEN`、`THINKING`、`TOOL_CALL`、`TOOL_RESULT`、`DONE`、`ERROR`、`TOOL_STATUS`、`HOSTED_SEARCH` 等低层事件。Gateway 对外统一附加同 conversation 内单调递增的 `seq`，并把控制事件规范化为 `run.accepted`、`user.message.appended`、`conversation.rebased`、`projection.updated`、`run.completed`、`run.failed`、`run.cancelled` 等 WebUI 事件。命令编排逻辑（去重、探活、接受回执、启动看门狗）收敛于 `internal/chatcmd`。
+The desktop still expresses low-level events such as `TOKEN`, `THINKING`, `TOOL_CALL`, `TOOL_RESULT`, `DONE`, `ERROR`, `TOOL_STATUS`, `HOSTED_SEARCH` via `ChatEvent`. The Gateway uniformly attaches an externally visible monotonically increasing `seq` within the same conversation, and normalizes control events into WebUI events such as `run.accepted`, `user.message.appended`, `conversation.rebased`, `projection.updated`, `run.completed`, `run.failed`, `run.cancelled`. Command orchestration logic (deduplication, liveness probing, acceptance receipts, starting watchdogs) is consolidated in `internal/chatcmd`.
 
-WebUI 对 command ACK 使用 4 秒上限。连接中断或 ACK 丢失时仅重试一次，并复用完全相同的 payload 与 `client_request_id`；Gateway 在同一进程内原子返回 canonical run，因此不会重复 seed 或 dispatch。成功 prepare 的探测新鲜度绑定 Agent session epoch 并保留 2 秒，紧随 command 可直接复用，避免正常路径重复原生 RTT；`chat_accepted` 与 `chat_prepare` 响应走 WebSocket 控制优先队列，避免被 token 数据帧队头阻塞。
+The WebUI uses a 4-second cap for command ACKs. When the connection drops or an ACK is lost, it retries only once, reusing exactly the same payload and `client_request_id`; the Gateway returns the canonical run atomically within the same process, so it never double-seeds or double-dispatches. The probe freshness of a successful prepare is bound to the Agent session epoch and retained for 2 seconds, so it can be reused directly by an immediately following command, avoiding a duplicate native RTT on the normal path; `chat_accepted` and `chat_prepare` responses go through the WebSocket control-priority queue to avoid head-of-line blocking behind token data frames.
 
-## Settings 同步
+## Settings Sync
 
-| 操作 | 方向 | 语义 |
+| Operation | Direction | Semantics |
 |---|---|---|
-| `SettingsGetRequest`（直通） | WebUI -> Gateway -> Desktop | 读取桌面端当前 settings snapshot。 |
-| `SettingsUpdateRequest`（直通） | WebUI -> Gateway -> Desktop | 更新设置；provider secret 使用单独 `providerApiKeyUpdates`。 |
-| `settings_event` / `SettingsSyncEvent` | Desktop -> Gateway -> WebUI | GUI 本地保存后广播脱敏 settings snapshot（`settings_json` 由客户端解析）。 |
+| `SettingsGetRequest` (passthrough) | WebUI -> Gateway -> Desktop | Read the desktop's current settings snapshot. |
+| `SettingsUpdateRequest` (passthrough) | WebUI -> Gateway -> Desktop | Update settings; provider secrets use a separate `providerApiKeyUpdates`. |
+| `settings_event` / `SettingsSyncEvent` | Desktop -> Gateway -> WebUI | After a local GUI save, broadcast a redacted settings snapshot (`settings_json` is parsed by the client). |
 
-设置协议的关键约束是 provider API key 不走普通 sync snapshot。WebUI 只能看到 redacted provider 数据和 `apiKeyConfigured` 状态。
+The key constraint of the settings protocol is that provider API keys do not go through the ordinary sync snapshot. The WebUI can only see redacted provider data and the `apiKeyConfigured` status.
 
-## History 同步
+## History Sync
 
-| 操作 | 语义 |
+| Operation | Semantics |
 |---|---|
-| `HistoryListRequest` | 分页读取 conversation summary，用于 sidebar；网关钳制分页（page 默认 1、page_size 默认 80 上限 200）。 |
-| `HistoryGetRequest` | 读取 conversation detail；支持 `max_messages` 返回 tail window。 |
-| `HistoryRenameRequest` | 修改标题并广播 upsert event。 |
-| `HistoryPinRequest` | 修改置顶状态并保持排序。 |
-| `HistoryShareGet/SetRequest` | 管理公开分享 token 与 redaction 选项。 |
-| `HistoryDeleteRequest` | 删除会话和相关 FTS/share 行。 |
-| 编辑重发截断 | 不再暴露独立 WebUI history 命令；由 `chat.edit_resend` 在桌面端处理，并通过 `conversation.rebased`/`projection.updated` 同步视图。 |
+| `HistoryListRequest` | Paginated reading of conversation summaries for the sidebar; the gateway clamps pagination (page defaults to 1, page_size defaults to 80 with a cap of 200). |
+| `HistoryGetRequest` | Read conversation detail; supports `max_messages` to return a tail window. |
+| `HistoryRenameRequest` | Change the title and broadcast an upsert event. |
+| `HistoryPinRequest` | Change the pinned status while preserving ordering. |
+| `HistoryShareGet/SetRequest` | Manage public share tokens and redaction options. |
+| `HistoryDeleteRequest` | Delete the conversation and related FTS/share rows. |
+| Edit-resend truncation | No longer exposes an independent WebUI history command; it is handled on the desktop by `chat.edit_resend` and synchronized to the view via `conversation.rebased`/`projection.updated`. |
 
-桌面端是历史数据库真相源；Gateway 负责 request forwarding 和 sync event broadcasting；WebUI 负责本地列表和 transcript 状态更新。
+The desktop is the source of truth for the history database; the Gateway handles request forwarding and sync event broadcasting; the WebUI handles local list and transcript state updates.
 
-## Upload 协议
+## Upload Protocol
 
-| 步骤 | 说明 |
+| Step | Description |
 |---|---|
-| 1 | WebUI 将文件通过 multipart POST 到 `/api/files/import`。 |
-| 2 | Gateway 读取文件 bytes，注册 request stream，转成 `UploadReadableFilesRequest` 发给 Desktop。 |
-| 3 | Desktop 把文件写入应用上传暂存区 `~/.liveagent/uploads/<batch>/`（工作区外），返回 `ChatUploadedFile` 列表和 skipped 列表。 |
-| 4 | WebUI 把返回的 uploaded files 附加到下一次 Chat Command。 |
+| 1 | The WebUI POSTs the file via multipart to `/api/files/import`. |
+| 2 | The Gateway reads the file bytes, registers a request stream, and converts it into `UploadReadableFilesRequest` sent to the Desktop. |
+| 3 | The Desktop writes the file into the app upload staging area `~/.liveagent/uploads/<batch>/` (outside the workspace), returning a `ChatUploadedFile` list and a skipped list. |
+| 4 | The WebUI attaches the returned uploaded files to the next Chat Command. |
 
-GUI 本地上传不需要 HTTP/Gateway，直接通过 Tauri command 导入。上传臂不在
-`agent_request` 直通白名单内（大文件走 HTTP multipart 更合适）。
+Local GUI upload does not need HTTP/Gateway and is imported directly via a Tauri command. The upload arm is not in the
+`agent_request` passthrough allowlist (large files are better served by HTTP multipart).
 
-## Public Share 错误码
+## Public Share Error Codes
 
-`/api/public/history-shares/{token}` 仍然通过 Gateway 转发到桌面端解析 share token。桌面端返回 `ErrorResponse.code` 后，Gateway HTTP 直接按 code 映射状态：
+`/api/public/history-shares/{token}` still forwards through the Gateway to the desktop to resolve the share token. After the desktop returns `ErrorResponse.code`, the Gateway HTTP maps the status directly by code:
 
-| code | HTTP | 场景 |
+| code | HTTP | Scenario |
 |---:|---:|---|
-| `400` | Bad Request | share token 为空或请求非法。 |
-| `404` | Not Found | 分享链接不存在、已关闭，或对应历史对话不存在。 |
-| 其他 | Bad Gateway | 桌面端处理失败或返回未知错误。 |
+| `400` | Bad Request | The share token is empty or the request is invalid. |
+| `404` | Not Found | The share link does not exist, has been closed, or the corresponding history conversation does not exist. |
+| Other | Bad Gateway | The desktop failed to process or returned an unknown error. |
 
-Gateway 不再通过错误文案推断 public share 状态，错误语义由桌面端产生并通过 proto 传递。
+The Gateway no longer infers public share status from error text; error semantics are produced by the desktop and transmitted via proto.
 
-## Terminal Stream 协议
+## Terminal Stream Protocol
 
-终端为独立 stream 模型。主链路（`/ws/v2` 直通 `TerminalRequest`）只承载
-session list/create/close/rename、SSH prompt、SSH tabs 等控制面与 metadata
-同步；高频 `attach/input/resize/output/detach` 走 `/ws/v2/terminal` 数据面。
+The terminal is an independent stream model. The main link (passthrough `TerminalRequest` on `/ws/v2`) only carries
+session list/create/close/rename, SSH prompt, SSH tabs, and other control-plane and metadata
+sync; the high-frequency `attach/input/resize/output/detach` go over the `/ws/v2/terminal` data plane.
 
-| 层级 | 合同 |
+| Layer | Contract |
 |---|---|
-| Browser-Gateway | `GET /ws/v2/terminal` 首帧 `ClientHello{role=BROWSER}`；之后 `TerminalClientFrame{frame}` / `TerminalServerFrame{frame}` 双向承载 proto `TerminalStreamFrame`。 |
-| Frame 字段 | `kind` 为 `attach/input/resize/detach/output/snapshot/error`；含 `stream_id/session_id/project_path_key/seq/start_offset/end_offset/cols/rows/max_bytes/truncated/error/data`。 |
-| Desktop-Gateway | `GET /ws/v2/terminal` 首帧 `ClientHello{role=AGENT}`，其后承载 `TerminalStreamFrame`；主链路不承载 terminal output/input/resize。 |
-| Snapshot | attach 返回 `snapshot` frame，data 为 tail bytes，`start_offset/end_offset` 用于前端去重。 |
-| Input | input frame 为 fire-and-forget bytes；不返回 session metadata，不进入普通 request pending map。 |
-| Resize | resize frame 只发送最新 cols/rows；不返回 session metadata。 |
-| Output | output frame 只携带轻量 session id、project key、offset 与 bytes；React session state 不因 output 更新。 |
-| 页面 stream client | 每页按 token 维护一条 terminal stream，上游按 session 复用 attach；同 session 的多个 handle 共享 output。 |
+| Browser-Gateway | `GET /ws/v2/terminal` first frame `ClientHello{role=BROWSER}`; afterwards `TerminalClientFrame{frame}` / `TerminalServerFrame{frame}` carry the proto `TerminalStreamFrame` in both directions. |
+| Frame fields | `kind` is `attach/input/resize/detach/output/snapshot/error`; includes `stream_id/session_id/project_path_key/seq/start_offset/end_offset/cols/rows/max_bytes/truncated/error/data`. |
+| Desktop-Gateway | `GET /ws/v2/terminal` first frame `ClientHello{role=AGENT}`, after which it carries `TerminalStreamFrame`; the main link does not carry terminal output/input/resize. |
+| Snapshot | attach returns a `snapshot` frame, data is the tail bytes, and `start_offset/end_offset` are used by the frontend for deduplication. |
+| Input | input frames are fire-and-forget bytes; they do not return session metadata and do not enter the ordinary request pending map. |
+| Resize | resize frames send only the latest cols/rows; they do not return session metadata. |
+| Output | output frames carry only the lightweight session id, project key, offset, and bytes; React session state is not updated by output. |
+| Page stream client | Each page maintains one terminal stream per token, and upstream reuses attach per session; multiple handles for the same session share output. |
 
-Gateway 的终端连接只维护本连接内的 session attach 集合；detach 只影响这条 terminal stream 的输出投递，不改变桌面端 terminal registry。
+The Gateway's terminal connection only maintains the set of session attachments within this connection; detach only affects output delivery on this terminal stream and does not change the desktop terminal registry.
 
-## Workspace Activity 协议
+## Workspace Activity Protocol
 
-Git 面板与文件树不再轮询：桌面端 `workspace_watch` 服务（notify watcher，250ms 去抖，`.git` 内部噪声过滤，changedPaths 封顶 64 + truncated）为每个被观察的 workdir 发出失效信号。
+The Git panel and file tree no longer poll: the desktop `workspace_watch` service (notify watcher, 250ms debounce, `.git` internal noise filtering, changedPaths capped at 64 + truncated) emits an invalidation signal for each watched workdir.
 
-| 层级 | 合同 |
+| Layer | Contract |
 |---|---|
-| Desktop 内 | Tauri 事件 `workspace:activity`，payload `{workdir, revision, fs, git, changedPaths, truncated}`；前端经 `workspace_watch_set(workdirs)` 声明式注册本 webview 的观察集合。 |
-| Desktop→Gateway | `AgentEnvelope.workspace_activity`（`WorkspaceActivityEvent`，字段 90）。Gateway→Desktop 用 `GatewayEnvelope.workspace_watch`（`WorkspaceWatchRequest`，声明式全量 workdir 集合；订阅计数变化与 agent 重连时重发）。 |
-| Browser-Gateway | `/ws/v2` 帧 `workspace_subscribe/workspace_unsubscribe {workdir}`，事件臂 `workspace_activity`。 |
-| 语义 | best-effort 失效信号，不保证不丢事件：客户端在（重）订阅、通道重建、revision 回退时必须自标脏并 refetch。revision 为 per-workdir 单调计数（agent 进程内）。 |
-| 消费端 | `crates/agent-ui/src/lib/workspace-activity/useWorkspaceInvalidation.ts` 为共享实现，两端分别提供 `WorkspaceActivityClient`：面板隐藏时只置脏、激活时冲刷；数据本体仍走既有 fs/git 拉取命令（invalidate-push + fetch-on-demand）。 |
+| Inside Desktop | Tauri event `workspace:activity`, payload `{workdir, revision, fs, git, changedPaths, truncated}`; the frontend declaratively registers this webview's watch set via `workspace_watch_set(workdirs)`. |
+| Desktop→Gateway | `AgentEnvelope.workspace_activity` (`WorkspaceActivityEvent`, field 90). Gateway→Desktop uses `GatewayEnvelope.workspace_watch` (`WorkspaceWatchRequest`, declaratively the full workdir set; resent when the subscription count changes or the agent reconnects). |
+| Browser-Gateway | `/ws/v2` frame `workspace_subscribe/workspace_unsubscribe {workdir}`, event arm `workspace_activity`. |
+| Semantics | best-effort invalidation signal, not guaranteed lossless: the client must mark itself dirty and refetch on (re)subscription, channel rebuild, and revision rollback. revision is a per-workdir monotonic counter (within the agent process). |
+| Consumer | `crates/agent-ui/src/lib/workspace-activity/useWorkspaceInvalidation.ts` is the shared implementation; each end provides its own `WorkspaceActivityClient`: when the panel is hidden it only marks dirty, and flushes on activation; the data itself still goes through the existing fs/git fetch commands (invalidate-push + fetch-on-demand). |
 
-## Skills 与 Memory 管理协议
+## Skills and Memory Management Protocol
 
-| 能力 | 直通请求臂 | Desktop 落点 |
+| Capability | Passthrough request arm | Desktop destination |
 |---|---|---|
-| Skills 列表和管理 | `SkillFilesListRequest`、`SkillManageRequest`、`SkillMetadataReadRequest`、`SkillTextReadRequest` | `system_ensure_builtin_skills`、`system_manage_skill`、`system_read_skill_*`、`commands/app/system.rs`、`services/skills/*` |
-| Memory 管理 | `MemoryManageRequest` | `commands/integration/memory.rs`、`services/memory/*` |
-| Cron 管理 | `CronManageRequest` | `commands/automation/cron.rs`、`services/automation/*`、settings cron 表 |
+| Skills listing and management | `SkillFilesListRequest`, `SkillManageRequest`, `SkillMetadataReadRequest`, `SkillTextReadRequest` | `system_ensure_builtin_skills`, `system_manage_skill`, `system_read_skill_*`, `commands/app/system.rs`, `services/skills/*` |
+| Memory management | `MemoryManageRequest` | `commands/integration/memory.rs`, `services/memory/*` |
+| Cron management | `CronManageRequest` | `commands/automation/cron.rs`, `services/automation/*`, settings cron table |
 
-## 恢复与去重机制
+## Recovery and Deduplication Mechanisms
 
-| 机制 | 位置 | 目的 |
+| Mechanism | Location | Purpose |
 |---|---|---|
-| `clientRequestId` | WebUI Chat Command -> Gateway session manager | 进程级 24 小时幂等键；并发或单次 ACK 恢复重试返回同一 canonical run。Gateway 重启后不保留。 |
-| `conversationId` -> run index | Gateway session manager | 当前会话刷新/切换后可定位正在运行的事件流。 |
-| `Seq` | Gateway 进程内 conversation event window / `chat_event` payload | 同 conversation 内单调递增；断线后 `chat_subscribe` 携带 `after_seq` 游标补发窗口内缺失事件，窗口不足时 reset + history hydrate。 |
-| 直通关联 id 命名空间 | Gateway v2 relay | 多标签页共享一个桌面端；网关按连接为 `request_id` 加前缀转发、回程剥离，杜绝跨连接冲突。 |
-| done retention | Gateway session manager | 已结束 run 短时间保留，支持刷新后看到终态。 |
-| local running ids | WebUI App | 避免正在运行会话被错误切换或误删。 |
+| `clientRequestId` | WebUI Chat Command -> Gateway session manager | Process-level 24-hour idempotency key; concurrent or single ACK-recovery retries return the same canonical run. Not retained after a Gateway restart. |
+| `conversationId` -> run index | Gateway session manager | Locate the currently running event stream after a refresh/switch of the conversation. |
+| `Seq` | Gateway in-process conversation event window / `chat_event` payload | Monotonically increasing within the same conversation; after a disconnect, `chat_subscribe` carries an `after_seq` cursor to replay missing events within the window, and resets + hydrates history when the window is insufficient. |
+| Passthrough correlation id namespace | Gateway v2 relay | Multiple tabs share one desktop; the gateway prefixes forwarded `request_id`s per connection and strips the prefix on the return path, eliminating cross-connection conflicts. |
+| done retention | Gateway session manager | Finished runs are retained briefly so the terminal state is visible after a refresh. |
+| local running ids | WebUI App | Prevent a running conversation from being switched or deleted by mistake. |
 
-## 协议改造注意点
+## Protocol Change Notes
 
-| 场景 | 必查点 |
+| Scenario | Must-check points |
 |---|---|
-| 新增 Gateway request | 在 `proto/v2/gateway.proto` 加请求/响应臂（编号只增不改）→ `buf generate` → v2 直通白名单（`internal/protocol/pbws/guard.go`）放行 → WebUI client method + adapter；桌面端 `envelope_handler.rs` 增加分支。不再需要 Go 手工 payload 塑形。 |
-| 新增本地/编排操作 | `proto/v2/gateway_ws.proto` 加帧臂 → pbws 本地处理器 → 客户端方法。 |
-| proto 演进纪律 | CI `buf breaking`（WIRE_JSON）把关；删除字段用 `reserved`；v2 业务消息永不改号、永不弃用。 |
-| 新增 settings 字段 | GUI settings normalize/storage、Rust settings save/load、Gateway redaction whitelist、WebUI settings copy 都要同步。 |
-| 新增 history 字段 | Rust summary model、proto `ConversationSummary`、GUI/WebUI sidebar render 都要同步。 |
-| 新增 chat event | Desktop event publisher、proto enum、Gateway 事件规范化与 `chat_event` payload、WebUI event reducer/transcript 都要同步。 |
-| 涉及 secret | 默认不进普通 sync，必须设计单向或显式更新通道。 |
+| Adding a Gateway request | Add request/response arms in `proto/v2/gateway.proto` (numbers only increase, never change) → `buf generate` → allowlist it in the v2 passthrough (`internal/protocol/pbws/guard.go`) → WebUI client method + adapter; add a branch in the desktop `envelope_handler.rs`. Hand-written Go payload shaping is no longer needed. |
+| Adding a local/orchestration operation | Add a frame arm in `proto/v2/gateway_ws.proto` → pbws local handler → client method. |
+| proto evolution discipline | CI `buf breaking` (WIRE_JSON) gates this; use `reserved` for deleted fields; v2 business messages never renumber and are never deprecated. |
+| Adding a settings field | GUI settings normalize/storage, Rust settings save/load, Gateway redaction whitelist, and WebUI settings copy must all be synchronized. |
+| Adding a history field | Rust summary model, proto `ConversationSummary`, and GUI/WebUI sidebar render must all be synchronized. |
+| Adding a chat event | Desktop event publisher, proto enum, Gateway event normalization and `chat_event` payload, and WebUI event reducer/transcript must all be synchronized. |
+| Involving secrets | By default they do not enter the ordinary sync; a one-way or explicit update channel must be designed. |

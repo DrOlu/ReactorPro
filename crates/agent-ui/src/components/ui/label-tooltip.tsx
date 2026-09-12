@@ -2,10 +2,11 @@ import type { ReactNode } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 /**
- * 纯文本标签气泡（Base UI）：composer 运行时控件与上下文用量环共用同一视觉。
- * 默认非受控（悬停展示）；触屏点按驱动的调用方（上下文用量环）传入
- * open/onOpenChange 受控，并禁用 closeOnClick——trigger 按压关闭发生在
- * pointerdown，早于调用方 click 阶段的开合裁决，保留会让二段点按判据失效。
+ * Plain-text label tooltip (Base UI): the composer runtime controls and the context usage ring
+ * share the same visuals. Uncontrolled by default (shown on hover); touch-tap-driven callers (the
+ * context usage ring) pass open/onOpenChange for controlled mode and disable closeOnClick -- the
+ * trigger's press-to-close happens on pointerdown, earlier than the caller's click-stage toggle
+ * decision, and keeping it would break the two-stage tap criterion.
  */
 export function LabelTooltip(props: {
   label: ReactNode;

@@ -27,7 +27,7 @@ test("missing safety modes preserve the existing unsandboxed default", () => {
   assert.equal(resolveShellSandboxSettings(null), undefined);
 });
 
-// P2#6:未识别的模式值必须向严格侧收敛,不能静默降级成最宽松的非 ask 值。
+// P2#6: An unrecognized mode value must converge toward the strict side and must not silently degrade to the most permissive non-ask value.
 test("unrecognized command safety modes fail closed to ask", () => {
   assert.equal(normalizeCommandSafetyMode(undefined), "auto");
   assert.equal(normalizeCommandSafetyMode(null), "auto");
@@ -40,7 +40,7 @@ test("unrecognized command safety modes fail closed to ask", () => {
   assert.equal(normalizeCommandSafetyMode(1), "ask");
 });
 
-// P3#9:远端/排队快照只能收紧本地设置,绝不能放宽。
+// P3#9: Remote/queued snapshots may only tighten local settings, never loosen them.
 test("command safety mode clamping always keeps the stricter side", () => {
   assert.equal(strictestCommandSafetyMode("auto", "sandboxOffline"), "sandboxOffline");
   assert.equal(strictestCommandSafetyMode("sandboxOffline", "auto"), "sandboxOffline");

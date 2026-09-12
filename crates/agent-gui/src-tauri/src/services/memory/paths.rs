@@ -7,9 +7,9 @@ impl MemoryStore {
         let projects = self.projects_dir();
         if projects.exists() {
             for entry in
-                fs::read_dir(&projects).map_err(|e| format!("读取项目记忆目录失败：{e}"))?
+                fs::read_dir(&projects).map_err(|e| format!("Failed to read project memory directory: {e}"))?
             {
-                let entry = entry.map_err(|e| format!("读取项目记忆目录项失败：{e}"))?;
+                let entry = entry.map_err(|e| format!("Failed to read project memory directory entry: {e}"))?;
                 if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                     collect_md_files(&entry.path(), false, &mut out)?;
                 }
@@ -69,7 +69,7 @@ impl MemoryStore {
 
     fn atomic_replace_entry_file(&self, target: &Path, content: &str) -> Result<(), String> {
         if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("创建记忆目录失败：{e}"))?;
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create memory directory: {e}"))?;
         }
         atomic_write(target, content.as_bytes())
     }
@@ -96,7 +96,7 @@ impl MemoryStore {
             return Err("project memory requires workdir hash".to_string());
         }
         let dir = self.projects_dir().join(workdir_hash);
-        fs::create_dir_all(&dir).map_err(|e| format!("创建项目记忆目录失败：{e}"))?;
+        fs::create_dir_all(&dir).map_err(|e| format!("Failed to create project memory directory: {e}"))?;
         if let Some(workdir) = workdir {
             let marker = dir.join(".workdir.json");
             if !marker.exists() {
@@ -104,7 +104,7 @@ impl MemoryStore {
                     "path": workdir,
                     "createdAt": format_rfc3339(now_ms())
                 }))
-                .map_err(|e| format!("序列化项目记忆标记失败：{e}"))?;
+                .map_err(|e| format!("Failed to serialize project memory marker: {e}"))?;
                 atomic_write(&marker, &payload)?;
             }
         }
@@ -163,9 +163,9 @@ impl MemoryStore {
             return Ok(());
         }
         let dir = self.organize_snapshot_dir_for(meta);
-        fs::create_dir_all(&dir).map_err(|e| format!("创建记忆整理快照目录失败：{e}"))?;
+        fs::create_dir_all(&dir).map_err(|e| format!("Failed to create memory organize snapshot directory: {e}"))?;
         let snapshot = dir.join(format!("{}.{}.md", now_ms(), meta.slug));
-        fs::copy(path, snapshot).map_err(|e| format!("写入记忆整理快照失败：{e}"))?;
+        fs::copy(path, snapshot).map_err(|e| format!("Failed to write memory organize snapshot: {e}"))?;
         Ok(())
     }
 
@@ -226,7 +226,7 @@ fn collect_organize_snapshot_dirs(root: &Path) -> Vec<PathBuf> {
 }
 
 fn memory_root_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "Unable to locate the user directory".to_string())?;
     Ok(home.join(MEMORY_DIR_NAME).join(MEMORY_ROOT_DIR))
 }
 
@@ -240,7 +240,7 @@ fn ensure_root_dirs(root: &Path) -> Result<(), String> {
         root.join(".quarantine"),
     ] {
         fs::create_dir_all(&dir)
-            .map_err(|e| format!("创建记忆目录 {} 失败：{e}", dir.display()))?;
+            .map_err(|e| format!("Failed to create memory directory {}: {e}", dir.display()))?;
     }
     Ok(())
 }
@@ -253,13 +253,13 @@ fn collect_md_files(
         return Ok(());
     }
     for entry in
-        fs::read_dir(dir).map_err(|e| format!("读取记忆目录 {} 失败：{e}", dir.display()))?
+        fs::read_dir(dir).map_err(|e| format!("Failed to read memory directory {}: {e}", dir.display()))?
     {
-        let entry = entry.map_err(|e| format!("读取记忆目录项失败：{e}"))?;
+        let entry = entry.map_err(|e| format!("Failed to read memory directory entry: {e}"))?;
         let path = entry.path();
         let file_type = entry
             .file_type()
-            .map_err(|e| format!("读取记忆文件类型失败：{e}"))?;
+            .map_err(|e| format!("Failed to read memory file type: {e}"))?;
         if file_type.is_dir() {
             let name = entry.file_name().to_string_lossy().to_string();
             if archived || name == ".archive" {
@@ -359,17 +359,17 @@ fn to_hex(bytes: &[u8]) -> String {
 fn atomic_write(target: &Path, content: &[u8]) -> Result<(), String> {
     let parent = target
         .parent()
-        .ok_or_else(|| format!("目标路径没有父目录：{}", target.display()))?;
-    fs::create_dir_all(parent).map_err(|e| format!("创建目录 {} 失败：{e}", parent.display()))?;
+        .ok_or_else(|| format!("Target path has no parent directory: {}", target.display()))?;
+    fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory {}: {e}", parent.display()))?;
     let mut tmp = tempfile::NamedTempFile::new_in(parent)
-        .map_err(|e| format!("创建临时记忆文件失败：{e}"))?;
+        .map_err(|e| format!("Failed to create temporary memory file: {e}"))?;
     tmp.write_all(content)
-        .map_err(|e| format!("写入临时记忆文件失败：{e}"))?;
+        .map_err(|e| format!("Failed to write temporary memory file: {e}"))?;
     tmp.as_file()
         .sync_all()
-        .map_err(|e| format!("fsync 临时记忆文件失败：{e}"))?;
+        .map_err(|e| format!("Failed to fsync temporary memory file: {e}"))?;
     tmp.persist(target)
-        .map_err(|e| format!("替换记忆文件失败：{}", e.error))?;
+        .map_err(|e| format!("Failed to replace memory file: {}", e.error))?;
     if let Ok(parent_file) = File::open(parent) {
         let _ = parent_file.sync_all();
     }

@@ -169,7 +169,7 @@ function HistoryLoadingState(props: { title?: string }) {
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
           <div className="max-w-[28rem] text-[calc(14px*var(--zone-font-scale,1))] font-medium text-foreground/90">
-            正在加载会话历史
+            Loading conversation history
           </div>
           {title ? (
             <div className="mt-1 max-w-[28rem] truncate text-[calc(12px*var(--zone-font-scale,1))] text-muted-foreground">
@@ -278,7 +278,7 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
   const editTitle = missingStableRef
     ? locale === "en-US"
       ? "This older message cannot be edited because it has no stable message identifier."
-      : "旧历史缺少稳定消息标识，无法编辑重发"
+      : "This older history lacks a stable message identifier, so it cannot be edited and resent."
     : t("chat.edit");
 
   if (isEditing && effectiveMessageRef) {
@@ -394,7 +394,7 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
     ? t("chat.retry")
     : locale === "en-US"
       ? "This reply cannot be retried because its prompt has no stable message identifier."
-      : "旧历史缺少稳定消息标识，无法重试";
+      : "This older history lacks a stable message identifier, so it cannot be retried.";
   const branchPending = branchPendingMessageId != null;
   const isRowBranchPending =
     branchPending && !!retryMessageRef && branchPendingMessageId === retryMessageRef.messageId;
@@ -727,14 +727,19 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
   // after the DOM has already resized, so estimate-based row positions can
   // overlap without another resize event to repopulate the cache.
 
-  // 楼层跳转：scrollToIndex(align:"start") 后连续几帧重对齐——目标行远处的
-  // 估高行在滚动后被真实测量，落点会漂移；对准同一 index 是收敛操作，不会
-  // 震荡。收敛期间用户的滚轮/触摸/按键立即取消收敛；新跳转替换旧收敛。
-  // 楼层导航当前楼层：以「视口顶缘（+8px 容差）」所落在的用户消息为准——与
-  // 跳转的 align:"start" 落位一致，跳转后高亮的必然是刚点的楼层；视口贴近
-  // 内容底部时直接取最后一层（否则短对话拼满一屏时底部楼层永远无法成为当前
-  // 层）。贴底判定用 scrollHeight（与 scrollTop/clientHeight 同一坐标系，
-  // 含底部保留区），避免与 getTotalSize 的列表局部坐标错位。
+  // Row jump: after scrollToIndex(align:"start") we realign for several frames --
+  // estimated-height rows far from the target row get measured for real after the
+  // scroll, so the landing point drifts; aligning to the same index is a convergent
+  // operation and does not oscillate. During convergence, the user's wheel/touch/key
+  // input cancels it immediately; a new jump replaces the old convergence.
+  // Row navigation current row: use the user message that the viewport's top edge
+  // (+8px tolerance) lands on -- consistent with the jump's align:"start" landing, so
+  // after a jump the highlighted row is necessarily the one just clicked; when the
+  // viewport is near the bottom of the content, take the last row directly (otherwise
+  // in a short conversation that fills one screen, the bottom row could never become
+  // the current row). The bottom-stick check uses scrollHeight (the same coordinate
+  // system as scrollTop/clientHeight, including the bottom reserved area) to avoid
+  // mismatching getTotalSize's list-local coordinates.
   useTranscriptNavigation({
     items: virtualItems,
     getItemKey: (item) => item.key,
@@ -865,10 +870,10 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                 {isLoadingMoreHistory
                   ? locale === "en-US"
                     ? "Loading earlier history..."
-                    : "正在加载更早历史..."
+                    : "Loading earlier history..."
                   : locale === "en-US"
                     ? "Load earlier history"
-                    : "加载更早历史"}
+                    : "Load earlier history"}
               </button>
             </div>
           );

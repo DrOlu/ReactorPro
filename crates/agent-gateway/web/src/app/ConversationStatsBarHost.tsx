@@ -1,8 +1,11 @@
 /**
- * 会话统计状态栏的 WebUI 薄包装（docs/design/composer-context-stats-bar.md §4.4）。
+ * Thin WebUI wrapper around the conversation stats status bar
+ * (docs/design/composer-context-stats-bar.md §4.4).
  *
- * 独立组件而非直接写进 GatewayAppView：运行中状态栏每秒重渲染一次，隔在这里
- * 只重画这一行，不带着整个视图回流（与 ComposerContextUsageRing 同一考量）。
+ * A separate component rather than writing directly into GatewayAppView: while
+ * running, the status bar re-renders once per second, and isolating it here
+ * redraws only this row instead of reflowing the whole view (the same
+ * consideration as ComposerContextUsageRing).
  */
 
 import { ConversationStatsBar } from "@liveagent/ui/components/chat/ConversationStatsBar";
@@ -23,10 +26,10 @@ export function ConversationStatsBarHost(props: {
   conversationId: string;
   host: TrajectoryHost;
   enabled?: boolean;
-  /** 提供且占用达标时整条可点击，弹出确认后触发手动压缩；缺省为纯展示。 */
+  /** When provided and usage meets the threshold, the whole bar is clickable and triggers manual compaction after a confirmation; defaults to display-only. */
   onManualCompactConfirm?: (() => void) | (() => Promise<unknown>);
   manualCompactBlocked?: boolean;
-  /** 与 composer 用量环同一订阅源，供状态栏恒显分组读取当前上下文占用。 */
+  /** The same subscription source as the composer usage ring, letting the always-visible status bar group read the current context usage. */
   contextUsageTokensSource?: ContextUsageTokensSource;
   contextWindow?: number;
 }) {
@@ -49,7 +52,8 @@ export function ConversationStatsBarHost(props: {
     conversationId,
     host,
     liveEvents,
-    // 观察端：页面刚重载、尚未收到实时流时不把仍在运行的回合误判为中断。
+    // Observer side: when the page was just reloaded and no live stream has
+// arrived yet, do not misjudge a still-running turn as interrupted.
     liveOwnership: "observed",
     authoritativeRevision,
     enabled,

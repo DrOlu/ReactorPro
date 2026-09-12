@@ -7,7 +7,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const abs = (rel) => path.join(rootDir, rel);
 
-/** streamAssistantMessage 收到的参数（按调用顺序）。 */
+/** Parameters received by streamAssistantMessage (in call order). */
 const calls = [];
 const deltas = [];
 
@@ -24,7 +24,7 @@ const loader = createTsModuleLoader({
           content: [{ type: "text", text: "[CLARIFY_QUESTION]\nQ1" }],
         };
       },
-      // 与真实实现同构：拼接 text 块（llm.ts 从 messageUtils 再导出）。
+      // Isomorphic to the real implementation: concatenates text blocks (llm.ts re-exports from messageUtils).
       assistantMessageToText: (message) => {
         let text = "";
         for (const block of message.content) {
@@ -66,8 +66,8 @@ test("runGuiClarifyTurn maps messages into a text-only stream call", async () =>
     () => runtime,
   )(
     [
-      // buildClarifyMessages（Task 1）在消息数组前置 system；pi-ai 的 Message
-      // 类型没有 system 角色，runner 必须把它并入 context.systemPrompt。
+      // buildClarifyMessages (Task 1) prepends system to the message array; pi-ai's
+      // Message type has no system role, so the runner must merge it into context.systemPrompt.
       { role: "system", content: "You are a clarify assistant." },
       { role: "user", content: "hi" },
     ],
@@ -121,7 +121,7 @@ test("runGuiClarifyTurn resolves selection lazily per turn", async () => {
   await run();
   assert.equal(calls[calls.length - 1].model, "m1");
 
-  // 会话中途切模型：getter 惰性求值，下一轮澄清直接用新选择。
+  // Switching models mid-conversation: the getter is evaluated lazily, so the next clarification turn uses the new selection directly.
   model = "m2";
   await run();
   assert.equal(calls[calls.length - 1].model, "m2");

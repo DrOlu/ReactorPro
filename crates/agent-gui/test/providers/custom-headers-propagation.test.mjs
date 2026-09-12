@@ -4,9 +4,11 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 回归网：自定义请求头曾在 Agent 聊天 / 文本聊天 / 自动标题 / Compaction 四条链路
-// 上被逐字段转抄的 runtime 对象整体丢弃。这里对每个真实的供应商请求入口各跑一遍，
-// 断言 customHeaders 与 promptCacheRetention 一路抵达上游头集与覆盖包。
+// Regression net: custom request headers were once dropped entirely on all four
+// chains (Agent chat / text chat / auto title / Compaction) because the runtime object
+// was copied field by field. Here every real provider request entry point is exercised,
+// asserting that customHeaders and promptCacheRetention reach both the upstream header
+// set and the override package.
 
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const powerActivityModulePath = path.join(rootDir, "src/lib/system/powerActivity.ts");
@@ -15,11 +17,11 @@ const PROXY_SERVER_INFO = { baseUrl: "http://127.0.0.1:18080", token: "proxy-tok
 
 const CUSTOM_HEADERS = [
   { key: "X-Trace-Id", value: "liveagent-e2e" },
-  // 覆盖内置默认头，且大小写与内置键不同——必须替换而非并存。
+  // Overrides a built-in default header, with different casing from the built-in key -- must replace, not coexist.
   { key: "user-agent", value: "my-agent/9.9" },
-  // 浏览器禁止头名：只能靠覆盖包送达上游。
+  // A browser-forbidden header name: it can only reach upstream via the override package.
   { key: "Cookie", value: "session=abc" },
-  // 保留头：一律丢弃。
+  // Reserved header: always dropped.
   { key: "Authorization", value: "Bearer hijacked" },
   { key: "anthropic-beta", value: "hijacked" },
   { key: "x-liveagent-proxy-token", value: "hijacked" },
@@ -58,8 +60,9 @@ function createAssistantStream() {
 }
 
 /**
- * 走真实的 prepareProviderRequest + prepareProxyRequest（只把 tauri invoke 与
- * 电源活动这两个平台边界换成 mock），因此断言覆盖整条装配链。
+ * Goes through the real prepareProviderRequest + prepareProxyRequest (mocking only the
+ * two platform boundaries: tauri invoke and power activity), so the assertions cover
+ * the entire assembly chain.
  */
 function loadProvidersWithCapturedStream() {
   const captured = [];
@@ -112,21 +115,23 @@ function decodeOverrides(headers) {
 function assertCustomHeadersReachedUpstream(options) {
   const headers = options.headers ?? {};
 
-  // 1) 普通自定义头抵达请求头集。
+  // 1) An ordinary custom header reaches the request header set.
   assert.equal(readHeader(headers, "x-trace-id"), "liveagent-e2e");
-  // 2) 自定义 UA 作为普通自定义头原样抵达，绝不重复、绝不被别的头覆盖。
+  // 2) A custom UA arrives verbatim as an ordinary custom header, never duplicated and never overridden by another header.
   assert.equal(readHeader(headers, "user-agent"), "my-agent/9.9");
-  // 3) 浏览器禁止头名同样进入头集，并由覆盖包负责真正送达。
+  // 3) A browser-forbidden header name also enters the header set, with the override package responsible for actual delivery.
   assert.equal(readHeader(headers, "cookie"), "session=abc");
-  // 4) 保留头不可被自定义头劫持。
+  // 4) Reserved headers cannot be hijacked by custom headers.
   assert.equal(readHeader(headers, "authorization"), undefined);
   assert.equal(readHeader(headers, "x-api-key"), "test-key");
-  // anthropic-beta 由长上下文中间件独占：劫持尝试被保留头策略拦下，中间件算出的
-  // beta 串必须完好无损（覆盖包在其之前构建，不含该头，因此不会回头压掉它）。
+  // anthropic-beta is owned exclusively by the long-context middleware: the hijack
+  // attempt is stopped by the reserved-header policy, and the beta string computed by
+  // the middleware must remain intact (the override package is built before it, does
+  // not contain this header, and therefore will not clobber it afterwards).
   assert.equal(readHeader(headers, "anthropic-beta"), "context-1m-2025-08-07");
   assert.equal(readHeader(headers, "x-liveagent-proxy-token"), PROXY_SERVER_INFO.token);
 
-  // 5) 覆盖包携带全部非鉴权头，由 Rust 反代在转发前最后一步覆盖写入。
+  // 5) The override package carries all non-auth headers, overwritten as the last step by the Rust reverse proxy before forwarding.
   const overrides = decodeOverrides(headers);
   assert.equal(overrides["X-Trace-Id"], "liveagent-e2e");
   assert.equal(overrides["user-agent"], "my-agent/9.9");
@@ -146,7 +151,7 @@ function assertCustomHeadersReachedUpstream(options) {
     "anthropic-beta must stay owned by attachAnthropicLongContextBeta",
   );
 
-  // 6) promptCacheRetention 与 customHeaders 一同在四条链路上失效过，一并锁定。
+  // 6) promptCacheRetention failed together with customHeaders across all four chains, so both are locked down.
   assert.equal(options.cacheRetention, "long");
 }
 
@@ -184,8 +189,9 @@ test("completeAssistantMessage sends provider custom headers (compaction summari
 });
 
 test("compaction summarizer forwards the whole runtime config untouched", async () => {
-  // 摘要器只改 reasoning 档位（展开派生），其余字段必须原样透传——曾经的
-  // 逐字段转抄正是在这一层之上把 customHeaders 抹掉的。
+  // The summarizer only changes the reasoning level (derived expansion); all other
+  // fields must pass through verbatim -- the old field-by-field copy was exactly what
+  // wiped out customHeaders at this layer.
   const loader = createTsModuleLoader();
   const { summarizeConversation } = loader.loadModule("src/lib/chat/compaction/summarizer.ts");
   const runtime = buildRuntime();
@@ -217,7 +223,7 @@ test("compaction summarizer forwards the whole runtime config untouched", async 
   assert.equal(seen.length, 1);
   assert.deepEqual(seen[0].customHeaders, CUSTOM_HEADERS);
   assert.equal(seen[0].promptCacheRetention, "long");
-  // Codex 摘要固定用 medium 档，其余字段来自原 runtime。
+  // The Codex summary always uses the medium level; the other fields come from the original runtime.
   assert.equal(seen[0].reasoning, "medium");
 });
 

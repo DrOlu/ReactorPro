@@ -222,7 +222,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
             ...(project.worktree ? { worktree: project.worktree } : {}),
           }
         : project;
-      // 目标工作区已完全激活时提前返回，避免流式进行中触发无谓的 settings 写入与重渲染
+      // Return early when the target workspace is already fully active, avoiding needless settings writes and re-renders during streaming
       if (
         !options?.startConversation &&
         targetProject.id === activeWorkspaceProjectId &&
@@ -424,7 +424,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
       if (!path) return;
       activateWorkspaceProject(createWorkspaceProjectFromPath(path, "managed"));
     } catch (error) {
-      setErrorMessage(asErrorMessage(error, "选择项目目录失败"));
+      setErrorMessage(asErrorMessage(error, "Failed to select the project directory"));
     }
   }, [activateWorkspaceProject, activeWorkspaceProjectPath, workdir, setErrorMessage]);
 
@@ -438,7 +438,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
           activateWorkspaceProject(createWorkspaceProjectFromPath(path, "managed"));
         }
       } catch (error) {
-        setErrorMessage(asErrorMessage(error, "添加拖入的工作空间失败"));
+        setErrorMessage(asErrorMessage(error, "Failed to add the dropped workspace"));
       }
     },
     [activateWorkspaceProject, setErrorMessage],
@@ -461,8 +461,8 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     [activateWorkspaceProject],
   );
 
-  // 后端返回主工作树作为稳定仓库身份；即使从 linked worktree 再创建，
-  // 新项目也会归到同一个源仓库分组并持久化真实关联分支。
+  // The backend returns the main worktree as the stable repository identity; even when created from a linked worktree again,
+  // the new project is grouped under the same source repository and persists the real associated branch.
   const handleOpenWorktree = useCallback(
     (worktree: { path: string; repositoryPath: string; branch: string }) => {
       const path = worktree.path.trim();
@@ -566,7 +566,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
 
   const handleDeleteWorkspaceGroup = useCallback(
     (groupId: string) => {
-      // 删除分组只解除成员归属，项目保留在列表中。
+      // Deleting a group only removes member attribution; the projects remain in the list.
       updateWorkspaceProjectGroups((groups) => groups.filter((group) => group.id !== groupId));
     },
     [updateWorkspaceProjectGroups],
@@ -578,7 +578,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
       if (!pathKey) return;
       updateWorkspaceProjectGroups((groups) => {
         if (groupId === null) {
-          // 移出所有分组
+          // Remove from all groups
           return groups.map((group) =>
             group.projectPaths.some((path) => workspaceProjectPathKey(path) === pathKey)
               ? {

@@ -540,35 +540,35 @@ export function CollapsibleCodePre({
 }
 
 const streamdownTranslations = {
-  close: "关闭",
-  copied: "已复制",
-  copyCode: "复制代码",
-  copyLink: "复制链接",
-  copyTable: "复制表格",
-  copyTableAsCsv: "复制为 CSV",
-  copyTableAsMarkdown: "复制为 Markdown",
-  copyTableAsTsv: "复制为 TSV",
-  downloadDiagram: "下载图表",
-  downloadDiagramAsMmd: "下载为 Mermaid",
-  downloadDiagramAsPng: "下载为 PNG",
-  downloadDiagramAsSvg: "下载为 SVG",
-  downloadFile: "下载文件",
-  downloadImage: "下载图片",
-  downloadTable: "下载表格",
-  downloadTableAsCsv: "下载为 CSV",
-  downloadTableAsMarkdown: "下载为 Markdown",
-  exitFullscreen: "退出全屏",
-  externalLinkWarning: "请确认目标站点可信后再继续。",
-  imageNotAvailable: "图片暂不可用",
-  mermaidFormatMmd: "Mermaid 源码",
-  mermaidFormatPng: "PNG 图片",
-  mermaidFormatSvg: "SVG 图片",
-  openExternalLink: "打开外部链接",
-  openLink: "打开链接",
+  close: "Close",
+  copied: "Copied",
+  copyCode: "Copy code",
+  copyLink: "Copy link",
+  copyTable: "Copy table",
+  copyTableAsCsv: "Copy as CSV",
+  copyTableAsMarkdown: "Copy as Markdown",
+  copyTableAsTsv: "Copy as TSV",
+  downloadDiagram: "Download diagram",
+  downloadDiagramAsMmd: "Download as Mermaid",
+  downloadDiagramAsPng: "Download as PNG",
+  downloadDiagramAsSvg: "Download as SVG",
+  downloadFile: "Download file",
+  downloadImage: "Download image",
+  downloadTable: "Download table",
+  downloadTableAsCsv: "Download as CSV",
+  downloadTableAsMarkdown: "Download as Markdown",
+  exitFullscreen: "Exit fullscreen",
+  externalLinkWarning: "Please confirm the destination site is trustworthy before continuing.",
+  imageNotAvailable: "Image unavailable",
+  mermaidFormatMmd: "Mermaid source",
+  mermaidFormatPng: "PNG image",
+  mermaidFormatSvg: "SVG image",
+  openExternalLink: "Open external link",
+  openLink: "Open link",
   tableFormatCsv: "CSV",
   tableFormatMarkdown: "Markdown",
   tableFormatTsv: "TSV",
-  viewFullscreen: "全屏查看",
+  viewFullscreen: "View fullscreen",
 } satisfies Partial<StreamdownTranslations>;
 
 async function openExternalLink(url: string, fallback: () => void) {
@@ -644,7 +644,7 @@ function ExternalLinkDialog({ onClose, onConfirm, url }: Omit<LinkSafetyModalPro
               className="mr-auto flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground"
             >
               <Checkbox id={checkboxId} checked={dontRemind} onCheckedChange={setDontRemind} />
-              <span>不再提醒</span>
+              <span>Don't remind me again</span>
             </label>
             <Button
               type="button"

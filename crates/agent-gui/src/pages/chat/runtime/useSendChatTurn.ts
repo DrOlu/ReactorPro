@@ -346,18 +346,18 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       overrides?.executionModeOverride ??
       gatewayBridgeRequest?.executionModeOverride ??
       settings.system.executionMode;
-    // 命令安全模式:远端 WebUI / 网关 / 排队快照带来的模式只能“收紧”,不能放宽
-    // (P3#9)。桌面端是工具唯一执行处,一份陈旧的浏览器快照不得把本地刻意选定的
-    // sandboxOffline 静默降级成 auto —— 故与本地 settings.system 取更严格者。
+    // Command safety mode: a mode coming from the remote WebUI / gateway / queued snapshot can only "tighten", never loosen
+    // (P3#9). The desktop is the only place where tools execute, so a stale browser snapshot must not silently downgrade the locally chosen
+    // sandboxOffline to auto — hence take the stricter of that and the local settings.system.
     const requestedCommandSafetyMode =
       overrides?.commandSafetyModeOverride ?? gatewayBridgeRequest?.commandSafetyModeOverride;
     const effectiveCommandSafetyMode = requestedCommandSafetyMode
       ? strictestCommandSafetyMode(requestedCommandSafetyMode, settings.system.commandSafetyMode)
       : settings.system.commandSafetyMode;
     const effectiveIsAgentMode = isAgentExecutionMode(effectiveExecutionMode);
-    // Plan mode:限制性开关,合并方向同 commandSafetyMode 的"只能收紧"——任一
-    // 来源(本地 settings / 队列快照 / 网关覆盖)要求 plan mode 即生效,远端
-    // 陈旧快照的 false 不得关闭本地已开启的 plan mode。仅 agent 模式有意义。
+    // Plan mode: a restrictive switch whose merge direction is the same "can only tighten" as commandSafetyMode — if any
+    // source (local settings / queue snapshot / gateway override) requires plan mode, it takes effect, and a false from a remote
+    // stale snapshot must not turn off locally enabled plan mode. Only meaningful in agent mode.
     const effectivePlanModeEnabled =
       effectiveIsAgentMode &&
       (settings.chatRuntimeControls.planModeEnabled ||
@@ -457,13 +457,13 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return false;
     }
     if (hydration.isHydrating(conversationId)) {
-      const message = "当前会话仍在加载，请稍候。";
+      const message = "The current conversation is still loading, please wait.";
       setConversationErrorState(message);
       gatewayBridgeEvents.emitError(message, conversationId);
       return false;
     }
     if (hydration.isFailed(conversationId)) {
-      const message = "当前会话加载失败，请重新打开该会话后再继续。";
+      const message = "Failed to load the current conversation. Reopen it before continuing.";
       setConversationErrorState(message);
       gatewayBridgeEvents.emitError(message, conversationId);
       return false;
@@ -484,7 +484,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         gatewaySelectedModel: gatewayBridgeRequest?.selectedModelOverride,
       });
     } catch (error) {
-      const message = asErrorMessage(error, "当前模型配置不可用，请重新选择后重试。");
+      const message = asErrorMessage(error, "The current model configuration is unavailable. Reselect one and retry.");
       setConversationErrorState(message);
       gatewayBridgeEvents.emitError(message);
       return false;
@@ -596,7 +596,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         text = buildTextFromComposerDraft(composerDraft, imported.fileByPasteId);
         uploadedFiles = mergePendingUploadedFiles(uploadedFiles, imported.files);
       } catch (error) {
-        const message = asErrorMessage(error, "大段粘贴内容导入附件失败");
+        const message = asErrorMessage(error, "Failed to import the large pasted content as an attachment");
         setConversationErrorState(message);
         setErrorMessage(message);
         gatewayBridgeEvents.emitError(message, conversationId);
@@ -623,8 +623,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return false;
     }
 
-    // 粘贴等路径可能让草稿携带超限/重复/自引用的会话引用；发送边界统一
-    // 归一化（带当前会话 ID 过滤自引用），与 gateway 队列路径语义一致。
+    // Paths such as paste may leave the draft carrying out-of-range/duplicate/self-referential conversation references; the send boundary uniformly
+    // normalizes them (filtering self-references by the current conversation ID), consistent with the gateway queue path semantics.
     const referencedConversations = normalizeConversationMentionReferences(
       composerDraft?.conversationMentions ?? [],
       conversationId,
@@ -660,8 +660,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     const transcriptStore = getConversationLiveTranscriptStore(conversationId);
     const compaction = getCompactionController(conversationId);
     const isConversationVisible = () => currentConversationIdRef.current === conversationId;
-    // 轮次级取消：会话 abort controller 只注册 userStop 一次；每个 LLM 请求
-    // （主请求/压缩摘要/标题任务）各自派生子 scope，杜绝 abort 换代丢停止的窗口。
+    // Turn-level cancellation: the conversation abort controller registers userStop only once; each LLM request
+    // (main request/compaction summary/title task) derives its own child scope, eliminating the window where an abort generation loses the stop.
     const cancellation = createTurnCancellation();
     const conversationDebugLogger = createStreamDebugLogger({
       enabled: effectiveIsAgentDevExecutionMode,
@@ -1007,8 +1007,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         // its suffix. Otherwise an unchanged header can reference a section pruned by rebase.
         clearLocalTrajectory(conversationId);
         await releaseTrajectoryRecorder(conversationId);
-        // 重发同样是新用户消息开启新 Run:替换回来的历史 meta 可能带着上一
-        // Run 持久化的 taskList,必须与常规发送一样在 Run 边界清除。
+        // Resending also starts a new Run with a new user message: the restored history meta may carry the taskList persisted by the previous
+        // Run, and it must be cleared at the Run boundary just like a regular send.
         nextConversationState = clearTaskListState(
           await replaceConversationAtMessage(
             conversationId,
@@ -1036,7 +1036,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           console.warn("edit-resend subagent cleanup failed", error);
         });
       } catch (error) {
-        const message = asErrorMessage(error, "替换编辑消息失败，原历史保持不变。");
+        const message = asErrorMessage(error, "Failed to replace the edited message; the original history is unchanged.");
         cancellation.userStop.abort();
         setConversationErrorState(message);
         gatewayBridgeEvents.emitError(message, conversationId);
@@ -1114,7 +1114,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         if (await finishRequestedStopBeforeRuntime()) {
           return true;
         }
-        const message = asErrorMessage(error, "启动远程对话运行失败");
+        const message = asErrorMessage(error, "Failed to start the remote conversation run");
         setConversationErrorState(message);
         gatewayBridgeEvents.emitError(message, conversationId);
         releaseConversationRunUi();
@@ -1160,7 +1160,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         return true;
       }
       if (!persisted) {
-        const message = "历史记录保存失败，已取消发送。";
+        const message = "Failed to save history; the send was cancelled.";
         setConversationErrorState(message);
         gatewayRuntimeErrorCode = "history_persist_failed";
         gatewayRuntimeErrorMessage = message;
@@ -1180,7 +1180,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         if (await finishRequestedStopBeforeRuntime()) {
           return true;
         }
-        const message = asErrorMessage(error, "历史保存后的启动操作失败");
+        const message = asErrorMessage(error, "The post-save startup operation failed");
         setConversationErrorState(message);
         gatewayRuntimeErrorCode = "post_history_start_failed";
         gatewayRuntimeErrorMessage = message;
@@ -1252,7 +1252,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     ]);
     let skillsPrompt = "";
     let memoryPrompt = "";
-    /** 本轮 `/skill-name` 显式提及块;没有提及时恒为空串,不会挂出任何内容。 */
+    /** This turn's explicit `/skill-name` mention block; it is always an empty string when there is no mention and mounts nothing. */
     let explicitSkillMentionBlock = "";
     let skillsRootDirForTools = skillsRootDir;
     let skillAccessPolicyForTools: SkillAccessPolicy | undefined = effectiveSkillsEnabled
@@ -1265,13 +1265,13 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         }
       : undefined;
 
-    // recorder 跨轮存活：header 分段去重靠的就是「上一份 refs」，每轮新建会让
-    // 去重立刻失效。这里只更新本轮的活动 segment。
+    // recorder survives across turns: header segment dedup relies on the "previous refs", so recreating it each turn would make
+    // dedup fail immediately. Here only this turn's active segment is updated.
     const trajectoryRecording = acquireTrajectoryRecorder(
       conversationId,
       getActiveSegment(nextConversationState)?.segmentIndex ??
         nextConversationState.meta.activeSegmentIndex,
-      // registry 已写入桌面实时缓存；这里只下发给 WebUI 轨迹页。
+      // The registry has already written into the desktop live cache; here it is only pushed to the WebUI trajectory page.
       (events) => {
         for (const event of events) {
           gatewayBridgeEvents.queueEvent({
@@ -1282,8 +1282,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         }
       },
     );
-    // 压缩有四条触发路径，逐个调用点埋点必漏；订阅控制器生命周期一次覆盖全部。
-    // manual 发生在两轮之间，不属于任何 turn。
+    // Compaction has four trigger paths, and instrumenting each call site individually would surely miss some; subscribing to the controller lifecycle covers them all at once.
+    // manual happens between turns and belongs to no turn.
     compaction.setObserver({
       onStart: ({ trigger }) => {
         trajectoryRecording.recorder.compactionStart({ standalone: trigger === "manual" });
@@ -1317,16 +1317,16 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         activeAgentPrompt: effectiveAgentPrompt,
         skillsPrompt,
         memoryPrompt,
-        // 每次组装都现取:增量块按消息 id 绑定,已挂上的块在后续轮次原样重放,
-        // 历史区间的字节因此保持稳定。
-        // 只有发给主模型的上下文才需要增量块;记忆抽取这类复用同一份消息的旁路
-        // 必须显式关掉,否则块里的索引行会被当成用户说的话再抽一遍。
+        // Fetched fresh on every assembly: incremental blocks are bound by message id, and already-mounted blocks are replayed as-is in later turns,
+        // so the bytes of the historical range stay stable.
+        // Only the context sent to the main model needs incremental blocks; bypasses that reuse the same messages, such as memory extraction,
+        // must explicitly disable them, otherwise the index lines inside the block would be extracted again as if the user had said them.
         memoryTurnUpdates:
           options?.includeMemoryTurnUpdates === false
             ? null
             : memoryTurnInjection.getMessageUpdates(conversationId),
-        // 显式提及块与 memory 增量同一个口径:同样是合成出来的上下文,不能被
-        // 记忆抽取这类旁路当成用户说的话再抽一遍。
+        // The explicit mention block shares the same treatment as the memory increment: it is likewise synthesized context and must not be
+        // extracted again as user speech by bypasses such as memory extraction.
         skillMentionUpdates:
           options?.includeMemoryTurnUpdates === false
             ? null
@@ -1419,9 +1419,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             titlePromise,
           });
         },
-        // 压缩把携带 memory 增量块的 user 消息移出 active segment,增量对模型
-        // 永久不可见;丢弃注入状态,下一轮把 fresh 快照重冻结进 system 段 ——
-        // 压缩本来就要重建前缀,这次重冻结免费。
+        // Compaction moves the user message carrying the memory increment block out of the active segment, making the increment permanently
+        // invisible to the model; discard the injection state and re-freeze a fresh snapshot into the system segment next turn —
+        // compaction already rebuilds the prefix, so this re-freeze is free.
         onCompacted: () => memoryTurnInjection.invalidate(conversationId),
       },
     });
@@ -1449,7 +1449,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }
 
       if (missing.length > 0) {
-        const message = `找不到以下 Skills：${missing.join(", ")}（请先重新扫描固定 Skills 目录）`;
+        const message = `The following Skills were not found: ${missing.join(", ")} (please rescan the fixed Skills directory first)`;
         setConversationErrorState(message);
         gatewayRuntimeErrorCode = "skills_missing";
         gatewayRuntimeErrorMessage = message;
@@ -1489,8 +1489,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         structured: composerDraft?.skillMentions ?? [],
         enabledSkills: selectedSkills,
       });
-      // 显式提及只对当轮有效:留在 system prompt 里会让它这轮多一段、下轮撤回去,
-      // 一次 `/skill-name` 连废两次缓存前缀。这里只算出块,挂载推迟到停止检查之后。
+      // Explicit mention is valid only for the current turn: leaving it in the system prompt would add a section this turn and remove it next turn,
+      // so one `/skill-name` would waste the cached prefix twice. Here we only compute the block; mounting is deferred until after the stop check.
       explicitSkillMentionBlock = formatExplicitSkillMentions(explicitSkills);
       skillsPrompt = buildSkillsSystemPrompt({
         rootDir,
@@ -1498,34 +1498,34 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       });
     }
 
-    // memory 索引每轮都可能变(模型刚写完一条,下一轮索引就跟着变)。整块塞进
-    // system prompt 会让 system 段跟着漂,把整条缓存前缀连同全部历史一起顶掉。
-    // 因此只有首轮走 system prompt(那时它本就是稳定前缀的一部分),之后 system
-    // 段冻结,变化改挂到当轮 user 消息尾部 —— 复用 pi-ai 已经打在最后一条 user
-    // 消息上的那个断点,不额外占用 Anthropic 的 4 个 cache_control 名额。
+    // The memory index can change every turn (the model just wrote an entry, and the next turn's index changes accordingly). Putting the whole block into
+    // the system prompt would make the system segment drift and knock out the entire cached prefix together with all history.
+    // Therefore only the first turn goes through the system prompt (when it is already part of the stable prefix); afterwards the system
+    // segment is frozen, and changes are mounted at the tail of the current turn's user message — reusing the breakpoint pi-ai already places on the last user
+    // message, without consuming an extra one of Anthropic's 4 cache_control slots.
     let memoryOverview: string | null = null;
     try {
       memoryOverview = await buildMemoryOverviewSection(effectiveWorkdir);
     } catch (error) {
       console.warn("Failed to build memory overview prompt", error);
-      // null 表示这轮没读到,基线维持原样;空串是「一条记忆都没有」,属于正常内容。
+      // null means it was not read this turn and the baseline stays as-is; an empty string is "no memories at all" and is normal content.
       memoryOverview = null;
     }
     if (await finishRequestedStopBeforeRuntime()) {
       return true;
     }
-    // 放在停止检查之后:这一轮被停掉时请求根本没发出去,提前推进基线会让下一轮
-    // 漏报这次变化。
+    // Placed after the stop check: when this turn is stopped the request was never sent, and advancing the baseline early would make the next turn
+    // miss reporting this change.
     memoryPrompt = memoryTurnInjection.planTurn({
       conversationId,
       messageId: pendingUserMessage.id,
       overview: memoryOverview,
-      // project 段随 workdir 换血,增量 diff 无法保真表达;基线记录冻结时的
-      // workdir,切换时由 planTurn 触发重冻结。
+      // The project segment changes with workdir, and an incremental diff cannot faithfully represent it; the baseline records the frozen
+      // workdir, and on switch planTurn triggers a re-freeze.
       workdir: effectiveWorkdir,
     }).systemText;
-    // 同样放在停止检查之后:这一轮被停掉时消息根本没发出去,提前记账只会给一个
-    // 永远对不上的消息 id 留下垃圾块。空块不会创建任何状态。
+    // Also placed after the stop check: when this turn is stopped the message was never sent, and advancing the ledger early would leave
+    // garbage blocks under a message id that will never match. An empty block creates no state.
     skillMentionInjection.record({
       conversationId,
       messageId: pendingUserMessage.id,
@@ -1647,10 +1647,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       resetLiveTranscript(transcriptStore);
     }
 
-    // Run 级任务清单存储:先落盘、成功后才应用到运行时状态,失败时状态从未
-    // 变更(无需回滚)。持久化走非终态通道——中途任务写盘失败只属于本次工具
-    // 调用(模型收到错误可重试),绝不能点亮 terminalHistoryPersistFailed 把
-    // 已成功收尾的 run 误报为 history_persist_failed。
+    // Run-level task list storage: persist to disk first, apply to runtime state only on success, so on failure the state never
+    // changes (no rollback needed). Persistence goes through the non-terminal channel — a mid-flight task write failure belongs only to this tool
+    // call (the model receives an error and can retry), and must never light up terminalHistoryPersistFailed to
+    // misreport an already successfully finished run as history_persist_failed.
     const taskStateStore: TaskStateStore = {
       runId: gatewayBridgeRequestId,
       getState: () => nextConversationState.meta.taskList,

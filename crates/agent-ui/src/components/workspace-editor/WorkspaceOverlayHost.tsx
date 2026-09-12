@@ -71,7 +71,7 @@ type WorkspaceOverlayHostProps = {
   terminalSessions: TerminalSession[];
   onWorkspaceSshTerminalHide: () => void;
   onSshTerminalOpenFile?: (session: TerminalSession, request: SftpOpenFileRequest) => void;
-  /** 工作台互斥/拖出(可选透传;缺省时 overlay 行为不变)。 */
+  /** Workbench mutual exclusion/drag-out (optional pass-through; overlay behavior is unchanged when omitted). */
   sshTerminalPaneLeasedSessionIds?: ReadonlySet<string>;
   onSshTerminalFocusLeasedSession?: (sessionId: string) => void;
   onSshTerminalSessionTabDragStart?: (

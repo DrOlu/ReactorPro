@@ -9,8 +9,8 @@ export function Tooltip<Payload = unknown>(props: TooltipPrimitive.Root.Props<Pa
 }
 
 /**
- * 分离式触发器：多个 TooltipTrigger 通过同一个 handle 共享一个 Tooltip 实例，
- * 列表类场景不必为每一行各挂一份弹层。
+ * Detached triggers: multiple TooltipTriggers share one Tooltip instance through the same handle,
+ * so list-style scenarios need not attach a separate popover to every row.
  */
 export const createTooltipHandle = TooltipPrimitive.createHandle;
 

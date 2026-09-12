@@ -101,13 +101,14 @@ test("provider groups keep a reachable edit affordance before the chevron", () =
     assert.match(source, /t\("settings\.editProvider"\)/);
     assert.doesNotMatch(source, /title=\{`\$\{t\("settings\.editProvider"\)/);
     assert.doesNotMatch(source, /title=\{\s*expanded \? t\("chat\.collapseProvider"\)/);
-    // 编辑入口常驻可点：此前 pointer-events-none + opacity-0 靠 group-hover
-    // 激活，触屏设备没有 hover，因此永远点不到。
+    // The edit entry is always clickable: previously pointer-events-none + opacity-0 relied on
+    // group-hover to activate, and touch devices have no hover, so it could never be tapped.
     assert.match(source, /flex w-7 shrink-0 cursor-pointer/);
     assert.doesNotMatch(source, /pointer-events-none flex w-7/);
     assert.doesNotMatch(source, /max-w-0|group-hover:max-w-7|group-focus-within:max-w-7/);
-    // 分组计数已移除；编辑入口仍需排在折叠按钮之前。锚点用折叠按钮独有的
-    // aria-label —— 触发器自身也有 <ChevronDown，按标签名会锚错位置。
+    // The group count has been removed; the edit entry must still come before the collapse button.
+    // The anchor uses the collapse button's unique aria-label -- the trigger itself also has a
+    // <ChevronDown, so anchoring by tag name would land in the wrong place.
     assert.ok(source.indexOf("<Pencil") < source.indexOf("chat.collapseProvider"));
     assert.match(
       source,
@@ -118,9 +119,10 @@ test("provider groups keep a reachable edit affordance before the chevron", () =
 
 test("upload stays leftmost before model controls in the composer toolbar", () => {
   assert.match(composerSource, /<ComposerModelControls/);
-  // 上传入口是 Codex 风格的 + 菜单。触发键按菜单可用性禁用(aria-label 用
-  // addMenuTooltip),上传专属限制(需要 workdir 等)下沉到上传菜单项自身——
-  // plan 开关不依赖上传前置条件,不得被 uploadDisabled 连坐锁死。
+  // The upload entry is a Codex-style + menu. The trigger key is disabled according to menu
+  // availability (aria-label uses addMenuTooltip), and upload-specific restrictions (needing a
+  // workdir, etc.) are pushed down into the upload menu item itself -- the plan switch does not depend
+  // on upload preconditions and must not be locked out by uploadDisabled.
   assert.match(composerSource, /aria-label=\{addMenuTooltip\}/);
   assert.match(composerSource, /disabled=\{composerAddMenuDisabled\}/);
   assert.match(composerSource, /onSelect=\{onPickReadableFiles\}\s+disabled=\{uploadDisabled\}/);
@@ -149,19 +151,23 @@ test("upload stays leftmost before model controls in the composer toolbar", () =
     assert.match(source, /thinkingEnabled: !chatRuntimeControls\.thinkingEnabled/);
     assert.match(source, /thinkingEnabled: true, reasoning: level/);
     assert.match(source, /thinkingEnabled: false/);
-    // 推理强度由「脑图标 + 带刻度滑块 + 数值胶囊」三重表示改为分段按钮：
-    // 原实现只有滑块可交互，胶囊却与旁边真正的按钮同款样式，必然被误点。
+    // Reasoning effort is represented by segmented buttons instead of the previous triple
+    // "brain icon + ticked slider + numeric pill": in the original implementation only the slider was
+    // interactive, yet the pill had the same styling as the real buttons beside it and would
+    // inevitably be mis-clicked.
     assert.match(source, /function ReasoningEffortSegments/);
     assert.match(source, /role="radiogroup"/);
     assert.doesNotMatch(source, /type="range"/);
-    // role="radio" 承诺了 radiogroup 的交互约定：整组一个 Tab 停靠点 +
-    // 方向键改选。原实现是 input[type=range]，两者由浏览器免费提供；
-    // 换成分段按钮后必须自己实现，否则 ARIA 角色与实际行为不符。
+    // role="radio" promises the radiogroup interaction contract: a single Tab stop for the whole group
+    // + arrow keys to change selection. The original implementation was input[type=range], where the
+    // browser provides both for free; after switching to segmented buttons they must be implemented
+    // manually, otherwise the ARIA role does not match the actual behavior.
     assert.match(source, /tabIndex=\{isSelected \|\| \(activeIndex < 0 && index === 0\) \? 0 : -1\}/);
     assert.match(source, /event\.key === "ArrowRight" \|\| event\.key === "ArrowDown"/);
     assert.match(source, /focus-visible:ring-2 focus-visible:ring-inset/);
-    // role="radio" 现在是分段控件的正确 ARIA 模式（配合 radiogroup），
-    // 不再是「误用原生控件」的信号；仍不应引入 select/switch。
+    // role="radio" is now the correct ARIA pattern for a segmented control (paired with radiogroup)
+    // and is no longer a signal of "misusing a native control"; select/switch should still not be
+    // introduced.
     assert.doesNotMatch(source, /from "@liveagent\/ui\/components\/ui\/select"/);
     assert.doesNotMatch(source, /from "@liveagent\/ui\/components\/ui\/switch"/);
   }

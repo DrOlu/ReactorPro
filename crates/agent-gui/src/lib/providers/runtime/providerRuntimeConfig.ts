@@ -8,8 +8,10 @@ import {
 import type { ProviderRuntimeConfig } from "./types";
 
 /**
- * ProviderRuntimeConfig 的唯一构造点——全仓仅此一处注入品牌。任何调用方都只能
- * 拿到完整对象并整体传递（需要改档位等请用展开派生），不得再逐字段转抄。
+ * The sole construction point for ProviderRuntimeConfig — the only place in the repo where the
+ * brand is injected. Every caller must take the complete object and pass it along whole (use a
+ * spread-derived object if you need to change a level or similar); copying it field by field is
+ * not allowed.
  */
 export function createProviderRuntimeConfig(
   provider: CustomProvider,

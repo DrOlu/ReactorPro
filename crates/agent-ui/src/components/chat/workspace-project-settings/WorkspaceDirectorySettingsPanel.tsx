@@ -76,7 +76,7 @@ export function WorkspaceDirectorySettingsPanel(props: {
     <section className="space-y-4 p-6 max-[720px]:p-4">
       <h3 className="text-sm font-semibold">{t("chat.workspaceSettingsDirectories")}</h3>
 
-      {/* 主目录与附加目录合并为同一张列表卡片，形成统一的目录清单。 */}
+      {/* The primary directory and additional directories merge into one list card, forming a unified directory listing. */}
       <div className="overflow-hidden rounded-xl border border-border/60">
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -132,7 +132,7 @@ export function WorkspaceDirectorySettingsPanel(props: {
                     disabled={!loaded}
                     className="h-6 min-w-0 max-w-[180px] border-transparent bg-transparent px-1 text-sm font-medium shadow-none hover:border-border/60 focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-foreground/10"
                   />
-                  {/* 正常状态不显示徽标，只有异常/待批准时提醒。 */}
+                  {/* No badge is shown in the normal state; it only alerts for error/pending-approval states. */}
                   {root.state !== "active" ? (
                     <span
                       className={cn(

@@ -274,15 +274,15 @@ function CcsImportModal(props: {
       <DialogContent
         className="flex h-[min(34rem,85dvh)] max-w-xl flex-col p-0"
         closeDisabled={importing}
-        closeLabel="关闭"
+        closeLabel="Close"
         showCloseButton
       >
         <DialogHeader className="flex-row items-center gap-3 px-6">
           {sourceLogo("ccswitch", "h-9 w-9")}
           <div className="min-w-0 flex-1">
-            <DialogTitle className="text-sm leading-normal">从 CC Switch 导入</DialogTitle>
+            <DialogTitle className="text-sm leading-normal">Import from CC Switch</DialogTitle>
             <DialogDescription className="mt-0.5 text-xs">
-              导入当前供应商类型的配置，并在后台获取模型列表
+              Import the configuration for the current provider type and fetch the model list in the background
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -313,19 +313,19 @@ function CcsImportModal(props: {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{item.name}</div>
                     <div className="truncate text-xs text-muted-foreground">
-                      {item.baseUrl || "未配置 Base URL"}
+                      {item.baseUrl || "No Base URL configured"}
                     </div>
                   </div>
                   {item.apiKey.trim() ? <Key className="h-3.5 w-3.5" /> : null}
                   {alreadyImported ? (
-                    <span className="text-xs text-emerald-600">已导入</span>
+                    <span className="text-xs text-emerald-600">Imported</span>
                   ) : null}
                 </label>
               );
             })
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              当前类型未发现可导入配置
+              No importable configuration found for the current type
             </div>
           )}
         </DialogBody>
@@ -338,7 +338,7 @@ function CcsImportModal(props: {
         <DialogFooter className="px-6">
           <DialogActions>
             <Button variant="outline" onClick={onClose} disabled={importing}>
-              关闭
+              Close
             </Button>
             <Button
               className="gap-1.5"
@@ -350,7 +350,7 @@ function CcsImportModal(props: {
               ) : (
                 <Download className="h-3.5 w-3.5" />
               )}
-              导入 {selectedItems.length} 项
+              Import {selectedItems.length} items
             </Button>
           </DialogActions>
         </DialogFooter>
@@ -359,14 +359,14 @@ function CcsImportModal(props: {
   );
 }
 
-/** 桌面端复制内容：Base URL 与 API Key 各占一行，空值省略。 */
+/** Desktop copy content: Base URL and API Key each on their own line, with empty values omitted. */
 export function formatProviderCopyConfig(provider: Pick<CustomProvider, "baseUrl" | "apiKey">) {
   return [provider.baseUrl.trim(), provider.apiKey.trim()].filter(Boolean).join("\n");
 }
 
 /**
- * 供应商卡片上的一键复制按钮（仅桌面端）：把 Base URL 与 API Key 复制到
- * 剪贴板。WebUI 会对 API Key 做脱敏，因此 gateway 端的同名适配器返回 null。
+ * One-click copy button on the provider card (desktop only): copies the Base URL and API Key to
+ * the clipboard. The WebUI masks API Keys, so the same-named adapter on the gateway side returns null.
  */
 export function ProviderCopyConfigButton(props: {
   provider: Pick<CustomProvider, "baseUrl" | "apiKey">;
@@ -473,8 +473,8 @@ export function ProviderSettingsExtension(props: {
     const failed = results.filter((result) => !result.ok).length;
     setMessage(
       failed > 0
-        ? `已导入配置，${failed} 个供应商模型获取失败`
-        : "已导入配置并激活获取到的全部模型",
+        ? `Configuration imported; model fetch failed for ${failed} providers`
+        : "Configuration imported and all fetched models activated",
     );
   }
 
@@ -498,7 +498,7 @@ export function ProviderSettingsExtension(props: {
         ? updateCustomProviders(current, [...current.customProviders, ...imported])
         : current;
     });
-    setMessage(`已导入 ${imported.length} 个 CC Switch 供应商，正在获取模型…`);
+    setMessage(`Imported ${imported.length} CC Switch providers; fetching models...`);
     void syncModels(imported).finally(() => setImporting(false));
   }
 
@@ -556,8 +556,8 @@ export function ProviderSettingsExtension(props: {
     const failed = results.filter((result) => !result.ok).length;
     setMessage(
       failed > 0
-        ? `已同步 ${importable.length} 个 Cherry Studio 供应商，${failed} 个模型列表获取失败`
-        : `已同步 ${importable.length} 个 Cherry Studio 供应商并激活全部模型`,
+        ? `Synced ${importable.length} Cherry Studio providers; model list fetch failed for ${failed}`
+        : `Synced ${importable.length} Cherry Studio providers and activated all models`,
     );
     setCherryModalOpen(false);
     setImporting(false);
@@ -625,10 +625,10 @@ export function ProviderSettingsExtension(props: {
             />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>桌面配置同步</DropdownMenuLabel>
+            <DropdownMenuLabel>Desktop config sync</DropdownMenuLabel>
             <DropdownMenuItem onSelect={() => void scan()} disabled={scanning} className="gap-2">
               <RefreshCw className={cn("h-4 w-4", scanning && "animate-spin")} />
-              重新扫描本地配置
+              Rescan local configuration
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -640,7 +640,7 @@ export function ProviderSettingsExtension(props: {
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">CC Switch</span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  当前类型发现 {ccsCount} 项配置
+                  Found {ccsCount} configurations for the current type
                 </span>
               </span>
             </DropdownMenuItem>
@@ -653,7 +653,7 @@ export function ProviderSettingsExtension(props: {
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">Cherry Studio</span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  当前类型发现 {cherryCount} 项可同步配置
+                  Found {cherryCount} syncable configurations for the current type
                 </span>
               </span>
             </DropdownMenuItem>

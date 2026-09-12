@@ -102,7 +102,7 @@ test("runCompaction produces a zero-usage checkpoint and appends a new segment",
   assert.equal(checkpoint.api, "liveagent-compaction");
   assert.equal(checkpoint.model, "claude-x");
   assert.equal(checkpoint.promptVersion, "summary-v3");
-  // usage 恒为零：summarizer 用量只进 compactionStats。
+  // usage is always zero: the summarizer usage only goes into compactionStats.
   assert.equal(checkpoint.usage.totalTokens, 0);
   assert.equal(checkpoint.usage.input, 0);
   assert.deepEqual(checkpoint.compactionStats, {
@@ -113,7 +113,7 @@ test("runCompaction produces a zero-usage checkpoint and appends a new segment",
   assert.equal(outcome.newSegmentIndex, 1);
   assert.equal(outcome.state.activeSegmentIndex, 1);
   assert.equal(outcome.state.segments.length, 2);
-  // 旧消息保留展示，新 segment 从空开始、summary 挂载。
+  // Old messages stay displayed; the new segment starts empty with the summary attached.
   assert.equal(outcome.state.segments[0].messages.length, 2);
   assert.equal(outcome.state.segments[1].messages.length, 0);
 

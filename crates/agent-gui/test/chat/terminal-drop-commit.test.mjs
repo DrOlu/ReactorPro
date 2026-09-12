@@ -130,8 +130,8 @@ test("an unknown session id is ignored without side effects", () => {
 });
 
 test("a session from another project is rejected instead of opened", () => {
-  // 跨项目投放会造出「project 声称 /repo、cwd 实际在 /other」的 surface;
-  // Rust 侧建会话时也会拒,这里让它在投放阶段就无声失败。
+  // A cross-project drop would create a surface where "the project claims /repo but cwd is actually /other";
+  // the Rust side would also reject it when creating the session, so here it silently fails at the drop stage.
   const { deps, calls } = makeDeps({
     sessions: [session("session-1", { projectPathKey: "/other", cwd: "/other" })],
   });
@@ -183,9 +183,9 @@ test("newTerminal opens an unbound local surface with the project cwd", () => {
   const surface = calls.open[0].surface;
   assert.equal(surface.kind, "localTerminal");
   assert.deepEqual(surface.launchSpec, { cwd: "/workspace/app" });
-  // PTY 由宿主挂载后创建:drop 阶段不得预建会话或写绑定。
+  // The PTY is created after the host mounts it: the drop stage must not pre-create a session or write a binding.
   assert.deepEqual(deps.bindings.surfaceIds(), []);
-  // 显式新建须授权 auto-launch,宿主挂载后才会自动建会话(区别于恢复占位)。
+  // An explicit new-terminal must grant auto-launch so the session is created automatically after the host mounts it (unlike restoring a placeholder).
   assert.deepEqual(calls.autoLaunch, [surface.surfaceId]);
 });
 

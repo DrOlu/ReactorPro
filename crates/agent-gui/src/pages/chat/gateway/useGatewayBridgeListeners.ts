@@ -39,7 +39,7 @@ type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
   requestConversationStop: (conversationId: string) => boolean;
   requestActiveConversationStop: (conversationId: string, options: { force: boolean }) => boolean;
   consumeConversationStop: (conversationId: string, expectedVersion?: number) => boolean;
-  /** 执行一次澄清补全（Web 下发模型选择，桌面端按 providerId 查表重建 runtime）。返回 assistant 全文文本。 */
+  /** Runs one clarification completion (the Web sends down the model selection, and the desktop rebuilds the runtime by looking up providerId). Returns the assistant's full text. */
   runGatewayClarifyTurn: (
     messages: ClarifyMessage[],
     selection: { providerId: string; model: string },

@@ -7,8 +7,9 @@ import (
 	"time"
 )
 
-// 写泵语义回归测试（原 internal/server/websocket_write_test.go）：队列路由、
-// 拥塞掉帧、关联响应关连接、心跳静默丢弃等行为必须逐一保持。
+// Write-pump semantics regression tests (formerly internal/server/websocket_write_test.go): queue routing,
+// frame dropping under congestion, closing the connection on correlated responses, and silently discarding
+// heartbeats must all be preserved one by one.
 
 func newTestConn(queueSize int, writeTimeout time.Duration) *Conn {
 	return NewConn(nil, Config{
@@ -126,7 +127,8 @@ func TestResponseQueueFullClosesConnectionForRecovery(t *testing.T) {
 	}
 	select {
 	case <-c.Done():
-		// 预期：客户端观察到断连即可恢复该关联请求，而非等一个被静默丢弃的响应到超时。
+		// Expected: on observing the disconnect the client can recover the correlated request,
+// rather than waiting for a silently dropped response until it times out.
 	default:
 		t.Fatal("dropping a correlated response left the connection open")
 	}

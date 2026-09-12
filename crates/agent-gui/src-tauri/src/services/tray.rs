@@ -1,15 +1,17 @@
-//! 托盘菜单的「视图层」：固定骨架 + 单一 apply 写入路径。
+//! The "view layer" of the tray menu: a fixed skeleton + a single apply write path.
 //!
-//! 设计约束（勿破坏）：
-//! - 菜单骨架只建一次（bootstrap 用 zh-CN 默认文案），此后所有更新都走
-//!   [`apply_tray_menu`] 改内容（set_text/set_checked/set_enabled + 子菜单重建），
-//!   绝不整棵 `set_menu` 替换——Linux 托盘菜单一旦设置不可替换，macOS 菜单
-//!   展开时替换会闪烁。
-//! - 文案单一真源在前端 i18n（`i18n/config.ts`），Rust 不建翻译表也不猜
-//!   locale；前端经 `app_tray_menu_sync` 推送已本地化的 [`TrayMenuModel`]。
-//! - 会话标题等用户数据进菜单前必须过 [`sanitize_menu_label`]（`&` 转义、
-//!   控制字符剥离、显示宽度截断）。
-//! - 动作分发不在本模块：菜单项 ID 由 `lib.rs` 的动作总线解析执行。
+//! Design constraints (do not break):
+//! - The menu skeleton is built only once (bootstrap uses English default labels);
+//!   afterwards all updates go through [`apply_tray_menu`] to change content
+//!   (set_text/set_checked/set_enabled + submenu rebuild), never a whole-tree
+//!   `set_menu` replacement -- once set, a Linux tray menu cannot be replaced, and
+//!   replacing a macOS menu while it is open causes flicker.
+//! - The single source of truth for labels is the frontend i18n (`i18n/config.ts`);
+//!   Rust keeps no translation table and does not guess the locale; the frontend
+//!   pushes an already-localized [`TrayMenuModel`] via `app_tray_menu_sync`.
+//! - User data such as conversation titles must pass through [`sanitize_menu_label`]
+//!   before entering the menu (`&` escaping, control-character stripping, display-width truncation).
+//! - Action dispatch is not in this module: menu item IDs are resolved and executed by the action bus in `lib.rs`.
 
 use std::sync::Mutex;
 
@@ -18,7 +20,7 @@ use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIcon;
 use tauri::AppHandle;
 
-// ---- 静态菜单项 ID（lib.rs 动作总线按这些 ID 解析）----
+// ---- Static menu item IDs (the lib.rs action bus resolves by these IDs) ----
 pub const TRAY_STATUS_ID: &str = "tray-status";
 pub const TRAY_SHOW_ID: &str = "tray-show";
 pub const TRAY_NEW_CHAT_ID: &str = "tray-new-chat";
@@ -39,19 +41,20 @@ pub const TRAY_CHECK_UPDATES_ID: &str = "tray-check-updates";
 pub const TRAY_OPEN_DATA_DIR_ID: &str = "tray-open-data-dir";
 pub const TRAY_QUIT_ID: &str = "tray-quit";
 
-// ---- 动态子项 ID 前缀（`<前缀><业务 id>`）----
+// ---- Dynamic child item ID prefixes (`<prefix><business id>`) ----
 pub const TRAY_RECENT_PREFIX: &str = "tray-recent:";
 pub const TRAY_WORKSPACE_PREFIX: &str = "tray-ws:";
 pub const TRAY_RUN_PREFIX: &str = "tray-run:";
 pub const TRAY_CRON_PREFIX: &str = "tray-cron:";
 
-/// 动态列表的显示宽度上限（半角单位；CJK 记 2）。
+/// Display-width upper bound for dynamic lists (half-width units; wide characters count as 2).
 const TRAY_LABEL_MAX_WIDTH: usize = 40;
-/// 单个子菜单条目数上限（前端已截断，这里是防御性兜底）。
+/// Upper bound on entries in a single submenu (the frontend truncates already; this is a defensive fallback).
 const TRAY_SUBMENU_MAX_ENTRIES: usize = 20;
 
-/// 前端推送的动态子项：`id` 是业务 id（会话/工作空间/cron 任务），
-/// `label` 已本地化但**未**消毒——消毒统一在 Rust apply 时做。
+/// A dynamic child item pushed by the frontend: `id` is the business id (conversation/workspace/
+/// cron task), and `label` is already localized but **not** sanitized -- sanitization is done
+/// uniformly in Rust during apply.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrayMenuEntry {
@@ -61,7 +64,7 @@ pub struct TrayMenuEntry {
     pub checked: bool,
 }
 
-/// 静态菜单项的本地化文案。空字符串 = 保持现值（bootstrap 文案）。
+/// Localized labels for static menu items. An empty string = keep the current value (bootstrap label).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct TrayMenuLabels {
@@ -85,34 +88,34 @@ pub struct TrayMenuLabels {
     pub quit: String,
 }
 
-/// 前端推送的完整托盘模型。缺省字段语义为「保持/清空该区块」，
-/// 与 settings sync 的 keep-current 语义不同：托盘模型每次全量推送。
+/// The complete tray model pushed by the frontend. Absent fields mean "keep/clear this block",
+/// which differs from settings sync's keep-current semantics: the tray model is pushed in full each time.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct TrayMenuModel {
     pub labels: TrayMenuLabels,
-    /// 状态行后缀（如「远程已连接」）；None 时只显示 `LiveAgent <version>`。
+    /// Status-line suffix (e.g. "Remote connected"); when None, only `ReactorPro <version>` is shown.
     pub status_suffix: Option<String>,
     pub recent: Vec<TrayMenuEntry>,
-    /// 最近对话被截断时在子菜单尾部追加「查看全部…」。
+    /// Appends "View All…" at the end of the submenu when recent chats are truncated.
     pub recent_truncated: bool,
     pub workspaces: Vec<TrayMenuEntry>,
     pub runs: Vec<TrayMenuEntry>,
     pub cron: Vec<TrayMenuEntry>,
-    /// "light" | "dark" | "system"；其余值不更新勾选。
+    /// "light" | "dark" | "system"; other values do not update the checkmarks.
     pub theme: String,
-    /// 远程网关行是否可点（未配置远程时禁用）。
+    /// Whether the remote gateway row is clickable (disabled when remote is not configured).
     pub gateway_enabled: bool,
-    /// summon / newChat 全局快捷键回显（muda accelerator 格式，仅显示不注册）。
+    /// summon / newChat global shortcut echo (muda accelerator format; display only, not registered).
     pub show_accelerator: Option<String>,
     pub new_chat_accelerator: Option<String>,
     pub tooltip: Option<String>,
-    /// macOS 状态栏文字徽标（如「2」）；None 清除。其他平台忽略。
+    /// macOS status-bar text badge (e.g. "2"); None clears it. Ignored on other platforms.
     pub badge_text: Option<String>,
 }
 
-/// 固定骨架的全部句柄。菜单项句柄是主线程代理（Send+Sync），
-/// 所有变更经 [`apply_tray_menu`] 串行化。
+/// All handles of the fixed skeleton. Menu item handles are main-thread proxies (Send+Sync),
+/// and all changes are serialized through [`apply_tray_menu`].
 pub struct TrayMenuHandles {
     apply_lock: Mutex<()>,
     app_version: &'static str,
@@ -136,7 +139,7 @@ pub struct TrayMenuHandles {
     tray_icon: TrayIcon,
 }
 
-/// 骨架构建的中间产物：菜单 + 各项句柄（托盘图标 build 后再并入）。
+/// Intermediate product of skeleton construction: the menu + item handles (the tray icon is merged in after build).
 pub struct TrayMenuSkeleton {
     pub menu: Menu<tauri::Wry>,
     status: MenuItem<tauri::Wry>,
@@ -158,8 +161,8 @@ pub struct TrayMenuSkeleton {
     quit: MenuItem<tauri::Wry>,
 }
 
-/// 建固定骨架。bootstrap 文案用 zh-CN（i18n DEFAULT_LOCALE），
-/// 前端挂载后首次 sync 即被真实本地化内容替换。
+/// Builds the fixed skeleton. Bootstrap labels use English (i18n DEFAULT_LOCALE), and are
+/// replaced by real localized content on the frontend's first sync after mount.
 pub fn build_tray_menu_skeleton(
     app: &tauri::App,
     app_version: &str,
@@ -171,22 +174,22 @@ pub fn build_tray_menu_skeleton(
         false,
         None::<&str>,
     )?;
-    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "显示主窗口", true, None::<&str>)?;
-    let new_chat = MenuItem::with_id(app, TRAY_NEW_CHAT_ID, "新建对话", true, None::<&str>)?;
-    let pin = CheckMenuItem::with_id(app, TRAY_PIN_ID, "窗口置顶", true, false, None::<&str>)?;
-    let recent = Submenu::with_id(app, TRAY_RECENT_MENU_ID, "最近对话", false)?;
-    let workspaces = Submenu::with_id(app, TRAY_WORKSPACES_MENU_ID, "工作空间", false)?;
-    let runs = Submenu::with_id(app, TRAY_RUNS_MENU_ID, "运行中", false)?;
-    let cron = Submenu::with_id(app, TRAY_CRON_MENU_ID, "定时任务", false)?;
-    let gateway = MenuItem::with_id(app, TRAY_GATEWAY_ID, "远程网关", false, None::<&str>)?;
+    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "Show Main Window", true, None::<&str>)?;
+    let new_chat = MenuItem::with_id(app, TRAY_NEW_CHAT_ID, "New Chat", true, None::<&str>)?;
+    let pin = CheckMenuItem::with_id(app, TRAY_PIN_ID, "Always on Top", true, false, None::<&str>)?;
+    let recent = Submenu::with_id(app, TRAY_RECENT_MENU_ID, "Recent Chats", false)?;
+    let workspaces = Submenu::with_id(app, TRAY_WORKSPACES_MENU_ID, "Workspaces", false)?;
+    let runs = Submenu::with_id(app, TRAY_RUNS_MENU_ID, "Running", false)?;
+    let cron = Submenu::with_id(app, TRAY_CRON_MENU_ID, "Scheduled Tasks", false)?;
+    let gateway = MenuItem::with_id(app, TRAY_GATEWAY_ID, "Remote Gateway", false, None::<&str>)?;
     let theme_light =
-        CheckMenuItem::with_id(app, TRAY_THEME_LIGHT_ID, "浅色", true, false, None::<&str>)?;
+        CheckMenuItem::with_id(app, TRAY_THEME_LIGHT_ID, "Light", true, false, None::<&str>)?;
     let theme_dark =
-        CheckMenuItem::with_id(app, TRAY_THEME_DARK_ID, "深色", true, false, None::<&str>)?;
+        CheckMenuItem::with_id(app, TRAY_THEME_DARK_ID, "Dark", true, false, None::<&str>)?;
     let theme_system = CheckMenuItem::with_id(
         app,
         TRAY_THEME_SYSTEM_ID,
-        "跟随系统",
+        "Follow System",
         true,
         false,
         None::<&str>,
@@ -194,21 +197,21 @@ pub fn build_tray_menu_skeleton(
     let appearance = Submenu::with_id_and_items(
         app,
         TRAY_APPEARANCE_MENU_ID,
-        "外观",
+        "Appearance",
         true,
         &[&theme_light, &theme_dark, &theme_system],
     )?;
-    let settings = MenuItem::with_id(app, TRAY_SETTINGS_ID, "设置…", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, TRAY_SETTINGS_ID, "Settings…", true, None::<&str>)?;
     let check_updates =
-        MenuItem::with_id(app, TRAY_CHECK_UPDATES_ID, "检查更新…", true, None::<&str>)?;
+        MenuItem::with_id(app, TRAY_CHECK_UPDATES_ID, "Check for Updates…", true, None::<&str>)?;
     let open_data_dir = MenuItem::with_id(
         app,
         TRAY_OPEN_DATA_DIR_ID,
-        "打开数据目录",
+        "Open Data Folder",
         true,
         None::<&str>,
     )?;
-    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "退出", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
@@ -283,7 +286,7 @@ impl TrayMenuHandles {
         }
     }
 
-    /// 置顶勾选同步（真源在 Rust `WindowPinState`，不经 apply 模型）。
+    /// Always-on-top checkmark sync (source of truth is Rust `WindowPinState`, not the apply model).
     pub fn set_pin_checked(&self, checked: bool) {
         if let Err(error) = self.pin.set_checked(checked) {
             eprintln!("failed to sync tray pin checkmark: {error}");
@@ -291,9 +294,9 @@ impl TrayMenuHandles {
     }
 }
 
-/// 唯一的托盘菜单写入路径：全部内容更新与子菜单重建都在这里完成。
-/// 从 IPC 命令线程调用（菜单操作内部代理到主线程；主线程调用也安全——
-/// tauri 的 `send_user_message` 在主线程上内联执行）。
+/// The only tray menu write path: all content updates and submenu rebuilds happen here.
+/// Called from the IPC command thread (menu operations proxy to the main thread internally;
+/// calling from the main thread is also safe -- tauri's `send_user_message` runs inline on the main thread).
 pub fn apply_tray_menu(
     app: &AppHandle,
     handles: &TrayMenuHandles,
@@ -306,7 +309,7 @@ pub fn apply_tray_menu(
 
     let err = |error: tauri::Error| format!("tray menu update failed: {error}");
 
-    // 状态行：Rust 拥有版本号，前端喂本地化状态后缀。
+    // Status line: Rust owns the version number, the frontend feeds the localized status suffix.
     handles
         .status
         .set_text(compose_status_line(
@@ -315,7 +318,7 @@ pub fn apply_tray_menu(
         ))
         .map_err(err)?;
 
-    // 静态文案（空字符串 = 保持现值）。
+    // Static labels (empty string = keep the current value).
     set_text_if_present(&handles.show, &model.labels.show).map_err(err)?;
     set_text_if_present(&handles.new_chat, &model.labels.new_chat).map_err(err)?;
     set_check_text_if_present(&handles.pin, &model.labels.pin).map_err(err)?;
@@ -333,7 +336,7 @@ pub fn apply_tray_menu(
     set_text_if_present(&handles.open_data_dir, &model.labels.open_data_dir).map_err(err)?;
     set_text_if_present(&handles.quit, &model.labels.quit).map_err(err)?;
 
-    // 快捷键回显（仅显示；实际注册在 global-shortcut 插件）。
+    // Shortcut echo (display only; actual registration is in the global-shortcut plugin).
     handles
         .show
         .set_accelerator(model.show_accelerator.as_deref())
@@ -343,7 +346,7 @@ pub fn apply_tray_menu(
         .set_accelerator(model.new_chat_accelerator.as_deref())
         .map_err(err)?;
 
-    // 主题勾选（未知值不更新，避免把三个勾都清掉）。
+    // Theme checkmarks (unknown values do not update, to avoid clearing all three checks).
     match model.theme.as_str() {
         "light" | "dark" | "system" => {
             handles
@@ -362,17 +365,17 @@ pub fn apply_tray_menu(
         _ => {}
     }
 
-    // 远程网关行。
+    // Remote gateway row.
     handles
         .gateway
         .set_enabled(model.gateway_enabled)
         .map_err(err)?;
 
-    // 动态子菜单重建。
+    // Dynamic submenu rebuild.
     let recent_trailing = if model.recent_truncated {
         Some((
             TRAY_RECENT_VIEW_ALL_ID,
-            non_empty_or(&model.labels.recent_view_all, "查看全部…"),
+            non_empty_or(&model.labels.recent_view_all, "View All…"),
         ))
     } else {
         None
@@ -410,7 +413,7 @@ pub fn apply_tray_menu(
     } else {
         Some((
             TRAY_RUN_STOP_ALL_ID,
-            non_empty_or(&model.labels.stop_all, "全部停止"),
+            non_empty_or(&model.labels.stop_all, "Stop All"),
         ))
     };
     rebuild_submenu(
@@ -427,7 +430,7 @@ pub fn apply_tray_menu(
         .set_enabled(!model.runs.is_empty())
         .map_err(err)?;
 
-    // 定时任务是启用开关：可勾选子项（✓ = enabled），点击翻转状态。
+    // Scheduled tasks are enable toggles: checkable child items (✓ = enabled), clicking flips the state.
     rebuild_submenu(
         app,
         &handles.cron,
@@ -442,10 +445,10 @@ pub fn apply_tray_menu(
         .set_enabled(!model.cron.is_empty())
         .map_err(err)?;
 
-    // 托盘图标附属状态。
-    let tooltip = model.tooltip.as_deref().unwrap_or("LiveAgent");
+    // Tray icon auxiliary state.
+    let tooltip = model.tooltip.as_deref().unwrap_or("ReactorPro");
     if let Err(error) = handles.tray_icon.set_tooltip(Some(tooltip)) {
-        // Linux 不支持 tooltip；仅记录不失败。
+        // Linux does not support tooltips; log only, do not fail.
         eprintln!("failed to set tray tooltip: {error}");
     }
     #[cfg(target_os = "macos")]
@@ -459,7 +462,7 @@ pub fn apply_tray_menu(
 }
 
 fn compose_status_line(app_version: &str, status_suffix: Option<&str>) -> String {
-    let base = format!("LiveAgent {app_version}");
+    let base = format!("ReactorPro {app_version}");
     match status_suffix {
         Some(suffix) if !suffix.trim().is_empty() => format!("{base} · {}", suffix.trim()),
         _ => base,
@@ -495,7 +498,8 @@ fn set_submenu_text_if_present(item: &Submenu<tauri::Wry>, text: &str) -> tauri:
     item.set_text(text)
 }
 
-/// 清空并按模型重建子菜单。只能在能安全阻塞的线程调用（IPC 命令线程或主线程）。
+/// Clears and rebuilds the submenu from the model. May only be called on a thread that can safely
+/// block (the IPC command thread or the main thread).
 fn rebuild_submenu(
     app: &AppHandle,
     submenu: &Submenu<tauri::Wry>,
@@ -535,9 +539,10 @@ fn rebuild_submenu(
     Ok(())
 }
 
-/// 用户数据进菜单前的统一消毒：控制字符/零宽字符转空格并折叠、
-/// 按显示宽度截断（CJK 记 2 个半角）、`&`→`&&`（Windows 助记符；
-/// macOS 由 muda strip_mnemonic 剥裸 `&`，转义后可原样显示）。
+/// Uniform sanitization before user data enters the menu: control/zero-width characters become
+/// spaces and are collapsed, truncated by display width (wide characters count as 2 half-widths),
+/// and `&`→`&&` (Windows mnemonic; on macOS muda's strip_mnemonic removes a bare `&`, so after
+/// escaping it displays as-is).
 pub(crate) fn sanitize_menu_label(text: &str, max_width: usize) -> String {
     let mut cleaned = String::with_capacity(text.len());
     let mut pending_space = false;
@@ -581,8 +586,8 @@ pub(crate) fn sanitize_menu_label(text: &str, max_width: usize) -> String {
     out.replace('&', "&&")
 }
 
-/// 常见宽字符范围（CJK/全角/谚文/假名）记 2，其余记 1。
-/// 够托盘截断用，不追求 UAX#11 全覆盖。
+/// Common wide-character ranges (CJK/fullwidth/Hangul/Kana) count as 2, everything else as 1.
+/// Sufficient for tray truncation; full UAX#11 coverage is not attempted.
 fn char_display_width(c: char) -> usize {
     let cp = c as u32;
     match cp {
@@ -616,22 +621,22 @@ mod tests {
     #[test]
     fn sanitize_strips_control_chars_and_collapses_whitespace() {
         assert_eq!(
-            sanitize_menu_label("第一行\n第二行\t结尾  ", 40),
-            "第一行 第二行 结尾"
+            sanitize_menu_label("First line\nSecond line\tend  ", 40),
+            "First line Second line end"
         );
         assert_eq!(sanitize_menu_label("\u{200B}a\u{0007}b", 40), "a b");
     }
 
     #[test]
     fn sanitize_truncates_by_display_width_with_cjk_as_double() {
-        // 10 个 CJK = 宽度 20；上限 10 → 5 个字 + 省略号。
+        // 10 double-width characters = width 20; upper bound 10 -> 5 characters + ellipsis.
         assert_eq!(
-            sanitize_menu_label("一二三四五六七八九十", 10),
-            "一二三四五…"
+            sanitize_menu_label("ａｂｃｄｅｆｇｈｉｊ", 10),
+            "ａｂｃｄｅ…"
         );
-        // ASCII 按 1 计。
+        // ASCII counts as 1.
         assert_eq!(sanitize_menu_label("abcdefghij", 5), "abcde…");
-        // 不超限不截断。
+        // No truncation when under the limit.
         assert_eq!(sanitize_menu_label("abc", 5), "abc");
     }
 
@@ -643,7 +648,7 @@ mod tests {
 
     #[test]
     fn sanitize_truncation_before_escape_keeps_width_semantics() {
-        // & 在截断阶段按 1 个半角计，转义发生在截断之后。
+        // & counts as 1 half-width during truncation; escaping happens after truncation.
         assert_eq!(sanitize_menu_label("a&bcdef", 3), "a&&b…");
     }
 
@@ -652,15 +657,15 @@ mod tests {
         let model: TrayMenuModel = serde_json::from_value(serde_json::json!({
             "labels": { "newChat": "New Chat", "openDataDir": "Open Data Folder" },
             "statusSuffix": "Remote connected",
-            "recent": [{ "id": "c1", "label": "对话 A" }],
+            "recent": [{ "id": "c1", "label": "Conversation A" }],
             "recentTruncated": true,
-            "workspaces": [{ "id": "w1", "label": "默认项目", "checked": true }],
+            "workspaces": [{ "id": "w1", "label": "Default project", "checked": true }],
             "runs": [],
-            "cron": [{ "id": "t1", "label": "夜间构建" }],
+            "cron": [{ "id": "t1", "label": "Nightly build" }],
             "theme": "dark",
             "gatewayEnabled": true,
             "newChatAccelerator": "Ctrl+Shift+KeyN",
-            "tooltip": "LiveAgent · 空闲",
+            "tooltip": "ReactorPro · Idle",
             "badgeText": null
         }))
         .expect("model should deserialize");
@@ -678,18 +683,18 @@ mod tests {
             Some("Ctrl+Shift+KeyN")
         );
         assert!(model.badge_text.is_none());
-        // 缺省字段回退默认。
+        // Absent fields fall back to defaults.
         assert!(model.labels.show.is_empty());
         assert!(model.show_accelerator.is_none());
     }
 
     #[test]
     fn compose_status_line_appends_suffix_only_when_non_empty() {
-        assert_eq!(compose_status_line("1.3.0", None), "LiveAgent 1.3.0");
-        assert_eq!(compose_status_line("1.3.0", Some("  ")), "LiveAgent 1.3.0");
+        assert_eq!(compose_status_line("1.3.0", None), "ReactorPro 1.3.0");
+        assert_eq!(compose_status_line("1.3.0", Some("  ")), "ReactorPro 1.3.0");
         assert_eq!(
-            compose_status_line("1.3.0", Some("远程已连接")),
-            "LiveAgent 1.3.0 · 远程已连接"
+            compose_status_line("1.3.0", Some("Remote connected")),
+            "ReactorPro 1.3.0 · Remote connected"
         );
     }
 }

@@ -26,16 +26,18 @@ import type { StreamOptionsEx, ToolChoice } from "../runtime/types";
 import type { LlmAdapter } from "./types";
 
 // ============================================================================
-// pi-ai 四协议适配器。
+// pi-ai four-protocol adapter.
 //
-// 各分支为 streamByApi.ts 原实现的原样搬移（PR-1 行为等价不变量）：分支内的
-// withStreamRetry 包装位置、toolChoice 映射、thinking runtime 解析、注释
-// 一并保留，不做任何重写。判定基准是 PR-0 golden 快照零修改通过。
+// Each branch is a faithful move of the original implementation in streamByApi.ts (the PR-1
+// behavioural-equivalence invariant): the withStreamRetry wrapper position, toolChoice mapping,
+// thinking-runtime resolution, and comments inside each branch are all preserved with no rewrite.
+// The acceptance criterion is PR-0 golden snapshots passing with zero modifications.
 //
-// 唯一的入口侧处理：对 openai-completions / openai-responses / google 三协议，
-// 纯文本模型（model.input 不含 "image"）的工具结果图片在进 pi-ai 前替换为
-// 说明文字。pi-ai 对这三协议本就按 model.input 静默丢弃这些图片，模型只会
-// 看到"see image below"却没有图；这里让缺图原因与替代做法对模型显式可见。
+// The only entry-side handling: for the openai-completions / openai-responses / google protocols,
+// tool-result images for text-only models (model.input without "image") are replaced with
+// explanatory text before entering pi-ai. For these three protocols pi-ai already silently drops
+// such images based on model.input, so the model would only see "see image below" with no image;
+// this makes the reason for the missing image and the alternative explicit to the model.
 // ============================================================================
 
 function mapToolChoiceToOpenAI(
@@ -78,11 +80,13 @@ function buildOpenAIBaseOptions(model: Model<Api>, options: StreamOptionsEx) {
 }
 
 function streamAnthropicMessages(model: Model<Api>, context: Context, options: StreamOptionsEx) {
-  // Anthropic：需要我们自己调用 streamAnthropic()，以便显式传 toolChoice（以及启用/禁用 thinking）。
+  // Anthropic: we need to call streamAnthropic() ourselves in order to pass toolChoice
+  // explicitly (and to enable/disable thinking).
   const anthropicThinking = resolveAnthropicThinkingRuntime(model, options);
-  // Anthropic 拒绝 extended thinking 与强制工具（"any"/{type:"tool"}）同请求
-  // （400）。降级为 auto：有界强制的调用方（plan mode 补提交轮）同时注入了
-  // 消息级提醒，语义仍然成立；直接 400 反而会进重试/failover 循环。
+  // Anthropic rejects extended thinking together with a forced tool ("any"/{type:"tool"}) in the
+  // same request (400). Downgrade to auto: callers that force within bounds (the plan mode
+  // supplementary submit turn) also inject a message-level reminder, so the semantics still hold;
+  // a direct 400 would instead enter the retry/failover loop.
   const requestedToolChoice = options.toolChoice ?? "none";
   const anthropicToolChoice =
     anthropicThinking.thinkingEnabled &&
@@ -116,10 +120,11 @@ function streamAnthropicMessages(model: Model<Api>, context: Context, options: S
 }
 
 function streamOpenAICompletionsApi(model: Model<Api>, context: Context, options: StreamOptionsEx) {
-  // 严格校验的 OpenAI 兼容端点（xAI/各类中转网关）对「带 tool_choice 但没带
-  // tools」的请求直接 400（"A tool_choice was set on the request but no tools
-  // were specified"）——compaction 摘要、标题生成等 text-only 请求没有工具，
-  // 会踩中。tool_choice 在无工具时本就无意义，只在请求真正携带 tools 时下发。
+  // Strictly validating OpenAI-compatible endpoints (xAI/various relay gateways) return 400
+  // directly for requests that carry tool_choice but no tools ("A tool_choice was set on the
+  // request but no tools were specified") — text-only requests such as compaction summaries and
+  // title generation have no tools and would trip this. tool_choice is meaningless without tools
+  // anyway, so it is only sent when the request actually carries tools.
   const openAIOptions: OpenAICompletionsOptions = {
     ...buildOpenAIBaseOptions(model, options),
     reasoningEffort: clampOpenAIReasoningEffort(model, options.reasoning),
@@ -186,9 +191,10 @@ export const piAiAdapter: LlmAdapter = {
   stream(model, context, options) {
     switch (model.api) {
       case "anthropic-messages":
-        // 不按 model.input 剥离工具结果图片：自定义 anthropic 模型的 input 是
-        // 保守默认值（["text"]），中转背后的模型可能具备视觉，pi-ai 该协议
-        // 也不看 model.input，与附件路径口径一致（见 modelFactory 注释）。
+        // Do not strip tool-result images based on model.input: a custom anthropic model's input
+        // is a conservative default (["text"]), the model behind a relay may be vision-capable, and
+        // pi-ai does not read model.input for this protocol either, consistent with the attachment
+        // path (see the modelFactory comment).
         return streamAnthropicMessages(model, context, options);
       case "openai-completions":
         return streamOpenAICompletionsApi(
@@ -209,7 +215,8 @@ export const piAiAdapter: LlmAdapter = {
           options,
         );
       default:
-        // 注册表按 apis 路由到这里，正常不可达；防御分支保持同一错误文案。
+        // The registry routes by apis before reaching here, so this is normally unreachable; the
+        // defensive branch keeps the same error text.
         throw new Error(`Unsupported model API: ${model.api}`);
     }
   },

@@ -1,7 +1,7 @@
 package websocket_test
 
-// v2（WebSocket+Protobuf）二进制帧测试 harness：起真实 httptest 服务器、以子协议拨号、
-// 按 proto 帧收发。
+// v2 (WebSocket+Protobuf) binary frame test harness: starts a real httptest server, dials with
+// the subprotocol, and sends/receives proto frames.
 
 import (
 	"net/http"
@@ -26,7 +26,7 @@ func newV2TestConfig() *config.Config {
 	}
 }
 
-// dialV2 起服务并以 v2 子协议拨号。
+// dialV2 starts the server and dials with the v2 subprotocol.
 func dialV2(t *testing.T, handler http.Handler) (*websocket.Conn, func()) {
 	t.Helper()
 	ts := httptest.NewServer(handler)
@@ -64,8 +64,9 @@ func sendProtoFrame(t *testing.T, conn *websocket.Conn, frame proto.Message) {
 	}
 }
 
-// receiveWebFrame 读取一条 WebServerFrame，跳过与断言无关的周期/广播帧（测试 helper
-// 过滤集）；带关联 id 的 status 是 status_get / chat_prepare 的响应，不过滤。
+// receiveWebFrame reads one WebServerFrame, skipping periodic/broadcast frames unrelated to the
+// assertion (the test helper's filter set); a status with a correlation id is the response to
+// status_get / chat_prepare and is not filtered.
 func receiveWebFrame(t *testing.T, conn *websocket.Conn) *gatewayv2.WebServerFrame {
 	t.Helper()
 	for {
@@ -105,7 +106,7 @@ func receiveWebFrameRaw(t *testing.T, conn *websocket.Conn) *gatewayv2.WebServer
 	return &frame
 }
 
-// receiveWebFrameWithID 等待携带指定关联 id 的帧。
+// receiveWebFrameWithID waits for the frame carrying the given correlation id.
 func receiveWebFrameWithID(t *testing.T, conn *websocket.Conn, id string) *gatewayv2.WebServerFrame {
 	t.Helper()
 	for attempt := 0; attempt < 8; attempt++ {
@@ -118,7 +119,7 @@ func receiveWebFrameWithID(t *testing.T, conn *websocket.Conn, id string) *gatew
 	return nil
 }
 
-// helloV2 完成浏览器链路握手并断言成功。
+// helloV2 completes the browser link handshake and asserts success.
 func helloV2(t *testing.T, conn *websocket.Conn, token string) {
 	t.Helper()
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
@@ -139,7 +140,7 @@ func helloV2(t *testing.T, conn *websocket.Conn, token string) {
 	}
 }
 
-// newV2BrowserTest 建好 manager + 假 agent 会话 + 已握手的浏览器连接。
+// newV2BrowserTest sets up a manager + fake agent session + handshaken browser connection.
 func newV2BrowserTest(t *testing.T) (*session.Manager, *session.AgentSession, *websocket.Conn, func()) {
 	t.Helper()
 
@@ -155,7 +156,7 @@ func newV2BrowserTest(t *testing.T) (*session.Manager, *session.AgentSession, *w
 	return sm, agentSession, conn, cleanup
 }
 
-// readOutboundEnvelope 取出网关发往桌面端的下一条信封并 Ack。
+// readOutboundEnvelope takes the next envelope the gateway sends to the desktop and Acks it.
 func readOutboundEnvelope(t *testing.T, agentSession *session.AgentSession) *gatewayv2.GatewayEnvelope {
 	t.Helper()
 	select {
@@ -168,7 +169,7 @@ func readOutboundEnvelope(t *testing.T, agentSession *session.AgentSession) *gat
 	}
 }
 
-// answerChatRuntimeProbe 以假桌面端身份应答 chat.prepare 的关联 Ping 探测。
+// answerChatRuntimeProbe answers the correlated Ping probe of chat.prepare as the fake desktop.
 func answerChatRuntimeProbe(
 	t *testing.T,
 	sm *session.Manager,
@@ -190,7 +191,7 @@ func answerChatRuntimeProbe(
 	return requestID
 }
 
-// dispatchStarted 以假桌面端身份上报 run 的 started 控制事件。
+// dispatchStarted reports a run's started control event as the fake desktop.
 func dispatchStarted(sm *session.Manager, runID string, conversationID string) {
 	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: runID,

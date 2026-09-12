@@ -24,7 +24,7 @@ type UseBranchConversationParams = {
 
 /**
  * Copies the conversation prefix up to (and including) the picked assistant
- * reply into a fresh "新分支" conversation, then switches to it.
+ * reply into a fresh "New Branch" conversation, then switches to it.
  */
 export function useBranchConversation(params: UseBranchConversationParams) {
   const {
@@ -39,15 +39,15 @@ export function useBranchConversation(params: UseBranchConversationParams) {
   } = params;
 
   const branchInFlightRef = useRef(false);
-  // 驱动被点行的转圈与全行禁用；ref 仍是同步防重入的真源。
+  // Drives the spinner on the clicked row and disables the whole row; the ref remains the synchronous source of truth for re-entry prevention.
   const [branchPendingMessageId, setBranchPendingMessageId] = useState<string | null>(null);
   const handleBranchConversation = useCallback(
     async (messageRef: HistoryMessageRef) => {
       const conversationId = currentConversationIdRef.current.trim();
       if (!conversationId) return;
       if (isSending || isConversationHydrating || isConversationHydrationFailed) return;
-      // 分支 invoke 会排在同会话 persist 写锁后面，期间按钮仍可点：
-      // 用 ref 挡掉重复确认，避免一次点击风暴造出多份"新分支"。
+      // The branch invoke queues behind the same-session persist write lock, during which the button can still be clicked:
+      // use the ref to block duplicate confirmations, preventing one click storm from creating multiple "New Branch" conversations.
       if (branchInFlightRef.current) return;
       branchInFlightRef.current = true;
       setBranchPendingMessageId(messageRef.messageId);

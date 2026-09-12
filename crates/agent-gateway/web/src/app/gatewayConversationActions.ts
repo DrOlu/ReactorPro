@@ -105,8 +105,9 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
     options.setChatError(null);
     options.setSelectedHistory(null);
     options.setPendingUploadsForConversation(nextConversationId, []);
-    // 返回新草稿 id，供“无会话时先上传”的兜底路径立即取用（state 尚未
-    // 重渲染，调用方拿不到最新的 displayedConversationId）。
+    // Return the new draft id so the fallback path ("upload first when there is no
+    // conversation") can use it immediately (state has not re-rendered yet, so the
+    // caller cannot get the latest displayedConversationId).
     return nextConversationId;
   };
 
@@ -244,7 +245,7 @@ export function createGatewayConversationActions(options: CreateGatewayConversat
         editMessageRef: messageRef,
       });
     } catch (error) {
-      options.setChatError(asErrorMessage(error, "编辑后重发失败"));
+      options.setChatError(asErrorMessage(error, "Failed to resend after editing"));
     }
   };
 

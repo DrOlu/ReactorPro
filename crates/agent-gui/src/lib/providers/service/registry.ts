@@ -1,10 +1,11 @@
 import type { LlmAdapter } from "./types";
 
 /**
- * api → adapter 注册表。
+ * api -> adapter registry.
  *
- * PR-1 的注册表是模块内静态注册（registerAdapter 仅供本目录的默认装配与
- * 测试使用），不提供运行期动态卸载——那是 PR-3 拦截器注册化的范畴。
+ * The PR-1 registry is a module-static registration (registerAdapter is only used by this
+ * directory's default assembly and tests), and does not offer runtime dynamic unregistration --
+ * that falls under PR-3 interceptor registration.
  */
 const adaptersByApi = new Map<string, LlmAdapter>();
 
@@ -19,10 +20,10 @@ export function registerAdapter(adapter: LlmAdapter): void {
 }
 
 /**
- * 解析一个 wire 协议的适配器。
+ * Resolves the adapter for a wire protocol.
  *
- * 未注册协议的错误文案与重构前 streamByApi.ts 的 default 分支逐字保持一致
- * （"Unsupported model API: ..."），错误路径也不漂移。
+ * The error message for an unregistered protocol stays word-for-word identical to the pre-refactor
+ * default branch in streamByApi.ts ("Unsupported model API: ..."), and the error path does not drift either.
  */
 export function resolveAdapter(api: string): LlmAdapter {
   const adapter = adaptersByApi.get(api);
@@ -32,7 +33,7 @@ export function resolveAdapter(api: string): LlmAdapter {
   return adapter;
 }
 
-/** 已注册协议列表（测试用，按注册顺序）。 */
+/** List of registered protocols (for tests, in registration order). */
 export function registeredApis(): string[] {
   return [...adaptersByApi.keys()];
 }

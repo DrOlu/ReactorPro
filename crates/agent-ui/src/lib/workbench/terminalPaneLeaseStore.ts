@@ -1,26 +1,26 @@
 export type TerminalPaneLeaseListener = () => void;
 
 /**
- * 终端视图租约(View Lease)层:一个终端 sessionId 在画板中至多被一个 pane 持有。
- * Pane 持有租约期间,Right Dock 等其他宿主不得再挂载该会话的 XTermViewport,
- * 否则输出流会被双消费、输入会被双写。租约纯内存,不持久化。
+ * Terminal view lease layer: a terminal sessionId is held by at most one pane on the canvas.
+ * While a Pane holds the lease, other hosts such as the Right Dock must not mount that session's XTermViewport,
+ * or the output stream would be double-consumed and input double-written. Leases are purely in-memory and not persisted.
  */
 export type TerminalPaneLeaseStore = {
   /**
-   * 获取租约并返回 release 函数。sessionId 已被其他 pane 持有时抛错
-   * (调用方必须先用 paneIdFor 查询);同一 pane 对同一 session 重复
-   * acquire 幂等返回既有 release。release 幂等,且不会误释放后建租约。
+   * Acquires a lease and returns a release function. Throws when the sessionId is already held by another pane
+   * (the caller must query paneIdFor first); a repeated acquire of the same session by the same pane idempotently
+   * returns the existing release. release is idempotent and will not mistakenly release a lease created later.
    */
   acquire(sessionId: string, paneId: string): () => void;
   /**
-   * 释放指定 pane 持有的租约(幂等)。drop 事务会在宿主挂载前同步占约,
-   * 若 Pane 在宿主从未取得租约前就被关闭,release 无人持有,只能按
-   * paneId 对账回收,否则该会话在 Right Dock 永久隐藏。
+   * Releases the lease held by the given pane (idempotent). A drop transaction claims the lease synchronously
+   * before the host mounts; if the Pane is closed before the host ever acquires the lease, the release has no
+   * holder and must be reclaimed by reconciling paneId, or that session is permanently hidden in the Right Dock.
    */
   releaseForPane(paneId: string): void;
   paneIdFor(sessionId: string): string | null;
   sessionIdFor(paneId: string): string | null;
-  /** 当前被 pane 持有的全部 sessionId;引用在租约不变时保持稳定(useSyncExternalStore 快照)。 */
+  /** All sessionIds currently held by panes; the reference stays stable while leases are unchanged (a useSyncExternalStore snapshot). */
   leasedSessionIds(): readonly string[];
   subscribe(listener: TerminalPaneLeaseListener): () => void;
 };
@@ -45,7 +45,7 @@ export function createTerminalPaneLeaseStore(): TerminalPaneLeaseStore {
   };
 
   const drop = (record: LeaseRecord) => {
-    // 只清除仍指向该 record 的索引,防止陈旧 release 误删后建租约。
+    // Clears only the index still pointing at that record, preventing a stale release from mistakenly deleting a lease created later.
     if (leasesBySessionId.get(record.sessionId) === record) {
       leasesBySessionId.delete(record.sessionId);
     }
@@ -70,8 +70,8 @@ export function createTerminalPaneLeaseStore(): TerminalPaneLeaseStore {
         }
         return existing.release;
       }
-      // 同一 pane 换绑新会话(重建终端)时,先释放它持有的旧租约,
-      // 维持 “一个 pane 至多一个终端视图” 的双向不变量。
+      // When the same pane rebinds to a new session (rebuilding the terminal), first release the old lease it
+      // holds, maintaining the bidirectional invariant "at most one terminal view per pane".
       const previous = leasesByPaneId.get(paneKey);
       if (previous) {
         drop(previous);
@@ -120,10 +120,11 @@ export function createTerminalPaneLeaseStore(): TerminalPaneLeaseStore {
 }
 
 /**
- * 按布局对账回收孤儿租约:drop 事务同步占约后,Pane 若在宿主挂载(接手
- * release)之前就被关闭,租约将无人释放。两端在布局变化时调用本函数,
- * 释放持有者已不在布局中的租约;宿主正常持有的租约在其卸载 cleanup 中
- * 先于本对账释放,不受影响。
+ * Reclaims orphan leases by reconciling against the layout: if a Pane is closed before the host mounts (and
+ * takes over release) after a drop transaction synchronously claims the lease, the lease would have no one to
+ * release it. Both ends call this function on layout changes to release leases whose holder is no longer in the
+ * layout; leases normally held by the host are released in its unmount cleanup before this reconciliation, so
+ * they are unaffected.
  */
 export function releaseOrphanTerminalPaneLeases(
   lease: Pick<TerminalPaneLeaseStore, "leasedSessionIds" | "paneIdFor" | "releaseForPane">,

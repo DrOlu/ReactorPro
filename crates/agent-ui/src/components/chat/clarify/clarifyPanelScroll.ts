@@ -1,8 +1,9 @@
 // crates/agent-ui/src/components/chat/clarify/clarifyPanelScroll.ts
 //
-// 澄清面板问答列表的钉底跟随：流式增长时把 scrollTop 写到末端；读者
-// 上翻阅读历史则停跟，回到末端附近再接上。阈值覆盖 DPR 舍入（scrollTop
-// 常比物理 clamp 短 1–3px）。
+// Sticky-bottom follow for the clarify panel's Q&A list: while it grows by streaming, scrollTop
+// is written to the end; when the reader scrolls up to review history, following stops and
+// resumes once near the end again. The threshold covers DPR rounding (scrollTop is often 1-3px
+// short of the physical clamp).
 
 export const CLARIFY_FOLLOW_THRESHOLD_PX = 32;
 

@@ -1,5 +1,5 @@
 function readUnauthorizedErrorMessage(errorText: string) {
-  return errorText === "unauthorized" ? "Access Token 错误，请检查后重试。" : errorText;
+  return errorText === "unauthorized" ? "Invalid Access Token, please check and try again." : errorText;
 }
 
 async function readFetchError(response: Response, fallback: string) {
@@ -39,7 +39,7 @@ export function normalizeGatewayAccessToken(value: string) {
 export async function verifyGatewayAccessToken(input: string) {
   const token = normalizeGatewayAccessToken(input);
   if (!token) {
-    throw new Error("请输入 Access Token。");
+    throw new Error("Please enter an Access Token.");
   }
 
   const response = await fetch(`${window.location.origin}/api/status`, {
@@ -50,7 +50,7 @@ export async function verifyGatewayAccessToken(input: string) {
   });
 
   if (!response.ok) {
-    throw new Error(await readFetchError(response, "Access Token 验证失败。"));
+    throw new Error(await readFetchError(response, "Access Token verification failed."));
   }
 
   return token;

@@ -161,7 +161,6 @@ import {
 } from "../lib/settings";
 import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
-import { desktopSttTransport } from "../lib/stt/desktopSttTransport";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
@@ -278,7 +277,6 @@ export function ChatPage(props: ChatPageProps) {
   const {
     settings,
     setSettings,
-    sttProviderOverride,
     getMcpSettings,
     getToolPolicies,
     context,
@@ -307,9 +305,9 @@ export function ChatPage(props: ChatPageProps) {
   const [currentConversationId, setCurrentConversationId] = useState<string>(
     () => initialConversationRef.current.conversationId,
   );
-  // sessionId / createdAt / selectedModel 不再是页面级镜像 state:它们由
-  // registry entry 派生(见 useChatPageRuntimeStore 调用后的
-  // useConversationRuntimeEntrySnapshot),registry 是唯一写入方。
+  // sessionId / createdAt / selectedModel are no longer page-level mirror state: they are derived
+  // from the registry entry (see useConversationRuntimeEntrySnapshot after the
+  // useChatPageRuntimeStore call), and the registry is the sole writer.
   const [runningConversationIds, setRunningConversationIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -521,7 +519,8 @@ export function ChatPage(props: ChatPageProps) {
     [],
   );
   const sendActionRef = useRef<SendChatAction>(async () => false);
-  // WebUI 经 chat_queue compact_now 中继的手动压缩入口(useChatTurnQueue 消费)。
+  // Manual compaction entry relayed from the WebUI via chat_queue compact_now (consumed by
+  // useChatTurnQueue).
   const manualCompactActionRef = useRef<
     (request?: ManualCompactionRequest) => Promise<ManualCompactionResult>
   >(async () => ({ status: "skipped" }));
@@ -583,10 +582,12 @@ export function ChatPage(props: ChatPageProps) {
     finishGatewayRunMirror,
   } = useGatewayRunMirrorCoordinator();
 
-  // 用量环读数：运行中直读 TokenLedger（消息落定即更新，不逐帧估算流式
-  // 文本，优先级与理由见 useContextUsageTokensSource 内注释）；账本无读数
-  // 或空闲时用与 WebUI 同源的 deriveContextUsageTokens 倒扫历史项（运行中
-  // 补上 live 尾部）。经订阅源直达环组件，读数变化只重渲染环本身而不回流
+  // Usage ring reading: while running, read TokenLedger directly (updated as soon as a message
+  // settles, without per-frame estimation of streaming text; see the comments inside
+  // useContextUsageTokensSource for priority and rationale); when the ledger has no reading or is
+  // idle, use deriveContextUsageTokens, shared with the WebUI, to scan history items backwards
+  // (appending the live tail while running). It reaches the ring component directly through the
+  // subscription source, so a reading change re-renders only the ring itself without flowing back
   // ChatPage。
   const contextUsageRingRunning = isSending || compactionStatus.phase === "running";
   const contextUsageTokensSource = useContextUsageTokensSource({
@@ -748,9 +749,10 @@ export function ChatPage(props: ChatPageProps) {
     t,
     setErrorMessage,
   });
-  // 被工作台 Pane 租用的会话从 Right Dock 的终端 tab 中隐藏(终端任一时刻只
-  // 出现在一个宿主里);Pane 关闭(Detach)释放租约后自动回归 dock。SSH overlay
-  // 的 shell tab 仍用该集合做视口占位互斥。
+  // Sessions leased by a workbench Pane are hidden from the Right Dock's terminal tab (a terminal
+  // appears in only one host at a time); after the Pane closes (Detach) and releases the lease, it
+  // automatically returns to the dock. The SSH overlay's shell tab still uses this set for viewport
+  // placeholder mutual exclusion.
   const leasedTerminalSessionIds = useSyncExternalStore(
     terminalPaneLease.subscribe,
     terminalPaneLease.leasedSessionIds,
@@ -759,8 +761,9 @@ export function ChatPage(props: ChatPageProps) {
     () => (leasedTerminalSessionIds.length > 0 ? new Set(leasedTerminalSessionIds) : undefined),
     [leasedTerminalSessionIds],
   );
-  // 顶栏 dock 折叠按钮的计数徽标:只数还留在 dock 里的会话。拖入画板的
-  // 终端已在画板可见,徽标再计入会与 dock 内 tab 数对不上。
+  // Count badge on the top bar's dock collapse button: counts only sessions still in the dock.
+  // Terminals dragged onto the canvas are already visible there, so including them in the badge would
+  // make it disagree with the number of dock tabs.
   const projectTerminalSessions = useMemo(
     () =>
       terminalProjectPathKey
@@ -862,8 +865,6 @@ export function ChatPage(props: ChatPageProps) {
     (message: string) => addNotify("error", message),
     [addNotify],
   );
-  // 语音输入失败（麦克风不可用等）以 toast 提示，不占用输入框区域。
-  const handleSttError = useCallback((message: string) => addNotify("error", message), [addNotify]);
   const handleOpenChatFileLink = useChatFileLinkNavigation({
     conversationId: currentConversationId,
     conversationWorkdir: displayedConversationWorkdir,
@@ -983,17 +984,20 @@ export function ChatPage(props: ChatPageProps) {
   });
   stopConversationActionRef.current = stopConversation;
 
-  // 对话式计划审批(对齐 Codex):计划提交即终止规划 run,用户以消息或按钮
-  // 回应。批准 = 关 plan 开关 + 暂存执行续轮;退回 = 反馈暂存为普通用户消息。
-  // 两者都走"暂存 → run 消失后冲刷"路径:send 在会话恰在发送/加载时会拒绝
-  // (返回 false),直发会静默丢消息——冲刷按结果重新暂存,直到真正发出。
-  // 卡片按钮、输入框批准短语、WebUI plan_decision 三个入口共用这两条路径。
+  // Conversational plan approval (aligned with Codex): submitting a plan terminates the planning
+  // run, and the user responds with a message or a button. Approve = turn off the plan switch +
+  // stage an execution continuation; reject = stage the feedback as a normal user message. Both go
+  // through the "stage -> flush after the run disappears" path: send refuses when the conversation
+  // is currently sending/loading (returns false), and sending directly would silently drop the
+  // message -- the flush re-stages based on the result until it truly sends. The card button, the
+  // composer approval phrase, and the WebUI plan_decision entry points all share these two paths.
   const pendingPlanContinuationsRef = useRef(new Map<string, string>());
   const pendingPlanFeedbackRef = useRef(new Map<string, string>());
   const planDecisionSendsInFlightRef = useRef(new Set<string>());
   const planDecisionRetryCountsRef = useRef(new Map<string, number>());
-  // handleSend 点击时采样(该回调刻意不依赖 settings):短语批准只在 plan 开关
-  // 仍开着时生效,防止被弃置的陈旧待决计划之后被一句"好的/ok"意外复活。
+  // Sampled when handleSend is clicked (this callback deliberately does not depend on settings):
+  // phrase approval only takes effect while the plan switch is still on, preventing an abandoned,
+  // stale pending plan from being unexpectedly revived later by a casual "sure/ok".
   const planModeEnabledRef = useRef(false);
   planModeEnabledRef.current = settings.chatRuntimeControls.planModeEnabled === true;
   const [planContinuationVersion, setPlanContinuationVersion] = useState(0);
@@ -1020,16 +1024,19 @@ export function ChatPage(props: ChatPageProps) {
     });
     return () => registerPlanDecisionHandlers(null);
   }, [setSettings, t]);
-  // 冲刷暂存的计划应答消息(规划 run 已"提交即终止",但打断/排队等场景下会话
-  // 可能仍在发送):
-  // - 退回反馈:会话空闲即发(模型留在 plan mode 修订);
-  // - 执行续轮:还需 plan 开关已关(settings 已 flush,避免续轮又被"只能收紧"
-  //   合并锁回只读)。
-  // send 返回 false / 抛错时重新暂存;运行集变化(run 结束)是主要重试信号,
-  // 另排一次短延迟兜底 bump(覆盖 hydrating 等与运行集无关的拒绝)。兜底限次:
-  // 永久性失败(会话加载失败等)不得退化成秒级重试死循环——超限后消息仍留在
-  // 暂存 map,由下一次运行集变化或新应答触发再试。in-flight 集防并发重复发送。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: planContinuationVersion 是刻意的重跑触发器(应答写入 ref 后 bump)
+  // Flush the staged plan-response messages (the planning run "terminates on submit", but in
+  // interrupt/queue scenarios the conversation may still be sending):
+  // - Reject feedback: sent as soon as the conversation is idle (the model stays in plan mode to
+  //   revise);
+  // - Execution continuation: additionally requires that the plan switch is off (settings already
+  //   flushed, so the continuation is not merged back into read-only by "tighten-only").
+  // When send returns false / throws, re-stage; a run-set change (run ending) is the main retry
+  // signal, plus one short-delay fallback bump (covering rejections unrelated to the run set, such
+  // as hydrating). The fallback is count-limited: a permanent failure (e.g. conversation load
+  // failure) must not degrade into a per-second retry loop -- past the limit the message stays in
+  // the staging map and is retried when the run set next changes or a new response arrives. The
+  // in-flight set prevents concurrent duplicate sends.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: planContinuationVersion is a deliberate re-run trigger (bumped after the response is written to the ref)
   useEffect(() => {
     const scheduleFlushRetry = (conversationId: string) => {
       const attempts = planDecisionRetryCountsRef.current.get(conversationId) ?? 0;
@@ -1049,8 +1056,9 @@ export function ChatPage(props: ChatPageProps) {
         void sendActionRef
           .current(buildOverrides(conversationId, text))
           .then((accepted) => {
-            // 竞态失败(会话恰在发送/加载)时重新暂存并排一次兜底重试;期间若
-            // 有更新的同会话应答入了 map,保留新值。
+            // On a race failure (conversation currently sending/loading), re-stage and schedule one
+            // fallback retry; if a newer response for the same conversation entered the map meanwhile,
+            // keep the new value.
             if (accepted) {
               planDecisionRetryCountsRef.current.delete(conversationId);
             } else if (!store.has(conversationId)) {
@@ -1124,11 +1132,13 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
-  // 会话瞬态交互的统一 prune 清理:本页与 useConversationHistoryActions 两条
-  // prune 路径共用,保证生命周期裁决一致。计划审批刻意不在此列——待决计划的
-  // 设计就是跨 run 存活(规划 run 提交即终止),空闲运行时缓存被逐出不等于会话
-  // 销毁,回到会话后卡片必须仍可批准;真正删除会话时才连批准态一起清(见
-  // handleConversationDeleted)。MCP 激活集清了只损失一次重新检索,可清。
+  // Unified prune cleanup for transient conversation interactions: shared by the two prune paths,
+  // this page and useConversationHistoryActions, ensuring consistent lifecycle decisions. Plan
+  // approval is deliberately excluded -- a pending plan is designed to survive across runs (the
+  // planning run terminates on submit), and evicting an idle runtime cache does not equal destroying
+  // the conversation, so the card must still be approvable after returning to it; only a genuine
+  // conversation deletion clears the approval state too (see handleConversationDeleted). Clearing the
+  // MCP activation set only costs one re-retrieval, so it may be cleared.
   const cancelConversationTransientInteractions = useCallback((conversationId: string) => {
     cancelPendingAskUserQuestionsForConversation(conversationId);
     cancelPendingToolApprovalsForConversation(conversationId);
@@ -1409,9 +1419,10 @@ export function ChatPage(props: ChatPageProps) {
       createdAt: currentConversationCreatedAt,
       updatedAt: Date.now(),
     });
-    // 会话不属于当前工作区作用域时（例如流式进行中切换了工作区），不往
-    // 侧栏强插 pending 行：它本就不该出现在新工作区的列表里，反复重插
-    // 会与作用域过滤互相打架，形成无限更新循环导致页面崩溃。
+    // When the conversation does not belong to the current workspace scope (e.g. the workspace was
+    // switched mid-stream), do not force a pending row into the sidebar: it should never appear in
+    // the new workspace's list, and repeatedly reinserting it would fight with the scope filter,
+    // forming an infinite update loop that crashes the page.
     if (!conversationMatchesScope(pendingItem, sidebarScope)) {
       return;
     }
@@ -1521,8 +1532,9 @@ export function ChatPage(props: ChatPageProps) {
       if (!provider) {
         throw new Error(`clarify provider not found: ${selection.providerId}`);
       }
-      // 与本地澄清共用 createGuiClarifyRunner：调用参数（cacheRetention/
-      // nativeWebSearch/context 拼装）单一来源，桥接路径不再手写一份。
+      // Shares createGuiClarifyRunner with local clarify: the call parameters (cacheRetention/
+      // nativeWebSearch/context assembly) have a single source, so the bridge path no longer hand-
+      // writes a duplicate.
       const guiSelection = {
         selectedModel: { customProviderId: provider.id, model: selection.model },
         provider,
@@ -1599,10 +1611,12 @@ export function ChatPage(props: ChatPageProps) {
   sendActionRef.current = send;
   stopSendingActionRef.current = stopSending;
 
-  // 手动压缩的同源提示词构建：当前会话据其工作区解析 skills/memory 提示词，
-  // 与发送链路的 buildPreparedContext 同源（activeAgentPrompt 单独直传）。手动
-  // 压缩无触发消息，skills 的 explicit 提及为空。跨会话中继的后台会话在此层拿
-  // 不到工作区上下文，返回空提示词（当前会话必须同源，后台保持现状）。
+  // Same-source prompt construction for manual compaction: the current conversation resolves its
+  // skills/memory prompts from its workspace, sharing a source with the send path's
+  // buildPreparedContext (activeAgentPrompt is passed through separately). Manual compaction has no
+  // triggering message, so skills' explicit mentions are empty. A background conversation relayed
+  // cross-session cannot get workspace context at this layer, so it returns an empty prompt (the
+  // current conversation must be same-source; background stays as-is).
   const resolveManualCompactionPromptInputs = useCallback(
     async (input: { isCurrentConversation: boolean; workdir?: string }) => {
       if (!input.isCurrentConversation) {
@@ -1769,8 +1783,8 @@ export function ChatPage(props: ChatPageProps) {
     prepareComposerForConversationChange,
   ]);
 
-  // 动作总线（Rust `app:action`）里 ChatPage 拥有的动作在下方统一监听
-  // （handleSelectConversation 定义之后）；这里先备好 ref 镜像。
+  // Actions owned by ChatPage on the action bus (Rust `app:action`) are listened to uniformly below
+  // (after handleSelectConversation is defined); the ref mirror is prepared here first.
   const handleNewConversationRef = useRef(handleNewConversation);
   handleNewConversationRef.current = handleNewConversation;
   const activeViewRef = useRef(activeView);
@@ -1807,8 +1821,9 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
-  // 托盘/快捷键动作参数的 ref 镜像：监听 effect 是 []-dep，闭包内一律
-  // 经 ref 取最新值（handleSelectWorkspaceProject 等依赖 settings，不稳定）。
+  // Ref mirror of tray/shortcut action parameters: the listen effect has []-deps, so closures always
+  // read the latest value through the ref (handleSelectWorkspaceProject and others depend on
+  // settings and are unstable).
   const sidebarRunningConversationIds = useSidebarSelector(
     sidebarStore,
     selectRunningConversationIds,
@@ -1846,9 +1861,10 @@ export function ChatPage(props: ChatPageProps) {
   };
 
   useEffect(() => {
-    // 单个会话的停止：完整序列在 stopConversation（stop intent + 队列取消 +
-    // abort + force 清理）。未停到任何东西且会话未运行时必须消费掉 stop
-    // intent，否则该会话下一次 send 会被静默吞掉（同 gateway:chat-cancel 守卫）。
+    // Stopping a single conversation: the full sequence lives in stopConversation (stop intent +
+    // queue cancellation + abort + force cleanup). When nothing was stopped and the conversation is
+    // not running, the stop intent must be consumed, otherwise that conversation's next send would
+    // be silently swallowed (same guard as gateway:chat-cancel).
     const stopConversationRun = (conversationId: string) => {
       const params = appActionParamsRef.current;
       const stopped = params.stopConversation(conversationId);
@@ -1861,9 +1877,10 @@ export function ChatPage(props: ChatPageProps) {
     let unlisten: (() => void) | null = null;
     let unlistenFeedback: (() => void) | null = null;
 
-    // Rust 直连动作的结果反馈（目前只有托盘的 cron 启用开关）：toast 呈现，
-    // 任务名从 automation store 现查（可能已被删除，回退显示 id）。
-    // 勾选态本身经 automation:cron-changed → store → 托盘同步 effect 刷新。
+    // Result feedback for direct Rust actions (currently only the tray cron enable toggle):
+    // presented as a toast; the task name is looked up live from the automation store (it may have
+    // been deleted, in which case fall back to showing the id). The checked state itself refreshes
+    // via automation:cron-changed -> store -> tray sync effect.
     listen<{ action: string; id?: string; ok: boolean; error?: string; value?: string }>(
       "app:action-feedback",
       (event) => {
@@ -1897,7 +1914,7 @@ export function ChatPage(props: ChatPageProps) {
         unlistenFeedback = nextUnlisten;
       })
       .catch(() => {
-        // 非 Tauri 环境忽略。
+        // Ignored in a non-Tauri environment.
       });
 
     listen<{ action: string; id?: string; value?: string }>("app:action", (event) => {
@@ -1906,11 +1923,12 @@ export function ChatPage(props: ChatPageProps) {
         case "new-chat": {
           const wasInHub = activeViewRef.current !== "chat";
           setActiveView("chat");
-          // 与侧栏"新建对话"一致：从 Hub 返回且当前已是空白草稿会话时直接复用。
+          // Consistent with the sidebar's "New chat": when returning from the Hub and the current
+          // conversation is already an empty draft, reuse it directly.
           if (!wasInHub || !isDraftConversationRef.current) {
             handleNewConversationRef.current();
           }
-          // 视图与会话切换渲染完成后再聚焦输入框。
+          // Focus the input only after the view and conversation switch have finished rendering.
           window.requestAnimationFrame(() => {
             window.requestAnimationFrame(() => {
               composerRef.current?.focus();
@@ -1939,7 +1957,7 @@ export function ChatPage(props: ChatPageProps) {
           const projectId = event.payload.id?.trim();
           if (!projectId) break;
           const project = params.workspaceProjects.find((entry) => entry.id === projectId);
-          // 菜单可能滞后于项目列表；找不到就静默忽略。
+          // The menu may lag behind the project list; silently ignore when not found.
           if (project) {
             setActiveView("chat");
             void params.handleSelectWorkspaceProject(project);
@@ -1971,7 +1989,7 @@ export function ChatPage(props: ChatPageProps) {
         unlisten = nextUnlisten;
       })
       .catch(() => {
-        // 非 Tauri 环境忽略。
+        // Ignored in a non-Tauri environment.
       });
     return () => {
       cancelled = true;
@@ -1984,10 +2002,11 @@ export function ChatPage(props: ChatPageProps) {
     };
   }, [composerRef, setActiveView]);
 
-  // 托盘菜单同步：任一输入变化即重建模型推送（syncTrayMenu 内部按 JSON 签名
-  // 去抖），300ms 尾随防抖吸收流式期间侧栏 upsert 引起的高频变化。
-  // 注：全局快捷键绑定存 localStorage 无订阅，在模型构建时现读——改绑后
-  // 回显会在下一次模型级变化时跟上。
+  // Tray menu sync: any input change rebuilds the model push (syncTrayMenu debounces internally by
+  // JSON signature); the 300ms trailing debounce absorbs high-frequency changes caused by sidebar
+  // upserts during streaming.
+  // Note: global shortcut bindings are stored in localStorage with no subscription and read live at
+  // model-build time -- after rebinding, the echo catches up on the next model-level change.
   const trayPrefs = useTrayPrefs();
   const automationState = useAutomation();
   useEffect(() => {
@@ -2044,12 +2063,16 @@ export function ChatPage(props: ChatPageProps) {
       }
       return;
     }
-    // 对话式计划审批:会话有待决计划时,纯批准短语("同意/开始/ok"等)即批准
-    // (等同点卡片按钮);其他输入就是普通消息(修改意见),照常发送——规划 run
-    // 已结束,消息直接开启新一轮 plan mode 修订,不经队列。
-    // 短语批准要求 plan 开关仍开着:正常流程中提交后开关保持开启(批准才关);
-    // 用户手动关掉 pill 即视为弃置当前计划,之后的"好的/ok"是普通消息,不得
-    // 把陈旧计划复活成执行续轮。显式批准仍可走卡片按钮(不受开关限制)。
+    // Conversational plan approval: when the conversation has a pending plan, a pure approval
+    // phrase ("agree/start/ok", etc.) approves it (equivalent to clicking the card button); any
+    // other input is a normal message (revision feedback) sent as usual -- the planning run has
+    // ended, so the message directly opens a new round of plan mode revision without going through
+    // the queue.
+    // Phrase approval requires the plan switch to still be on: in the normal flow the switch stays on
+    // after submission (it only turns off on approval); if the user manually turns off the pill, the
+    // current plan is considered abandoned, and a later "sure/ok" is a normal message that must not
+    // revive a stale plan into an execution continuation. Explicit approval can still use the card
+    // button (not subject to the switch).
     if (conversationId && planModeEnabledRef.current) {
       const pendingPlan = getPendingPlanForConversation(conversationId);
       if (pendingPlan) {
@@ -2095,9 +2118,9 @@ export function ChatPage(props: ChatPageProps) {
   const composerPlaceholder = isCompactionRunning
     ? t("chat.compactingContextWait")
     : isConversationHydrating
-      ? "正在加载会话，请稍候..."
+      ? "Loading conversation, please wait..."
       : isConversationHydrationFailed
-        ? "当前会话加载失败，请重新打开会话..."
+        ? "Failed to load the current conversation, please reopen the conversation..."
         : enabledComposerSkills.length > 0
           ? t("chat.inputHintWithSkills")
           : t("chat.inputHint");
@@ -2210,10 +2233,11 @@ export function ChatPage(props: ChatPageProps) {
     t,
   });
 
-  // 提示词澄清执行器（按会话缓存）：ChatComposerBar 是 memo 组件，runner 的
-  // identity 必须跨渲染稳定。背景 Pane 的 binding 在普通函数里逐 Pane 构建
-  // （Pane 数量随布局变化），不能在里面 useMemo，故用 ref 缓存 + 惰性 getter：
-  // 每轮澄清调用时才解析当前设置与会话模型，中途切模型下一轮即生效。
+  // Prompt clarify runners (cached per conversation): ChatComposerBar is a memo component, so a
+  // runner's identity must be stable across renders. A background Pane's binding is built per Pane
+  // in a normal function (the Pane count varies with layout), where useMemo cannot be used, so a ref
+  // cache + lazy getter is used: settings and the conversation model are resolved only when a
+  // clarify call happens, so switching models mid-way takes effect on the next turn.
   const clarifySettingsRef = useRef(settings);
   clarifySettingsRef.current = settings;
   const clarifyRunnersRef = useRef(new Map<string, RunClarifyTurn>());
@@ -2221,7 +2245,8 @@ export function ChatPage(props: ChatPageProps) {
     (conversationId: string): RunClarifyTurn => {
       let runner = clarifyRunnersRef.current.get(conversationId);
       if (!runner) {
-        // 设置里的「澄清对话模型」优先；未选或失效时回退本会话当前模型。
+        // The "clarify conversation model" from settings takes priority; when unset or invalid, fall
+        // back to this conversation's current model.
         const resolveClarifySelection = () =>
           resolvePromptClarifyModelSelection(clarifySettingsRef.current) ??
           resolveEffectiveChatModelSelection({
@@ -2254,13 +2279,16 @@ export function ChatPage(props: ChatPageProps) {
       project: activeWorkspaceProject ?? null,
       disabled: !currentConversationId || isSending,
       onRewound: (info) => {
-        // 显式回退通知:让用户明确知道工作区刚被回退过。文件工具缓存
-        // 无需手动失效——注册表与 fileState 每用户轮都会重建。
+        // Explicit revert notification: let the user clearly know the workspace was just reverted.
+        // File tool caches need no manual invalidation -- the registry and fileState are rebuilt on
+        // every user turn.
         //
-        // 已知残留:压缩摘要里的 fileLedger 是持久化在历史里的,不随轮次
-        // 重建,回退后仍会列出那些路径。账本语义是"曾被触碰的路径",不断言
-        // 当前内容,所以不算失真;真正会过时的是摘要正文里模型写的完成情况,
-        // 那要改写已落库的摘要才能修,不在本功能范围内。
+        // Known residual: the fileLedger in the compaction summary is persisted in history and is not
+        // rebuilt per turn, so those paths are still listed after a revert. The ledger's semantics are
+        // "paths that were once touched" and do not assert current content, so this is not
+        // distortion; what truly goes stale is the completion status written by the model in the
+        // summary body, and fixing that would require rewriting the already-persisted summary, which
+        // is outside this feature's scope.
         const notice = formatCheckpointRewoundNotification(info, locale === "zh-CN");
         addNotify(notice.level, notice.message);
       },
@@ -2273,7 +2301,8 @@ export function ChatPage(props: ChatPageProps) {
       description: fileDropDescription,
       limitHint: fileDropLimitHint,
     },
-    // 每个会话独立保存视图；当前 Pane 使用页面级实时数据渲染自己的轨迹。
+    // Each conversation saves its view independently; the current Pane renders its own trajectory
+    // using page-level live data.
     trajectory: {
       active: renderedConversationView === "trajectory",
       renderContent: () => (
@@ -2315,16 +2344,6 @@ export function ChatPage(props: ChatPageProps) {
       conversationId: currentConversationId,
       isUploadingFiles,
       isInputDisabled: isComposerInputDisabled,
-      // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
-      sttSessionKey: currentConversationId,
-      sttProvider: settings.stt.enabled
-        ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
-        : null,
-      sttProviderConfigured:
-        settings.stt.providers[sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"]
-          ?.configured,
-      sttTransport: desktopSttTransport,
-      onSttError: handleSttError,
       inputPlaceholder: composerPlaceholder,
       workdir: displayedConversationWorkdir,
       enabledSkills: enabledComposerSkills,
@@ -2364,9 +2383,10 @@ export function ChatPage(props: ChatPageProps) {
       onPasteFiles: importReadableFiles,
       onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
       loadHistoryPrompts: loadComposerHistoryPrompts,
-      // 提示词澄清：当前会话模型跑纯文本补全；clarifyContext 只喂轻量工作区
-      // 信息（分支无现成状态，留空不为此新拉 git）。总开关关闭时不传执行器，
-      // ChatComposerBar 随之隐藏澄清按钮。
+      // Prompt clarify: the current conversation model runs a plain-text completion; clarifyContext
+      // feeds only lightweight workspace info (branch has no ready state, so it is left empty rather
+      // than pulling git for this). When the master switch is off, no runner is passed, and
+      // ChatComposerBar hides the clarify button accordingly.
       runClarifyTurn: settings.customSettings.promptClarifyEnabled
         ? getConversationClarifyRunner(currentConversationId)
         : undefined,
@@ -2478,20 +2498,23 @@ export function ChatPage(props: ChatPageProps) {
     (paneId: string) => {
       const pane = workbench.layoutRef.current.panes[paneId];
       const result = workbench.closePane(paneId);
-      // Pane 关闭即结束这次会话视图投影。只有布局确认移除成功后才清理，
-      // 避免失败的关闭操作把仍在画布上的轨迹视图强制切回会话。
+      // Closing a Pane ends this conversation-view projection. Cleanup happens only after the layout
+      // confirms removal succeeded, so a failed close does not force the trajectory view still on the
+      // canvas back to the conversation.
       if (pane?.surface.kind === "conversation" && !workbench.layoutRef.current.panes[paneId]) {
         setConversationView(pane.surface.conversationId, "conversation");
       }
-      // 终端 Pane 的关闭 = 终止终端(不再 Detach 回 Right Dock):进程由
-      // terminalPaneClose 先关,这里在布局移除后回收绑定,再次拖入走全新
-      // surface 身份。先关 Pane 再删绑定,同一事件批处理内宿主已卸载,不会
-      // 把空绑定误判为待新建。
+      // Closing a terminal Pane = terminating the terminal (no longer Detach back to the Right Dock):
+      // the process is closed first by terminalPaneClose, and here the binding is reclaimed after the
+      // layout removes it; dragging it in again uses a brand-new surface identity. The Pane is closed
+      // before the binding is deleted, so within the same event batch the host is already unmounted
+      // and an empty binding is not misjudged as pending creation.
       if (pane?.surface.kind === "localTerminal" || pane?.surface.kind === "sshTerminal") {
         terminalPaneBindings.delete(pane.surface.surfaceId);
       }
-      // 项目工具 Pane 的关闭同时关闭 dock 里的该工具:租约释放后 dock 不再把
-      // tab 弹回来。只在布局确认移除后写设置,失败的关闭不动 dock 状态。
+      // Closing a project-tool Pane also closes that tool in the dock: after the lease is released,
+      // the dock no longer bounces the tab back. Settings are written only after the layout confirms
+      // removal; a failed close does not touch dock state.
       if (
         pane &&
         isProjectToolSurface(pane.surface) &&
@@ -2512,8 +2535,9 @@ export function ChatPage(props: ChatPageProps) {
     [selectWorkbenchConversation, setConversationView, setSettings, workbench],
   );
 
-  // Pane 的 × / Meta+Alt+W:终端 Pane 先终止终端(运行中的会话在 Pane 内红条
-  // 确认),由 closed 事件联动收 Pane;其它 Pane 直接关闭。
+  // Pane's × / Meta+Alt+W: a terminal Pane first terminates the terminal (a running conversation
+  // shows a red-bar confirmation inside the Pane), and the closed event collapses the Pane; other
+  // Panes close directly.
   const terminalPaneClose = useTerminalPaneCloseFlow({
     client: tauriTerminalClient,
     sessions: terminalSessions,
@@ -2601,11 +2625,12 @@ export function ChatPage(props: ChatPageProps) {
               if (paneId) handleWorkbenchFocusPane(paneId);
               return;
             }
-            // not-created/stale/identity-mismatch/rejected:暂停窗口内被 defer
-            // 掉的会话切换必须补一次同步,且项目身份取当前会话自己的解析——
-            // identity-mismatch 的定义就是草稿 workdir 不属于拖入项目,绝不能
-            // 拿拖入项目的 ProjectRef 强绑聚焦 Pane(checkpoint 授权根、文件
-            // 投放作用域都会跟着错位)。
+            // not-created/stale/identity-mismatch/rejected: a conversation switch deferred during
+            // the pause window must be resynced once, and the project identity uses the current
+            // conversation's own resolution -- identity-mismatch is defined as the draft workdir not
+            // belonging to the dragged-in project, and the dragged-in project's ProjectRef must never
+            // be force-bound to the focused Pane (the checkpoint authorization root and file drop
+            // scope would both become misaligned).
             workbench.syncCurrentConversation(
               currentConversationIdRef.current,
               conversationSurfaceProject,
@@ -2755,8 +2780,9 @@ export function ChatPage(props: ChatPageProps) {
     [beginWorkbenchDrag, workbenchProjectForConversation],
   );
 
-  // Right Dock 终端 tab 拖出:既有会话进入画板。dock 的 tab 只列本地会话;
-  // SSH 会话从 workspace overlay 的 shell tab 拖出(handleSshTerminalTabDragIntent)。
+  // Dragging a Right Dock terminal tab out: an existing conversation enters the canvas. The dock's
+  // tabs list only local conversations; SSH conversations are dragged out from the workspace
+  // overlay's shell tab (handleSshTerminalTabDragIntent).
   const handleTerminalTabWorkbenchDragIntent = useCallback(
     (
       session: TerminalSession,
@@ -2787,12 +2813,13 @@ export function ChatPage(props: ChatPageProps) {
     [beginWorkbenchDrag, workspaceProjects],
   );
 
-  // SSH overlay 的 shell tab 拖出与 dock tab 同一 payload 通路;drop 时由
-  // terminalSurfaceForSession 依 session.ssh.hostId 构造 sshTerminal surface,
-  // 租约建立后 overlay 自动显示"已在画板中打开"占位。
+  // Dragging out the SSH overlay's shell tab uses the same payload path as the dock tab; on drop,
+  // terminalSurfaceForSession builds an sshTerminal surface from session.ssh.hostId, and once the
+  // lease is established the overlay automatically shows an "already open on the canvas" placeholder.
   const handleSshTerminalTabDragIntent = handleTerminalTabWorkbenchDragIntent;
 
-  // 空态"新建终端"按钮拖出:落点新建终端 Pane(几何先行,PTY 由宿主异步建)。
+  // Dragging out the empty-state "New terminal" button: the drop target creates a terminal Pane
+  // (geometry first; the PTY is created asynchronously by the host).
   const handleNewTerminalWorkbenchDragIntent = useCallback(
     (event: {
       pointerId: number;
@@ -2819,8 +2846,8 @@ export function ChatPage(props: ChatPageProps) {
     [beginWorkbenchDrag, t, terminalProjectPath, terminalProjectPathKey, workspaceProjects],
   );
 
-  // Right Dock 的当前项目:项目工具(文件树/审查/内网穿透/SSH/后台任务)
-  // 拖出或"在分屏中打开"时,Pane 绑定的就是这个 ProjectRef。
+  // The Right Dock's current project: when a project tool (file tree/review/tunneling/SSH/background
+  // tasks) is dragged out or "opened in split view", the Pane binds to this ProjectRef.
   const dockToolProjectRef = useCallback((): ProjectRef | null => {
     if (!terminalProjectPathKey) return null;
     const project = workspaceProjects.find(
@@ -2852,7 +2879,7 @@ export function ChatPage(props: ChatPageProps) {
     [beginWorkbenchDrag, dockToolProjectRef, t],
   );
 
-  // 画板 Pane 持有租约的会话:overlay/占位的"前往 Pane"聚焦通路。
+  // Sessions leased by a canvas Pane: the "go to Pane" focus path from the overlay/placeholder.
   const focusWorkbenchTerminalPane = useCallback(
     (sessionId: string) => {
       const paneId = terminalPaneLease.paneIdFor(sessionId);
@@ -2863,17 +2890,17 @@ export function ChatPage(props: ChatPageProps) {
     [handleWorkbenchFocusPane, workbench],
   );
 
-  // 会话被关闭(`closed` 事件:Pane 的 × 终止、dock 关闭或 close_project)时,
-  // 持有它的 Pane 一并关闭。缺了这一环,宿主会把
-  // "绑定的会话消失"当作恢复期陈旧绑定,按 launchSpec 复活一个新 PTY,
-  // 表现为 dock 上的终端"关不掉"。按绑定而非租约查找,覆盖宿主取得租约
-  // 前的 connecting 窗口。
+  // When a conversation is closed (`closed` event: Pane × termination, dock close, or
+  // close_project), the Pane holding it closes too. Without this link, the host would treat "the
+  // bound conversation disappeared" as a stale binding during recovery and revive a new PTY per
+  // launchSpec, which shows up as a dock terminal that "can't be closed". Lookup is by binding
+  // rather than lease, covering the connecting window before the host acquires the lease.
   useEffect(() => {
     if (!sessionWorkbench.enabled) return;
     return tauriTerminalClient.subscribe((event) => {
       if (event.kind !== "closed") return;
-      // 应用退出的 close_all 不是用户关闭单个终端:保住布局里的终端 Pane,
-      // 重启后按 launchSpec 恢复。
+      // The app-exit close_all is not the user closing a single terminal: keep the terminal Panes in
+      // the layout, to be restored per launchSpec after restart.
       if (terminalAppExitGuard.isExiting()) return;
       const closedSessionId = event.sessionId?.trim() || event.session?.id || "";
       if (!closedSessionId) return;
@@ -2957,8 +2984,9 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
-  // 同一提交通路的键盘/菜单入口:终端 tab 无需拖拽也能进工作台。已租用的会话
-  // 由 commitTerminalDrop 自己走"移动既有 Pane",不会二次开 Pane。
+  // Keyboard/menu entry for the same commit path: a terminal tab can enter the workbench without
+  // dragging. An already-leased conversation goes through commitTerminalDrop's own "move existing
+  // Pane" path and does not open a second Pane.
   const handleOpenTerminalInWorkbenchSplit = useCallback(
     (session: TerminalSession) => {
       const target = resolveWorkbenchAutoDockTarget();
@@ -3256,9 +3284,10 @@ export function ChatPage(props: ChatPageProps) {
       }
     }
   }, [workbench.layout]);
-  // 布局对账:终端 drop 事务在宿主挂载前同步占约,Pane 若在宿主接手
-  // release 前被关闭,租约会永久悬挂(dock 里永远隐藏该终端)。宿主持有
-  // 的租约在其卸载 cleanup 中先于本 effect 释放,不受影响。
+  // Layout reconciliation: the terminal drop transaction reserves the lease synchronously before the
+  // host mounts; if the Pane is closed before the host takes over release, the lease would hang
+  // forever (hiding that terminal in the dock permanently). A lease held by the host is released in
+  // its unmount cleanup before this effect and is unaffected.
   useEffect(() => {
     releaseOrphanTerminalPaneLeases(terminalPaneLease, workbench.layout);
   }, [workbench.layout]);
@@ -3369,8 +3398,9 @@ export function ChatPage(props: ChatPageProps) {
     return {
       controller,
       changedFilesActions,
-      // 回退是写工作区的破坏性操作,只允许从焦点 Pane 发起(聚焦后走
-      // primaryPaneBinding 的完整授权链);背景 Pane 一律禁用。
+      // Revert is a destructive workspace write and may only be initiated from the focused Pane
+      // (once focused, it goes through primaryPaneBinding's full authorization chain); background
+      // Panes are always disabled.
       checkpointRewind: {
         project: null,
         disabled: true,
@@ -3423,16 +3453,6 @@ export function ChatPage(props: ChatPageProps) {
         conversationId,
         isUploadingFiles: false,
         isInputDisabled: false,
-        // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
-        sttSessionKey: conversationId,
-        sttProvider: settings.stt.enabled
-          ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
-          : null,
-        sttProviderConfigured:
-          settings.stt.providers[sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"]
-            ?.configured,
-        sttTransport: desktopSttTransport,
-        onSttError: handleSttError,
         inputPlaceholder: t("chat.inputHint"),
         workdir: workspaceRoot ?? "",
         enabledSkills: enabledComposerSkills,
@@ -3489,13 +3509,15 @@ export function ChatPage(props: ChatPageProps) {
         },
         onLoadUploadedImagePreview: loadComposerUploadedImagePreview,
         loadHistoryPrompts: loadComposerHistoryPrompts,
-        // 背景 Pane 的澄清执行器同样按本 Pane 会话解析模型（见
-        // getConversationClarifyRunner 的惰性 getter）；总开关与主 Pane 同源。
+        // A background Pane's clarify runner likewise resolves the model from this Pane's conversation
+        // (see getConversationClarifyRunner's lazy getter); the master switch shares a source with the
+        // main Pane.
         runClarifyTurn: settings.customSettings.promptClarifyEnabled
           ? getConversationClarifyRunner(conversationId)
           : undefined,
-        // 与主 Pane 口径一致：clarifyContext 只喂本 Pane 会话的轻量工作区
-        // 信息；会话无 cwd/workdir 时不传空串，避免系统提示词带噪音。
+        // Consistent with the main Pane: clarifyContext feeds only this Pane conversation's
+        // lightweight workspace info; when the conversation has no cwd/workdir, an empty string is not
+        // passed, avoiding noise in the system prompt.
         clarifyContext: workspaceRoot ? { workdir: workspaceRoot } : undefined,
         onRemovePendingUpload: (relativePath) => removePendingUpload(relativePath, conversationId),
         onRunQueuedTurnNow: runQueuedTurnNow,
@@ -3600,8 +3622,8 @@ export function ChatPage(props: ChatPageProps) {
       .replace("{workspace}", workspaceName);
   };
 
-  // 与 PaneSurfaceLayer 的 paneCount < 2(chromeless)判定保持同一口径:
-  // 只要画布上有 ≥2 个 Pane,Pane chrome 就会渲染,切换点随之下沉。
+  // Same criterion as PaneSurfaceLayer's paneCount < 2 (chromeless) check: as long as the canvas has
+  // >=2 Panes, Pane chrome renders and the switch point sinks accordingly.
   const workbenchHasMultiplePanes =
     sessionWorkbench.enabled && Object.keys(workbench.layout.panes).length >= 2;
 
@@ -3658,8 +3680,9 @@ export function ChatPage(props: ChatPageProps) {
     );
   };
 
-  // 项目工具 Pane 的运行环境:与 RightDockPanel 拿到的是同一批 client/回调,
-  // 只是按 Pane 自己的 ProjectRef 解析项目(见 ProjectToolPaneHost)。
+  // Runtime environment for a project-tool Pane: the same batch of clients/callbacks that
+  // RightDockPanel gets, except the project is resolved by the Pane's own ProjectRef (see
+  // ProjectToolPaneHost).
   const projectToolPaneEnvironment = useMemo<ProjectToolPaneEnvironment>(
     () => ({
       theme: effectiveTheme,
@@ -3757,7 +3780,8 @@ export function ChatPage(props: ChatPageProps) {
     ],
   );
 
-  // 被画板 Pane 租用的项目工具:dock 隐藏对应 tab/内容/入口(与终端租约同口径)。
+  // Project tools leased by a canvas Pane: the dock hides the corresponding tab/content/entry
+  // (same criterion as terminal leases).
   const leasedDockTools = useMemo(
     () =>
       leasedProjectToolKinds(workbench.layout, terminalProjectPathKey, PROJECT_TOOL_SURFACE_KINDS),
@@ -4014,8 +4038,9 @@ export function ChatPage(props: ChatPageProps) {
           onToggleTheme={onToggleTheme}
           onOpenSidebar={handleOpenSidebar}
           leadingActions={
-            // 多 Pane 时切换点内嵌在聚焦 Pane 的左上角(PaneChrome),顶栏
-            // 不再重复;单 Pane 无 Pane chrome,保留顶栏 Tabs。
+            // With multiple Panes the switch point is embedded in the focused Pane's top-left corner
+            // (PaneChrome) and is not repeated in the top bar; a single Pane has no Pane chrome, so
+            // the top bar Tabs are kept.
             activeView === "chat" && hasConversationReply && !workbenchHasMultiplePanes ? (
               <ConversationViewTabs
                 active={renderedConversationView}
@@ -4082,8 +4107,9 @@ export function ChatPage(props: ChatPageProps) {
         {confirmDialog}
 
         {/* ---- Main content ----
-            字体缩放仅作用于聊天视图：Skills/MCP Hub 页面存在大量未迁移的固定
-            像素字号，整列缩放会造成混排（聊天区设置也只应影响聊天区）。 */}
+            Font scaling applies only to the chat view: Skills/MCP Hub pages contain many
+            un-migrated fixed pixel font sizes, and scaling the whole column would cause mixed
+            typesetting (chat-area settings should also only affect the chat area). */}
         <ApplicationView
           activeView={activeView}
           settings={settings}

@@ -1,23 +1,28 @@
-// LiveAgent Browser Bridge — MV3 service worker.
+// ReactorPro Browser Bridge — MV3 service worker.
 //
-// 反向连接 LiveAgent 桌面端的桥接服务（ws://127.0.0.1:19222，见 Rust 侧
-// services/browser/bridge.rs），在用户日常浏览器里中继 CDP：
-//   - browser-level 命令（Target.*）由本文件模拟——只暴露 LiveAgent 自己
-//     创建的自动化标签页，用户的其它标签页对桌面端不可见；
-//   - session-level 命令按 sessionId → tabId 映射转发 chrome.debugger.sendCommand；
-//   - chrome.debugger.onEvent 反向转发为 CDP 事件帧。
-// 线型与原生 CDP 一致，桌面端的 CdpConnection/PageSession 无需感知差异。
+// Reverse-connection bridge service to the ReactorPro desktop app
+// (ws://127.0.0.1:19222, see services/browser/bridge.rs on the Rust side); it
+// relays CDP inside the user's everyday browser:
+//   - browser-level commands (Target.*) are emulated by this file — only the
+//     automation tabs created by ReactorPro are exposed, and the user's other
+//     tabs are invisible to the desktop app;
+//   - session-level commands are forwarded to chrome.debugger.sendCommand via a
+//     sessionId → tabId mapping;
+//   - chrome.debugger.onEvent is forwarded back as CDP event frames.
+// The wire format matches native CDP, so the desktop side's CdpConnection/
+// PageSession needs no awareness of the difference.
 
 const BRIDGE_URL = "ws://127.0.0.1:19222";
 const RECONNECT_ALARM = "liveagent-bridge-reconnect";
-const KEEPALIVE_INTERVAL_MS = 20_000; // MV3 SW 空闲 30s 回收，20s 心跳把它顶住。
+const KEEPALIVE_INTERVAL_MS = 20_000; // MV3 SW is reclaimed after 30s idle; a 20s heartbeat holds it up.
 const DEBUGGER_PROTOCOL_VERSION = "1.3";
 
 let socket = null;
 let keepaliveTimer = null;
 
-// 自动化标签页登记：targetId → { tabId, sessionId|null }。
-// targetId/sessionId 都是本扩展编的号，只需在这条连接内自洽。
+// Automation tab registry: targetId → { tabId, sessionId|null }.
+// targetId/sessionId are numbers minted by this extension; they only need to be
+// self-consistent within this connection.
 const targets = new Map();
 let nextOrdinal = 1;
 
@@ -49,11 +54,12 @@ function sendError(id, message) {
   send({ id, error: { message: String(message) } });
 }
 
-// ---- browser-level 命令模拟 -------------------------------------------------
+// ---- browser-level command emulation ----------------------------------------
 
 async function handleGetTargets(id) {
-  // 只报告仍存活的自动化标签页；用户手关 tab 后这里查不到，桌面端的
-  // target_alive 探测即判定会话失效并重建。
+  // Only report automation tabs that are still alive; once the user closes a tab
+  // manually it is not found here, and the desktop side's target_alive probe
+  // considers the session dead and rebuilds it.
   const targetInfos = [];
   for (const [targetId, entry] of targets) {
     try {
@@ -84,7 +90,7 @@ async function handleAttachToTarget(id, params) {
   const targetId = params?.targetId;
   const entry = targets.get(targetId);
   if (!entry) {
-    sendError(id, `unknown targetId ${targetId}: only tabs created by LiveAgent can be attached`);
+    sendError(id, `unknown targetId ${targetId}: only tabs created by ReactorPro can be attached`);
     return;
   }
   await chrome.debugger.attach({ tabId: entry.tabId }, DEBUGGER_PROTOCOL_VERSION);
@@ -100,13 +106,13 @@ async function handleCloseTarget(id, params) {
     try {
       await chrome.tabs.remove(entry.tabId);
     } catch {
-      // 用户已手关，视同成功。
+      // The user already closed it manually; treat as success.
     }
   }
   sendResult(id, { success: true });
 }
 
-// ---- 帧分发 -----------------------------------------------------------------
+// ---- frame dispatch ---------------------------------------------------------
 
 async function handleFrame(raw) {
   let frame;
@@ -154,15 +160,16 @@ async function handleFrame(raw) {
   }
 }
 
-// chrome.debugger 事件 → CDP 事件帧（带映射回去的 sessionId）。
+// chrome.debugger events → CDP event frames (with the sessionId mapped back).
 chrome.debugger.onEvent.addListener((source, method, params) => {
   const entry = targetForTab(source.tabId);
   if (!entry || !entry.sessionId) return;
   send({ method, params: params ?? {}, sessionId: entry.sessionId });
 });
 
-// 调试器被剥离（用户点了"取消"横幅、tab 崩溃）：撤登记，桌面端下次动作
-// 时经 Target.getTargets 察觉并重建会话。
+// The debugger was detached (the user clicked the "Cancel" banner, or the tab
+// crashed): unregister it, and the desktop side notices on its next action via
+// Target.getTargets and rebuilds the session.
 chrome.debugger.onDetach.addListener((source) => {
   const entry = targetForTab(source.tabId);
   if (entry) targets.get(entry.targetId).sessionId = null;
@@ -173,7 +180,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   if (entry) targets.delete(entry.targetId);
 });
 
-// ---- 连接生命周期 ------------------------------------------------------------
+// ---- connection lifecycle ---------------------------------------------------
 
 function connect() {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
@@ -185,9 +192,10 @@ function connect() {
     return;
   }
   socket.onopen = () => {
-    // 心跳帧只为续 SW 生命周期；桌面端按"无 id 的未知事件"忽略。
+    // The heartbeat frame only extends the SW lifetime; the desktop side ignores
+    // it as an "unknown event without an id".
     clearInterval(keepaliveTimer);
-    keepaliveTimer = setInterval(() => send({ method: "LiveAgent.ping" }), KEEPALIVE_INTERVAL_MS);
+    keepaliveTimer = setInterval(() => send({ method: "ReactorPro.ping" }), KEEPALIVE_INTERVAL_MS);
   };
   socket.onmessage = (event) => handleFrame(event.data);
   socket.onclose = () => {
@@ -195,7 +203,7 @@ function connect() {
     socket = null;
   };
   socket.onerror = () => {
-    // onclose 会跟着触发，重连交给 alarm。
+    // onclose will fire right after; reconnection is left to the alarm.
   };
 }
 
@@ -211,5 +219,5 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RECONNECT_ALARM) connect();
 });
 
-// SW 每次被唤醒（事件驱动）都尝试补连。
+// Every time the SW is woken (event-driven), try to reconnect.
 connect();

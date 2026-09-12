@@ -48,7 +48,7 @@ test("verifyGatewayAccessToken sends normalized bearer header and maps unauthori
 
   await assert.rejects(
     () => auth.verifyGatewayAccessToken("Bearer bad-token"),
-    /Access Token 错误，请检查后重试。/,
+    /Invalid Access Token, please check and try again./,
   );
 
   assert.equal(requests.length, 1);

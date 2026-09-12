@@ -1,17 +1,17 @@
-// 工具审批的网关同步契约:桌面端在同步给 WebUI 的工具参数上盖“待审批 + 截止
-// 时间”标记(见 gatewayToolPreview),WebUI 据此渲染审批卡片并显示倒计时。
-// 这些是 __ 前缀的合成参数,不参与展示(见 toolCallArgsForDisplay 过滤),也不
-// 影响本地工具执行(执行用真实 arguments,非网关预览副本)。
-// 本文件是两端共用的参数协议真源。
+// Gateway sync contract for tool approval: the desktop stamps the tool arguments synced to the WebUI with
+// "pending approval + deadline" markers (see gatewayToolPreview), and the WebUI renders an approval card
+// and shows a countdown from them. These are __-prefixed synthetic arguments that do not participate in
+// display (filtered by toolCallArgsForDisplay) and do not affect local tool execution (execution uses the
+// real arguments, not the gateway preview copy). This file is the shared source of truth for the parameter protocol on both ends.
 
-/** 工具调用正等待用户审批(真时 WebUI 渲染审批卡片)。 */
+/** The tool call is awaiting user approval (when true the WebUI renders an approval card). */
 export const TOOL_APPROVAL_PENDING_ARG = "__toolApprovalPending";
-/** 权威审批截止时间戳(毫秒);WebUI 倒计时与桌面计时同源。 */
+/** Authoritative approval deadline timestamp (ms); the WebUI countdown shares its source with the desktop timer. */
 export const TOOL_APPROVAL_DEADLINE_ARG = "__toolApprovalDeadlineAt";
-/** 待审批工具的命令/参数摘要(桌面端算一次同步给 WebUI,审批栏统一展示)。 */
+/** Command/argument summary of the pending tool (computed once on the desktop and synced to the WebUI for the approval bar to display uniformly). */
 export const TOOL_APPROVAL_SUMMARY_ARG = "__toolApprovalSummary";
 
-/** 审批决定:allow=本次放行;deny=本次拒绝;approve_session=本对话内该工具后续免审。 */
+/** Approval decision: allow=allow this time; deny=reject this time; approve_session=this tool is exempt from approval for the rest of this conversation. */
 export type ToolApprovalDecision = "approve" | "deny" | "approve_session";
 
 export function readToolApprovalPending(args: unknown): boolean {

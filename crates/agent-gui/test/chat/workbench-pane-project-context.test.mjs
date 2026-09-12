@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 不变量:「focusedPane → activeProject → dock 数据源」的解析
-// (docs/design/session-workbench-pane-architecture.md §30.2)。聚焦 Pane 携带的 projectPathKey
-// 只在指向一个已知、非 archived、非 missing 的工作区项目时才切换 Right Dock;
-// 陈旧/合成 key 绝不回退到别的项目。
+// Invariant: the resolution of "focusedPane → activeProject → dock data source"
+// (docs/design/session-workbench-pane-architecture.md §30.2). The projectPathKey carried
+// by the focused Pane switches the Right Dock only when it points to a known,
+// non-archived, non-missing workspace project; a stale/synthetic key never falls back to
+// another project.
 
 const { loadModule } = createTsModuleLoader();
 const { resolveWorkbenchPaneProject } = loadModule("src/pages/chat/workbench/paneProjectContext.ts");
@@ -63,8 +64,8 @@ test("a missing project never activates", () => {
 });
 
 test("a stale key never falls back to a different project", () => {
-  // 合成 key(conversation:xxx)与已删除项目的 key 都必须落空,而不是
-  // 挑一个"最接近"的项目顶上。
+  // Both a synthetic key (conversation:xxx) and the key of a deleted project must miss,
+  // rather than picking a "closest" project to fill in.
   assert.equal(resolveWorkbenchPaneProject("conversation:c1", context()), null);
   assert.equal(
     resolveWorkbenchPaneProject(workspaceProjectPathKey("/workspaces/deleted"), context()),
@@ -73,7 +74,7 @@ test("a stale key never falls back to a different project", () => {
 });
 
 test("matching runs on normalized path keys, same key space as blocked checks", () => {
-  // 项目路径带尾斜杠时,存储的 path 与 pane 携带的 key 仍按同一规范化匹配。
+  // When the project path has a trailing slash, the stored path and the key carried by the pane still match under the same normalization.
   const trailing = project("gamma", "/workspaces/gamma/");
   const resolved = resolveWorkbenchPaneProject(
     workspaceProjectPathKey("/workspaces/gamma"),
@@ -85,7 +86,7 @@ test("matching runs on normalized path keys, same key space as blocked checks", 
 test("ChatPage routes pane project activation through the resolver", () => {
   const source = readFileSync(new URL("../../src/pages/ChatPage.tsx", import.meta.url), "utf8");
   assert.match(source, /resolveWorkbenchPaneProject\(projectPathKey, \{/);
-  // 旧的内联 find + set 判定不应回潮:解析必须只有资源器这一处。
+  // The old inline find + set decision must not come back: resolution must live in the resolver only.
   assert.equal(
     source.includes("!archivedWorkspaceProjectPathKeys.has(projectPathKey)"),
     false,

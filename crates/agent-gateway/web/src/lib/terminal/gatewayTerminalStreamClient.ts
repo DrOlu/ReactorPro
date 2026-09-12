@@ -18,7 +18,7 @@ import {
 const INPUT_RETRY_MS = 25;
 const ATTACH_RETRY_MS = 250;
 
-// 帧头形状沿用旧自定义帧的命名；v2 下由适配层映射到 TerminalStreamFrame。
+// The frame-header shape reuses the naming of the old custom frames; under v2 the adapter layer maps it to TerminalStreamFrame.
 type TerminalFrameHeader = TerminalWireHeader;
 
 type PendingAttach = {
@@ -34,7 +34,7 @@ function terminalStreamUrl() {
   if (!origin) {
     throw new Error("Gateway terminal stream origin is unavailable");
   }
-  // v2 终端数据面唯一端点。
+  // The sole endpoint of the v2 terminal data plane.
   const url = new URL(origin);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.pathname = "/ws/v2/terminal";
@@ -84,10 +84,12 @@ function isRetryableAttachError(message: string) {
   );
 }
 
-// TerminalStreamBuffer 来自 @liveagent/ui（跨包导入），生产构建下 rolldown 可能把这里和它的
-// 定义拆进不同 chunk。class 顶层的 extends 子句在模块求值时立即读取该导入绑定，若此时目标 chunk
-// 还没跑完初始化就会读到 undefined，报 "Class extends value undefined is not a constructor"。
-// 包一层工厂函数，把 extends 求值推迟到首次实际 attach（此时全部 chunk 必已加载完毕）。
+// TerminalStreamBuffer comes from @liveagent/ui (a cross-package import), and in production
+// builds rolldown may split this file and its definition into different chunks. A class-level
+// extends clause reads that import binding immediately at module evaluation time, and if the
+// target chunk has not finished initializing it reads undefined, reporting "Class extends
+// value undefined is not a constructor". Wrap it in a factory function to defer the extends
+// evaluation until the first actual attach (by which point all chunks must be loaded).
 function createGatewayTerminalStreamHandleClass() {
   return class GatewayTerminalStreamHandle extends TerminalStreamBuffer {
     constructor(
@@ -179,7 +181,8 @@ export class BrowserGatewayTerminalStreamClient implements TerminalStreamClient 
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
 
-  // getAgentId 提供当前明确的活跃 Agent，终端数据面在 hello 时绑定该目标。
+  // getAgentId provides the currently explicit active Agent; the terminal data plane binds
+  // that target during hello.
   constructor(
     private readonly token: string,
     private readonly getAgentId: () => string,
@@ -302,7 +305,7 @@ export class BrowserGatewayTerminalStreamClient implements TerminalStreamClient 
         rejectOnce(error instanceof Error ? error : new Error(String(error)));
         return;
       }
-      // v2：二进制 protobuf 帧 + 子协议协商 + hello 鉴权握手。
+      // v2: binary protobuf frames + subprotocol negotiation + hello auth handshake.
       const socket = new WebSocket(url, GATEWAY_V2_SUBPROTOCOL);
       socket.binaryType = "arraybuffer";
       const failAttempt = (error: Error) => {
@@ -327,7 +330,7 @@ export class BrowserGatewayTerminalStreamClient implements TerminalStreamClient 
       };
       socket.onmessage = (event) => {
         if (typeof event.data === "string") {
-          // v2 链路无文本帧；忽略。
+          // The v2 link has no text frames; ignore.
           return;
         }
         const decoded = decodeTerminalServerFrame(event.data as ArrayBuffer);

@@ -17,17 +17,17 @@ function buildQuestionsArgs() {
     questions: [
       {
         id: "storage",
-        header: "存储",
-        prompt: "配置应当存放在哪里？",
+        header: "Storage",
+        prompt: "Where should the configuration be stored?",
         options: [
-          { label: "应用数据目录", description: "不污染工作区", recommended: true },
-          { label: "工作区根目录" },
-          { label: "自定义路径" },
+          { label: "App data directory", description: "Does not pollute the workspace", recommended: true },
+          { label: "Workspace root directory" },
+          { label: "Custom path" },
         ],
       },
       {
-        prompt: "是否需要迁移旧数据？",
-        options: [{ label: "迁移" }, { label: "不迁移", recommended: true }, { label: "稍后再说" }],
+        prompt: "Should old data be migrated?",
+        options: [{ label: "Migrate" }, { label: "Do not migrate", recommended: true }, { label: "Decide later" }],
       },
     ],
   };
@@ -63,14 +63,14 @@ test("parseAskUserQuestionItems enforces limits, ids, and single recommendation"
   );
   assert.throws(() => shared.parseAskUserQuestionItems(undefined), /non-empty/);
   assert.throws(
-    () => shared.parseAskUserQuestionItems([{ prompt: "只有一个选项？", options: [{ label: "a" }] }]),
+    () => shared.parseAskUserQuestionItems([{ prompt: "Only one option?", options: [{ label: "a" }] }]),
     /needs 2-6 options/,
   );
   assert.throws(
     () =>
       shared.parseAskUserQuestionItems([
         {
-          prompt: "选项过多？",
+          prompt: "Too many options?",
           options: Array.from({ length: 7 }, (_, index) => ({ label: `o${index}` })),
         },
       ]),
@@ -80,7 +80,7 @@ test("parseAskUserQuestionItems enforces limits, ids, and single recommendation"
     () =>
       shared.parseAskUserQuestionItems([
         {
-          prompt: "重复推荐",
+          prompt: "Duplicate recommendation",
           options: [
             { label: "a", recommended: true },
             { label: "b", recommended: true },
@@ -92,24 +92,24 @@ test("parseAskUserQuestionItems enforces limits, ids, and single recommendation"
   assert.throws(
     () =>
       shared.parseAskUserQuestionItems([
-        { prompt: "重复标签", options: [{ label: "same" }, { label: "same" }] },
+        { prompt: "Duplicate label", options: [{ label: "same" }, { label: "same" }] },
       ]),
     /duplicate option label/,
   );
   assert.throws(
     () =>
       shared.parseAskUserQuestionItems([
-        { id: "dup", prompt: "一", options: [{ label: "a" }, { label: "b" }] },
-        { id: "dup", prompt: "二", options: [{ label: "a" }, { label: "b" }] },
+        { id: "dup", prompt: "One", options: [{ label: "a" }, { label: "b" }] },
+        { id: "dup", prompt: "Two", options: [{ label: "a" }, { label: "b" }] },
       ]),
     /duplicate question id/,
   );
 
-  // 同一轮各题的选项数可以不同：卡片一次只渲染一题，高度本就随 prompt 与
-  // description 变化，强行对齐换不来布局稳定，只会白白拒掉合法提问。
+  // The number of options per question may differ within a round: the card renders only one question at a time, and its height already varies with prompt and
+  // description changes; forcing alignment buys no layout stability and only needlessly rejects valid questions.
   const mixed = shared.parseAskUserQuestionItems([
-    { prompt: "三个选项", options: [{ label: "a" }, { label: "b" }, { label: "c" }] },
-    { prompt: "两个选项", options: [{ label: "x" }, { label: "y" }] },
+    { prompt: "Three options", options: [{ label: "a" }, { label: "b" }, { label: "c" }] },
+    { prompt: "Two options", options: [{ label: "x" }, { label: "y" }] },
   ]);
   assert.deepEqual(
     mixed.map((question) => question.options.length),
@@ -122,10 +122,10 @@ test("parseAskUserQuestionItems enforces limits, ids, and single recommendation"
     ["storage", "q2"],
   );
   assert.equal(parsed[0].options[0].recommended, true);
-  // 推荐项固定排在第一位，其余保持原顺序。
+  // The recommended option is always placed first; the rest keep their original order.
   assert.deepEqual(
     parsed[1].options.map((option) => option.label),
-    ["不迁移", "迁移", "稍后再说"],
+    ["Do not migrate", "Migrate", "Decide later"],
   );
   assert.equal(parsed[1].options[0].recommended, true);
 });
@@ -134,11 +134,11 @@ test("buildDefaultAskUserQuestionAnswers picks the recommended (or first) option
   const { shared } = loadModules();
   const questions = shared.parseAskUserQuestionItems([
     {
-      prompt: "有推荐项",
+      prompt: "Has recommended option",
       options: [{ label: "a" }, { label: "b", recommended: true }],
     },
     {
-      prompt: "无推荐项",
+      prompt: "No recommended option",
       options: [{ label: "x" }, { label: "y" }],
     },
   ]);
@@ -156,15 +156,15 @@ test("buildDefaultAskUserQuestionAnswers picks the recommended (or first) option
 test("sanitizeAskUserQuestionItems tolerates streaming partial arguments", () => {
   const { shared } = loadModules();
   assert.deepEqual(shared.sanitizeAskUserQuestionItems(undefined), []);
-  assert.deepEqual(shared.sanitizeAskUserQuestionItems([{ prompt: "缺选项" }]), []);
+  assert.deepEqual(shared.sanitizeAskUserQuestionItems([{ prompt: "Missing options" }]), []);
 
   const partial = shared.sanitizeAskUserQuestionItems([
-    { prompt: "已成形的问题", options: [{ label: "选项 A", recommended: true }, { label: "" }] },
+    { prompt: "Well-formed question", options: [{ label: "Option A", recommended: true }, { label: "" }] },
     { prompt: "", options: [{ label: "x" }] },
   ]);
   assert.equal(partial.length, 1);
   assert.equal(partial[0].id, "q1");
-  assert.deepEqual(partial[0].options, [{ label: "选项 A", recommended: true }]);
+  assert.deepEqual(partial[0].options, [{ label: "Option A", recommended: true }]);
 });
 
 test("execute suspends until the user answers, then returns the selections", async () => {
@@ -176,25 +176,25 @@ test("execute suspends until the user answers, then returns the selections", asy
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-answer"), true);
 
-  // 非法应答（缺第二题）不落定，也不清挂起态。
+  // An invalid response (missing the second question) does not settle and does not clear the pending state.
   const invalid = tools.answerAskUserQuestion("call-ask-answer", [
-    { questionId: "storage", selectedLabel: "应用数据目录" },
+    { questionId: "storage", selectedLabel: "App data directory" },
   ]);
   assert.equal(invalid.ok, false);
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-answer"), true);
 
-  // 选项必须来自问题定义。
+  // Options must come from the question definition.
   const wrongLabel = tools.answerAskUserQuestion("call-ask-answer", [
-    { questionId: "storage", selectedLabel: "不存在的选项" },
-    { questionId: "q2", selectedLabel: "迁移" },
+    { questionId: "storage", selectedLabel: "Nonexistent option" },
+    { questionId: "q2", selectedLabel: "Migrate" },
   ]);
   assert.equal(wrongLabel.ok, false);
 
-  // 乱序提交每题的非推荐、非第一项，结果仍按问题定义对齐；这也确保超时
-  // 默认答案不能掩盖用户真实选择。
+  // Submitting each question's non-recommended, non-first option out of order still aligns the result with the question definition; this also ensures the timeout
+  // default answer cannot mask the user's real choice.
   const accepted = tools.answerAskUserQuestion("call-ask-answer", [
-    { questionId: "q2", selectedLabel: "稍后再说" },
-    { questionId: "storage", selectedLabel: "工作区根目录" },
+    { questionId: "q2", selectedLabel: "Decide later" },
+    { questionId: "storage", selectedLabel: "Workspace root directory" },
   ]);
   assert.equal(accepted.ok, true);
 
@@ -203,14 +203,14 @@ test("execute suspends until the user answers, then returns the selections", asy
   assert.equal(result.details.kind, "ask_user_question");
   assert.deepEqual(
     result.details.answers.map((answer) => answer.selectedLabel),
-    ["工作区根目录", "稍后再说"],
+    ["Workspace root directory", "Decide later"],
   );
   assert.equal("timedOut" in result.details, false);
   assert.match(result.content[0].text, /proceed accordingly/);
-  assert.match(result.content[0].text, /工作区根目录/);
+  assert.match(result.content[0].text, /Workspace root directory/);
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-answer"), false);
 
-  // 已落定的提问不能再次应答。
+  // A settled question cannot be answered again.
   const late = tools.answerAskUserQuestion("call-ask-answer", []);
   assert.equal(late.ok, false);
 });
@@ -225,15 +225,15 @@ test("timeout auto-selects the recommended options and continues", async () => {
   assert.equal(result.details.timedOut, true);
   assert.deepEqual(
     result.details.answers.map((answer) => answer.selectedLabel),
-    ["应用数据目录", "不迁移"],
+    ["App data directory", "Do not migrate"],
   );
   assert.match(result.content[0].text, /did not answer within the time limit/);
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-timeout"), false);
 
-  // 超时落定后不能再应答。
+  // It cannot be answered again after a timeout settles it.
   const late = tools.answerAskUserQuestion("call-ask-timeout", [
-    { questionId: "storage", selectedLabel: "工作区根目录" },
-    { questionId: "q2", selectedLabel: "迁移" },
+    { questionId: "storage", selectedLabel: "Workspace root directory" },
+    { questionId: "q2", selectedLabel: "Migrate" },
   ]);
   assert.equal(late.ok, false);
 });
@@ -274,8 +274,8 @@ test("immediate answers are pending synchronously and never fall through to time
     assert.equal(tools.hasPendingAskUserQuestion(toolCallId), true);
 
     const accepted = tools.answerAskUserQuestion(toolCallId, [
-      { questionId: "storage", selectedLabel: "工作区根目录" },
-      { questionId: "q2", selectedLabel: "稍后再说" },
+      { questionId: "storage", selectedLabel: "Workspace root directory" },
+      { questionId: "q2", selectedLabel: "Decide later" },
     ]);
     assert.deepEqual(accepted, { ok: true });
 
@@ -283,7 +283,7 @@ test("immediate answers are pending synchronously and never fall through to time
     assert.equal("timedOut" in result.details, false);
     assert.deepEqual(
       result.details.answers.map((answer) => answer.selectedLabel),
-      ["工作区根目录", "稍后再说"],
+      ["Workspace root directory", "Decide later"],
     );
   }
 });
@@ -295,8 +295,8 @@ test("an answer accepted before the deadline is not overwritten when the old tim
   const resultPromise = bundle.executeToolCall(createToolCall(buildQuestionsArgs(), toolCallId));
 
   const accepted = tools.answerAskUserQuestion(toolCallId, [
-    { questionId: "storage", selectedLabel: "工作区根目录" },
-    { questionId: "q2", selectedLabel: "稍后再说" },
+    { questionId: "storage", selectedLabel: "Workspace root directory" },
+    { questionId: "q2", selectedLabel: "Decide later" },
   ]);
   assert.equal(accepted.ok, true);
   const result = await resultPromise;
@@ -305,7 +305,7 @@ test("an answer accepted before the deadline is not overwritten when the old tim
   assert.equal("timedOut" in result.details, false);
   assert.deepEqual(
     result.details.answers.map((answer) => answer.selectedLabel),
-    ["工作区根目录", "稍后再说"],
+    ["Workspace root directory", "Decide later"],
   );
   assert.equal(tools.hasPendingAskUserQuestion(toolCallId), false);
   assert.equal(tools.answerAskUserQuestion(toolCallId, []).ok, false);
@@ -330,8 +330,8 @@ test("abort settles a pending question as cancelled", async () => {
   assert.equal(tools.getAskUserQuestionDeadlineAt("call-ask-abort"), null);
   assert.equal(
     tools.answerAskUserQuestion("call-ask-abort", [
-      { questionId: "storage", selectedLabel: "工作区根目录" },
-      { questionId: "q2", selectedLabel: "迁移" },
+      { questionId: "storage", selectedLabel: "Workspace root directory" },
+      { questionId: "q2", selectedLabel: "Migrate" },
     ]).ok,
     false,
   );
@@ -352,8 +352,8 @@ test("conversation disposal cancels its pending questions only", async () => {
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-b"), true);
 
   const accepted = tools.answerAskUserQuestion("call-ask-b", [
-    { questionId: "storage", selectedLabel: "工作区根目录" },
-    { questionId: "q2", selectedLabel: "迁移" },
+    { questionId: "storage", selectedLabel: "Workspace root directory" },
+    { questionId: "q2", selectedLabel: "Migrate" },
   ]);
   assert.equal(accepted.ok, true);
   const resultB = await promiseB;
@@ -398,8 +398,8 @@ test("pending questions are observable per conversation for the sidebar badge", 
 
   // Answering emits and clears — this is what drops the badge.
   tools.answerAskUserQuestion("call-obs-a", [
-    { questionId: "storage", selectedLabel: "工作区根目录" },
-    { questionId: "q2", selectedLabel: "迁移" },
+    { questionId: "storage", selectedLabel: "Workspace root directory" },
+    { questionId: "q2", selectedLabel: "Migrate" },
   ]);
   await promiseA;
   assert.equal(notifiedA, 2);
@@ -425,7 +425,7 @@ test("invalid arguments fail fast with a validation error result", async () => {
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-missing"), false);
 
   const result = await bundle.executeToolCall(
-    createToolCall({ questions: [{ prompt: "选项不足", options: [{ label: "唯一" }] }] }),
+    createToolCall({ questions: [{ prompt: "Insufficient options", options: [{ label: "Only" }] }] }),
   );
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /needs 2-6 options/);
@@ -436,8 +436,8 @@ test("result details round-trip through the transcript parser", () => {
   const { shared } = loadModules();
   const questions = shared.parseAskUserQuestionItems(buildQuestionsArgs().questions);
   const answers = shared.resolveAskUserQuestionAnswers(questions, [
-    { questionId: "storage", selectedLabel: "应用数据目录" },
-    { questionId: "q2", selectedLabel: "不迁移" },
+    { questionId: "storage", selectedLabel: "App data directory" },
+    { questionId: "q2", selectedLabel: "Do not migrate" },
   ]);
   assert.ok(answers);
 
@@ -462,10 +462,10 @@ test("remote answers are rejected when the conversation does not match", async (
   await new Promise((resolve) => setTimeout(resolve, 10));
 
   const answers = [
-    { questionId: "storage", selectedLabel: "应用数据目录" },
-    { questionId: "q2", selectedLabel: "不迁移" },
+    { questionId: "storage", selectedLabel: "App data directory" },
+    { questionId: "q2", selectedLabel: "Do not migrate" },
   ];
-  // 携带会话上下文的应答（WebUI tool_answer 通道）必须命中挂起提问所属会话。
+  // A response carrying session context (the WebUI tool_answer channel) must hit the session that owns the pending question.
   const mismatch = tools.answerAskUserQuestion("call-ask-conv", answers, {
     conversationId: "conv-other",
   });
@@ -484,13 +484,13 @@ test("remote answers are rejected when the conversation does not match", async (
 test("gateway deadline stamp is preset once and adopted by execute", async () => {
   const { shared, tools } = loadModules();
 
-  // 网关参数上报先于 execute：首次 ensure 预置，之后幂等返回同一值。
+  // Gateway parameter reporting precedes execute: the first ensure presets it, after which it idempotently returns the same value.
   const preset = tools.ensureAskUserQuestionDeadlineAt("call-ask-deadline");
   assert.ok(preset > Date.now());
   assert.equal(tools.ensureAskUserQuestionDeadlineAt("call-ask-deadline"), preset);
   assert.equal(tools.getAskUserQuestionDeadlineAt("call-ask-deadline"), preset);
 
-  // execute 挂起后复用同一预置值作为权威 deadline（不重新计时）。
+  // After execute suspends, the same preset value is reused as the authoritative deadline (it does not restart the clock).
   const bundle = tools.createAskUserQuestionTools({ conversationId: "conv-1" });
   const resultPromise = bundle.executeToolCall(
     createToolCall(buildQuestionsArgs(), "call-ask-deadline"),
@@ -500,14 +500,14 @@ test("gateway deadline stamp is preset once and adopted by execute", async () =>
   assert.equal(tools.ensureAskUserQuestionDeadlineAt("call-ask-deadline"), preset);
 
   tools.answerAskUserQuestion("call-ask-deadline", [
-    { questionId: "storage", selectedLabel: "应用数据目录" },
-    { questionId: "q2", selectedLabel: "不迁移" },
+    { questionId: "storage", selectedLabel: "App data directory" },
+    { questionId: "q2", selectedLabel: "Do not migrate" },
   ]);
   await resultPromise;
-  // 落定后清理，读取回落 null（卡片此时已只读，无需倒计时）。
+  // Cleanup after settling; reads fall back to null (the card is read-only by then and needs no countdown).
   assert.equal(tools.getAskUserQuestionDeadlineAt("call-ask-deadline"), null);
 
-  // 参数上盖章的读取器：合法数值透传，缺失/非法回 null。
+  // The reader stamped on the parameter: valid numbers pass through; missing/invalid returns null.
   const stamped = { questions: [], [shared.ASK_USER_QUESTION_DEADLINE_ARG]: preset };
   assert.equal(shared.readAskUserQuestionDeadlineAt(stamped), preset);
   assert.equal(shared.readAskUserQuestionDeadlineAt({ questions: [] }), null);
@@ -520,7 +520,7 @@ test("gateway deadline stamp is preset once and adopted by execute", async () =>
 
 test("injected test timeout overrides a preset deadline", async () => {
   const { tools } = loadModules();
-  // 预置一个 3 分钟后的 deadline；注入 timeoutMs 必须无视它，避免测试悬挂。
+  // Preset a deadline 3 minutes out; an injected timeoutMs must ignore it, avoiding a hung test.
   tools.ensureAskUserQuestionDeadlineAt("call-ask-timeout-preset");
   const bundle = tools.createAskUserQuestionTools({ conversationId: "conv-1", timeoutMs: 50 });
   const result = await bundle.executeToolCall(
@@ -535,25 +535,25 @@ test("custom answers bypass option membership and are marked in the result", asy
   const resultPromise = bundle.executeToolCall(createToolCall(buildQuestionsArgs(), "call-ask-custom"));
   await new Promise((resolve) => setTimeout(resolve, 10));
 
-  // custom 空文本视为未作答，不落定。
+  // Empty custom text counts as unanswered and does not settle.
   const emptyCustom = tools.answerAskUserQuestion("call-ask-custom", [
     { questionId: "storage", selectedLabel: "   ", custom: true },
-    { questionId: "q2", selectedLabel: "不迁移" },
+    { questionId: "q2", selectedLabel: "Do not migrate" },
   ]);
   assert.equal(emptyCustom.ok, false);
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-custom"), true);
 
-  // 非 custom 的越权 label 依旧拒绝（不因 custom 通道放宽）。
+  // An out-of-scope label without custom is still rejected (the custom channel does not loosen this).
   const wrongLabel = tools.answerAskUserQuestion("call-ask-custom", [
-    { questionId: "storage", selectedLabel: "自由发挥" },
-    { questionId: "q2", selectedLabel: "不迁移" },
+    { questionId: "storage", selectedLabel: "Freestyle" },
+    { questionId: "q2", selectedLabel: "Do not migrate" },
   ]);
   assert.equal(wrongLabel.ok, false);
 
-  // 混合应答：一题选列表项、一题自由输入。
+  // Mixed response: one question picks a list item, another uses free input.
   const accepted = tools.answerAskUserQuestion("call-ask-custom", [
-    { questionId: "storage", selectedLabel: "应用数据目录" },
-    { questionId: "q2", selectedLabel: "先迁移最近 30 天的数据试试", custom: true },
+    { questionId: "storage", selectedLabel: "App data directory" },
+    { questionId: "q2", selectedLabel: "Try migrating the last 30 days of data first", custom: true },
   ]);
   assert.equal(accepted.ok, true);
 
@@ -563,20 +563,20 @@ test("custom answers bypass option membership and are marked in the result", asy
     result.details.answers.map((answer) => answer.custom === true),
     [false, true],
   );
-  assert.equal(result.details.answers[1].selectedLabel, "先迁移最近 30 天的数据试试");
-  // 列表项应答不写出 custom 键（序列化形状与旧版一致）。
+  assert.equal(result.details.answers[1].selectedLabel, "Try migrating the last 30 days of data first");
+  // A list-item response does not write the custom key (the serialized shape matches the old version).
   assert.equal("custom" in result.details.answers[0], false);
-  assert.match(result.content[0].text, /先迁移最近 30 天的数据试试/);
+  assert.match(result.content[0].text, /Try migrating the last 30 days of data first/);
   assert.match(result.content[0].text, /user-typed answer via "Other"/);
 });
 
 test("resolveAskUserQuestionAnswers truncates over-length custom text", () => {
   const { shared } = loadModules();
   const questions = shared.parseAskUserQuestionItems(buildQuestionsArgs().questions);
-  const longText = "长".repeat(shared.ASK_USER_QUESTION_CUSTOM_MAX_LENGTH + 100);
+  const longText = "x".repeat(shared.ASK_USER_QUESTION_CUSTOM_MAX_LENGTH + 100);
   const answers = shared.resolveAskUserQuestionAnswers(questions, [
     { questionId: "storage", selectedLabel: longText, custom: true },
-    { questionId: "q2", selectedLabel: "不迁移" },
+    { questionId: "q2", selectedLabel: "Do not migrate" },
   ]);
   assert.ok(answers);
   assert.equal(answers[0].selectedLabel.length, shared.ASK_USER_QUESTION_CUSTOM_MAX_LENGTH);
@@ -590,8 +590,8 @@ test("custom flag round-trips through the transcript parser", () => {
     kind: "ask_user_question",
     questions,
     answers: [
-      { questionId: "storage", prompt: "配置应当存放在哪里？", selectedLabel: "应用数据目录" },
-      { questionId: "q2", prompt: "是否需要迁移旧数据？", selectedLabel: "我自己写", custom: true },
+      { questionId: "storage", prompt: "Where should the configuration be stored?", selectedLabel: "App data directory" },
+      { questionId: "q2", prompt: "Should old data be migrated?", selectedLabel: "I'll write my own", custom: true },
     ],
   });
   assert.ok(parsed);

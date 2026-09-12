@@ -1,6 +1,6 @@
-# golangci-lint v2 —— 网关 Go 代码检查基线（此前无 linter，选务实检查集）：govet/staticcheck/unused
-# 管正确性与死代码，errcheck/ineffassign/misspell 做基础卫生。
-# 生成代码（internal/proto/）不参与检查。
+# golangci-lint v2 -- gateway Go linting baseline (no linter existed before, so a pragmatic set was chosen): govet/staticcheck/unused
+# cover correctness and dead code, while errcheck/ineffassign/misspell handle basic hygiene.
+# Generated code (internal/proto/) is excluded from linting.
 version: "2"
 
 linters:
@@ -15,7 +15,7 @@ linters:
   exclusions:
     generated: lax
     rules:
-      # 测试代码允许忽略清理类调用的返回值。
+      # Test code is allowed to ignore the return value of cleanup-style calls.
       - path: _test\.go
         linters: [errcheck]
 

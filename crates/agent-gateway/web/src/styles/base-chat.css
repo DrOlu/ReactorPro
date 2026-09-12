@@ -248,13 +248,16 @@ html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-/* SFTP 双栏 <860px 时靠这条横向滚动条露出被裁切的右栏，但全局
-   scrollbar-width: thin 会让 Chromium 121+/Safari 18.2+ 忽略上面的
-   *::-webkit-scrollbar 自绘样式，macOS 上退化成"滚动中才短暂浮现"的悬浮
-   滚动条——静止时底部看不到任何滚动条。恢复 auto 让自绘样式重新生效，
-   与 GUI 端的常驻滚动条对齐。必须排在全局 *:hover / *:focus-within 的
-   scrollbar-color 规则之后：两者同优先级，靠源码顺序覆盖，否则悬停一瞬间
-   scrollbar-color 变回非 auto，滚动条会当场消失。 */
+/* Below 860px the SFTP two-pane layout relies on this horizontal scrollbar to
+   reveal the clipped right pane, but the global scrollbar-width: thin makes
+   Chromium 121+/Safari 18.2+ ignore the *::-webkit-scrollbar custom styles
+   above, degrading on macOS to an overlay scrollbar that "only briefly appears
+   while scrolling" — nothing is visible at the bottom when idle. Restoring auto
+   makes the custom styles take effect again, matching the GUI client's permanent
+   scrollbar. This must come after the global *:hover / *:focus-within
+   scrollbar-color rules: both have the same specificity, so source order
+   decides, otherwise on hover scrollbar-color briefly reverts to non-auto and
+   the scrollbar vanishes on the spot. */
 html[data-liveagent-webui="gateway"] .sftp-panes-scroll {
   scrollbar-width: auto;
   scrollbar-color: auto;
@@ -753,9 +756,11 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 
 .gateway-composer-layer {
   display: grid;
-  /* 与 .gateway-transcript-shell 同步减去已退役的 40px 头像列，否则输入框
-     会比它要对齐的正文列宽 40px。两条规则现在读同一个变量（#762 起输入框
-     也跟随可调的正文宽），但 grid 模板无法复用，补偿仍需两处各写一次。 */
+  /* Subtract the retired 40px avatar column in sync with .gateway-transcript-shell,
+     otherwise the composer would be 40px wider than the body column it aims to
+     align with. Both rules now read the same variable (since #762 the composer
+     also follows the adjustable body width), but the grid templates cannot be
+     shared, so the compensation still has to be written in both places. */
   grid-template-columns:
     minmax(var(--gateway-chat-column-gutter, 16px), 1fr)
     minmax(0, min(calc(var(--chat-transcript-content-width, 768px) - 40px), 100%))

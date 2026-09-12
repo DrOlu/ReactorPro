@@ -28,9 +28,9 @@ const payload = {
   kind: "workspacePath",
   projectPathKey: "/workspace/project",
   cwd: "/workspace/project",
-  relativePath: "docs/方案's draft.md",
+  relativePath: "docs/proposal's draft.md",
   entryKind: "file",
-  label: "方案's draft.md",
+  label: "proposal's draft.md",
 };
 
 test("workspace path drag payload round-trips without becoming an upload", () => {
@@ -219,14 +219,14 @@ test("workspace path drop remains scoped to the originating project", () => {
 
 test("terminal insertion uses absolute paths and shell-specific quoting", () => {
   const absolute = workspacePathDrag.absoluteWorkspacePath(payload);
-  assert.equal(absolute, "/workspace/project/docs/方案's draft.md");
+  assert.equal(absolute, "/workspace/project/docs/proposal's draft.md");
   assert.equal(
     workspacePathDrag.quoteWorkspacePathForShell(absolute, "/bin/zsh"),
-    "'/workspace/project/docs/方案'\\''s draft.md'",
+    "'/workspace/project/docs/proposal'\\''s draft.md'",
   );
   assert.equal(
     workspacePathDrag.quoteWorkspacePathForShell(absolute, "pwsh.exe"),
-    "'/workspace/project/docs/方案''s draft.md'",
+    "'/workspace/project/docs/proposal''s draft.md'",
   );
   assert.equal(
     workspacePathDrag.absoluteWorkspacePath({

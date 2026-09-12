@@ -1,11 +1,11 @@
 /**
- * 对话运行时的轨迹埋点。
+ * Trajectory instrumentation for the conversation runtime.
  *
- * 全部方法同步、不抛错：轨迹是诊断视图，任何自身故障都不该打断对话。内部一律
- * try/catch 吞掉并 `console.warn`。
+ * All methods are synchronous and never throw: trajectories are a diagnostic view, and any failure of its own must not interrupt the conversation. Internally everything is
+ * swallowed by try/catch and `console.warn`.
  *
- * 事件走两条路：立即经 `publish` 下发给 Gateway（WebUI 实时骨架），并按批经
- * `persist` 落到当前 segment。两条路同源，所以 WebUI 看到的和落盘的最终一致。
+ * Events take two paths: delivered immediately to the Gateway via `publish` (the WebUI live skeleton), and in batches via
+ * `persist` into the current segment. Both paths share the same source, so what the WebUI sees and what is persisted are ultimately consistent.
  */
 
 import {
@@ -22,21 +22,21 @@ import type {
 import { createTrajectoryPersistenceQueue } from "./persistenceQueue";
 import { scrubSecretsFromErrorText } from "./scrub";
 
-/** 工具参数在事件里的截断长度：实时通道要小，详情由正文索引另行提供。 */
+/** Truncation length of tool arguments in events: the live channel must stay small, details are provided separately via the body index. */
 const TOOL_ARGS_PREVIEW_CHARS = 200;
 const CONTEXT_PREVIEW_CHARS = 512;
 const DEFAULT_FLUSH_INTERVAL_MS = 2_000;
 const DISPOSE_FLUSH_ATTEMPTS = 3;
 
 export type TrajectoryRecorderPorts = {
-  /** 把一批事件追加到指定 segment。 */
+  /** Append a batch of events to the specified segment. */
   persist: (conversationId: string, segmentIndex: number, eventsJson: string) => Promise<unknown>;
-  /** 幂等写入新出现的 prompt 分段。 */
+  /** Idempotently write newly appearing prompt segments. */
   persistSections: (
     conversationId: string,
     sections: readonly TrajectorySection[],
   ) => Promise<unknown>;
-  /** 实时下发；未连接 Gateway 时可缺省。 */
+  /** Live delivery; may be omitted when the Gateway is not connected. */
   publish?: (events: readonly TrajectoryEvent[]) => void;
 };
 
@@ -52,8 +52,8 @@ export type TrajectoryStepEndInfo = {
 
 export type TrajectoryRecorder = {
   /**
-   * 一轮开始（用户消息落定）。同时把 `turn` 记为当前轮，后续调用不再重复传——
-   * 让每个埋点点自己传 turn 号，多一个参数就多一处传错的机会。
+   * A turn begins (the user message is finalized). It also records `turn` as the current turn so later calls need not repeat it —
+   * having each instrumentation point pass its own turn number means one more parameter and one more chance to pass it wrong.
    */
   beginTurn: (info: {
     turn: number;
@@ -61,11 +61,11 @@ export type TrajectoryRecorder = {
     messageId?: string;
     text?: string;
   }) => void;
-  /** 上下文注入。 */
+  /** Context injection. */
   noteContext: (info: { source?: string; text?: string }) => void;
   /**
-   * 记录一次请求头。内容未变时复用既有 headerId 且不产生事件。
-   * @returns 本次请求应引用的 headerId；埋点失败时为 undefined。
+   * Record a set of request headers. When the content is unchanged, reuse the existing headerId and produce no event.
+   * @returns the headerId this request should reference; undefined when instrumentation fails.
    */
   captureHeader: (input: TrajectorySectionInput) => string | undefined;
   stepStart: (step: number, headerId?: string) => void;
@@ -78,11 +78,11 @@ export type TrajectoryRecorder = {
       maxRetries?: number;
       delayMs?: number;
       error?: string;
-      /** 候选标签（"Provider · model"）；failover 下区分各候选自己的重试。 */
+      /** Candidate label ("Provider · model"); under failover, distinguishes each candidate's own retries. */
       provider?: string;
     },
   ) => void;
-  /** 跨供应商切换。`attempt` 是本次请求内的切换序号（1 起）。 */
+  /** Cross-provider switch. `attempt` is the switch index within this request (starting at 1). */
   noteFailover: (
     step: number,
     info: {
@@ -94,8 +94,8 @@ export type TrajectoryRecorder = {
     },
   ) => void;
   /**
-   * 一次实际尝试的传输装配快照。调用方必须只传头名（不传值）——
-   * recorder 不做二次脱敏，线格式里根本没有放头值的字段。
+   * Transport assembly snapshot for one actual attempt. The caller must pass only header names (not values) —
+   * recorder does not redact again, since the wire format has no field for header values at all.
    */
   noteTransport: (
     step: number,
@@ -112,7 +112,7 @@ export type TrajectoryRecorder = {
     callId: string,
     info: { isError?: boolean; summary?: string; subagentRunIds?: readonly string[] },
   ) => void;
-  /** 压缩开始。`standalone` 表示发生在两轮之间，不属于任何 turn。 */
+  /** Compaction begins. `standalone` means it happens between turns and belongs to no turn. */
   compactionStart: (options?: { standalone?: boolean }) => void;
   compactionEnd: (info: {
     status: TrajectoryStatus;
@@ -122,11 +122,11 @@ export type TrajectoryRecorder = {
     standalone?: boolean;
   }) => void;
   endTurn: (info: { status: TrajectoryStatus; error?: string }) => void;
-  /** 立即落盘缓冲区；turn 边界与会话切换时调用。 */
+  /** Flush the buffer immediately; called at turn boundaries and on session switch. */
   flush: () => Promise<void>;
-  /** 停止定时器并做最后一次落盘。 */
+  /** Stop the timer and perform one final flush. */
   dispose: () => Promise<void>;
-  /** 会话已被删除/截断时丢弃尚未落盘的诊断数据并停止定时器。 */
+  /** Discard unflushed diagnostic data and stop the timer when the session has been deleted/truncated. */
   discard: () => void;
 };
 
@@ -148,7 +148,7 @@ function previewContext(value: string | undefined): string | undefined {
   return value.length > CONTEXT_PREVIEW_CHARS ? `${value.slice(0, CONTEXT_PREVIEW_CHARS)}…` : value;
 }
 
-/** 一个不做任何事的 recorder，供 text 模式与测试替身使用。 */
+/** A recorder that does nothing, for text mode and test doubles. */
 export const NOOP_TRAJECTORY_RECORDER: TrajectoryRecorder = {
   beginTurn: () => {},
   noteContext: () => {},
@@ -170,10 +170,10 @@ export const NOOP_TRAJECTORY_RECORDER: TrajectoryRecorder = {
 };
 
 /**
- * 创建会话级 recorder。
+ * Create a session-level recorder.
  *
- * @param params - 会话标识、当前活动 segment 的读取器与落盘/下发端口。
- * @returns 埋点接口。
+ * @param params - session identity, reader for the current active segment, and the persist/deliver ports.
+ * @returns the instrumentation interface.
  */
 export function createTrajectoryRecorder(params: {
   conversationId: string;
@@ -199,7 +199,7 @@ export function createTrajectoryRecorder(params: {
   };
   const queue = createTrajectoryPersistenceQueue({ conversationId, ports, warn });
 
-  /** err 字段的统一入口：供应商报错可能回显带密钥的 URL/头，落盘前洗掉。 */
+  /** Unified entry point for the err field: provider errors may echo a URL/header containing a key; scrub before persisting. */
   const scrubError = (error: string | undefined): string | undefined =>
     error === undefined ? undefined : scrubSecretsFromErrorText(error);
 

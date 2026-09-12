@@ -13,7 +13,7 @@ function loadModules() {
   };
 }
 
-const PLAN = "## 目标\n\n1. 改 A\n2. 验证 B\n";
+const PLAN = "## Goal\n\n1. Change A\n2. Verify B\n";
 
 function createToolCall(argumentsValue, id = "call-plan-1") {
   return { type: "toolCall", id, name: "ExitPlanMode", arguments: argumentsValue };
@@ -44,17 +44,17 @@ test("shared helpers sanitize plans and resolve decisions", () => {
   assert.deepEqual(shared.resolvePlanDecisionAnswer({ decision: "approve" }), {
     decision: "approve",
   });
-  assert.deepEqual(shared.resolvePlanDecisionAnswer({ decision: "reject", feedback: " 改一下 " }), {
+  assert.deepEqual(shared.resolvePlanDecisionAnswer({ decision: "reject", feedback: " revise it " }), {
     decision: "reject",
-    feedback: "改一下",
+    feedback: "revise it",
   });
 
-  // 待决/已批准的合成标记读取(WebUI 参数盖章)。
+  // Reading the pending/approved synthetic markers (WebUI argument stamping).
   assert.equal(shared.readPlanPendingMarker({ __exitPlanModePending: true }), true);
   assert.equal(shared.readPlanPendingMarker({}), false);
   assert.equal(shared.readPlanApprovedMarker({ __exitPlanModeApproved: true }), true);
 
-  // details 解析：kind/plan 缺失即 null。
+  // details parsing: null when kind/plan are missing.
   assert.equal(shared.parseExitPlanModeResultDetails({ kind: "other", plan: "p" }), null);
   assert.deepEqual(shared.parseExitPlanModeResultDetails({ kind: "exit_plan_mode", plan: "p" }), {
     kind: "exit_plan_mode",
@@ -64,10 +64,10 @@ test("shared helpers sanitize plans and resolve decisions", () => {
 
 test("isPlanApprovalMessage accepts pure approval phrases only", () => {
   const { tools } = loadModules();
-  for (const yes of ["同意", "  开始吧。", "OK", "ok!", "Go ahead", "lgtm", "开干"]) {
+  for (const yes of ["approve", "  go ahead.", "OK", "ok!", "Go ahead", "lgtm", "do it"]) {
     assert.equal(tools.isPlanApprovalMessage(yes), true, yes);
   }
-  for (const no of ["同意,但第二步改一下", "先等等", "保存到 plan.md 再执行", "", "  "]) {
+  for (const no of ["approve, but change step two", "wait a bit first", "save to plan.md then execute", "", "  "]) {
     assert.equal(tools.isPlanApprovalMessage(no), false, no);
   }
 });
@@ -84,7 +84,7 @@ test("execute rejects an empty plan without registering", async () => {
 test("submission returns immediately and registers the pending plan", async () => {
   const { tools } = loadModules();
   const bundle = tools.createExitPlanModeTools({ conversationId: "conv-submit" });
-  // 对话式范式:execute 不挂起——立即 resolve,不需要任何应答。
+  // Conversational paradigm: execute does not suspend --- it resolves immediately with no reply required.
   const result = await bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-submit-1"));
   assert.equal(result.isError, false);
   assert.match(result.content[0].text, /this turn ends here/);
@@ -95,7 +95,7 @@ test("submission returns immediately and registers the pending plan", async () =
   });
   assert.equal(tools.isPlanDecisionPending("call-submit-1"), true);
 
-  // 新提交覆盖旧登记:旧调用不再待决。
+  // A new submission overrides the old registration: the old call is no longer pending.
   await bundle.executeToolCall(createToolCall({ plan: "# v2" }, "call-submit-2"));
   assert.equal(tools.isPlanDecisionPending("call-submit-1"), false);
   assert.equal(tools.getPendingPlanForConversation("conv-submit").toolCallId, "call-submit-2");
@@ -113,9 +113,9 @@ test("approve routes to the host handler and settles the pending plan", async ()
   const bundle = tools.createExitPlanModeTools({ conversationId: "conv-approve" });
   await bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-approve-1"));
 
-  // 非法决定被拒。
+  // An invalid decision is rejected.
   assert.equal(tools.answerPlanDecision("call-approve-1", { decision: "maybe" }).ok, false);
-  // 串会话应答被拒。
+  // A cross-conversation answer is rejected.
   assert.equal(
     tools.answerPlanDecision(
       "call-approve-1",
@@ -135,13 +135,13 @@ test("approve routes to the host handler and settles the pending plan", async ()
   assert.deepEqual(rejections, []);
   assert.equal(tools.isPlanApprovalToolCall("call-approve-1"), true);
   assert.equal(tools.getPendingPlanForConversation("conv-approve"), null);
-  // 已落定后再次应答被拒(结构化 code 供远端卡片落定而非报错)。
+  // Answering again after settlement is rejected (a structured code lets the remote card settle rather than error).
   const settled = tools.answerPlanDecision("call-approve-1", { decision: "approve" });
   assert.equal(settled.ok, false);
   assert.equal(settled.code, "not_pending");
   tools.registerPlanDecisionHandlers(null);
-  // 批准态也随会话清理:批准时 pending 已删,清理不得依赖 pending 反查——
-  // 否则 approvedToolCallIds 随进程无限增长。
+  // The approved state is also cleaned up with the conversation: pending is deleted on approval, so cleanup
+  // must not rely on a reverse lookup through pending --- otherwise approvedToolCallIds would grow unbounded per process.
   tools.cancelPendingPlanDecisionsForConversation("conv-approve");
   assert.equal(tools.isPlanApprovalToolCall("call-approve-1"), false);
 });
@@ -157,18 +157,18 @@ test("reject requires feedback and routes it to the host as a message", async ()
   const bundle = tools.createExitPlanModeTools({ conversationId: "conv-reject" });
   await bundle.executeToolCall(createToolCall({ plan: PLAN }, "call-reject-1"));
 
-  // 缺反馈的 reject 被拒(引导直接打字)。
+  // A reject without feedback is rejected (prompting the user to type directly).
   assert.equal(tools.answerPlanDecision("call-reject-1", { decision: "reject" }).ok, false);
   assert.equal(tools.isPlanDecisionPending("call-reject-1"), true);
 
   const outcome = tools.answerPlanDecision("call-reject-1", {
     decision: "reject",
-    feedback: "拆成两步",
+    feedback: "split into two steps",
   });
   assert.equal(outcome.ok, true);
-  assert.deepEqual(rejections, [{ conversationId: "conv-reject", feedback: "拆成两步" }]);
+  assert.deepEqual(rejections, [{ conversationId: "conv-reject", feedback: "split into two steps" }]);
   assert.deepEqual(approvals, []);
-  // 反馈发出后旧计划失效(模型将修订重提)。
+  // The old plan is invalidated after feedback is sent (the model will revise and resubmit).
   assert.equal(tools.isPlanDecisionPending("call-reject-1"), false);
   assert.equal(tools.isPlanApprovalToolCall("call-reject-1"), false);
   tools.registerPlanDecisionHandlers(null);
@@ -184,7 +184,7 @@ test("cancel clears the conversation's pending plan and approval mark", async ()
 
   tools.cancelPendingPlanDecisionsForConversation("conv-a");
   assert.equal(tools.getPendingPlanForConversation("conv-a"), null);
-  // 其他会话不受影响。
+  // Other conversations are unaffected.
   assert.equal(tools.isPlanDecisionPending("call-plan-b"), true);
   tools.cancelPendingPlanDecisionsForConversation("conv-b");
   tools.registerPlanDecisionHandlers(null);
@@ -209,9 +209,10 @@ test("subscription notifies on register/approve/supersede", async () => {
 });
 
 test("phrase approval in ChatPage is gated on the live plan switch", () => {
-  // 待决计划跨 run 存活(设计如此),但短语批准必须要求 plan 开关仍开着:
-  // 用户关掉 pill 弃置计划后,之后随口一句"好的/ok"不得把陈旧计划复活成
-  // 执行续轮。显式批准仍走卡片按钮,不受开关限制。
+  // A pending plan survives across runs (by design), but phrase approval must require the plan switch to
+  // still be on: after the user turns off the pill and discards the plan, a casual "ok" afterwards must not
+  // revive the stale plan into an execution continuation turn. Explicit approval still goes through the card
+  // button and is not limited by the switch.
   const chatPageSource = readFileSync(
     new URL("../../src/pages/ChatPage.tsx", import.meta.url),
     "utf8",
@@ -221,7 +222,7 @@ test("phrase approval in ChatPage is gated on the live plan switch", () => {
     /planModeEnabledRef\.current =\s*settings\.chatRuntimeControls\.planModeEnabled === true/,
   );
   assert.match(chatPageSource, /if \(conversationId && planModeEnabledRef\.current\) \{/);
-  // 短语批准分支整体处于开关前置之内(前置判断先于 pending 查询出现)。
+  // The phrase-approval branch is entirely inside the switch precondition (the precondition appears before the pending query).
   assert.ok(
     chatPageSource.indexOf("conversationId && planModeEnabledRef.current") <
       chatPageSource.indexOf("getPendingPlanForConversation(conversationId)"),
@@ -242,19 +243,19 @@ test("isPlanModeAllowedTool admits read-only, plan, and collaboration tools only
 test("plan-mode prompt routes every complete answer through ExitPlanMode without unbounded pressure", () => {
   const { tools } = loadModules();
   const section = tools.buildPlanModeSystemPromptSection();
-  // 覆盖面:所有完整答案(不只实现计划)都经 ExitPlanMode 提交。
+  // Coverage: every complete answer (not only implementation plans) is submitted through ExitPlanMode.
   assert.match(section, /Submit every complete answer through ExitPlanMode/);
   assert.match(section, /architecture summaries, research findings, Q&A/);
   assert.match(section, /instead of plain assistant text/);
-  // 反空转:引导"够用即停",并点明重复读取只会得到 unchanged 桩。
+  // Anti-spin: guide the model to "stop once it is enough" and point out that repeated reads only return an unchanged stub.
   assert.match(section, /Stop researching once you can produce the deliverable/);
   assert.match(section, /unchanged stub/);
-  // 细节决策积极提问:属于用户的决定用 AskUserQuestion 问清,而非猜测或把
-  // 开放问题遗留在计划里;作答后本轮继续。
+  // Ask proactively about detailed decisions: decisions that belong to the user are clarified with
+  // AskUserQuestion rather than guessed or left as open questions in the plan; after answering, the turn continues.
   assert.match(section, /proactively ask with AskUserQuestion during research/);
   assert.match(section, /instead of guessing or leaving open questions in the plan/);
   assert.match(section, /Execution pauses for the answers and continues this turn/);
-  // 高压措辞已移除:它抬高提交门槛,诱导无限调研。
+  // High-pressure wording has been removed: it raises the submission bar and induces endless research.
   assert.doesNotMatch(section, /You MUST call/);
   const bundle = tools.createExitPlanModeTools({ conversationId: "conv-prompt" });
   const tool = bundle.tools.find((candidate) => candidate.name === "ExitPlanMode");
@@ -263,7 +264,7 @@ test("plan-mode prompt routes every complete answer through ExitPlanMode without
 });
 
 // ---------------------------------------------------------------------------
-// 运行策略:有界升级状态机
+// Run policy: bounded escalation state machine
 // ---------------------------------------------------------------------------
 
 function textAssistantMessage(text) {
@@ -285,7 +286,7 @@ test("run policy: auto during research, one forced nudge, then text fallback reg
   const { tools } = loadModules();
   const policy = tools.createPlanModeRunPolicy({ conversationId: "conv-policy" });
 
-  // 研究阶段:不强制 tool_choice,熔断线为研究上限。
+  // Research phase: tool_choice is not forced, and the circuit-breaker line is the research limit.
   assert.equal(policy.resolveToolChoice(), undefined);
   assert.equal(policy.maxRounds(), tools.PLAN_MODE_MAX_RESEARCH_ROUNDS);
   assert.equal(
@@ -294,30 +295,30 @@ test("run policy: auto during research, one forced nudge, then text fallback reg
   );
   assert.equal(policy.resolveToolTermination({ type: "toolCall", id: "c2", name: "Read" }), false);
 
-  // 第一次 run 以文本收尾且未提交 → 补提交一轮(定向强制 + 提醒文案)。
+  // The first run ends with text and no submission -> one supplementary submission round (targeted forcing + reminder text).
   const first = policy.decideAfterRun({ emittedMessages: [textAssistantMessage("plan text")] });
   assert.equal(first.kind, "nudge");
   assert.equal(first.reminderText, tools.PLAN_MODE_NUDGE_REMINDER);
   assert.deepEqual(policy.resolveToolChoice(), { type: "tool", name: "ExitPlanMode" });
   assert.equal(policy.maxRounds(), tools.PLAN_MODE_MAX_NUDGE_ROUNDS);
 
-  // 补提交仍未产出 → 文本兜底。
+  // The supplementary submission still produces nothing -> text fallback.
   const second = policy.decideAfterRun({ emittedMessages: [textAssistantMessage("plan text")] });
   assert.equal(second.kind, "fallback");
 
-  const fallback = policy.registerFallbackPlan({ planText: "## 兜底计划\n\n1. A\n" });
+  const fallback = policy.registerFallbackPlan({ planText: "## Fallback plan\n\n1. A\n" });
   assert.ok(fallback);
   assert.equal(fallback.toolCall.name, "ExitPlanMode");
   assert.equal(fallback.toolResult.toolCallId, fallback.toolCall.id);
   assert.equal(fallback.toolResult.isError, false);
   assert.deepEqual(fallback.toolResult.details, {
     kind: "exit_plan_mode",
-    plan: "## 兜底计划\n\n1. A",
+    plan: "## Fallback plan\n\n1. A",
   });
-  // 与真实提交同构:登记待决计划,审批入口零改动复用。
+  // Isomorphic to a real submission: register the pending plan and reuse the approval entry with zero changes.
   assert.deepEqual(tools.getPendingPlanForConversation("conv-policy"), {
     toolCallId: fallback.toolCall.id,
-    plan: "## 兜底计划\n\n1. A",
+    plan: "## Fallback plan\n\n1. A",
   });
   assert.equal(tools.isPlanDecisionPending(fallback.toolCall.id), true);
   tools.cancelPendingPlanDecisionsForConversation("conv-policy");
@@ -330,7 +331,7 @@ test("run policy: a successful ExitPlanMode submission settles the run immediate
     emittedMessages: [planToolResultMessage("call-ok-1")],
   });
   assert.equal(decision.kind, "submitted");
-  // 提交成功后不进入补提交态。
+  // After a successful submission it does not enter the supplementary-submission state.
   assert.equal(policy.resolveToolChoice(), undefined);
 });
 
@@ -359,7 +360,7 @@ test("run policy: repeated identical research calls are blocked past the limit",
     type: "toolCall",
     id,
     name: "Read",
-    // 键序不同也算同一调用(稳定序列化)。
+    // A different key order still counts as the same call (stable serialization).
     arguments: id === "r2" ? { limit: 5, path: "a.ts" } : { path: "a.ts", limit: 5 },
   });
 
@@ -370,7 +371,7 @@ test("run policy: repeated identical research calls are blocked past the limit",
   assert.match(blocked.reason, /already made this exact Read call/);
   assert.match(blocked.reason, /ExitPlanMode/);
 
-  // 参数不同的调用不受影响。
+  // Calls with different arguments are unaffected.
   assert.equal(
     policy.guardRepeatedToolCall({
       type: "toolCall",
@@ -380,7 +381,7 @@ test("run policy: repeated identical research calls are blocked past the limit",
     }).allow,
     true,
   );
-  // ExitPlanMode 永不被重复守卫拦截(修订后的重提不能被卡死)。
+  // ExitPlanMode is never blocked by the repeat guard (a revised resubmission must not be stuck).
   for (const id of ["p1", "p2", "p3", "p4"]) {
     assert.equal(
       policy.guardRepeatedToolCall({

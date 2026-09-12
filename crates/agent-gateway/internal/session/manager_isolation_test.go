@@ -7,8 +7,9 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// dispatchFor 以 agent 的已认证会话身份入账一条信封（模拟协议层的
-// DispatchFromAgentForSession 调用路径）。
+// dispatchFor ingests an envelope under the agent's authenticated session
+// identity (simulating the protocol layer's DispatchFromAgentForSession
+// call path).
 func dispatchFor(m *Manager, sess *AgentSession, env *gatewayv2.AgentEnvelope) {
 	m.DispatchFromAgentForSession(sess, env)
 }
@@ -24,7 +25,8 @@ func TestBroadcastEventsCarrySourceAgentTag(t *testing.T) {
 	events, cleanup := m.SubscribeHistorySync()
 	defer cleanup()
 
-	// A 与 B 各发一条历史事件：订阅端必须能凭标签区分来源。
+	// A and B each emit one history event: the subscriber must be able to
+	// distinguish the source by tag.
 	dispatchFor(m, a, &gatewayv2.AgentEnvelope{
 		Payload: &gatewayv2.AgentEnvelope_HistorySync{
 			HistorySync: &gatewayv2.HistorySyncEvent{Kind: "upsert", ConversationId: "conv-a"},
@@ -63,7 +65,8 @@ func TestDisplacedSessionEventsAreDropped(t *testing.T) {
 	events, cleanup := m.SubscribeHistorySync()
 	defer cleanup()
 
-	// 被顶替连接的迟到事件必须被丢弃，不得冒充新会话入账。
+	// A late event from a displaced connection must be dropped and must
+	// not be recorded as if it came from the new session.
 	dispatchFor(m, old, &gatewayv2.AgentEnvelope{
 		Payload: &gatewayv2.AgentEnvelope_HistorySync{
 			HistorySync: &gatewayv2.HistorySyncEvent{Kind: "upsert", ConversationId: "stale"},
@@ -84,7 +87,7 @@ func TestTunnelFrameFromWrongAgentIsRejected(t *testing.T) {
 	m.SetSession(b)
 	t.Cleanup(func() { m.ClearSession(a); m.ClearSession(b) })
 
-	// A 声明一条隧道并有访问者流。
+	// A declares a tunnel and has a visitor stream.
 	m.ApplyDesiredState("agent-a", &gatewayv2.TunnelDesiredState{
 		Tunnels: []*gatewayv2.TunnelSpec{{Id: "tun-a", TargetUrl: "http://localhost:3000"}},
 	})
@@ -98,7 +101,7 @@ func TestTunnelFrameFromWrongAgentIsRejected(t *testing.T) {
 		t.Fatalf("lease agent = %q, want agent-a", lease.AgentID())
 	}
 
-	// B 伪造 A 的 stream_id 注入数据：必须被丢弃。
+	// B forges A's stream_id to inject data: it must be dropped.
 	m.dispatchTunnelFrame("agent-b", &gatewayv2.TunnelFrame{
 		StreamId: "s-1",
 		Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY,
@@ -110,7 +113,7 @@ func TestTunnelFrameFromWrongAgentIsRejected(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	// A 自己的帧正常送达。
+	// A's own frame is delivered normally.
 	m.dispatchTunnelFrame("agent-a", &gatewayv2.TunnelFrame{
 		StreamId: "s-1",
 		Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY,
@@ -165,7 +168,7 @@ func TestTerminalSnapshotsAreScopedPerAgent(t *testing.T) {
 		t.Fatalf("agent-b terminal snapshot = %d entries, want 0 (isolation)", got)
 	}
 
-	// A 的会话更替只清 A 的快照。
+	// A session replacement for A only clears A's snapshot.
 	m.SetSession(newTestSession(m, "agent-a", "session-a2"))
 	if got := len(m.TerminalSessionSnapshot("agent-a", "")); got != 0 {
 		t.Fatalf("agent-a snapshot after displacement = %d, want 0", got)

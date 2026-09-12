@@ -3,24 +3,25 @@ export type TerminalPaneBindingListener = () => void;
 export type TerminalPaneBindingStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export type TerminalPaneBindingStoreOptions = {
-  /** 显式传 null 时使用纯内存绑定；省略时使用 sessionStorage。 */
+  /** Passing null explicitly uses pure in-memory bindings; omitting it uses sessionStorage. */
   storage?: TerminalPaneBindingStorage | null;
   storageKey?: string;
 };
 
 /**
- * 终端运行时绑定(Runtime Binding)层:surfaceId → sessionId。
- * 布局 JSON 只持久化 launchSpec + surfaceId,sessionId 存 sessionStorage:
- * webview reload 后 Rust 终端注册表仍活着,绑定可对账恢复;应用重启后
- * sessionStorage 清空,恰好对应终端会话已死。无 window / 存储异常时降级为纯内存。
+ * Terminal runtime binding (Runtime Binding) layer: surfaceId -> sessionId.
+ * The layout JSON persists only launchSpec + surfaceId, while sessionId lives in sessionStorage:
+ * after a webview reload the Rust terminal registry is still alive and the binding can be reconciled and
+ * recovered; after an app restart sessionStorage is cleared, which exactly corresponds to the terminal
+ * session being dead. Degrades to pure in-memory when there is no window / on storage errors.
  */
 export type TerminalPaneBindingStore = {
   get(surfaceId: string): string | null;
   set(surfaceId: string, sessionId: string): void;
   delete(surfaceId: string): void;
-  /** 当前全部已绑定 surfaceId;引用在绑定不变时保持稳定(恢复对账/快照订阅用)。 */
+  /** All currently bound surfaceIds; the reference stays stable while bindings are unchanged (for recovery reconciliation / snapshot subscription). */
   surfaceIds(): readonly string[];
-  /** 对账:只保留 sessionId 仍在 liveSessionIds 中的绑定,返回被清除的 surfaceId 列表。 */
+  /** Reconcile: keep only bindings whose sessionId is still in liveSessionIds, and return the list of cleared surfaceIds. */
   reconcile(liveSessionIds: ReadonlySet<string>): string[];
   subscribe(listener: TerminalPaneBindingListener): () => void;
 };
@@ -53,7 +54,7 @@ function readPersistedBindings(
   try {
     parsed = JSON.parse(raw);
   } catch {
-    // 坏 JSON:忽略并从空状态重建,下次写入覆盖脏数据。
+    // Bad JSON: ignore it and rebuild from an empty state; the next write overwrites the dirty data.
     return bindings;
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -93,7 +94,7 @@ export function createTerminalPaneBindingStore(
         storage.setItem(storageKey, JSON.stringify(Object.fromEntries(bindings)));
       }
     } catch {
-      // 存储写失败(配额/隐私模式)只降级为内存态,不影响调用方。
+      // A storage write failure (quota/private mode) degrades only to in-memory state and does not affect the caller.
     }
   };
 
@@ -103,12 +104,13 @@ export function createTerminalPaneBindingStore(
       if (!key) return null;
       const hit = bindings.get(key);
       if (hit) return hit;
-      // 内存 miss 时从 storage 兜底采纳:dev HMR 可能让写入方与读取方持有
-      // 不同的模块实例,storage 是它们唯一的共享层。少了这一步,拖入既有
-      // 会话的 Pane 会误判"无绑定"而按 launchSpec 新建一个 PTY——表现为
-      // 拖入后要等 shell 冷启动(数秒),且原会话原样留在 dock。
-      // 静默采纳、不通知监听者:get 被 useSyncExternalStore 当 getSnapshot
-      // 在渲染期调用,首次读取即返回正确值,渲染期不得触发其他组件更新。
+      // Fall back to adopting from storage on an in-memory miss: under dev HMR the writer and reader may
+      // hold different module instances, and storage is their only shared layer. Without this step, a Pane
+      // with a dragged-in existing session would misjudge it as "no binding" and create a new PTY from
+      // launchSpec --- observable as a wait for the shell cold start (seconds) after drag-in, with the
+      // original session left in the dock. Adopt silently without notifying listeners: get is called by
+      // useSyncExternalStore as getSnapshot during render, so the first read returns the correct value and
+      // render must not trigger other component updates.
       const persisted = readPersistedBindings(storage, storageKey).get(key);
       if (persisted) {
         bindings.set(key, persisted);

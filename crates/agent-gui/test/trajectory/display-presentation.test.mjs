@@ -107,7 +107,7 @@ test("collapsing an assistant hides the tool calls that follow it", () => {
     collapsedAssistants: new Set([assistant.recordId]),
   });
   assert.equal(collapsed.filter((item) => item.kind === "record" && item.record.kind === "tool").length, 0);
-  // assistant 本身仍然可见，折叠的是它名下的调用。
+  // The assistant itself remains visible; what is collapsed are the calls under it.
   assert.ok(
     collapsed.some((item) => item.kind === "record" && item.record.recordId === assistant.recordId),
   );
@@ -137,9 +137,10 @@ test("a search with no hits yields an empty list, not a header-only list", () =>
 
 test("collapsible sets only include turns and assistants that have something to fold", () => {
   const turns = twoTurnLayout();
-  // 两个 turn 都有不止一行（user + assistant），都可折叠。
+  // Both turns have more than one row (user + assistant), so both are collapsible.
   assert.deepEqual([...collapsibleTrajectoryTurns(turns)], [1, 2]);
-  // 只有名下紧跟工具调用的 assistant 才可折叠，turn 2 的 assistant 没有。
+  // Only an assistant immediately followed by tool calls under it is collapsible; turn 2's assistant
+  // is not.
   const assistants = collapsibleTrajectoryAssistants(turns);
   assert.equal(assistants.length, 1);
 });
@@ -311,7 +312,8 @@ test("throughput and segments stay null unless every timing fact is present", ()
     }),
     null,
   );
-  // 时间戳倒序说明记录不可信，宁可不显示也不给出负数分段。
+  // Out-of-order timestamps mean the record is untrustworthy; better to show nothing than to produce
+  // a negative segment.
   assert.equal(
     trajectoryAssistantSegments({
       assistantMetrics: { ...complete.assistantMetrics, firstTokenAt: BASE - 1 },
@@ -344,7 +346,8 @@ test("subagent steps come from assistant messages and pair errors by call id", (
       ["Read", true],
     ],
   );
-  // 子工具自带起止：起点 = assistant 消息时间戳，终点 = toolResult 时间戳。
+  // The subtool carries its own start/end: start = the assistant message timestamp, end = the
+  // toolResult timestamp.
   assert.deepEqual(
     steps[0].tools.map((tool) => [tool.startedAt, tool.endedAt]),
     [

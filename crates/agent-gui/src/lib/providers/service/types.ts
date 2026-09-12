@@ -3,11 +3,12 @@ import type { StreamRetryConfig } from "../runtime/streamRetry";
 import type { StreamOptionsEx } from "../runtime/types";
 
 /**
- * 一次 LLM 流式请求的完整信封。
+ * The complete envelope for a single LLM streaming request.
  *
- * `model.api` 决定路由到哪个适配器；`context` 与 `options` 不做任何解释，
- * 原样交给适配器——传输路由字段（headers 里的 x-liveagent-*、useSystemProxy
- * 派生头）对 seam 不透明透传，seam 不读取、不判断、不缓存。
+ * `model.api` determines which adapter it routes to; `context` and `options` are not
+ * interpreted at all and are passed to the adapter as-is - transport routing fields (the
+ * x-liveagent-* entries in headers, useSystemProxy-derived headers) are passed through
+ * opaquely to the seam, which does not read, judge, or cache them.
  */
 export type LlmStreamRequest = {
   model: Model<Api>;
@@ -16,23 +17,24 @@ export type LlmStreamRequest = {
 };
 
 /**
- * LLM 适配器：把一组 wire 协议接到统一分发入口 llm.stream() 上。
+ * LLM adapter: wires a set of wire protocols into the unified dispatch entry point llm.stream().
  *
- * PR-1 只要求 stream()（行为与被包装的原实现逐行等价）；resolveModel /
- * retryPolicy 是 PR-2（策略归属权反转）预留的可选能力，当前没有实现者，
- * 重试策略仍由调用方通过 options.streamRetry 携带。
+ * PR-1 only requires stream() (behavior line-for-line equivalent to the wrapped original
+ * implementation); resolveModel / retryPolicy are optional capabilities reserved for PR-2
+ * (inverting policy ownership), with no implementers currently, and the retry policy is still
+ * carried by the caller via options.streamRetry.
  */
 export type LlmAdapter = {
-  /** 本适配器承接的 wire 协议 id 集合（即 model.api 的取值）。 */
+  /** The set of wire protocol ids this adapter handles (i.e. the values of model.api). */
   readonly apis: readonly string[];
-  /** 发起一次流式请求。必须保持被包装实现的语义，包括流内重试的包装位置。 */
+  /** Issue a streaming request. It must preserve the semantics of the wrapped implementation, including the wrapping position of in-stream retries. */
   stream(
     model: Model<Api>,
     context: Context,
     options: StreamOptionsEx,
   ): AssistantMessageEventStream;
-  /** PR-2 预留：路由时机的模型解析。 */
+  /** Reserved for PR-2: model resolution at routing time. */
   resolveModel?(model: Model<Api>): Model<Api>;
-  /** PR-2 预留：供应商级重试策略查询。 */
+  /** Reserved for PR-2: provider-level retry policy lookup. */
   retryPolicy?(model: Model<Api>): StreamRetryConfig | undefined;
 };

@@ -110,16 +110,22 @@ function truncateReminderField(value: string, maxChars = MAX_REMINDER_FIELD_CHAR
 }
 
 /**
- * 归一化身份列表：过滤空 id/name、按 agentId 排序、按上限截断。
- * 稳定段与易变段共用同一份选择结果，保证两段的截断口径一致——否则会出现
- * “稳定段列了某个 agent、易变段却没有它”的错位。
+ * Normalizes the identity list: filters out empty id/name, sorts by agentId, and
+ * truncates to the cap. The stable and volatile sections share the same
+ * selection result, so both truncate identically — otherwise a misalignment
+ * would arise where "the stable section lists an agent but the volatile section
+ * does not".
  *
- * 排序**不用 `localeCompare`**：它依赖 locale 与 ICU 版本，同样输入在不同环境下
- * 可能给出不同顺序，等于凭空制造前缀差异
- * （见 spec/liveagent/frontend/prompt-cache-stability.md 的 Common Mistake 一节）。
- * 归一化本身也是必需的：`listIdentities()` 按 `updatedAt` 倒序返回，任一身份被更新
- * 都会改变返回顺序，而稳定段要求“身份集合不变则字节不变”。
- * 代价是超过上限时列出的不再是最近更新的 12 个，而是 id 序最靠前的 12 个。
+ * Sorting deliberately does **not** use `localeCompare`: it depends on locale
+ * and ICU version, so the same input may produce a different order in different
+ * environments, effectively manufacturing prefix differences out of thin air
+ * (see the Common Mistake section of
+ * spec/liveagent/frontend/prompt-cache-stability.md). Normalization itself is
+ * also required: `listIdentities()` returns in reverse `updatedAt` order, so
+ * updating any identity changes the returned order, while the stable section
+ * requires that "if the identity set is unchanged, the bytes are unchanged".
+ * The cost is that above the cap, the listed agents are no longer the 12 most
+ * recently updated but the 12 earliest by id order.
  */
 function selectListedIdentities(identities: SubagentIdentity[]) {
   const usable = identities
@@ -136,10 +142,13 @@ function selectListedIdentities(identities: SubagentIdentity[]) {
  * so follow-up user requests are routed to the stable ids instead of the
  * parent impersonating them.
  *
- * 只含身份字段（id / name / role）：身份集合不变则字节不变，可以安全地待在
- * systemPrompt 里。mode 不属于身份——它随每次 Agent 调用变化（lastMode），
- * 放这里会破坏稳定段的字节稳定性，因此与运行状态（status / last_task /
- * last_summary）一样由 buildRosterRunStatusSection 单独渲染并后置到消息尾部。
+ * Contains only identity fields (id / name / role): if the identity set is
+ * unchanged the bytes are unchanged, so it is safe to keep in the systemPrompt.
+ * mode is not part of identity — it changes with every Agent call (lastMode),
+ * and putting it here would break the byte stability of the stable section, so
+ * like the run state (status / last_task / last_summary) it is rendered
+ * separately by buildRosterRunStatusSection and appended to the end of the
+ * message.
  */
 export function buildRosterIdentitySection(params: { identities: SubagentIdentity[] }) {
   const { listed, omittedCount } = selectListedIdentities(params.identities);
@@ -169,13 +178,17 @@ export function buildRosterIdentitySection(params: { identities: SubagentIdentit
 }
 
 /**
- * roster 的易变段：只含随子代理 run 推进而变的字段。
+ * The volatile section of the roster: contains only fields that change as
+ * subagent runs progress.
  *
- * 与稳定段共用 selectListedIdentities 的选择结果，所以列出的 id 必定是稳定段的子集；
- * 没有历史 run 的身份不出现（与拆分前“无 latestRun 就不带这些字段”同口径）。
+ * It shares selectListedIdentities' selection result with the stable section, so
+ * the listed ids are always a subset of the stable section's; identities with no
+ * historical run do not appear (the same convention as before the split, where
+ * "no latestRun means those fields are omitted").
  *
- * 纯函数：不含时间量、不含随机量，同样输入恒等输出——调用方据此用“输出是否与上次
- * 相同”判定要不要投递。
+ * Pure function: no time values and no randomness, so identical input yields
+ * identical output — callers use "is the output the same as last time" to decide
+ * whether to deliver it.
  */
 export function buildRosterRunStatusSection(params: {
   identities: SubagentIdentity[];
@@ -190,7 +203,7 @@ export function buildRosterRunStatusSection(params: {
     const fields = [
       `id=${identity.agentId}`,
       `status=${latestRun.status}`,
-      // mode 随每次 Agent 调用变化，从身份段移到这里；仍是确定性字段，不破坏纯函数约定。
+      // mode changes with every Agent call and was moved here from the identity section; it is still a deterministic field, so it does not break the pure-function contract.
       `mode=${identity.lastMode}`,
       `last_task=${truncateReminderField(latestRun.prompt)}`,
     ];

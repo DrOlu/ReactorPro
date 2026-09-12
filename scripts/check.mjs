@@ -221,7 +221,7 @@ async function main() {
   mkdirSync(commandEnvironment.GOLANGCI_LINT_CACHE, { recursive: true });
   mkdirSync(dirname(reportPath), { recursive: true });
   const log = createWriteStream(logPath, { flags: "w" });
-  const header = `LiveAgent check profile: ${profile}\nPlatform: ${process.platform} ${process.arch}\nLog: ${logPath}\nReport: ${reportPath}\nKeep going after failures: ${keepGoing ? "1" : "0"}\n`;
+  const header = `ReactorPro check profile: ${profile}\nPlatform: ${process.platform} ${process.arch}\nLog: ${logPath}\nReport: ${reportPath}\nKeep going after failures: ${keepGoing ? "1" : "0"}\n`;
   process.stdout.write(header);
   log.write(header);
 
@@ -256,7 +256,7 @@ async function main() {
 
   const summary = [
     "",
-    `LiveAgent check profile: ${profile}`,
+    `ReactorPro check profile: ${profile}`,
     `Platform: ${process.platform} ${process.arch}`,
     ...results.map(
       (result) =>

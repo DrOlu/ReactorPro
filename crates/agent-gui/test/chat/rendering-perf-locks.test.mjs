@@ -2,20 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 渲染进程长会话性能的反漂移锁（见 issue：3.7 小时会话把 WebContent 顶到 88~124% CPU）。
+// Anti-drift lock for long-conversation renderer performance (see the issue: a 3.7-hour conversation
+// pushed WebContent to 88-124% CPU).
 //
-// 1. Intl formatter 必须按 (variant, locale) 复用：`sample` 抓到的热点栈是
-//    timerFired → JSEventListener::handleEvent → constructIntlDateTimeFormat →
-//    udat_open，即渲染/tick 路径里反复新建 formatter（每次一次 ICU 初始化）。
-// 2. 可见性判定必须同时认 `document.hidden` 与 `visibilityState`：Tauri/WKWebView
-//    后台启动出现过两者不同步；据此收敛的定时器不能在隐藏时继续跑。
+// 1. Intl formatters must be reused by (variant, locale): the hot stack captured by `sample` was
+//    timerFired -> JSEventListener::handleEvent -> constructIntlDateTimeFormat -> udat_open, i.e.
+//    repeatedly constructing formatters in the render/tick path (one ICU init each time).
+// 2. The visibility check must recognize both `document.hidden` and `visibilityState`:
+//    Tauri/WKWebView background startup has shown them out of sync; timers trimmed based on this must
+//    not keep running while hidden.
 const loader = createTsModuleLoader();
 const intl = loader.loadModule("@liveagent/ui/lib/shared/intlFormatters.ts");
 const visibility = loader.loadModule("@liveagent/ui/lib/shared/documentVisibility.ts");
 const stats = loader.loadModule("@liveagent/ui/lib/trajectory/stats.ts");
 const presentation = loader.loadModule("@liveagent/ui/lib/trajectory/presentation.ts");
 
-/** 统计期间构造了多少个 Intl 实例。 */
+/** Counts how many Intl instances were constructed during the measurement. */
 function countConstructions(kind, run) {
   const Original = Intl[kind];
   let built = 0;
@@ -40,9 +42,9 @@ test("cachedNumberFormat constructs once per variant and locale", () => {
     for (let index = 0; index < 25; index += 1) {
       intl.cachedNumberFormat("zh-CN", "integer-0", { maximumFractionDigits: 0 }).format(index);
     }
-    // 同一个 variant 换 locale 是新的一档。
+    // The same variant with a different locale is a new bucket.
     intl.cachedNumberFormat("en-US", "integer-0", { maximumFractionDigits: 0 }).format(1);
-    // 同一个 locale 换 variant 也是新的一档。
+    // The same locale with a different variant is also a new bucket.
     intl.cachedNumberFormat("zh-CN", "decimal-2", { maximumFractionDigits: 2 }).format(1);
   });
   assert.equal(built, 3);
@@ -96,7 +98,7 @@ test("trajectory stats formatters reuse one formatter per locale", () => {
     }
     return values;
   });
-  // compact-whole / compact-1 / count —— 三档，与调用次数无关。
+  // compact-whole / compact-1 / count -- three buckets, independent of the call count.
   assert.equal(built, 3);
   assert.equal(result.length, 40);
 });

@@ -33,8 +33,8 @@ type TerminalEventListener = (event: TerminalEvent) => void;
 
 const globalTerminalListeners = new Set<TerminalEventListener>();
 let globalListenerStarted = false;
-// 输出流按 sessionId 分桶派发（O(1)），画板多终端 Pane 并列后 handle 数量
-// 上升，避免每个输出事件线性扫全部 handle。
+// Output streams are dispatched bucketed by sessionId (O(1)); as multiple terminal panes coexist in the canvas the handle count
+// rises, avoiding a linear scan of all handles on every output event.
 const globalTerminalStreamHandles = createTerminalStreamHandleRegistry<TauriTerminalStreamHandle>();
 let globalStreamListenerStarted = false;
 

@@ -1,12 +1,14 @@
 /**
- * 存量会话的降级推导：`UiMessage[]` → 账本。
+ * Fallback derivation for existing sessions: `UiMessage[]` -> ledger.
  *
- * 轨迹功能上线前的会话没有事件日志。这条路径从消息本身重建结构——turn 按用户消息
- * 边界切，step 按 round 切，工具按 callId 配对——但**没有任何时间信息**。
+ * Sessions from before the trajectory feature shipped have no event log. This path reconstructs structure
+ * from the messages themselves --- turns split on user-message boundaries, steps split on rounds, tools
+ * paired by callId --- but **there is no timing information at all**.
  *
- * `hasTiming: false` 是给 UI 的硬信号：甘特图必须锁在 sequence 投影，Duration 按钮
- * 置灰。绝不伪造耗时：从消息 timestamp 差分推出来的「耗时」在并行工具批次上是错的，
- * 一个看起来精确但实际错误的数字比一个诚实的空值有害得多。
+ * `hasTiming: false` is a hard signal to the UI: the Gantt chart must be locked to the sequence projection
+ * and the Duration button grayed out. Never fabricate durations: a "duration" derived from message timestamp
+ * differences is wrong for parallel tool batches, and a number that looks precise but is actually wrong is
+ * far more harmful than an honest null.
  */
 
 import type { UiMessage } from "../chat/uiMessages";
@@ -43,10 +45,10 @@ function normalizeUsage(value: unknown): TrajectoryUsage | undefined {
 }
 
 /**
- * 从消息序列推导降级账本。
+ * Derive the fallback ledger from the message sequence.
  *
- * @param messages - 会话的 UI 消息序列。
- * @returns 结构完整、时间全为 null 的账本。
+ * @param messages - The session's UI message sequence.
+ * @returns A structurally complete ledger with all times null.
  */
 export function deriveLedgerFromMessages(
   messages: readonly UiMessage[],
@@ -64,7 +66,7 @@ export function deriveLedgerFromMessages(
           name: item.toolCall.name,
           startedAt: null,
           endedAt: null,
-          // 消息里只有终态，没有中间态：有结果即完成，无结果即被中断。
+          // Messages have only a final state, no intermediate state: having a result means completed, no result means interrupted.
           status:
             item.toolResult === undefined
               ? "aborted"

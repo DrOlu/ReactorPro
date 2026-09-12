@@ -161,8 +161,8 @@ test("MCP Store cards center connection previews and use working external and ad
 test("MCP Hub description follows the active Chinese locale", () => {
   assert.match(pageSource, /subtitle=\{t\("mcpHub\.subtitle"\)\}/);
   for (const translations of [guiTranslations, webTranslations]) {
-    assert.equal(translations["zh-CN"]["mcpHub.subtitle"], "管理模型上下文协议（MCP）服务器");
-    assert.equal(translations["zh-CN"]["mcpHub.storeSearchPlaceholder"], "搜索 MCP 服务器");
+    assert.equal(translations["zh-CN"]["mcpHub.subtitle"], "Model Context Protocol");
+    assert.equal(translations["zh-CN"]["mcpHub.storeSearchPlaceholder"], "Search MCP servers");
   }
 });
 

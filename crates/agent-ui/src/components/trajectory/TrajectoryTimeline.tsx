@@ -1,11 +1,11 @@
 /**
- * 三泳道时间轴。
+ * Three-swimlane timeline.
  *
- * 只做两件事：把投影模型画出来，把手势翻译成「选区」和「选中某条记录」。所有
- * 投影计算都在 `lib/trajectory/timeline.ts`，这里不含任何时间语义。
+ * It does only two things: draw the projection model, and translate gestures into "selection range" and "select a record". All
+ * projection computation lives in `lib/trajectory/timeline.ts`; this file contains no time semantics.
  *
- * 自上而下：回合编号带 → 三泳道（工具泳道按并行错行）→ 时间刻度尺 → minimap
- * 概览条。duration 模式被压缩的空闲间隙用斜纹标出，不再静默消失。
+ * Top to bottom: turn number band -> three swimlanes (the tool lane staggers parallel rows) -> time ruler -> minimap
+ * overview bar. In duration mode, compressed idle gaps are marked with diagonal stripes and no longer silently disappear.
  */
 
 import { type CSSProperties, useMemo, useRef, useState } from "react";
@@ -47,10 +47,10 @@ const SPAN_TONE: Record<TrajectoryRecordKind, string> = {
   subtool: "bg-orange-400/70",
 };
 
-/** 已中断的条目叠一层斜纹，和「完成了但很短」一眼区分。 */
+/** Interrupted entries get a diagonal-stripe overlay to be distinguishable at a glance from "finished but very short". */
 const ABORTED_HATCH =
   "repeating-linear-gradient(45deg, transparent 0 2px, rgba(0,0,0,0.28) 2px 3px)";
-/** duration 模式被压缩掉的空闲间隙。 */
+/** Idle gaps compressed away in duration mode. */
 const IDLE_HATCH =
   "repeating-linear-gradient(45deg, transparent 0 2px, rgba(100,116,139,0.35) 2px 4px)";
 
@@ -164,9 +164,9 @@ export function TrajectoryTimeline(props: {
         <button
           ref={trackRef}
           type="button"
-          // 轨道本身就是点击目标（点击定位到最近记录），所以用真正的 button 而不是
-          // 加了 tabIndex 的 div：原生可聚焦、原生语义，Esc 清除选区挂在它自己的
-          // 键盘契约上。内部只有装饰性 span，不会形成交互嵌套。
+          // The track itself is the click target (clicking locates the nearest record), so use a real button rather than
+          // a div with tabIndex: natively focusable, native semantics, and Esc clearing the selection is bound to its own
+          // keyboard contract. Inside there are only decorative spans, so no interactive nesting is formed.
           aria-label={t("trajectory.timeline.hint")}
           className="relative block w-full cursor-crosshair touch-none select-none text-left"
           style={{ height: trackHeight }}
@@ -184,7 +184,7 @@ export function TrajectoryTimeline(props: {
             }
           }}
         >
-          {/* 回合编号带 */}
+          {/* Turn number band */}
           {model.turnBoundaries
             .filter((boundary) => boundary.end >= viewport.start && boundary.time <= viewport.end)
             .map((boundary) => {
@@ -193,8 +193,8 @@ export function TrajectoryTimeline(props: {
                 14,
                 Math.min(pct(boundary.end), 100) - Math.max(pct(boundary.time), 0),
               );
-              // turnStatuses 以 turnBoundaries 为键源构建，理论不会 miss；兜底防止
-              // 未来键源变化时整条时间轴崩掉。
+              // turnStatuses is built with turnBoundaries as the key source and theoretically cannot miss; this fallback prevents
+              // the whole timeline from crashing if the key source changes in the future.
               const status = turnStatuses.get(boundary.turn) ?? "complete";
               return (
                 <span
@@ -229,7 +229,7 @@ export function TrajectoryTimeline(props: {
               );
             })}
 
-          {/* 泳道主体 */}
+          {/* Swimlane body */}
           {visibleSpans.map((span) => {
             const record = recordsByIndex.get(span.index);
             const segments = record === undefined ? null : trajectoryAssistantSegments(record);
@@ -270,8 +270,8 @@ export function TrajectoryTimeline(props: {
                 onPointerLeave={() => setHovered(null)}
               >
                 {ttftShare !== null && (
-                  // TTFT 与解码在同一块里分色：等模型和真正出字是两回事，合成一段
-                  // 会让「慢在哪」这个问题失去答案。
+                  // TTFT and decoding are color-coded within the same block: waiting for the model and actually emitting tokens are two different things, and merging them
+                  // would make the question "where is it slow" unanswerable.
                   <span
                     className="absolute inset-y-0 left-0 bg-black/25"
                     style={{ width: `${ttftShare * 100}%` }}
@@ -281,7 +281,7 @@ export function TrajectoryTimeline(props: {
             );
           })}
 
-          {/* 被压缩的空闲间隙：斜纹标出，宽度是固定视觉占位不是数据。 */}
+          {/* Compressed idle gaps: marked with diagonal stripes; the width is a fixed visual placeholder, not data. */}
           {props.mode === "duration" &&
             model.idleGaps
               .filter((gap) => gap.at >= viewport.start && gap.at <= viewport.end)
@@ -301,7 +301,7 @@ export function TrajectoryTimeline(props: {
                 />
               ))}
 
-          {/* 回合竖线 */}
+          {/* Turn vertical line */}
           {model.turnBoundaries
             .filter((boundary) => boundary.time > viewport.start && boundary.time < viewport.end)
             .map((boundary) => (
@@ -313,7 +313,7 @@ export function TrajectoryTimeline(props: {
               />
             ))}
 
-          {/* 进行中的 now 游标 */}
+          {/* In-progress now cursor */}
           {nowAt !== null && (
             <span
               aria-hidden="true"
@@ -335,7 +335,7 @@ export function TrajectoryTimeline(props: {
           )}
         </button>
 
-        {/* 悬停卡片：替代原生 title，跟着 hover 状态走，拖选期间不出现。 */}
+        {/* Hover card: replaces the native title, follows hover state, and does not appear during drag selection. */}
         {hoveredRecord !== null && gestures.draft === null && hovered !== null && (
           <div
             aria-hidden="true"
@@ -354,7 +354,7 @@ export function TrajectoryTimeline(props: {
           </div>
         )}
 
-        {/* 时间刻度尺 */}
+        {/* Time ruler */}
         <div className="relative w-full border-t border-border/60" style={{ height: RULER_HEIGHT }}>
           {ticks.map((tick) => (
             <span
@@ -369,7 +369,7 @@ export function TrajectoryTimeline(props: {
           ))}
         </div>
 
-        {/* minimap 概览条：全模型域 + 当前视口窗口框。 */}
+        {/* minimap overview bar: full model domain + current viewport window box. */}
         <button
           ref={minimapRef}
           type="button"
@@ -456,7 +456,7 @@ export function TrajectoryTimeline(props: {
 
 type TurnStatus = "running" | "error" | "complete";
 
-/** 回合状态只看成员记录；时长走 boundary.activeMs（与投影模式无关的净活跃毫秒）。 */
+/** Turn status only looks at member records; duration uses boundary.activeMs (net active milliseconds, independent of projection mode). */
 function turnStatusOf(
   spans: readonly TrajectoryTimelineSpan[],
   from: number,
@@ -471,7 +471,7 @@ function turnStatusOf(
   return status;
 }
 
-/** running 条目的最新右端：now 游标落点。 */
+/** Latest right edge of running entries: where the now cursor lands. */
 function nowCursorAt(
   spans: readonly TrajectoryTimelineSpan[],
   viewport: TrajectoryTimeRange,
@@ -508,7 +508,7 @@ function rulerTicks(
   return ticks;
 }
 
-/** 从 1/2/5 序列里取 ≥target 的整齐步长。 */
+/** Take a tidy step >= target from the 1/2/5 sequence. */
 function niceStep(target: number, minimum: number): number {
   if (!(target > 0)) return minimum;
   const magnitude = 10 ** Math.floor(Math.log10(target));
@@ -519,7 +519,7 @@ function niceStep(target: number, minimum: number): number {
   return 10 * magnitude;
 }
 
-/** 紧凑时长：刻度尺和回合带用的短标签。 */
+/** Compact duration: the short labels used by the ruler and turn band. */
 function formatCompactMs(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`;
   const seconds = ms / 1000;
@@ -541,7 +541,7 @@ function turnChipTitle(params: {
   return parts.join(" · ");
 }
 
-/** 悬停卡片正文上限：长回复截断展示，全文在下方事件列表里看。 */
+/** Hover card body limit: long replies are truncated for display; the full text is in the event list below. */
 const TOOLTIP_TEXT_MAX_CHARS = 200;
 
 function spanTooltip(params: {
@@ -557,8 +557,8 @@ function spanTooltip(params: {
   if (record === undefined) return params.kindLabel;
   const lines: string[] = [params.kindLabel];
   if (record.text !== "") {
-    // 长原文截断（同 layout.ts previewLine 的压缩+上限模式），否则超长 assistant
-    // 文本会把悬停卡片撑破出白框。
+    // Truncate long original text (same compression + cap pattern as layout.ts previewLine), otherwise an overlong assistant
+    // text would burst the hover card into a white box.
     const collapsed = record.text.replace(/\s+/g, " ").trim();
     lines.push(
       collapsed.length > TOOLTIP_TEXT_MAX_CHARS

@@ -155,7 +155,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         requested?.conversationId ?? currentConversationIdRef.current
       ).trim();
       if (!targetConversationId) {
-        setErrorMessage("请先选择或创建会话后再上传文件。");
+        setErrorMessage("Please select or create a conversation before uploading files.");
         return null;
       }
 
@@ -179,7 +179,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       // not resurrect cleared attachments: files picked inside the old
       // workspace are not readable from the new one.
       if (!isAgentModeRef.current || (isTargetDisplayed && workdirRef.current !== targetWorkdir)) {
-        addNotify("warning", "上传目标已失效，已忽略本次导入的文件");
+        addNotify("warning", "The upload target is no longer valid; the files from this import were ignored");
         return;
       }
       if (result.files.length === 0 && result.skipped.length === 0) {
@@ -192,13 +192,13 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         const previous = getPendingUploadsForConversation(targetConversationId);
         const merged = mergePendingUploadedFilesWithStats(previous, result.files);
         if (merged.duplicateCount > 0) {
-          addNotify("warning", `已合并 ${merged.duplicateCount} 个重复文件`);
+          addNotify("warning", `Merged ${merged.duplicateCount} duplicate files`);
         }
         const overflowCount = Math.max(0, merged.files.length - MAX_UPLOAD_FILES);
         if (overflowCount > 0) {
           addNotify(
             "warning",
-            `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略 ${overflowCount} 个额外文件`,
+            `At most ${MAX_UPLOAD_FILES} files can be uploaded; ${overflowCount} extra files were ignored`,
           );
         }
         setPendingUploadsForConversation(
@@ -211,14 +211,14 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       }
       if (result.files.length === 0 && result.skipped.length > 0) {
         if (isTargetDisplayed) {
-          setErrorMessage(`${emptySelectionMessage}：\n${result.skipped.join("\n")}`);
+          setErrorMessage(`${emptySelectionMessage}:\n${result.skipped.join("\n")}`);
         } else {
-          addNotify("warning", `${emptySelectionMessage}：\n${result.skipped.join("\n")}`);
+          addNotify("warning", `${emptySelectionMessage}:\n${result.skipped.join("\n")}`);
         }
         return;
       }
       if (result.skipped.length > 0) {
-        addNotify("warning", `以下文件已跳过：\n${result.skipped.join("\n")}`);
+        addNotify("warning", `The following files were skipped:\n${result.skipped.join("\n")}`);
       }
     },
     [
@@ -243,15 +243,15 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       requestedTarget?: ConversationUploadTarget,
     ) => {
       if (uploadTaskActiveRef.current) {
-        addNotify("warning", "当前正在上传文件，请稍候");
+        addNotify("warning", "Files are currently uploading, please wait");
         return;
       }
       if (!isAgentMode) {
-        setErrorMessage("文件上传仅在 tools 模式可用。");
+        setErrorMessage("File upload is only available in tools mode.");
         return;
       }
       if (!(requestedTarget?.workdir ?? workdir).trim()) {
-        setErrorMessage("请先在项目栏选择或创建项目后再上传文件。");
+        setErrorMessage("Please select or create a project in the project panel before uploading files.");
         return;
       }
 
@@ -291,8 +291,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   const pickReadableFiles = useCallback(
     () =>
       runUploadTask({
-        emptySelectionMessage: "所选文件均不受当前 Read 支持",
-        errorFallback: "导入文件失败",
+        emptySelectionMessage: "None of the selected files are supported by the current Read",
+        errorFallback: "Failed to import files",
         importer: ({ targetWorkdir }) =>
           invoke<SystemPickReadableFilesResponse>("system_pick_readable_files", {
             workdir: targetWorkdir,
@@ -307,8 +307,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       if (paths.length === 0) return;
       await runUploadTask(
         {
-          emptySelectionMessage: "拖入文件均不受当前 Read 支持",
-          errorFallback: "导入文件失败",
+          emptySelectionMessage: "None of the dropped files are supported by the current Read",
+          errorFallback: "Failed to import files",
           importer: ({ targetWorkdir }) =>
             invoke<SystemPickReadableFilesResponse>("system_import_readable_file_paths", {
               workdir: targetWorkdir,
@@ -327,15 +327,15 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       if (files.length === 0) return;
       await runUploadTask(
         {
-          emptySelectionMessage: "剪贴板文件均不受当前 Read 支持",
-          errorFallback: "导入剪贴板文件失败",
+          emptySelectionMessage: "None of the clipboard files are supported by the current Read",
+          errorFallback: "Failed to import clipboard files",
           importer: async ({ targetWorkdir }) => {
             const importBatch = files.slice(0, MAX_UPLOAD_FILES);
             const ignoredForLimit = files.length - importBatch.length;
             if (ignoredForLimit > 0) {
               addNotify(
                 "warning",
-                `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略 ${ignoredForLimit} 个额外文件`,
+                `At most ${MAX_UPLOAD_FILES} files can be uploaded; ${ignoredForLimit} extra files were ignored`,
               );
             }
             const uploadFiles = await Promise.all(importBatch.map(fileToUploadInput));

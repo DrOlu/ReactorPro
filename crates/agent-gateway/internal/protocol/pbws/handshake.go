@@ -10,16 +10,18 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// helloVerdict 是握手校验结果；ok=false 时 message 面向客户端。
+// helloVerdict is the handshake validation result; when ok=false, message is client-facing.
 type helloVerdict struct {
 	ok      bool
 	message string
 }
 
-// vetHello 校验 ClientHello 的协议版本、角色与浏览器凭证。
-// 角色-凭证绑定：浏览器角色只接受网关 token；Agent 角色必须声明 agent_id。
-// Agent 凭证由 authenticateAgentHello 在存储锁内只校验一次，主链路与终端
-// 数据链路复用该入口。凭证失败统一报 "unauthorized"，防止枚举 Agent ID。
+// vetHello validates the ClientHello protocol version, role, and browser credentials.
+// Role-credential binding: the browser role only accepts the gateway token; the Agent
+// role must declare agent_id. Agent credentials are validated exactly once by
+// authenticateAgentHello under the store lock, and both the main path and the terminal
+// data path reuse that entry point. Credential failures always report "unauthorized" to
+// prevent Agent ID enumeration.
 func (s *Server) vetHello(hello *gatewayv2.ClientHello, wantRole gatewayv2.ClientRole) helloVerdict {
 	if hello == nil {
 		return helloVerdict{message: "hello frame is required"}
@@ -28,7 +30,9 @@ func (s *Server) vetHello(hello *gatewayv2.ClientHello, wantRole gatewayv2.Clien
 		return helloVerdict{message: "unsupported protocol version"}
 	}
 	role := hello.GetRole()
-	// hello 缺省角色按端点预期补齐（路径已可区分）；显式错误角色拒绝，防止 agent 帧被当浏览器帧处理。
+	// A hello with no explicit role is filled in with the endpoint's expected role (the
+	// path already distinguishes them); an explicitly wrong role is rejected so agent
+	// frames cannot be processed as browser frames.
 	if role != gatewayv2.ClientRole_CLIENT_ROLE_UNSPECIFIED && role != wantRole {
 		return helloVerdict{message: "unexpected client role"}
 	}
@@ -45,8 +49,9 @@ func (s *Server) vetHello(hello *gatewayv2.ClientHello, wantRole gatewayv2.Clien
 	return helloVerdict{ok: true}
 }
 
-// authenticateAgentHello 在 Store 内完成唯一一次独立 Token 查询、共享 Token 判定、
-// 自动登记及按 Agent 凭证纪元快照。调用方必须在注册传输时校验返回纪元。
+// authenticateAgentHello performs the single independent token lookup, shared-token
+// determination, auto-registration, and per-Agent credential epoch snapshot inside the
+// Store. Callers must validate the returned epoch when registering the transport.
 func (s *Server) authenticateAgentHello(hello *gatewayv2.ClientHello) (uint64, error) {
 	return s.tokens.AuthenticateAndRegister(
 		hello.GetAgentId(),
@@ -55,8 +60,9 @@ func (s *Server) authenticateAgentHello(hello *gatewayv2.ClientHello) (uint64, e
 	)
 }
 
-// serverHello 构造握手应答；sessionID 仅 agent 角色使用，maxMessageBytes 按链路
-// 报告实际读限额（各链路收紧后不再统一）。
+// serverHello builds the handshake response; sessionID is only used by the agent role,
+// and maxMessageBytes reports the actual read limit per link (no longer uniform after
+// each link tightened its own).
 func (s *Server) serverHello(ok bool, message string, sessionID string, maxMessageBytes int64) *gatewayv2.ServerHello {
 	return &gatewayv2.ServerHello{
 		Ok:                     ok,
@@ -67,12 +73,12 @@ func (s *Server) serverHello(ok bool, message string, sessionID string, maxMessa
 		MaxMessageBytes:        uint64(maxMessageBytes),
 		Capabilities: []string{
 			gatewayv2.ChatIngressV1Capability,
-			gatewayv2.SttStreamV1Capability,
 		},
 	}
 }
 
-// closeUnauthorized 以鉴权失败码关闭连接（调用方已写出失败 hello）。
+// closeUnauthorized closes the connection with the auth-failure code (the caller has
+// already written the failure hello).
 func closeUnauthorized(conn *websocket.Conn, timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	_ = conn.WriteControl(

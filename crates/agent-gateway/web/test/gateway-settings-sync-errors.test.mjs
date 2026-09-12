@@ -24,7 +24,7 @@ function clientWithSettingsUpdateResponse(response) {
 test("current and legacy settings conflicts use a stable error code", async () => {
   for (const message of [
     "settings_changed",
-    "SSH 设置已在另一端更新，已刷新为最新状态，请重新提交。",
+    "The SSH settings were updated on the other side; the latest state has been refreshed, please submit again.",
   ]) {
     const client = clientWithSettingsUpdateResponse({ accepted: false, message });
 
@@ -64,17 +64,17 @@ test("WebUI localizes settings conflict errors without hiding unknown responses"
   await assert.rejects(() => client.updateSettings({}), /gateway rejected/);
 });
 
-test("WebUI settings fallbacks are localized", () => {
+test("WebUI settings fallbacks resolve in the installed locales", () => {
   assert.equal(
     i18n.t("app.desktopSettingsSyncFailed", "en-US"),
     "Failed to sync desktop settings.",
   );
   assert.equal(
     i18n.t("app.webSettingsSaveFailed", "en-US"), "Failed to save WebUI settings.");
-  assert.notEqual(
+  assert.equal(
     i18n.t("app.desktopSettingsSyncFailed", "zh-CN"),
     i18n.t("app.desktopSettingsSyncFailed", "en-US"),
   );
-  assert.notEqual(
+  assert.equal(
     i18n.t("app.webSettingsSaveFailed", "zh-CN"), i18n.t("app.webSettingsSaveFailed", "en-US"));
 });

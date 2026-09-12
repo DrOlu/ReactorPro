@@ -1,14 +1,19 @@
 /**
- * 桌面端 webview 导航守卫（GUI 专属，勿镜像到 WebUI —— 浏览器里 F5 刷新是用户预期）。
+ * Desktop webview navigation guard (GUI-only; do not mirror into the WebUI --
+ * in a browser, F5 to refresh is what users expect).
  *
- * WebView2（Windows）等宿主 webview 自带一批"浏览器加速键"：F5/Ctrl+R/Ctrl+F5 刷新、
- * Ctrl+F/F3 原生查找条、Ctrl+P 打印、Ctrl+S 保存页面、Ctrl+O 打开文件、Ctrl+U 查看源码、
- * F7 光标浏览、Alt+←/→/Home 历史导航；鼠标侧键（button 3/4）与页内拖放同样会触发
- * 历史导航或页面跳转。这些默认行为会把整个应用当网页刷新/导航走，表现为"软件整体刷新"。
+ * Host webviews such as WebView2 (Windows) ship a set of "browser accelerator
+ * keys": F5/Ctrl+R/Ctrl+F5 to reload, Ctrl+F/F3 for the native find bar, Ctrl+P
+ * to print, Ctrl+S to save the page, Ctrl+O to open a file, Ctrl+U to view
+ * source, F7 for caret browsing, Alt+Left/Right/Home for history navigation;
+ * mouse side buttons (button 3/4) and in-page drag-and-drop likewise trigger
+ * history navigation or page jumps. These defaults would treat the whole app as
+ * a web page to reload/navigate, showing up as "the entire app refreshing".
  *
- * Chromium 系加速键在页面对 keydown preventDefault 后不再执行，所以统一在 window
- * 捕获阶段取消默认行为。只 preventDefault、绝不 stopPropagation：xterm/Monaco/
- * 应用内快捷键处理器仍照常收到事件。
+ * Chromium-family accelerator keys stop executing once the page calls
+ * preventDefault on keydown, so we cancel the default behavior uniformly in the
+ * window capture phase. We only preventDefault, never stopPropagation:
+ * xterm/Monaco/in-app shortcut handlers still receive the events as usual.
  */
 
 export interface GuardKeyInput {
@@ -20,13 +25,13 @@ export interface GuardKeyInput {
 }
 
 export interface GuardKeyOptions {
-  /** macOS 上 Option+方向键是分词移动光标的编辑默认行为，历史导航拦截仅限非 mac。 */
+  /** On macOS, Option+arrow is the default word-wise cursor movement, so history navigation interception applies only to non-mac. */
   isMac: boolean;
-  /** dev 下放行刷新组合键（F5/Ctrl+R/Cmd+R），方便本地整页重载调试。 */
+  /** In dev, let reload chords through (F5/Ctrl+R/Cmd+R) to ease local full-page reload debugging. */
   allowReloadChords: boolean;
 }
 
-/** 键盘媒体导航键（UI Events 标准 key 值），一律取消默认行为。 */
+/** Keyboard media navigation keys (UI Events standard key values); always cancel their default behavior. */
 const BROWSER_NAV_KEYS = new Set([
   "BrowserBack",
   "BrowserForward",
@@ -36,15 +41,17 @@ const BROWSER_NAV_KEYS = new Set([
   "BrowserStop",
 ]);
 
-// 主修饰键（Ctrl/Cmd）组合下要拦的物理键：打印/查找/保存页面/打开文件/查看源码。
-// 同时按 code 与 key 匹配 —— 非拉丁布局（如西里尔）下 key 是本地字符，
-// 而 webview 加速键按物理键位（code）生效。
+// Physical keys to intercept under the primary modifier (Ctrl/Cmd): print/find/
+// save page/open file/view source. Match on both code and key -- under non-Latin
+// layouts (e.g. Cyrillic) key is a local character, while webview accelerator
+// keys act on the physical key position (code).
 const PRIMARY_BLOCKED_CODES = new Set(["KeyP", "KeyF", "KeyS", "KeyO", "KeyU"]);
 const PRIMARY_BLOCKED_KEYS = new Set(["p", "f", "s", "o", "u"]);
 
 /**
- * 判断一次 keydown 是否应取消 webview 的浏览器默认行为。
- * 纯函数，便于穷举测试；不判定应用内快捷键（那些走各自组件的处理器）。
+ * Decide whether a keydown should cancel the webview's browser default behavior.
+ * Pure function, easy to exhaustively test; it does not judge in-app shortcuts
+ * (those go through their own component handlers).
  */
 export function shouldBlockBrowserKeyDefault(
   event: GuardKeyInput,
@@ -52,15 +59,15 @@ export function shouldBlockBrowserKeyDefault(
 ): boolean {
   const primary = event.ctrlKey || event.metaKey;
 
-  // 刷新全家桶：F5 / Ctrl+F5 / Shift+F5 / 键盘 BrowserRefresh 媒体键。
+  // The whole reload family: F5 / Ctrl+F5 / Shift+F5 / the BrowserRefresh media key.
   if (event.key === "F5" || event.key === "BrowserRefresh") {
     return !options.allowReloadChords;
   }
-  // F3 查找下一个、F7 光标浏览确认框（均为 WebView2 加速键）。
+  // F3 find-next and F7 caret browsing confirmation dialog (both WebView2 accelerator keys).
   if (event.key === "F3" || event.key === "F7") return true;
   if (BROWSER_NAV_KEYS.has(event.key)) return true;
 
-  // AltGr 在 Windows 上报告为 ctrl+alt，放行以免吞掉特殊字符输入。
+  // On Windows AltGr is reported as ctrl+alt; let it through so special-character input is not swallowed.
   if (primary && !event.altKey) {
     if (event.code === "KeyR" || event.key.toLowerCase() === "r") {
       return !options.allowReloadChords;
@@ -73,7 +80,7 @@ export function shouldBlockBrowserKeyDefault(
     }
   }
 
-  // Alt+←/→ 历史导航、Alt+Home 回主页（Windows/Linux webview）。
+  // Alt+Left/Right history navigation and Alt+Home back to home (Windows/Linux webview).
   if (!options.isMac && event.altKey && !primary) {
     if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "Home") {
       return true;
@@ -83,7 +90,7 @@ export function shouldBlockBrowserKeyDefault(
   return false;
 }
 
-/** 往输入框/富文本拖文本是合法编辑操作，拖放守卫对可编辑目标放行。 */
+/** Dragging text into an input box or rich text is a valid edit operation, so the drag-and-drop guard lets editable targets through. */
 function isEditableDragTarget(target: unknown): boolean {
   if (!target || typeof target !== "object") return false;
   const el = target as { tagName?: unknown; isContentEditable?: unknown };
@@ -96,7 +103,7 @@ export interface WebviewNavigationGuardOptions {
   allowReloadChords?: boolean;
 }
 
-/** 结构化的最小事件源类型：生产传 window，测试传录制用的假实现。 */
+/** Minimal structured event-source type: production passes window, tests pass a recording fake. */
 export interface GuardEventSource {
   addEventListener(
     type: string,
@@ -110,8 +117,9 @@ export interface GuardEventSource {
   ): void;
 }
 
-// 只记录由导航守卫取消的默认行为，让应用快捷键仍可处理这些事件。
-// WeakSet 不修改原生事件，也不会在按键处理结束后保留事件引用。
+// Record only the defaults cancelled by the navigation guard, so app shortcuts
+// can still handle these events. A WeakSet does not modify native events and
+// does not retain event references after key handling ends.
 const browserDefaultBlockedEvents = new WeakSet<Event>();
 
 export function wasBrowserKeyDefaultBlocked(event: Event): boolean {
@@ -121,8 +129,10 @@ export function wasBrowserKeyDefaultBlocked(event: Event): boolean {
 let uninstallCurrent: (() => void) | null = null;
 
 /**
- * 安装 webview 导航守卫，返回卸载函数。重复安装会先卸载上一份（幂等，兼容 HMR）。
- * 在 React 挂载前调用，保证 UI 崩溃兜底页之外的一切阶段都有防护。
+ * Install the webview navigation guard and return an uninstall function.
+ * Repeated installation uninstalls the previous one first (idempotent, HMR-friendly).
+ * Called before React mounts so every stage other than the UI crash fallback
+ * page is protected.
  */
 export function installWebviewNavigationGuard(
   options: WebviewNavigationGuardOptions,
@@ -144,16 +154,19 @@ export function installWebviewNavigationGuard(
     }
   };
 
-  // 鼠标侧键（button 3/4）在 Chromium/WebView2 上触发历史前进/后退；
-  // mousedown+mouseup 都取消，覆盖不同引擎的触发时机。
+  // Mouse side buttons (button 3/4) trigger history forward/back on
+  // Chromium/WebView2; cancel both mousedown and mouseup to cover the trigger
+  // timing of different engines.
   const onNavMouseButton = (event: MouseEvent) => {
     if (event.button === 3 || event.button === 4) event.preventDefault();
   };
 
-  // 页内拖放（链接/图片/选中文本拖到非可编辑区域）默认会让 webview 导航到拖体。
-  // 组件自己处理过的（defaultPrevented）与可编辑目标放行；冒泡阶段注册，
-  // 保证晚于 React 根容器的委托处理器。外部文件拖入由 Tauri 原生 dragDrop 接管，
-  // 不产生 HTML5 拖放事件，不受此守卫影响。
+  // In-page drag-and-drop into non-editable areas (a link/image/selected text) by
+  // default makes the webview navigate to the dragged payload. Let through
+  // anything a component already handled (defaultPrevented) and editable
+  // targets; register in the bubble phase so we run after React root container
+  // delegated handlers. External file drops are taken over by Tauri's native
+  // dragDrop, producing no HTML5 drag events, so they are unaffected by this guard.
   const onDragOver = (event: DragEvent) => {
     if (event.defaultPrevented || isEditableDragTarget(event.target)) return;
     event.preventDefault();
@@ -164,7 +177,8 @@ export function installWebviewNavigationGuard(
     event.preventDefault();
   };
 
-  // 漏写 onSubmit preventDefault 的表单默认会整页导航（等效刷新）——兜底取消。
+  // Forms that forget to preventDefault in onSubmit otherwise do a full-page
+// navigation (equivalent to a refresh) -- cancel as a fallback.
   const onSubmit = (event: Event) => {
     if (!event.defaultPrevented) event.preventDefault();
   };

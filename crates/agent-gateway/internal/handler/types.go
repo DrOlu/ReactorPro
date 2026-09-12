@@ -18,8 +18,10 @@ type ChatRuntimeControlsBody struct {
 	ThinkingEnabled        *bool  `json:"thinking_enabled,omitempty"`
 	NativeWebSearchEnabled *bool  `json:"native_web_search_enabled,omitempty"`
 	Reasoning              string `json:"reasoning"`
-	// Plan mode 是限制性开关:缺省按 false 归一(桌面端"只能收紧"合并,false
-	// 不会关闭本地已开启的 plan mode),与 thinking/webSearch 的缺省 true 相反。
+	// Plan mode is a restrictive switch: it defaults to false on normalize (the
+	// desktop client merges with "tighten only", so false does not turn off a
+	// plan mode already enabled locally), unlike thinking/webSearch which default
+	// to true.
 	PlanModeEnabled *bool `json:"plan_mode_enabled,omitempty"`
 }
 
@@ -157,8 +159,10 @@ func NormalizeWorkdir(value string) string {
 	return normalizeTrimmedText(value)
 }
 
-// NormalizeCommandSafetyMode 归一化命令安全模式。仅放行四个合法值;空串或未知值
-// 归为空串,表示"远端未指定",桌面端据此回落到本地 settings.system.commandSafetyMode。
+// NormalizeCommandSafetyMode normalizes the command safety mode. Only the four
+// legal values are allowed through; an empty or unknown value normalizes to the
+// empty string, meaning "not specified by the remote", and the desktop client
+// then falls back to the local settings.system.commandSafetyMode.
 func NormalizeCommandSafetyMode(value string) string {
 	switch normalizeTrimmedText(value) {
 	case "ask", "auto", "sandbox", "sandboxOffline":

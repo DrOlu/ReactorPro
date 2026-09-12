@@ -1,8 +1,8 @@
-// Web 端 Session Workbench 编排：复用共享 useWindowWorkbench 布局 reducer，
-// 把「聚焦 Pane 的会话」与页面的 displayedConversationId 保持一致（与桌面端
-// ChatPage 的 selectWorkbenchConversation / syncCurrentConversation 同一语义）。
-// 拖拽体系与桌面端共用同一状态机/拖拽会话 hook：侧栏会话与项目、Right Dock
-// 终端 tab 与「新建终端」都可拖入画布,Pane 头部拖动重排。
+// Web-side Session Workbench orchestration: reuses the shared useWindowWorkbench layout reducer
+// to keep "the focused Pane's conversation" consistent with the page's displayedConversationId (same
+// semantics as the desktop ChatPage's selectWorkbenchConversation / syncCurrentConversation).
+// The drag-and-drop system shares the same state machine / drag session hook with the desktop: sidebar conversations and projects, Right Dock
+// terminal tabs and "New terminal" can all be dragged into the canvas, and Pane headers can be dragged to reorder.
 
 import { WORKBENCH_CANVAS_DIVIDER_SIZE } from "@liveagent/ui/components/workbench/WorkbenchCanvas";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
@@ -59,7 +59,7 @@ import {
   gatewayTerminalPaneLease,
 } from "./terminalPaneRuntime";
 
-/** 与桌面端 canSplitRectAtEdge 同口径：两半都必须保住会话 Pane 硬最小尺寸。 */
+/** Same definition as the desktop canSplitRectAtEdge: both halves must preserve the hard minimum size of a conversation Pane. */
 function canSplitRectAtEdge(rect: WorkbenchRect, edge: WorkbenchEdge): boolean {
   const horizontal = edge === "left" || edge === "right";
   const min = horizontal ? MIN_CONVERSATION_PANE_WIDTH : MIN_CONVERSATION_PANE_HEIGHT;
@@ -67,7 +67,7 @@ function canSplitRectAtEdge(rect: WorkbenchRect, edge: WorkbenchEdge): boolean {
   return span - WORKBENCH_CANVAS_DIVIDER_SIZE >= min * 2;
 }
 
-/** 桌面端窄画布自动停靠改走纵向的阈值（doc §22）。 */
+/** Threshold at which the desktop switches auto-docking to vertical on a narrow canvas (doc §22). */
 const NARROW_CANVAS_WIDTH_FOR_AUTO_DOCK = 680;
 
 function resolveWorkbenchPaneProject(
@@ -93,39 +93,39 @@ export type UseGatewayWorkbenchParams = {
   displayedConversationId: string;
   sidebarStore: SidebarStore;
   workspaceProjects: readonly WorkspaceProject[];
-  /** 归档项目不接受 workspace 拖拽落点（与桌面端同口径）。 */
+  /** Archived projects do not accept workspace drop targets (same definition as the desktop). */
   archivedProjectPathKeys: ReadonlySet<string>;
-  /** 缺失项目不激活 Right Dock 跟随（与桌面端 blocked 判定同一键空间）。 */
+  /** Missing projects do not activate Right Dock following (same key space as the desktop's blocked check). */
   missingProjectPathKeys: ReadonlySet<string>;
-  /** 聚焦 Pane 的项目上下文驱动 Right Dock（archived/missing 不切换）。 */
+  /** The focused Pane's project context drives the Right Dock (no switch for archived/missing). */
   activateWorkspaceProject: (project: WorkspaceProject) => void;
-  /** 网关终端 client；未连接时终端拖拽入口不渲染，closed 联动停摆。 */
+  /** Gateway terminal client; when not connected the terminal drag entry is not rendered and the closed linkage halts. */
   terminalClient: TerminalClient | null;
-  /** 全窗口终端会话列表（Right Dock 权威态）。 */
+  /** Window-wide terminal session list (the Right Dock's authoritative state). */
   terminalSessions: readonly TerminalSession[];
-  /** Right Dock 当前项目路径；「新建终端」拖拽的 cwd 来源。 */
+  /** Current project path of the Right Dock; the cwd source for the "New terminal" drag. */
   terminalProjectPath: string;
-  /** 拖拽幽灵上「新建终端」的标题文案（已本地化）。 */
+  /** Title text for "New terminal" on the drag ghost (localized). */
   newTerminalTitle: string;
-  /** 项目工具(文件树/审查/内网穿透/SSH/后台任务)拖拽幽灵标题(已本地化)。 */
+  /** Project tool (file tree / review / tunnel / SSH / background tasks) drag ghost title (localized). */
   projectToolTitle: (tool: ProjectToolSurfaceKind) => string;
-  /** 把页面当前会话切换到指定会话（走既有的侧栏选择通路）。 */
+  /** Switch the page's current conversation to the given conversation (using the existing sidebar selection path). */
   selectConversation: (conversationId: string) => void;
-  /** workspace 拖拽落点：走既有「项目新建会话」通路（目录检查 + 新草稿）。 */
+  /** Workspace drop target: goes through the existing "new conversation in project" path (directory check + new draft). */
   startConversationForProject: (project: WorkspaceProject) => Promise<string | null>;
-  /** 草稿 workdir 权威查询：workspace 拖拽开 Pane 前校验落点身份。 */
+  /** Authoritative draft workdir lookup: validates the drop target's identity before the workspace drag opens a Pane. */
   conversationWorkdirFor: (conversationId: string) => string | null;
-  /** 自动停靠没有合法空间时的用户提示。 */
+  /** User prompt when auto-docking has no legal space. */
   onNoSpaceForSplit: () => void;
-  /** 拖拽期间布局/几何已变化，事务无法安全重放。 */
+  /** The layout/geometry changed during the drag, so the transaction cannot be safely replayed. */
   onDropStateChanged: () => void;
-  /** workspace 草稿创建事务抛错。 */
+  /** The workspace draft creation transaction threw an error. */
   onWorkspaceDropFailed: (error: unknown) => void;
-  /** 已在 Pane 中的会话再次从侧栏拖入时，明确说明聚焦语义。 */
+  /** Clarifies the focus semantics when a conversation already in a Pane is dragged in from the sidebar again. */
   onConversationAlreadyOpen: () => void;
-  /** 项目工具 Pane 关闭:同时关闭 dock 里的该工具(释放租约后不再弹回 tab)。 */
+  /** Project tool Pane close: also closes that tool in the dock (it no longer pops back to a tab after the lease is released). */
   onProjectToolPaneClosed?: (tool: ProjectToolSurfaceKind, projectPathKey: string) => void;
-  /** 终端 Pane 关闭时后端 close 失败(会话仍存活)。 */
+  /** Backend close failed while closing the terminal Pane (the session is still alive). */
   onTerminalCloseFailed?: (message: string) => void;
 };
 
@@ -136,33 +136,33 @@ export type GatewayWorkbenchController = {
   handleFocusPane: (paneId: string) => void;
   handleClosePane: (paneId: string) => void;
   /**
-   * Pane 的 × / Meta+Alt+W 入口:终端 Pane 先终止终端(运行中在 Pane 内红条
-   * 确认,closed 事件联动收 Pane),其它 Pane 直接 handleClosePane。
+   * Pane's × / Meta+Alt+W entry: a terminal Pane terminates the terminal first (when running, a red bar inside the Pane
+   * confirms, and the closed event closes the Pane); other Panes call handleClosePane directly.
    */
   requestClosePane: (paneId: string) => void;
   terminalPaneCloseRequest: TerminalPaneCloseRequest | null;
   confirmTerminalPaneClose: () => void;
   cancelTerminalPaneClose: () => void;
-  /** 侧栏菜单「在分屏中打开」：聚焦既有 Pane，否则贴着聚焦 Pane 自动停靠。 */
+  /** Sidebar menu "Open in split": focus the existing Pane, otherwise auto-dock next to the focused Pane. */
   handleOpenConversationInSplit: (item: SidebarConversation) => boolean;
-  /** Right Dock 菜单「在分屏中打开」：同一 drop 事务的无拖拽入口。 */
+  /** Right Dock menu "Open in split": the drag-free entry for the same drop transaction. */
   handleOpenTerminalInSplit: (session: TerminalSession) => void;
-  /** Right Dock 工具 tab 菜单「在分屏中打开」:聚焦既有 Pane,否则自动停靠。 */
+  /** Right Dock tool tab menu "Open in split": focus the existing Pane, otherwise auto-dock. */
   handleOpenToolInSplit: (tool: ProjectToolSurfaceKind) => void;
-  /** Right Dock 新建菜单「在分屏中新建终端」。 */
+  /** Right Dock new menu "New terminal in split". */
   handleOpenNewTerminalInSplit: () => void;
-  /** SSH overlay「已在画板中打开」占位的「前往 Pane」聚焦通路。 */
+  /** The "Go to Pane" focus path for the SSH overlay's "already open on the canvas" placeholder. */
   focusTerminalPaneForSession: (sessionId: string) => void;
-  /** 会话从权威索引消失（删除等）：关闭对应 Pane，不做选中迁移。 */
+  /** The conversation disappeared from the authoritative index (deletion, etc.): close the corresponding Pane without migrating the selection. */
   closePanesForRemovedConversations: (ids: readonly string[]) => void;
-  /** 登录/Agent 作用域切换：清空布局和终端 surface 绑定。 */
+  /** Login/agent scope switch: clear the layout and terminal surface bindings. */
   clearWorkbench: () => void;
   projectRefForConversation: (item: { id: string; cwd?: string | null }) => ProjectRef;
-  /** 拖拽 overlay 模型（幽灵 + 落点预览）；idle 时为 null。 */
+  /** Drag overlay model (ghost + drop preview); null when idle. */
   dragState: WorkbenchDragRenderState | null;
   /** Imperative compositor-only pointer tracking for the drag ghost. */
   dragGhostRef: (element: HTMLDivElement | null) => void;
-  /** Pane 头部拖动把手（pointer-down 发起）。 */
+  /** Pane header drag handle (initiated by pointer-down). */
   beginPaneDrag: (
     pane: PaneRecord,
     title: string,
@@ -173,7 +173,7 @@ export type GatewayWorkbenchController = {
       currentTarget?: EventTarget | null;
     },
   ) => void;
-  /** 侧栏会话行拖拽发起。 */
+  /** Sidebar conversation row drag initiation. */
   handleConversationDragIntent: (
     item: SidebarConversation,
     event: {
@@ -183,7 +183,7 @@ export type GatewayWorkbenchController = {
       currentTarget?: EventTarget | null;
     },
   ) => void;
-  /** 侧栏项目行拖拽发起（落点新建会话）。 */
+  /** Sidebar project row drag initiation (drop target creates a new conversation). */
   handleProjectDragIntent: (
     project: WorkspaceProject,
     event: {
@@ -193,7 +193,7 @@ export type GatewayWorkbenchController = {
       currentTarget?: EventTarget | null;
     },
   ) => void;
-  /** Right Dock 终端 tab 拖拽发起（既有会话入画布）。 */
+  /** Right Dock terminal tab drag initiation (an existing conversation into the canvas). */
   handleTerminalTabDragIntent: (
     session: TerminalSession,
     event: {
@@ -203,14 +203,14 @@ export type GatewayWorkbenchController = {
       currentTarget?: EventTarget | null;
     },
   ) => void;
-  /** Right Dock「新建终端」按钮拖拽发起（落点新建终端 Pane）。 */
+  /** Right Dock "New terminal" button drag initiation (drop target creates a terminal Pane). */
   handleNewTerminalDragIntent: (event: {
     pointerId: number;
     clientX: number;
     clientY: number;
     currentTarget?: EventTarget | null;
   }) => void;
-  /** Right Dock 工具 tab / 空态入口拖拽发起(落点打开该工具 Pane)。 */
+  /** Right Dock tool tab / empty-state entry drag initiation (drop target opens that tool's Pane). */
   handleToolDragIntent: (
     tool: ProjectToolSurfaceKind,
     event: {
@@ -220,7 +220,7 @@ export type GatewayWorkbenchController = {
       currentTarget?: EventTarget | null;
     },
   ) => void;
-  /** 被画布 Pane 租用的会话（Right Dock 终端 tab 互斥隐藏用）。 */
+  /** Conversations leased by canvas Panes (used to mutually hide Right Dock terminal tabs). */
   leasedDockSessionIds: readonly string[];
 };
 
@@ -281,8 +281,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     geometryRef.current = geometry;
   }, []);
 
-  // Web 冷启动始终从单 Root Pane 开始,不做布局持久化(persistence: false);
-  // 桌面端与此不同,走共享 Hook 默认的 localStorage 布局恢复。
+  // Web cold start always begins from a single Root Pane and does not persist the layout (persistence: false);
+  // the desktop differs and uses the shared Hook's default localStorage layout restore.
   const initialRef = useRef<{ conversationId: string; project: ProjectRef } | null>(null);
   if (initialRef.current === null) {
     initialRef.current = {
@@ -296,8 +296,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     initialProject: initialRef.current.project,
     geometryRef,
     dividerSize: WORKBENCH_CANVAS_DIVIDER_SIZE,
-    // Web 每次打开都从当前会话的单 Pane 首页开始。Desktop 仍使用共享
-    // Hook 的默认持久化，以保留其窗口布局恢复能力。
+    // Web always starts from a single-Pane home for the current conversation each time it opens. Desktop still uses the shared
+    // Hook's default persistence to keep its window layout restore capability.
     persistence: false,
     onCommandError: (error) => {
       if (error.code === "insufficient-space") onNoSpaceForSplit();
@@ -306,9 +306,9 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
 
   const selectConversationRef = useRef(selectConversation);
   selectConversationRef.current = selectConversation;
-  // Pane 点击会异步走页面选中管线；在 displayedConversationId 落地前，
-  // syncCurrentConversation 不得把聚焦 Pane 重绑回旧会话（桌面端
-  // workbenchPendingSelectRef 同口径）。
+  // A Pane click goes through the page selection pipeline asynchronously; before displayedConversationId lands,
+  // syncCurrentConversation must not rebind the focused Pane back to the old conversation (same definition as the desktop
+  // workbenchPendingSelectRef).
   const pendingSelectRef = useRef<string | null>(null);
   const selectWorkbenchConversation = useCallback((conversationId: string) => {
     const key = conversationId.trim();
@@ -343,8 +343,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [activateWorkspaceProject, archivedProjectPathKeys, missingProjectPathKeys, workspaceProjects],
   );
 
-  // 页面当前会话变化（侧栏选择、新会话、草稿转正）→ 聚焦 Pane 跟随；
-  // 会话已在其它 Pane 时聚焦挪过去，维持「一个会话最多一个 Pane」。
+  // Page's current conversation changes (sidebar selection, new conversation, draft promoted) -> the focused Pane follows;
+  // when the conversation is already in another Pane, focus moves there, maintaining "at most one Pane per conversation".
   const lastSyncedConversationRef = useRef<string | null>(null);
   useEffect(() => {
     if (!enabled) return;
@@ -370,8 +370,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     (paneId: string) => {
       const pane = workbench.focusPane(paneId);
       if (!pane) return;
-      // 终端/不支持的 surface 不驱动页面当前会话，只把 Right Dock 跟到该
-      // Pane 的项目（archived/missing 不切换）。
+      // Terminal/unsupported surfaces do not drive the page's current conversation; they only make the Right Dock follow that
+      // Pane's project (no switch for archived/missing).
       if (pane.surface.kind !== "conversation") {
         activatePaneProject(surfaceProjectRef(pane.surface)?.projectPathKey);
         return;
@@ -389,12 +389,12 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     (paneId: string) => {
       const pane = workbench.layoutRef.current.panes[paneId];
       const result = workbench.closePane(paneId);
-      // 终端 Pane 的关闭 = 终止终端:terminalPaneClose 先关闭会话,这里在
-      // closed 事件确认后回收绑定,再次拖入走全新 surface 身份。
+      // Closing a terminal Pane = terminating the terminal: terminalPaneClose closes the session first, and here the binding is
+      // reclaimed after the closed event confirms, so dragging in again uses a brand-new surface identity.
       if (pane?.surface.kind === "localTerminal" || pane?.surface.kind === "sshTerminal") {
         gatewayTerminalPaneBindings.delete(pane.surface.surfaceId);
       }
-      // 项目工具 Pane 关闭 = 工具整体关闭:布局确认移除后通知页面收掉 dock 状态。
+      // Closing a project tool Pane = closing the tool entirely: after the layout confirms removal, the page is notified to clear the dock state.
       if (
         pane &&
         isProjectToolSurface(pane.surface) &&
@@ -426,8 +426,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
   });
   const requestClosePane = terminalPaneClose.requestClosePane;
 
-  // 会话被关闭(`closed` 事件:Pane 的 × 终止、dock 关闭等)时,持有它的
-  // Pane 一并关闭。按绑定而非租约查找,覆盖宿主取得租约前的 connecting 窗口。
+  // When a conversation is closed (`closed` event: Pane's × termination, dock close, etc.), the
+  // Pane holding it is closed too. Lookup is by binding rather than lease, covering the connecting window before the host acquires the lease.
   useEffect(() => {
     if (!enabled || !terminalClient) return;
     return terminalClient.subscribe((event) => {
@@ -442,8 +442,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     });
   }, [enabled, terminalClient, workbench]);
 
-  // 与桌面端同口径的键盘命令,全部挂在 Meta/Ctrl+Alt:
-  // 方向键聚焦相邻 Pane,Shift+方向键把聚焦 Pane 挪到那边,W 关闭,=/+ 均分。
+  // Keyboard commands matching the desktop, all bound to Meta/Ctrl+Alt:
+  // arrow keys focus the adjacent Pane, Shift+arrow moves the focused Pane there, W closes, and =/+ splits evenly.
   useEffect(() => {
     if (!enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -497,8 +497,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [enabled, handleFocusPane, requestClosePane, workbench]);
 
-  // 与桌面端 resolveWorkbenchAutoDockTarget 同口径：优先右侧（窄画布优先
-  // 下方），两个方向都放不下时明确拒绝。
+  // Same definition as the desktop resolveWorkbenchAutoDockTarget: prefer the right side (on a narrow canvas, prefer
+  // below), and explicitly reject when neither direction fits.
   const resolveAutoDockTarget = useCallback((): WorkbenchOpenTarget | null => {
     const layout = workbench.layoutRef.current;
     if (!layout.focusedPaneId) return { kind: "canvas-empty" };
@@ -544,7 +544,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     ],
   );
 
-  /** 终端 drop 事务的公共依赖(拖拽提交与菜单入口共用)。 */
+  /** Shared dependencies of the terminal drop transaction (used by both drag commit and the menu entry). */
   const terminalDropDeps = useCallback(
     () => ({
       layout: workbench.layoutRef.current,
@@ -568,8 +568,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
 
   const handleDropCommit = useCallback(
     (commit: WorkbenchDropCommit) => {
-      // 布局修订号在拖拽期间变了(聚焦/结构变化):取消事务而不是按陈旧
-      // 几何重放。
+      // The layout revision changed during the drag (focus/structural change): cancel the transaction instead of replaying
+      // against stale geometry.
       if (commit.revision !== workbench.layoutRef.current.revision) {
         onDropStateChanged();
         return;
@@ -619,10 +619,10 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
               if (paneId) handleFocusPane(paneId);
               return;
             }
-            // not-created/stale/identity-mismatch/rejected:暂停窗口内被 defer
-            // 掉的会话切换必须补一次同步,且项目身份取当前会话自己的解析——
-            // identity-mismatch 的定义就是草稿 workdir 不属于拖入项目,不能
-            // 拿拖入项目的 ProjectRef 强绑聚焦 Pane。
+            // not-created/stale/identity-mismatch/rejected: a conversation switch deferred during the pause
+            // window must be synced once more, and the project identity uses the current conversation's own resolution --
+            // identity-mismatch means the draft workdir does not belong to the dragged-in project, so the
+            // dragged-in project's ProjectRef must not be forced onto the focused Pane.
             const currentId = displayedConversationId.trim();
             if (currentId) {
               workbench.syncCurrentConversation(currentId, sidebarProjectRef(currentId));
@@ -646,7 +646,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
       if (payload.kind === "conversation") {
         const existingPaneId = workbench.paneIdForConversation(payload.conversationId);
         if (target.kind === "pane-center") {
-          // 拖拽会话已归一化:pane-center 只可能是会话自己的 Pane,语义是聚焦。
+          // The dragged conversation has been normalized: pane-center can only be the conversation's own Pane, and the semantics are focus.
           if (existingPaneId && target.paneId === existingPaneId) {
             handleFocusPane(existingPaneId);
             onConversationAlreadyOpen();
@@ -685,12 +685,12 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
         });
         return;
       }
-      // Pane 头部拖动重排。
+      // Pane header drag reorder.
       if (target.kind === "canvas-empty") return;
       if (target.kind === "pane-center" && target.paneId === payload.paneId) return;
       if (workbench.movePane(payload.paneId, target)) {
         const pane = workbench.layoutRef.current.panes[payload.paneId];
-        // 只有会话 Pane 驱动页面当前会话;终端 Pane 移动不改选中。
+        // Only conversation Panes drive the page's current conversation; moving a terminal Pane does not change the selection.
         if (
           pane?.surface.kind === "conversation" &&
           pane.surface.conversationId !== displayedConversationId
@@ -796,7 +796,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [beginDrag],
   );
 
-  // Right Dock 终端 tab 拖出:既有会话进入画布。
+  // Right Dock terminal tab dragged out: an existing conversation enters the canvas.
   const handleTerminalTabDragIntent = useCallback(
     (
       session: TerminalSession,
@@ -827,7 +827,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [beginDrag],
   );
 
-  // 「新建终端」按钮拖出:落点新建终端 Pane(几何先行,PTY 由宿主异步建)。
+  // "New terminal" button dragged out: the drop target creates a terminal Pane (geometry first; the PTY is created asynchronously by the host).
   const handleNewTerminalDragIntent = useCallback(
     (event: {
       pointerId: number;
@@ -856,7 +856,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [beginDrag, newTerminalTitle, terminalProjectPath],
   );
 
-  // Right Dock 的当前项目:项目工具拖出 / 在分屏中打开时 Pane 绑定的 ProjectRef。
+  // The Right Dock's current project: the ProjectRef a Pane binds to when a project tool is dragged out / opened in split.
   const dockToolProjectRef = useCallback((): ProjectRef | null => {
     const path = terminalProjectPath.trim();
     if (!path) return null;
@@ -887,8 +887,8 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [beginDrag, dockToolProjectRef, projectToolTitle],
   );
 
-  // 同一提交通路的菜单入口:终端 tab 无需拖拽也能进工作台。已租用的会话
-  // 由 commitTerminalDrop 自己走「移动既有 Pane」,不会二次开 Pane。
+  // The menu entry for the same commit path: terminal tabs can enter the workbench without dragging. An already-leased
+  // conversation goes through "move existing Pane" inside commitTerminalDrop itself, and no second Pane is opened.
   const handleOpenTerminalInSplit = useCallback(
     (session: TerminalSession) => {
       const target = resolveAutoDockTarget();
@@ -964,7 +964,7 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     terminalProjectPath,
   ]);
 
-  // 画板 Pane 持有租约的会话:overlay/占位的「前往 Pane」聚焦通路。
+  // Conversations leased by canvas Panes: the "Go to Pane" focus path for the overlay/placeholder.
   const focusTerminalPaneForSession = useCallback(
     (sessionId: string) => {
       const paneId = gatewayTerminalPaneLease.paneIdFor(sessionId);
@@ -975,22 +975,22 @@ export function useGatewayWorkbench(params: UseGatewayWorkbenchParams): GatewayW
     [handleFocusPane, workbench],
   );
 
-  // 被画布 Pane 租用的会话从 Right Dock 的终端 tab 中隐藏(终端任一时刻只
-  // 出现在一个宿主里);Pane 关闭(Detach)释放租约后自动回归 dock。
+  // Conversations leased by canvas Panes are hidden from the Right Dock's terminal tabs (a terminal appears in
+  // only one host at a time); after a Pane close (Detach) releases the lease, it automatically returns to the dock.
   const leasedDockSessionIds = useSyncExternalStore(
     gatewayTerminalPaneLease.subscribe,
     gatewayTerminalPaneLease.leasedSessionIds,
   );
 
-  // 布局对账:drop 事务在宿主挂载前同步占约,Pane 若在宿主接手 release 前
-  // 被关闭,租约会永久悬挂(dock 里永远隐藏该终端)。宿主持有的租约在其
-  // 卸载 cleanup 中先于本 effect 释放,不受影响。
+  // Layout reconciliation: the drop transaction claims the lease synchronously before the host mounts; if the Pane is
+  // closed before the host takes over release, the lease would hang forever (the terminal permanently hidden in the dock). Leases held by the host
+  // are released in its unmount cleanup before this effect, so they are unaffected.
   useEffect(() => {
     releaseOrphanTerminalPaneLeases(gatewayTerminalPaneLease, workbench.layout);
   }, [workbench.layout]);
 
-  // 会话被删除：只收布局，不迁移选中（displayed 选中迁移由既有移除通路负责，
-  // 之后 syncCurrentConversation 会把聚焦 Pane 重新绑定到新的当前会话）。
+  // Conversation deleted: only the layout is closed, without migrating the selection (the displayed selection migration is handled by the existing removal path,
+  // after which syncCurrentConversation rebinds the focused Pane to the new current conversation).
   const closePanesForRemovedConversations = useCallback(
     (ids: readonly string[]) => {
       for (const id of ids) {

@@ -1,4 +1,4 @@
-const MODEL_GENERATING_STATUS_PATTERN = /^第\s*\d+\s*轮：模型生成中\.\.\.$/;
+const MODEL_GENERATING_STATUS_PATTERN = /^Round\s*\d+:\s*model generating\.\.\.$/i;
 
 export const VIBING_STATUS = "Vibing...";
 

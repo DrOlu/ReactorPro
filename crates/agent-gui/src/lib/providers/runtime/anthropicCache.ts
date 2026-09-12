@@ -78,9 +78,9 @@ function markLastCacheableAnthropicBlock(
     const block = blocks[index];
     if (!isRecord(block)) continue;
 
-    // thinking / redacted_thinking 在 Anthropic 的请求类型里都不带 cache_control
-    // 字段(ThinkingBlockParam 只有 signature/thinking,RedactedThinkingBlockParam
-    // 只有 data),给它们塞断点会被服务端拒绝而不是少省 token。
+    // thinking / redacted_thinking carry no cache_control field in Anthropic's request types
+    // (ThinkingBlockParam has only signature/thinking, RedactedThinkingBlockParam only data);
+    // stuffing a breakpoint into them is rejected by the server rather than saving fewer tokens.
     if (block.type === "thinking" || block.type === "redacted_thinking") continue;
     if (block.type === "text" && typeof block.text === "string" && !block.text.trim()) continue;
 
@@ -152,10 +152,10 @@ function supportsAnthropicTopLevelAutomaticCaching(baseUrl: string) {
 }
 
 /**
- * 把「本轮实际会应用的缓存参数」描述出来,供前缀归因入账。
+ * Describe "the cache parameters actually applied this turn" for prefix attribution accounting.
  *
- * 刻意复用本模块内部的同一批判定函数,而不是在诊断侧照抄一遍条件 —— 一旦两处
- * 抄写发生漂移,归因就会开始描述一个并不存在的请求。
+ * Deliberately reuses the same set of predicate functions inside this module instead of copying the conditions
+ * on the diagnostics side -- once the two copies drift, attribution starts describing a request that never existed.
  */
 export function describeAnthropicCacheShape(
   providerId: ProviderId,

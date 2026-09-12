@@ -30,7 +30,7 @@ function createAppUpdateControllerHarness(options = {}) {
     currentVersion: "1.3.0",
     version: "1.3.1",
     channel: "stable",
-    repository: "Stack-Cairn/LiveAgent",
+    repository: "DrOlu/ReactorPro",
   };
   const installedResult = { ...checkResult, available: false };
   let resolveCheck;

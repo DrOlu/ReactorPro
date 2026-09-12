@@ -455,7 +455,7 @@ test("UI message builder groups assistant rounds and attaches matching tool resu
   assert.equal(ui[1].rounds.length, 2);
   assert.equal(uiMessages.getRoundThinkingText(ui[1].rounds[0]), "checking");
   assert.equal(uiMessages.getRoundToolTrace(ui[1].rounds[0])[0].toolResult.content[0].text, "file contents");
-  // meta 只携带原始事实（usage/stopReason），用量环锚点在读取时现算。
+  // meta carries only raw facts (usage/stopReason); the usage-ring anchor is computed on read.
   assert.equal(ui[1].rounds[1].meta.usage.totalTokens, 42);
   assert.equal(ui[1].rounds[1].meta.stopReason, "stop");
   assert.equal("usageTotalTokens" in ui[1].rounds[1].meta, false);
@@ -499,7 +499,7 @@ test("UI message builder preserves provider hosted search blocks", () => {
           id: "search-1",
           provider: "codex",
           status: "completed",
-          queries: ["LiveAgent web search"],
+          queries: ["ReactorPro web search"],
           sources: [
             {
               url: "https://example.com/result",
@@ -531,7 +531,7 @@ test("UI message builder preserves provider hosted search blocks", () => {
       id: "search-1",
       provider: "codex",
       status: "completed",
-      queries: ["LiveAgent web search"],
+      queries: ["ReactorPro web search"],
       sources: [
         {
           url: "https://example.com/result",
@@ -549,7 +549,7 @@ test("UI message builder hides provider-native web_search tool traces when hoste
     type: "toolCall",
     id: "dsml-tool-call-search-1",
     name: "web_search",
-    arguments: { query: "LiveAgent DeepSeek search" },
+    arguments: { query: "ReactorPro DeepSeek search" },
   };
   const messages = [
     { role: "user", content: "search", timestamp: 1 },
@@ -562,7 +562,7 @@ test("UI message builder hides provider-native web_search tool traces when hoste
           id: "search-1",
           provider: "claude_code",
           status: "completed",
-          queries: ["LiveAgent DeepSeek search"],
+          queries: ["ReactorPro DeepSeek search"],
           sources: [{ url: "https://example.com/result", title: "Result" }],
         },
         webSearchCall,
@@ -680,9 +680,9 @@ test("hosted search finalization infers sources from assistant text when provide
     sources: [],
   };
   const answerText = [
-    "来源：",
-    "- Dell 官方 iDRAC 页面：https://www.dell.com/en-us/lp/dt/open-manage-idrac",
-    "- Dell iDRAC9 用户指南：https://www.dell.com/support/manuals/en-us/idrac9-lifecycle-controller-v7.x-series/idrac9_7.xx_ug/overview-of-idrac",
+    "Sources:",
+    "- Dell official iDRAC page: https://www.dell.com/en-us/lp/dt/open-manage-idrac",
+    "- Dell iDRAC9 user guide: https://www.dell.com/support/manuals/en-us/idrac9-lifecycle-controller-v7.x-series/idrac9_7.xx_ug/overview-of-idrac",
   ].join("\n");
 
   const assistant = hostedSearch.appendHostedSearchBlocksToAssistant(
@@ -704,11 +704,11 @@ test("hosted search finalization infers sources from assistant text when provide
     assistant.content[0].sources.map((source) => [source.title, source.url]),
     [
       [
-        "Dell 官方 iDRAC 页面",
+        "Dell official iDRAC page",
         "https://www.dell.com/en-us/lp/dt/open-manage-idrac",
       ],
       [
-        "Dell iDRAC9 用户指南",
+        "Dell iDRAC9 user guide",
         "https://www.dell.com/support/manuals/en-us/idrac9-lifecycle-controller-v7.x-series/idrac9_7.xx_ug/overview-of-idrac",
       ],
     ],
@@ -721,10 +721,10 @@ test("hosted search finalization anchors delayed metadata near the search senten
     id: "search-pattern",
     provider: "codex",
     status: "completed",
-    queries: ["设计模式定义"],
-    sources: [{ url: "https://example.com/pattern", title: "设计模式" }],
+    queries: ["design pattern definition"],
+    sources: [{ url: "https://example.com/pattern", title: "Design Patterns" }],
   };
-  const fullText = "任务1完成：当前项目已经检查。现在按顺序进行联网检索设计模式定义。任务2完成：设计模式是软件工程里的可复用方案。来源：维基百科。";
+  const fullText = "Task 1 complete: the current project has been checked. Now search the web for the design pattern definition.\nTask 2 complete: a design pattern is a reusable solution in software engineering. Source: Wikipedia.";
 
   const assistant = hostedSearch.appendHostedSearchBlocksToAssistant(
     {
@@ -746,12 +746,12 @@ test("hosted search finalization anchors delayed metadata near the search senten
   );
   assert.equal(
     assistant.content[0].text,
-    "任务1完成：当前项目已经检查。现在按顺序进行联网检索设计模式定义。",
+    "Task 1 complete: the current project has been checked. Now search the web for the design pattern definition.",
   );
   assert.equal(assistant.content[1].id, "search-pattern");
   assert.equal(
     assistant.content[2].text,
-    "任务2完成：设计模式是软件工程里的可复用方案。来源：维基百科。",
+    "\nTask 2 complete: a design pattern is a reusable solution in software engineering. Source: Wikipedia.",
   );
 });
 
@@ -764,8 +764,8 @@ test("hosted search finalization does not split a sentence at the stream event o
     queries: ["AI companion app revenue 2025 users pay loneliness"],
     sources: [{ url: "https://example.com/market", title: "Market" }],
   };
-  const beforeSearch = "对，我前面犯的是工程师病：先造东西，再硬想怎么卖。现在反过来，我先看“谁";
-  const afterSearch = "为什么会掏钱”。然后再分析产品。";
+  const beforeSearch = "Right, my earlier mistake was the engineer's disease: build first, then force yourself to figure out how to sell. Now, in reverse, I look at \"who";
+  const afterSearch = "would pay\".\nThen I analyze the product.";
 
   const assistant = hostedSearch.appendHostedSearchBlocksToAssistant(
     {
@@ -788,10 +788,10 @@ test("hosted search finalization does not split a sentence at the stream event o
   );
   assert.equal(
     assistant.content[0].text,
-    `${beforeSearch}为什么会掏钱”。`,
+    `${beforeSearch}would pay".`,
   );
   assert.equal(assistant.content[1].id, "search-sentence");
-  assert.equal(assistant.content[2].text, "然后再分析产品。");
+  assert.equal(assistant.content[2].text, "\nThen I analyze the product.");
 });
 
 test("hosted search finalization preserves protocol blocks around reordered text", () => {
@@ -842,14 +842,14 @@ test("hosted search finalization keeps stream order across non-text blocks", () 
     {
       role: "assistant",
       content: [
-        { type: "text", text: "任务1完成。" },
+        { type: "text", text: "Task 1 complete.\n" },
         {
           type: "toolCall",
           id: "call-read",
           name: "Read",
           arguments: { path: "README.md" },
         },
-        { type: "text", text: "任务2继续输出。" },
+        { type: "text", text: "Task 2 keeps printing." },
       ],
       provider: "codex",
       model: "gpt-5",
@@ -860,9 +860,9 @@ test("hosted search finalization keeps stream order across non-text blocks", () 
     [search],
     {
       orderedBlocks: [
-        { kind: "text", text: "任务1完成。" },
+        { kind: "text", text: "Task 1 complete.\n" },
         { kind: "hostedSearch", item: search },
-        { kind: "text", text: "任务2继续输出。" },
+        { kind: "text", text: "Task 2 keeps printing." },
       ],
     },
   );
@@ -900,22 +900,22 @@ test("live hosted search card moves after the current sentence when more text ar
     queries: ["AI companion app revenue"],
     sources: [],
   };
-  const beforeSearch = "现在反过来，我先看“谁";
+  const beforeSearch = "Now, in reverse, I look at \"who";
 
   const withText = uiMessages.appendTextDeltaToRound(initialRound, beforeSearch);
   const withSearch = uiMessages.upsertHostedSearchToRound(withText, search);
   const withMoreText = uiMessages.appendTextDeltaToRound(
     withSearch,
-    "为什么会掏钱”。然后再看市场。",
+    "would pay\".\nThen I look at the market.",
   );
 
   assert.deepEqual(
     withMoreText.blocks.map((block) => block.kind),
     ["text", "hostedSearch", "text"],
   );
-  assert.equal(withMoreText.blocks[0].text, `${beforeSearch}为什么会掏钱”。`);
+  assert.equal(withMoreText.blocks[0].text, `${beforeSearch}would pay".`);
   assert.equal(withMoreText.blocks[1].item.id, "search-live-sentence");
-  assert.equal(withMoreText.blocks[2].text, "然后再看市场。");
+  assert.equal(withMoreText.blocks[2].text, "\nThen I look at the market.");
 });
 
 test("live hosted searches stay grouped when text streams between events", () => {
@@ -943,11 +943,11 @@ test("live hosted searches stay grouped when text streams between events", () =>
     sources: [{ url: "https://example.com/b", title: "B" }],
   };
 
-  const withText = uiMessages.appendTextDeltaToRound(initialRound, "先查第一组资料。");
+  const withText = uiMessages.appendTextDeltaToRound(initialRound, "Looking up the initial batch of material!");
   const withSearchA = uiMessages.upsertHostedSearchToRound(withText, searchA);
   const withMiddleText = uiMessages.appendTextDeltaToRound(
     withSearchA,
-    "继续说明中间过程。",
+    "Continuing to explain the intermediate process.",
   );
   const withSearchB = uiMessages.upsertHostedSearchToRound(withMiddleText, searchB);
 
@@ -997,7 +997,7 @@ test("UI message builder keeps hosted search after text when persisted at tail",
 
 test("UI message builder hydrates persisted hosted search sources from nearby answer links", () => {
   const messages = [
-    { role: "user", content: "请联网搜索 iDRAC 是什么", timestamp: 1 },
+    { role: "user", content: "Please search the web for what iDRAC is", timestamp: 1 },
     {
       role: "assistant",
       content: [
@@ -1011,7 +1011,7 @@ test("UI message builder hydrates persisted hosted search sources from nearby an
         },
         {
           type: "text",
-          text: "参考：\n- Dell 官方 iDRAC 页面：https://www.dell.com/en-us/lp/dt/open-manage-idrac",
+          text: "Reference:\n- Dell official iDRAC page: https://www.dell.com/en-us/lp/dt/open-manage-idrac",
         },
       ],
       provider: "codex",
@@ -1027,7 +1027,7 @@ test("UI message builder hydrates persisted hosted search sources from nearby an
   assert.deepEqual(searches[0].sources, [
     {
       url: "https://www.dell.com/en-us/lp/dt/open-manage-idrac",
-      title: "Dell 官方 iDRAC 页面",
+      title: "Dell official iDRAC page",
       sourceType: "citation",
     },
   ]);
@@ -1047,7 +1047,7 @@ test("UI message builder keeps inferred sources scoped to each persisted search 
           queries: [],
           sources: [],
         },
-        { type: "text", text: "A 来源：https://example.com/a\n" },
+        { type: "text", text: "A source: https://example.com/a\n" },
         {
           type: "hostedSearch",
           id: "search-b",
@@ -1056,7 +1056,7 @@ test("UI message builder keeps inferred sources scoped to each persisted search 
           queries: [],
           sources: [],
         },
-        { type: "text", text: "B 来源：https://example.com/b" },
+        { type: "text", text: "B source: https://example.com/b" },
       ],
       provider: "codex",
       model: "gpt-5.5",
@@ -1080,13 +1080,13 @@ test("UI message builder anchors delayed hosted search inside the text run", () 
     {
       role: "assistant",
       content: [
-        { type: "text", text: "任务1完成。现在按顺序进行联网检索设计模式定义。任务2完成：设计模式是可复用方案。" },
+        { type: "text", text: "Task 1 complete. Now search the web for the design pattern definition.\nTask 2 complete: a design pattern is a reusable solution." },
         {
           type: "hostedSearch",
           id: "search-pattern",
           provider: "codex",
           status: "completed",
-          queries: ["设计模式定义"],
+          queries: ["design pattern definition"],
           sources: [],
         },
       ],
@@ -1104,8 +1104,8 @@ test("UI message builder anchors delayed hosted search inside the text run", () 
     blocks.map((block) => block.kind),
     ["text", "hostedSearch", "text"],
   );
-  assert.equal(blocks[0].text, "任务1完成。现在按顺序进行联网检索设计模式定义。");
-  assert.equal(blocks[2].text, "任务2完成：设计模式是可复用方案。");
+  assert.equal(blocks[0].text, "Task 1 complete. Now search the web for the design pattern definition.");
+  assert.equal(blocks[2].text, "\nTask 2 complete: a design pattern is a reusable solution.");
 });
 
 test("UI message builder expands subagent batch results without showing the parent aggregate card", () => {
@@ -1238,8 +1238,8 @@ test("subagent placeholders are built from complete structured agents before res
     name: "Agent",
     arguments: {
       agents: [
-        { id: "a", name: "狼人玩家 1", prompt: "你是玩家 1，请继续发言。", mode: "readonly" },
-        { id: "b", name: "狼人玩家 2", prompt: "你是玩家 2，请继续发言。" },
+        { id: "a", name: "Werewolf Player 1", prompt: "You are Player 1; please continue speaking.", mode: "readonly" },
+        { id: "b", name: "Werewolf Player 2", prompt: "You are Player 2; please continue speaking." },
       ],
       concurrency: 2,
     },
@@ -1261,7 +1261,7 @@ test("subagent placeholders are built from complete structured agents before res
   );
   assert.deepEqual(
     placeholders.map((item) => item.arguments.name),
-    ["狼人玩家 1", "狼人玩家 2"],
+    ["Werewolf Player 1", "Werewolf Player 2"],
   );
   assert.deepEqual(
     placeholders.map((item) => item.arguments.mode),
@@ -1304,12 +1304,12 @@ test("subagent placeholders are built from complete structured agents before res
     ...placeholders[0],
     arguments: {
       ...placeholders[0].arguments,
-      name: "稳定玩家 1",
+      name: "Stable Player 1",
     },
   });
   const updatedTrace = uiMessages.getRoundToolTrace(updated);
   assert.equal(updatedTrace.length, 2);
-  assert.equal(updatedTrace[0].toolCall.arguments.name, "稳定玩家 1");
+  assert.equal(updatedTrace[0].toolCall.arguments.name, "Stable Player 1");
 });
 
 test("subagent placeholders skip partial streaming agents while keeping raw array indexes", () => {
@@ -1321,9 +1321,9 @@ test("subagent placeholders skip partial streaming agents while keeping raw arra
     name: "Agent",
     arguments: {
       agents: [
-        { id: "seer", name: "预言家", prompt: "请选择一个玩家并给出查验理由。" },
-        { id: "wolf", name: "狼人" },
-        { id: "witch", prompt: "继续进行夜间策略讨论。" },
+        { id: "seer", name: "Seer", prompt: "Choose a player and give a reason for the check." },
+        { id: "wolf", name: "Werewolf" },
+        { id: "witch", prompt: "Continue the night strategy discussion." },
         { id: "hun" },
       ],
       concurrency: 8,
@@ -1482,8 +1482,8 @@ test("UI message builder uses the stable Agent name supplied by card results", (
       agents: [
         {
           id: "agent-1",
-          name: "哲学家 - 苏格拉底",
-          prompt: "哲学视角探讨生命的意义",
+          name: "Philosopher - Socrates",
+          prompt: "Exploring the meaning of life from a philosophical perspective",
         },
       ],
     },
@@ -1493,7 +1493,7 @@ test("UI message builder uses the stable Agent name supplied by card results", (
     id: "call-agent-second",
     name: "Agent",
     arguments: {
-      agents: [{ id: "agent-1", prompt: "哲学家继续回应" }],
+      agents: [{ id: "agent-1", prompt: "The philosopher continues to respond" }],
     },
   };
   const firstToolResult = {
@@ -1514,8 +1514,8 @@ test("UI message builder uses the stable Agent name supplied by card results", (
         {
           id: "agent-1",
           runId: "call-agent-first:agent:1:agent-1:uuid",
-          name: "哲学家 - 苏格拉底",
-          prompt: "哲学视角探讨生命的意义",
+          name: "Philosopher - Socrates",
+          prompt: "Exploring the meaning of life from a philosophical perspective",
           mode: "readonly",
           status: "completed",
           summary: "first",
@@ -1536,9 +1536,9 @@ test("UI message builder uses the stable Agent name supplied by card results", (
         {
           ...firstToolResult.details.agents[0],
           runId: "call-agent-second:agent:1:agent-1:uuid",
-          name: "哲学家 - 苏格拉底",
-          role: "哲学视角",
-          prompt: "哲学家继续回应",
+          name: "Philosopher - Socrates",
+          role: "Philosophical perspective",
+          prompt: "The philosopher continues to respond",
           summary: "second",
         },
       ],
@@ -1572,11 +1572,11 @@ test("UI message builder uses the stable Agent name supplied by card results", (
 
   const firstTrace = uiMessages.getRoundToolTrace(ui[1].rounds[0]);
   const secondTrace = uiMessages.getRoundToolTrace(ui[3].rounds[0]);
-  assert.equal(firstTrace[0].toolResult.details.agent.name, "哲学家 - 苏格拉底");
-  assert.equal(secondTrace[0].toolCall.arguments.name, "哲学家 - 苏格拉底");
-  assert.equal(secondTrace[0].toolResult.details.agent.name, "哲学家 - 苏格拉底");
-  assert.equal(secondTrace[0].toolCall.arguments.role, "哲学视角");
-  assert.equal(secondTrace[0].toolResult.details.agent.role, "哲学视角");
+  assert.equal(firstTrace[0].toolResult.details.agent.name, "Philosopher - Socrates");
+  assert.equal(secondTrace[0].toolCall.arguments.name, "Philosopher - Socrates");
+  assert.equal(secondTrace[0].toolResult.details.agent.name, "Philosopher - Socrates");
+  assert.equal(secondTrace[0].toolCall.arguments.role, "Philosophical perspective");
+  assert.equal(secondTrace[0].toolResult.details.agent.role, "Philosophical perspective");
 });
 
 test("round update helpers append deltas, upsert tools, and collapse completed thinking", () => {
@@ -1746,12 +1746,12 @@ test("tool call summaries and argument display avoid dumping large payloads", ()
         subagent_card: true,
         id: "philosopher",
         name: "Philosophy Agent",
-        prompt: "从哲学角度探讨生命的意义",
+        prompt: "Discussing the meaning of life philosophically",
         mode: "worktree",
         concurrency: 4,
       },
     }),
-    "Agent agent=philosopher name=Philosophy Agent prompt=从哲学角度探讨生命的意义 mode=worktree concurrency=4",
+    "Agent agent=philosopher name=Philosophy Agent prompt=Discussing the meaning of life philosophically mode=worktree concurrency=4",
   );
   assert.equal(
     uiMessages.summarizeToolCall({
@@ -1978,8 +1978,8 @@ After`,
 
   const recovered = seedToolCalls.recoverAssistantSeedToolCalls(assistant);
   assert.equal(recovered, null);
-  // 旧 DeepSeek 适配的 flattened 文本恢复已随定向适配一并删除：strip 只处理
-  // seed 标记，历史扁平化文本原样保留。
+  // The old DeepSeek adapter's flattened-text recovery was removed along with the targeted
+  // adapter: strip only handles seed markers, and historical flattened text is preserved as-is.
   assert.equal(
     seedToolCalls.stripSeedToolCallMarkup(assistant.content[0].text),
     assistant.content[0].text,
@@ -2225,7 +2225,7 @@ test("seed tool call recovery preserves malformed labeled DeepSeek historical te
     content: [
       {
         type: "text",
-        text: `**Edit / Write 正常。** 继续测试 **Bash、MemoryManager 和管道类工具**：
+        text: `**Edit / Write OK.** Continuing to test **Bash, MemoryManager, and pipe-style tools**:
 
 
 
@@ -2234,7 +2234,7 @@ tool_call_id: call_00_malformed_bash
 tool_name: Bash
 arguments:
 {
-  "command": "echo 'Node: $(node --version 2>/dev/null || echo "未安装")'"
+  "command": "echo 'Node: $(node --version 2>/dev/null || echo "not installed")'"
 }
 `,
       },
@@ -2265,7 +2265,7 @@ test("seed tool call recovery preserves orphan DSML close text based only on Dee
     content: [
       {
         type: "text",
-        text: "Bash 正常。继续：\n\n## 五、Edit — 精确字符串替换\n\n",
+        text: "Bash OK. Continuing:\n\n## 5. Edit — exact string replacement\n\n",
       },
       {
         type: "toolCall",
@@ -2368,22 +2368,22 @@ test("chat page helpers keep model options stable and normalize status/title edg
   assert.equal(chatHelpers.normalizeConversationTitle("one two three four five six seven eight nine ten eleven"), "one two three four five six seven eight nine ten");
   // Rename box shares this normalizer: a long CJK title the user typed must survive intact.
   assert.equal(
-    chatHelpers.normalizeConversationTitle("关于侧边栏会话标题生成逻辑的重构与国际化适配讨论记录第二版"),
-    "关于侧边栏会话标题生成逻辑的重构与国际化适配讨论记录第二版",
+    chatHelpers.normalizeConversationTitle("あ".repeat(40)),
+    "あ".repeat(40),
   );
   assert.equal(
-    chatHelpers.normalizeConversationTitle("Fix 中文 encoding in the parser module and add regression tests"),
-    "Fix 中文 encoding in the parser module and add regression",
+    chatHelpers.normalizeConversationTitle("Fix かな encoding in the parser module and add regression tests"),
+    "Fix かな encoding in the parser module and add regression",
   );
   // Generated titles additionally get a CJK character cap.
   assert.equal(
-    chatHelpers.normalizeGeneratedConversationTitle("关于侧边栏会话标题生成逻辑的重构与国际化适配讨论记录第二版"),
-    "关于侧边栏会话标题生成逻辑的重构与国际化适配讨论",
+    chatHelpers.normalizeGeneratedConversationTitle("あ".repeat(40)),
+    "あ".repeat(24),
   );
   // Latin-dominant titles keep the word cap even when they contain a CJK token.
   assert.equal(
-    chatHelpers.normalizeGeneratedConversationTitle("Fix 中文 encoding in the parser module and add regression tests"),
-    "Fix 中文 encoding in the parser module and add regression",
+    chatHelpers.normalizeGeneratedConversationTitle("Fix かな encoding in the parser module and add regression tests"),
+    "Fix かな encoding in the parser module and add regression",
   );
   assert.equal(
     chatHelpers.normalizeGeneratedConversationTitle("one two three four five six seven eight nine ten eleven"),
@@ -2391,18 +2391,18 @@ test("chat page helpers keep model options stable and normalize status/title edg
   );
   // The CJK cap counts code points, so an astral char at the boundary is not split in half.
   const cappedAstralTitle = chatHelpers.normalizeGeneratedConversationTitle(
-    `${"中".repeat(23)}😀尾`,
+    `${"あ".repeat(23)}😀ん`,
   );
-  assert.equal(cappedAstralTitle, `${"中".repeat(23)}😀`);
+  assert.equal(cappedAstralTitle, `${"あ".repeat(23)}😀`);
   assert.equal(/[\uD800-\uDBFF]$/.test(cappedAstralTitle), false);
   assert.equal(chatHelpers.normalizeGeneratedConversationTitle("  "), "");
-  assert.match(chatHelpers.buildConversationTitleSystemPrompt("zh-CN"), /简体中文/);
+  assert.match(chatHelpers.buildConversationTitleSystemPrompt("zh-CN"), /Simplified Chinese/);
   assert.match(chatHelpers.buildConversationTitleSystemPrompt("en-US"), /concise conversation titles/i);
-  assert.match(chatHelpers.buildConversationTitlePrompt("hello", "zh-CN"), /简体中文标题/);
+  assert.match(chatHelpers.buildConversationTitlePrompt("hello", "zh-CN"), /Simplified Chinese title/);
   assert.match(chatHelpers.buildConversationTitlePrompt("hello", "en-US"), /within 10 words/i);
   assert.equal(chatHelpers.buildFallbackConversationTitle("x".repeat(60)), `${"x".repeat(48)}...`);
   assert.equal(
-    assistantStatus.normalizeLiveToolStatus("第 2 轮：模型生成中..."),
+    assistantStatus.normalizeLiveToolStatus("Round 2: model generating..."),
     assistantStatus.VIBING_STATUS,
   );
   assert.equal(assistantStatus.normalizeLiveToolStatus("Running"), "Running");

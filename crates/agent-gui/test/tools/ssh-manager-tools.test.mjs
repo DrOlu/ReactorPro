@@ -560,7 +560,7 @@ test("SSHManager never dials keyboard-interactive hosts itself", async () => {
     createToolCall({ action: "create_session", host_id: "host-kbi" }),
   );
   assert.equal(created.isError, true);
-  assert.match(created.content[0].text, /键盘交互/);
+  assert.match(created.content[0].text, /keyboard-interactive/i);
   assert.deepEqual(invocations, []);
 
   // exec without a running session errors instead of implicitly connecting.
@@ -568,7 +568,7 @@ test("SSHManager never dials keyboard-interactive hosts itself", async () => {
     createToolCall({ action: "exec", host_id: "host-kbi", command: "pwd" }),
   );
   assert.equal(noSession.isError, true);
-  assert.match(noSession.content[0].text, /键盘交互/);
+  assert.match(noSession.content[0].text, /keyboard-interactive/i);
   assert.deepEqual(
     invocations.map((call) => call.command),
     ["terminal_list"],
@@ -599,7 +599,7 @@ test("SSHManager never dials keyboard-interactive hosts itself", async () => {
     }),
   );
   assert.equal(forcedNew.isError, true);
-  assert.match(forcedNew.content[0].text, /键盘交互/);
+  assert.match(forcedNew.content[0].text, /keyboard-interactive/i);
   assert.deepEqual(invocations, []);
 });
 

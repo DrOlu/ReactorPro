@@ -201,7 +201,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard({
           </button>
         ) : null}
       </div>
-      {/* 超过 5 个文件时默认只展示前 5 个，点击后展开全部。 */}
+      {/* With more than 5 files, only the first 5 are shown by default; clicking expands all of them. */}
       <div className="flex flex-col gap-0 border-t border-border/30 px-2 py-1 dark:border-white/[0.05]">
         {visibleFiles.map((file) => (
           <ChangedFileRow key={file.lastToolCallId || file.path} file={file} />

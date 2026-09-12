@@ -5,7 +5,7 @@ fn normalize_ssh_project_host_associations_value(
     let raw = match value {
         Value::Object(map) => map,
         Value::Null => Map::new(),
-        _ => return Err("ssh.projectHostAssociations 必须是对象".to_string()),
+        _ => return Err("ssh.projectHostAssociations must be an object".to_string()),
     };
     let mut normalized = Map::new();
     let mut canonical_keys = HashSet::new();

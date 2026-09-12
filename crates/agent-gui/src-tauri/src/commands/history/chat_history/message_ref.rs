@@ -1,5 +1,6 @@
-// 稳定消息引用（HistoryMessageRef）的纯 JSON 工具：与前端 conversationState.ts
-// 的 contentHash/stableId 算法逐字节对齐，供 history.prefix 与分支会话共用。
+// Pure JSON utilities for stable message references (HistoryMessageRef): byte-for-byte aligned
+// with the contentHash/stableId algorithms in the frontend conversationState.ts, shared by
+// history.prefix and branched conversations.
 
 pub(crate) fn read_json_trimmed_string(object: &Map<String, Value>, key: &str) -> Option<String> {
     object
@@ -43,7 +44,7 @@ struct HashedConversationReference {
 }
 
 fn trim_unicode_whitespace(value: &str) -> &str {
-    // char::is_whitespace 与前端 \p{White_Space} 同为 Unicode White_Space 属性。
+    // char::is_whitespace and the frontend's \p{White_Space} are both the Unicode White_Space property.
     value.trim_matches(char::is_whitespace)
 }
 
@@ -80,10 +81,11 @@ fn normalize_conversation_mention_id(value: &str) -> Option<String> {
     Some(id.to_string())
 }
 
-// 与前端 normalizeConversationMentionReferences（哈希路径不带
-// currentConversationId，因此这里同样不做自引用过滤）逐字节对齐：
-// id 修剪空白并校验长度/控制字符，标题折叠空白后按 Unicode 标量截断到
-// 240，按 id 去重，最多保留 3 条。
+// Byte-for-byte aligned with the frontend normalizeConversationMentionReferences (the hash
+// path does not carry currentConversationId, so no self-reference filtering is done here either):
+// ids are whitespace-trimmed and validated for length/control characters, titles have whitespace
+// collapsed and are truncated to 240 Unicode scalars, duplicates are removed by id, and at most
+// 3 entries are kept.
 fn hashed_conversation_references(
     object: Option<&Map<String, Value>>,
 ) -> Vec<HashedConversationReference> {
@@ -119,8 +121,8 @@ fn hashed_conversation_references(
             .map(trim_unicode_whitespace)
             .unwrap_or("")
             .to_string();
-        // 前端 appendHashPart 里 undefined 参与 String(value ?? "") 得空串；
-        // 数字沿用 sizeBytes 的 Value::to_string 对齐策略。
+        // In the frontend's appendHashPart, undefined passed to String(value ?? "") yields the
+        // empty string; numbers keep the same Value::to_string alignment strategy as sizeBytes.
         let updated_at = entry
             .get("updatedAt")
             .filter(|value| value.is_number())
@@ -221,8 +223,9 @@ pub(crate) fn history_message_content_hash(message: &Value) -> String {
                     .unwrap_or_else(|| "0".to_string()),
             );
         }
-        // 仅在存在引用时追加（与前端一致）：无引用消息的哈希保持旧算法
-        // 不变，历史数据与旧版本客户端产出的 ref 向后兼容。
+        // Append only when references exist (matching the frontend): the hash of messages without
+        // references keeps the old algorithm unchanged, so refs produced by historical data and
+        // older clients remain backward compatible.
         let referenced_conversations = hashed_conversation_references(object);
         if !referenced_conversations.is_empty() {
             append_hash_part(&mut parts, referenced_conversations.len().to_string());
@@ -279,9 +282,9 @@ pub(crate) fn validate_user_history_message_ref(
 }
 
 fn history_message_timestamp_for_ref(message: &Value) -> i64 {
-    // stable-id 兜底必须确定性（前端 buildHistoryMessageRef 不会为缺 id 的
-    // 消息发 ref，server 端合成后经 liveAgentHistoryRef 回显），因此缺失
-    // 时间戳固定取 0，不取当前时间。
+    // The stable-id fallback must be deterministic (the frontend buildHistoryMessageRef does not
+    // emit a ref for messages missing an id; the server synthesizes one that is echoed back via
+    // liveAgentHistoryRef), so a missing timestamp is fixed at 0 rather than the current time.
     read_message_timestamp_with_fallback(message, 0)
 }
 

@@ -23,7 +23,7 @@ test("executeClarifyPromptTurn forwards onTextDelta to the RPC client", async ()
       calls.push({ input, options });
       options?.onDelta?.("[CLARIFY");
       options?.onDelta?.("_QUESTION]");
-      return { final_text: "[CLARIFY_QUESTION]\n要做什么？" };
+      return { final_text: "[CLARIFY_QUESTION]\nWhat do you want to build?" };
     },
   };
   const text = await executeClarifyPromptTurn(
@@ -34,10 +34,10 @@ test("executeClarifyPromptTurn forwards onTextDelta to the RPC client", async ()
       model: "m1",
       runtimeControls: settings.chatRuntimeControls,
     },
-    [{ role: "user", content: "帮我做一个网站" }],
+    [{ role: "user", content: "Help me build a website" }],
     (delta) => deltas.push(delta),
   );
-  assert.equal(text, "[CLARIFY_QUESTION]\n要做什么？");
+  assert.equal(text, "[CLARIFY_QUESTION]\nWhat do you want to build?");
   assert.deepEqual(deltas, ["[CLARIFY", "_QUESTION]"]);
   assert.equal(calls[0].input.providerId, "p1");
   assert.equal(calls[0].input.model, "m1");

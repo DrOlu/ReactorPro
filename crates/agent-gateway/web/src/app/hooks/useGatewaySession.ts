@@ -43,7 +43,7 @@ export function useGatewaySession(historyShareToken: string | null) {
         clearToken();
         resetGatewayWebSocketClient();
         setToken("");
-        setAuthError(asErrorMessage(error, "Access Token 验证失败。"));
+        setAuthError(asErrorMessage(error, "Access Token verification failed."));
         setLoginToken(storedToken);
       })
       .finally(() => {
@@ -61,7 +61,7 @@ export function useGatewaySession(historyShareToken: string | null) {
     const draftToken = loginToken;
     const normalizedToken = normalizeGatewayAccessToken(draftToken);
     if (!normalizedToken) {
-      setAuthError("请输入 Access Token。");
+      setAuthError("Please enter an Access Token.");
       return;
     }
 
@@ -80,7 +80,7 @@ export function useGatewaySession(historyShareToken: string | null) {
       clearToken();
       resetGatewayWebSocketClient();
       setToken("");
-      setAuthError(asErrorMessage(error, "Access Token 验证失败。"));
+      setAuthError(asErrorMessage(error, "Access Token verification failed."));
     } finally {
       setAuthSubmitting(false);
     }

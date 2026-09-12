@@ -33,8 +33,8 @@ type queuedAgentEnvelope struct {
 	encodedBytes int64
 }
 
-// AgentHandler 返回 /ws/v2/agent 的 HTTP 处理器：hello 一并完成鉴权与
-// 会话登记，之后进入双向信封流。
+// AgentHandler returns the HTTP handler for /ws/v2/agent: the hello frame completes
+// authentication and session registration together, after which the bidirectional envelope stream begins.
 func (s *Server) AgentHandler() http.Handler {
 	upgrader := s.upgrader()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +57,7 @@ func (s *Server) AgentHandler() http.Handler {
 func (s *Server) serveAgent(conn *websocket.Conn) {
 	defer func() { _ = conn.Close() }()
 
-	// ---- 握手：hello 同时完成鉴权与会话登记 ----
+	// ---- Handshake: hello completes authentication and session registration together ----
 	frame, _, ok := readAgentFrame(conn)
 	if !ok {
 		return
@@ -132,7 +132,7 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 			cancel()
 		}
 	}()
-	// ctx 结束时关闭底层连接，解除读循环的阻塞。
+	// When ctx ends, close the underlying connection to unblock the read loop.
 	go func() {
 		<-ctx.Done()
 		_ = conn.Close()
@@ -159,13 +159,13 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 		}
 	}()
 
-	// WS 控制帧 pong 计入桌面端存活（对应 h2 keepalive 的职能）。
+	// WS control-frame pong counts toward desktop liveness (the counterpart of h2 keepalive).
 	conn.SetPongHandler(func(string) error {
 		s.sm.TouchHeartbeat(sess)
 		return nil
 	})
 
-	// ---- 出站泵：心跳专用通道优先，拥塞永远饿不死保活 ----
+	// ---- Outbound pump: the heartbeat-only channel takes priority, so congestion can never starve keepalive ----
 	go func() {
 		defer cancel()
 		pings := sess.Pings()
@@ -206,7 +206,7 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 		}
 	}()
 
-	// ---- 入站循环 ----
+	// ---- Inbound loop ----
 	for {
 		frame, encodedBytes, ok := readAgentFrame(conn)
 		if !ok {
@@ -215,15 +215,17 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 		}
 		env := frame.GetEnvelope()
 		if env == nil {
-			// 重复 hello 或空帧：忽略（仍计入存活）。
+			// Duplicate hello or empty frame: ignore (still counts toward liveness).
 			s.sm.TouchHeartbeat(sess)
 			continue
 		}
-		// 任何入站信封都证明桌面端存活；活跃流式传输中的 agent 绝不能被判心跳过期。
+		// Any inbound envelope proves the desktop is alive; an agent in the middle of an active stream must never be judged heartbeat-expired.
 		s.sm.TouchHeartbeat(sess)
-		// 单一有界 dispatcher 保持信封顺序，同时把 protobuf 读取从业务
-		// 处理解耦。帧数或字节水位饱和时立即废弃当前 session；可靠聊天由
-		// Agent 在新连接重放，不能让慢 handler 反向阻塞 reader 和心跳。
+		// A single bounded dispatcher preserves envelope ordering while decoupling
+		// protobuf reads from business processing. When the frame-count or byte
+		// watermark saturates, the current session is discarded immediately; the
+		// agent replays reliable chat on a new connection, so a slow handler must
+		// not block the reader and heartbeat in reverse.
 		queuedBytes := int64(encodedBytes)
 		if !reserveAgentInboundBytes(&inboundBytes, queuedBytes) {
 			noteAgentInboundOverflow(sess, queuedBytes, "byte_limit")
@@ -309,7 +311,7 @@ func releaseAgentInboundBytes(queuedBytes *atomic.Int64, frameBytes int64) {
 	}
 }
 
-// writeAgentEnvelope 序列化并写出一条 GatewayEnvelope 帧（单写者无需互斥；WriteControl 与之并发安全）。
+// writeAgentEnvelope serializes and writes one GatewayEnvelope frame (no mutex needed for a single writer; WriteControl is concurrency-safe with it).
 func (s *Server) writeAgentEnvelope(conn *websocket.Conn, env *gatewayv2.GatewayEnvelope) bool {
 	data, err := proto.Marshal(&gatewayv2.AgentServerFrame{
 		Payload: &gatewayv2.AgentServerFrame_Envelope{Envelope: env},
@@ -326,8 +328,8 @@ func (s *Server) writeAgentEnvelope(conn *websocket.Conn, env *gatewayv2.Gateway
 	return conn.WriteMessage(websocket.BinaryMessage, data) == nil
 }
 
-// agentHeartbeatLoop：周期发应用层 Ping（走专用心跳通道）、
-// 驱逐心跳过期会话；额外补发 WS 控制帧 ping，由 tokio-tungstenite 自动 pong 承担传输层保活。
+// agentHeartbeatLoop: periodically sends application-layer Ping (over the dedicated heartbeat channel),
+// evicts heartbeat-expired sessions; additionally sends a WS control-frame ping, with tokio-tungstenite's automatic pong handling transport-layer keepalive.
 func (s *Server) agentHeartbeatLoop(ctx context.Context, conn *websocket.Conn, sess *session.AgentSession) {
 	period := 30 * time.Second
 	if s.cfg != nil && s.cfg.HeartbeatPeriod > 0 {

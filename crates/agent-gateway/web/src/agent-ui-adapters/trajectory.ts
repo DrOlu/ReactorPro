@@ -1,8 +1,9 @@
 /**
- * 轨迹视图的 WebUI 宿主：把共享实现接到 shim 的 invoke 上。
+ * WebUI host for the trajectory view: wires the shared implementation onto the shim's invoke.
  *
- * shim 会把 `trajectory_get_events` / `trajectory_get_sections` 路由成 Gateway 的
- * `trajectory.fetch` 请求，最终仍由桌面端应答——WebUI 不持有任何本地轨迹数据。
+ * The shim routes `trajectory_get_events` / `trajectory_get_sections` into the Gateway's
+ * `trajectory.fetch` requests, which are still ultimately answered by the desktop side --
+ * the WebUI holds no local trajectory data.
  */
 
 import type { TrajectoryHost } from "@liveagent/ui/contracts/trajectory";
@@ -12,9 +13,9 @@ import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
 import { invoke } from "@/shims/tauriCore";
 
 /**
- * 构造 WebUI 宿主。
+ * Constructs the WebUI host.
  *
- * @returns 轨迹视图宿主。
+ * @returns The trajectory view host.
  */
 export function createGatewayTrajectoryHost(
   api: GatewayWebSocketClientLike | null,

@@ -1,65 +1,66 @@
-# 输入框提示词澄清 · 计划 2：Web（agent-gateway）接线 实施计划
+# Composer Prompt Clarification · Plan 2: Web (agent-gateway) Wiring Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 让 Web 端（`crates/agent-gateway/web`）的 `ChatComposerBar` 澄清按钮可用——点击后经 gateway RPC `clarify.prompt_turn` 转发到桌面 agent 执行一次纯文本补全，产出优化提示词回填输入框。
+**Goal:** Make the `ChatComposerBar` clarify button usable on the Web side (`crates/agent-gateway/web`)—clicking it forwards a request via the gateway RPC `clarify.prompt_turn` to the desktop agent to execute a plain-text completion, producing an optimized prompt that is written back into the input box.
 
-**Architecture:** 浏览器 WS → gateway（`browserConn.handleAgentRequest` 直通转发 + `vetAgentRequest` 白名单）→ 桌面端 Rust `envelope_handler` → 新增 unary 桥（oneshot pending + emit 事件）→ 桌面端 TS 运行时（复用 GUI 计划 1 的 clarify 执行逻辑 `streamAssistantMessage`）→ 回传文本。Web 宿主 `GatewayAppView` 复用 `agent-ui` 的 `ChatComposerBar`，只需注入 `runClarifyTurn` / `clarifyContext` 两个 props——clarify 按钮/面板/状态机全部自动生效。请求携带 Web 当前选中的模型（provider_id + model + runtime_controls），桌面端按此构造 provider runtime。
+**Architecture:** Browser WS → gateway (`browserConn.handleAgentRequest` direct passthrough forwarding + `vetAgentRequest` allowlist) → desktop Rust `envelope_handler` → new unary bridge (oneshot pending + emit event) → desktop TS runtime (reusing the clarify execution logic `streamAssistantMessage` from GUI Plan 1) → return the text. The Web host `GatewayAppView` reuses `agent-ui`'s `ChatComposerBar` and only needs to inject the two props `runClarifyTurn` / `clarifyContext`—the clarify button/panel/state machine all take effect automatically. The request carries the model currently selected on the Web side (provider_id + model + runtime_controls), and the desktop side constructs the provider runtime accordingly.
 
-**Tech Stack:** protobuf（`proto/v2/gateway.proto`）、Go（`internal/protocol/pbws/guard.go`）、Rust（`services/gateway/`）、TypeScript（`crates/agent-gui/src/pages/chat/gateway/` + `crates/agent-gateway/web/src/lib/gatewaySocketV2/`）。
+**Tech Stack:** protobuf (`proto/v2/gateway.proto`), Go (`internal/protocol/pbws/guard.go`), Rust (`services/gateway/`), TypeScript (`crates/agent-gui/src/pages/chat/gateway/` + `crates/agent-gateway/web/src/lib/gatewaySocketV2/`).
 
 **Spec:** `docs/superpowers/specs/2026-08-30-composer-clarify-design.md`
 
 ## Global Constraints
 
-- 终稿协议标记：`[CLARIFY_QUESTION]` / `[CLARIFY_FINAL]` 单行置于回复开头——**Web 宿主逐字复用 `clarifyProtocol.ts`，不新建协议**（spec 实施偏差记录）。
-- 澄清轮次整段返回，无需流式（spec「Web 宿主」节：服务端执行一次文本补全并整段返回）。
-- 模型用 Web 当前会话选中的主模型（`activeSelectedModel` + `currentChatProvider` + `chatRuntimeControlsForCurrentProvider`），经 RPC 传给桌面端。
-- 无模型配置时按钮隐藏（与 GUI 一致；spec 实施偏差记录「Web 接线时统一决定」→ 定 hidden）。
-- 澄清会话不持久化、不进会话历史；面板关闭即丢弃。
-- i18n 复用 agent-ui `LocaleContext` + `chat.clarify.*` 键（Web 已 import `t as translate`），无需新增键。
-- proto 修改后双端生成：Go 走 `buf generate`，桌面端 Rust 走 build.rs prost-build（`cargo build` 自动）。
-- 测试：Web RPC 对齐 `crates/agent-gateway/test/webui/gateway-socket-client.test.mjs` 现有 envelope 模式；Go 白名单测试对齐 `guard_test.go`。
-- 代码注释风格跟随周边：中文注释、说明「为什么」。
+- Final-draft protocol markers: `[CLARIFY_QUESTION]` / `[CLARIFY_FINAL]` on a single line at the start of the reply—**the Web host reuses `clarifyProtocol.ts` verbatim and does not create a new protocol** (spec implementation-deviation note).
+- The clarification turn is returned as a whole segment, no streaming needed (spec "Web Host" section: the server executes one text completion and returns it as a whole segment).
+- The model is the primary model selected in the Web's current session (`activeSelectedModel` + `currentChatProvider` + `chatRuntimeControlsForCurrentProvider`), passed to the desktop side via RPC.
+- When there is no model configuration the button is hidden (consistent with the GUI; spec implementation-deviation note "decide uniformly when wiring the Web" → decided hidden).
+- Clarification sessions are not persisted and do not enter session history; closing the panel discards them.
+- i18n reuses agent-ui's `LocaleContext` + `chat.clarify.*` keys (the Web already imports `t as translate`), with no new keys needed.
+- After modifying proto, generate for both ends: Go via `buf generate`, desktop Rust via build.rs prost-build (automatic on `cargo build`).
+- Tests: Web RPC aligns with the existing envelope pattern in `crates/agent-gateway/test/webui/gateway-socket-client.test.mjs`; Go allowlist tests align with `guard_test.go`.
+- Code comment style follows the surrounding code: Chinese comments, explaining "why".
 
-## 现有代码事实（实施者必读）
+## Existing Code Facts (Required Reading for Implementers)
 
-- **Web→gateway 直通**：`browserConn.handleAgentRequest`（`crates/agent-gateway/internal/protocol/pbws/browser_relay.go:17`）白名单校验（`vetAgentRequest`，`guard.go:24`）→ request_id 命名空间化 → `sm.AwaitUnaryResponse` → 还原回传。载荷 proto 直通，gateway 不解析业务字段。
-- **gateway→桌面端**：`connection.rs` dispatcher → `envelope_handler.rs:28 handle_gateway_envelope` 大 match。每个 arm 模式：`Some(proto::gateway_envelope::Payload::X(req)) => { let r = gateway_bridge::handle_x(req).await; self.send_agent_envelope(payload: Some(Payload::XResp(r))).await }`。
-- **Rust→TS unary 桥模板**：`chat.rs:258 handle_chat_queue_request` —— oneshot channel 塞进 pending map → `app_handle.emit("gateway:chat-queue-request", event)` → `tokio::time::timeout(30s, rx)` → `send_agent_envelope`。TS 侧 `respond_chat_queue_request`（`chat.rs:340`）收 invoke 回传 → pending tx send。**clarify 照抄此模式。**
-- **TS 侧 chat 执行**：`useGatewayBridgeListeners.ts:349 handleGatewayChatRequest`（inbox 队列 + claim 租约，为 chat command 设计，复杂度高）。clarify 不需要这套——**独立轻量 unary 桥**，监听新事件直接执行。
-- **GUI clarify 执行器**：`createGuiClarifyRunner`（`crates/agent-gui/src/pages/chat/runtime/clarifyRunner.ts:78`）接收 `getSelection`（`resolveEffectiveChatModelSelection`）和 `getRuntime`（`createProviderRuntimeConfig(provider, model, chatRuntimeControls)`）。ChatPage.tsx:2086 `getConversationClarifyRunner` 展示了完整构造。
-- **Web RPC 客户端**：`gatewaySocketRpc.ts` 的 `GatewayWebSocketRpcClient`，`this.request<T>("rpc.name", payload)`（`gatewaySocketTransport.ts:860`）。`clarify.prompt_turn` 不在 `AGENT_ID_OPTIONAL_REQUEST_TYPES`（`gatewaySocketShared.ts:891`，仅 `agent.list`/`chat.activities`）→ 自动要求 agent id，无需改动。
-- **adapters 映射**：`agentRequestPayload(type, body)`（`gatewaySocketV2/adapters.ts:388`）把字符串 type 映射到 `GatewayEnvelope` typed oneof payload。
-- **Web 模型状态**：`useGatewayChatConfiguration`（`web/src/app/hooks/useGatewayChatConfiguration.ts:40`）——`activeSelectedModel{customProviderId, model}`、`currentChatProvider`（含 `type`/`requestFormat`）、`chatRuntimeControlsForCurrentProvider`。注入点在 `GatewayAppView.tsx:754 <ChatComposerBar>`。
-- **proto 生成**：Go `internal/proto/v2/gateway.pb.go` 由 `buf generate`（`buf.yaml`）生成；桌面端 `src-tauri/build.rs:42` prost-build 编译 `agent-gateway/proto/v2/gateway.proto`（cargo build 自动）。
-- **proto 字段号**：`GatewayEnvelope` oneof 已到 100（`installed_apps_list`）；`AgentEnvelope` oneof 已到 105（`installed_apps_list_resp`）。新字段用 101 / 106。
+- **Web→gateway passthrough**: `browserConn.handleAgentRequest` (`crates/agent-gateway/internal/protocol/pbws/browser_relay.go:17`) allowlist validation (`vetAgentRequest`, `guard.go:24`) → request_id namespacing → `sm.AwaitUnaryResponse` → restore and return. The payload proto passes through directly; the gateway does not parse business fields.
+- **gateway→desktop**: `connection.rs` dispatcher → `envelope_handler.rs:28 handle_gateway_envelope` big match. Each arm pattern: `Some(proto::gateway_envelope::Payload::X(req)) => { let r = gateway_bridge::handle_x(req).await; self.send_agent_envelope(payload: Some(Payload::XResp(r))).await }`.
+- **Rust→TS unary bridge template**: `chat.rs:258 handle_chat_queue_request`—push a oneshot channel into the pending map → `app_handle.emit("gateway:chat-queue-request", event)` → `tokio::time::timeout(30s, rx)` → `send_agent_envelope`. On the TS side, `respond_chat_queue_request` (`chat.rs:340`) receives the invoke callback → pending tx send. **clarify copies this pattern.**
+- **TS-side chat execution**: `useGatewayBridgeListeners.ts:349 handleGatewayChatRequest` (inbox queue + claim lease, designed for chat command, high complexity). clarify does not need this—an **independent lightweight unary bridge** that listens for the new event and executes directly.
+- **GUI clarify executor**: `createGuiClarifyRunner` (`crates/agent-gui/src/pages/chat/runtime/clarifyRunner.ts:78`) receives `getSelection` (`resolveEffectiveChatModelSelection`) and `getRuntime` (`createProviderRuntimeConfig(provider, model, chatRuntimeControls)`). ChatPage.tsx:2086 `getConversationClarifyRunner` shows the complete construction.
+- **Web RPC client**: `gatewaySocketRpc.ts`'s `GatewayWebSocketRpcClient`, `this.request<T>("rpc.name", payload)` (`gatewaySocketTransport.ts:860`). `clarify.prompt_turn` is not in `AGENT_ID_OPTIONAL_REQUEST_TYPES` (`gatewaySocketShared.ts:891`, only `agent.list`/`chat.activities`) → it automatically requires an agent id, with no changes needed.
+- **adapters mapping**: `agentRequestPayload(type, body)` (`gatewaySocketV2/adapters.ts:388`) maps the string type to a `GatewayEnvelope` typed oneof payload.
+- **Web model state**: `useGatewayChatConfiguration` (`web/src/app/hooks/useGatewayChatConfiguration.ts:40`)—`activeSelectedModel{customProviderId, model}`, `currentChatProvider` (including `type`/`requestFormat`), `chatRuntimeControlsForCurrentProvider`. The injection point is `GatewayAppView.tsx:754 <ChatComposerBar>`.
+- **proto generation**: Go's `internal/proto/v2/gateway.pb.go` is generated by `buf generate` (`buf.yaml`); the desktop's `src-tauri/build.rs:42` prost-build compiles `agent-gateway/proto/v2/gateway.proto` (automatic on cargo build).
+- **proto field numbers**: `GatewayEnvelope` oneof is already at 100 (`installed_apps_list`); `AgentEnvelope` oneof is already at 105 (`installed_apps_list_resp`). Use 101 / 106 for the new fields.
 
 ---
 
-### Task 1: proto 定义 + 双端生成
+### Task 1: proto Definition + Dual-End Generation
 
 **Files:**
 - Modify: `crates/agent-gateway/proto/v2/gateway.proto`
-- 生成物（不手改）：`crates/agent-gateway/internal/proto/v2/gateway.pb.go`、桌面端 `src-tauri/src/proto/*.rs`（cargo 自动）
+- Generated artifacts (do not edit by hand): `crates/agent-gateway/internal/proto/v2/gateway.pb.go`, desktop `src-tauri/src/proto/*.rs` (automatic via cargo)
 
 **Interfaces:**
-- Consumes: 无。
-- Produces（后续任务依赖的确切类型）:
+- Consumes: none.
+- Produces (exact types that subsequent tasks depend on):
   - `ClarifyTurnRequest { messages_json: string; provider_id: string; model: string; request_format: string; runtime_controls: ChatRuntimeControls; workdir: string; git_branch: string }`
   - `ClarifyTurnResponse { final_text: string; error_code: string; error_message: string }`
-  - `GatewayEnvelope.clarify_turn`（oneof 字段，号 101）
-  - `AgentEnvelope.clarify_turn_resp`（oneof 字段，号 106；105 已被 `installed_apps_list_resp` 占用）
+  - `GatewayEnvelope.clarify_turn` (oneof field, number 101)
+  - `AgentEnvelope.clarify_turn_resp` (oneof field, number 106; 105 is already taken by `installed_apps_list_resp`)
 
-- [ ] **Step 1: 在 gateway.proto 追加消息定义**
+- [ ] **Step 1: Append the message definitions to gateway.proto**
 
-在 `proto/v2/gateway.proto` 中 `ChatRuntimeControls`（163 行）之后追加：
+In `proto/v2/gateway.proto`, append after `ChatRuntimeControls` (line 163):
 
 ```proto
-// 澄清轮次（Web 计划 2）：浏览器经 gateway 转发到桌面 agent 的一次纯文本补全。
-// messages 走 JSON 字符串（ClarifyMessage[]，见 agent-ui clarifyTypes），避免为
-// 澄清会话引入新的一等消息类型；provider/model/runtime 由 Web 当前选中下发，
-// 桌面端按此构造 provider runtime。
+// Clarify turn (Web Plan 2): a single plain-text completion forwarded from the browser
+// through the gateway to the desktop agent. messages uses a JSON string (ClarifyMessage[],
+// see agent-ui clarifyTypes) to avoid introducing a new first-class message type for
+// clarification sessions; provider/model/runtime are sent down by the Web's current
+// selection, and the desktop side constructs the provider runtime accordingly.
 message ClarifyTurnRequest {
   string messages_json = 1;
   string provider_id = 2;
@@ -77,31 +78,31 @@ message ClarifyTurnResponse {
 }
 ```
 
-- [ ] **Step 2: GatewayEnvelope / AgentEnvelope 加 oneof 字段**
+- [ ] **Step 2: Add oneof fields to GatewayEnvelope / AgentEnvelope**
 
-`GatewayEnvelope` 的 oneof payload（14 行起，末尾 `installed_apps_list = 100;` 之后）：
+`GatewayEnvelope`'s oneof payload (starting at line 14, after the final `installed_apps_list = 100;`):
 
 ```proto
     ClarifyTurnRequest clarify_turn = 101;
 ```
 
-`AgentEnvelope` 的 oneof payload（81 行起，末尾 `trajectory_fetch_resp = 104;` 之后）：
+`AgentEnvelope`'s oneof payload (starting at line 81, after the final `trajectory_fetch_resp = 104;`):
 
 ```proto
     ClarifyTurnResponse clarify_turn_resp = 106;
 ```
 
-- [ ] **Step 3: Go 端重新生成 proto**
+- [ ] **Step 3: Regenerate proto on the Go side**
 
 Run: `cd crates/agent-gateway && buf generate`
-Expected: `internal/proto/v2/gateway.pb.go` 更新，出现 `GatewayEnvelope_ClarifyTurn` 与 `AgentEnvelope_ClarifyTurnResp`。
+Expected: `internal/proto/v2/gateway.pb.go` is updated and `GatewayEnvelope_ClarifyTurn` and `AgentEnvelope_ClarifyTurnResp` appear.
 
-- [ ] **Step 4: 桌面端 Rust 自动生成**
+- [ ] **Step 4: Automatic Rust generation on the desktop side**
 
 Run: `cd crates/agent-gui/src-tauri && cargo check`
-Expected: 编译通过，`src-tauri/src/proto/gateway.rs`（OUT_DIR 生成）出现 `clarify_turn` 相关类型。若 Rust 侧 proto 模块暴露方式与预期不同（`cargo check` 报缺字段），按报错定位生成路径——build.rs 已 rerun-if-changed，无需手动触发。
+Expected: compilation succeeds and `src-tauri/src/proto/gateway.rs` (generated in OUT_DIR) contains `clarify_turn`-related types. If the Rust-side proto module exposure differs from expectation (`cargo check` reports missing fields), locate the generated path from the errors—build.rs already has rerun-if-changed, so no manual trigger is needed.
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add crates/agent-gateway/proto/v2/gateway.proto crates/agent-gateway/internal/proto/v2/gateway.pb.go
@@ -110,23 +111,23 @@ git commit -m "feat(clarify): add ClarifyTurnRequest/Response proto for web phas
 
 ---
 
-### Task 2: Go 白名单直通
+### Task 2: Go Allowlist Passthrough
 
 **Files:**
 - Modify: `crates/agent-gateway/internal/protocol/pbws/guard.go:72`
 - Test: `crates/agent-gateway/internal/protocol/pbws/guard_test.go`
 
 **Interfaces:**
-- Consumes: `GatewayEnvelope_ClarifyTurn`（Task 1）。
-- Produces: 无（白名单放行，转发由 `browser_relay.go` 既有逻辑承担）。
+- Consumes: `GatewayEnvelope_ClarifyTurn` (Task 1).
+- Produces: none (allowlist admission; forwarding is handled by the existing logic in `browser_relay.go`).
 
-- [ ] **Step 1: 写失败测试**
+- [ ] **Step 1: Write a failing test**
 
-`guard_test.go` 追加（对齐文件现有 `TestVetAgentRequest*` 风格，先读文件头部确认测试辅助函数）：
+Append to `guard_test.go` (aligning with the file's existing `TestVetAgentRequest*` style; read the file header first to confirm the test helper functions):
 
 ```go
 func TestVetAgentRequestAllowsClarifyTurn(t *testing.T) {
-	sm := &fakeAgentView{} // 对齐本文件现有 fake/mock
+	sm := &fakeAgentView{} // align with the existing fake/mock in this file
 	err := vetAgentRequest(sm, &gatewayv2.GatewayEnvelope{
 		Payload: &gatewayv2.GatewayEnvelope_ClarifyTurn{
 			ClarifyTurn: &gatewayv2.ClarifyTurnRequest{
@@ -142,28 +143,29 @@ func TestVetAgentRequestAllowsClarifyTurn(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [ ] **Step 2: Run the test and confirm it fails**
 
 Run: `cd crates/agent-gateway && go test ./internal/protocol/pbws/ -run TestVetAgentRequestAllowsClarifyTurn -v`
-Expected: FAIL，`unsupported agent_request payload`。
+Expected: FAIL, `unsupported agent_request payload`.
 
-- [ ] **Step 3: 白名单加直通臂**
+- [ ] **Step 3: Add a passthrough arm to the allowlist**
 
-`guard.go:72` 的普通直通臂 case 列表（`*gatewayv2.GatewayEnvelope_ChatQueue:` 之后）追加：
+In the normal passthrough arm case list of `guard.go:72` (after `*gatewayv2.GatewayEnvelope_ChatQueue:`), append:
 
 ```go
-		// 澄清轮次：一次纯文本补全，载荷转发给桌面端执行，无网关侧门控。
+		// Clarify turn: a single plain-text completion; the payload is forwarded to the
+		// desktop side for execution, with no gateway-side gating.
 		*gatewayv2.GatewayEnvelope_ClarifyTurn,
 ```
 
-注意：是追加进**现有 `return nil` 的 case 组**，不是新增独立 case（与其他普通直通臂同组）。
+Note: append it into the **existing case group that `return nil`**, not as a new standalone case (same group as the other normal passthrough arms).
 
-- [ ] **Step 4: 跑测试确认通过**
+- [ ] **Step 4: Run the test and confirm it passes**
 
 Run: `cd crates/agent-gateway && go test ./internal/protocol/pbws/`
-Expected: PASS（新测试 + 既有测试全绿）。
+Expected: PASS (the new test + all existing tests green).
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add crates/agent-gateway/internal/protocol/pbws/guard.go crates/agent-gateway/internal/protocol/pbws/guard_test.go
@@ -172,24 +174,24 @@ git commit -m "feat(clarify): allow clarify_turn passthrough in gateway vet"
 
 ---
 
-### Task 3: 桌面端 Rust unary 桥
+### Task 3: Desktop Rust unary Bridge
 
 **Files:**
 - Create: `crates/agent-gui/src-tauri/src/services/gateway/clarify.rs`
 - Modify: `crates/agent-gui/src-tauri/src/services/gateway/mod.rs`
 - Modify: `crates/agent-gui/src-tauri/src/services/gateway/envelope_handler.rs`
-- Modify: `crates/agent-gui/src-tauri/src/lib.rs`（invoke 注册）
+- Modify: `crates/agent-gui/src-tauri/src/lib.rs` (invoke registration)
 
 **Interfaces:**
-- Consumes: `gateway_envelope::Payload::ClarifyTurn` / `agent_envelope::Payload::ClarifyTurnResp`（Task 1）。
-- Produces（Task 4 依赖）:
-  - 事件名常量 `"gateway:clarify-turn-requested"`，载荷 `GatewayClarifyTurnRequestEvent { request_id, messages_json, provider_id, model, request_format, runtime_controls_json, workdir, git_branch }`
-  - invoke 命令 `gateway_clarify_respond`：参数 `{ request_id, final_text?, error_code?, error_message? }`
-  - `GatewayClarifyRespondInput` 类型（Rust，响应结构化：成功 final_text / 失败 error_*）
+- Consumes: `gateway_envelope::Payload::ClarifyTurn` / `agent_envelope::Payload::ClarifyTurnResp` (Task 1).
+- Produces (depended on by Task 4):
+  - Event name constant `"gateway:clarify-turn-requested"`, payload `GatewayClarifyTurnRequestEvent { request_id, messages_json, provider_id, model, request_format, runtime_controls_json, workdir, git_branch }`
+  - invoke command `gateway_clarify_respond`: parameters `{ request_id, final_text?, error_code?, error_message? }`
+  - `GatewayClarifyRespondInput` type (Rust, structured response: success final_text / failure error_*)
 
-- [ ] **Step 1: 新建 clarify.rs（模板照抄 chat.rs 的 handle_chat_queue_request）**
+- [ ] **Step 1: Create clarify.rs (copy the template from chat.rs's handle_chat_queue_request)**
 
-先读 `chat.rs:258-345`（handle_chat_queue_request + respond_chat_queue_request + send_chat_queue_response）和 `mod.rs:110-130`（`pending_chat_queue_requests` 字段声明、`GatewayChatQueueRequestEvent` 结构、`GatewayChatQueueResponseInput`），确认 `oneshot`、`now_unix_seconds`、`send_agent_envelope` 的导入与 self 字段写法后照抄。
+First read `chat.rs:258-345` (handle_chat_queue_request + respond_chat_queue_request + send_chat_queue_response) and `mod.rs:110-130` (`pending_chat_queue_requests` field declaration, `GatewayChatQueueRequestEvent` struct, `GatewayChatQueueResponseInput`), confirm the imports and self field usage for `oneshot`, `now_unix_seconds`, and `send_agent_envelope`, then copy.
 
 ```rust
 // services/gateway/clarify.rs
@@ -199,13 +201,13 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-use super::chat::now_unix_seconds; // 若 now_unix_seconds 在 chat.rs，改为本地或按仓库现状
+use super::chat::now_unix_seconds; // if now_unix_seconds is in chat.rs; otherwise make it local or follow the repo's current state
 use crate::proto::{agent_envelope, gateway_envelope};
 
 pub(crate) const GATEWAY_CLARIFY_TURN_REQUESTED_EVENT: &str = "gateway:clarify-turn-requested";
 
-/// Rust → TS 的澄清轮次事件载荷。runtime_controls 以 JSON 字符串传递，
-/// TS 侧 parse 回 ChatRuntimeControls（复用 agent-ui 的 normalize 逻辑）。
+/// Payload for the Rust → TS clarify turn event. runtime_controls is passed as a JSON string,
+/// and the TS side parses it back into ChatRuntimeControls (reusing agent-ui's normalize logic).
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GatewayClarifyTurnRequestEvent {
@@ -219,7 +221,7 @@ pub(crate) struct GatewayClarifyTurnRequestEvent {
     pub git_branch: String,
 }
 
-/// TS 侧经 invoke gateway_clarify_respond 回传的结果。
+/// The result returned by the TS side via the invoke gateway_clarify_respond.
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GatewayClarifyRespondInput {
@@ -258,9 +260,9 @@ impl From<GatewayClarifyRespondInput> for crate::proto::ClarifyTurnResponse {
 }
 ```
 
-- [ ] **Step 2: 实现 handle_clarify_turn + respond_clarify_turn + 发响应**
+- [ ] **Step 2: Implement handle_clarify_turn + respond_clarify_turn + send response**
 
-在 `clarify.rs` 追加（pending map 用与 `pending_chat_queue_requests` 相同的锁容器，字段声明加进 `GatewayController`）：
+Append to `clarify.rs` (use the same lock container as `pending_chat_queue_requests` for the pending map, and add the field declaration to `GatewayController`):
 
 ```rust
 impl GatewayController {
@@ -343,7 +345,7 @@ impl GatewayController {
             .map_err(|_| "gateway clarify turn lock poisoned".to_string())?
             .remove(&input.request_id)
         else {
-            return Ok(()); // 已超时/已移除：静默丢弃迟到的响应。
+            return Ok(()); // Already timed out / already removed: silently drop the late response.
         };
         tx.send(crate::proto::ClarifyTurnResponse::from(input))
             .map_err(|_| "gateway clarify turn response receiver dropped".to_string())
@@ -351,20 +353,20 @@ impl GatewayController {
 }
 ```
 
-- [ ] **Step 3: 注册字段 + mod + envelope_handler arm**
+- [ ] **Step 3: Register the field + mod + envelope_handler arm**
 
-`mod.rs`：
-- `pub(crate) mod clarify;`（模块声明，含 `GatewayClarifyTurnRequestEvent`/`GatewayClarifyRespondInput` 重导出供 commands 用）
-- `GatewayController` 字段追加：
+`mod.rs`:
+- `pub(crate) mod clarify;` (module declaration, including re-exports of `GatewayClarifyTurnRequestEvent`/`GatewayClarifyRespondInput` for use by commands)
+- Add a field to `GatewayController`:
 
 ```rust
     pub(crate) pending_clarify_turns:
         std::sync::Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<crate::proto::ClarifyTurnResponse>>>,
 ```
 
-在既有 `pending_chat_queue_requests` 字段初始化处同步初始化。
+Initialize it alongside the existing `pending_chat_queue_requests` field initialization.
 
-`envelope_handler.rs` 的 match 追加（对齐 `ChatQueue` arm 写法，见 85-90 行）：
+Add to the match in `envelope_handler.rs` (aligning with the `ChatQueue` arm style, see lines 85-90):
 
 ```rust
             Some(proto::gateway_envelope::Payload::ClarifyTurn(request)) => {
@@ -374,15 +376,15 @@ impl GatewayController {
             }
 ```
 
-- [ ] **Step 4: lib.rs 注册 invoke**
+- [ ] **Step 4: Register the invoke in lib.rs**
 
-在 `lib.rs` 的 `invoke_handler` 列表（参考 `gateway_chat_claim_next` / `gateway_chat_queue_respond` 的注册位置）加：
+In the `invoke_handler` list in `lib.rs` (refer to where `gateway_chat_claim_next` / `gateway_chat_queue_respond` are registered), add:
 
 ```rust
             commands::gateway::clarify_respond,
 ```
 
-在 `commands/gateway.rs`（或现有 gateway commands 模块）新增命令：
+In `commands/gateway.rs` (or the existing gateway commands module), add the new command:
 
 ```rust
 #[tauri::command]
@@ -394,14 +396,14 @@ pub(crate) fn clarify_respond(
 }
 ```
 
-先读 `commands/gateway.rs` 现有 `chat_queue_respond`（或同名）命令写法，对齐 `#[tauri::command]` 的 State 获取与返回风格。
+First read the existing `chat_queue_respond` (or similarly named) command in `commands/gateway.rs` and align the `#[tauri::command]` State acquisition and return style.
 
-- [ ] **Step 5: 编译验证**
+- [ ] **Step 5: Compilation verification**
 
 Run: `cd crates/agent-gui/src-tauri && cargo check`
-Expected: 编译通过。若 `GatewayController` 字段/`commands/gateway.rs` 结构不同，按报错调整——语义不变。
+Expected: compilation succeeds. If the `GatewayController` fields / `commands/gateway.rs` structure differ, adjust per the errors—semantics unchanged.
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add crates/agent-gui/src-tauri/src/services/gateway/ crates/agent-gui/src-tauri/src/lib.rs
@@ -410,20 +412,20 @@ git commit -m "feat(clarify): desktop gateway unary bridge for clarify turns"
 
 ---
 
-### Task 4: 桌面端 TS bridge + ChatPage 执行器注入
+### Task 4: Desktop TS bridge + ChatPage Executor Injection
 
 **Files:**
 - Modify: `crates/agent-gui/src/pages/chat/gateway/useGatewayBridgeListeners.ts`
-- Modify: `crates/agent-gui/src/pages/chat/gateway/gatewayBridgeTypes.ts`（或事件类型所在文件，先 grep `GatewayChatQueueRequestEvent` 定位）
+- Modify: `crates/agent-gui/src/pages/chat/gateway/gatewayBridgeTypes.ts` (or whichever file holds the event types; grep `GatewayChatQueueRequestEvent` to locate it first)
 - Modify: `crates/agent-gui/src/pages/ChatPage.tsx`
 
 **Interfaces:**
-- Consumes: 事件 `gateway:clarify-turn-requested`、invoke `gateway_clarify_respond`（Task 3）；`createGuiClarifyRunner`（clarifyRunner.ts:78）；`createProviderRuntimeConfig`（lib/providers/llm.ts）；`ClarifyMessage` / `RunClarifyTurn`（agent-ui clarifyTypes）。
-- Produces: 无（终端执行器）。
+- Consumes: event `gateway:clarify-turn-requested`, invoke `gateway_clarify_respond` (Task 3); `createGuiClarifyRunner` (clarifyRunner.ts:78); `createProviderRuntimeConfig` (lib/providers/llm.ts); `ClarifyMessage` / `RunClarifyTurn` (agent-ui clarifyTypes).
+- Produces: none (terminal executor).
 
-- [ ] **Step 1: 类型定义**
+- [ ] **Step 1: Type definitions**
 
-事件类型文件（grep 定位 `GatewayChatQueueRequestEvent` 的 TS 定义处，同文件追加）：
+The event type file (grep to locate the TS definition of `GatewayChatQueueRequestEvent`; append in the same file):
 
 ```ts
 export interface GatewayClarifyTurnRequestEvent {
@@ -445,12 +447,12 @@ export interface GatewayClarifyRespondInput {
 }
 ```
 
-- [ ] **Step 2: params 加执行器方法**
+- [ ] **Step 2: Add the executor method to params**
 
-`useGatewayBridgeListeners.ts` 的 `UseGatewayBridgeListenersParams` 追加一个注入方法（ChatPage 提供，见 Step 4）：
+Add an injected method to `UseGatewayBridgeListenersParams` in `useGatewayBridgeListeners.ts` (provided by ChatPage, see Step 4):
 
 ```ts
-  /** 执行一次澄清补全（Web 下发模型选择）。返回 assistant 全文文本。 */
+  /** Execute one clarification completion (model selection sent down by the Web). Returns the assistant's full text. */
   runGatewayClarifyTurn: (
     messages: ClarifyMessage[],
     selection: {
@@ -463,9 +465,9 @@ export interface GatewayClarifyRespondInput {
   ) => Promise<string>;
 ```
 
-- [ ] **Step 3: 监听事件 + 执行 + 回传**
+- [ ] **Step 3: Listen for the event + execute + return the result**
 
-`useGatewayBridgeListeners.ts` 内（对齐 `listen<GatewayChatRequestReadyEvent>("gateway:chat-request-ready", ...)` 的注册写法，约 618 行）：
+In `useGatewayBridgeListeners.ts` (aligning with the registration style of `listen<GatewayChatRequestReadyEvent>("gateway:chat-request-ready", ...)`, around line 618):
 
 ```ts
     const handleClarifyTurnRequested = async (
@@ -522,11 +524,11 @@ export interface GatewayClarifyRespondInput {
     });
 ```
 
-`disposed` / `unlisten*` 变量对齐文件现有模式声明。`normalizeChatRuntimeControls` 已 import（第 6 行）。
+Declare the `disposed` / `unlisten*` variables following the file's existing pattern. `normalizeChatRuntimeControls` is already imported (line 6).
 
-- [ ] **Step 4: ChatPage 注入执行器**
+- [ ] **Step 4: Inject the executor in ChatPage**
 
-`ChatPage.tsx`：传给 `useGatewayBridgeListeners` 的 params 追加 `runGatewayClarifyTurn`。实现按 Web 下发的模型选择构造 provider runtime（对齐 `getConversationClarifyRunner` 的 `createProviderRuntimeConfig` 用法，ChatPage.tsx:2096-2103）：
+`ChatPage.tsx`: add `runGatewayClarifyTurn` to the params passed to `useGatewayBridgeListeners`. The implementation constructs the provider runtime from the model selection sent down by the Web (aligning with `getConversationClarifyRunner`'s usage of `createProviderRuntimeConfig`, ChatPage.tsx:2096-2103):
 
 ```ts
       runGatewayClarifyTurn: async (messages, selection, runtimeControls) => {
@@ -555,14 +557,14 @@ export interface GatewayClarifyRespondInput {
       },
 ```
 
-`buildClarifyCallContextFromJson`：解析 `messages_json` 后复用 `clarifyRunner.ts` 的 `buildClarifyCallContext`（把 `system` 消息并入 `systemPrompt`、user/assistant 映射为 `Context`）。从 `clarifyRunner.ts` 导出该内部函数，或在新方法里内联同样逻辑（读 clarifyRunner.ts:50-72 照抄）。`settings.providers` 的字段名以仓库实际类型为准（provider `id`/`type`/`requestFormat`）。
+`buildClarifyCallContextFromJson`: after parsing `messages_json`, reuse `clarifyRunner.ts`'s `buildClarifyCallContext` (merging `system` messages into `systemPrompt`, mapping user/assistant to `Context`). Export that internal function from `clarifyRunner.ts`, or inline the same logic in the new method (read clarifyRunner.ts:50-72 and copy). The field names of `settings.providers` follow the repository's actual types (provider `id`/`type`/`requestFormat`).
 
-- [ ] **Step 5: 类型检查**
+- [ ] **Step 5: Type check**
 
 Run: `cd crates/agent-gui && npx tsc --noEmit`
-Expected: 无类型错误。
+Expected: no type errors.
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add crates/agent-gui/src/pages/chat/gateway/ crates/agent-gui/src/pages/ChatPage.tsx
@@ -571,7 +573,7 @@ git commit -m "feat(clarify): desktop TS bridge executes gateway clarify turns"
 
 ---
 
-### Task 5: Web adapters + RPC 客户端 + 测试
+### Task 5: Web adapters + RPC Client + Tests
 
 **Files:**
 - Modify: `crates/agent-gateway/web/src/lib/gatewaySocketV2/adapters.ts`
@@ -579,14 +581,14 @@ git commit -m "feat(clarify): desktop TS bridge executes gateway clarify turns"
 - Test: `crates/agent-gateway/test/webui/gateway-socket-client.test.mjs`
 
 **Interfaces:**
-- Consumes: `ClarifyTurnRequest`/`ClarifyTurnResponse` proto（Task 1 生成物，`web/src/lib/proto/gen/`）。
-- Produces（Task 6 依赖）:
+- Consumes: `ClarifyTurnRequest`/`ClarifyTurnResponse` proto (Task 1 artifacts, `web/src/lib/proto/gen/`).
+- Produces (depended on by Task 6):
   - `GatewayWebSocketRpcClient.clarifyPromptTurn(input): Promise<{ final_text: string; error_code?: string; error_message?: string }>`
   - input: `{ messages: ClarifyMessage[]; providerId: string; model: string; requestFormat: string; runtimeControls?: ChatRuntimeControls; workdir: string; gitBranch?: string }`
 
-- [ ] **Step 1: adapters 加 type 映射**
+- [ ] **Step 1: Add the type mapping to adapters**
 
-`adapters.ts` 的 `agentRequestPayload`（388 行）switch 末尾（`trajectory.fetch` case 之后）加：
+At the end of the `agentRequestPayload` switch in `adapters.ts` (line 388) (after the `trajectory.fetch` case), add:
 
 ```ts
     case "clarify.prompt_turn":
@@ -613,11 +615,11 @@ git commit -m "feat(clarify): desktop TS bridge executes gateway clarify turns"
       };
 ```
 
-`ClarifyTurnRequestSchema` / `ChatRuntimeControlsSchema` 需加入文件顶部 schema import（对齐 `MemoryManageRequestSchema` 等现有 import 列表，`adapters.ts:60-90`）。先 `grep ClarifyTurnRequestSchema` 确认 proto 生成的 schema 导出名（在 `web/src/lib/proto/gen/`）。
+`ClarifyTurnRequestSchema` / `ChatRuntimeControlsSchema` need to be added to the schema imports at the top of the file (aligning with the existing import list such as `MemoryManageRequestSchema`, `adapters.ts:60-90`). First `grep ClarifyTurnRequestSchema` to confirm the proto-generated schema export name (in `web/src/lib/proto/gen/`).
 
-- [ ] **Step 2: RPC 客户端方法**
+- [ ] **Step 2: RPC client method**
 
-`gatewaySocketRpc.ts` 的 `GatewayWebSocketRpcClient` 加（对齐 `trajectoryFetch` 风格）：
+Add to `GatewayWebSocketRpcClient` in `gatewaySocketRpc.ts` (aligning with the `trajectoryFetch` style):
 
 ```ts
   async clarifyPromptTurn(input: {
@@ -645,11 +647,11 @@ git commit -m "feat(clarify): desktop TS bridge executes gateway clarify turns"
   }
 ```
 
-`ClarifyMessage` 从 `@liveagent/ui/components/chat/clarify/clarifyTypes` import；`ChatRuntimeControls` 从既有 import 拿。
+Import `ClarifyMessage` from `@liveagent/ui/components/chat/clarify/clarifyTypes`; take `ChatRuntimeControls` from the existing imports.
 
-- [ ] **Step 3: 写失败测试（帧断言）**
+- [ ] **Step 3: Write a failing test (frame assertion)**
 
-`gateway-socket-client.test.mjs` 追加（对齐 `memory manage payloads` 用例，603-634 行——`installBrowser` + `loadGatewaySocket` + `findAgentRequest` + `receiveBinary` 骨架照抄）：
+Append to `gateway-socket-client.test.mjs` (aligning with the `memory manage payloads` case, lines 603-634—copy the `installBrowser` + `loadGatewaySocket` + `findAgentRequest` + `receiveBinary` skeleton):
 
 ```js
 test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
@@ -659,7 +661,7 @@ test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
 
   const client = getGatewayWebSocketClient("token");
   const clarifyPromise = client.clarifyPromptTurn({
-    messages: [{ role: "user", content: "帮我做一个网站" }],
+    messages: [{ role: "user", content: "help me build a website" }],
     providerId: "builtin-gemini",
     model: "gemini-2.0-flash",
     requestFormat: "google",
@@ -670,7 +672,7 @@ test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
   await waitFor(() => findAgentRequest(codec, socket, "clarify_turn"), "clarify frame");
   const request = findAgentRequest(codec, socket, "clarify_turn");
   assert.deepEqual(JSON.parse(request.json.agent_request.clarify_turn.messages_json), [
-    { role: "user", content: "帮我做一个网站" },
+    { role: "user", content: "help me build a website" },
   ]);
   assert.equal(request.json.agent_request.clarify_turn.provider_id, "builtin-gemini");
   assert.equal(request.json.agent_request.clarify_turn.model, "gemini-2.0-flash");
@@ -682,23 +684,23 @@ test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
       request_id: request.requestId,
       agent_response: {
         clarify_turn_resp: {
-          final_text: "优化后的提示词",
+          final_text: "optimized prompt",
         },
       },
     }),
   );
 
-  assert.deepEqual(await clarifyPromise, { final_text: "优化后的提示词" });
+  assert.deepEqual(await clarifyPromise, { final_text: "optimized prompt" });
   resetGatewayWebSocketClient();
 });
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [ ] **Step 4: Run the test and confirm it passes**
 
 Run: `cd crates/agent-gateway && node ../../scripts/run-node-tests.mjs test/webui/gateway-socket-client.test.mjs`
-Expected: PASS（新用例 + 既有全绿）。
+Expected: PASS (the new case + all existing green).
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add crates/agent-gateway/web/src/lib/gatewaySocketV2/adapters.ts crates/agent-gateway/web/src/lib/gatewaySocketRpc.ts crates/agent-gateway/test/webui/gateway-socket-client.test.mjs
@@ -707,19 +709,19 @@ git commit -m "feat(clarify): web clarify_prompt_turn RPC client + frame test"
 
 ---
 
-### Task 6: Web 宿主注入
+### Task 6: Web Host Injection
 
 **Files:**
 - Modify: `crates/agent-gateway/web/src/app/GatewayAppView.tsx`
 - Modify: `crates/agent-gateway/web/src/app/GatewayApp.tsx`
 
 **Interfaces:**
-- Consumes: `clarifyPromptTurn`（Task 5）；`activeSelectedModel`/`currentChatProvider`/`chatRuntimeControlsForCurrentProvider`（useGatewayChatConfiguration）；`displayedConversationWorkdir`。
-- Produces: 无（终端注入，`ChatComposerBar` 的 `runClarifyTurn`/`clarifyContext` props 接上）。
+- Consumes: `clarifyPromptTurn` (Task 5); `activeSelectedModel`/`currentChatProvider`/`chatRuntimeControlsForCurrentProvider` (useGatewayChatConfiguration); `displayedConversationWorkdir`.
+- Produces: none (terminal injection; the `runClarifyTurn`/`clarifyContext` props of `ChatComposerBar` are wired up).
 
-- [ ] **Step 1: GatewayApp.tsx 传递所需模型状态到 View**
+- [ ] **Step 1: GatewayApp.tsx passes the required model state to the View**
 
-`GatewayAppView` 已从 props 拿 `activeSelectedModel`/`currentChatProvider`/`chatRuntimeControlsForCurrentProvider` 吗？先 grep——若 View 只有 `selectedValue`/`currentModelLabel` 等派生值，则在 `GatewayApp.tsx` 的 `<GatewayAppView ...>` props 追加传递：
+Does `GatewayAppView` already receive `activeSelectedModel`/`currentChatProvider`/`chatRuntimeControlsForCurrentProvider` from props? Grep first—if the View only has derived values such as `selectedValue`/`currentModelLabel`, then add to the `<GatewayAppView ...>` props in `GatewayApp.tsx`:
 
 ```tsx
     activeSelectedModel={activeSelectedModel}
@@ -727,11 +729,11 @@ git commit -m "feat(clarify): web clarify_prompt_turn RPC client + frame test"
     chatRuntimeControlsForCurrentProvider={chatRuntimeControlsForCurrentProvider}
 ```
 
-（对齐现有 props 传递风格；View 组件 props 类型同步加字段。）
+(Align with the existing props-passing style; add the fields to the View component's props type as well.)
 
-- [ ] **Step 2: GatewayAppView.tsx 构造 runClarifyTurn + clarifyContext**
+- [ ] **Step 2: GatewayAppView.tsx constructs runClarifyTurn + clarifyContext**
 
-`GatewayAppView.tsx` 内，`<ChatComposerBar>`（754 行）前构造执行器（对齐组件内既有 useMemo/useCallback 风格）：
+In `GatewayAppView.tsx`, before `<ChatComposerBar>` (line 754), construct the executor (aligning with the component's existing useMemo/useCallback style):
 
 ```tsx
   const runClarifyTurn = useCallback<RunClarifyTurn>(
@@ -768,25 +770,25 @@ git commit -m "feat(clarify): web clarify_prompt_turn RPC client + frame test"
   );
 ```
 
-`api` 是组件里已有的 gateway WS 客户端实例（grep 确认变量名，可能叫 `api` 或 `gatewayApi`）。`displayedConversationGitBranch`：若已有现成 git 分支状态则复用；否则省略该字段（`clarifyContext` 只喂 workdir，`runClarifyTurn` 的 gitBranch 传空串——spec 允许轻量上下文，workdir 即可）。
+`api` is the existing gateway WS client instance in the component (grep to confirm the variable name; it may be called `api` or `gatewayApi`). `displayedConversationGitBranch`: reuse an existing git branch state if one exists; otherwise omit the field (`clarifyContext` only feeds workdir, and `runClarifyTurn`'s gitBranch passes an empty string—the spec allows lightweight context, workdir suffices).
 
-- [ ] **Step 3: ChatComposerBar 注入 props**
+- [ ] **Step 3: Inject props into ChatComposerBar**
 
-`GatewayAppView.tsx:754` 的 `<ChatComposerBar>` 追加：
+Add to `<ChatComposerBar>` at `GatewayAppView.tsx:754`:
 
 ```tsx
                           runClarifyTurn={runClarifyTurn}
                           clarifyContext={clarifyContext}
 ```
 
-`RunClarifyTurn` / `ClarifyContext` 类型从 `@liveagent/ui/components/chat/clarify/clarifyTypes` import（文件已 import `ChatComposerBar`，加类型 import 即可）。
+Import the `RunClarifyTurn` / `ClarifyContext` types from `@liveagent/ui/components/chat/clarify/clarifyTypes` (the file already imports `ChatComposerBar`, so just add the type imports).
 
-- [ ] **Step 4: 类型检查**
+- [ ] **Step 4: Type check**
 
 Run: `cd crates/agent-gateway/web && npx tsc --noEmit`
-Expected: 无类型错误。
+Expected: no type errors.
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add crates/agent-gateway/web/src/app/GatewayAppView.tsx crates/agent-gateway/web/src/app/GatewayApp.tsx
@@ -795,43 +797,43 @@ git commit -m "feat(clarify): wire web clarify runner into gateway composer"
 
 ---
 
-### Task 7: 端到端手测
+### Task 7: End-to-End Manual Testing
 
-**Files:** 无新文件（验证任务）。
+**Files:** no new files (verification task).
 
-- [ ] **Step 1: 启动桌面端 + gateway**
+- [ ] **Step 1: Start the desktop side + gateway**
 
-- 启动桌面 GUI（`cd crates/agent-gui && pnpm tauri dev`，后台）。确保桌面 agent 连上 gateway（状态栏显示已连接）。
-- 启动 gateway（`cd crates/agent-gateway && go run ./cmd/gateway`，或仓库现有启动方式）。
+- Start the desktop GUI (`cd crates/agent-gui && pnpm tauri dev`, in the background). Make sure the desktop agent is connected to the gateway (the status bar shows connected).
+- Start the gateway (`cd crates/agent-gateway && go run ./cmd/gateway`, or the repository's existing start method).
 
-- [ ] **Step 2: 浏览器验收清单**
+- [ ] **Step 2: Browser acceptance checklist**
 
-1. 浏览器开 gateway Web UI，选一个已配置模型（如 MiniMax-M3）。
-2. 输入框输入模糊草稿（「帮我做一个网站」）→ 澄清按钮（魔棒）可用 → 点击 → 面板出现在输入框上方，首问出现（带 A/B/C/D 选项）。
-3. 回答 1-2 轮 → 点「直接生成提示词」→ 终稿写入输入框，面板关闭。
-4. 草稿为空 → 按钮禁用。
-5. 无模型配置（清空 provider）→ 按钮隐藏。
-6. 中英文 UI 各切一遍，`chat.clarify.*` 文案正确。
-7. 面板打开期间 Enter → 不发送主会话。
+1. Open the gateway Web UI in a browser and select a configured model (e.g. MiniMax-M3).
+2. Type a vague draft in the input box ("help me build a website") → the clarify button (magic wand) becomes available → click it → the panel appears above the input box and the first question appears (with A/B/C/D options).
+3. Answer 1-2 rounds → click "Generate prompt directly" → the final draft is written into the input box and the panel closes.
+4. Empty draft → the button is disabled.
+5. No model configured (clear the provider) → the button is hidden.
+6. Switch the UI between Chinese and English; the `chat.clarify.*` copy is correct.
+7. While the panel is open, Enter → does not send the main session.
 
-- [ ] **Step 3: 错误路径**
+- [ ] **Step 3: Error paths**
 
-- 停掉桌面端 → Web 点澄清 → RPC 失败（gateway 报 agent 离线），面板出现错误行（由 useClarifySession 的失败态驱动）。
-- 桌面端在澄清进行中关面板 → 请求超时/丢弃，无崩溃。
+- Stop the desktop side → click clarify on the Web → the RPC fails (the gateway reports the agent is offline), and an error line appears in the panel (driven by useClarifySession's failure state).
+- The desktop side closes the panel while clarification is in progress → the request times out/is dropped, with no crash.
 
-- [ ] **Step 4: 修复发现的问题（每修一个跑对应测试），全部通过后收尾 commit**
+- [ ] **Step 4: Fix the issues found (run the corresponding test for each fix); after all pass, do a final commit**
 
 ```bash
 git add -A
 git commit -m "fix(clarify): polish from web manual verification pass"
 ```
-（无问题则跳过本步。）
+(Skip this step if there are no issues.)
 
 ---
 
-## Self-Review 记录
+## Self-Review Notes
 
-- **Spec 覆盖**：RPC `clarify_prompt_turn`（T1/T5）、复用 protobuf envelope（T1/T2/T5）、服务端用当前 provider 配置（T3/T4 传模型选择 + `createProviderRuntimeConfig`）、整段返回不流式（T3 timeout unary + T4 `streamAssistantMessage` 全文回传）、Web 宿主只需实现 `RunClarifyTurn`（T6）、逐字复用 clarifyProtocol（T6 复用 agent-ui 组件/状态机，零协议代码）、i18n 复用 `chat.clarify.*`（无新增）、Web RPC 失败经既有错误通道（T4 useClarifySession 失败态 + toast 通道沿用）、测试对齐 gateway-socket-client（T5）。「无模型配置 隐藏 vs 禁用」决策 → hidden（T7 验收 5）。
-- **占位符**：T3/T4 标注了两处「按仓库现状微调」的接线点（`now_unix_seconds` 位置、`commands/gateway.rs` 现有命令写法），语义已锁死；T6 的 `api` 变量名 / `displayedConversationGitBranch` 以实施时 grep 为准。其余步骤代码完整。
-- **类型一致性**：`ClarifyTurnRequest` 字段名（`messages_json`/`provider_id`/`model`/`request_format`/`runtime_controls`/`workdir`/`git_branch`）贯穿 T1（proto）→ T3（Rust 事件）→ T4（TS 事件类型）→ T5（adapters snake_case + RPC camelCase input）→ T6（camelCase input）。`ClarifyTurnResponse`（`final_text`/`error_code`/`error_message`）贯穿 T1→T3→T5 断言→T6 抛出。
-- **Rust→TS unary 桥**：T3 完全照抄 `handle_chat_queue_request` 的 oneshot+pending+timeout+emit+invoke 回传模式（chat.rs:258-345），该模式经 chat_queue 生产验证。
+- **Spec coverage**: RPC `clarify_prompt_turn` (T1/T5), reuse of the protobuf envelope (T1/T2/T5), server uses the current provider configuration (T3/T4 pass the model selection + `createProviderRuntimeConfig`), whole-segment return without streaming (T3 timeout unary + T4 `streamAssistantMessage` full-text return), the Web host only needs to implement `RunClarifyTurn` (T6), verbatim reuse of clarifyProtocol (T6 reuses agent-ui components/state machine, zero protocol code), i18n reuses `chat.clarify.*` (no additions), Web RPC failures go through the existing error channel (T4 useClarifySession failure state + the toast channel is reused), tests align with gateway-socket-client (T5). The "no model configuration: hide vs disable" decision → hidden (T7 acceptance 5).
+- **Placeholders**: T3/T4 mark two wiring points to "fine-tune according to the repo's current state" (the location of `now_unix_seconds`, the existing command style in `commands/gateway.rs`), with the semantics locked down; T6's `api` variable name / `displayedConversationGitBranch` are to be confirmed by grep at implementation time. The rest of the step code is complete.
+- **Type consistency**: `ClarifyTurnRequest` field names (`messages_json`/`provider_id`/`model`/`request_format`/`runtime_controls`/`workdir`/`git_branch`) run through T1 (proto) → T3 (Rust event) → T4 (TS event type) → T5 (adapters snake_case + RPC camelCase input) → T6 (camelCase input). `ClarifyTurnResponse` (`final_text`/`error_code`/`error_message`) runs through T1→T3→T5 assertion→T6 throw.
+- **Rust→TS unary bridge**: T3 fully copies the oneshot+pending+timeout+emit+invoke return pattern of `handle_chat_queue_request` (chat.rs:258-345); that pattern is production-proven via chat_queue.

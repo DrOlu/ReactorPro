@@ -1,7 +1,7 @@
 fn load_agents(conn: &Connection) -> Result<Option<Value>, String> {
     let mut stmt = conn
         .prepare(AGENT_PROMPT_TEMPLATES_SELECT_SQL)
-        .map_err(|e| format!("准备读取 {AGENT_PROMPT_TEMPLATES_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare reading {AGENT_PROMPT_TEMPLATES_TABLE}: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             Ok((
@@ -12,12 +12,12 @@ fn load_agents(conn: &Connection) -> Result<Option<Value>, String> {
                 row.get::<_, i64>(4)?,
             ))
         })
-        .map_err(|e| format!("读取 {AGENT_PROMPT_TEMPLATES_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to read {AGENT_PROMPT_TEMPLATES_TABLE}: {e}"))?;
 
     let mut templates = Vec::new();
     for row in rows {
         let (template_id, name, description, prompt, enabled) =
-            row.map_err(|e| format!("读取 {AGENT_PROMPT_TEMPLATES_TABLE} 行失败：{e}"))?;
+            row.map_err(|e| format!("failed to read {AGENT_PROMPT_TEMPLATES_TABLE} row: {e}"))?;
         templates.push(Value::Object(Map::from_iter([
             ("id".to_string(), Value::String(template_id)),
             ("name".to_string(), Value::String(name)),
@@ -38,9 +38,9 @@ fn save_agents(conn: &mut Connection, payload: Value) -> Result<(), String> {
     let updated_at = now_ms();
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启 {AGENT_PROMPT_TEMPLATES_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin {AGENT_PROMPT_TEMPLATES_TABLE} transaction: {e}"))?;
     tx.execute(AGENT_PROMPT_TEMPLATES_DELETE_SQL, [])
-        .map_err(|e| format!("清空 {AGENT_PROMPT_TEMPLATES_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to clear {AGENT_PROMPT_TEMPLATES_TABLE}: {e}"))?;
 
     let mut seen = HashSet::new();
     let mut enabled_template_id: Option<String> = None;
@@ -50,7 +50,7 @@ fn save_agents(conn: &mut Connection, payload: Value) -> Result<(), String> {
             extract_non_empty_string(&template, "id", "settings_save_agents payload[]")?;
         if !seen.insert(template_id.clone()) {
             return Err(format!(
-                "{AGENT_PROMPT_TEMPLATES_TABLE}.template_id 重复：{template_id}"
+                "{AGENT_PROMPT_TEMPLATES_TABLE}.template_id is duplicated: {template_id}"
             ));
         }
 
@@ -62,13 +62,13 @@ fn save_agents(conn: &mut Connection, payload: Value) -> Result<(), String> {
             Some(Value::Bool(value)) => *value,
             Some(Value::Null) | None => false,
             Some(_) => {
-                return Err("settings_save_agents payload[].enabled 必须是布尔值".to_string());
+                return Err("settings_save_agents payload[].enabled must be a boolean".to_string());
             }
         };
         if enabled {
             if let Some(existing_id) = &enabled_template_id {
                 return Err(format!(
-                    "{AGENT_PROMPT_TEMPLATES_TABLE}.enabled 只能有一个激活项：{existing_id}, {template_id}"
+                    "{AGENT_PROMPT_TEMPLATES_TABLE}.enabled may only have one active entry: {existing_id}, {template_id}"
                 ));
             }
             enabled_template_id = Some(template_id.clone());
@@ -86,12 +86,12 @@ fn save_agents(conn: &mut Connection, payload: Value) -> Result<(), String> {
                 updated_at
             ],
         )
-        .map_err(|e| format!("写入 {AGENT_PROMPT_TEMPLATES_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to write {AGENT_PROMPT_TEMPLATES_TABLE}: {e}"))?;
     }
 
     tx.commit()
-        .map_err(|e| format!("提交 {AGENT_PROMPT_TEMPLATES_TABLE} 事务失败：{e}"))?;
-    // 标脏放在 commit 之后：事务回滚时不该触发自动同步。
+        .map_err(|e| format!("failed to commit {AGENT_PROMPT_TEMPLATES_TABLE} transaction: {e}"))?;
+    // Mark dirty after commit: a rolled-back transaction must not trigger auto-sync.
     crate::services::webdav_auto_sync::mark_dirty();
     Ok(())
 }

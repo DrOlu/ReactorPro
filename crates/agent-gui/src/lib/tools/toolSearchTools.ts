@@ -1,10 +1,15 @@
-// MCP 工具懒加载(ToolSearch):MCP 工具 schema 总量超过阈值时,工具仍全量注册
-// 在执行层(pi-agent-core 的 prepareToolCall 从 loop 快照查找,必须始终找得到),
-// 但**发给模型的请求**只包含已激活的 MCP 工具——未激活的经 runner 的
-// requestToolFilter 滤掉(与 provider 原生搜索"执行层可见、请求层隐藏"同机制)。
-// 模型通过 ToolSearch 检索并激活工具;直接调用未激活工具也会执行成功并自动
-// 激活(turn 层 executor wrapper),避免"调用成功但下轮看不见"的困惑。
-// 激活集按会话保存在内存(跨 turn 持久,重启后模型重新检索一次即可)。
+// MCP tool lazy loading (ToolSearch): when the total MCP tool schema size
+// exceeds the threshold, tools are still registered in full at the execution
+// layer (pi-agent-core's prepareToolCall looks them up from the loop snapshot,
+// so they must always be found), but **the request sent to the model** contains
+// only activated MCP tools -- unactivated ones are filtered out by the runner's
+// requestToolFilter (the same mechanism as provider-native search: "visible at
+// the execution layer, hidden at the request layer"). The model retrieves and
+// activates tools via ToolSearch; directly calling an unactivated tool also
+// succeeds and auto-activates it (turn-layer executor wrapper), avoiding the
+// confusion of "the call succeeded but it's invisible next turn". The activation
+// set is kept in memory per conversation (persists across turns; after a restart
+// the model just searches once more).
 
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
@@ -18,17 +23,21 @@ import {
 export const TOOL_SEARCH_TOOL_NAME = "ToolSearch";
 
 /**
- * 懒加载阈值(估算 tokens):MCP 工具 schema 总量低于它时全量注入请求,
- * 不启用 ToolSearch——多一次检索回合的代价只在真的省下可观 context 时才值。
+ * Lazy-loading threshold (estimated tokens): when the total MCP tool schema
+ * size is below it, inject everything into the request and do not enable
+ * ToolSearch -- the cost of an extra retrieval turn is only worth it when it
+ * genuinely saves meaningful context.
  */
 export const MCP_TOOL_DEFERRAL_THRESHOLD_TOKENS = 12_000;
 
-/** 单次检索返回的工具数上限;夹在 [1, MAX] 内。 */
+/** Upper bound on tools returned by a single search; clamped to [1, MAX]. */
 export const TOOL_SEARCH_MAX_RESULTS = 10;
 const TOOL_SEARCH_DEFAULT_RESULTS = 5;
 
-// 会话级激活集:跨 turn 保持(同一桌面会话进程内),会话销毁时清理。
-// 不落盘——重启后的新会话由模型按需重新 ToolSearch,成本是一次工具回合。
+// Conversation-level activation set: kept across turns (within the same desktop
+// session process) and cleared when the conversation is destroyed. Not persisted
+// to disk -- after a restart the model re-runs ToolSearch as needed, at the cost
+// of one tool turn.
 const activationByConversation = new Map<string, Set<string>>();
 
 export function getMcpToolActivation(conversationId: string): Set<string> {
@@ -59,8 +68,10 @@ function normalizeQueryTerms(query: string): string[] {
 }
 
 /**
- * 无依赖的轻量评分:词项对 name(×3)/serverLabel(×2)/description(×1) 的
- * 子串命中加权求和。目录只有几十到几百个工具,线性扫描足够;不引入 FTS。
+ * Dependency-free lightweight scoring: a weighted sum of substring hits for
+ * query terms against name (x3) / serverLabel (x2) / description (x1). The
+ * catalog is only tens to hundreds of tools, so a linear scan suffices; no FTS
+ * is introduced.
  */
 function scoreEntry(entry: DeferredMcpToolEntry, terms: string[]): number {
   const name = entry.tool.name.toLowerCase();
@@ -78,7 +89,7 @@ function scoreEntry(entry: DeferredMcpToolEntry, terms: string[]): number {
 export type ToolSearchResultDetails = {
   kind: "tool_search";
   query: string;
-  /** 本次新激活的工具名(规范调用名)。 */
+  /** Tool names newly activated by this call (canonical invocation names). */
   activated: string[];
   totalDeferred: number;
 };
@@ -96,8 +107,9 @@ function buildErrorResult(toolCall: ToolCall, text: string): ToolResultMessage {
 }
 
 /**
- * 判定是否启用懒加载:估算全部 MCP 工具 schema 的 token 量与阈值比较。
- * 判定输入是"会进请求的 JSON"(与 tokenLedger 同一估算口径)。
+ * Decide whether to enable lazy loading: estimate the token size of all MCP
+ * tool schemas and compare against the threshold. The input is "the JSON that
+ * would go into the request" (the same estimation basis as tokenLedger).
  */
 export function shouldDeferMcpTools(
   mcpTools: readonly Tool[],
@@ -109,7 +121,7 @@ export function shouldDeferMcpTools(
 
 export function createToolSearchTools(params: {
   conversationId: string;
-  /** 被延迟注入的 MCP 工具目录(name 为规范调用名 mcp_<server>_<tool>)。 */
+  /** Catalog of MCP tools whose injection is deferred (name is the canonical invocation name mcp_<server>_<tool>). */
   entries: readonly DeferredMcpToolEntry[];
 }): BuiltinToolBundle {
   const activation = getMcpToolActivation(params.conversationId);
@@ -230,7 +242,7 @@ export function createToolSearchTools(params: {
         {
           groupId: "system",
           kind: "tool_search",
-          // 只读:仅查目录并改写会话内激活集,不触碰任何外部状态。
+          // Read-only: only queries the catalog and updates the in-conversation activation set; touches no external state.
           isReadOnly: true,
           displayCategory: "system",
         },
@@ -240,10 +252,13 @@ export function createToolSearchTools(params: {
 }
 
 /**
- * 请求层可见性谓词:非 MCP 业务工具恒可见;MCP 业务工具需已激活。判定必须用
- * kind === "mcp"(业务工具专属),不能用裸 groupId——McpManager 也在 groupId
- * "mcp" 下,但它不进延迟目录,按 groupId 隐藏会让它从模型请求中永久消失。
- * ToolSearch 自身恒可见。runner 每轮请求都会重新评估,激活后下一轮立即生效。
+ * Request-layer visibility predicate: non-MCP business tools are always visible;
+ * MCP business tools must be activated. The check must use kind === "mcp"
+ * (business-tool specific), not a bare groupId -- McpManager is also under
+ * groupId "mcp" but does not enter the deferred catalog, and hiding by groupId
+ * would make it vanish from model requests forever. ToolSearch itself is always
+ * visible. The runner re-evaluates every request, so activation takes effect
+ * from the next turn on.
  */
 export function buildMcpRequestToolFilter(params: {
   conversationId: string;

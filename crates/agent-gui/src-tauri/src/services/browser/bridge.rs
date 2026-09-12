@@ -1,13 +1,15 @@
-//! 扩展桥接：本地 WebSocket 服务，接受 LiveAgent 浏览器扩展（MV3，
-//! `crates/agent-gui/browser-extension/`）的反向连接。扩展用 `chrome.debugger`
-//! 在用户日常浏览器里中继 CDP——自动化因此复用用户的登录态，且不用另起
-//! 浏览器进程。协议线型与原生 CDP 完全一致（{id,method,params,sessionId} /
-//! {id,result|error} / 事件），Rust 侧的 CdpConnection/PageSession 原样复用。
+//! Extension bridge: a local WebSocket service that accepts reverse connections from the
+//! ReactorPro browser extension (MV3, `crates/agent-gui/browser-extension/`). The extension
+//! uses `chrome.debugger` to relay CDP inside the user's everyday browser---automation therefore
+//! reuses the user's login state and does not need to launch a separate browser process. The wire
+//! protocol is identical to native CDP ({id,method,params,sessionId} / {id,result|error} / events),
+//! and the Rust-side CdpConnection/PageSession are reused as-is.
 //!
-//! 安全边界：只绑 127.0.0.1；握手校验 Origin 为 chrome-extension://（本机
-//! 恶意进程仍可伪造该头，与 Claude Code native messaging 相比这是折衷——
-//! 扩展侧只暴露自己创建的自动化标签页，攻击面限于"驱动一个新标签页"）。
-//! 同一时刻只保留最新连接：扩展重连即替换。
+//! Security boundary: binds only 127.0.0.1; the handshake verifies Origin is chrome-extension://
+//! (a malicious local process can still forge this header---compared with Claude Code native
+//! messaging this is a tradeoff; the extension side exposes only the automation tabs it created
+//! itself, so the attack surface is limited to "driving a new tab"). Only the newest connection is
+//! kept at any time: an extension reconnect replaces it.
 
 use std::sync::Mutex as StdMutex;
 use std::sync::Arc;
@@ -21,10 +23,10 @@ use tokio_tungstenite::tungstenite::handshake::server::{
 
 use super::cdp::CdpConnection;
 
-/// 缺省监听端口；可用 LIVEAGENT_BROWSER_BRIDGE_PORT 覆盖（扩展侧需同步改）。
+/// Default listen port; can be overridden with LIVEAGENT_BROWSER_BRIDGE_PORT (the extension side must be changed in sync).
 const DEFAULT_BRIDGE_PORT: u16 = 19_222;
 
-/// 握手超时：TCP 连上后不发升级请求的连接在此时限后被丢弃。
+/// Handshake timeout: connections that do not send an upgrade request after the TCP connect are dropped after this limit.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(crate) fn bridge_port() -> u16 {
@@ -41,8 +43,8 @@ pub(crate) struct ExtensionBridge {
 }
 
 impl ExtensionBridge {
-    /// 启动监听 task。绑定失败（端口被占等）只打日志不阻断 app 启动——
-    /// 桥接不可用时 BrowserManager 自动回退 launcher 模式。
+    /// Start the listen task. A bind failure (port in use, etc.) only logs and does not block app
+    /// startup---when the bridge is unavailable, BrowserManager automatically falls back to launcher mode.
     pub(crate) fn start(self: &Arc<Self>) {
         let bridge = Arc::clone(self);
         tauri::async_runtime::spawn(async move {
@@ -58,9 +60,9 @@ impl ExtensionBridge {
                 let Ok((stream, _)) = listener.accept().await else {
                     continue;
                 };
-                // 握手放独立 task 并限时：若在 accept 循环里串行 await，
-                // 任一连上后不发升级请求的本地连接会永久卡住循环，扩展
-                // 从此连不上桥接。
+                // The handshake runs in its own task with a timeout: if awaited serially in the accept loop,
+                // any local connection that connects but never sends an upgrade request would block the
+                // loop forever, and the extension would then be unable to connect to the bridge.
                 let bridge = Arc::clone(&bridge);
                 tauri::async_runtime::spawn(async move {
                     let handshake = tokio::time::timeout(
@@ -87,7 +89,7 @@ impl ExtensionBridge {
         });
     }
 
-    /// 当前存活的扩展连接（已断开的连接视同无）。
+    /// Currently live extension connections (disconnected connections count as none).
     pub(crate) fn live_connection(&self) -> Option<Arc<CdpConnection>> {
         self.latest
             .lock()
@@ -98,8 +100,8 @@ impl ExtensionBridge {
     }
 }
 
-/// 只接受浏览器扩展发起的握手：Chromium 系扩展 service worker 的 WebSocket
-/// 请求带 Origin: chrome-extension://<id>。
+/// Accepts handshakes initiated only by the browser extension: Chromium-family extension service
+/// worker WebSocket requests carry Origin: chrome-extension://<id>.
 fn verify_extension_origin(
     request: &Request,
     response: HandshakeResponse,

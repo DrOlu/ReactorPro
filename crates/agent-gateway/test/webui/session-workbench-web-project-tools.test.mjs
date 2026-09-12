@@ -1,6 +1,6 @@
-// Web 端项目工具 Pane 合同测试:网关 Workbench 控制器与桌面端共用同一份
-// 项目工具 Surface 模型与 drop 事务,GatewayAppView 通过 ProjectToolPaneHost
-// 渲染,dock 按租约隐藏工具。
+// Web-side project tool Pane contract test: the gateway Workbench controller shares the same
+// project tool Surface model and drop transactions with the desktop, GatewayAppView renders
+// through ProjectToolPaneHost, and the dock hides tools according to leases.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -35,7 +35,7 @@ test("gateway workbench wires every project tool through the shared drop transac
   assert.match(view, /onToolDragStart=/);
   assert.match(view, /onOpenToolInWorkbench=/);
   assert.match(view, /workbench\.paneRegionTool/);
-  // 网关离线(无终端 client)时工具 Pane 与终端 Pane 同样不渲染。
+  // When the gateway is offline (no terminal client), tool Panes are not rendered just like terminal Panes.
   assert.match(view, /if \(!projectToolPaneEnvironment\) return null;/);
 
   const app = readSource("../../web/src/app/GatewayApp.tsx");

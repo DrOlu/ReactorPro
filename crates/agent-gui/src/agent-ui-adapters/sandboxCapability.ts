@@ -6,8 +6,9 @@ export type SandboxCapability = {
   mechanism: string;
   platform: string;
   /**
-   * 是否支持断网变体(sandboxOffline)。macOS/Linux 在 supported 时为 true;
-   * Windows 取决于运行时探测(能否派生 AppContainer SID)。
+   * Whether the offline variant (sandboxOffline) is supported. macOS/Linux are
+   * true when supported; Windows depends on runtime probing (whether an
+   * AppContainer SID can be derived).
    */
   network_control: boolean;
   reason?: string;
@@ -15,7 +16,7 @@ export type SandboxCapability = {
 
 let cachedCapability: SandboxCapability | null = null;
 
-/** 桌面端:探测本机 OS 沙箱可用性(macOS Seatbelt / Linux bwrap / Windows 受限令牌写围栏)。 */
+/** Desktop: probe the local OS sandbox availability (macOS Seatbelt / Linux bwrap / Windows restricted-token write fence). */
 export function useSandboxCapability(): SandboxCapability | null {
   const [capability, setCapability] = useState<SandboxCapability | null>(cachedCapability);
 

@@ -137,7 +137,7 @@ try {
       ? ` Wrote Tauri version config: ${options.tauriConfigPath}.`
       : "";
     console.log(
-      `Prepared LiveAgent ${metadata.releaseTag} (app version ${metadata.appVersion}, prerelease ${metadata.isPrerelease}).${configSuffix}`,
+      `Prepared ReactorPro ${metadata.releaseTag} (app version ${metadata.appVersion}, prerelease ${metadata.isPrerelease}).${configSuffix}`,
     );
   }
 } catch (error) {

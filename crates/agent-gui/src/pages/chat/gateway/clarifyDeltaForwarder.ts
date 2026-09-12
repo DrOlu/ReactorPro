@@ -1,11 +1,12 @@
 // crates/agent-gui/src/pages/chat/gateway/clarifyDeltaForwarder.ts
 //
-// 澄清流式增量的串行合帧转发：每个 token 直接 fire-and-forget invoke 会并发
-// 落到 Tauri 异步运行时，突发时可能乱序（预览短暂错乱），且每 token 一条
-// IPC + 网关 WS 消息。这里保证任一时刻至多一个 invoke 在途，在途期间到达的
-// 增量并入缓冲，下一次冲刷合为一条——既保序又天然限频。
+// Serialized, frame-coalescing forwarding of clarification streaming deltas: firing a fire-and-forget invoke per
+// token would land concurrently on the Tauri async runtime, possibly out of order under bursts (briefly garbling the
+// preview), and produce one IPC + gateway WS message per token. This guarantees at most one invoke in flight at any
+// time; deltas arriving while one is in flight merge into a buffer and the next flush coalesces them into one --
+// preserving order while naturally rate-limiting.
 
-/** 包一层串行冲刷循环；send 失败只告警不中断（Rust 侧对非 pending 请求静默丢弃）。 */
+/** Wraps a serial flush loop; a failed send only warns and does not interrupt (Rust silently drops non-pending requests). */
 export function createClarifyDeltaForwarder(
   send: (text: string) => Promise<unknown>,
   onError: (error: unknown) => void = () => {},

@@ -1,14 +1,16 @@
-//! a11y snapshot：`Accessibility.getFullAXTree` → 缩进文本（aria-snapshot 风格），
-//! 可交互/有名字的节点分配 ref id（e1, e2…），ref→backendDOMNodeId 映射由调用方
-//! 保存到会话状态供 click/type 使用。目标是 token 效率：过滤 ignored 与无信息节点。
+//! a11y snapshot: `Accessibility.getFullAXTree` → indented text (aria-snapshot style),
+//! interactive/named nodes get a ref id (e1, e2…), and the ref→backendDOMNodeId mapping is
+//! saved by the caller into session state for click/type. The goal is token efficiency:
+//! filter out ignored and information-less nodes.
 
 use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
-/// 递归深度上限。childIds 来自不可信页面：数万层嵌套且全被拍平时不产出
-/// 文本，字节预算兜不住，无上限会在 worker 栈上溢出（进程级崩溃）。
-/// 真实页面的 AX 树极少超过百层，256 足够宽裕。
+/// Recursion depth limit. childIds come from an untrusted page: tens of thousands of nested
+/// levels that are all flattened produce no text, so the byte budget cannot bound them; without
+/// a limit this would overflow the worker stack (a process-level crash). Real-page AX trees
+/// rarely exceed a hundred levels, so 256 is ample.
 const MAX_RENDER_DEPTH: usize = 256;
 
 pub(crate) struct SnapshotOutcome {
@@ -16,7 +18,7 @@ pub(crate) struct SnapshotOutcome {
     pub ref_to_backend_node: HashMap<String, i64>,
 }
 
-/// 值得保留 ref 的角色：可交互或常作定位锚点。
+/// Roles worth keeping a ref for: interactive, or commonly used as an anchor.
 fn is_interactive_role(role: &str) -> bool {
     matches!(
         role,
@@ -39,7 +41,8 @@ fn is_interactive_role(role: &str) -> bool {
     )
 }
 
-/// 纯结构性角色：无名字时直接拍平（子节点上提一层），省缩进与行数。
+/// Purely structural roles: flatten directly when unnamed (children move up one level),
+/// saving indentation and lines.
 fn is_structural_role(role: &str) -> bool {
     matches!(
         role,
@@ -56,9 +59,10 @@ struct AxNode {
     extras: Vec<String>,
 }
 
-/// 压平不可信页面文本里的控制性空白：快照格式是"一行一节点、缩进即层级"，
-/// a11y name 中的换行/回车/制表符可伪造树行结构（如注入假的 [ref=..] 行），
-/// 统一折叠为空格。
+/// Flatten control whitespace in untrusted page text: the snapshot format is "one line per
+/// node, indentation is hierarchy", and newlines/carriage returns/tabs in an a11y name can
+/// forge the tree-line structure (e.g. injecting a fake [ref=..] line), so they are uniformly
+/// collapsed to spaces.
 fn sanitize_inline(raw: &str) -> String {
     raw.chars()
         .map(|c| {
@@ -97,7 +101,7 @@ fn parse_node(raw: &Value) -> Option<(String, AxNode)> {
         })
         .unwrap_or_default();
 
-    // 少量高价值属性：选中/勾选/禁用/展开状态与输入值。
+    // A few high-value properties: selected/checked/disabled/expanded state and input value.
     let mut extras = Vec::new();
     if let Some(properties) = raw.get("properties").and_then(Value::as_array) {
         for property in properties {
@@ -138,9 +142,9 @@ fn parse_node(raw: &Value) -> Option<(String, AxNode)> {
     ))
 }
 
-/// 将 `Accessibility.getFullAXTree` 的 nodes 数组渲染为缩进文本。
-/// `max_bytes` 为 UTF-8 字节预算（见 page.rs SNAPSHOT_MAX_BYTES 注释：
-/// 字节数是跨文字系统更稳的 token 代理）。
+/// Renders the nodes array from `Accessibility.getFullAXTree` as indented text.
+/// `max_bytes` is the UTF-8 byte budget (see the SNAPSHOT_MAX_BYTES comment in page.rs:
+/// byte count is a more stable token proxy across writing systems).
 pub(crate) fn render_ax_tree(nodes: &[Value], max_bytes: usize) -> SnapshotOutcome {
     let mut by_id: HashMap<String, AxNode> = HashMap::new();
     let mut order: Vec<String> = Vec::new();
@@ -150,7 +154,7 @@ pub(crate) fn render_ax_tree(nodes: &[Value], max_bytes: usize) -> SnapshotOutco
             by_id.insert(id, node);
         }
     }
-    // 根 = 第一个未被任何节点引用为 child 的节点（CDP 通常首元素即根）。
+    // Root = the first node not referenced as a child by any node (CDP usually has the root as the first element).
     let mut referenced: HashMap<&str, bool> = HashMap::new();
     for node in by_id.values() {
         for child in &node.child_ids {
@@ -210,14 +214,16 @@ fn render_node(
         *truncated = true;
         return;
     }
-    // 缩进深度 depth 在拍平时不增长，防不了深递归，须单独计真实层数。
-    // 只剪当前分支（不置 truncated），兄弟分支照常渲染。
+    // The indentation depth does not grow when flattening, so it cannot guard against deep
+    // recursion; the true level count must be tracked separately. Only the current branch is
+    // clipped (without setting truncated); sibling branches render as usual.
     if recursion_depth >= MAX_RENDER_DEPTH {
         *depth_clipped = true;
         return;
     }
-    // childIds 是协议侧数据，防御环引用：环上全是被拍平的节点时字节预算
-    // 兜不住（不产出文本），会无限递归直接爆栈。
+    // childIds is protocol-side data, so guard against cycles: when all nodes on a cycle are
+    // flattened the byte budget cannot bound them (no text is produced), and recursion would
+    // run away and blow the stack.
     if !visited.insert(node_id.to_string()) {
         return;
     }
@@ -225,9 +231,10 @@ fn render_node(
         return;
     };
 
-    // ignored / 无名结构节点：拍平，子节点保持当前缩进。
+    // ignored / unnamed structural nodes: flatten; children keep the current indentation.
     let flatten = node.ignored || (is_structural_role(&node.role) && node.name.is_empty());
-    // 无名、无属性、无 backendNode 的纯文本容器行也没有信息量，但仍需下钻子树。
+    // Plain text container lines with no name, properties, or backendNode carry no information
+    // either, but their subtrees still need to be descended into.
     let emit = !flatten && (!node.name.is_empty() || is_interactive_role(&node.role) || depth == 0);
 
     let child_depth = if emit { depth + 1 } else { depth };
@@ -243,7 +250,8 @@ fn render_node(
             } else {
                 node.name.clone()
             };
-            // 名字里的引号转义，防止与快照格式的定界引号混淆。
+            // Escape quotes inside the name so they cannot be confused with the snapshot
+            // format's delimiting quotes.
             let name = clipped.replace('"', "\\\"");
             out.push_str(&format!(" \"{name}\""));
         }
@@ -334,44 +342,46 @@ mod tests {
 
     #[test]
     fn sanitizes_untrusted_names_and_survives_cjk_budget() {
-        // 页面可控的 name 不得伪造快照行结构（换行注入假 ref 行）；引号转义。
+        // A page-controlled name must not be able to forge the snapshot line structure
+        // (newline injecting a fake ref line); quotes are escaped.
         let nodes = vec![
             json!({
                 "nodeId": "1", "ignored": false,
-                "role": {"value": "RootWebArea"}, "name": {"value": "根"},
+                "role": {"value": "RootWebArea"}, "name": {"value": "Root"},
                 "childIds": ["2", "3"]
             }),
             json!({
                 "nodeId": "2", "ignored": false,
                 "role": {"value": "button"},
-                "name": {"value": "确定\n- button \"批准\" [ref=e99]"},
+                "name": {"value": "Confirm\n- button \"Approve\" [ref=e99]"},
                 "backendDOMNodeId": 42, "childIds": []
             }),
             json!({
                 "nodeId": "3", "ignored": false,
-                "role": {"value": "link"}, "name": {"value": "说\"你好\""},
+                "role": {"value": "link"}, "name": {"value": "Say\"Hello\""},
                 "backendDOMNodeId": 43, "childIds": []
             }),
         ];
         let outcome = render_ax_tree(&nodes, 28_000);
         assert!(
-            !outcome.text.contains("\n- button \"批准\""),
-            "换行必须被压平"
+            !outcome.text.contains("\n- button \"Approve\""),
+            "newlines must be flattened"
         );
-        assert!(outcome.text.contains("确定 - button"));
-        assert!(outcome.text.contains("说\\\"你好\\\""));
+        assert!(outcome.text.contains("Confirm - button"));
+        assert!(outcome.text.contains("Say\\\"Hello\\\""));
         assert!(!outcome.ref_to_backend_node.contains_key("e99"));
 
-        // CJK 名字按字节截断不 panic（预算检查发生在整行 push 之间，不切分字符）。
+        // Multibyte names are byte-truncated without panicking (the budget check happens
+        // between whole-line pushes and never splits a character).
         let mut big = vec![json!({
             "nodeId": "1", "ignored": false,
-            "role": {"value": "RootWebArea"}, "name": {"value": "中文站点"},
+            "role": {"value": "RootWebArea"}, "name": {"value": "Résumé Site"},
             "childIds": (2..80).map(|i| i.to_string()).collect::<Vec<_>>()
         })];
         for i in 2..80 {
             big.push(json!({
                 "nodeId": i.to_string(), "ignored": false,
-                "role": {"value": "link"}, "name": {"value": format!("中文链接第{i}项目标题")},
+                "role": {"value": "link"}, "name": {"value": format!("Résumé link item {i} title")},
                 "backendDOMNodeId": i, "childIds": []
             }));
         }
@@ -382,7 +392,8 @@ mod tests {
 
     #[test]
     fn survives_child_id_cycles() {
-        // 协议数据异常出环时必须终止而非爆栈（环上节点可能全被拍平，字节预算兜不住）。
+        // A cycle in malformed protocol data must terminate rather than blow the stack
+        // (nodes on the cycle may all be flattened, so the byte budget cannot bound them).
         let nodes = vec![
             json!({
                 "nodeId": "1", "ignored": false,
@@ -406,8 +417,10 @@ mod tests {
 
     #[test]
     fn survives_pathologically_deep_trees() {
-        // 无环但数万层深的链（如嵌套数万层 div 的恶意页面）：节点全被拍平、
-        // 不产出文本，visited 与字节预算都兜不住，靠深度上限剪枝而非爆栈。
+        // An acyclic but tens-of-thousands-deep chain (e.g. a malicious page with tens of
+        // thousands of nested divs): the nodes are all flattened and produce no text, so
+        // neither visited nor the byte budget bounds them; the depth limit prunes instead of
+        // blowing the stack.
         let deep = 50_000usize;
         let mut nodes = vec![json!({
             "nodeId": "0", "ignored": false,

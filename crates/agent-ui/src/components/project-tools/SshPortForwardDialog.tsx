@@ -26,17 +26,17 @@ import {
 export type SshPortForwardDialogProps = {
   sessionId: string;
   projectPathKey?: string;
-  /** 会话标识（标题 · user@host:port），由面板算好传入。 */
+  /** Session identifier (title · user@host:port), computed and passed in by the panel. */
   subtitle: string;
-  /** 平台传输客户端（Tauri IPC / 网关 WS），由面板注入以保持本文件可镜像。 */
+  /** Platform transport client (Tauri IPC / gateway WS), injected by the panel to keep this file mirrorable. */
   client: SshLocalForwardClient;
   onClose: () => void;
-  /** 转发建立成功；面板收下 action 快照并关闭本对话框。 */
+  /** Forwarding was established; the panel takes the action snapshot and closes this dialog. */
   onStarted: (action: SshLocalForwardAction) => void;
 };
 
-// 模态 portal 到 body，逃出了 dock 的 --zone-font-scale 作用域，
-// 所以这里与 confirm-dialog 一样使用固定字号。
+// The modal portals to body, escaping the dock's --zone-font-scale scope,
+// so a fixed font size is used here just like in confirm-dialog.
 const FIELD_CLASS =
   "h-8 w-full min-w-0 rounded-lg border border-border/70 bg-background/80 px-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:border-indigo-500/50 focus-visible:ring-1 focus-visible:ring-indigo-500/20 disabled:opacity-50";
 
@@ -45,9 +45,10 @@ function errorMessage(error: unknown) {
 }
 
 /**
- * 「添加端口映射」模态框：本地端口（留空自动）、远端主机（留空 127.0.0.1）、
- * 远端端口。提交前先经 `checkLocalPort` 检测本地端口占用，占用即报错中止；
- * `start` 里权威的 bind 失败会以后端原始错误兜底显示。
+ * "Add port mapping" modal: local port (empty = auto), remote host (empty = 127.0.0.1),
+ * remote port. Before submitting, `checkLocalPort` detects whether the local port is in
+ * use and aborts with an error if so; the authoritative bind failure in `start` falls
+ * back to displaying the backend's original error.
  */
 export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
   const { sessionId, projectPathKey, subtitle, client, onClose, onStarted } = props;
@@ -58,7 +59,8 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const submittingRef = useRef(false);
-  // blur 检测是异步的：结果回来时草稿可能已被改掉，靠 ref 丢弃过期结果。
+  // The blur check is asynchronous: by the time the result returns the draft may have
+  // changed, so a ref is used to discard stale results.
   const localPortRef = useRef("");
   localPortRef.current = localPort;
 
@@ -75,7 +77,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
         setError(portInUseMessage(port));
       })
       .catch(() => {
-        // 提前提示失败无所谓，提交时还会再查一次。
+        // A failed early hint does not matter; it is checked again on submit.
       });
   };
 
@@ -92,7 +94,7 @@ export function SshPortForwardDialog(props: SshPortForwardDialogProps) {
     void (async () => {
       try {
         if (target.localPort > 0) {
-          // 检测失败（命令报错）不拦截：start 的 bind 才是权威裁决。
+          // A failed check (command error) does not block: the bind in start is the authoritative verdict.
           const available = await client.checkLocalPort(target.localPort).catch(() => true);
           if (!available) {
             setError(portInUseMessage(target.localPort));

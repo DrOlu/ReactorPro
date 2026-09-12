@@ -39,8 +39,8 @@ export function McpHubPage(props: McpHubPageProps) {
     import: "",
   });
 
-  // 与 McpServersForm 的列表口径一致：由专属设置页托管的 server 不计入
-  // Hub 的徽章，否则会出现「0 个 server 却显示 1/1 已启用」。
+  // Consistent with McpServersForm's listing: servers managed by their dedicated settings page
+  // do not count toward the Hub badge, otherwise you would see "0 servers but 1/1 enabled".
   const visibleServers = useMemo(
     () => settings.mcp.servers.filter((server) => !isHubHiddenServerId(server.id)),
     [settings.mcp.servers],

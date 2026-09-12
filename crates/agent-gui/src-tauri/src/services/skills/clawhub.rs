@@ -1,4 +1,4 @@
-//! ClawHub 注册表集成：搜索、卡片归一化、下载 URL 与安装。
+//! ClawHub registry integration: search, card normalization, download URL, and installation.
 
 use serde_json::Value;
 use std::path::Path;
@@ -67,7 +67,7 @@ pub(crate) fn clawhub_download_url_for_slug(
     url.query_pairs_mut()
         .append_pair("slug", slug)
         .append_pair("tag", tag);
-    // ClawHub 对重名 slug 返回 409，必须带 ownerHandle 消歧。
+    // ClawHub returns 409 for a duplicate slug, so ownerHandle must be included to disambiguate.
     if let Some(owner) = owner_handle
         .map(str::trim)
         .filter(|value| !value.is_empty())

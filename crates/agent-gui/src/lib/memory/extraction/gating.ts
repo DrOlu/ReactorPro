@@ -45,7 +45,7 @@ function hasPrefix(text: string, prefixes: readonly string[]): boolean {
   return prefixes.some((prefix) => normalized.startsWith(prefix));
 }
 
-/** Short yes/no style replies ("是的", "yes") that may answer a pending
+/** Short yes/no style replies ("yes", "yeah") that may answer a pending
  *  memory-confirmation question and therefore bypass the length gates. */
 export function isShortMemoryConfirmationText(text: string): boolean {
   const normalized = text
@@ -94,7 +94,7 @@ export function extractionSkipReason(input: ExtractionGateInput): ExtractionSkip
   if (stripped.length === 0) return "punctuation-only-user-message";
 
   // CJK has no ASCII word boundary; rely on prefix match plus a grapheme cap
-  // so that "谢谢你，请以后默认用中文" still reaches the LLM.
+  // so that "thanks, please use Chinese by default from now on" still reaches the LLM.
   const shortEnough = graphemes < GATING_SHORT_ACK_GRAPHEME_LIMIT;
   if (shortEnough && hasPrefix(text, GATING_GREETING_PREFIXES)) return "greeting";
   if (shortEnough && hasPrefix(text, GATING_THANKS_PREFIXES)) return "acknowledgement-thanks";

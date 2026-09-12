@@ -1,7 +1,7 @@
 import { providerSupportsNativeWebSearch } from "../../providers/nativeWebSearch";
 import type { ProviderId } from "../../settings";
 
-export const PROVIDER_NATIVE_WEB_SEARCH_STATUS = "正在联网搜索...";
+export const PROVIDER_NATIVE_WEB_SEARCH_STATUS = "Searching the web...";
 export const PROVIDER_NATIVE_WEB_SEARCH_STATUS_DELAY_MS = 1_200;
 
 export function resolveProviderNativeWebSearchStatus(params: {

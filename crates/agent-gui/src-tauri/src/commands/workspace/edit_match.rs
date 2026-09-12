@@ -7,7 +7,7 @@
 //! failing the edit (Claude Code runs a cascade of increasingly lenient
 //! "replacers"; Codex CLI's `apply_patch` locates context with
 //! exact → rstrip → trim passes). This module implements the same idea for
-//! LiveAgent's exact-string Edit tool.
+//! ReactorPro's exact-string Edit tool.
 //!
 //! Passes run strictest first, and the first pass that yields at least one
 //! match wins, so a stricter interpretation always takes precedence:
@@ -809,10 +809,10 @@ mod tests {
 
     #[test]
     fn unicode_content_survives_normalization() {
-        let text = "版本 = 一\r\n名字 = 二\r\n";
-        let (next, strategy, _) = apply_first(text, "名字 = 二\n", "名字 = 三\n");
+        let text = "version = café\r\nname = naïve\r\n";
+        let (next, strategy, _) = apply_first(text, "name = naïve\n", "name = résumé\n");
         assert_eq!(strategy, EditMatchStrategy::LineEndings);
-        assert_eq!(next, "版本 = 一\r\n名字 = 三\r\n");
+        assert_eq!(next, "version = café\r\nname = résumé\r\n");
     }
 
     #[test]

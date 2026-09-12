@@ -160,9 +160,9 @@ function ToolTraceGroupInner(props: {
   );
   const [open, setOpen] = useAttentionDisclosure(attentionRequired);
 
-  // The latest live batch drops the count prefix ("运行中" instead of
-  // "1 运行中"), nothing more. Idle phases render no filler status here:
-  // an active reasoning segment shows its own 思考中 row and the turn-level
+  // The latest live batch drops the count prefix ("Running" instead of
+  // "1 Running"), nothing more. Idle phases render no filler status here:
+  // an active reasoning segment shows its own Thinking row and the turn-level
   // sparkle covers the gaps in between.
   const statusLabel =
     counts.failed > 0
@@ -175,8 +175,9 @@ function ToolTraceGroupInner(props: {
           ? `${counts.waiting} ${t("chat.tool.waiting")}`
           : t("chat.tool.success");
 
-  // 中文标签之间没有天然的词边界（"读取了文件运行了命令"会黏成一句），
-  // 用全角竖线分隔；全角字符自带留白，两侧不再加空格。
+  // CJK labels have no natural word boundary (adjacent labels run together into one sentence),
+  // so they are separated with a fullwidth vertical bar; fullwidth characters carry their own
+  // spacing, so no spaces are added on either side.
   const countLabel = batchCounts
     .map(({ category }) => t(`chat.tool.batch.${category}`))
     .join(locale === "zh-CN" ? "｜" : " | ");
@@ -221,9 +222,10 @@ function ToolTraceGroupInner(props: {
 
       <LazyCollapse open={open} retainWhileClosed={retainRunningToolContent && counts.running > 0}>
         {() => (
-          // 横向内缩与折叠头按钮同口径（外扩量恒等于内补量），组内每行的图标
-          // 才和组头图标落在同一条竖线上；12px 的外扩给行内 6px 的悬停底色和
-          // 圆角留出裁剪余量。
+          // Horizontal inset uses the same basis as the collapse header button (the negative margin
+          // always equals the padding), so each row's icon inside the group lands on the same
+          // vertical line as the group header icon; the 12px negative margin leaves clipping room
+          // for the row's 6px hover background and rounded corners.
           <div className="-mx-3 overflow-hidden px-3 pt-0.5">
             <div
               data-tool-trace-scroll=""

@@ -5,7 +5,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "git diff --check origin/main...HEAD（ci.yml 使用事件 base/head SHA）"
+  "basis": "git diff --check origin/main...HEAD (ci.yml uses the event base/head SHA)"
  },
  {
   "name": "trajectory-gui",
@@ -29,7 +29,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "GUI 构建（vite build）通过"
+  "basis": "GUI build (vite build) passed"
  },
  {
   "name": "tsc-web",
@@ -37,7 +37,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "WebUI 构建通过（含重新生成的 gateway_pb.ts）"
+  "basis": "WebUI build passed (including the regenerated gateway_pb.ts)"
  },
  {
   "name": "test-gui",
@@ -53,7 +53,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "WebUI 测试 587/587"
+  "basis": "WebUI tests 587/587"
  },
  {
   "name": "build-gui",
@@ -61,7 +61,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "pnpm tauri build（NSIS 安装包产出）"
+  "basis": "pnpm tauri build (NSIS installer produced)"
  },
  {
   "name": "build-web",
@@ -69,7 +69,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "WebUI 构建通过"
+  "basis": "WebUI build passed"
  },
  {
   "name": "lint-ui",
@@ -77,7 +77,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "pnpm lint:ui 退出码 0（仅告警，均为未改动文件）"
+  "basis": "pnpm lint:ui exit code 0 (warnings only, all in unchanged files)"
  },
  {
   "name": "lint-gui",
@@ -85,7 +85,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "pnpm --filter liveagent lint 退出码 0（修复 useLiveTranscriptController.ts import 排序后）"
+  "basis": "pnpm --filter liveagent lint exit code 0 (after fixing the import order in useLiveTranscriptController.ts)"
  },
  {
   "name": "lint-web",
@@ -93,7 +93,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "pnpm --filter @liveagent/gateway-webui lint 退出码 0（仅告警）"
+  "basis": "pnpm --filter @liveagent/gateway-webui lint exit code 0 (warnings only)"
  },
  {
   "name": "ui-boundaries",
@@ -117,7 +117,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "cargo check --tests（5 条预存告警，均在未改动文件）"
+  "basis": "cargo check --tests (5 pre-existing warnings, all in unchanged files)"
  },
  {
   "name": "cargo-trajectory-tests",
@@ -133,7 +133,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "cargo test chat_history --lib 83/83（修正 replace 断言后）"
+  "basis": "cargo test chat_history --lib 83/83 (after fixing the replace assertion)"
  },
  {
   "name": "cargo-ci-suites",
@@ -141,7 +141,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "ssh_local_forward 7/7、shell_runner 10/10、integration_commands::mcp 15/15"
+  "basis": "ssh_local_forward 7/7, shell_runner 10/10, integration_commands::mcp 15/15"
  },
  {
   "name": "rust-harness",
@@ -149,7 +149,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "由 cargo-trajectory-tests 覆盖（trajectory 过滤器即 Rust 侧轨迹测试集）"
+  "basis": "Covered by cargo-trajectory-tests (the trajectory filter is the Rust-side trajectory test suite)"
  },
  {
   "name": "protocol-static",
@@ -157,7 +157,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "由 proto-check 与 generated-drift 覆盖（buf lint + breaking + 生成物一致）"
+  "basis": "Covered by proto-check and generated-drift (buf lint + breaking + generated artifacts in sync)"
  },
  {
   "name": "go-build",
@@ -165,7 +165,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "go build ./... 与 go vet ./..."
+  "basis": "go build ./... and go vet ./..."
  },
  {
   "name": "go-test",
@@ -173,7 +173,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "全部包通过；仅 agenttoken TestDBFilePermissionsAndNoPlaintext 在 Windows 失败（POSIX 0600 权限断言，CI 在 Linux 通过；文件未改动）"
+  "basis": "All packages pass; only agenttoken TestDBFilePermissionsAndNoPlaintext fails on Windows (POSIX 0600 permission assertion; passes in CI on Linux; file unchanged)"
  },
  {
   "name": "proto-check",
@@ -181,7 +181,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "buf 1.71.0（与 CI 同版本）lint + breaking --against origin/main"
+  "basis": "buf 1.71.0 (same version as CI) lint + breaking --against origin/main"
  },
  {
   "name": "generated-drift",
@@ -189,7 +189,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "buf generate（protoc-gen-go v1.36.11 与 CI 同版本）后生成物与工作树逐字节一致"
+  "basis": "After buf generate (protoc-gen-go v1.36.11, same version as CI), generated artifacts are byte-for-byte identical to the working tree"
  },
  {
   "name": "web-smoke",
@@ -197,7 +197,7 @@
   "status": "pass",
   "exitCode": 0,
   "seconds": 0,
-  "basis": "由 build-web + test-web 覆盖"
+  "basis": "Covered by build-web + test-web"
  },
  {
   "verdict": "PASS",

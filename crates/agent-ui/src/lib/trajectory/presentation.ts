@@ -1,8 +1,9 @@
 /**
- * 记录 → 展示文案的纯映射。
+ * Pure mapping from records → display copy.
  *
- * 布局层刻意不产生任何面向用户的文案：它是纯逻辑，不该知道 i18n。这里只负责把
- * 记录翻译成 i18n key 与格式化数值，真正的取词留给组件。
+ * The layout layer deliberately produces no user-facing copy: it is pure logic and
+ * should not know about i18n. This module only maps records to i18n keys and formatted
+ * values; the actual word lookup is left to the component.
  */
 
 import { cachedDateTimeFormat, cachedNumberFormat } from "../shared/intlFormatters";
@@ -55,7 +56,7 @@ export function trajectoryStatusLabelKey(status: TrajectoryStatus): string {
   return `trajectory.status.${status}`;
 }
 
-/** SYSTEM 行没有正文，标题完全由变化类别决定。 */
+/** A SYSTEM row has no body; its title is determined entirely by the change category. */
 export function trajectorySystemLabelKey(change: TrajectoryHeaderChange | undefined): string {
   switch (change) {
     case "tools":
@@ -69,7 +70,7 @@ export function trajectorySystemLabelKey(change: TrajectoryHeaderChange | undefi
   }
 }
 
-/** 一行在没有正文时的兜底标题 key；有正文时返回 undefined，由调用方直接用 text。 */
+/** Fallback title key for a row without a body; returns undefined when there is a body, letting the caller use text directly. */
 export function trajectoryFallbackLabelKey(record: TrajectoryRecord): string | undefined {
   if (record.text !== "") return undefined;
   if (record.kind === "system") return trajectorySystemLabelKey(record.headerChange);
@@ -77,7 +78,7 @@ export function trajectoryFallbackLabelKey(record: TrajectoryRecord): string | u
   return undefined;
 }
 
-/** 毫秒时长标签；未知为 `—`，秒级以上换算成 s 以免出现七位数字。 */
+/** Millisecond duration label; `—` when unknown, converting to s at second scale or above to avoid seven-digit numbers. */
 export function formatTrajectoryDuration(milliseconds: number | null, locale: string): string {
   if (milliseconds === null || !Number.isFinite(milliseconds)) return "—";
   const rounded = Math.max(0, milliseconds);
@@ -106,7 +107,7 @@ export function formatTrajectoryClock(timestamp: number | null, locale: string):
   }).format(new Date(timestamp));
 }
 
-/** 解码吞吐；缺少任一时序事实时返回 null 而不是估算。 */
+/** Decode throughput; returns null rather than estimating when any timing fact is missing. */
 export function trajectoryThroughputTokensPerSecond(record: TrajectoryRecord): number | null {
   const metrics = record.assistantMetrics;
   if (metrics === undefined || !metrics.timingRecorded) return null;
@@ -117,7 +118,7 @@ export function trajectoryThroughputTokensPerSecond(record: TrajectoryRecord): n
   return (outputTokens / decodingMs) * 1000;
 }
 
-/** TTFT 与解码两段耗时，用于甘特块的内部分色与 Timing 面板。 */
+/** The two durations, TTFT and decode, used for the Gantt block's internal color split and the Timing panel. */
 export function trajectoryAssistantSegments(
   record: TrajectoryRecord,
 ): { ttftMs: number; decodingMs: number } | null {

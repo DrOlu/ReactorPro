@@ -108,7 +108,8 @@ test("a direct-connection candidate snapshot omits the proxy flag entirely", () 
   const direct = captureTransportSnapshot({
     "x-liveagent-upstream-origin": "https://api.domestic.example",
   });
-  // failover 逐候选独立性:主选走代理、备选直连,两份快照互不泄漏。
+  // Per-candidate failover independence: the primary goes through the proxy and the fallback
+  // connects directly; the two snapshots do not leak into each other.
   assert.equal(withProxy.useSystemProxy, true);
   assert.equal(direct.useSystemProxy, false);
   assert.ok(withProxy.headerNames.includes("x-liveagent-use-system-proxy"));

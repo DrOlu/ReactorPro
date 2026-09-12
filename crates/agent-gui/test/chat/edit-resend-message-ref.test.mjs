@@ -48,10 +48,11 @@ test("findHistoryMessageRefByMessageId returns undefined for unknown or blank id
   assert.equal(conversationState.findHistoryMessageRefByMessageId(state, "   "), undefined);
 });
 
-// 与 Rust history_message_content_hash 的跨语言对齐校验：fixture 与期望哈希和
-// src-tauri/src/commands/history/chat_history/tests.rs 中的
-// history_message_content_hash_matches_frontend_fixture 逐字面值一致。
-// 任何一侧改动哈希算法都必须同步更新两处。
+// Cross-language alignment check with the Rust history_message_content_hash: the fixture and
+// expected hash are byte-for-byte identical to
+// history_message_content_hash_matches_frontend_fixture in
+// src-tauri/src/commands/history/chat_history/tests.rs. Any change to the hash algorithm on
+// either side must be mirrored in both places.
 test("content hash stays byte-aligned with the Rust implementation", () => {
   const plain = { role: "user", id: "user-plain", content: "hello there", timestamp: 1000 };
   const emptyRefs = { ...plain, liveAgentReferencedConversations: [] };
@@ -71,7 +72,7 @@ test("content hash stays byte-aligned with the Rust implementation", () => {
         cwd: " /tmp/work ",
         updatedAt: 1735689600123,
       },
-      { id: "conv-beta", title: "训练 β 运行" },
+      { id: "conv-beta", title: "Training β run" },
       { id: "conv-alpha", title: "duplicate entry" },
       { id: "conv-gamma", title: "third reference" },
       { id: "conv-delta", title: "over the cap" },
@@ -79,10 +80,12 @@ test("content hash stays byte-aligned with the Rust implementation", () => {
   };
 
   assert.equal(conversationState.getHistoryMessageContentHash(plain), "fnv1a32:73027b85");
-  // 空引用数组不追加哈希段：与无引用消息哈希一致，保证旧历史向后兼容。
+  // An empty reference array appends no hash segment: it matches the hash of a message with no
+  // references, keeping old history backward compatible.
   assert.equal(conversationState.getHistoryMessageContentHash(emptyRefs), "fnv1a32:73027b85");
-  // 归一化（id 修剪、标题折叠空白、去重、上限 3）后的引用参与哈希。
-  assert.equal(conversationState.getHistoryMessageContentHash(withRefs), "fnv1a32:87daff4d");
+  // The references participate in the hash after normalization (id trimmed, title whitespace
+  // collapsed, deduplicated, capped at 3).
+  assert.equal(conversationState.getHistoryMessageContentHash(withRefs), "fnv1a32:19221043");
 });
 
 function collectEvents() {

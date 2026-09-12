@@ -75,7 +75,7 @@ func TestClearSessionDoesNotCloseReplacement(t *testing.T) {
 	assertDoneOpen(t, second.Done())
 
 	env := &gatewayv2.GatewayEnvelope{RequestId: "still-current"}
-	// SendToAgentContext 等待送达 Ack；在旁路读取并 Ack 出站信封后再收敛。
+	// SendToAgentContext waits for a delivery Ack; read and Ack the outbound envelope on the side channel so it converges.
 	sendErr := make(chan error, 1)
 	go func() {
 		sendErr <- sm.SendToAgentContext(context.Background(), "desktop-agent", env)
@@ -239,7 +239,7 @@ func TestDispatchFromStaleSessionIsIgnored(t *testing.T) {
 	second := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(second)
 
-	// RegisterStreamAndSendContext 等待送达 Ack；没有服务泵，用一次性 drain 代替。
+	// RegisterStreamAndSendContext waits for a delivery Ack; there is no service pump, so a one-shot drain stands in for it.
 	go func() {
 		outbound := <-second.Outbound()
 		outbound.Ack(nil)

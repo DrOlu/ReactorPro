@@ -44,7 +44,7 @@ type CronPromptRunnerProps = {
 };
 
 function buildCronSystemPrompt(taskName: string) {
-  const lines = ["You are running a scheduled Auto Prompt task in LiveAgent."];
+  const lines = ["You are running a scheduled Auto Prompt task in ReactorPro."];
   const normalizedTaskName = taskName.trim();
   if (normalizedTaskName) {
     lines.push(`Task: ${normalizedTaskName}`);
@@ -72,7 +72,7 @@ async function buildCronSkillsContext(settings: AppSettings, workdir: string) {
   const skillByName = new Map(discovery.skills.map((skill) => [skill.name, skill]));
   const missing = selectedSkillNames.filter((name) => !skillByName.has(name));
   if (missing.length > 0 && resources.mode !== "custom") {
-    throw new Error(`找不到以下 Skills：${missing.join(", ")}（请先重新扫描固定 Skills 目录）`);
+    throw new Error(`Skills not found: ${missing.join(", ")} (please re-scan the pinned Skills directory first)`);
   }
 
   const selectedSkills = selectedSkillNames
@@ -216,8 +216,8 @@ async function executeCronPromptRun(
         ...DEFAULT_CHAT_RUNTIME_CONTROLS,
         reasoning: resolveCronReasoning(request.reasoning),
       }),
-      // 后台定时任务恒开提示词缓存：与前台会话共享同一前缀，命中率远高于按
-      // 供应商开关逐个判断。
+      // Background scheduled tasks always enable prompt caching: they share the same prefix with
+      // foreground sessions, so the hit rate is far higher than judging per-provider switches one by one.
       promptCachingEnabled: true,
     },
     runtimePlatform,

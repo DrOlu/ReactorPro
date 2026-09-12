@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 反漂移锁：UI 档位列表（resolveModelThinking）与请求期钳制
-// （pi-ai getSupportedThinkingLevels 读 createModelFromConfig 产物）必须逐档一致，
-// 否则用户能选到发不出去的档、或被钳到列表之外的档。
+// Anti-drift lock: the UI level list (resolveModelThinking) and request-time clamping (pi-ai
+// getSupportedThinkingLevels reading the createModelFromConfig output) must agree level by level,
+// otherwise users could select a level that cannot be sent, or be clamped to a level outside the list.
 const realPiAi = await import(
   new URL("../../node_modules/@earendil-works/pi-ai/dist/models.js", import.meta.url).href
 );

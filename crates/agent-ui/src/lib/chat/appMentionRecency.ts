@@ -1,26 +1,26 @@
-// @ 提及应用的「最近使用」前端持久化：单个版本化 localStorage 键（与
-// lib/chat-floor-nav/floorBookmarks.ts 的 JSON blob 惯例一致），结构
-// { version, keys: string[] }，keys 按最近使用在前排列。身份键直接复用
-// appMentionIcons 的 identityKeys 裁决（bundle id > path > name），不另
-// 维护一份优先级。localStorage 不可用时静默降级为仅本次运行有效。
+// Frontend persistence for @-mention app "recently used": a single versioned localStorage key (consistent
+// with the JSON blob convention in lib/chat-floor-nav/floorBookmarks.ts), structured as
+// { version, keys: string[] }, with keys ordered most-recently-used first. Identity keys directly reuse
+// appMentionIcons' identityKeys decision (bundle id > path > name), maintaining no separate priority list.
+// When localStorage is unavailable it silently degrades to being valid only for the current run.
 
 import { type AppMentionIconIdentity, identityKeys } from "./appMentionIcons";
 
 const STORAGE_KEY = "liveagent.app-mention-recents.v1";
 const STORAGE_VERSION = 1;
-// 存的比弹层展示的多：已卸载/被门控滤掉的应用不该把榜单掏空。
+// Stores more than the popover displays: uninstalled or gated-out apps should not empty the list.
 const MAX_RECENT_KEYS = 20;
 
 export type AppMentionRecencyIdentity = AppMentionIconIdentity;
 
-/** 应用的最近使用榜单键——取身份键裁决里最稳定的一个作规范键。 */
+/** The recent-use list key for an app -- takes the most stable of the identity-key decisions as the canonical key. */
 export function appMentionRecencyKey(identity: AppMentionRecencyIdentity): string {
   return identityKeys(identity)[0] ?? "";
 }
 
 /**
- * 按最近使用排序：上榜的按榜单先后排在最前，未上榜的保持入参原序
- * （宿主给的字母序；Array.prototype.sort 是稳定排序）。
+ * Sorts by recent use: listed ones come first in list order, and unlisted ones keep the input order
+ * (the alphabetical order given by the host; Array.prototype.sort is a stable sort).
  */
 export function sortAppsByMentionRecency<T extends AppMentionRecencyIdentity>(
   apps: readonly T[],
@@ -60,17 +60,17 @@ function persist(keys: string[]) {
       JSON.stringify({ version: STORAGE_VERSION, keys }),
     );
   } catch {
-    // 存储不可用（隐私模式/配额）：榜单仅在本次运行内生效。
+    // Storage unavailable (private mode / quota): the list is only valid for the current run.
   }
 }
 
-/** 最近使用的应用身份键，最近在前。 */
+/** Recently used app identity keys, most recent first. */
 export function readAppMentionRecents(): readonly string[] {
   if (cache === null) cache = readStoredKeys();
   return cache;
 }
 
-/** 记录一次 @ 应用的使用：身份键提到榜首并落盘。 */
+/** Records one @-app use: the identity key is moved to the top and persisted. */
 export function recordAppMentionUse(identity: AppMentionRecencyIdentity): void {
   const key = appMentionRecencyKey(identity);
   if (!key) return;
@@ -82,7 +82,7 @@ export function recordAppMentionUse(identity: AppMentionRecencyIdentity): void {
   persist(next);
 }
 
-/** 仅供测试：清空内存缓存，强制下次访问重读 localStorage。 */
+/** Test-only: clears the in-memory cache, forcing the next access to re-read localStorage. */
 export function resetAppMentionRecentsCacheForTest(): void {
   cache = null;
 }

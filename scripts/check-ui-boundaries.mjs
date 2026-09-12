@@ -42,12 +42,12 @@ const checks = [
     forbidden: [
       {
         pattern: /(?:from\s+|import\s*\(\s*|import\s+)["']@tauri-apps\//,
-        reason: "共享层必须通过 @liveagent/adapters 访问应用能力",
+        reason: "The shared layer must access app capabilities through @liveagent/adapters",
       },
       {
         pattern:
           /(?:from\s+|import\s*\(\s*)["'][^"']*crates\/agent-(?:gui|gateway)/,
-        reason: "共享层不能反向依赖具体应用路径",
+        reason: "The shared layer must not depend on specific app paths in reverse",
       },
     ],
   },
@@ -56,46 +56,46 @@ const checks = [
     forbidden: [
       {
         pattern: /(?:from\s+|import\s*\(\s*|import\s+)["']@tauri-apps\//,
-        reason: "WebUI 不能直接导入 Tauri API",
+        reason: "WebUI must not import the Tauri API directly",
       },
       {
         pattern: /(?:from\s+|import\s*\(\s*)["'][^"']*crates\/agent-gui/,
-        reason: "WebUI 不能依赖桌面应用源码",
+        reason: "WebUI must not depend on desktop app source",
       },
       {
         pattern:
           /(?:from\s+|import\s*\(\s*|import\s+)["'](?:@\/|\.{1,2}\/)[^"']*ChatComposerBar["']/,
-        reason: "聊天输入栏必须使用 @liveagent/ui/pages/chat/ChatComposerBar",
+        reason: "The chat composer bar must use @liveagent/ui/pages/chat/ChatComposerBar",
       },
       {
         pattern: /chat-(?:user-bubble|assistant)-action/,
         reason:
-          "消息操作栏必须使用 @liveagent/ui/components/chat/TranscriptMessageActions",
+          "The message actions bar must use @liveagent/ui/components/chat/TranscriptMessageActions",
       },
       {
         pattern:
           /(?:function|const)\s+(?:ContextCheckpointCard|RetryDetailsBlock)\b|checkpoint-card|retry-details-toggle/,
-        reason: "上下文检查点与重试详情必须使用 @liveagent/ui 共享组件",
+        reason: "Context checkpoints and retry details must use the @liveagent/ui shared components",
       },
       {
         pattern:
           /(?:function\s+normalizeLiveToolStatus|const\s+VIBING_STATUS\s*=|function\s+buildContextUsageScanItems)\b/,
-        reason: "聊天实时状态与上下文用量投影必须使用 @liveagent/ui 共享逻辑",
+        reason: "Chat live status and context usage projection must use the @liveagent/ui shared logic",
       },
       {
         pattern:
           /(?:from\s+|import\s*\(\s*|import\s+)["']@liveagent\/ui\/(?:components\/chat\/ChatHeader|pages\/(?:skills-hub\/SkillsHubPage|mcp-hub\/McpHubPage))["']/,
-        reason: "公共页面与聊天顶部栏必须由共享 ApplicationView 统一组装",
+        reason: "Common pages and the chat top bar must be assembled uniformly by the shared ApplicationView",
       },
       {
         pattern:
           /(?:from\s+|import\s*\(\s*|import\s+)["']@\/pages\/chat\/(?:AssistantBubble|useChatSkills|queue\/chatTurnQueue|assistant-bubble\/[^"']+)["']/,
-        reason: "聊天渲染、Skill 与队列公共逻辑必须使用 agent-ui 共享实现",
+        reason: "Chat rendering, Skill, and queue common logic must use the agent-ui shared implementation",
       },
       {
         pattern:
           /(?:from\s+|import\s*\(\s*|import\s+)["']\.\/(?:FileDropOverlay|WorkspaceOverlayHost)["']/,
-        reason: "聊天 Overlay 必须使用 agent-ui 共享实现",
+        reason: "The chat Overlay must use the agent-ui shared implementation",
       },
     ],
   },
@@ -105,37 +105,37 @@ const checks = [
       {
         pattern:
           /(?:from\s+|import\s*\(\s*)["'][^"']*crates\/agent-gateway\/web/,
-        reason: "GUI 不能依赖 WebUI 应用源码",
+        reason: "The GUI must not depend on WebUI app source",
       },
       {
         pattern:
           /(?:from\s+|import\s*\(\s*|import\s+)["']\.{1,2}\/[^"']*ChatComposerBar["']/,
-        reason: "聊天输入栏必须使用 @liveagent/ui/pages/chat/ChatComposerBar",
+        reason: "The chat composer bar must use @liveagent/ui/pages/chat/ChatComposerBar",
       },
       {
         pattern: /chat-(?:user-bubble|assistant)-action/,
         reason:
-          "消息操作栏必须使用 @liveagent/ui/components/chat/TranscriptMessageActions",
+          "The message actions bar must use @liveagent/ui/components/chat/TranscriptMessageActions",
       },
       {
         pattern:
           /(?:function|const)\s+(?:ContextCheckpointCard|RetryDetailsBlock)\b|checkpoint-card|retry-details-toggle/,
-        reason: "上下文检查点与重试详情必须使用 @liveagent/ui 共享组件",
+        reason: "Context checkpoints and retry details must use the @liveagent/ui shared components",
       },
       {
         pattern:
           /(?:function\s+normalizeLiveToolStatus|const\s+VIBING_STATUS\s*=|function\s+buildContextUsageScanItems)\b/,
-        reason: "聊天实时状态与上下文用量投影必须使用 @liveagent/ui 共享逻辑",
+        reason: "Chat live status and context usage projection must use the @liveagent/ui shared logic",
       },
       {
         pattern:
           /(?:from\s+|import\s*\(\s*|import\s+)["']@liveagent\/ui\/(?:components\/chat\/ChatHeader|pages\/(?:skills-hub\/SkillsHubPage|mcp-hub\/McpHubPage))["']/,
-        reason: "公共页面与聊天顶部栏必须由共享 ApplicationView 统一组装",
+        reason: "Common pages and the chat top bar must be assembled uniformly by the shared ApplicationView",
       },
       {
         pattern:
           /(?:from\s+|import\s*\(\s*|import\s+)["']\.{1,2}\/(?:components\/(?:ChatFileDropOverlay|WorkspaceOverlayHost|assistant-bubble\/[^"']+)|hooks\/useChatSkills)["']/,
-        reason: "聊天渲染、Overlay 与 Skill 公共逻辑必须使用 agent-ui 共享实现",
+        reason: "Chat rendering, Overlay, and Skill common logic must use the agent-ui shared implementation",
       },
     ],
   },
@@ -157,30 +157,30 @@ const retiredDialogPatterns = [
   {
     pattern:
       /\b(?:settings-modal-(?:overlay|panel|header|subheader|body|footer|actions|step-row)|(?:external-link|history-share)-modal-(?:overlay|panel)|modal-dialog-(?:backdrop|popup|viewport)|ssh-forward-dialog-(?:backdrop|popup))\b/,
-    reason: "Dialog 显隐、动画和层级必须由共享 Dialog/Sheet 原语管理",
+    reason: "Dialog visibility, animation, and layering must be managed by the shared Dialog/Sheet primitives",
   },
   {
     pattern: /\buseModalMotion\b/,
     reason:
-      "Dialog 退场必须使用 Base UI onOpenChangeComplete，不能恢复手写计时器",
+      "Dialog exit must use Base UI onOpenChangeComplete; do not reintroduce hand-written timers",
   },
   {
     pattern: /\brole=["']dialog["']/,
-    reason: "业务组件不能手写 dialog 语义，必须使用共享 Dialog/AlertDialog",
+    reason: "Business components must not hand-write dialog semantics; use the shared Dialog/AlertDialog",
   },
   {
     pattern:
       /\b(?:overlayClassName|viewportClassName|backdropClassName|portalProps)\b/,
     reason:
-      "业务组件不能覆盖弹层基础设施；布局应落在 Content/Sheet 的语义 API 内",
+      "Business components must not override overlay infrastructure; layout should stay within the Content/Sheet semantic API",
   },
   {
     pattern: /\bz-\[\d+\]/,
-    reason: "层级必须使用 layer-popover/layer-modal/layer-toast 等语义 token",
+    reason: "Layering must use semantic tokens such as layer-popover/layer-modal/layer-toast",
   },
   {
     pattern: /\brounded-\[(?:\d|\.\d)[^\]]*\]/,
-    reason: "圆角必须使用由 --radius 派生的标准 rounded-* token",
+    reason: "Border radius must use the standard rounded-* tokens derived from --radius",
   },
 ];
 for (const root of [
@@ -197,7 +197,7 @@ for (const root of [
     ) {
       failures += 1;
       console.error(
-        `${filePath}: Base UI 只能由 agent-ui 共享 UI 原语直接导入`,
+        `${filePath}: Base UI may only be imported directly by agent-ui shared UI primitives`,
       );
     }
     for (const rule of retiredDialogPatterns) {
@@ -238,7 +238,7 @@ for (const [facadePath, expectedSource] of sharedFacades) {
   if (!existsSync(absolutePath)) continue;
   if (readFileSync(absolutePath, "utf8") === expectedSource) continue;
   failures += 1;
-  console.error(`${facadePath}: 共享兼容入口只能重导出 agent-ui 真源`);
+  console.error(`${facadePath}: The shared compatibility entry may only re-export the agent-ui source of truth`);
 }
 
 const appRoots = [
@@ -282,7 +282,7 @@ for (const appRoot of appRoots) {
     )) {
       failures += 1;
       console.error(
-        `${relative(repoRoot, file)}:${declaration.line}:${declaration.column}: ${declaration.name} 已迁移到 agent-ui，宿主只能导入共享实现`,
+        `${relative(repoRoot, file)}:${declaration.line}:${declaration.column}: ${declaration.name} has migrated to agent-ui; hosts may only import the shared implementation`,
       );
     }
   }
@@ -295,7 +295,7 @@ for (const sharedFile of listSourceFiles(sharedRoot)) {
     if (sharedFacades.has(toPosixPath(relative(repoRoot, appFile)))) continue;
     failures += 1;
     console.error(
-      `${toPosixPath(relative(repoRoot, appFile))}: 共享源码不能在应用目录保留同路径副本`,
+      `${toPosixPath(relative(repoRoot, appFile))}: Shared source must not keep a same-path copy in the app directory`,
     );
   }
 }
@@ -364,7 +364,7 @@ for (const retiredPath of retiredSharedCopies) {
   if (!existsSync(join(repoRoot, retiredPath))) continue;
   failures += 1;
   console.error(
-    `${retiredPath}: 已迁移到 agent-ui 的共享源码不能在宿主目录重新创建`,
+    `${retiredPath}: Shared source migrated to agent-ui must not be recreated in the host directory`,
   );
 }
 
@@ -382,9 +382,9 @@ for (const [entryFile, viewFile] of applicationEntries) {
   const entrySource = readFileSync(entryFile, "utf8");
   const viewSource = readFileSync(viewFile, "utf8");
   const viewComponentName = basename(viewFile, ".tsx");
-  // 断言真实的渲染委托，而非文本巧合：入口必须以 JSX 实际渲染 View 组件
-  // （仅 import type 不算数），View 必须 import 共享 ApplicationView 并渲染它
-  // （注释里出现路径字符串不算数）。
+  // Assert real render delegation, not textual coincidence: the entry must actually render the View component via JSX
+  // (import type alone does not count), and the View must import the shared ApplicationView and render it
+  // (a path string appearing in a comment does not count).
   const delegatesToView =
     entryFile === viewFile ||
     rendersImportedComponent(
@@ -402,7 +402,7 @@ for (const [entryFile, viewFile] of applicationEntries) {
   if (delegatesToView && rendersSharedApplicationView) continue;
   failures += 1;
   console.error(
-    `${relative(repoRoot, entryFile)}: 应用必须通过共享 ApplicationView 渲染主视图`,
+    `${relative(repoRoot, entryFile)}: The app must render the main view through the shared ApplicationView`,
   );
 }
 

@@ -204,7 +204,7 @@ fn search_fts_table(
     };
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("准备记忆 FTS 查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare memory FTS query: {e}"))?;
     let rows = stmt
         .query_map(params![query], |row| {
             Ok((
@@ -215,10 +215,10 @@ fn search_fts_table(
                 row.get::<_, f64>(4)?,
             ))
         })
-        .map_err(|e| format!("执行记忆 FTS 查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to execute memory FTS query: {e}"))?;
     for row in rows {
         let (slug, scope, workdir_hash, snippet, bm25) =
-            row.map_err(|e| format!("读取记忆 FTS 结果失败：{e}"))?;
+            row.map_err(|e| format!("Failed to read memory FTS result: {e}"))?;
         let Some(meta) = meta_by_key.get(&(scope, workdir_hash, slug)) else {
             continue;
         };
@@ -339,27 +339,27 @@ fn fts_phrase(input: &str) -> String {
 fn expand_memory_search_terms(query: &str) -> Vec<String> {
     let mut terms = vec![query.trim().to_string()];
     let lower = query.to_lowercase();
-    if lower.contains("我是谁")
-        || lower.contains("我的名字")
-        || lower.contains("我叫什么")
+    if lower.contains("who i am")
+        || lower.contains("my name")
+        || lower.contains("what's my name")
         || lower.contains("who am i")
         || lower.contains("my name")
     {
         terms.extend([
-            "我叫".to_string(),
-            "我的名字是".to_string(),
-            "我是".to_string(),
-            "身份".to_string(),
+            "my name is".to_string(),
+            "i am called".to_string(),
+            "i am".to_string(),
+            "identity".to_string(),
             "name".to_string(),
             "identity".to_string(),
             "profile".to_string(),
             "user".to_string(),
         ]);
     }
-    if lower.contains("偏好") || lower.contains("习惯") || lower.contains("preference") {
+    if lower.contains("preference") || lower.contains("habit") || lower.contains("prefers") {
         terms.extend([
-            "偏好".to_string(),
-            "习惯".to_string(),
+            "preference".to_string(),
+            "habit".to_string(),
             "prefer".to_string(),
             "feedback".to_string(),
         ]);

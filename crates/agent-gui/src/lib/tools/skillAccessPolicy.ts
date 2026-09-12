@@ -235,7 +235,7 @@ export function assertSkillMutationAllowed(
     throw new Error(
       [
         `${operation} is blocked: built-in Skill "${baseDir}" is protected and cannot be modified by the model.`,
-        "Built-in Skills may be read and used, but their files are managed by LiveAgent.",
+        "Built-in Skills may be read and used, but their files are managed by ReactorPro.",
         "Create or update a separate user Skill instead.",
       ].join(" "),
     );

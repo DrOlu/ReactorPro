@@ -29,9 +29,9 @@ func (m *Manager) SubscribeTerminalEvents() (<-chan Tagged[*gatewayv2.TerminalEv
 	return ch, cleanup
 }
 
-// RegisterTerminalStreamToAgentIfCurrent 把终端数据面鉴权结果与连接作为一个注册
-// 动作提交。isCurrent 在 registry 写锁内执行，凭证已轮换或删除时不会留下登记项。
-// 同 Agent 重连会撤销旧终端连接；不同 Agent 互不影响。
+// RegisterTerminalStreamToAgentIfCurrent submits the terminal data-plane auth result and connection as a single
+// registration action. isCurrent runs inside the registry write lock, so no entry is left behind when credentials have been rotated or deleted.
+// A reconnect from the same Agent revokes the old terminal connection; different Agents do not affect each other.
 func (m *Manager) RegisterTerminalStreamToAgentIfCurrent(
 	agentID string,
 	ch chan *gatewayv2.TerminalStreamFrame,
@@ -70,9 +70,9 @@ func (m *Manager) RegisterTerminalStreamToAgentIfCurrent(
 	}, true
 }
 
-// SendTerminalFrameToAgent 把浏览器终端帧送往目标 Agent 的数据面连接。
-// 终端数据面独立于控制会话：只要求通道已登记，不要求控制会话在线
-// （终端数据面是独立连接，两者的建立顺序不定）。
+// SendTerminalFrameToAgent sends a browser terminal frame to the target Agent data-plane connection.
+// The terminal data plane is independent of the control session: it only requires the channel to be registered, not the control session to be online
+// (the terminal data plane is a separate connection, and the two may be established in any order).
 func (m *Manager) SendTerminalFrameToAgent(ctx context.Context, agentID string, frame *gatewayv2.TerminalStreamFrame) error {
 	if frame == nil {
 		return nil
@@ -227,8 +227,8 @@ func terminalSessionMatchesProject(session *gatewayv2.TerminalSession, projectPa
 	return strings.TrimSpace(session.GetProjectPathKey()) == projectPathKey
 }
 
-// clearTerminalSessionSnapshot 清空 agent_id 的终端会话快照（该 Agent 会话更替时，
-// 旧连接的终端进程已随桌面端断开失效）。
+// clearTerminalSessionSnapshot clears the terminal session snapshot for agent_id (when that Agent's session is replaced,
+// the old connection's terminal process has already become invalid when the desktop disconnected).
 func (m *Manager) clearTerminalSessionSnapshot(agentID string) {
 	entry := m.entryFor(agentID)
 	if entry == nil {

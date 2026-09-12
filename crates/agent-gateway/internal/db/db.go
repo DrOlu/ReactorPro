@@ -1,5 +1,7 @@
-// Package db 管理网关共享的数据库连接池：各持久化子系统在同一池上建各自的表，
-// 避免对同一库开多个池放大锁冲突。当前后端为内嵌 SQLite，后端切换在 Open 分发。
+// Package db manages the gateway's shared database connection pool: each persistence
+// subsystem creates its own tables on the same pool, avoiding multiple pools on one
+// database amplifying lock contention. The current backend is embedded SQLite; backend
+// switching is dispatched in Open.
 package db
 
 import (
@@ -8,13 +10,14 @@ import (
 	"strings"
 )
 
-// DB 是 Gateway 共享连接池句柄。
+// DB is the handle to the Gateway's shared connection pool.
 type DB struct {
 	pool *sql.DB
 }
 
-// Open 打开连接池；DSN 为空直接报错，Gateway 不提供关闭持久化的模式。目前仅
-// 支持 SQLite（DSN 即文件路径），后端扩展（如 PostgreSQL）在此按 DSN 分发。
+// Open opens the connection pool; an empty DSN is an immediate error, and the Gateway
+// offers no mode that disables persistence. Currently only SQLite is supported (the DSN
+// is the file path); backend extensions (e.g. PostgreSQL) are dispatched here by DSN.
 func Open(dsn string) (*DB, error) {
 	dsn = strings.TrimSpace(dsn)
 	if dsn == "" {
@@ -31,7 +34,8 @@ func (d *DB) Enabled() bool {
 	return d != nil
 }
 
-// Pool 返回底层连接池供子系统建表与查询；生命周期归本包，调用方不得 Close。
+// Pool returns the underlying connection pool for subsystems to create tables and query;
+// its lifetime belongs to this package, and callers must not Close it.
 func (d *DB) Pool() *sql.DB {
 	if d == nil {
 		return nil

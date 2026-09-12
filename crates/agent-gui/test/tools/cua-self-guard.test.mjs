@@ -20,21 +20,21 @@ const OTHER_PID = 99;
 
 test.beforeEach(() => resetCuaSelfGuardCaches());
 
-test("宿主 pid 的调用被拒绝，其他 pid 放行", () => {
+test("calls targeting the host pid are rejected, other pids pass", () => {
   assert.ok(refuseSelfTargetedCall({ pid: SELF_PID }, SELF_PID));
   assert.equal(refuseSelfTargetedCall({ pid: OTHER_PID }, SELF_PID), null);
   assert.equal(refuseSelfTargetedCall({}, SELF_PID), null);
   assert.equal(refuseSelfTargetedCall(undefined, SELF_PID), null);
 });
 
-test("拿不到宿主 pid 时不拦截——宁可不拦，也不误伤正常目标", () => {
+test("when the host pid is unavailable, do not intercept — better not to intercept than to hit a legitimate target", () => {
   assert.equal(refuseSelfTargetedCall({ pid: SELF_PID }, null), null);
 });
 
-test("窗口枚举结果剔除宿主记录", () => {
+test("window enumeration results have host records removed", () => {
   const payload = JSON.stringify({
     windows: [
-      { window_id: 1, pid: SELF_PID, app_name: "LiveAgent" },
+      { window_id: 1, pid: SELF_PID, app_name: "ReactorPro" },
       { window_id: 2, pid: OTHER_PID, app_name: "Safari" },
     ],
   });
@@ -45,8 +45,9 @@ test("窗口枚举结果剔除宿主记录", () => {
   );
 });
 
-test("过滤时学到的 window_id 让后续按 window_id 的调用也被拦下", () => {
-  // 过滤之前拦不住：window_id 与 pid 的对应关系只有 cua-driver 知道。
+test("the window_id learned during filtering makes later window_id-based calls intercepted too", () => {
+  // Before filtering it cannot be intercepted: only cua-driver knows the mapping between
+  // window_id and pid.
   assert.equal(refuseSelfTargetedCall({ window_id: 1 }, SELF_PID), null);
 
   stripSelfFromJsonText(
@@ -58,7 +59,7 @@ test("过滤时学到的 window_id 让后续按 window_id 的调用也被拦下"
   assert.equal(refuseSelfTargetedCall({ window_id: 2 }, SELF_PID), null);
 });
 
-test("嵌套结构里的宿主记录同样被剔除", () => {
+test("host records nested in structures are removed as well", () => {
   const payload = JSON.stringify({
     desktop: { apps: [{ pid: SELF_PID }, { pid: OTHER_PID }] },
   });
@@ -66,25 +67,27 @@ test("嵌套结构里的宿主记录同样被剔除", () => {
   assert.deepEqual(stripped.desktop.apps, [{ pid: OTHER_PID }]);
 });
 
-test("非 JSON 载荷与无宿主记录的载荷原样返回", () => {
+test("non-JSON payloads and payloads without host records are returned as-is", () => {
   const plain = "Screenshot captured: 1920x1080";
   assert.equal(stripSelfFromJsonText(plain, SELF_PID), plain);
 
   const malformed = "{not json";
   assert.equal(stripSelfFromJsonText(malformed, SELF_PID), malformed);
 
-  // 没有命中就不该重新序列化——避免无谓地改写模型看到的原文格式。
+  // With no match it must not be re-serialized — avoiding needlessly rewriting the original
+  // format the model sees.
   const clean = JSON.stringify({ windows: [{ window_id: 2, pid: OTHER_PID }] });
   assert.equal(stripSelfFromJsonText(clean, SELF_PID), clean);
 });
 
-test("拿不到宿主 pid 时不过滤", () => {
+test("no filtering when the host pid is unavailable", () => {
   const payload = JSON.stringify([{ pid: SELF_PID }]);
   assert.equal(stripSelfFromJsonText(payload, null), payload);
 });
 
-test("包在 target 里的宿主 pid / window_id 同样被拦下", () => {
-  // 上游现约把目标写进 target 对象。只看顶层字段的话，官方写法直接放行。
+test("host pid / window_id wrapped inside target are intercepted as well", () => {
+  // The upstream convention writes the target into the target object. Looking only at
+  // top-level fields would let the official form pass straight through.
   assert.ok(
     refuseSelfTargetedCall({ target: { kind: "window", pid: SELF_PID }, x: 10, y: 10 }, SELF_PID),
   );
@@ -98,7 +101,7 @@ test("包在 target 里的宿主 pid / window_id 同样被拦下", () => {
   assert.equal(refuseSelfTargetedCall({ target: { kind: "window", window_id: 8 } }, SELF_PID), null);
 });
 
-test("camelCase 与 owner_pid 之类的别名一并覆盖", () => {
+test("aliases such as camelCase and owner_pid are covered too", () => {
   assert.ok(refuseSelfTargetedCall({ target: { processId: SELF_PID } }, SELF_PID));
   assert.ok(refuseSelfTargetedCall({ target: { owner_pid: SELF_PID } }, SELF_PID));
 
@@ -106,41 +109,43 @@ test("camelCase 与 owner_pid 之类的别名一并覆盖", () => {
   assert.ok(refuseSelfTargetedCall({ windowId: 11 }, SELF_PID));
 });
 
-test("桌面坐标判定：显式窗口目标不算，桌面目标与扁平坐标都算", () => {
+test("desktop-coordinate detection: an explicit window target does not count; desktop targets and flat coordinates both do", () => {
   assert.equal(
     usesDesktopScreenCoordinates({ target: { kind: "window", window_id: 9 }, x: 10, y: 10 }),
     false,
   );
   assert.ok(usesDesktopScreenCoordinates({ target: { kind: "desktop" }, x: 800, y: 400 }));
-  // 没有 target 的扁平写法按屏幕绝对坐标处理。
+  // A flat form without target is treated as absolute screen coordinates.
   assert.ok(usesDesktopScreenCoordinates({ x: 800, y: 400 }));
-  // 不带坐标的调用与本条无关。
+  // Calls without coordinates are unrelated to this check.
   assert.equal(usesDesktopScreenCoordinates({ target: { kind: "desktop" } }), false);
   assert.equal(usesDesktopScreenCoordinates(undefined), false);
 });
 
-test("落在宿主窗口矩形内的桌面坐标被拒绝，外面的放行", () => {
+test("desktop coordinates inside the host window rectangle are rejected; those outside pass", () => {
   const rects = [{ x: 100, y: 100, width: 400, height: 300 }];
 
   assert.ok(refuseSelfRegionCall({ target: { kind: "desktop" }, x: 200, y: 200 }, rects));
-  // 边界算在内：窗口边框上的点击一样会落到宿主窗口。
+  // Boundaries included: a click on the window border also falls on the host window.
   assert.ok(refuseSelfRegionCall({ x: 100, y: 100 }, rects));
   assert.ok(refuseSelfRegionCall({ x: 500, y: 400 }, rects));
 
   assert.equal(refuseSelfRegionCall({ x: 900, y: 200 }, rects), null);
   assert.equal(refuseSelfRegionCall({ x: 200, y: 900 }, rects), null);
 
-  // 拖拽这类多点参数，任一端落在宿主窗口里就拒绝。
+  // For multi-point arguments like drags, if either end falls inside the host window it is
+  // rejected.
   assert.ok(refuseSelfRegionCall({ start: { x: 900, y: 900 }, end: { x: 200, y: 200 } }, rects));
 
-  // 矩形拿不到（宿主窗口全部不可见 / 查询失败）时不拦，宁可不拦也不误伤。
+  // When the rectangle is unavailable (all host windows invisible / query failed), do not
+  // intercept; better not to intercept than to hit a legitimate target.
   assert.equal(refuseSelfRegionCall({ x: 200, y: 200 }, []), null);
 });
 
-test("带摘要前缀的 MCP 文本也会被过滤，前后文原样保留", () => {
+test("MCP text with a summary prefix is filtered too, with surrounding text preserved as-is", () => {
   const payload = `✅ Windows listed\n${JSON.stringify({
     windows: [
-      { window_id: 1, pid: SELF_PID, app_name: "LiveAgent" },
+      { window_id: 1, pid: SELF_PID, app_name: "ReactorPro" },
       { window_id: 2, pid: OTHER_PID, app_name: "Safari" },
     ],
   })}\n(2 windows)`;
@@ -148,66 +153,68 @@ test("带摘要前缀的 MCP 文本也会被过滤，前后文原样保留", () 
   const stripped = stripSelfFromJsonText(payload, SELF_PID);
   assert.ok(stripped.startsWith("✅ Windows listed\n"));
   assert.ok(stripped.endsWith("\n(2 windows)"));
-  assert.equal(stripped.includes("LiveAgent"), false);
+  assert.equal(stripped.includes("ReactorPro"), false);
 
-  // 顺带学到了宿主的 window_id。
+  // The host's window_id was learned along the way.
   assert.ok(refuseSelfTargetedCall({ window_id: 1 }, SELF_PID));
 });
 
-test("一条文本里的多段 JSON 全部过滤，不只是第一段", () => {
+test("all JSON segments in one text are filtered, not just the first", () => {
   const payload = [
     "✅ Windows listed",
-    JSON.stringify({ windows: [{ window_id: 1, pid: SELF_PID, app_name: "LiveAgent" }] }),
+    JSON.stringify({ windows: [{ window_id: 1, pid: SELF_PID, app_name: "ReactorPro" }] }),
     "and apps:",
-    JSON.stringify({ apps: [{ pid: SELF_PID, name: "LiveAgent" }, { pid: OTHER_PID }] }),
+    JSON.stringify({ apps: [{ pid: SELF_PID, name: "ReactorPro" }, { pid: OTHER_PID }] }),
   ].join("\n");
 
   const stripped = stripSelfFromJsonText(payload, SELF_PID);
-  assert.equal(stripped.includes("LiveAgent"), false);
+  assert.equal(stripped.includes("ReactorPro"), false);
   assert.ok(stripped.includes("and apps:"));
   assert.ok(stripped.includes(String(OTHER_PID)));
 });
 
-test("嵌套过深的入参被拒绝，而不是扫不完就放行", () => {
-  // 扫不完就放行等于给出一条现成的绕过方式：把目标埋到深处即可。
+test("overly deep arguments are rejected rather than allowed when the scan cannot finish", () => {
+  // Allowing when the scan cannot finish is a ready-made bypass: just bury the target deep.
   let deep = { pid: SELF_PID };
   for (let i = 0; i < 20; i++) deep = { nested: deep };
   assert.ok(refuseSelfTargetedCall(deep, SELF_PID));
 
-  // 深但没有可疑字段的也一样拒绝——扫不完就是没能确认。
+  // Deep structures without suspicious fields are rejected too — an unfinished scan means
+  // unconfirmed.
   let benign = { note: "x" };
   for (let i = 0; i < 20; i++) benign = { nested: benign };
   assert.ok(refuseSelfTargetedCall(benign, SELF_PID));
 
-  // 正常深度不受影响。
+  // Normal depth is unaffected.
   assert.equal(
     refuseSelfTargetedCall({ target: { kind: "window", window_id: 42 } }, SELF_PID),
     null,
   );
 });
 
-test("无明确目标的 desktop 键盘调用在宿主处于前台时被拒绝", () => {
-  // v0.22.0 契约:press_key 只要求 key、hotkey 只要求 keys、type_text 只要求
-  // text,pid / window_id / 坐标均非必填,输入投递给前台应用。按 pid 与按
-  // 坐标的两道闸对这类调用完全不参与——不查前台就是一条现成的绕过。
+test("desktop keyboard calls with no explicit target are rejected when the host is in the foreground", () => {
+  // v0.22.0 contract: press_key only requires key, hotkey only requires keys, type_text only
+  // requires text; pid / window_id / coordinates are all optional, and input is delivered to
+  // the foreground app. The two gates by pid and by coordinates do not participate at all for
+  // such calls — skipping the foreground check is a ready-made bypass.
   const cases = [
     ["press_key", { scope: "desktop", key: "return" }],
     ["press_key", { target: { kind: "desktop", display_id: "primary" }, key: "return" }],
     ["hotkey", { scope: "desktop", keys: ["cmd", "q"] }],
     ["type_text", { scope: "desktop", text: "allow" }],
-    // 扁平写法:连 scope 都没有,投递语义同样是前台。
+    // Flat form: not even scope is present, yet the delivery semantics are still the foreground.
     ["press_key", { key: "return" }],
   ];
   for (const [tool, args] of cases) {
-    assert.ok(isDesktopKeyboardCall(tool, args), `${tool} 应被识别为焦点投递调用`);
+    assert.ok(isDesktopKeyboardCall(tool, args), `${tool} should be recognized as a focus-delivery call`);
     assert.ok(
       refuseDesktopKeyboardCall(tool, args, SELF_PID, SELF_PID),
-      `${tool} 在宿主前台时应被拒绝`,
+      `${tool} should be rejected when the host is in the foreground`,
     );
   }
 });
 
-test("前台是其他应用时键盘调用放行", () => {
+test("keyboard calls pass when another app is in the foreground", () => {
   assert.equal(
     refuseDesktopKeyboardCall("press_key", { scope: "desktop", key: "return" }, SELF_PID, OTHER_PID),
     null,
@@ -218,15 +225,17 @@ test("前台是其他应用时键盘调用放行", () => {
   );
 });
 
-test("前台查不到时 fail-closed 拒绝,而不是放行", () => {
-  // 窗口矩形取不到可以放行(误伤的是矩形下方的真实目标);前台查不到不行——
-  // 键盘输入没有那种二义性,放行的代价是模型可以对宿主敲任意按键。
+test("when the foreground cannot be determined, fail-closed and reject rather than allow", () => {
+  // An unavailable window rectangle may be allowed (the real target below the rectangle is what
+  // gets hit); an unavailable foreground may not — keyboard input has no such ambiguity, and
+  // allowing it means the model can type any key into the host.
   assert.ok(refuseDesktopKeyboardCall("press_key", { scope: "desktop", key: "return" }, SELF_PID, null));
 });
 
-test("带明确非宿主身份的键盘调用不过前台检查", () => {
-  // 契约里带 pid / window_id 的调用(含 desktop scope + pid 的后台投递写法)
-  // 投递给那个窗口,不跟焦点走;宿主自己的身份在这之前已被 pid 闸拒掉。
+test("keyboard calls with an explicit non-host identity skip the foreground check", () => {
+  // Calls carrying pid / window_id in the contract (including the desktop scope + pid
+  // background-delivery form) are delivered to that window and do not follow focus; the host's
+  // own identity has already been rejected by the pid gate before this.
   assert.equal(
     isDesktopKeyboardCall("press_key", { target: { kind: "window", pid: OTHER_PID }, key: "return" }),
     false,
@@ -246,7 +255,7 @@ test("带明确非宿主身份的键盘调用不过前台检查", () => {
   );
 });
 
-test("非键盘工具不受前台检查影响", () => {
+test("non-keyboard tools are unaffected by the foreground check", () => {
   assert.equal(isDesktopKeyboardCall("click", { scope: "desktop", x: 1, y: 2 }), false);
   assert.equal(isDesktopKeyboardCall("get_desktop_state", {}), false);
   assert.equal(
@@ -255,17 +264,18 @@ test("非键盘工具不受前台检查影响", () => {
   );
 });
 
-test("参数形态兜底:不认识的工具名带 key / keys 也按键盘调用处理", () => {
-  // 上游改名或新增 hold_key 之类的工具时,靠载荷特征仍能认出来。
+test("argument-shape fallback: unknown tool names carrying key / keys are treated as keyboard calls too", () => {
+  // When upstream renames or adds tools like hold_key, payload features can still identify them.
   assert.ok(isDesktopKeyboardCall("hold_key", { scope: "desktop", key: "shift" }));
   assert.ok(isDesktopKeyboardCall("send_keys", { keys: ["cmd", "w"] }));
-  // text 字段刻意不参与形态兜底:clipboard_write / 查找类工具也带 text,
-  // 投递语义与焦点无关;type_text 本身已由工具名覆盖。
+  // The text field deliberately does not participate in the shape fallback: clipboard_write /
+  // search-type tools also carry text, and their delivery semantics are unrelated to focus;
+  // type_text itself is already covered by the tool name.
   assert.equal(isDesktopKeyboardCall("clipboard_write", { text: "hello" }), false);
   assert.equal(isDesktopKeyboardCall("find_element", { scope: "desktop", text: "OK" }), false);
 });
 
-test("JSON 片段的括号配对认字符串字面量", () => {
+test("bracket pairing in JSON fragments recognizes string literals", () => {
   const payload = `Result:\n${JSON.stringify({
     windows: [{ window_id: 3, pid: SELF_PID, title: 'a } b " c' }],
   })}`;

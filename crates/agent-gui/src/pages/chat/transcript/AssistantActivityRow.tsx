@@ -23,7 +23,7 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
   showUsage?: boolean;
   usageContextWindow?: number;
   isCompactionRunning: boolean;
-  /** 本对话有工具卡在审批门上（审批发生在执行前，不体现为运行中的工具）。 */
+  /** This conversation has a tool stuck at the approval gate (approval happens before execution and does not show up as a running tool). */
   hasPendingToolApproval?: boolean;
   toolStatus: string | null;
   actionsVisible?: boolean;
@@ -53,8 +53,9 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
     onBranchConversation,
   } = props;
 
-  // 回合停在用户身上（未应答的提问 / 计划卡，或卡在审批门上的工具）时没有任何
-  // 东西在跑：进度指示改为静态，闪烁会把「等你决策」误报成「正在处理」。
+  // When the turn stops on the user (an unanswered question / plan card, or a tool stuck at the
+  // approval gate) nothing is actually running: the progress indicator becomes static, since
+  // blinking would misreport "waiting for your decision" as "processing".
   const awaitingDecision = useMemo(
     () => row.live && (hasPendingToolApproval || hasPendingInteractionCard(row.units)),
     [hasPendingToolApproval, row.live, row.units],
@@ -83,8 +84,9 @@ export const AssistantActivityRow = memo(function AssistantActivityRow(props: {
           ) : null}
         </div>
       ))}
-      {/* 整个回合存活期间常驻的脉冲星标：工具/思考的空档、压缩总结阶段都
-          保持可见，告诉用户对话仍在进行；回合落定（live=false）即消失。 */}
+      {/* The pulsing star that persists for the whole life of the turn: it stays visible
+          through gaps between tools/thinking and the compaction summary stage, telling the user
+          the conversation is still in progress; it disappears once the turn settles (live=false). */}
       {row.live ? <LiveSparkle className="pt-1" paused={awaitingDecision} /> : null}
     </div>
   );

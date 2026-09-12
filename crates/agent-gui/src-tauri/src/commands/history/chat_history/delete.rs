@@ -4,7 +4,7 @@ fn delete_chat_history_sync(
 ) -> Result<subagent_store::SubagentPruneResult, String> {
     let chat_id = id.trim().to_string();
     if chat_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("History conversation id cannot be empty".to_string());
     }
 
     let existing = conn
@@ -14,15 +14,15 @@ fn delete_chat_history_sync(
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|e| format!("检查历史对话是否存在失败：{e}"))?;
+        .map_err(|e| format!("Failed to check whether the history conversation exists: {e}"))?;
 
     if existing.is_none() {
-        return Err("未找到对应的历史对话".to_string());
+        return Err("No matching history conversation found".to_string());
     }
 
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启删除历史事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin delete-history transaction: {e}"))?;
     let subagent_prune_result =
         subagent_store::delete_subagent_history_for_parent_conversation(&tx, chat_id.as_str())?;
     delete_chat_history_conversation_fts(&tx, chat_id.as_str())?;
@@ -30,14 +30,14 @@ fn delete_chat_history_sync(
         "DELETE FROM chatHistorySegment WHERE conversation_id = ?1",
         params![chat_id.as_str()],
     )
-    .map_err(|e| format!("删除历史分段失败：{e}"))?;
+    .map_err(|e| format!("Failed to delete history segments: {e}"))?;
     tx.execute(
         "DELETE FROM chatHistory WHERE id = ?1",
         params![chat_id.as_str()],
     )
-    .map_err(|e| format!("删除历史对话失败：{e}"))?;
+    .map_err(|e| format!("Failed to delete history conversation: {e}"))?;
     tx.commit()
-        .map_err(|e| format!("提交删除历史事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit delete-history transaction: {e}"))?;
     Ok(subagent_prune_result)
 }
 
@@ -56,7 +56,7 @@ pub(crate) async fn chat_history_delete_inner(id: String) -> Result<(), String> 
         Ok(())
     })
     .await
-    .map_err(|e| format!("chat_history_delete join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_delete join failed: {e}"))?
 }
 
 #[tauri::command]

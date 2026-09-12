@@ -87,7 +87,7 @@ export function McpImportView(props: {
     try {
       const result = await scanExternalMcpServers();
       setScans(result);
-      // 清掉扫描结果中已不存在的选择项（「从文件导入」的选择项不受重扫影响）
+      // Clear selections that no longer exist in the scan results ("Import from File" selections are unaffected by a rescan)
       setSelected((prev) => {
         const valid = new Set(
           result.flatMap((scan) =>
@@ -138,7 +138,7 @@ export function McpImportView(props: {
     }
   }, [scans, loading, rescan]);
 
-  // 扫描结果就绪后自动定位到第一个有配置的工具；用户手动切换后不再干预
+  // Once scan results are ready, automatically locate the first tool with configuration; do not interfere after the user switches manually
   useEffect(() => {
     if (userChoseToolRef.current || !scans || scans.length === 0) return;
     const preferred =
@@ -161,7 +161,7 @@ export function McpImportView(props: {
       const path = picked?.trim();
       if (!path) return;
       const scan = await scanMcpConfigFile(path);
-      // 换文件后清掉上一个文件遗留的选择项，避免按 id 误选到新文件的同名条目
+      // After switching files, clear selections left over from the previous file, avoiding wrongly selecting same-named entries of the new file by id
       setSelected((prev) => {
         const next = new Set([...prev].filter((key) => !key.startsWith(`${LOCAL_FILE_TOOL}:`)));
         return next.size === prev.size ? prev : next;

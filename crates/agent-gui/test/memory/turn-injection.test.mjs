@@ -32,10 +32,10 @@ function entry(overrides = {}) {
     slug: "user-name",
     scope: "global",
     memoryType: "user",
-    description: "用户叫苏枫",
+    description: "The user's name is Alex",
     headline: "",
     dateLocal: null,
-    // 固定成「今天」,新鲜度桶恒为 d0,overview 的字节只随内容变化。
+    // Fixed to "today", so the freshness bucket is always d0 and the overview bytes change only with content.
     updatedAt: Date.now(),
     unreviewed: false,
     confidence: "high",
@@ -55,7 +55,7 @@ function overviewText(entries) {
 }
 
 const OVERVIEW_A = overviewText([entry()]);
-const OVERVIEW_B = overviewText([entry(), entry({ slug: "user-editor", description: "用户用 neovim" })]);
+const OVERVIEW_B = overviewText([entry(), entry({ slug: "user-editor", description: "The user uses neovim" })]);
 
 function baselineFrom(overview) {
   const plan = planMemoryTurnInjection({ baseline: null, overview });
@@ -63,9 +63,9 @@ function baselineFrom(overview) {
 }
 
 // ---------------------------------------------------------------------------
-// 纯规划器:三条硬约束逐条对齐
+// Pure planner: align the three hard constraints one by one
 
-test("首轮走 system prompt,不额外产生增量块", () => {
+test("the first turn goes through the system prompt and produces no extra update block", () => {
   const plan = planMemoryTurnInjection({ baseline: null, overview: OVERVIEW_A });
 
   assert.equal(plan.systemText, OVERVIEW_A);
@@ -74,7 +74,7 @@ test("首轮走 system prompt,不额外产生增量块", () => {
   assert.equal(plan.baseline.updateBytes, 0);
 });
 
-test("内容未变时不产生任何额外消息", () => {
+test("no extra messages are produced when the content is unchanged", () => {
   const baseline = baselineFrom(OVERVIEW_A);
   const plan = planMemoryTurnInjection({ baseline, overview: OVERVIEW_A });
 
@@ -84,7 +84,7 @@ test("内容未变时不产生任何额外消息", () => {
   assert.equal(plan.baseline.updateBytes, 0);
 });
 
-test("内容变化时产出增量,且 system 段一个字节都不动", () => {
+test("produces an update when the content changes, without touching a single byte of the system section", () => {
   const baseline = baselineFrom(OVERVIEW_A);
   const plan = planMemoryTurnInjection({ baseline, overview: OVERVIEW_B });
 
@@ -96,16 +96,16 @@ test("内容变化时产出增量,且 system 段一个字节都不动", () => {
   assert.equal(plan.baseline.updateBytes, plan.turnUpdate.length);
 });
 
-test("增量只报被顶替条目的 id,不复述旧值", () => {
+test("the update reports only the id of the superseded entry, not restating the old value", () => {
   const removed = formatMemoryTurnUpdate(OVERVIEW_B, OVERVIEW_A);
 
   assert.ok(removed.includes("- [user-editor]"));
-  assert.ok(!removed.includes("用户用 neovim"));
-  // 未变化的条目不重复列出,避免每次增量都把整份索引再刷一遍。
+  assert.ok(!removed.includes("The user uses neovim"));
+  // Unchanged entries are not relisted, avoiding re-flushing the whole index on every update.
   assert.ok(!removed.includes("[user-name|u|d0]"));
 });
 
-test("只有折叠提示之类的非条目变化时,不挂出空壳增量块", () => {
+test("no hollow update block is attached when only non-entry changes such as a folded hint occur", () => {
   assert.equal(formatMemoryTurnUpdate(OVERVIEW_A, `${OVERVIEW_A}\n\ntrailing note`), "");
 
   const baseline = baselineFrom(OVERVIEW_A);
@@ -115,12 +115,12 @@ test("只有折叠提示之类的非条目变化时,不挂出空壳增量块", (
   });
 
   assert.equal(plan.turnUpdate, "");
-  // 指纹仍然推进,否则下一轮还会重复算同一个差异。
+  // The fingerprint still advances, otherwise the next turn would recompute the same diff.
   assert.equal(plan.baseline.lastSeenText, `${OVERVIEW_A}\n\ntrailing note`);
   assert.equal(plan.baseline.updateBytes, 0);
 });
 
-test("读取失败(overview=null)保持基线不动,也不推进指纹", () => {
+test("a read failure (overview=null) leaves the baseline untouched and does not advance the fingerprint", () => {
   const baseline = baselineFrom(OVERVIEW_A);
   const plan = planMemoryTurnInjection({ baseline, overview: null });
 
@@ -129,7 +129,7 @@ test("读取失败(overview=null)保持基线不动,也不推进指纹", () => {
   assert.equal(plan.baseline, baseline);
 });
 
-test("首轮就读取失败时不建立基线,留给下一轮重来", () => {
+test("a read failure on the first turn establishes no baseline, leaving it for the next turn", () => {
   const plan = planMemoryTurnInjection({ baseline: null, overview: null });
 
   assert.equal(plan.systemText, "");
@@ -137,21 +137,23 @@ test("首轮就读取失败时不建立基线,留给下一轮重来", () => {
   assert.equal(plan.baseline, null);
 });
 
-test("累计增量字节超出预算后转重冻结:fresh 快照进 system 段,预算归零", () => {
+test("refreezes once cumulative update bytes exceed the budget: the fresh snapshot goes into the system section and the budget resets", () => {
   let baseline = baselineFrom(OVERVIEW_A);
   const budget = memoryTurnUpdateByteBudget(baseline.systemText);
-  // 小快照吃到下限预算:小更新能攒够多轮,不会两三轮就重建前缀。
+  // A small snapshot hits the floor budget: small updates can accumulate over many turns without rebuilding the prefix every two or three.
   assert.equal(budget, MEMORY_TURN_UPDATE_BYTE_BUDGET_MIN);
 
-  // 逐轮小更新直到预算耗尽。封顶轮的判定必须把本轮块字节一起计入:
-  // 触发重冻结的那轮不挂块(turnUpdate 为空),变化直接进 fresh 快照。
+  // Apply small updates turn by turn until the budget is exhausted. The cap-turn
+  // decision must count this turn's block bytes as well: the turn that triggers the
+  // refreeze does not attach a block (turnUpdate is empty), and the change goes
+  // straight into the fresh snapshot.
   let rounds = 0;
   let refrozenPlan = null;
   while (refrozenPlan === null && rounds < 500) {
     rounds += 1;
     const plan = planMemoryTurnInjection({
       baseline,
-      overview: overviewText([entry({ description: `用户叫苏枫 ${rounds}` })]),
+      overview: overviewText([entry({ description: `The user's name is Alex ${rounds}` })]),
     });
     if (plan.refrozen) {
       refrozenPlan = plan;
@@ -162,24 +164,24 @@ test("累计增量字节超出预算后转重冻结:fresh 快照进 system 段,�
     baseline = plan.baseline;
   }
 
-  // 确实攒了多轮增量才封顶,而不是一上来就重冻结。
+  // It really took multiple update rounds to cap, rather than refreezing immediately.
   assert.ok(refrozenPlan, "expected refreeze to trigger within 500 rounds");
   assert.ok(rounds > 2, `expected multiple update rounds before refreeze, got ${rounds}`);
   assert.equal(refrozenPlan.turnUpdate, "");
-  // 变化不静默丢失:fresh 快照整份进 system 段。
-  const cappedOverview = overviewText([entry({ description: `用户叫苏枫 ${rounds}` })]);
+  // The change is not silently lost: the full fresh snapshot goes into the system section.
+  const cappedOverview = overviewText([entry({ description: `The user's name is Alex ${rounds}` })]);
   assert.equal(refrozenPlan.systemText, cappedOverview);
   assert.equal(refrozenPlan.baseline.lastSeenText, cappedOverview);
   assert.equal(refrozenPlan.baseline.updateBytes, 0);
 
-  // 重冻结后预算重新可用:下一次变化继续走增量。
+  // After the refreeze the budget is available again: the next change continues incrementally.
   const next = planMemoryTurnInjection({ baseline: refrozenPlan.baseline, overview: OVERVIEW_B });
   assert.equal(next.refrozen, false);
   assert.ok(next.turnUpdate.startsWith("<memory-update>"));
 });
 
-test("单块特别大且预算不够时,当轮直接重冻结而不是先挂块再触顶", () => {
-  // 人为压低剩余预算:先攒到接近预算线。
+test("when a single block is very large and the budget is insufficient, refreeze that turn instead of attaching the block and then hitting the cap", () => {
+  // Artificially lower the remaining budget: first accumulate to near the budget line.
   let baseline = baselineFrom(OVERVIEW_A);
   baseline = { ...baseline, updateBytes: memoryTurnUpdateByteBudget(baseline.systemText) - 1 };
 
@@ -189,31 +191,31 @@ test("单块特别大且预算不够时,当轮直接重冻结而不是先挂块�
   assert.equal(plan.systemText, OVERVIEW_B);
 });
 
-test("变更条目数超过单块上限时转重冻结,不再发截断块", () => {
+test("refreezes when changed entries exceed the single-block cap, no longer emitting a truncated block", () => {
   const wide = (suffix) =>
     overviewText(
       Array.from({ length: 13 }, (_, index) =>
-        entry({ slug: `user-${index}`, description: `事实 ${index}${suffix}` }),
+        entry({ slug: `user-${index}`, description: `Fact ${index}${suffix}` }),
       ),
     );
   const baseline = baselineFrom(wide(""));
-  const plan = planMemoryTurnInjection({ baseline, overview: wide(" 改") });
+  const plan = planMemoryTurnInjection({ baseline, overview: wide(" changed") });
 
   assert.equal(plan.refrozen, true);
   assert.equal(plan.turnUpdate, "");
-  assert.equal(plan.systemText, wide(" 改"));
+  assert.equal(plan.systemText, wide(" changed"));
   assert.equal(plan.baseline.updateBytes, 0);
 });
 
-test("变更条目数恰好在上限内仍走增量,不触发重冻结", () => {
+test("still updates incrementally when changed entries are exactly within the cap, without triggering a refreeze", () => {
   const wide = (suffix) =>
     overviewText(
       Array.from({ length: 12 }, (_, index) =>
-        entry({ slug: `user-${index}`, description: `事实 ${index}${suffix}` }),
+        entry({ slug: `user-${index}`, description: `Fact ${index}${suffix}` }),
       ),
     );
   const baseline = baselineFrom(wide(""));
-  const plan = planMemoryTurnInjection({ baseline, overview: wide(" 改") });
+  const plan = planMemoryTurnInjection({ baseline, overview: wide(" changed") });
 
   assert.equal(plan.refrozen, false);
   assert.ok(plan.turnUpdate.startsWith("<memory-update>"));
@@ -221,7 +223,7 @@ test("变更条目数恰好在上限内仍走增量,不触发重冻结", () => {
   assert.equal(plan.systemText, baseline.systemText);
 });
 
-test("workdir 切换触发重冻结;任一侧缺 workdir 时不凭空触发", () => {
+test("a workdir switch triggers a refreeze; a missing workdir on either side does not trigger one out of thin air", () => {
   const first = planMemoryTurnInjection({ baseline: null, overview: OVERVIEW_A, workdir: "/proj/a" });
   assert.equal(first.baseline.workdir, "/proj/a");
 
@@ -234,7 +236,7 @@ test("workdir 切换触发重冻结;任一侧缺 workdir 时不凭空触发", ()
   assert.equal(switched.systemText, OVERVIEW_B);
   assert.equal(switched.baseline.workdir, "/proj/b");
 
-  // 旧基线没记 workdir:照常走增量,不因为这轮开始带 workdir 就重冻结。
+  // The old baseline did not record workdir: it updates incrementally as usual, and does not refreeze just because this turn starts carrying a workdir.
   const legacy = planMemoryTurnInjection({
     baseline: baselineFrom(OVERVIEW_A),
     overview: OVERVIEW_B,
@@ -244,7 +246,7 @@ test("workdir 切换触发重冻结;任一侧缺 workdir 时不凭空触发", ()
   assert.notEqual(legacy.turnUpdate, "");
 });
 
-test("空索引冻结后首次出现记忆:整份快照重冻结进 system 段", () => {
+test("first memory after an empty-index freeze: the whole snapshot refreezes into the system section", () => {
   const empty = planMemoryTurnInjection({ baseline: null, overview: "" });
   assert.equal(empty.baseline.systemText, "");
 
@@ -252,30 +254,30 @@ test("空索引冻结后首次出现记忆:整份快照重冻结进 system 段",
   assert.equal(appeared.refrozen, true);
   assert.equal(appeared.systemText, OVERVIEW_A);
   assert.equal(appeared.turnUpdate, "");
-  // 反向(非空→空)走普通增量即可,索引规则文本已在 system 段里。
+  // The reverse (non-empty → empty) can just update normally; the index rule text is already in the system section.
   const cleared = planMemoryTurnInjection({ baseline: appeared.baseline, overview: "" });
   assert.equal(cleared.refrozen, false);
 });
 
-test("索引被展示截断时抑制 retired 列表,并注明截断", () => {
+test("suppresses the retired list when the index is display-truncated and notes the truncation", () => {
   const wide = Array.from({ length: 31 }, (_, index) =>
-    entry({ slug: `user-${index}`, description: `事实 ${index}` }),
+    entry({ slug: `user-${index}`, description: `Fact ${index}` }),
   );
   const truncated = overviewText(wide);
   assert.ok(truncated.includes("more entries hidden"));
 
-  // 移除 user-0 后不再触发桶截断:原本隐藏的 user-30 现身,user-0 貌似 retire。
+  // After removing user-0 the bucket is no longer truncated: the previously hidden user-30 appears, and user-0 looks retired.
   const narrowed = overviewText(wide.slice(1));
   const update = formatMemoryTurnUpdate(truncated, narrowed);
 
   assert.ok(update.includes("[user-30|u|d0]"));
-  // user-0 的「消失」可能只是截断造成的,不得报成 retired。
+  // user-0's "disappearance" may be only from truncation and must not be reported as retired.
   assert.ok(!update.includes("No longer in the index"));
   assert.ok(!update.includes("- [user-0]"));
   assert.ok(update.includes("display-truncated"));
 });
 
-test("规划器是纯函数:重复调用结果一致,且不改动入参", async () => {
+test("the planner is pure: repeated calls give identical results and inputs are not mutated", async () => {
   const baseline = baselineFrom(OVERVIEW_A);
   const snapshot = { ...baseline };
   const first = planMemoryTurnInjection({ baseline, overview: OVERVIEW_B });
@@ -287,9 +289,9 @@ test("规划器是纯函数:重复调用结果一致,且不改动入参", async 
 });
 
 // ---------------------------------------------------------------------------
-// 挂载:增量必须落在最后一条 user 消息尾部(复用 pi-ai 的第 4 个断点)
+// Mounting: the update must land at the tail of the last user message (reusing pi-ai's 4th breakpoint)
 
-test("字符串 content 的增量追加到消息尾部,不改动入参", () => {
+test("the update for string content is appended to the message tail without mutating the input", () => {
   const messages = [
     { role: "user", id: "u1", content: "hello" },
     { role: "assistant", content: [{ type: "text", text: "hi" }] },
@@ -301,7 +303,7 @@ test("字符串 content 的增量追加到消息尾部,不改动入参", () => {
   assert.equal(next[1], messages[1]);
 });
 
-test("数组 content 的增量追加成末尾的 text block", () => {
+test("the update for array content is appended as a trailing text block", () => {
   const messages = [
     {
       role: "user",
@@ -319,7 +321,7 @@ test("数组 content 的增量追加成末尾的 text block", () => {
   assert.equal(messages[0].content.length, 2);
 });
 
-test("无匹配 id / 非 user 消息 / 空增量表时原样返回同一数组", () => {
+test("returns the same array unchanged when there is no matching id / a non-user message / an empty update list", () => {
   const messages = [
     { role: "user", id: "u1", content: "hello" },
     { role: "assistant", id: "a1", content: [{ type: "text", text: "hi" }] },
@@ -328,12 +330,12 @@ test("无匹配 id / 非 user 消息 / 空增量表时原样返回同一数组",
   assert.equal(attachMemoryTurnUpdates(messages, undefined), messages);
   assert.equal(attachMemoryTurnUpdates(messages, new Map()), messages);
   assert.equal(attachMemoryTurnUpdates(messages, new Map([["missing", "U"]])), messages);
-  // assistant 消息即使 id 撞上也不挂:断点只认最后一条 user 消息。
+  // Assistant messages are not mounted even if the id collides: the breakpoint only recognizes the last user message.
   assert.equal(attachMemoryTurnUpdates(messages, new Map([["a1", "U"]])), messages);
 });
 
 // ---------------------------------------------------------------------------
-// 端到端:用阶段 ① 的前缀哈希对账验证 system 段冻结
+// End to end: verify system-section freezing by reconciling the phase ① prefix hash
 
 function stateOf(messages) {
   return normalizeConversationState({
@@ -380,7 +382,7 @@ function assistantTurn(index) {
   };
 }
 
-test("多轮对账:内容未变不加消息,内容变化只动 user 消息、system 段判定 unchanged", (t) => {
+test("multi-turn reconciliation: unchanged content adds no message; changed content touches only the user message and the system section is judged unchanged", (t) => {
   const conversationId = "conv-multi-turn";
   t.after(() => memoryTurnInjection.dispose(conversationId));
 
@@ -403,35 +405,35 @@ test("多轮对账:内容未变不加消息,内容变化只动 user 消息、sys
     messages.push(assistantTurn(turn));
   });
 
-  // 每轮的消息数就是真实消息数:没有任何一轮凭空多出一条消息。
+  // The message count each turn is the real message count: no turn fabricates an extra message.
   assert.deepEqual(
     contexts.map((context) => context.messages.length),
     [1, 3, 5, 7],
   );
 
-  // system 段从第一轮起就冻住了,四轮全部 unchanged。
+  // The system section has been frozen since the first turn; all four turns are unchanged.
   const summaries = shapes.map((shape, index) =>
     comparePrefixShape(index === 0 ? null : shapes[index - 1], shape).prefixChangeSummary,
   );
   assert.deepEqual(summaries, ["initial", "unchanged", "unchanged", "unchanged"]);
 
-  // 第 2 轮 memory 没变:上下文里不该出现任何增量块。
+  // Turn 2 memory did not change: no update block should appear in the context.
   assert.ok(!JSON.stringify(contexts[1].messages).includes("<memory-update>"));
 
-  // 第 3 轮 memory 变了:增量挂在第 3 轮那条 user 消息上,历史消息原样不动。
+  // Turn 3 memory changed: the update is attached to turn 3's user message, and history messages stay untouched.
   const thirdTurnUser = contexts[2].messages.find((message) => message.id === "u3");
   assert.ok(thirdTurnUser.content.includes("<memory-update>"));
   assert.ok(thirdTurnUser.content.includes("[user-editor|u|d0]"));
   assert.equal(contexts[2].messages[0].content, "turn 1");
 
-  // 第 4 轮重放同一份字节:历史区间保持可缓存。
+  // Turn 4 replays the same bytes: the history interval stays cacheable.
   assert.equal(
     JSON.stringify(contexts[3].messages.slice(0, 5)),
     JSON.stringify(contexts[2].messages),
   );
 });
 
-test("对照组:同样的变化若继续走 system prompt,前缀会被判定为 system 变更", () => {
+test("control group: if the same change kept going through the system prompt, the prefix would be judged a system change", () => {
   const before = capturePrefixShape({
     systemPrompt: `${BASE_SYSTEM_PROMPT}\n\n${OVERVIEW_A}`,
     tools: TOOLS,
@@ -444,7 +446,7 @@ test("对照组:同样的变化若继续走 system prompt,前缀会被判定为 
   assert.equal(comparePrefixShape(before, after).prefixChangeSummary, "system");
 });
 
-test("会话恢复后基线丢失:完整快照只进 system prompt 一次,不重复注入", (t) => {
+test("baseline lost after conversation restore: the full snapshot enters the system prompt once, with no duplicate injection", (t) => {
   const conversationId = "conv-restore";
   t.after(() => memoryTurnInjection.dispose(conversationId));
 
@@ -452,7 +454,7 @@ test("会话恢复后基线丢失:完整快照只进 system prompt 一次,不重
   memoryTurnInjection.planTurn({ conversationId, messageId: "u2", overview: OVERVIEW_B });
   assert.equal(memoryTurnInjection.getMessageUpdates(conversationId).size, 1);
 
-  // 重启/恢复:内存态基线随进程一起没了。
+  // Restart/restore: the in-memory baseline is gone along with the process.
   memoryTurnInjection.dispose(conversationId);
 
   const restored = memoryTurnInjection.planTurn({
@@ -470,11 +472,11 @@ test("会话恢复后基线丢失:完整快照只进 system prompt 一次,不重
     restored.systemText,
   );
   assert.ok(!JSON.stringify(context.messages).includes("<memory-update>"));
-  // 同一份内容不会既进 system 段又发一遍增量。
+  // The same content is not both put into the system section and sent again as an update.
   assert.equal(context.systemPrompt.split("# Memory Index").length - 1, 1);
 });
 
-test("没有可挂载的消息 id 时丢掉本次增量,但不推进指纹", (t) => {
+test("discards this update when there is no message id to mount it on, without advancing the fingerprint", (t) => {
   const conversationId = "conv-no-message-id";
   t.after(() => memoryTurnInjection.dispose(conversationId));
 
@@ -483,7 +485,7 @@ test("没有可挂载的消息 id 时丢掉本次增量,但不推进指纹", (t)
   assert.equal(skipped.turnUpdate, "");
   assert.equal(memoryTurnInjection.getMessageUpdates(conversationId).size, 0);
 
-  // 指纹没推进,下一轮拿到消息 id 时补上同一份差异。
+  // The fingerprint did not advance; when a message id appears next turn the same diff is filled in.
   const recovered = memoryTurnInjection.planTurn({
     conversationId,
     messageId: "u2",
@@ -493,14 +495,14 @@ test("没有可挂载的消息 id 时丢掉本次增量,但不推进指纹", (t)
   assert.equal(memoryTurnInjection.getMessageUpdates(conversationId).get("u2"), recovered.turnUpdate);
 });
 
-test("缺少会话 id 时退回旧行为:整块进 system prompt", () => {
+test("falls back to the old behavior when the conversation id is missing: the whole block goes into the system prompt", () => {
   const plan = memoryTurnInjection.planTurn({ conversationId: "  ", overview: OVERVIEW_A });
 
   assert.equal(plan.systemText, OVERVIEW_A);
   assert.equal(plan.turnUpdate, "");
 });
 
-test("会话删除后状态清空", () => {
+test("state is cleared after the conversation is deleted", () => {
   const conversationId = "conv-dispose";
   memoryTurnInjection.planTurn({ conversationId, messageId: "u1", overview: OVERVIEW_A });
   memoryTurnInjection.planTurn({ conversationId, messageId: "u2", overview: OVERVIEW_B });
@@ -510,7 +512,7 @@ test("会话删除后状态清空", () => {
   assert.equal(memoryTurnInjection.getMessageUpdates(conversationId), undefined);
 });
 
-test("压缩后 invalidate:下一轮把 fresh 快照重冻结进 system 段,旧增量清空", (t) => {
+test("invalidate after compaction: the next turn refreezes the fresh snapshot into the system section and clears the old update", (t) => {
   const conversationId = "conv-compaction-invalidate";
   t.after(() => memoryTurnInjection.dispose(conversationId));
 
@@ -518,7 +520,7 @@ test("压缩后 invalidate:下一轮把 fresh 快照重冻结进 system 段,旧�
   memoryTurnInjection.planTurn({ conversationId, messageId: "u2", overview: OVERVIEW_B });
   assert.equal(memoryTurnInjection.getMessageUpdates(conversationId).size, 1);
 
-  // 压缩完成:携带增量块的 u2 已被移出 active segment。
+  // Compaction complete: u2, which carried the update block, has been removed from the active segment.
   memoryTurnInjection.invalidate(conversationId);
   assert.equal(memoryTurnInjection.getMessageUpdates(conversationId), undefined);
 
@@ -531,7 +533,7 @@ test("压缩后 invalidate:下一轮把 fresh 快照重冻结进 system 段,旧�
   assert.equal(next.turnUpdate, "");
 });
 
-test("controller 在重冻结时清空已挂出的增量块", (t) => {
+test("the controller clears already-mounted update blocks on refreeze", (t) => {
   const conversationId = "conv-refreeze-clears";
   t.after(() => memoryTurnInjection.dispose(conversationId));
 
@@ -549,7 +551,7 @@ test("controller 在重冻结时清空已挂出的增量块", (t) => {
   });
   assert.equal(memoryTurnInjection.getMessageUpdates(conversationId).size, 1);
 
-  // workdir 切换触发重冻结:旧增量描述旧快照的差异,必须一并清掉。
+  // A workdir switch triggers a refreeze: the old update describes the old snapshot's diff and must be cleared along with it.
   const refrozen = memoryTurnInjection.planTurn({
     conversationId,
     messageId: "u3",
@@ -563,9 +565,9 @@ test("controller 在重冻结时清空已挂出的增量块", (t) => {
 });
 
 // ---------------------------------------------------------------------------
-// 旁路:复用同一份消息的子模型链路必须显式关掉增量
+// Bypass: the submodel path reusing the same messages must explicitly disable updates
 
-test("memoryTurnUpdates=null 时抽取子模型看到的仍是用户原话", (t) => {
+test("with memoryTurnUpdates=null the extraction submodel still sees the user's original words", (t) => {
   const conversationId = "conv-extraction-bypass";
   t.after(() => memoryTurnInjection.dispose(conversationId));
 
@@ -583,8 +585,9 @@ test("memoryTurnUpdates=null 时抽取子模型看到的仍是用户原话", (t)
     memoryTurnUpdates: null,
   });
 
-  // 主模型那份带增量:这也正是抽取不能直接复用它的原因 —— 索引行会被当成用户
-  // 发言,既撑破「消息太短就跳过」的门控,又诱发重复写入。
+  // The main model's copy carries the update: this is exactly why extraction cannot
+  // reuse it directly — index lines would be treated as user speech, both breaking the
+  // "skip if message too short" gate and inducing duplicate writes.
   assert.ok(extractLatestUserText(forModel.messages).includes("<memory-update>"));
   assert.equal(extractLatestUserText(forExtraction.messages), "turn 2");
 });

@@ -1,6 +1,7 @@
 package websocket_test
 
-// v2 加固集成测试：连接上限、派发信号量、按链路读限额、入站限速。
+// v2 hardening integration tests: connection cap, dispatch semaphore, per-link read
+// limit, inbound rate limiting.
 
 import (
 	"net/http"
@@ -17,7 +18,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// writeProtoFrameRaw 直接写出帧、错误返回而非 t.Fatal（限速测试里服务端断开是预期）。
+// writeProtoFrameRaw writes a frame directly, returning errors instead of calling
+// t.Fatal (a server-side disconnect is expected in the rate-limit test).
 func writeProtoFrameRaw(conn *websocket.Conn, frame proto.Message) error {
 	data, err := proto.Marshal(frame)
 	if err != nil {
@@ -29,7 +31,8 @@ func writeProtoFrameRaw(conn *websocket.Conn, frame proto.Message) error {
 func TestV2BrowserConnectionCapRejectsExcess(t *testing.T) {
 	t.Parallel()
 
-	// 上限已是配置项：用小值验证行为，避免测试随默认值调整而失效。
+	// The cap is already a config item: use a small value to verify behavior, keeping
+// the test valid as the default changes.
 	cfg := newV2TestConfig()
 	cfg.MaxBrowserConnections = 4
 	sm := session.NewManager()
@@ -53,7 +56,7 @@ func TestV2BrowserConnectionCapRejectsExcess(t *testing.T) {
 		conns = append(conns, conn)
 	}
 
-	// 超限的下一个连接：升级前即 503。
+	// The next connection beyond the cap: 503 before the upgrade.
 	_, resp, err := dialer.Dial(wsURL, http.Header{"Origin": []string{ts.URL}})
 	if err == nil {
 		t.Fatal("connection beyond the cap should be rejected")
@@ -62,7 +65,8 @@ func TestV2BrowserConnectionCapRejectsExcess(t *testing.T) {
 		t.Fatalf("over-cap connection status = %v, want 503", resp)
 	}
 
-	// 释放一个槽位后可再连（计数正确回收）。
+	// After releasing one slot, connecting again succeeds (the count is reclaimed
+	// correctly).
 	_ = conns[0].Close()
 	conns = conns[1:]
 	deadline := time.Now().Add(2 * time.Second)
@@ -82,8 +86,8 @@ func TestV2BrowserConnectionCapRejectsExcess(t *testing.T) {
 func TestV2DispatchSemaphoreRejectsAndRecovers(t *testing.T) {
 	t.Parallel()
 
-	// 两个 Agent 在线且不应答：agent_request 挂在 AwaitUnaryResponse 上直到
-	// requestTimeout（1s），期间占满 16 个在途槽位。
+	// Two Agents are online and do not answer: agent_request blocks on
+	// AwaitUnaryResponse until requestTimeout (1s), filling all 16 in-flight slots.
 	sm, agentA, _, conn, cleanup := newV2MultiAgentTest(t)
 	defer cleanup()
 
@@ -101,8 +105,9 @@ func TestV2DispatchSemaphoreRejectsAndRecovers(t *testing.T) {
 		})
 	}
 
-	// 第 17 个在途请求必须很快得到信号量本地错误（其余 16 个等到超时才有响应；
-	// 期间会先收到快照回放等广播帧，跳过）。
+	// The 17th in-flight request must quickly receive a semaphore local_error (the
+	// other 16 only respond at timeout; broadcast frames such as snapshot replay
+	// arrive first and are skipped).
 	deadlineReject := time.Now().Add(time.Second)
 	for {
 		if time.Now().After(deadlineReject) {
@@ -117,8 +122,10 @@ func TestV2DispatchSemaphoreRejectsAndRecovers(t *testing.T) {
 		}
 	}
 
-	// 槽位随超时释放：之后的请求恢复正常处理。此时才启动应答泵（前 16 个请求
-	// 必须无应答才能占满槽位），恢复后的请求应立即得到真实响应。
+	// Slots are released as the timeout expires: subsequent requests are handled
+	// normally. Only now start the answer pump (the first 16 requests must go
+	// unanswered to fill the slots); the request after recovery should get a real
+	// response promptly.
 	time.Sleep(1200 * time.Millisecond)
 	go answerAgentRequests(sm, agentA, "/recovered")
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
@@ -155,8 +162,9 @@ func TestV2BrowserOversizedFrameClosesConnection(t *testing.T) {
 	defer cleanup()
 	helloV2(t, conn, "ws-token")
 
-	// 超过浏览器链路 4 MiB 读限额的帧：服务端立即断开（写侧收到 reset 或读侧
-	// 收到关闭都算命中）。
+	// A frame exceeding the browser link's 4 MiB read limit: the server disconnects
+	// immediately (a reset on the write side or a close on the read side both count
+	// as a hit).
 	oversized := make([]byte, 5<<20)
 	if err := conn.WriteMessage(websocket.BinaryMessage, oversized); err != nil {
 		return
@@ -178,14 +186,15 @@ func TestV2InboundRateLimitClosesRunawayConnection(t *testing.T) {
 	defer cleanup()
 	helloV2(t, conn, "ws-token")
 
-	// 突发远超 burst(200)：先收 local_error，连续违规后连接被关闭。
+	// A burst far beyond burst(200): receive local_error first, then the connection is
+	// closed after repeated violations.
 	for i := 0; i < 400; i++ {
 		frame := &gatewayv2.WebClientFrame{RequestId: "flood"}
 		if err := conn.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
 			t.Fatalf("set write deadline: %v", err)
 		}
 		if err := writeProtoFrameRaw(conn, frame); err != nil {
-			// 服务端已断开——达到预期。
+			// The server has disconnected — as expected.
 			return
 		}
 	}

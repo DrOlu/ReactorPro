@@ -1,39 +1,41 @@
-// Package wscore 提供 v2 WebSocket 协议共用的连接运行时（优先级双队列写泵、帧数/字节
-// 双限、空闲驱逐与心跳）。对帧格式无感：帧以已编码字节入队，协议层负责编码并声明
-// 拥塞策略（Frame.Class）；第一次底层写错误会立即关闭连接并交给重连恢复。
+// Package wscore provides the connection runtime shared by the v2 WebSocket protocol (dual
+// priority-queue write pump, dual frame-count/byte limits, idle eviction and heartbeat).
+// It is agnostic to frame format: frames are enqueued as already-encoded bytes, and the
+// protocol layer is responsible for encoding and declaring the congestion policy (Frame.Class);
+// the first underlying write error immediately closes the connection and hands off to reconnect recovery.
 package wscore
 
 import "errors"
 
-// ErrWriteQueueFull 表示帧因持续拥塞被丢弃；协议层可据此对单个流降级恢复而不牺牲整条连接。
+// ErrWriteQueueFull indicates a frame was dropped due to sustained congestion; the protocol layer can use this to degrade and recover a single stream without sacrificing the whole connection.
 var ErrWriteQueueFull = errors.New("write queue full")
 
-// ErrWriteFrameTooLarge 表示单帧本身已经超过所属队列的字节预算，继续等待不会恢复。
+// ErrWriteFrameTooLarge indicates a single frame itself already exceeds its queue's byte budget, and continuing to wait will not recover it.
 var ErrWriteFrameTooLarge = errors.New("write frame exceeds queue byte limit")
 
-// FrameClass 决定帧的入队队列与拥塞策略。
+// FrameClass determines a frame's enqueue queue and congestion policy.
 type FrameClass uint8
 
 const (
-	// FrameData 是可掉帧的事件/广播数据：走数据队列，持续拥塞时丢弃并返回 ErrWriteQueueFull。
+	// FrameData is droppable event/broadcast data: goes through the data queue, and is dropped with ErrWriteQueueFull under sustained congestion.
 	FrameData FrameClass = iota
-	// FrameControl 是尽力送达的控制帧：走优先队列越过数据积压；持续拥塞时丢弃报错但不关连接。
+	// FrameControl is a best-effort control frame: goes through the priority queue past data backlog; under sustained congestion it is dropped with an error but does not close the connection.
 	FrameControl
-	// FramePing 是周期心跳：走优先队列，队列满时静默丢弃（下个周期取代）。
+	// FramePing is a periodic heartbeat: goes through the priority queue, and is silently dropped when the queue is full (replaced next period).
 	FramePing
-	// FrameResponse 是请求关联响应：静默丢弃会让客户端挂到超时，故持续拥塞时关连接促使重连重试。
+	// FrameResponse is a request-correlated response: silent dropping would hang the client until timeout, so sustained congestion closes the connection to force a reconnect retry.
 	FrameResponse
 )
 
-// Frame 是写泵承载的单帧描述，载荷为已编码字节。
+// Frame is a single-frame description carried by the write pump, with an already-encoded byte payload.
 type Frame struct {
 	Class FrameClass
-	// RequestID 为关联响应的请求 id，仅用于诊断。
+	// RequestID is the request id of the correlated response, used for diagnostics only.
 	RequestID string
-	// Kind 是帧类型标签（v2 oneof 臂名 / v2 oneof 臂名），仅用于掉帧日志与测试断言。
+	// Kind is the frame type label (v2 oneof arm name / v2 oneof arm name), used only for drop logs and test assertions.
 	Kind string
-	// MessageType 为 websocket.TextMessage 或 websocket.BinaryMessage。
+	// MessageType is websocket.TextMessage or websocket.BinaryMessage.
 	MessageType int
-	// Data 为完整的已编码帧载荷。
+	// Data is the complete already-encoded frame payload.
 	Data []byte
 }

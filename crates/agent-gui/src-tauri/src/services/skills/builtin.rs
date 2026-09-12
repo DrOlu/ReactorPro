@@ -1,4 +1,4 @@
-//! 内置 Agent Skill：内嵌文件定义、修改保护与启动时种子写入。
+//! Built-in Agent Skills: embedded file definitions, modification protection, and seeding at startup.
 
 use std::fs;
 use std::io;
@@ -20,7 +20,7 @@ pub(crate) struct BuiltinSkill {
 
 const CODE_REVIEW_OWNERSHIP_MARKER_PATH: &str = "_liveagent_builtin.json";
 const CODE_REVIEW_OWNERSHIP_MARKER_CONTENT: &str =
-    "{\"schemaVersion\":1,\"owner\":\"LiveAgent\",\"skill\":\"liveagent-code-review\"}\n";
+    "{\"schemaVersion\":1,\"owner\":\"ReactorPro\",\"skill\":\"liveagent-code-review\"}\n";
 
 const SKILLS_INSTALLER_FILES: &[BuiltinSkillFile] = &[
     BuiltinSkillFile {
@@ -132,7 +132,7 @@ pub(crate) fn ensure_not_builtin_skill_management_target(
     let is_protected = !target.exists() || builtin_skill_owns_target(&target, builtin)?;
     if is_protected {
         return Err(format!(
-            "SkillsManager action={action} cannot modify built-in Skill \"{name}\". Built-in Skills are managed by LiveAgent; create or update a separate user Skill instead."
+            "SkillsManager action={action} cannot modify built-in Skill \"{name}\". Built-in Skills are managed by ReactorPro; create or update a separate user Skill instead."
         ));
     }
     Ok(())

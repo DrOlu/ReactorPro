@@ -170,15 +170,16 @@ export function parseMarkdownConversationMentionReference(
 
 export type AppMentionReference = {
   name: string;
-  /** macOS bundle id；其他平台可能缺失，此时以 path 兜底标识。 */
+  /** macOS bundle id; may be missing on other platforms, in which case path is used as the fallback
+   * identifier. */
   bundleId?: string;
   path: string;
 };
 
 /** Serialize an app mention so the model can address the app via the CUA
  *  toolset: the visible name plus the stable identity (bundle id, or the
- *  install path when the platform has no bundle ids). 组件内序列化与发送
- *  路径（composerDraft）共用这一份实现。 */
+ *  install path when the platform has no bundle ids). In-component serialization and the send
+ *  path (composerDraft) share this single implementation. */
 export function formatAppMentionToken(app: AppMentionReference) {
   const identity = app.bundleId?.trim() || app.path.trim();
   if (!identity || identity === app.name) return `app "${app.name}"`;

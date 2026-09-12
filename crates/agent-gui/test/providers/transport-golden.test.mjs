@@ -5,13 +5,15 @@ import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 // ============================================================================
-// LLM seam 改造（golden 基线之二）：传输装配整体快照。
+// LLM seam rework (golden baseline #2): whole-transport-assembly snapshot.
 //
-// custom-headers-propagation.test.mjs 断言"自定义头能抵达"；本文件把
-// prepareProviderRequest 的完整输出（反代 URL + 全量头集 + base64 覆盖包
-// 解码内容）逐字段锁死，并锁定 failover 场景下逐候选传输配置的独立性——
-// 供应商级 useSystemProxy 是"网络可达性属于每个目标"这一公理的载体，
-// seam 重构绝不允许把主选的传输事实泄漏给备选。
+// custom-headers-propagation.test.mjs asserts that "custom headers arrive"; this
+// file locks down prepareProviderRequest's full output field by field (proxy URL
+// + full header set + decoded base64 override payload) and locks down per-
+// candidate transport-config independence under failover — provider-level
+// useSystemProxy is the vehicle for the axiom that "network reachability belongs
+// to each target", and the seam rework must never leak the primary's transport
+// facts to the fallback.
 // ============================================================================
 
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -33,14 +35,14 @@ function decodeOverrides(headers) {
   return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
 }
 
-/** 覆盖包单独解码断言，其余头逐字段断言。 */
+/** The override payload is asserted by decoding it separately; other headers are asserted field by field. */
 function splitPrepared(prepared) {
   const { "x-liveagent-upstream-headers": _encoded, ...headers } = prepared.headers;
   return { baseUrl: prepared.baseUrl, headers, overrides: decodeOverrides(prepared.headers) };
 }
 
 // ---------------------------------------------------------------------------
-// 第一部分：prepareProviderRequest 完整输出快照（真实实现，仅 mock tauri invoke）
+// Part one: prepareProviderRequest full output snapshot (real implementation, only tauri invoke mocked)
 // ---------------------------------------------------------------------------
 
 const transportLoader = createTsModuleLoader({
@@ -60,7 +62,7 @@ const { ANTHROPIC_DEFAULT_REQUEST_HEADERS } = transportLoader.loadModule(
   "@liveagent/ui/lib/providers/customHeaders.ts",
 );
 
-test("golden/transport: anthropic 全量头集（内置默认头 + 自定义头 + 覆盖包 + use-system-proxy）", async () => {
+test("golden/transport: anthropic full header set (built-in default headers + custom headers + override payload + use-system-proxy)", async () => {
   const prepared = await prepareProviderRequest(
     "claude_code",
     {
@@ -68,7 +70,8 @@ test("golden/transport: anthropic 全量头集（内置默认头 + 自定义头 
       apiKey: "sk-ant-test",
       customHeaders: [
         { key: "X-Relay-Channel", value: "vip" },
-        // 浏览器禁止头名：常规通道会被 WebView 丢弃，只能靠覆盖包送达。
+        // Browser-forbidden header name: it is dropped by the WebView on the
+        // regular channel and can only arrive via the override payload.
         { key: "Cookie", value: "session=abc" },
       ],
       useSystemProxy: true,
@@ -88,7 +91,8 @@ test("golden/transport: anthropic 全量头集（内置默认头 + 自定义头 
     "x-liveagent-proxy-token": "proxy-token",
     "x-liveagent-use-system-proxy": "1",
   });
-  // 覆盖包 = 内置默认头 + 自定义头；鉴权头（x-api-key）按排除集绝不进包。
+  // Override payload = built-in default headers + custom headers; the auth header
+  // (x-api-key) is in the exclusion set and never enters the payload.
   assert.deepEqual(overrides, {
     ...ANTHROPIC_DEFAULT_REQUEST_HEADERS,
     "X-Claude-Code-Session-Id": SESSION_ID,
@@ -97,7 +101,7 @@ test("golden/transport: anthropic 全量头集（内置默认头 + 自定义头 
   });
 });
 
-test("golden/transport: codex Responses 链路带 session/conversation 头；直连时无 use-system-proxy", async () => {
+test("golden/transport: codex Responses chain carries session/conversation headers; no use-system-proxy on direct connections", async () => {
   const prepared = await prepareProviderRequest(
     "codex",
     { baseUrl: "https://chatgpt.com/backend-api/codex", apiKey: "sk-codex-test" },
@@ -125,7 +129,7 @@ test("golden/transport: codex Responses 链路带 session/conversation 头；直
   });
 });
 
-test("golden/transport: codex Completions 格式绝不泄漏 session/conversation 头", async () => {
+test("golden/transport: codex Completions format never leaks session/conversation headers", async () => {
   const prepared = await prepareProviderRequest(
     "codex",
     {
@@ -138,7 +142,7 @@ test("golden/transport: codex Completions 格式绝不泄漏 session/conversatio
   const { baseUrl, headers, overrides } = splitPrepared(prepared);
 
   assert.equal(baseUrl, "http://127.0.0.1:18080/proxy/codex/v1");
-  // 无状态协议仅 Bearer；头集不含任何需要覆盖包的条目。
+  // The stateless protocol uses Bearer only; the header set contains no entry requiring the override payload.
   assert.deepEqual(headers, {
     Authorization: "Bearer sk-relay-test",
     "x-liveagent-upstream-origin": "https://relay.example.com",
@@ -147,7 +151,7 @@ test("golden/transport: codex Completions 格式绝不泄漏 session/conversatio
   assert.equal(overrides, undefined);
 });
 
-test("golden/transport: gemini 用 x-goog-api-key 单头鉴权", async () => {
+test("golden/transport: gemini authenticates with the single x-goog-api-key header", async () => {
   const prepared = await prepareProviderRequest(
     "gemini",
     { baseUrl: "https://generativelanguage.googleapis.com", apiKey: "g-test-key" },
@@ -164,7 +168,7 @@ test("golden/transport: gemini 用 x-goog-api-key 单头鉴权", async () => {
   assert.equal(overrides, undefined);
 });
 
-test("golden/transport: deepseek full URL 模式保留完整上游 URL（含查询参数）", async () => {
+test("golden/transport: deepseek full URL mode preserves the complete upstream URL (including query parameters)", async () => {
   const prepared = await prepareProviderRequest(
     "deepseek",
     {
@@ -187,13 +191,16 @@ test("golden/transport: deepseek full URL 模式保留完整上游 URL（含查�
 });
 
 // ---------------------------------------------------------------------------
-// 第二部分：failover 逐候选传输配置独立性。
-// 场景来自网络拓扑用户故事：主选是走应用代理的国外供应商，备选是直连的国内
-// 中转。断言两个目标各自独立装配（use-system-proxy 头互不泄漏），主选未提交
-// 失败后备选以自己的传输配置接管。
+// Part two: per-candidate transport-config independence under failover.
+// The scenario comes from the network-topology user story: the primary is an
+// overseas provider going through the app proxy, and the fallback is a domestic
+// relay connected directly. Assert that the two targets assemble independently
+// (their use-system-proxy headers do not leak into each other) and that after
+// the primary fails uncommitted, the fallback takes over with its own transport
+// config.
 // ---------------------------------------------------------------------------
 
-/** 捕获经 streamSimpleByApi 发出的每次调用（model + options.headers）。 */
+/** Captures every call issued through streamSimpleByApi (model + options.headers). */
 const streamCalls = [];
 let streamImpl = () => {
   throw new Error("streamImpl was not configured");
@@ -289,15 +296,15 @@ test.beforeEach(() => {
   streamCalls.length = 0;
 });
 
-test("golden/transport-failover: 主选走代理 + 备选直连，逐候选传输配置互不泄漏", async () => {
-  // 主选：国外供应商，勾选走应用代理。
+test("golden/transport-failover: primary proxied + fallback direct, per-candidate transport configs do not leak", async () => {
+  // Primary: overseas provider, with the app proxy enabled.
   const primaryRuntime = {
     baseUrl: "https://api.anthropic.com/v1",
     apiKey: "sk-primary",
     promptCachingEnabled: false,
     useSystemProxy: true,
   };
-  // 备选：国内中转，直连（不带 useSystemProxy）。
+  // Fallback: domestic relay, direct (no useSystemProxy).
   const fallbackRuntime = {
     baseUrl: "https://relay.cn.example/v1",
     apiKey: "sk-fallback",
@@ -320,14 +327,14 @@ test("golden/transport-failover: 主选走代理 + 备选直连，逐候选传�
       config: { maxSwitches: 3, failureThreshold: 3, cooldownSeconds: 60 },
       primary: {
         selectedModel: { customProviderId: "p-abroad", model: "claude-x" },
-        label: "国外官方 · claude-x",
+        label: "Overseas official · claude-x",
       },
       fallbacks: [
         {
           selectedModel: { customProviderId: "p-cn-relay", model: "claude-x" },
           providerId: "claude_code",
           model: "claude-x",
-          label: "国内中转 · claude-x",
+          label: "Domestic relay · claude-x",
           runtime: fallbackRuntime,
         },
       ],
@@ -337,7 +344,7 @@ test("golden/transport-failover: 主选走代理 + 备选直连，逐候选传�
   assert.equal(final.content[0].text, "fallback-answer");
   assert.equal(streamCalls.length, 2);
 
-  // 候选 1（主选）：真实 prepareProviderRequest 输出，带 use-system-proxy。
+  // Candidate 1 (primary): real prepareProviderRequest output, with use-system-proxy.
   const primaryCall = streamCalls[0];
   assert.equal(primaryCall.model.baseUrl, "http://127.0.0.1:18080/proxy/claude_code/v1");
   assert.equal(primaryCall.options.headers["x-liveagent-use-system-proxy"], "1");
@@ -347,7 +354,7 @@ test("golden/transport-failover: 主选走代理 + 备选直连，逐候选传�
     "https://api.anthropic.com",
   );
 
-  // 候选 2（备选）：独立装配，绝不继承主选的 use-system-proxy 与凭据。
+  // Candidate 2 (fallback): assembled independently, never inheriting the primary's use-system-proxy or credentials.
   const fallbackCall = streamCalls[1];
   assert.equal(fallbackCall.model.baseUrl, "http://127.0.0.1:18080/proxy/claude_code/v1");
   assert.equal(fallbackCall.options.headers["x-liveagent-use-system-proxy"], undefined);
@@ -358,7 +365,7 @@ test("golden/transport-failover: 主选走代理 + 备选直连，逐候选传�
   );
 });
 
-test("golden/transport-failover: 反向拓扑（主选直连 + 备选走代理）同样逐候选独立", async () => {
+test("golden/transport-failover: reverse topology (primary direct + fallback proxied) is likewise per-candidate independent", async () => {
   const primaryRuntime = {
     baseUrl: "https://relay.cn.example/v1",
     apiKey: "sk-primary-direct",
@@ -387,14 +394,14 @@ test("golden/transport-failover: 反向拓扑（主选直连 + 备选走代理�
       config: { maxSwitches: 3, failureThreshold: 3, cooldownSeconds: 60 },
       primary: {
         selectedModel: { customProviderId: "p-cn-relay", model: "claude-x" },
-        label: "国内中转 · claude-x",
+        label: "Domestic relay · claude-x",
       },
       fallbacks: [
         {
           selectedModel: { customProviderId: "p-abroad", model: "claude-x" },
           providerId: "claude_code",
           model: "claude-x",
-          label: "国外官方 · claude-x",
+          label: "Overseas official · claude-x",
           runtime: fallbackRuntime,
         },
       ],

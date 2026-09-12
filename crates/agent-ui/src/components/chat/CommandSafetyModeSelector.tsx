@@ -30,14 +30,18 @@ const MODE_DESC_I18N_KEYS: Record<CommandSafetyMode, string> = {
 const SAFETY_MODES = ["ask", "auto", "sandbox", "sandboxOffline"] as const;
 
 /**
- * 读掩蔽是平台/后端相关的能力,不能作为跨平台的肯定承诺(P2#7)。
- * macOS 用 `(deny file-read* (subpath …))`、Linux 用 `--tmpfs` 掩蔽,文案成立;
- * Windows 的联网后端是 WRITE_RESTRICTED 受限令牌 —— 限制性 SID 只参与"写"判定,
- * 读/执行跳过第二遍,且写 ACE 只授不撤,**没有任何读掩蔽**。若沿用同一句"敏感目录
- * 不可读",Windows 用户会据此认为凭据受保护而在沙箱模式下跑不可信代码,而这恰恰是
- * 可联网的后端(~/.ssh、%USERPROFILE%\.aws\credentials、config.sqlite 里的 provider
- * key 都可读并外传)。故该平台改用不含读掩蔽承诺的文案。
- * 断网后端(AppContainer)默认拒读,顺带获得掩蔽,sandboxOffline 文案不受影响。
+ * Read masking is a platform/backend-specific capability and cannot be an affirmative
+ * cross-platform promise (P2#7). macOS masks with `(deny file-read* (subpath …))` and Linux with
+ * `--tmpfs`, so the wording holds there; Windows' networked backend is a WRITE_RESTRICTED
+ * restricted token -- the restricting SID only participates in "write" decisions, read/execute
+ * skip the second pass, and write ACEs are grant-only with no revocation, so there is **no read
+ * masking at all**. Reusing the same "sensitive directories are unreadable" line would lead
+ * Windows users to believe their credentials are protected and run untrusted code in sandbox mode,
+ * when in fact this is a networked backend (~/.ssh, %USERPROFILE%\.aws\credentials, and provider
+ * keys in config.sqlite are all readable and exfiltratable). So that platform uses wording without
+ * the read-masking promise.
+ * The offline backend (AppContainer) denies reads by default and gains masking incidentally, so
+ * the sandboxOffline wording is unaffected.
  */
 const MECHANISMS_WITHOUT_READ_MASKING: ReadonlySet<string> = new Set(["restricted-token"]);
 
@@ -69,28 +73,32 @@ export function CommandSafetyModeSelector(props: {
   const { t } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
   const capability = useSandboxCapability();
-  // 写围栏(sandbox):平台不支持时禁用。桌面端探测返回前(null)乐观启用,由执行层
-  // fail-closed 兜底;WebUI 执行端平台未知,同样交由 fail-closed。
+  // Write fence (sandbox): disabled when the platform does not support it. Before the desktop
+  // probe returns (null) it is optimistically enabled, with fail-closed as the backstop in the
+  // execution layer; the WebUI execution side's platform is unknown, likewise left to fail-closed.
   const sandboxUnavailable = capability !== null && !capability.supported;
-  // 断网(sandboxOffline):额外要求平台可断网。探测判定 network_control=false 时
-  // (如 Windows 派生不出 AppContainer SID)仅此项禁用,sandbox 仍可用。
+  // Offline (sandboxOffline): additionally requires that the platform can go offline. When the
+  // probe determines network_control=false (for example, Windows cannot derive an AppContainer
+  // SID), only this item is disabled; sandbox remains available.
   const offlineUnavailable =
     sandboxUnavailable || (capability !== null && !capability.network_control);
-  // 禁用时的说明文案:整体不可用优先,否则为“仅断网不可用”。
+  // Explanation wording when disabled: overall unavailability takes priority, otherwise "offline only is unavailable".
   const disabledHint = sandboxUnavailable
     ? t("chat.safety.sandboxUnavailable")
     : t("chat.safety.sandboxOfflineUnavailable");
-  // 联网写围栏后端是否缺失读掩蔽(Windows 受限令牌);缺失时 sandbox 项换用不承诺
-  // “敏感目录不可读”的文案。探测返回前(null)以及 WebUI(永远拿不到桌面 mechanism)
-  // 保守按缺失处理,避免先给出过强承诺。
+  // Whether the networked write-fence backend lacks read masking (Windows restricted token);
+  // when missing, the sandbox item uses wording that does not promise "sensitive directories are
+  // unreadable". Before the probe returns (null), and on the WebUI (which never gets the desktop
+  // mechanism), conservatively treat it as missing to avoid making too strong a promise up front.
   const sandboxLacksReadMasking =
     capability === null ? true : MECHANISMS_WITHOUT_READ_MASKING.has(capability.mechanism);
   const modeDescKey = (mode: CommandSafetyMode) =>
     mode === "sandbox" && sandboxLacksReadMasking
       ? "chat.safety.sandboxDescNoReadMask"
       : MODE_DESC_I18N_KEYS[mode];
-  // 当前值本身不可用(如设置同步自 macOS,本机是 Windows)时仍显示,但标红提示
-  // 由执行层报错兜底;这里不做静默改写,避免设置回写抖动。
+  // When the current value itself is unavailable (for example, settings synced from macOS while
+  // this machine is Windows) it is still shown but flagged in red, with the execution layer's error
+  // as the backstop; no silent rewriting happens here, avoiding settings write-back churn.
   const selected = isCommandSafetyMode(value) ? value : "auto";
   const selectedLabel = t(MODE_I18N_KEYS[selected]);
 

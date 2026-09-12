@@ -3,9 +3,10 @@ import type { TerminalSession } from "./types";
 export type SshSessionStatus = "connected" | "reconnecting" | "disconnected";
 
 /**
- * SSH 会话连接状态的统一推导:后端 `ssh.status` 为准,但会话进程已停止时
- * 一律视为 disconnected(状态事件可能晚于进程退出)。未知状态按 disconnected
- * 保守处理。WorkspaceSshTerminalOverlay 与 SshTerminalPaneSurface 共用。
+ * Unified derivation of SSH session connection status: the backend `ssh.status` is authoritative,
+ * but once the session process has stopped it is always treated as disconnected (a status event may
+ * arrive after the process exits). Unknown statuses are conservatively treated as disconnected.
+ * Shared by WorkspaceSshTerminalOverlay and SshTerminalPaneSurface.
  */
 export function sshSessionStatus(session: TerminalSession): SshSessionStatus {
   const status = session.ssh?.status ?? (session.running ? "connected" : "disconnected");
@@ -14,7 +15,7 @@ export function sshSessionStatus(session: TerminalSession): SshSessionStatus {
   return "disconnected";
 }
 
-/** SSH 会话的目标端点标签(user@host:port);非 SSH 会话退回 cwd。 */
+/** Target endpoint label of an SSH session (user@host:port); non-SSH sessions fall back to cwd. */
 export function sshSessionEndpointLabel(session: TerminalSession): string {
   const ssh = session.ssh;
   if (!ssh) return session.cwd || session.projectPathKey;

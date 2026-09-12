@@ -574,7 +574,7 @@ function buildSuggestions(result: {
     if (error.includes("timeoutMs")) suggestions.push("Increase timeoutMs to a positive value.");
   }
   const message = result.test?.error ?? "";
-  if (/No such file|os error 2|启动 MCP server|spawn/i.test(message)) {
+  if (/No such file|os error 2|start MCP server|spawn/i.test(message)) {
     suggestions.push("Check that the stdio command exists in PATH or set cwd/env explicitly.");
   }
   if (/timed out|timeout/i.test(message)) {
@@ -705,8 +705,8 @@ export function createMcpManagerTools(params: {
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   runtimeScope: SystemToolRuntimeScope;
   /**
-   * 本轮的 OS 沙箱设置(与 Bash / ManagedProcess 同一份契约)。启用时,本工具的
-   * stdio 运行时探测一律拒绝(P1#1)。
+   * This turn's OS sandbox settings (the same contract as Bash / ManagedProcess). When enabled, this
+   * tool's stdio runtime probe is always rejected (P1#1).
    */
   sandbox?: ShellSandboxSettings;
   resolveHomeDir?: () => Promise<string>;
@@ -751,21 +751,25 @@ export function createMcpManagerTools(params: {
   }
 
   /**
-   * 沙箱围栏的对称性守卫(P1#1)。
+   * Symmetry guard for the sandbox fence (P1#1).
    *
-   * `transport: "stdio"` 的运行时探测最终走到 Rust `build_stdio_command` 的裸
-   * `Command::new`,不带任何 SandboxSpec;而 `action: "test"` 允许模型传入自由格式的
-   * `command`/`args`,既不写配置也不持久化 —— 等于在"选了最严格模式"的会话里留下一个
-   * 与 Bash 同样通用、却完全无围栏的进程 spawn 入口(sandboxOffline 下尤其矛盾:
-   * 该模式的全部意义就是内核级断网)。MCP 运行时是进程级共享池,且 http/sse 传输根本
-   * 不落到 shell funnel 上,无法复用同一套沙箱包装,故在沙箱模式下一律 fail-closed 拒绝。
+   * A runtime probe with `transport: "stdio"` ultimately reaches the bare `Command::new` of Rust's
+   * `build_stdio_command`, without any SandboxSpec; whereas `action: "test"` lets the model pass
+   * free-form `command`/`args`, writing no config and persisting nothing -- leaving, in a session
+   * where "the strictest mode" was chosen, a process-spawn entry point as general as Bash yet
+   * completely unfenced (especially contradictory under sandboxOffline, whose entire point is
+   * kernel-level network cutoff). The MCP runtime is a process-level shared pool, and http/sse
+   * transports do not land on the shell funnel at all, so the same sandbox wrapper cannot be reused;
+   * hence in sandbox mode it is always fail-closed rejected.
    *
-   * create / update / enable 同样会把 stdio `command`/`args` 写入设置,下一轮
-   * registry 构建(或同轮 subagent)经 `createMcpTools` → `mcp_list_tools` 自动拉起
-   * 该进程,所以配置写入路径必须走同一守卫,不能只拦运行时探测。
+   * create / update / enable likewise write the stdio `command`/`args` into settings, and on the
+   * next registry build (or a same-turn subagent) the process is automatically launched via
+   * `createMcpTools` -> `mcp_list_tools`, so the config-write path must go through the same guard; it
+   * is not enough to block only the runtime probe.
    *
-   * 非 stdio 传输不 spawn 进程,不在本守卫范围内;用户在设置界面里手动测试 MCP 服务器
-   * 也不受影响(那是显式用户操作,与 hooks / 用户自建 Cron 脚本同一豁免)。
+   * Non-stdio transports spawn no process and are outside this guard; a user manually testing an MCP
+   * server in the settings UI is also unaffected (that is an explicit user action, the same exemption
+   * as hooks / user-created Cron scripts).
    */
   function assertRuntimeSpawnAllowed(action: McpManagerAction, server: McpServerConfig) {
     if (!params.sandbox?.enabled) return;
@@ -946,7 +950,7 @@ export function createMcpManagerTools(params: {
       commitDelete(serverId);
       const runtimeWarnings: string[] = [];
       const stopped = await stopRuntimeAfterCommit([serverId], runtimeWarnings, signal);
-      // OAuth server：卸载即清 keychain 条目（roadmap 验收项）；best effort。
+      // OAuth server: uninstalling clears the keychain entry (a roadmap acceptance item); best effort.
       if (deleted.auth?.type === "oauth") {
         try {
           await invoke("mcp_oauth_clear", { server_id: serverId });
@@ -1060,7 +1064,7 @@ export function createMcpManagerTools(params: {
   const toolMcpManager: Tool = {
     name: "McpManager",
     description:
-      "Manage LiveAgent MCP Server configuration. Use this built-in tool for MCP server CRUD, enable/disable, static validation, connection tests, diagnostics, restart/stop, and tools/list. Enabled MCP servers are automatically loaded as dynamic mcp_* tools. It does not call arbitrary MCP business tools; use the dynamically loaded mcp_* tools for actual MCP tool execution.",
+      "Manage ReactorPro MCP Server configuration. Use this built-in tool for MCP server CRUD, enable/disable, static validation, connection tests, diagnostics, restart/stop, and tools/list. Enabled MCP servers are automatically loaded as dynamic mcp_* tools. It does not call arbitrary MCP business tools; use the dynamically loaded mcp_* tools for actual MCP tool execution.",
     parameters: MCP_MANAGER_PARAMETERS,
   };
 

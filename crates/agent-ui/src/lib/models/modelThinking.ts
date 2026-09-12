@@ -6,18 +6,20 @@ import {
 } from "./modelCatalog";
 
 // ---------------------------------------------------------------------------
-// 模型思考能力（档位可用性的单一真源）
+// Model thinking capability (single source of truth for level availability)
 // ---------------------------------------------------------------------------
-// 数据来自 catalog.generated.ts 的 thinking 字段（OpenAI 重名模型优先采用
-// Codex supported_reasoning_levels，其余由 models.dev reasoning_options 补充并
-// 在生成期归一化）。本模块只回答"这个模型有哪些思考档、能否关闭"——UI 档位
-// 列表与请求期钳制都从这里派生，保证两者永不漂移。每档发什么请求参数
-// （adaptive/budget、effort 字段名、值改写）是流式运行时的领域，不归这里管。
-// 本文件是两端思考能力判断的单一真源。
+// Data comes from the thinking field in catalog.generated.ts (for OpenAI models with duplicate
+// names, Codex supported_reasoning_levels takes priority; the rest are supplemented by
+// models.dev reasoning_options and normalized at generation time). This module only answers
+// "which thinking levels does this model have, and can it be turned off" — the UI level list and
+// request-time clamping both derive from here, ensuring they never drift apart. Which request
+// parameters each level sends (adaptive/budget, effort field name, value rewriting) belongs to
+// the streaming runtime and is not managed here. This file is the single source of truth for
+// thinking-capability decisions on both ends.
 
 export type ThinkingLevel = CatalogThinkingLevel;
 
-/** 升序标准梯子；目录 levels 恒为其子集（生成期归一化保证）。 */
+/** The ascending standard ladder; catalog levels are always a subset of it (guaranteed by generation-time normalization). */
 export const THINKING_LEVEL_LADDER: readonly ThinkingLevel[] = [
   "minimal",
   "low",
@@ -28,18 +30,18 @@ export const THINKING_LEVEL_LADDER: readonly ThinkingLevel[] = [
 ];
 
 export type ModelThinkingCapability = {
-  /** false = 非思考模型（无档位、无开关，UI 隐藏整组控件）。 */
+  /** false = non-thinking model (no levels, no toggle, the UI hides the whole control group). */
   reasoning: boolean;
-  /** 可选档位（不含 off）；reasoning 为 true 且为空 = 思考恒开且不可调。 */
+  /** Selectable levels (excluding off); reasoning true with an empty list = thinking always on and not adjustable. */
   levels: ThinkingLevel[];
-  /** true = 思考不可关闭。 */
+  /** true = thinking cannot be turned off. */
   alwaysOn: boolean;
-  /** 目录命中 or 兜底推断（调试/测试用途）。 */
+  /** Catalog hit or fallback inference (for debugging/testing). */
   fromCatalog: boolean;
 };
 
 // ---------------------------------------------------------------------------
-// Anthropic 世代启发式（目录未命中的三方改名 id 兜底，两端共用的唯一实现）
+// Anthropic generation heuristics (fallback for third-party renamed ids not found in the catalog; the only implementation shared by both ends)
 // ---------------------------------------------------------------------------
 
 function isClaudeFamilyVersionAtLeast(
@@ -47,8 +49,9 @@ function isClaudeFamilyVersionAtLeast(
   family: "opus" | "sonnet",
   minimumMinor: number,
 ) {
-  // minor 限定 1-2 位数字，避免把日期后缀（如 claude-sonnet-4-20250514）误读成
-  // 小版本号；同时接受三方中转的倒序命名（claude-4.6-sonnet）。
+  // minor is limited to 1-2 digits, avoiding misreading a date suffix (e.g.
+  // claude-sonnet-4-20250514) as a minor version; it also accepts the reversed naming used by
+  // third-party relays (claude-4.6-sonnet).
   const match = normalizedModelId.match(
     new RegExp(`(?:${family}[-.]4[-.](\\d{1,2})(?!\\d)|4[-.](\\d{1,2})(?!\\d)[-.]${family})`),
   );
@@ -57,9 +60,9 @@ function isClaudeFamilyVersionAtLeast(
   return Number.isFinite(minor) && minor >= minimumMinor;
 }
 
-// Claude 5 起（sonnet-5 / fable-5 / mythos-5 等）整个家族都是 adaptive thinking 且
-// 支持 xhigh。倒序写法（claude-5-sonnet）用负向后行断言排除 3-5-sonnet 这类旧
-// 世代小版本号。
+// From Claude 5 onward (sonnet-5 / fable-5 / mythos-5, etc.) the whole family uses adaptive
+// thinking and supports xhigh. The reversed form (claude-5-sonnet) uses a negative lookbehind to
+// exclude old-generation minor version numbers like 3-5-sonnet.
 function isClaudeFamilyMajorVersionAtLeast(normalizedModelId: string, minimumMajor: number) {
   const match = normalizedModelId.match(
     /(?:(?:opus|sonnet|haiku|fable|mythos)[-.](\d{1,2})(?!\d)|(?<!\d[-.])(\d{1,2})[-.](?:opus|sonnet|haiku|fable|mythos))/,
@@ -69,7 +72,7 @@ function isClaudeFamilyMajorVersionAtLeast(normalizedModelId: string, minimumMaj
   return Number.isFinite(major) && major >= minimumMajor;
 }
 
-/** adaptive 世代（Opus/Sonnet 4.6+、Claude 5、Mythos Preview）即 1M GA 世代。 */
+/** The adaptive generation (Opus/Sonnet 4.6+, Claude 5, Mythos Preview) is the 1M GA generation. */
 export function isAnthropicAdaptiveModelId(modelId: string): boolean {
   const normalizedModelId = modelId.trim().toLowerCase();
   return (
@@ -80,7 +83,7 @@ export function isAnthropicAdaptiveModelId(modelId: string): boolean {
   );
 }
 
-/** xhigh：Opus 4.7+ 与 Claude 5 家族；Mythos Preview / Opus 4.6 / Sonnet 4.6 只到 max。 */
+/** xhigh: Opus 4.7+ and the Claude 5 family; Mythos Preview / Opus 4.6 / Sonnet 4.6 only go up to max. */
 export function anthropicModelSupportsXHigh(modelId: string): boolean {
   const normalizedModelId = modelId.trim().toLowerCase();
   return (
@@ -90,17 +93,19 @@ export function anthropicModelSupportsXHigh(modelId: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// 能力解析
+// Capability resolution
 // ---------------------------------------------------------------------------
 
-// 目录未命中的自定义模型无法从 id 可靠判断推理能力，按可推理处理：标准四档、
-// 可关闭（与目录 budget 型模型同形）；xhigh/max 需目录或 Anthropic 世代启发式
-// opt-in。是否真的下发思考由用户的开关决定。
+// A custom model not found in the catalog cannot have its reasoning capability reliably
+// determined from its id, so it is treated as reasoning-capable: the standard four levels,
+// switchable off (same shape as catalog budget-type models); xhigh/max require a catalog or
+// Anthropic generation heuristic opt-in. Whether thinking is actually sent is decided by the
+// user's toggle.
 const FALLBACK_LEVELS: readonly ThinkingLevel[] = ["minimal", "low", "medium", "high"];
 
 function fallbackCapability(providerId: CatalogAppProviderId, modelId: string) {
   if (providerId === "claude_code" && isAnthropicAdaptiveModelId(modelId)) {
-    // adaptive 世代目录形态：无 minimal 档；xhigh 按家族判定。
+    // Adaptive-generation catalog shape: no minimal level; xhigh determined by family.
     const levels: ThinkingLevel[] = anthropicModelSupportsXHigh(modelId)
       ? ["low", "medium", "high", "xhigh", "max"]
       : ["low", "medium", "high", "max"];
@@ -110,11 +115,13 @@ function fallbackCapability(providerId: CatalogAppProviderId, modelId: string) {
 }
 
 /**
- * 解析模型的思考能力。目录查找与限额同路径：供应商作用域优先，未命中按 id
- * 跨供应商回查（中转挂载的 glm/kimi/deepseek 等命中真实档位），最后才落兜底。
+ * Resolve a model's thinking capability. Catalog lookup follows the same path as quota: the
+ * provider scope takes priority, and on a miss it re-queries across providers by id
+ * (relay-mounted glm/kimi/deepseek etc. hit their real levels), only falling back at the end.
  *
- * xAI 例外：思考恒不可关（omit reasoning_effort ≠ 关闭，wire 无法表达 off），
- * 目录的 off 声明对 xai 供应商不生效——与请求侧行为保持一致，勿单独放开。
+ * xAI exception: thinking can never be turned off (omitting reasoning_effort ≠ off; the wire
+ * cannot express off), so the catalog's off declaration does not take effect for the xai
+ * provider — consistent with request-side behavior; do not enable it separately.
  */
 export function resolveModelThinking(
   providerId: CatalogAppProviderId,
@@ -143,11 +150,11 @@ export function resolveModelThinking(
 }
 
 // ---------------------------------------------------------------------------
-// pi-ai ThinkingLevelMap 派生（GUI 请求路径消费；与 pi-ai 类型结构兼容）
+// pi-ai ThinkingLevelMap derivation (consumed by the GUI request path; compatible with pi-ai's type structure)
 // ---------------------------------------------------------------------------
-// pi-ai getSupportedThinkingLevels 语义：null = 不支持；xhigh/max 必须显式声明
-// 才存在；minimal..high 缺省即支持（值透传）。本函数保证
-// getSupportedThinkingLevels(带此 map 的模型) ≡ capability.levels（+off）。
+// pi-ai getSupportedThinkingLevels semantics: null = unsupported; xhigh/max exist only when
+// explicitly declared; minimal..high are supported by default (values passed through). This
+// function guarantees getSupportedThinkingLevels(model with this map) ≡ capability.levels (+off).
 
 export type ThinkingLevelMap = Partial<Record<"off" | ThinkingLevel, string | null>>;
 
@@ -155,10 +162,10 @@ const BASE_LEVELS: readonly ThinkingLevel[] = ["minimal", "low", "medium", "high
 const OPT_IN_LEVELS: readonly ThinkingLevel[] = ["xhigh", "max"];
 
 /**
- * @param wireValues 档位 → 请求值的改写表（如 xai 的 minimal→low、pi-ai 目录
- * 自带的 off→"none"、low→"LOW"），只对 capability 中存在的档位生效——wire 表
- * 不得复活目录裁掉的档，null（pi-ai 的"不支持"标记）一律忽略，可用性只听
- * capability 的。
+ * @param wireValues level → request-value rewrite table (e.g. xai's minimal→low, the pi-ai
+ * catalog's built-in off→"none", low→"LOW"); it applies only to levels present in capability —
+ * the wire table must not revive levels trimmed by the catalog, null (pi-ai's "unsupported"
+ * marker) is always ignored, and availability follows capability alone.
  */
 export function toThinkingLevelMap(
   capability: ModelThinkingCapability,
@@ -191,8 +198,9 @@ export function toThinkingLevelMap(
 }
 
 /**
- * 把（历史设置里的）档位钳到列表内最近档：先向上找、再向下找——与 pi-ai
- * clampThinkingLevel 同算法，供 UI 归一化已保存档位使用。
+ * Clamp a level (from historical settings) to the nearest one in the list: search upward first,
+ * then downward — same algorithm as pi-ai clampThinkingLevel, used by the UI to normalize saved
+ * levels.
  */
 export function clampThinkingLevelToList(
   level: ThinkingLevel,

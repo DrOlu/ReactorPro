@@ -159,9 +159,11 @@ impl AutomationStore {
         scheduler.run_now(task_id)
     }
 
-    /// 翻转单个 cron 任务的启用状态（托盘菜单开关用）。走唯一的
-    /// `cron_apply` 写路径（revision CAS）；读-改窗口内被并发修改时
-    /// 用新快照重试一次，仍冲突则报错。返回翻转后的启用状态。
+    /// Toggle the enabled state of a single cron task (used by the tray menu
+    /// switch). It goes through the single `cron_apply` write path (revision
+    /// CAS); if the task is modified concurrently within the read-modify window,
+    /// it retries once with a fresh snapshot, and errors if it still conflicts.
+    /// Returns the toggled enabled state.
     pub fn toggle_cron_task_enabled(&self, task_id: &str) -> Result<bool, String> {
         for _ in 0..2 {
             let cron = self.snapshot()?.cron;
@@ -169,7 +171,7 @@ impl AutomationStore {
                 .tasks
                 .iter()
                 .find(|task| task.id == task_id)
-                .ok_or_else(|| format!("cron task 不存在：{task_id}"))?;
+                .ok_or_else(|| format!("cron task does not exist: {task_id}"))?;
             let next_enabled = !task.enabled;
             let response = self.cron_apply(AutomationApplyInput {
                 base_revision: cron.revision,
@@ -182,7 +184,7 @@ impl AutomationStore {
                 return Ok(next_enabled);
             }
         }
-        Err("cron task 状态已被并发修改，请重试".to_string())
+        Err("cron task state was modified concurrently, please retry".to_string())
     }
 
     fn lock_conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
@@ -204,7 +206,7 @@ impl AutomationStore {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
-                .map_err(|e| format!("开启 cron apply 事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to begin cron apply transaction: {e}"))?;
 
             let current = db::read_revision(&tx, db::CRON_REVISION_KEY)?;
             if input.base_revision != current {
@@ -222,7 +224,7 @@ impl AutomationStore {
             db::bump_revision(&tx, db::CRON_REVISION_KEY)?;
             let snapshot = db::read_cron_snapshot(&tx)?;
             tx.commit()
-                .map_err(|e| format!("提交 cron apply 事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit cron apply transaction: {e}"))?;
             snapshot
         };
 
@@ -238,7 +240,7 @@ impl AutomationStore {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
-                .map_err(|e| format!("开启 hooks apply 事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to begin hooks apply transaction: {e}"))?;
 
             let current = db::read_revision(&tx, db::HOOKS_REVISION_KEY)?;
             if input.base_revision != current {
@@ -256,7 +258,7 @@ impl AutomationStore {
             db::bump_revision(&tx, db::HOOKS_REVISION_KEY)?;
             let snapshot = db::read_hooks_snapshot(&tx)?;
             tx.commit()
-                .map_err(|e| format!("提交 hooks apply 事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit hooks apply transaction: {e}"))?;
             snapshot
         };
 
@@ -280,7 +282,7 @@ impl AutomationStore {
                     |row| row.get(0),
                 )
                 .optional()
-                .map_err(|e| format!("读取 automation_cron_tasks.last_error 失败：{e}"))?;
+                .map_err(|e| format!("Failed to read automation_cron_tasks.last_error: {e}"))?;
             let Some(stored) = stored else {
                 return Ok(());
             };
@@ -291,7 +293,7 @@ impl AutomationStore {
                 "UPDATE automation_cron_tasks SET last_error = ?2, updated_at = ?3 WHERE task_id = ?1",
                 params![task_id, error, db::now_ms()],
             )
-            .map_err(|e| format!("更新 automation_cron_tasks.last_error 失败：{e}"))?;
+            .map_err(|e| format!("Failed to update automation_cron_tasks.last_error: {e}"))?;
             db::bump_revision(&conn, db::CRON_REVISION_KEY)?;
             db::read_cron_snapshot(&conn)?
         };
@@ -312,7 +314,7 @@ impl AutomationStore {
                      WHERE task_id = ?1",
                     params![task_id, error, db::now_ms()],
                 )
-                .map_err(|e| format!("禁用 automation_cron_tasks 失败：{e}"))?;
+                .map_err(|e| format!("Failed to disable automation_cron_tasks: {e}"))?;
             if updated == 0 {
                 return Ok(());
             }
@@ -333,7 +335,7 @@ impl AutomationStore {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(|e| format!("读取 automation_cron_tasks 状态失败：{e}"))?;
+            .map_err(|e| format!("Failed to read automation_cron_tasks state: {e}"))?;
         Ok(matches!(row, Some((enabled, remaining)) if enabled != 0 && remaining != Some(0)))
     }
 
@@ -343,7 +345,7 @@ impl AutomationStore {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
-                .map_err(|e| format!("开启 run 记录事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to begin run record transaction: {e}"))?;
             insert_finished_run(&tx, &run, RunState::Done)?;
             let effect = if run.counted {
                 decrement_remaining(&tx, &run.task_id)?
@@ -359,7 +361,7 @@ impl AutomationStore {
                 CronMutationEffect::None => None,
             };
             tx.commit()
-                .map_err(|e| format!("提交 run 记录事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit run record transaction: {e}"))?;
             snapshot
         };
 
@@ -401,7 +403,7 @@ impl AutomationStore {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
-                .map_err(|e| format!("开启 prompt 排队事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to begin prompt enqueue transaction: {e}"))?;
 
             let active: Option<String> = tx
                 .query_row(
@@ -411,7 +413,7 @@ impl AutomationStore {
                     |row| row.get(0),
                 )
                 .optional()
-                .map_err(|e| format!("检查 prompt 活动运行失败：{e}"))?;
+                .map_err(|e| format!("Failed to check for active prompt run: {e}"))?;
             if active.is_some() {
                 return Ok(PromptQueueOutcome::SkippedActiveRun);
             }
@@ -434,7 +436,7 @@ impl AutomationStore {
                 reasoning: task.reasoning.clone().unwrap_or_default(),
             };
             let request_json = serde_json::to_string(&request)
-                .map_err(|e| format!("序列化 prompt run 请求失败：{e}"))?;
+                .map_err(|e| format!("Failed to serialize prompt run request: {e}"))?;
             tx.execute(
                 "INSERT INTO automation_cron_runs
                     (execution_id, task_id, state, success, started_at, duration_ms,
@@ -448,9 +450,9 @@ impl AutomationStore {
                     request_json,
                 ],
             )
-            .map_err(|e| format!("写入 prompt run 失败：{e}"))?;
+            .map_err(|e| format!("Failed to write prompt run: {e}"))?;
             tx.commit()
-                .map_err(|e| format!("提交 prompt 排队事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit prompt enqueue transaction: {e}"))?;
             request
         };
 
@@ -471,7 +473,7 @@ impl AutomationStore {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
-                .map_err(|e| format!("开启 prompt claim 事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to begin prompt claim transaction: {e}"))?;
             let mut claims = Vec::new();
             {
                 let mut stmt = tx
@@ -480,12 +482,12 @@ impl AutomationStore {
                          WHERE state = 'pending' AND request_json IS NOT NULL
                          ORDER BY started_at ASC, execution_id ASC",
                     )
-                    .map_err(|e| format!("准备读取 pending prompt runs 失败：{e}"))?;
+                    .map_err(|e| format!("Failed to prepare pending prompt runs read: {e}"))?;
                 let rows = stmt
                     .query_map([], |row| row.get::<_, String>(0))
-                    .map_err(|e| format!("读取 pending prompt runs 失败：{e}"))?;
+                    .map_err(|e| format!("Failed to read pending prompt runs: {e}"))?;
                 for row in rows {
-                    let raw = row.map_err(|e| format!("读取 pending prompt run 行失败：{e}"))?;
+                    let raw = row.map_err(|e| format!("Failed to read pending prompt run row: {e}"))?;
                     match serde_json::from_str::<PromptRunRequest>(&raw) {
                         Ok(request) => claims.push(request),
                         Err(error) => eprintln!("skip malformed prompt run request: {error}"),
@@ -497,17 +499,17 @@ impl AutomationStore {
                 request.lease_expires_at =
                     now + (request.timeout_seconds.max(1) as i64).saturating_mul(1_000);
                 let request_json = serde_json::to_string(request)
-                    .map_err(|e| format!("序列化 prompt run 请求失败：{e}"))?;
+                    .map_err(|e| format!("Failed to serialize prompt run request: {e}"))?;
                 tx.execute(
                     "UPDATE automation_cron_runs
                      SET state = 'leased', lease_expires_at = ?2, request_json = ?3
                      WHERE execution_id = ?1",
                     params![request.execution_id, request.lease_expires_at, request_json],
                 )
-                .map_err(|e| format!("租约 prompt run 失败：{e}"))?;
+                .map_err(|e| format!("Failed to lease prompt run: {e}"))?;
             }
             tx.commit()
-                .map_err(|e| format!("提交 prompt claim 事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit prompt claim transaction: {e}"))?;
             claims
         };
 
@@ -529,7 +531,7 @@ impl AutomationStore {
                     db::now_ms() + PROMPT_PENDING_CLAIM_WINDOW_MS
                 ],
             )
-            .map_err(|e| format!("释放 prompt run 失败：{e}"))?
+            .map_err(|e| format!("Failed to release prompt run: {e}"))?
         };
         if released > 0 {
             self.with_notifier(|notifier| notifier.prompt_pending());
@@ -550,7 +552,7 @@ impl AutomationStore {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
-                .map_err(|e| format!("开启 prompt 完成事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to begin prompt completion transaction: {e}"))?;
 
             let row: Option<(String, String, i64, Option<String>)> = tx
                 .query_row(
@@ -560,7 +562,7 @@ impl AutomationStore {
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
                 )
                 .optional()
-                .map_err(|e| format!("读取 prompt run 失败：{e}"))?;
+                .map_err(|e| format!("Failed to read prompt run: {e}"))?;
 
             let Some((task_id, state, started_at, request_json)) = row else {
                 return Ok(PromptCompletionResponse {
@@ -602,7 +604,7 @@ impl AutomationStore {
                     db::truncate_run_output(&output),
                 ],
             )
-            .map_err(|e| format!("写入 prompt 完成结果失败：{e}"))?;
+            .map_err(|e| format!("Failed to write prompt completion result: {e}"))?;
 
             let effect = if prompt_run_is_counted(request_json.as_deref()) {
                 decrement_remaining(&tx, &task_id)?
@@ -618,7 +620,7 @@ impl AutomationStore {
                 CronMutationEffect::None => None,
             };
             tx.commit()
-                .map_err(|e| format!("提交 prompt 完成事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit prompt completion transaction: {e}"))?;
             snapshot
         };
 
@@ -669,7 +671,7 @@ impl AutomationStore {
             let mut conn = self.lock_conn()?;
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
-                .map_err(|e| format!("开启 prompt 过期事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to begin prompt expiration transaction: {e}"))?;
 
             let mut rows = Vec::new();
             {
@@ -678,7 +680,7 @@ impl AutomationStore {
                         "SELECT execution_id, task_id, started_at, request_json FROM automation_cron_runs
                          WHERE {predicate}"
                     ))
-                    .map_err(|e| format!("准备读取过期 prompt runs 失败：{e}"))?;
+                    .map_err(|e| format!("Failed to prepare expired prompt runs read: {e}"))?;
                 let mapped = stmt
                     .query_map(predicate_params, |row| {
                         Ok((
@@ -688,9 +690,9 @@ impl AutomationStore {
                             row.get::<_, Option<String>>(3)?,
                         ))
                     })
-                    .map_err(|e| format!("读取过期 prompt runs 失败：{e}"))?;
+                    .map_err(|e| format!("Failed to read expired prompt runs: {e}"))?;
                 for row in mapped {
-                    rows.push(row.map_err(|e| format!("读取过期 prompt run 行失败：{e}"))?);
+                    rows.push(row.map_err(|e| format!("Failed to read expired prompt run row: {e}"))?);
                 }
             }
             if rows.is_empty() {
@@ -708,7 +710,7 @@ impl AutomationStore {
                      WHERE execution_id = ?1",
                     params![execution_id, now, (now - started_at).max(0), message],
                 )
-                .map_err(|e| format!("标记 prompt run 过期失败：{e}"))?;
+                .map_err(|e| format!("Failed to mark prompt run expired: {e}"))?;
                 if prompt_run_is_counted(request_json.as_deref())
                     && matches!(
                         decrement_remaining(&tx, &task_id)?,
@@ -730,7 +732,7 @@ impl AutomationStore {
                 None
             };
             tx.commit()
-                .map_err(|e| format!("提交 prompt 过期事务失败：{e}"))?;
+                .map_err(|e| format!("Failed to commit prompt expiration transaction: {e}"))?;
             (events, snapshot)
         };
 
@@ -746,7 +748,7 @@ impl AutomationStore {
     pub fn list_runs(&self, task_id: &str, limit: usize) -> Result<Vec<CronRunRecord>, String> {
         let conn = self.lock_conn()?;
         if db::read_cron_task(&conn, task_id)?.is_none() {
-            return Err(format!("cron task 不存在：{task_id}"));
+            return Err(format!("cron task does not exist: {task_id}"));
         }
         db::read_runs(&conn, task_id, limit)
     }
@@ -758,7 +760,7 @@ impl AutomationStore {
              WHERE task_id = ?1 AND state IN ('done', 'expired')",
             params![task_id],
         )
-        .map_err(|e| format!("清理 automation_cron_runs 失败：{e}"))
+        .map_err(|e| format!("Failed to clean up automation_cron_runs: {e}"))
     }
 
     /// Enabled, non-exhausted tasks for the scheduler's diff reload. Workdirs
@@ -793,7 +795,7 @@ impl AutomationStore {
         }
         let conn = self.lock_conn()?;
         let task = db::read_cron_task(&conn, task_id)?
-            .ok_or_else(|| format!("cron task 不存在：{task_id}"))?;
+            .ok_or_else(|| format!("cron task does not exist: {task_id}"))?;
         if task.kind == "prompt" {
             let active: Option<String> = conn
                 .query_row(
@@ -803,7 +805,7 @@ impl AutomationStore {
                     |row| row.get(0),
                 )
                 .optional()
-                .map_err(|e| format!("检查 prompt 活动运行失败：{e}"))?;
+                .map_err(|e| format!("Failed to check for active prompt run: {e}"))?;
             if active.is_some() {
                 return Err("Cron task is already running.".to_string());
             }
@@ -827,14 +829,14 @@ fn apply_cron_op(conn: &Connection, op: AutomationOp) -> Result<(), String> {
             validate::restore_masked_headers(&mut item, None);
             let task = validate::validate_cron_task(item, "cron task")?;
             if db::read_cron_task(conn, &task.id)?.is_some() {
-                return Err(format!("cron task 已存在：{}", task.id));
+                return Err(format!("cron task already exists: {}", task.id));
             }
             let sort_index = next_sort_index(conn, "automation_cron_tasks")?;
             db::insert_cron_task(conn, &task, sort_index)?;
         }
         AutomationOp::Update { id, patch } => {
             let stored = db::read_cron_task(conn, id.trim())?
-                .ok_or_else(|| format!("cron task 不存在：{id}"))?;
+                .ok_or_else(|| format!("cron task does not exist: {id}"))?;
             let mut merged = validate::merge_patch(&stored, patch, "cron task")?;
             validate::restore_masked_headers(&mut merged, stored.requests.as_deref());
             let mut task = validate::validate_cron_task(merged, "cron task")?;
@@ -850,15 +852,15 @@ fn apply_cron_op(conn: &Connection, op: AutomationOp) -> Result<(), String> {
                     "DELETE FROM automation_cron_tasks WHERE task_id = ?1",
                     params![id.trim()],
                 )
-                .map_err(|e| format!("删除 cron task 失败：{e}"))?;
+                .map_err(|e| format!("Failed to delete cron task: {e}"))?;
             if deleted == 0 {
-                return Err(format!("cron task 不存在：{id}"));
+                return Err(format!("cron task does not exist: {id}"));
             }
             conn.execute(
                 "DELETE FROM automation_cron_runs WHERE task_id = ?1",
                 params![id.trim()],
             )
-            .map_err(|e| format!("删除 cron task 运行记录失败：{e}"))?;
+            .map_err(|e| format!("Failed to delete cron task run records: {e}"))?;
         }
         AutomationOp::Reorder { ids } => {
             reorder_rows(conn, "automation_cron_tasks", "task_id", &ids)?;
@@ -875,14 +877,14 @@ fn apply_hook_op(conn: &Connection, op: AutomationOp) -> Result<(), String> {
             validate::restore_masked_headers(&mut item, None);
             let hook = validate::validate_hook(item, "hook")?;
             if db::read_hook(conn, &hook.id)?.is_some() {
-                return Err(format!("hook 已存在：{}", hook.id));
+                return Err(format!("hook already exists: {}", hook.id));
             }
             let sort_index = next_sort_index(conn, "automation_hooks")?;
             db::insert_hook(conn, &hook, sort_index)?;
         }
         AutomationOp::Update { id, patch } => {
             let stored =
-                db::read_hook(conn, id.trim())?.ok_or_else(|| format!("hook 不存在：{id}"))?;
+                db::read_hook(conn, id.trim())?.ok_or_else(|| format!("hook does not exist: {id}"))?;
             let mut merged = validate::merge_patch(&stored, patch, "hook")?;
             validate::restore_masked_headers(&mut merged, stored.requests.as_deref());
             let mut hook = validate::validate_hook(merged, "hook")?;
@@ -895,9 +897,9 @@ fn apply_hook_op(conn: &Connection, op: AutomationOp) -> Result<(), String> {
                     "DELETE FROM automation_hooks WHERE hook_id = ?1",
                     params![id.trim()],
                 )
-                .map_err(|e| format!("删除 hook 失败：{e}"))?;
+                .map_err(|e| format!("Failed to delete hook: {e}"))?;
             if deleted == 0 {
-                return Err(format!("hook 不存在：{id}"));
+                return Err(format!("hook does not exist: {id}"));
             }
         }
         AutomationOp::Reorder { ids } => {
@@ -928,7 +930,7 @@ fn next_sort_index(conn: &Connection, table: &str) -> Result<i64, String> {
         [],
         |row| row.get(0),
     )
-    .map_err(|e| format!("读取 {table} 排序索引失败：{e}"))
+    .map_err(|e| format!("Failed to read {table} sort index: {e}"))
 }
 
 fn reorder_rows(
@@ -941,9 +943,9 @@ fn reorder_rows(
         .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get(0)
         })
-        .map_err(|e| format!("读取 {table} 数量失败：{e}"))?;
+        .map_err(|e| format!("Failed to read {table} count: {e}"))?;
     if count as usize != ids.len() {
-        return Err(format!("reorder 必须包含全部 {count} 个条目"));
+        return Err(format!("reorder must include all {count} entries"));
     }
     for (index, id) in ids.iter().enumerate() {
         let updated = conn
@@ -951,9 +953,9 @@ fn reorder_rows(
                 &format!("UPDATE {table} SET sort_index = ?1 WHERE {id_column} = ?2"),
                 params![index as i64, id.trim()],
             )
-            .map_err(|e| format!("更新 {table} 排序失败：{e}"))?;
+            .map_err(|e| format!("Failed to update {table} ordering: {e}"))?;
         if updated == 0 {
-            return Err(format!("reorder 引用了不存在的条目：{id}"));
+            return Err(format!("reorder references a non-existent entry: {id}"));
         }
     }
     Ok(())
@@ -981,7 +983,7 @@ fn insert_finished_run(
             db::truncate_run_output(&run.output),
         ],
     )
-    .map_err(|e| format!("写入 automation_cron_runs 失败：{e}"))?;
+    .map_err(|e| format!("Failed to write automation_cron_runs: {e}"))?;
     Ok(())
 }
 
@@ -993,7 +995,7 @@ fn decrement_remaining(conn: &Connection, task_id: &str) -> Result<CronMutationE
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
-        .map_err(|e| format!("读取 remaining_runs 失败：{e}"))?;
+        .map_err(|e| format!("Failed to read remaining_runs: {e}"))?;
     let Some((remaining, enabled)) = row else {
         return Ok(CronMutationEffect::None);
     };
@@ -1012,7 +1014,7 @@ fn decrement_remaining(conn: &Connection, task_id: &str) -> Result<CronMutationE
          WHERE task_id = ?1",
         params![task_id, next, next_enabled, db::now_ms()],
     )
-    .map_err(|e| format!("更新 remaining_runs 失败：{e}"))?;
+    .map_err(|e| format!("Failed to update remaining_runs: {e}"))?;
     Ok(CronMutationEffect::Changed)
 }
 
@@ -1033,7 +1035,7 @@ fn read_system_workdir(conn: &Connection) -> Result<String, String> {
             |row| row.get(0),
         )
         .optional()
-        .map_err(|e| format!("检查 system_settings 表失败：{e}"))?;
+        .map_err(|e| format!("Failed to check system_settings table: {e}"))?;
     if has_table.is_none() {
         return Ok(String::new());
     }
@@ -1044,7 +1046,7 @@ fn read_system_workdir(conn: &Connection) -> Result<String, String> {
             |row| row.get(0),
         )
         .optional()
-        .map_err(|e| format!("读取 system_settings.workdir 失败：{e}"))?;
+        .map_err(|e| format!("Failed to read system_settings.workdir: {e}"))?;
     let Some(raw) = raw else {
         return Ok(String::new());
     };

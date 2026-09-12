@@ -38,7 +38,7 @@ import { buildTextModeToolResultsForAssistant } from "./textModeToolRecovery";
 import { captureTransportSnapshot, type TransportSnapshot } from "./transportSnapshot";
 import type { ProviderRuntimeConfig, StreamOptionsEx } from "./types";
 
-// 导出供 turn runner 估算 provider 边界追加段（用量环 fixed 校准），非请求路径。
+// Exported so the turn runner can estimate the provider-boundary appended segment (usage-ring fixed calibration); not a request path.
 export function buildTextOnlySystemSuffix(allowJsonOutput = false) {
   return [
     "Important Rules:",
@@ -78,7 +78,7 @@ function buildTextOnlyStreamOptions(params: {
   cacheRetention?: CacheRetention;
   nativeWebSearch?: boolean;
   debugLogger?: StreamDebugLogger;
-  /** 本组 options 所属候选的展示标签（"Provider · model"），随 onRetryStatus 回传。 */
+  /** Display label of the candidate these options belong to ("Provider · model"), passed back with onRetryStatus. */
   providerLabel?: string;
   onRetryStatus?: (
     attempt: number,
@@ -128,8 +128,9 @@ function buildTextOnlyStreamOptions(params: {
     toolChoice: usesOpenAIChatNativeWebSearch ? undefined : nativeWebSearch ? "auto" : "none",
     streamRetry: {
       ...resolveStreamRetryConfig(params.runtime.retryPolicy),
-      // 绑定当前候选标签：failover 下备用供应商的流内重试才能在轨迹里归属
-      // 到具体候选，与 agent 模式 retryAttempts 携带 providerLabel 的口径一致。
+      // Bind the current candidate label: only then can an in-stream retry of a backup provider
+      // under failover be attributed to a specific candidate in the trajectory, matching how agent
+      // mode's retryAttempts carries providerLabel.
       onRetry: onRetryStatus
         ? (attempt, maxAttempts, errorMessage, plannedDelayMs) =>
             onRetryStatus(attempt, maxAttempts, errorMessage, plannedDelayMs, params.providerLabel)
@@ -195,7 +196,7 @@ export async function streamAssistantMessage(params: {
   allowJsonOutput?: boolean;
   nativeWebSearch?: boolean;
   onHostedSearch?: (block: HostedSearchBlock) => void;
-  /** `providerLabel` 是产生本次重试的候选标签；failover 下用于区分各候选。 */
+  /** `providerLabel` is the label of the candidate that produced this retry; under failover it distinguishes candidates. */
   onRetryStatus?: (
     attempt: number,
     maxAttempts: number,
@@ -204,7 +205,7 @@ export async function streamAssistantMessage(params: {
     providerLabel?: string,
   ) => void;
   onRetryRecovered?: () => void;
-  /** 每个实际尝试的候选各 fire 一次：脱敏后的传输装配快照（只含头名，不含值）。 */
+  /** Fires once per candidate actually attempted: a redacted transport assembly snapshot (header names only, no values). */
   onTransportAttempt?: (snapshot: TransportSnapshot & { providerLabel: string }) => void;
   /** Exact text-only provider boundary after its mandatory system suffix is appended. */
   onRequestStart?: (info: { context: Context; systemSuffix: string }) => void;
@@ -366,7 +367,7 @@ export async function streamAssistantMessage(params: {
   let activeFailoverTargetIndex = 0;
   let lastFailoverErrorMessage = "";
 
-  /** 逐候选独立采样；观察失败不影响请求。 */
+  /** Samples independently per candidate; an observation failure does not affect the request. */
   const noteTransportAttempt = (
     label: string,
     attemptOptions: StreamOptionsEx | undefined,
@@ -528,7 +529,7 @@ export async function streamAssistantMessage(params: {
               params.onTextDelta(delta);
             }
           } else if (event.type === "thinking_delta") {
-            // 思考内容不进 orderedBlocks——那套排序只服务于正文与 hosted search 的交织。
+            // Reasoning content does not go into orderedBlocks -- that ordering only serves the interleaving of body text and hosted search.
             params.onThinkingDelta?.(event.delta);
           }
         }

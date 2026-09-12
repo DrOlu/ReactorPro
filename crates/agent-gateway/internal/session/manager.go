@@ -1,8 +1,6 @@
 package session
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -12,8 +10,8 @@ import (
 
 var ErrAgentIDRequired = errors.New("agent_id is required")
 var ErrAgentOffline = errors.New("agent offline")
-var ErrChatProtocolIncompatible = errors.New("desktop chat protocol is incompatible; update LiveAgent desktop")
-var ErrConversationReferencesProtocolIncompatible = errors.New("desktop conversation references are incompatible; update LiveAgent desktop")
+var ErrChatProtocolIncompatible = errors.New("desktop chat protocol is incompatible; update ReactorPro desktop")
+var ErrConversationReferencesProtocolIncompatible = errors.New("desktop conversation references are incompatible; update ReactorPro desktop")
 var ErrTunnelNotFound = errors.New("tunnel not found")
 var ErrTunnelExpired = errors.New("tunnel expired")
 
@@ -38,7 +36,6 @@ type Manager struct {
 	managedProcesses *managedProcessHub
 	statusSubs       *statusSubscriberHub
 	clarifyDeltas    *clarifyDeltaHub
-	sttSettingsSync  func(context.Context, json.RawMessage) (any, error)
 }
 
 type AgentSession struct {

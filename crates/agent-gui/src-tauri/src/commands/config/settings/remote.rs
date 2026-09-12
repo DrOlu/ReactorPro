@@ -1,5 +1,5 @@
 fn default_remote_gateway_port() -> u16 {
-    // 桌面端 WebSocket 经该端口连接网关。
+    // The desktop WebSocket connects to the gateway through this port.
     443
 }
 
@@ -90,7 +90,7 @@ fn repair_url_scheme_slashes(input: &str) -> String {
 
 pub(crate) fn parse_remote_settings_payload(value: Value) -> Result<RemoteSettingsPayload, String> {
     let parsed = serde_json::from_value::<RemoteSettingsPayload>(value)
-        .map_err(|e| format!("解析 remote settings 失败：{e}"))?;
+        .map_err(|e| format!("Failed to parse remote settings: {e}"))?;
     Ok(normalize_remote_settings_payload(parsed))
 }
 
@@ -104,7 +104,7 @@ pub(crate) fn load_remote(conn: &Connection) -> Result<Option<Value>, String> {
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|e| format!("读取 {REMOTE_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("Failed to read {REMOTE_SETTINGS_TABLE}: {e}"))?;
 
     match payload_json {
         Some(raw) => Ok(Some(parse_json(&raw, REMOTE_SETTINGS_TABLE)?)),
@@ -124,7 +124,7 @@ fn persist_remote_settings(
     settings: &RemoteSettingsPayload,
 ) -> Result<(), String> {
     let payload = serde_json::to_value(settings)
-        .map_err(|e| format!("序列化 {REMOTE_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("Failed to serialize {REMOTE_SETTINGS_TABLE}: {e}"))?;
     conn.execute(
         &format!(
             "INSERT INTO {REMOTE_SETTINGS_TABLE} (config_id, payload_json, updated_at)
@@ -135,12 +135,13 @@ fn persist_remote_settings(
         ),
         params![serialize_json(&payload, REMOTE_SETTINGS_TABLE)?, now_ms()],
     )
-    .map_err(|e| format!("写入 {REMOTE_SETTINGS_TABLE} 失败：{e}"))?;
+    .map_err(|e| format!("Failed to write {REMOTE_SETTINGS_TABLE}: {e}"))?;
     Ok(())
 }
 
-// ensure_remote_agent_id 只在首次安装或旧的 hostname/手填 ID 尚未替换时写库；
-// 生成和复查位于同一个 IMMEDIATE 事务中，并发打开配置库也只会保留一个身份。
+// ensure_remote_agent_id writes to the database only on first install or while an old hostname/
+// hand-entered ID has not yet been replaced; generation and re-check happen in the same IMMEDIATE
+// transaction, so concurrently opening the config database still keeps only one identity.
 pub(crate) fn ensure_remote_agent_id(conn: &mut Connection) -> Result<String, String> {
     let current = load_remote_settings(conn)?;
     if is_generated_agent_id(&current.agent_id) {
@@ -149,7 +150,7 @@ pub(crate) fn ensure_remote_agent_id(conn: &mut Connection) -> Result<String, St
 
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|e| format!("开启 Agent ID 初始化事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin Agent ID initialization transaction: {e}"))?;
     let mut settings = load_remote_settings(&tx)?;
     if !is_generated_agent_id(&settings.agent_id) {
         settings.agent_id = generate_agent_id();
@@ -157,7 +158,7 @@ pub(crate) fn ensure_remote_agent_id(conn: &mut Connection) -> Result<String, St
     }
     let agent_id = settings.agent_id.clone();
     tx.commit()
-        .map_err(|e| format!("提交 Agent ID 初始化事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit Agent ID initialization transaction: {e}"))?;
     Ok(agent_id)
 }
 
@@ -190,15 +191,15 @@ fn save_remote(conn: &mut Connection, payload: Value) -> Result<RemoteSettingsPa
     let mut normalized = parse_remote_settings_payload(payload)?;
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|e| format!("开启 {REMOTE_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin {REMOTE_SETTINGS_TABLE} transaction: {e}"))?;
     let persisted = load_remote_settings(&tx)?;
     if !is_generated_agent_id(&persisted.agent_id) {
-        return Err("Agent ID 尚未初始化".to_string());
+        return Err("Agent ID has not been initialized".to_string());
     }
-    // Agent ID 是安装身份，不接受设置页面或 IPC 载荷覆盖。
+    // The Agent ID is an installation identity and cannot be overridden by the settings page or IPC payloads.
     normalized.agent_id = persisted.agent_id;
     persist_remote_settings(&tx, &normalized)?;
     tx.commit()
-        .map_err(|e| format!("提交 {REMOTE_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit {REMOTE_SETTINGS_TABLE} transaction: {e}"))?;
     Ok(normalized)
 }

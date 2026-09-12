@@ -1,9 +1,10 @@
-//! OAuth 发现链（docs/design/mcp-oauth.md §4.1/§4.3）。
+//! OAuth discovery chain (docs/design/mcp-oauth.md §4.1/§4.3).
 //!
-//! 401 `WWW-Authenticate` 的 `resource_metadata`（RFC 9728）→ PRM
-//! `authorization_servers[0]` → RFC 8414 AS 元数据（路径感知候选 + OIDC
-//! fallback）；全程拿不到时退 2025-03-26 旧规范（AS = server origin，缺元数据
-//! 用默认 `/authorize` `/token` `/register` 端点）。
+//! The 401 `WWW-Authenticate` `resource_metadata` (RFC 9728) → PRM
+//! `authorization_servers[0]` → RFC 8414 AS metadata (path-aware candidates + OIDC
+//! fallback); when none of that is available, fall back to the 2025-03-26 legacy spec
+//! (AS = server origin, using the default `/authorize` `/token` `/register` endpoints
+//! when metadata is missing).
 
 use reqwest::blocking::Client;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, WWW_AUTHENTICATE};
@@ -12,18 +13,18 @@ use reqwest::Url;
 use serde::Deserialize;
 use serde_json::json;
 
-/// 发现结果：授权流所需的全部端点与 scope 线索。
+/// Discovery result: all endpoints and scope hints the authorization flow needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Discovered {
-    /// RFC 8707 resource 参数值（规范化 server URL）。
+    /// RFC 8707 resource parameter value (canonicalized server URL).
     pub resource: String,
     pub issuer: String,
     pub authorization_endpoint: String,
     pub token_endpoint: String,
     pub registration_endpoint: Option<String>,
-    /// PRM `scopes_supported`（授权请求的默认 scope 来源）。
+    /// PRM `scopes_supported` (the default scope source for authorization requests).
     pub scopes_supported: Vec<String>,
-    /// 走了旧规范默认端点（未取到任何 AS 元数据）。
+    /// The legacy default endpoints were used (no AS metadata was obtained).
     pub legacy_default_endpoints: bool,
 }
 
@@ -49,13 +50,14 @@ struct AuthServerMetadata {
     scopes_supported: Vec<String>,
 }
 
-/// MCP 规范的 canonical resource：小写 scheme/host、去默认端口、去 fragment、
-/// 根路径省略尾斜杠。`Url` 序列化天然覆盖前三项。
+/// The MCP spec's canonical resource: lowercase scheme/host, drop the default port,
+/// drop the fragment, and omit the trailing slash on the root path. `Url` serialization
+/// naturally covers the first three.
 pub fn canonical_resource(raw: &str) -> Result<String, String> {
     let mut url =
-        Url::parse(raw.trim()).map_err(|e| format!("MCP server URL 无效：{raw}（{e}）"))?;
+        Url::parse(raw.trim()).map_err(|e| format!("invalid MCP server URL: {raw} ({e})"))?;
     if !matches!(url.scheme(), "http" | "https") {
-        return Err(format!("MCP server URL 必须是 http/https：{raw}"));
+        return Err(format!("MCP server URL must be http/https: {raw}"));
     }
     url.set_fragment(None);
     let mut out = url.to_string();
@@ -65,7 +67,7 @@ pub fn canonical_resource(raw: &str) -> Result<String, String> {
     Ok(out)
 }
 
-/// 解析 `WWW-Authenticate` 挑战里的 `resource_metadata` auth-param（RFC 9728 §5.1）。
+/// Parse the `resource_metadata` auth-param from a `WWW-Authenticate` challenge (RFC 9728 §5.1).
 pub fn parse_resource_metadata_param(header: &str) -> Option<String> {
     let lower = header.to_ascii_lowercase();
     let key_at = lower.find("resource_metadata")?;
@@ -84,8 +86,9 @@ pub fn parse_resource_metadata_param(header: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
 
-/// 未带凭据探测 MCP endpoint，收集 401 的 `WWW-Authenticate` resource_metadata。
-/// 非 401（甚至成功）返回 None——由上层走 well-known 推导。
+/// Probe the MCP endpoint without credentials and collect the 401's
+/// `WWW-Authenticate` resource_metadata. Returns None for a non-401 (even success) —
+/// the upper layer then falls back to well-known derivation.
 fn probe_resource_metadata_url(client: &Client, server_url: &Url) -> Option<String> {
     let body = json!({
         "jsonrpc": "2.0",
@@ -93,7 +96,7 @@ fn probe_resource_metadata_url(client: &Client, server_url: &Url) -> Option<Stri
         "method": "initialize",
         "params": {
             "protocolVersion": "2025-06-18",
-            "clientInfo": { "name": "LiveAgent", "version": crate::app_version() },
+            "clientInfo": { "name": "ReactorPro", "version": crate::app_version() },
             "capabilities": {}
         }
     });
@@ -122,7 +125,7 @@ fn origin_of(url: &Url) -> Url {
     origin
 }
 
-/// RFC 9728 well-known 候选：带路径的 server 先试路径插入形式，再试根形式。
+/// RFC 9728 well-known candidates: for a server with a path, try the path-insertion form first, then the root form.
 pub fn prm_well_known_candidates(server_url: &Url) -> Vec<String> {
     let mut out = Vec::new();
     let origin = origin_of(server_url).to_string();
@@ -135,7 +138,7 @@ pub fn prm_well_known_candidates(server_url: &Url) -> Vec<String> {
     out
 }
 
-/// RFC 8414 + OIDC 的 AS 元数据候选序列（设计 §4.3）。
+/// The RFC 8414 + OIDC AS metadata candidate sequence (design §4.3).
 pub fn as_metadata_candidates(issuer: &str) -> Vec<String> {
     let Ok(url) = Url::parse(issuer.trim()) else {
         return Vec::new();
@@ -166,14 +169,14 @@ fn fetch_json<T: for<'de> Deserialize<'de>>(client: &Client, url: &str) -> Resul
         .get(url)
         .header(ACCEPT, "application/json")
         .send()
-        .map_err(|e| format!("请求 {url} 失败：{e}"))?;
+        .map_err(|e| format!("request to {url} failed: {e}"))?;
     if !resp.status().is_success() {
-        return Err(format!("请求 {url} 返回 {}", resp.status()));
+        return Err(format!("request to {url} returned {}", resp.status()));
     }
     let body = resp
         .text()
-        .map_err(|e| format!("读取 {url} 响应失败：{e}"))?;
-    serde_json::from_str(&body).map_err(|e| format!("解析 {url} JSON 失败：{e}"))
+        .map_err(|e| format!("failed to read response from {url}: {e}"))?;
+    serde_json::from_str(&body).map_err(|e| format!("failed to parse JSON from {url}: {e}"))
 }
 
 fn fetch_as_metadata(client: &Client, issuer: &str) -> Option<AuthServerMetadata> {
@@ -182,12 +185,12 @@ fn fetch_as_metadata(client: &Client, issuer: &str) -> Option<AuthServerMetadata
         .find_map(|candidate| fetch_json::<AuthServerMetadata>(client, candidate).ok())
 }
 
-/// 完整发现链。`server_url_raw` 为配置里的 MCP endpoint。
+/// The complete discovery chain. `server_url_raw` is the MCP endpoint from the config.
 pub fn discover(client: &Client, server_url_raw: &str) -> Result<Discovered, String> {
     let resource = canonical_resource(server_url_raw)?;
-    let server_url = Url::parse(&resource).map_err(|e| format!("URL 解析失败：{e}"))?;
+    let server_url = Url::parse(&resource).map_err(|e| format!("URL parse failed: {e}"))?;
 
-    // 1) PRM：优先 401 挑战里的 resource_metadata，退 well-known 推导。
+    // 1) PRM: prefer the resource_metadata from the 401 challenge, fall back to well-known derivation.
     let mut prm_urls: Vec<String> = Vec::new();
     if let Some(from_challenge) = probe_resource_metadata_url(client, &server_url) {
         prm_urls.push(from_challenge);
@@ -198,7 +201,7 @@ pub fn discover(client: &Client, server_url_raw: &str) -> Result<Discovered, Str
         .iter()
         .find_map(|url| fetch_json::<ProtectedResourceMetadata>(client, url).ok());
 
-    // 2) issuer：PRM 声明优先，拿不到退旧规范（AS = server origin）。
+    // 2) issuer: prefer what PRM declares, else fall back to the legacy spec (AS = server origin).
     let (issuer, scopes_supported, legacy_issuer) = match prm {
         Some(doc) if !doc.authorization_servers.is_empty() => {
             (doc.authorization_servers[0].clone(), doc.scopes_supported, false)
@@ -217,10 +220,11 @@ pub fn discover(client: &Client, server_url_raw: &str) -> Result<Discovered, Str
         }
     };
 
-    // 3) AS 元数据；全败且处于旧规范分支时用默认端点。
+    // 3) AS metadata; when all attempts fail and we are on the legacy branch, use the default endpoints.
     match fetch_as_metadata(client, &issuer) {
         Some(meta) => {
-            // MCP 规范要求确认 S256 支持；字段缺失（旧 AS）放行，声明了就必须包含。
+            // The MCP spec requires confirming S256 support; a missing field (legacy AS)
+            // passes, but a declared list must include it.
             if !meta.code_challenge_methods_supported.is_empty()
                 && !meta
                     .code_challenge_methods_supported
@@ -228,7 +232,7 @@ pub fn discover(client: &Client, server_url_raw: &str) -> Result<Discovered, Str
                     .any(|m| m == "S256")
             {
                 return Err(format!(
-                    "授权服务器 {issuer} 不支持 PKCE S256（code_challenge_methods_supported={:?}），MCP 规范要求 S256",
+                    "authorization server {issuer} does not support PKCE S256 (code_challenge_methods_supported={:?}); the MCP spec requires S256",
                     meta.code_challenge_methods_supported
                 ));
             }
@@ -257,7 +261,7 @@ pub fn discover(client: &Client, server_url_raw: &str) -> Result<Discovered, Str
             legacy_default_endpoints: true,
         }),
         None => Err(format!(
-            "无法获取授权服务器元数据：{issuer}（已尝试 {:?}）",
+            "failed to obtain authorization server metadata: {issuer} (tried {:?})",
             as_metadata_candidates(&issuer)
         )),
     }

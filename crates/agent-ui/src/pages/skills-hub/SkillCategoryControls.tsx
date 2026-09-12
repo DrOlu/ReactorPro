@@ -30,7 +30,7 @@ import type { SkillSummary } from "@liveagent/ui/lib/skills/index";
 
 export type StoreCategoryValue = "all" | ClawHubCategorySlug;
 
-// 图标与 ClawHub 官网分类侧边栏一一对应（layers/plug/zap/globe/wrench/…）。
+// Icons correspond one-to-one with the category sidebar on the ClawHub website (layers/plug/zap/globe/wrench/...).
 export const STORE_CATEGORY_ICONS: Record<StoreCategoryValue, typeof Layers> = {
   all: Layers,
   integrations: Plug,
@@ -49,9 +49,10 @@ export const STORE_CATEGORY_ICONS: Record<StoreCategoryValue, typeof Layers> = {
   other: Package,
 };
 
-// 惰性计算而非模块顶层 spread：生产构建下这段代码与 CLAWHUB_CATEGORY_SLUGS
-// 分处不同的 rolldown chunk，顶层 spread 有时会在对方 chunk 初始化完成前
-// 执行，读到 undefined 并抛出 "not iterable"。推迟到调用时读取可以避开。
+// Lazy computation rather than a module-top-level spread: in a production build this code and
+// CLAWHUB_CATEGORY_SLUGS live in different rolldown chunks, and a top-level spread sometimes runs
+// before the other chunk finishes initializing, reading undefined and throwing "not iterable".
+// Deferring the read until call time avoids that.
 let storeCategoryOptionsCache: readonly StoreCategoryValue[] | undefined;
 function getStoreCategoryOptions(): readonly StoreCategoryValue[] {
   storeCategoryOptionsCache ??= ["all", ...CLAWHUB_CATEGORY_SLUGS];
@@ -62,7 +63,7 @@ function storeCategoryLabelKey(value: StoreCategoryValue): string {
   return `settings.skillsStoreCategory${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
-// 已安装技能没有 ClawHub 的 topics 字段，用名称+描述做启发式分类。
+// Installed skills have no ClawHub topics field, so classify heuristically using the name + description.
 export function classifyInstalledSkill(skill: SkillSummary): ClawHubCategorySlug[] {
   return classifyClawHubSkill({
     slug: skill.name,

@@ -22,7 +22,8 @@ const CODEX_MODELS_SUFFIXES = ["/chat/completions", "/responses", "/response"];
 const GEMINI_GENERATE_SUFFIXES = [":streamGenerateContent", ":generateContent"];
 const ANTHROPIC_API_VERSION = "2023-06-01";
 
-// Gateway WebUI 判定移至 lib/runtimeEnv 单一真源；此处再导出保持既有调用方不变。
+// The Gateway WebUI check moved to the single source of truth in lib/runtimeEnv; re-exported here
+// to keep existing callers unchanged.
 export { isGatewayWebuiRuntime };
 
 const REDACTED_USAGE_QUERY_SECRET_DISPLAY = "••••••••";
@@ -34,9 +35,10 @@ export function providerSupportsModelInputModalitiesOverride(providerId: Provide
     providerId === "codex" ||
     providerId === "xai" ||
     providerId === "gemini" ||
-    // deepseek：Responses wire 已接受 input_image（官方《图像理解》指南），模型
-    // 能力默认按 id 推断（flash 家族吃图、Pro 纯文本），中转端点不吃图时用覆盖
-    // 改回 ["text"]。
+    // deepseek: the Responses wire already accepts input_image (per the official "Image
+    // Understanding" guide); model capability is inferred from the id by default (the flash family
+    // accepts images, Pro is text-only), and relay endpoints that do not accept images can be
+    // overridden back to ["text"].
     providerId === "deepseek"
   );
 }
@@ -59,10 +61,11 @@ export function applyModelInputModalitiesMode(
   };
 }
 
-// KEEP IN SYNC:general/newapi 预设与桌面端 Rust services/provider_usage.rs 的
-// GENERAL_SCRIPT / NEWAPI_SCRIPT 逐字符一致(脚本为空的存量配置由 Rust 兜底执行);
-// custom 骨架仅前端填充(Rust 对空的 custom 脚本直接报错,无兜底)。三者内容
-// 一比一复刻 cc-switch UsageScriptModal 的模板。
+// KEEP IN SYNC: the general/newapi presets are character-for-character identical to
+// GENERAL_SCRIPT / NEWAPI_SCRIPT in the desktop Rust services/provider_usage.rs (legacy configs with
+// an empty script are executed by the Rust fallback); the custom skeleton is filled in only by the
+// frontend (Rust errors directly on an empty custom script, with no fallback). All three mirror the
+// cc-switch UsageScriptModal template one-to-one.
 export const USAGE_QUERY_PRESET_SCRIPTS: Partial<Record<UsageQueryMode, string>> = {
   custom: `({
   request: {
@@ -83,7 +86,7 @@ export const USAGE_QUERY_PRESET_SCRIPTS: Partial<Record<UsageQueryMode, string>>
     method: "GET",
     headers: {
       "Authorization": "Bearer {{apiKey}}",
-      "User-Agent": "LiveAgent/1.0"
+      "User-Agent": "ReactorPro/1.0"
     }
   },
   extractor: function(response) {
@@ -101,7 +104,7 @@ export const USAGE_QUERY_PRESET_SCRIPTS: Partial<Record<UsageQueryMode, string>>
     headers: {
       "Content-Type": "application/json",
       "Authorization": "Bearer {{accessToken}}",
-      "User-Agent": "LiveAgent/1.0",
+      "User-Agent": "ReactorPro/1.0",
       "New-Api-User": "{{userId}}"
     },
   },
@@ -126,24 +129,25 @@ export const USAGE_QUERY_PRESET_SCRIPTS: Partial<Record<UsageQueryMode, string>>
 const USAGE_QUERY_SCRIPT_MODES = ["custom", "general", "newapi"] as const;
 type UsageQueryScriptMode = (typeof USAGE_QUERY_SCRIPT_MODES)[number];
 
-// Token Plan 供应商路由表(一比一复刻 cc-switch codingPlanProviders.ts):
-// pattern 与 Rust prepare_coding_plan_query 的 host 检测同效;智谱团队与个人版
-// base_url 相同,必须靠显式选择路由(pattern 仅占位,不参与自动检测——个人版
-// 排在前面,首匹配恒命中个人版)。
+// Token Plan provider routing table (a one-to-one copy of cc-switch codingPlanProviders.ts):
+// pattern is equivalent to the host detection in Rust prepare_coding_plan_query; the Zhipu team and
+// personal editions share the same base_url, so routing must rely on an explicit choice (pattern is
+// only a placeholder and does not participate in auto-detection -- the personal edition is listed
+// first, so the first match always hits the personal edition).
 export const USAGE_QUERY_CODING_PLAN_PROVIDERS: readonly {
   id: Exclude<UsageQueryCodingPlanProvider, "">;
   label: string;
   pattern: RegExp;
 }[] = [
   { id: "kimi", label: "Kimi For Coding", pattern: /api\.kimi\.com\/coding/i },
-  { id: "zhipu", label: "Zhipu GLM (智谱)", pattern: /bigmodel\.cn|api\.z\.ai/i },
-  { id: "zhipu_team", label: "Zhipu GLM Team (智谱团队)", pattern: /bigmodel\.cn/i },
+  { id: "zhipu", label: "Zhipu GLM (Zhipu)", pattern: /bigmodel\.cn|api\.z\.ai/i },
+  { id: "zhipu_team", label: "Zhipu GLM Team (Zhipu Team)", pattern: /bigmodel\.cn/i },
   { id: "minimax", label: "MiniMax", pattern: /api\.minimaxi?\.com|api\.minimax\.io/i },
   { id: "zenmux", label: "ZenMux", pattern: /zenmux\./i },
-  { id: "volcengine", label: "火山方舟 (Volcengine)", pattern: /volces\.com\/api\/coding/i },
+  { id: "volcengine", label: "Volcengine Ark (Volcengine)", pattern: /volces\.com\/api\/coding/i },
 ];
 
-/** 根据 Base URL 自动检测 Token Plan 供应商;未命中返回 ""。 */
+/** Auto-detects the Token Plan provider from the Base URL; returns "" when nothing matches. */
 export function detectCodingPlanProvider(
   baseUrl: string | undefined | null,
 ): UsageQueryCodingPlanProvider {
@@ -154,7 +158,7 @@ export function detectCodingPlanProvider(
   return "";
 }
 
-// 官方余额供应商检测表(一比一复刻 cc-switch BALANCE_PROVIDERS)。
+// Official balance provider detection table (a one-to-one copy of cc-switch BALANCE_PROVIDERS).
 export const USAGE_QUERY_BALANCE_PROVIDERS: readonly {
   id: string;
   label: string;
@@ -167,7 +171,7 @@ export const USAGE_QUERY_BALANCE_PROVIDERS: readonly {
   { id: "novita", label: "Novita AI", pattern: /api\.novita\.ai/i },
 ];
 
-/** 官方余额模式:按 Base URL 匹配到的供应商徽章列表。 */
+/** Official balance mode: the list of provider badges matched by Base URL. */
 export function matchBalanceProviders(baseUrl: string | undefined | null) {
   if (!baseUrl) return [];
   return USAGE_QUERY_BALANCE_PROVIDERS.filter((entry) => entry.pattern.test(baseUrl));
@@ -178,10 +182,11 @@ export function isUsageQueryScriptMode(mode: UsageQueryMode): mode is UsageQuery
 }
 
 /**
- * 切换查询方式:脚本按模式各自独立——离开脚本模式时把编辑器内容存回
- * scripts[旧模式],进入脚本模式时恢复 scripts[新模式],没填写过的显示模板预设
- * (custom 为空骨架)。打开弹窗时以 (draft, draft.mode) 调用,为存量单 script
- * 配置做 seeding。balance/coding-plan 无脚本,不动编辑器内容。
+ * Switching query mode: each mode's script is independent -- when leaving script mode, the editor
+ * content is stored back into scripts[oldMode], and when entering script mode, scripts[newMode] is
+ * restored; a mode never filled in shows the template preset (custom as an empty skeleton). The
+ * dialog opens by calling with (draft, draft.mode), seeding legacy single-script configs.
+ * balance/coding-plan have no script and do not touch the editor content.
  */
 export function applyUsageQueryModePreset(
   previous: UsageQueryConfig,
@@ -199,7 +204,7 @@ export function applyUsageQueryModePreset(
   return next;
 }
 
-/** 编辑器内容变更:同步写入当前模式的独立脚本槽位。 */
+/** Editor content changed: write it synchronously into the current mode's independent script slot. */
 export function setUsageQueryScript(previous: UsageQueryConfig, script: string): UsageQueryConfig {
   const next = { ...previous, script };
   if (isUsageQueryScriptMode(previous.mode)) {
@@ -260,7 +265,8 @@ export function serializeUsageQueryDraft(
   const apiKey = apiKeyIsRedacted ? "" : usageQuery.apiKey.trim();
   const accessToken = accessTokenIsRedacted ? "" : usageQuery.accessToken.trim();
   const secretAccessKey = secretAccessKeyIsRedacted ? "" : usageQuery.secretAccessKey.trim();
-  // 编辑器当前内容并入所属模式槽位后逐项 trim,空脚本槽位不落盘。
+  // The editor's current content is merged into its mode slot and trimmed item by item; empty script
+  // slots are not persisted.
   const mergedScripts = {
     ...usageQuery.scripts,
     ...(isUsageQueryScriptMode(usageQuery.mode) ? { [usageQuery.mode]: usageQuery.script } : {}),
@@ -400,14 +406,16 @@ export function buildProviderModelsUrl(
   return buildVersionedModelsUrl(baseUrl, versionPath);
 }
 
-// 首次尝试统一 /v1/models + Authorization Bearer；失败后回退到各家官方形式
-// （gemini v1beta + x-goog-api-key、claude_code x-api-key）。每次请求仍只带单一鉴权头。
+// First attempt uniformly uses /v1/models + Authorization Bearer; on failure it falls back to each
+// vendor's official form (gemini v1beta + x-goog-api-key, claude_code x-api-key). Each request still
+// carries only a single auth header.
 //
-// 这里只产出发请求必需的头，不含任何客户端身份伪装：伪装一律由用户在设置里显式
-// 开启（「模拟 CLI」按钮把整套头写进自定义请求头），再经 mergeCustomHeaders 落到
-// 请求上。不开启就照实发，不冒充任何官方 CLI——与 CPA 的 preserveCallerFingerprint
-// 同一取向。
-// KEEP IN SYNC: crates/agent-gui/src-tauri/src/services/provider_models.rs 的
+// Only the headers required to send the request are produced here, with no client identity spoofing:
+// spoofing is always explicitly enabled by the user in settings (the "Simulate CLI" button writes the
+// whole header set into the custom request headers), which then reach the request via
+// mergeCustomHeaders. When not enabled, requests are sent as-is without impersonating any official
+// CLI -- the same orientation as CPA's preserveCallerFingerprint.
+// KEEP IN SYNC: crates/agent-gui/src-tauri/src/services/provider_models.rs's
 // build_provider_models_headers。
 function buildModelsHeaders(
   type: ProviderId,
@@ -450,8 +458,9 @@ export function buildProviderModelsAttempts(
       headers: mergeCustomHeaders(buildModelsHeaders(type, apiKey, "official"), customHeaders),
     },
   ];
-  // codex/xai/deepseek 的官方形式与首次尝试完全一致（URL 仅 gemini 随 kind 变化，且其请求头
-  // 必不同），重复请求同一端点没有意义，收敛为一次。
+  // The official forms of codex/xai/deepseek are exactly identical to the first attempt (only gemini's
+  // URL varies by kind, and its headers necessarily differ), so repeating the request against the same
+  // endpoint is pointless and is collapsed into one.
   return JSON.stringify(attempts[0].headers) === JSON.stringify(attempts[1].headers)
     ? [attempts[0]]
     : attempts;
@@ -524,7 +533,8 @@ async function fetchModelsThroughGateway(
     models_url: modelsUrl,
     provider_id: providerId,
     is_full_url: isFullUrl,
-    // 恒传（哪怕空数组）：草稿里清空请求头也得让桌面端按空集发，不能回落到落库配置。
+    // Always pass (even an empty array): clearing the request headers in the draft must still make the
+    // desktop send an empty set and must not fall back to the persisted config.
     custom_headers: (customHeaders ?? []).map((header) => ({ ...header })),
   });
 
@@ -608,8 +618,9 @@ function normalizeGeminiFetchedModels(items: unknown): ProviderModelConfig[] {
       (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
     const contextWindow = normalizePositiveInteger(obj.inputTokenLimit);
     const maxOutputToken = normalizePositiveInteger(obj.outputTokenLimit);
-    // 已有存档里的用户自定义字段（如 inputModalities 输入模态覆盖）必须透传；
-    // API 响应不会携带这些字段，透传对刷新场景是无害的。
+    // User-defined fields already in the archive (such as the inputModalities input-modality
+    // override) must pass through; API responses do not carry these fields, so passing them through
+    // is harmless in refresh scenarios.
     const inputModalities = normalizeInputModalities(obj.inputModalities);
     out.push({
       id,
@@ -641,8 +652,9 @@ export function mergeFetchedModels(
       model.contextWindow === 1_000_000 &&
       existingModel.contextWindow < 1_000_000 &&
       Math.round(existingModel.contextWindow / 1_000) === 1_000;
-    // 供应商本次响应自带真实限额字段（provider 来源）：比落库的目录/兜底值
-    // 更新鲜，直接采信；用户手改（user）来源任何时候都不被自动覆盖。
+    // The provider's response carries real quota fields this time (provider source): fresher than the
+    // persisted catalog/fallback values, so they are trusted directly; a user-edited (user) source is
+    // never auto-overwritten at any time.
     const shouldAdoptFreshProviderLimits =
       existingModel !== undefined &&
       model.limitsSource === "provider" &&
@@ -674,7 +686,8 @@ export function mergeFetchedModels(
   return merged;
 }
 
-// 供“列表总开关”一次性设置一批模型的启用状态：enabled=true 时并集，false 时差集。
+// Lets the "list master switch" set the enabled state of a batch of models at once: union when
+// enabled=true, difference when false.
 export function applyModelsActiveState(
   activeModels: ReadonlySet<string>,
   targetModels: Iterable<string>,
@@ -705,8 +718,9 @@ export function buildProviderModelsFetchKey(
 ): string {
   const routing = useSystemProxy ? "proxy" : "direct";
   const override = modelsUrl.trim();
-  // 请求头进 key：这些头参与上游鉴权，改完不重新拉一次的话，用户看到的仍是上一套
-  // 头留下的失败结果，与「改了没生效」无法区分。
+  // Request headers enter the key: these headers participate in upstream authentication, and without
+  // re-fetching after a change the user would still see the failure result left by the previous header
+  // set, indistinguishable from "the change had no effect".
   const headers = (customHeaders ?? []).length
     ? JSON.stringify((customHeaders ?? []).map((header) => [header.key, header.value]))
     : "";

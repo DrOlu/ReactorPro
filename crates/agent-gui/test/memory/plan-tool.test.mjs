@@ -24,10 +24,10 @@ const WRITE_ITEM = {
   slug: "user-language",
   scope: "global",
   type: "feedback",
-  description: "用户偏好中文回答",
-  body: "用户希望默认用中文回答。",
+  description: "User prefers concise answers",
+  body: "User wants concise answers by default.",
   confidence: "high",
-  source_quote: "以后默认用中文回答",
+  source_quote: "use concise answers by default from now on",
   reasoning: "explicit signal",
 };
 
@@ -53,7 +53,7 @@ test("a valid write item is accepted with camelCase evidence", () => {
   const item = result.accepted[0];
   assert.equal(item.action, "write");
   assert.equal(item.slug, "user-language");
-  assert.equal(item.evidence.sourceQuote, "以后默认用中文回答");
+  assert.equal(item.evidence.sourceQuote, "use concise answers by default from now on");
   assert.equal(item.evidence.confidence, "high");
 });
 
@@ -104,11 +104,11 @@ test("recently rejected slugs need override_reject", () => {
   assert.equal(blocked.rejected[0].code, "rejected-slug-no-override");
 
   const overridden = validateSubmittedPlan(
-    { items: [{ ...WRITE_ITEM, override_reject: "user re-stated with 请记住" }] },
+    { items: [{ ...WRITE_ITEM, override_reject: "user re-stated with remember this" }] },
     ctx,
   );
   assert.equal(overridden.accepted.length, 1);
-  assert.equal(overridden.accepted[0].evidence.overrideReject, "user re-stated with 请记住");
+  assert.equal(overridden.accepted[0].evidence.overrideReject, "user re-stated with remember this");
 });
 
 test("already-written slugs are dropped as duplicates", () => {
@@ -128,7 +128,7 @@ test("in-plan duplicate mutations rejected; update-then-accept allowed", () => {
   const promote = validateSubmittedPlan(
     {
       items: [
-        { action: "update", slug: "user-language", mode: "merge", confidence: "high", source_quote: "以后默认用中文回答" },
+        { action: "update", slug: "user-language", mode: "merge", confidence: "high", source_quote: "use concise answers by default from now on" },
         { action: "accept", slug: "user-language", scope: "global" },
       ],
     },
@@ -146,7 +146,7 @@ test("evidence-only update carries no body and defaults to merge", () => {
           action: "update",
           slug: "user-editor",
           confidence: "medium",
-          source_quote: "其实我最近换 helix 了",
+          source_quote: "actually I switched to helix recently",
           reasoning: "user restated",
         },
       ],
@@ -165,7 +165,7 @@ test("append_daily requires a body and needs no slug", () => {
   assert.equal(empty.rejected[0].code, "empty-daily-body");
 
   const ok = validateSubmittedPlan(
-    { items: [{ action: "append_daily", body: "- 完成 memory 重构 P1" }] },
+    { items: [{ action: "append_daily", body: "- completed memory refactor P1" }] },
     CTX,
   );
   assert.equal(ok.accepted.length, 1);
@@ -188,7 +188,7 @@ test("planToApplyBatchArgs maps to the single batch payload", () => {
           action: "update",
           slug: "user-editor",
           confidence: "medium",
-          source_quote: "换 helix 了",
+          source_quote: "switched to helix",
         },
         { action: "accept", slug: "user-name", scope: "global" },
         { action: "delete", slug: "user-old-pref", scope: "global", reasoning: "user refuted" },
@@ -204,7 +204,7 @@ test("planToApplyBatchArgs maps to the single batch payload", () => {
   const [write, update, accept, del] = batch.decisions;
   assert.equal(write.op, "upsert");
   assert.equal(write.memoryType, "feedback");
-  assert.equal(write.evidence.sourceQuote, "以后默认用中文回答");
+  assert.equal(write.evidence.sourceQuote, "use concise answers by default from now on");
   assert.equal(update.op, "update");
   assert.equal(update.mode, "merge");
   assert.equal(update.body, undefined);

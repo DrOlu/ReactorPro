@@ -1,10 +1,12 @@
-//! MCP OAuth token 存储（docs/design/mcp-oauth.md §3）。
+//! MCP OAuth token storage (docs/design/mcp-oauth.md §3).
 //!
-//! 凭据纪律：token/client_secret 只进 OS keystore（keyring v3），keyring 不可用
-//! 时降级 `~/.liveagent/mcp-oauth-tokens.json`（明文，诊断标注 `file`；Unix 上
-//! chmod 0600，Windows 无此语义、依赖 `%USERPROFILE%` 默认 ACL）——
-//! 永不进 settings/SQLite，Gateway 同步与 WebDAV 备份天然不含凭据。
-//! Keychain IPC 有毫秒级开销，故挂进程内缓存：只在 miss/授权/刷新/清除时碰后端。
+//! Credential discipline: token/client_secret only go into the OS keystore (keyring v3);
+//! when keyring is unavailable it falls back to `~/.liveagent/mcp-oauth-tokens.json`
+//! (plaintext, flagged as `file` in diagnostics; chmod 0600 on Unix, which Windows lacks,
+//! relying on the default `%USERPROFILE%` ACL) — never into settings/SQLite, so Gateway
+//! sync and WebDAV backups naturally contain no credentials.
+//! Keychain IPC has millisecond-level overhead, so an in-process cache is kept: the backend
+//! is only touched on miss/authorization/refresh/clear.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -14,16 +16,18 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const KEYRING_SERVICE: &str = "LiveAgent MCP OAuth";
+pub const KEYRING_SERVICE: &str = "ReactorPro MCP OAuth";
 const FILE_STORE_NAME: &str = "mcp-oauth-tokens.json";
 
-/// 距过期不足该窗口即视作「将过期」，请求前主动刷新。
+/// Being within this window of expiry counts as "about to expire", triggering a proactive
+/// refresh before the request.
 pub const EXPIRY_SKEW_MS: u64 = 60_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TokenRecord {
     pub version: u32,
-    /// 规范化后的 MCP server URL；与当前配置不符即视为无 token（防 audience 串用）。
+    /// Normalized MCP server URL; a mismatch with the current config is treated as no token
+    /// (prevents cross-audience reuse).
     pub server_url: String,
     pub issuer: String,
     pub authorization_endpoint: String,
@@ -33,17 +37,17 @@ pub struct TokenRecord {
     pub client_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_secret: Option<String>,
-    /// RFC 7591 注册返回值："none" | "client_secret_post" | "client_secret_basic"。
+    /// RFC 7591 registration return value: "none" | "client_secret_post" | "client_secret_basic".
     #[serde(default)]
     pub token_endpoint_auth_method: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
-    /// RFC 8707 resource 参数值（规范化 server URL）。
+    /// RFC 8707 resource parameter value (normalized server URL).
     pub resource: String,
     pub access_token: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
-    /// 0 = 服务端未声明过期时间（不主动刷新，仅被动 401 刷新）。
+    /// 0 = the server declared no expiry time (no proactive refresh, only passive 401 refresh).
     #[serde(default)]
     pub expires_at_ms: u64,
 }
@@ -65,7 +69,7 @@ pub fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-// ---- 进程内缓存 ----
+// ---- in-process cache ----
 
 #[derive(Clone)]
 enum CacheSlot {
@@ -78,7 +82,7 @@ fn cache() -> &'static Mutex<HashMap<String, CacheSlot>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-// 诊断用：最近一次实际命中的后端。0=未知 1=keychain 2=file。
+// Diagnostic: the backend actually hit most recently. 0=unknown 1=keychain 2=file.
 static LAST_BACKEND: AtomicU8 = AtomicU8::new(0);
 
 pub fn storage_label() -> &'static str {
@@ -89,33 +93,33 @@ pub fn storage_label() -> &'static str {
     }
 }
 
-// ---- keyring 后端 ----
+// ---- keyring backend ----
 
 fn keyring_entry(server_id: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(KEYRING_SERVICE, server_id)
-        .map_err(|e| format!("创建 keyring 条目失败：{e}"))
+        .map_err(|e| format!("failed to create keyring entry: {e}"))
 }
 
-/// Ok(Some)=命中 Ok(None)=确认无条目 Err=后端不可用（触发文件降级）。
+/// Ok(Some)=hit Ok(None)=confirmed no entry Err=backend unavailable (triggers file fallback).
 fn keyring_load(server_id: &str) -> Result<Option<TokenRecord>, String> {
     let entry = keyring_entry(server_id)?;
     match entry.get_password() {
         Ok(raw) => {
             let record: TokenRecord = serde_json::from_str(&raw)
-                .map_err(|e| format!("解析 keychain 内 MCP OAuth 记录失败：{e}"))?;
+                .map_err(|e| format!("failed to parse MCP OAuth record in keychain: {e}"))?;
             Ok(Some(record))
         }
         Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("读取 keychain 失败：{e}")),
+        Err(e) => Err(format!("failed to read keychain: {e}")),
     }
 }
 
-// ---- 文件降级后端 ----
+// ---- file fallback backend ----
 
 fn file_store_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "unable to locate the user home directory".to_string())?;
     let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
-    fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败：{e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("failed to create config directory: {e}"))?;
     Ok(dir.join(FILE_STORE_NAME))
 }
 
@@ -128,22 +132,22 @@ fn load_file_map_at(path: &PathBuf) -> HashMap<String, TokenRecord> {
 
 fn save_file_map_at(path: &PathBuf, map: &HashMap<String, TokenRecord>) -> Result<(), String> {
     if map.is_empty() {
-        // 空表直接移除文件，避免留下空壳。
+        // Remove the file outright when the map is empty, so no empty shell is left behind.
         let _ = fs::remove_file(path);
         return Ok(());
     }
-    let payload = serde_json::to_string(map).map_err(|e| format!("序列化 token 文件失败：{e}"))?;
-    fs::write(path, payload).map_err(|e| format!("写入 token 文件失败：{e}"))?;
+    let payload = serde_json::to_string(map).map_err(|e| format!("failed to serialize token file: {e}"))?;
+    fs::write(path, payload).map_err(|e| format!("failed to write token file: {e}"))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-            .map_err(|e| format!("设置 token 文件权限失败：{e}"))?;
+            .map_err(|e| format!("failed to set token file permissions: {e}"))?;
     }
     Ok(())
 }
 
-// ---- 公共 API ----
+// ---- public API ----
 
 pub fn load(server_id: &str) -> Option<TokenRecord> {
     let id = server_id.trim();
@@ -165,7 +169,7 @@ pub fn load(server_id: &str) -> Option<TokenRecord> {
         }
         Ok(None) => None,
         Err(_) => {
-            // keyring 后端不可用（Linux 无 secret-service / headless）：读文件降级。
+            // keyring backend unavailable (Linux without secret-service / headless): read file fallback.
             let record = file_store_path()
                 .ok()
                 .and_then(|path| load_file_map_at(&path).remove(id));
@@ -191,21 +195,22 @@ pub fn load(server_id: &str) -> Option<TokenRecord> {
 pub fn save(server_id: &str, record: &TokenRecord) -> Result<(), String> {
     let id = server_id.trim();
     if id.is_empty() {
-        return Err("server_id 不能为空".to_string());
+        return Err("server_id must not be empty".to_string());
     }
 
     let keyring_result = keyring_entry(id).and_then(|entry| {
         let payload =
-            serde_json::to_string(record).map_err(|e| format!("序列化 OAuth 记录失败：{e}"))?;
+            serde_json::to_string(record).map_err(|e| format!("failed to serialize OAuth record: {e}"))?;
         entry
             .set_password(&payload)
-            .map_err(|e| format!("写入 keychain 失败：{e}"))
+            .map_err(|e| format!("failed to write keychain: {e}"))
     });
 
     match keyring_result {
         Ok(()) => {
             LAST_BACKEND.store(1, Ordering::Relaxed);
-            // keyring 写入成功后清理文件降级副本，防止后续读取到陈旧记录。
+            // After a successful keyring write, clear the file fallback copy so later reads
+            // do not pick up a stale record.
             if let Ok(path) = file_store_path() {
                 let mut map = load_file_map_at(&path);
                 if map.remove(id).is_some() {
@@ -214,12 +219,12 @@ pub fn save(server_id: &str, record: &TokenRecord) -> Result<(), String> {
             }
         }
         Err(keyring_error) => {
-            let path =
-                file_store_path().map_err(|e| format!("{keyring_error}；文件降级也失败：{e}"))?;
+            let path = file_store_path()
+                .map_err(|e| format!("{keyring_error}; file fallback also failed: {e}"))?;
             let mut map = load_file_map_at(&path);
             map.insert(id.to_string(), record.clone());
             save_file_map_at(&path, &map)
-                .map_err(|e| format!("{keyring_error}；文件降级也失败：{e}"))?;
+                .map_err(|e| format!("{keyring_error}; file fallback also failed: {e}"))?;
             LAST_BACKEND.store(2, Ordering::Relaxed);
         }
     }
@@ -230,18 +235,18 @@ pub fn save(server_id: &str, record: &TokenRecord) -> Result<(), String> {
     Ok(())
 }
 
-/// 删除条目（keyring 与文件降级都清）；条目不存在不算错误。
+/// Delete an entry (clears both keyring and file fallback); a missing entry is not an error.
 pub fn delete(server_id: &str) -> Result<(), String> {
     let id = server_id.trim();
     if id.is_empty() {
-        return Err("server_id 不能为空".to_string());
+        return Err("server_id must not be empty".to_string());
     }
 
     let mut errors: Vec<String> = Vec::new();
     match keyring_entry(id) {
         Ok(entry) => match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => {}
-            Err(e) => errors.push(format!("删除 keychain 条目失败：{e}")),
+            Err(e) => errors.push(format!("failed to delete keychain entry: {e}")),
         },
         Err(e) => errors.push(e),
     }
@@ -261,7 +266,7 @@ pub fn delete(server_id: &str) -> Result<(), String> {
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(errors.join("；"))
+        Err(errors.join("; "))
     }
 }
 
@@ -302,7 +307,7 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             let mode = fs::metadata(&path).expect("meta").permissions().mode();
-            assert_eq!(mode & 0o777, 0o600, "token 文件必须是 0600");
+            assert_eq!(mode & 0o777, 0o600, "the token file must be 0600");
         }
     }
 

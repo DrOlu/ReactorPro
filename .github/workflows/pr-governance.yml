@@ -28,7 +28,7 @@ jobs:
             const body = (pr.body || '').replace(/<!--[\s\S]*?-->/g, '');
             const MARKER = '<!-- pr-governance-report -->';
 
-            // PR(如 dependabot)与维护者显式豁免的 PR 跳过检查。
+            // Skip checks for bot PRs (such as Dependabot) and PRs a maintainer explicitly exempted.
             const labels = pr.labels.map((l) => l.name);
             if (pr.user.type === 'Bot' || labels.includes('governance-exempt')) {
               core.info('Bot PR or governance-exempt label present, skipping governance checks.');
@@ -37,7 +37,7 @@ jobs:
 
             const problems = [];
 
-            // 1) 必须关联 issue:优先看 GitHub 解析出的关闭引用,正则兜底
+            // 1) Must link an issue: prefer the closing references GitHub resolves, with a regex as fallback.
             const gql = await github.graphql(
               `query ($owner: String!, $repo: String!, $num: Int!) {
                 repository(owner: $owner, name: $repo) {
@@ -60,7 +60,7 @@ jobs:
               );
             }
 
-            // 2) UI 改动必须附截图/预览:改动文件命中前端路径,而正文没有图片即视为缺失。
+            // 2) UI changes must include a screenshot/preview: if changed files match frontend paths and the body has no image, treat it as missing.
             const UI_PATHS = [
               'crates/agent-ui/src/',
               'crates/agent-gui/src/',
@@ -83,7 +83,7 @@ jobs:
               );
             }
 
-            // 3) 必须与基线无冲突。mergeable 由 GitHub 异步计算,null 表示尚未算完,轮询等待。
+            // 3) Must not conflict with the base branch. GitHub computes mergeable asynchronously; null means it is not ready yet, so poll.
             let mergeable = pr.mergeable ?? null;
             for (let i = 0; i < 6 && mergeable === null; i++) {
               await new Promise((r) => setTimeout(r, 5000));
@@ -100,17 +100,17 @@ jobs:
               );
             }
 
-            // 汇总:不合规先尝试转 draft,再按实际结果生成报告,避免文案与真实状态不符。
+            // Summary: for a failing PR, first try converting it to draft, then build the report from the actual outcome so the text matches reality.
             const passed = problems.length === 0;
 
-            // 转失败(未配 PAT / token 失效)只警告:下面的 setFailed 会把检查置红,
-            // 配合 main 的 required status check 仍能阻止合并,治理不会失效。
+            // A failed conversion (no PAT configured / token expired) only warns: the setFailed below still turns the check red,
+            // and together with main's required status check it still blocks the merge, so governance stays effective.
             let drafted = false;
             if (!passed) {
               try {
                 const pat = process.env.DRAFT_PAT;
                 if (!pat) throw new Error('PR_GOVERNANCE_PAT is not configured');
-                // 不走 github.graphql:octokit 的 auth 钩子会强制覆盖 authorization 头,传入的 PAT 会被 GITHUB_TOKEN 顶掉,而该 mutation 不接受 integration token。
+                // Do not use github.graphql: octokit's auth hook overrides the authorization header, so the supplied PAT is replaced by GITHUB_TOKEN, and this mutation does not accept an integration token.
                 const res = await fetch('https://api.github.com/graphql', {
                   method: 'POST',
                   headers: {
@@ -159,7 +159,7 @@ jobs:
             });
             const existing = comments.find((c) => c.body?.includes(MARKER));
             if (existing) {
-              // 结果没变化就不重复编辑,避免 timeline 噪音。
+              // Do not edit again when the result is unchanged, to avoid timeline noise.
               if (existing.body !== report) {
                 await github.rest.issues.updateComment({
                   owner,
@@ -169,7 +169,7 @@ jobs:
                 });
               }
             } else if (!passed) {
-              // 首次即通过的 PR 不发评论,保持安静。
+              // Do not comment on a PR that passed on the first run; stay quiet.
               await github.rest.issues.createComment({
                 owner,
                 repo,

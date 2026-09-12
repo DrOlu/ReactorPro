@@ -107,7 +107,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "app.errorBoundaryReload": "Reload",
   "app.errorBoundaryTitle": "Something went wrong",
   "app.loading": "Loading settings...",
-  "app.name": "LiveAgent",
+  "app.name": "ReactorPro",
   "app.settingsSshSettingsChanged":
     "SSH settings were updated elsewhere. The latest settings have been loaded; submit your changes again.",
   "common.currentUser": "Current user",
@@ -346,7 +346,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.resizeSidebarSections": "Resize workspaces and recent conversations",
   "chat.emptyChatHistory": "No conversation history",
   "chat.clickNewConversation": "Click 'New Conversation' above to start chatting",
-  "chat.welcome": "Welcome to LiveAgent",
+  "chat.welcome": "Welcome to ReactorPro",
   "chat.greetingMorning": "Good morning",
   "chat.greetingNoon": "Good afternoon",
   "chat.greetingAfternoon": "Good afternoon",

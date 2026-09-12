@@ -15,28 +15,33 @@ type InstalledApp = {
 const EMPTY_APPS: MentionComposerApp[] = [];
 
 /**
- * 输入框 @ 提及的应用候选（computer use 操作目标）。
+ * App candidates for the composer's @ mention (computer use operation targets).
  *
- * 门控与 cua-driver 的接入状态一致：当前会话的工作区资源里挂着
- * cua-driver（按 id 或 command 判定，与审批缺省/自指闸门同一份裁决，见
- * contracts/mcpServerDefaults.ts）且处于 agent 模式时才枚举；否则返回空
- * 数组，@ 弹层的行为与从前完全一致。
+ * The gating matches cua-driver's connection status: it enumerates only when the
+ * current conversation's workspace resources carry cua-driver (judged by id or command,
+ * the same decision as the approval default/self-reference gate, see
+ * contracts/mcpServerDefaults.ts) and the mode is agent; otherwise it returns an empty
+ * array and the @ popup behaves exactly as before.
  *
- * 列表在门控首次满足时取一次并缓存整个会话周期——安装应用集合的变化
- * 频率远低于会话生命周期，实时性不值得每次开弹层都扫一遍磁盘。枚举
- * 失败置 fetched 后本挂载周期内不再重试（组件重挂载才会再扫），避免
- * 门控反复翻转时重复扫磁盘。宿主自身已在 Rust 侧剔除（cuaSelfGuard
- * 会拒绝以宿主为目标的操作）。
+ * The list is fetched once when the gate is first satisfied and cached for the whole
+ * conversation lifetime — the installed-app set changes far less often than a
+ * conversation lives, so real-time freshness is not worth rescanning the disk every
+ * time the popup opens. After a failed enumeration sets fetched, it is not retried
+ * within this mount cycle (only a component remount rescans), avoiding repeated disk
+ * scans when the gate flips back and forth. The host itself is already filtered out on
+ * the Rust side (cuaSelfGuard rejects operations targeting the host).
  *
- * 双端共用：`invoke` 经 `@liveagent/app/shims/tauriCore` 按宿主解析——
- * GUI 直连 Tauri 命令 `cua_driver_list_installed_apps`；WebUI 的 shim 把
- * 同名命令经 Gateway 直通中继到已连接的桌面 Agent（installed_apps_list
- * 臂），列出的是**桌面宿主本机**的已安装应用，与远程会话跑在桌面、
- * cua-driver 操作桌面屏幕的模型一致。
+ * Shared by both ends: `invoke` is resolved per host via `@liveagent/app/shims/tauriCore`
+ * — the GUI connects directly to the Tauri command `cua_driver_list_installed_apps`;
+ * the WebUI shim relays the same-named command through the Gateway passthrough to the
+ * connected desktop Agent (the installed_apps_list arm), listing installed apps on the
+ * **desktop host machine**, consistent with the model where the remote conversation runs
+ * on the desktop and cua-driver operates the desktop screen.
  *
- * 平台收窄：枚举实现见 services/cua_driver/installed_apps.rs——macOS 扫
- * 应用目录、Windows 扫开始菜单快捷方式，其他平台（Linux 等）返回空
- * 列表，@ 弹层不出现应用分组。
+ * Platform narrowing: the enumeration implementation is in
+ * services/cua_driver/installed_apps.rs — macOS scans the applications directory,
+ * Windows scans Start Menu shortcuts, and other platforms (Linux, etc.) return an empty
+ * list, so no app group appears in the @ popup.
  */
 export function useMentionApps(mcpServers: readonly McpServerConfig[], isAgentMode: boolean) {
   const cuaEnabled = useMemo(
@@ -59,13 +64,14 @@ export function useMentionApps(mcpServers: readonly McpServerConfig[], isAgentMo
           path: app.path,
           iconDataUrl: app.iconDataUrl || undefined,
         }));
-        // chip 与用户气泡按身份从注册表取 logo（data URL 不进序列化），
-        // 列表落地时登记一次即可覆盖三处展示面。
+        // The chip and user bubble fetch the logo by identity from the registry (the
+        // data URL is not serialized); registering once when the list is materialized
+        // covers all three display surfaces.
         registerAppMentionIcons(mapped);
         setApps(mapped);
       })
       .catch(() => {
-        // 枚举失败按"没有应用候选"降级，见模块注释的重试语义。
+        // A failed enumeration degrades to "no app candidates"; see the retry semantics in the module comment.
         if (!cancelled) setFetched(true);
       });
     return () => {

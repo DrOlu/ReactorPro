@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 终端 Pane 泛化后的 useWindowWorkbench 行为:openTerminalSurface 复用、
-// closePane/syncCurrentConversation 对非会话 Pane 的收窄。
+// useWindowWorkbench behavior after terminal Pane generalization: openTerminalSurface reuse, and
+// closePane/syncCurrentConversation narrowing for non-conversation Panes.
 
 function createHookHarness() {
   const refs = [];

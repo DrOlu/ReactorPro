@@ -1,11 +1,15 @@
-// 会话级 memory 注入控制器:持有「首轮冻结进 system prompt 的快照」与「后续轮次
-// 挂在 user 消息上的增量块」,是 memory 注入位置的唯一状态持有者。
+// Conversation-level memory injection controller: holds both "the snapshot frozen
+// into the system prompt on the first turn" and "the incremental blocks attached to
+// user messages on later turns"; it is the sole state holder of memory injection positions.
 //
-// 判定逻辑全部在纯函数 turnInjection 里,这里只负责状态归属:按会话 key 存取、
-// 按消息 id 绑定增量、会话删除时清理、LRU 封顶防止 map 无限增长。
+// All decision logic lives in the pure function turnInjection; this only owns state:
+// store/retrieve by conversation key, bind increments by message id, clean up on
+// conversation deletion, and cap with LRU to prevent unbounded map growth.
 //
-// 增量只活在内存里,不落库也不进历史:进程重启/会话恢复后基线随之丢失,下一轮
-// 会重新把完整快照放进 system prompt —— 那一轮前缀本来就要重建,不亏。
+// Increments live only in memory, never persisted or added to history: after a process
+// restart / conversation restore the baseline is lost, and the next turn puts the full
+// snapshot back into the system prompt -- that turn's prefix has to be rebuilt anyway,
+// so nothing is lost.
 
 import {
   type MemoryInjectionBaseline,
@@ -13,12 +17,12 @@ import {
   planMemoryTurnInjection,
 } from "../../memory/prompts/turnInjection";
 
-/** 缓存的会话数量上限,与 runtime 缓存同量级即可。 */
+/** Upper bound on cached conversations; the same order of magnitude as the runtime cache is fine. */
 const INJECTION_CONVERSATION_STATE_LIMIT = 32;
 
 type ConversationInjectionState = {
   baseline: MemoryInjectionBaseline;
-  /** messageId → 增量块。一旦写入就不再改动,后续轮次原样重放。 */
+  /** messageId -> incremental block. Once written it never changes and is replayed verbatim on later turns. */
   updates: Map<string, string>;
   lastTouchedAt: number;
 };
@@ -34,17 +38,20 @@ function pruneStates() {
 }
 
 export type MemoryTurnInjectionResult = {
-  /** 本轮进 system prompt 的 memory 文本。 */
+  /** Memory text placed into the system prompt this turn. */
   systemText: string;
-  /** 本轮新挂出的增量块,便于调用方观测;为空表示没有变化。 */
+  /** The incremental block newly attached this turn, for the caller to observe; empty means no change. */
   turnUpdate: string;
 };
 
 export const memoryTurnInjection = {
   /**
-   * 请求边界调用一次:决定这轮 memory 走 system 段还是走 user 消息增量。
-   * overview 传 null 表示读取失败,此时保持基线不动。plan 判定 refrozen 时同步
-   * 清空已挂出的增量块 —— 它们描述旧快照的差异,与重冻结后的 system 段自相矛盾。
+   * Called once at the request boundary: decides whether this turn's memory goes into
+   * the system section or into a user-message increment. overview null means the read
+   * failed, in which case the baseline is left untouched. When plan determines
+   * refrozen, the already-attached increment blocks are cleared in step -- they
+   * describe differences against the old snapshot and would contradict the re-frozen
+   * system section.
    */
   planTurn(params: {
     conversationId: string;
@@ -54,7 +61,8 @@ export const memoryTurnInjection = {
   }): MemoryTurnInjectionResult {
     const key = params.conversationId.trim();
     if (!key) {
-      // 没有会话 key 就没法维持基线,退回旧行为:整块进 system prompt。
+      // Without a conversation key there is no way to maintain a baseline, so fall back
+      // to the old behavior: put the whole block into the system prompt.
       return { systemText: params.overview ?? "", turnUpdate: "" };
     }
 
@@ -70,7 +78,8 @@ export const memoryTurnInjection = {
 
     const messageId = params.messageId?.trim() ?? "";
     if (plan.turnUpdate && !messageId) {
-      // 没有可挂载的消息 id:丢掉这次增量,同时不推进指纹,留给下一轮补上。
+      // No message id to attach to: drop this increment without advancing the
+      // fingerprint, leaving it to be added on the next turn.
       return { systemText: plan.systemText, turnUpdate: "" };
     }
 
@@ -95,36 +104,41 @@ export const memoryTurnInjection = {
     return { systemText: plan.systemText, turnUpdate: plan.turnUpdate };
   },
 
-  /** 组装请求上下文时读取:messageId → 增量块。 */
+  /** Read when assembling request context: messageId -> incremental block. */
   getMessageUpdates(conversationId: string): MemoryTurnUpdateMap | undefined {
     return states.get(conversationId.trim())?.updates;
   },
 
   /**
-   * 读取已冻结的 system 段快照。手动压缩这类旁路会自己重新读一份 overview,直接
-   * 用那份新读的会让 system 段在「压缩轮 → 下一轮发送」之间来回翻,凭空多废一次
-   * 前缀。返回 undefined 表示这个会话还没有基线,调用方自行兜底。
+   * Reads the frozen system-section snapshot. A bypass such as manual compaction reads
+   * its own fresh overview; using that freshly read one directly would make the system
+   * section flap back and forth between "the compaction turn and the next turn's send",
+   * needlessly wasting an extra prefix. Returning undefined means this conversation has
+   * no baseline yet and the caller should fall back on its own.
    */
   getSystemText(conversationId: string): string | undefined {
     return states.get(conversationId.trim())?.baseline.systemText;
   },
 
   /**
-   * 压缩完成后调用:压缩把携带增量块的 user 消息移出 active segment,那些增量
-   * 对模型永久不可见,基线的指纹却已越过它们 —— 继续增量会静默丢失这些变化。
-   * 丢弃整个会话状态,下一次 planTurn 走首轮分支把 fresh 快照重冻结进 system 段;
-   * 压缩本来就要重建前缀,这次重冻结是免费的。
+   * Called after compaction completes: compaction moves the user messages carrying
+   * increment blocks out of the active segment, making those increments permanently
+   * invisible to the model while the baseline fingerprint has already moved past them
+   * -- continuing to increment would silently lose those changes. Discard the whole
+   * conversation state so the next planTurn takes the first-turn branch and re-freezes
+   * a fresh snapshot into the system section; compaction rebuilds the prefix anyway, so
+   * this re-freeze is free.
    */
   invalidate(conversationId: string) {
     states.delete(conversationId.trim());
   },
 
-  /** 会话删除/被裁掉:连基线一起丢弃。 */
+  /** Conversation deleted/trimmed away: discard the baseline too. */
   dispose(conversationId: string) {
     states.delete(conversationId.trim());
   },
 
-  /** 应用退出。 */
+  /** Application exit. */
   disposeAll() {
     states.clear();
   },

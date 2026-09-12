@@ -18,7 +18,7 @@ pub async fn chat_history_list(
         )
     })
     .await
-    .map_err(|e| format!("chat_history_list join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_list join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -28,7 +28,7 @@ pub async fn chat_history_workdirs() -> Result<ChatHistoryWorkdirsResponse, Stri
         list_chat_history_workdirs_sync(&conn)
     })
     .await
-    .map_err(|e| format!("chat_history_workdirs join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_workdirs join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -49,7 +49,7 @@ pub async fn chat_history_search(
 ) -> Result<ChatHistorySearchResponse, String> {
     tauri::async_runtime::spawn_blocking(move || search_chat_history_sync(args))
         .await
-        .map_err(|e| format!("chat_history_search join 失败：{e}"))?
+        .map_err(|e| format!("chat_history_search join failed: {e}"))?
 }
 
 pub(crate) async fn chat_history_get_summary_inner(
@@ -60,29 +60,29 @@ pub(crate) async fn chat_history_get_summary_inner(
         get_summary_by_id(&conn, &id)
     })
     .await
-    .map_err(|e| format!("chat_history_get_summary join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_get_summary join failed: {e}"))?
 }
 
-// 桌面前端已迁移到窗口化的 chat_history_get_window；全量读取仅剩
-// gateway_bridge 的服务端投影在用，因此不再作为 webview command 暴露。
+// The desktop frontend has migrated to the windowed chat_history_get_window; the full read is now only
+// used by gateway_bridge's server-side projection, so it is no longer exposed as a webview command.
 pub async fn chat_history_get(id: String) -> Result<ChatHistoryRecord, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let chat_id = id.trim().to_string();
         if chat_id.is_empty() {
-            return Err("历史对话 id 不能为空".to_string());
+            return Err("history conversation id cannot be empty".to_string());
         }
 
         let conn = open_db()?;
         let mut record = get_record_by_id(&conn, &chat_id)?;
         record.segments = load_segments(&conn, &record.id)?;
         if record.segments.is_empty() {
-            return Err("历史对话缺少分段数据".to_string());
+            return Err("history conversation is missing segment data".to_string());
         }
 
         Ok(record)
     })
     .await
-    .map_err(|e| format!("chat_history_get join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_get join failed: {e}"))?
 }
 
 pub(crate) async fn chat_history_get_tail(
@@ -92,20 +92,20 @@ pub(crate) async fn chat_history_get_tail(
     tauri::async_runtime::spawn_blocking(move || {
         let chat_id = id.trim().to_string();
         if chat_id.is_empty() {
-            return Err("历史对话 id 不能为空".to_string());
+            return Err("history conversation id cannot be empty".to_string());
         }
 
         let conn = open_db()?;
         let mut record = get_record_by_id(&conn, &chat_id)?;
         record.segments = load_tail_segments(&conn, &record.id, max_messages)?;
         if record.segments.is_empty() {
-            return Err("历史对话缺少分段数据".to_string());
+            return Err("history conversation is missing segment data".to_string());
         }
 
         Ok(record)
     })
     .await
-    .map_err(|e| format!("chat_history_get_tail join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_get_tail join failed: {e}"))?
 }
 
 pub(crate) fn build_chat_history_window_record(
@@ -118,10 +118,10 @@ pub(crate) fn build_chat_history_window_record(
 ) -> Result<ChatHistoryWindowRecord, String> {
     let chat_id = record.id.trim();
     if chat_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("history conversation id cannot be empty".to_string());
     }
     if max_messages <= 0 {
-        return Err("历史窗口 maxMessages 必须大于 0".to_string());
+        return Err("history window maxMessages must be greater than 0".to_string());
     }
 
     let revision = build_history_revision(
@@ -140,7 +140,7 @@ pub(crate) fn build_chat_history_window_record(
     let (segments, first_segment_offset) =
         load_message_window_segments(conn, &record.id, requested_oldest_offset, end_offset)?;
     if end_offset > requested_oldest_offset && segments.is_empty() {
-        return Err("历史窗口未找到对应的分段数据".to_string());
+        return Err("history window found no matching segment data".to_string());
     }
     let relative_end_offset = end_offset.saturating_sub(first_segment_offset);
     let window =
@@ -150,7 +150,7 @@ pub(crate) fn build_chat_history_window_record(
         || first_segment_offset.saturating_add(window.end_offset) != end_offset
         || window.returned_message_count != end_offset.saturating_sub(oldest_offset)
     {
-        return Err("历史窗口消息统计与权威 offset 不一致".to_string());
+        return Err("history window message statistics are inconsistent with the authoritative offset".to_string());
     }
     let segment_windows = serialize_history_segment_windows(&window)?;
     let conversation = get_summary_by_id(conn, &record.id)?;
@@ -190,12 +190,12 @@ pub(crate) fn chat_history_get_window_sync(
 ) -> Result<ChatHistoryWindowRecord, String> {
     let chat_id = id.trim();
     if chat_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("history conversation id cannot be empty".to_string());
     }
 
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启历史窗口读取事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin history window read transaction: {e}"))?;
     let record = get_record_by_id(&tx, chat_id)?;
     let result = build_chat_history_window_record(
         &tx,
@@ -206,7 +206,7 @@ pub(crate) fn chat_history_get_window_sync(
         include_active_segment,
     )?;
     tx.commit()
-        .map_err(|e| format!("提交历史窗口读取事务失败：{e}"))?;
+        .map_err(|e| format!("failed to commit history window read transaction: {e}"))?;
     Ok(result)
 }
 
@@ -230,7 +230,7 @@ pub async fn chat_history_get_window(
         )
     })
     .await
-    .map_err(|e| format!("chat_history_get_window join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_get_window join failed: {e}"))?
 }
 
 pub(crate) async fn chat_history_upsert_inner(
@@ -257,7 +257,7 @@ pub(crate) async fn chat_history_upsert_inner(
         let mut conn = open_db()?;
         let tx = conn
             .transaction()
-            .map_err(|e| format!("开启聊天历史事务失败：{e}"))?;
+            .map_err(|e| format!("failed to begin chat history transaction: {e}"))?;
         upsert_chat_history_header(&tx, &conversation)?;
 
         sync_segments(
@@ -269,12 +269,12 @@ pub(crate) async fn chat_history_upsert_inner(
         verify_chat_history_consistency(&tx, input.id.trim())?;
 
         tx.commit()
-            .map_err(|e| format!("提交聊天历史事务失败：{e}"))?;
+            .map_err(|e| format!("failed to commit chat history transaction: {e}"))?;
 
         get_summary_by_id(&conn, input.id.trim())
     })
     .await
-    .map_err(|e| format!("chat_history_upsert join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_upsert join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -297,19 +297,19 @@ pub(crate) async fn chat_history_upsert_active_segment_inner(
         let mut conn = open_db()?;
         let tx = conn
             .transaction()
-            .map_err(|e| format!("开启 active segment 事务失败：{e}"))?;
+            .map_err(|e| format!("failed to begin active segment transaction: {e}"))?;
 
         upsert_chat_history_header(&tx, &input.conversation)?;
         upsert_single_segment(&tx, input.conversation.id.trim(), &input.segment)?;
         verify_chat_history_consistency(&tx, input.conversation.id.trim())?;
 
         tx.commit()
-            .map_err(|e| format!("提交 active segment 事务失败：{e}"))?;
+            .map_err(|e| format!("failed to commit active segment transaction: {e}"))?;
 
         get_summary_by_id(&conn, input.conversation.id.trim())
     })
     .await
-    .map_err(|e| format!("chat_history_upsert_active_segment join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_upsert_active_segment join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -333,7 +333,7 @@ pub(crate) async fn chat_history_append_segment_inner(
         get_summary_by_id(&conn, input.conversation.id.trim())
     })
     .await
-    .map_err(|e| format!("chat_history_append_segment join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_append_segment join failed: {e}"))?
 }
 
 fn append_chat_history_segment_sync(
@@ -343,7 +343,7 @@ fn append_chat_history_segment_sync(
     validate_append_segment_input(input)?;
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启 append segment 事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin append segment transaction: {e}"))?;
 
     validate_append_segment_preconditions(&tx, input)?;
     upsert_chat_history_header(&tx, &input.conversation)?;
@@ -356,7 +356,7 @@ fn append_chat_history_segment_sync(
     verify_chat_history_consistency(&tx, input.conversation.id.trim())?;
 
     tx.commit()
-        .map_err(|e| format!("提交 append segment 事务失败：{e}"))?;
+        .map_err(|e| format!("failed to commit append segment transaction: {e}"))?;
     Ok(())
 }
 
@@ -381,7 +381,7 @@ pub(crate) async fn chat_history_rename_inner(
         rename_chat_history_sync(&conn, &id, &title)
     })
     .await
-    .map_err(|e| format!("chat_history_rename join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_rename join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -406,7 +406,7 @@ pub(crate) async fn chat_history_set_pinned_inner(
         set_chat_history_pinned_sync(&conn, &id, is_pinned)
     })
     .await
-    .map_err(|e| format!("chat_history_set_pinned join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_set_pinned join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -431,7 +431,7 @@ pub(crate) async fn chat_history_set_cwd_inner(
         set_chat_history_cwd_sync(&conn, &id, &cwd)
     })
     .await
-    .map_err(|e| format!("chat_history_set_cwd join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_set_cwd join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -456,7 +456,7 @@ pub(crate) async fn chat_history_set_model_inner(
         set_chat_history_model_sync(&conn, &id, &selected_model_json)
     })
     .await
-    .map_err(|e| format!("chat_history_set_model join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_set_model join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -480,7 +480,7 @@ pub(crate) async fn chat_history_share_get_inner(
         get_chat_history_share_status_sync(&conn, &id)
     })
     .await
-    .map_err(|e| format!("chat_history_share_get join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_share_get join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -498,7 +498,7 @@ pub(crate) async fn chat_history_share_set_inner(
         set_chat_history_share_enabled_sync(&conn, &id, enabled, redact_tool_content)
     })
     .await
-    .map_err(|e| format!("chat_history_share_set join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_share_set join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -528,5 +528,5 @@ pub(crate) async fn chat_history_share_resolve_inner(
         resolve_chat_history_share_sync(&conn, &token)
     })
     .await
-    .map_err(|e| format!("chat_history_share_resolve join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_share_resolve join failed: {e}"))?
 }

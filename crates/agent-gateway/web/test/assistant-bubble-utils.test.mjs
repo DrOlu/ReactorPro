@@ -127,7 +127,7 @@ test("final native images and hosted search results stay in the answer layer", (
       {
         round: 1,
         meta: terminalMeta,
-        blocks: [text("intro", "图像开始"), displayImageTool],
+        blocks: [text("intro", "image start"), displayImageTool],
       },
     ],
     { live: false },
@@ -143,7 +143,7 @@ test("final native images and hosted search results stay in the answer layer", (
       {
         round: 1,
         meta: terminalMeta,
-        blocks: [displayImageTool, text("done", "图像测试完成")],
+        blocks: [displayImageTool, text("done", "image test complete")],
       },
     ],
     { live: false },
@@ -160,7 +160,7 @@ test("final native images and hosted search results stay in the answer layer", (
         round: 1,
         meta: terminalMeta,
         blocks: [
-          text("summary", "搜索完成"),
+          text("summary", "search complete"),
           { kind: "hostedSearch", item: { id: "search-1", query: "OpenAI" } },
         ],
       },

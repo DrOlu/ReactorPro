@@ -33,15 +33,15 @@ const validCases = [
   ],
   ["C:/path with spaces/a.ts", { path: "C:/path with spaces/a.ts", source: "absolute" }],
   ["C:/path%20with%20spaces/a.ts", { path: "C:/path with spaces/a.ts", source: "absolute" }],
-  ["C:/路径/文件.ts", { path: "C:/路径/文件.ts", source: "absolute" }],
+  ["C:/path/file.ts", { path: "C:/path/file.ts", source: "absolute" }],
   [
     "file:///C:/work/a.ts",
     { path: "C:/work/a.ts", source: "file-url" },
   ],
   [
-    "file:///C:/path%20with%20spaces/%E6%96%87%E4%BB%B6.ts#L7-L9",
+    "file:///C:/path%20with%20spaces/file.ts#L7-L9",
     {
-      path: "C:/path with spaces/文件.ts",
+      path: "C:/path with spaces/file.ts",
       line: 7,
       endLine: 9,
       source: "file-url",
@@ -127,7 +127,7 @@ test("Gateway chat file opens run off-loop with bounded host concurrency", () =>
 
 test("the internal payload codec preserves locations and rejects malformed payloads", () => {
   const original = {
-    path: "C:/路径/a file.ts",
+    path: "C:/path/a file.ts",
     line: 12,
     endLine: 20,
     column: 4,

@@ -44,8 +44,9 @@ test("threshold: every provider reserves the output buffer from the total window
     200_000 - 32_000 * 1.2,
   );
 
-  // Codex 目录模型（总窗口 = 272K 输入预算 + 128K 输出，生成期已换算）：
-  // 保护阈值恒不超过真实输入上限（400K − 1.2×128K = 246.4K < 272K）。
+  // Codex catalog model (total window = 272K input budget + 128K output, already converted for
+  // the generation): the protection threshold never exceeds the real input limit
+  // (400K - 1.2x128K = 246.4K < 272K).
   assert.equal(
     policy.resolveCompactionThreshold({
       intent: "protection",
@@ -89,7 +90,7 @@ test("decideCompaction covers every reason", () => {
   assert.equal(cooldown.reason, "cooldown");
   assert.equal(cooldown.shouldCompact, false);
 
-  // 冷却窗内但用户消息已足量 → 允许压缩（防超大单轮卡死）。
+  // Within the cooldown window but user messages are already sufficient -> allow compaction (to prevent a huge single turn from getting stuck).
   assert.equal(
     decide({ totalTokens: 199_000, lastCompactionAt: NOW - 30_000, userMessageCount: 3 }).reason,
     "threshold-exceeded",
@@ -105,7 +106,7 @@ test("pressure escalates on consecutive ineffective compactions and resets on an
   let pressure = policy.createCompactionPressure();
   assert.equal(pressure.level, 0);
 
-  // 压缩后仍高于阈值 90% = 低效。
+  // Still above 90% of the threshold after compaction = inefficient.
   pressure = policy.notePressureAfterCompaction(pressure, {
     totalTokensAfter: 150_000,
     threshold: 160_000,
@@ -122,7 +123,7 @@ test("pressure escalates on consecutive ineffective compactions and resets on an
   });
   assert.equal(pressure.level, 2);
 
-  // 永不硬拒：第 3 次低效仍停在最高档而不是禁止压缩。
+  // Never hard-reject: the third inefficient result still stays at the highest tier rather than forbidding compaction.
   pressure = policy.notePressureAfterCompaction(pressure, {
     totalTokensAfter: 150_000,
     threshold: 160_000,

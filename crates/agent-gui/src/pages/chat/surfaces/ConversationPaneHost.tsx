@@ -244,7 +244,7 @@ const RegisteredConversationPaneHost = forwardRef<
               {...composer}
               {...(paneSendHandler ? { onSend: paneSendHandler } : {})}
               conversationId={snapshot.conversationId}
-              // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
+              // The trajectory page is a read-only analysis view: suspend the input area (keep it mounted so drafts are not lost).
               hidden={trajectoryActive}
               composerRef={composerRef}
               isSending={isSending}
@@ -274,11 +274,12 @@ const RegisteredConversationPaneHost = forwardRef<
               }
               statsBar={
                 <ConversationStatsBarHost
-                  // 前缀防与同级 taskProgressBar 的 key（裸会话 id）碰撞：React 对同键
-                  // 兄弟的 keyed diff 会让旧 fiber 逃过删除，DOM 残留逐次累积。
+                  // The prefix prevents collision with the sibling taskProgressBar key
+                  // (the bare conversation id): React's keyed diff for same-key siblings
+                  // lets old fibers escape deletion, and DOM remnants accumulate over time.
                   key={`stats-${snapshot.conversationId}`}
                   conversationId={snapshot.conversationId}
-                  // 轨迹页挂起输入区时状态栏随之隐藏，无需重复拉取。
+                  // The stats bar is hidden along with the trajectory page suspending the input area; no need to re-fetch.
                   enabled={!trajectoryActive}
                   contextUsageTokensSource={composer.contextUsageTokensSource}
                   contextWindow={composer.contextWindow}

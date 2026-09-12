@@ -51,8 +51,9 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
     workdir,
     onOpenFileLink,
   } = props;
-  // 回复末尾的已编辑文件卡：聚合整条回复所有 round 的 Write/Edit/Delete，
-  // 只在回复结束（流停止）后出现；脱敏视图（分享页隐藏工具内容）不渲染。
+  // Changed-files card at the end of a reply: aggregates the Write/Edit/Delete of every round in the
+  // whole reply, appearing only after the reply ends (stream stops); the redacted view (share page
+  // hiding tool content) does not render it.
   const changedFiles = useMemo(
     () => (isStreaming || redactToolContent ? null : collectChangedFiles(rounds)),
     [isStreaming, redactToolContent, rounds],

@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-// 回归护栏:xterm 6 的 css.toColor 不支持关键字 "transparent"(canvas 回退
-// 路径对 alpha<255 直接 throw),主题里任何 "transparent" 都会静默落回默认色
-// #ffffff。overview ruler 每帧用 overviewRulerBorder 画一条 1px 竖线,落回
-// 白色后就是终端右缘的白线(深色主题下肉眼可见)。透明必须写 8 位 hex
-// (#RRGGBBAA 分支不校验 alpha)。
+// Regression guard: xterm 6's css.toColor does not support the keyword "transparent"
+// (the canvas fallback path throws outright for alpha<255), so any "transparent" in a
+// theme silently falls back to the default color #ffffff. The overview ruler draws a
+// 1px vertical line each frame with overviewRulerBorder, and after falling back to
+// white it becomes a white line along the terminal's right edge (visible to the naked
+// eye in dark themes). Transparency must be written as 8-digit hex (the #RRGGBBAA
+// branch does not validate alpha).
 
 const source = readFileSync(
   new URL("../../../agent-ui/src/components/project-tools/XTermViewport.tsx", import.meta.url),

@@ -127,8 +127,8 @@ export type GitFileDisplayReference = {
   githubUrl?: string;
 };
 
-/** 应用提及（computer use 目标）。身份按内容分类：带路径分隔符判 path，
- *  否则判 bundle id——与 formatAppMentionToken 的序列化取向互逆。 */
+/** App mention (computer use target). Identity is classified by content: a path separator means a
+ *  path, otherwise a bundle id — the inverse of formatAppMentionToken's serialization direction. */
 export type AppDisplayReference = {
   name: string;
   bundleId?: string;
@@ -362,9 +362,10 @@ function inlineGitFileReferenceAt(text: string, index: number) {
   };
 }
 
-/** `app "Safari" (com.apple.Safari)`——formatAppMentionToken 的逆变换。
- *  只认带括号身份的完整形态：裸 `app "Name"` 在自然语言里太常见，作为
- *  token 识别会把普通句子错渲染成 chip。 */
+/** `app "Safari" (com.apple.Safari)` — the inverse transform of formatAppMentionToken.
+ *  Only the complete form with a parenthesized identity is recognized: a bare `app "Name"` is too
+ *  common in natural language, and recognizing it as a token would wrongly render ordinary
+ *  sentences as chips. */
 function inlineAppReferenceAt(text: string, index: number) {
   if (!isTokenBoundary(text, index)) return null;
   const match = /^app "([^"\r\n]{1,200})" \(([^()\r\n]{1,500})\)/.exec(text.slice(index));
@@ -884,8 +885,9 @@ function SkillMentionChip({ name }: { name: string }) {
 }
 
 function AppMentionChip({ app }: { app: AppDisplayReference }) {
-  // 图标来自进程级注册表（宿主拉到应用列表时登记）；订阅保证登记晚于
-  // 气泡挂载时也能补上真实 logo。查不到（WebUI、应用已卸载）回退占位。
+  // The icon comes from a process-level registry (registered when the host fetches the app list);
+  // the subscription ensures the real logo is filled in even when registration happens after the
+  // bubble mounts. A miss (WebUI, app uninstalled) falls back to a placeholder.
   const iconDataUrl = useAppMentionIcon(app);
   const identity = app.bundleId ?? app.path ?? "";
   return (

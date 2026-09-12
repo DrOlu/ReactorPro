@@ -25,8 +25,8 @@ test("formal xai provider type always uses openai-responses", () => {
     "openai-completions",
   );
   assert.equal(model.api, "openai-responses");
-  // 档位来自生成目录：grok-4.5 只有 low/medium/high（minimal 不存在=null）；
-  // 思考恒不可关（off:null），high 直通无需改写。
+  // Tiers come from the generated catalog: grok-4.5 only has low/medium/high (minimal does not exist = null);
+  // thinking can never be turned off (off: null), and high passes through without rewriting.
   assert.equal(model.thinkingLevelMap?.minimal, null);
   assert.equal(model.thinkingLevelMap?.high, undefined);
   assert.equal(model.thinkingLevelMap?.off, null);

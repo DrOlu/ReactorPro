@@ -21,7 +21,7 @@ async function readGatewayStatus(): Promise<GatewayRuntimeStatus> {
       enabled: false,
       configured: false,
       gatewayUrl: typeof window !== "undefined" ? window.location.origin : "",
-      lastError: "未配置 Gateway Token",
+      lastError: "Gateway Token not configured",
     };
   }
 
@@ -67,9 +67,9 @@ async function invokeGatewayMemory<T>(command: string, args?: Record<string, unk
 
 async function pickWorkdirInBrowser(): Promise<string | null> {
   return promptPathInBrowser({
-    title: "选择工作目录",
-    description: "浏览器无法直接打开远程目录选择器。请输入桌面端 Agent 可访问的绝对工作目录路径。",
-    label: "工作目录路径",
+    title: "Select working directory",
+    description: "The browser cannot open the remote directory picker directly. Enter an absolute working directory path accessible to the desktop Agent.",
+    label: "Working directory path",
     placeholder: "/Users/name/project",
     inputId: "gateway-browser-workdir-path",
   });
@@ -77,9 +77,9 @@ async function pickWorkdirInBrowser(): Promise<string | null> {
 
 async function pickFilePathInBrowser(): Promise<string | null> {
   return promptPathInBrowser({
-    title: "选择配置文件",
-    description: "浏览器无法直接打开远程文件选择器。请输入桌面端 Agent 可访问的配置文件绝对路径。",
-    label: "配置文件路径",
+    title: "Select configuration file",
+    description: "The browser cannot open the remote file picker directly. Enter the absolute path of a configuration file accessible to the desktop Agent.",
+    label: "Configuration file path",
     placeholder: "~/.mcp.json",
     inputId: "gateway-browser-file-path",
   });
@@ -91,7 +91,8 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
   }
 
   switch (command) {
-    // 轨迹是只读诊断视图；两端共用同一份宿主实现，差异只在这里的路由。
+    // The trajectory is a read-only diagnostic view; both ends share the same host
+    // implementation, and the only difference is the routing here.
     case "trajectory_get_events":
       return (await getGatewayWebSocketClient(loadToken().trim()).trajectoryFetch<T>({
         conversation_id: typeof args?.conversationId === "string" ? args.conversationId : "",
@@ -239,13 +240,17 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         typeof args?.query === "string" ? args.query : undefined,
         typeof args?.show_hidden === "boolean" ? args.show_hidden : undefined,
       )) as T;
-    // @ 应用提及：与 GUI 同名命令，经 Gateway 直通中继到桌面宿主枚举。
+    // @ app mentions: same-named command as the GUI, relayed straight through the
+    // Gateway to the desktop host for enumeration.
     case "cua_driver_list_installed_apps":
       return (await getGatewayWebSocketClient(loadToken().trim()).listInstalledApps()) as T;
-    // Computer Use 设置页：探测与授权状态只读中继到桌面宿主。安装与授权
-    // （cua_driver_install / cua_driver_permissions_grant）有意不实现——前者
-    // 要用户先看清将要执行的安装命令全文，后者会在桌面机屏幕上弹 macOS 系统
-    // 对话框，两件事浏览器这端都完成不了，设置页据此在 web 面隐藏入口。
+    // Computer Use settings page: probe and authorization status are relayed
+    // read-only to the desktop host. Installation and authorization
+    // (cua_driver_install / cua_driver_permissions_grant) are intentionally not
+    // implemented -- the former requires the user to first see the full text of the
+    // install command to be executed, and the latter pops up a macOS system dialog
+    // on the desktop machine's screen; neither can be done on the browser side, so
+    // the settings page hides the entry point on the web.
     case "cua_driver_probe":
       return (await getGatewayWebSocketClient(loadToken().trim()).cuaDriverStatus<T>("probe")) as T;
     case "cua_driver_permissions_status":

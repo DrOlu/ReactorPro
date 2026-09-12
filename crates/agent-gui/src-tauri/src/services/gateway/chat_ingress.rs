@@ -984,9 +984,9 @@ fn validate_delta_event_json(event_json: &str) -> Result<(), String> {
 }
 
 fn chat_ingress_db_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "Unable to locate the user directory".to_string())?;
     let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
-    fs::create_dir_all(&dir).map_err(|error| format!("创建网关聊天镜像目录失败：{error}"))?;
+    fs::create_dir_all(&dir).map_err(|error| format!("Failed to create gateway chat mirror directory: {error}"))?;
     Ok(dir.join(CHAT_INGRESS_DB_FILENAME))
 }
 

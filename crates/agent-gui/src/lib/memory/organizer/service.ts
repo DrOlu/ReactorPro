@@ -118,31 +118,31 @@ function resolveOrganizerProvider(run: MemoryOrganizeRun, settings: AppSettings)
   const customProviderId = stringValue(selected?.customProviderId);
   const model = stringValue(selected?.model);
   if (!customProviderId || !model) {
-    throw new Error("请先在 Settings > Memory 中选择记忆整理模型。");
+    throw new Error("Select a memory organizer model in Settings > Memory first.");
   }
   const provider = settings.customProviders.find((item) => item.id === customProviderId);
   if (!provider) {
-    throw new Error(`记忆整理模型供应商不存在：${customProviderId}`);
+    throw new Error(`Memory organizer model provider not found: ${customProviderId}`);
   }
   if (!provider.baseUrl.trim()) {
-    throw new Error(`记忆整理模型供应商 Base URL 为空：${provider.name || provider.id}`);
+    throw new Error(`Memory organizer model provider Base URL is empty: ${provider.name || provider.id}`);
   }
   if (!provider.apiKey.trim()) {
-    throw new Error(`记忆整理模型供应商 API Key 为空：${provider.name || provider.id}`);
+    throw new Error(`Memory organizer model provider API Key is empty: ${provider.name || provider.id}`);
   }
   return { provider, model };
 }
 
 function buildFinalSummary(stats: OrganizerStats) {
   if (stats.inputCount === 0) {
-    return "本次记忆整理未找到可整理的普通记忆，未进行任何写入。";
+    return "No ordinary memories eligible for organization were found; nothing was written.";
   }
   const failureNote =
-    stats.parseFailures > 0 ? `；${stats.parseFailures} 个分组未提交有效计划，已局部跳过` : "";
+    stats.parseFailures > 0 ? `; ${stats.parseFailures} groups submitted no valid plan and were partially skipped` : "";
   if (stats.pendingSafeDecisions > 0) {
-    return `本次整理覆盖 ${stats.inputCount} 条记忆、${stats.clusterCount} 个分组，已生成 ${stats.pendingSafeDecisions} 条安全建议，等待你在历史记录中确认应用；${stats.reviewSkipped} 条风险建议已跳过并保存在历史详情中${failureNote}。`;
+    return `This organization covered ${stats.inputCount} memories across ${stats.clusterCount} groups and generated ${stats.pendingSafeDecisions} safe suggestions, awaiting your confirmation in history; ${stats.reviewSkipped} risky suggestions were skipped and saved in the history details${failureNote}.`;
   }
-  return `本次整理覆盖 ${stats.inputCount} 条记忆、${stats.clusterCount} 个分组，已应用 ${stats.safeApplied} 条安全建议，新增 ${stats.createdCount} 条、更新 ${stats.updatedCount} 条、删除 ${stats.deletedCount} 条；${stats.reviewSkipped} 条风险建议已跳过并保存在历史详情中${failureNote}。`;
+  return `This organization covered ${stats.inputCount} memories across ${stats.clusterCount} groups and applied ${stats.safeApplied} safe suggestions: ${stats.createdCount} created, ${stats.updatedCount} updated, ${stats.deletedCount} deleted; ${stats.reviewSkipped} risky suggestions were skipped and saved in the history details${failureNote}.`;
 }
 
 function advanceScheduledOrganizer(run: MemoryOrganizeRun, setSettings: SetSettings) {
@@ -250,8 +250,8 @@ async function runOrganizerModelPrompt(params: {
     model,
     runtime: {
       ...createProviderRuntimeConfig(provider, model, DEFAULT_CHAT_RUNTIME_CONTROLS),
-      // 后台整理恒开提示词缓存：多轮 prompt 共享同一前缀，命中率远高于按供应商
-      // 开关逐个判断。
+      // Background organization always enables prompt caching: multi-turn prompts share the same
+      // prefix, giving a far higher hit rate than checking provider-by-provider switches.
       promptCachingEnabled: true,
     },
     context,
@@ -504,7 +504,7 @@ async function executeOrganizerRun(
     }
 
     if (parsedResults.length === 0 && stats.parseFailures > 0) {
-      const message = `所有 ${stats.parseFailures} 个分组都未提交有效整理计划，已跳过本次写入。`;
+      const message = `All ${stats.parseFailures} groups submitted no valid organization plan; this write was skipped.`;
       report.reviewItems.push({
         phase: "system",
         kind: "error",
@@ -519,7 +519,7 @@ async function executeOrganizerRun(
         clusterCount: stats.clusterCount,
         parseFailures: stats.parseFailures,
         error: message,
-        finalSummary: `本次记忆整理失败：${message}请重新运行或调整记忆整理模型。`,
+        finalSummary: `Memory organization failed: ${message}Re-run it or adjust the memory organizer model.`,
         phase: "plan",
         quotaHeadroomAtStart,
         tokenUsageTotal: tokens.total,
@@ -611,7 +611,7 @@ async function executeOrganizerRun(
       mergedCount: stats.mergedCount,
       parseFailures: stats.parseFailures,
       error: message,
-      finalSummary: `本次记忆整理失败：${message}`,
+      finalSummary: `Memory organization failed: ${message}`,
       quotaHeadroomAtStart,
       tokenUsageTotal: tokens.total,
       report,

@@ -43,7 +43,7 @@ else
   done
 fi
 
-[ "${#binaries[@]}" -gt 0 ] || fail "no LiveAgent release binary found to inspect (build it first or pass a path)"
+[ "${#binaries[@]}" -gt 0 ] || fail "no ReactorPro release binary found to inspect (build it first or pass a path)"
 
 status=0
 for binary in "${binaries[@]}"; do

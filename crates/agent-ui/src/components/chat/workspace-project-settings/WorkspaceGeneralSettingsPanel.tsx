@@ -50,8 +50,8 @@ export function WorkspaceGeneralSettingsPanel(props: {
                 projectNameInvalid && "border-destructive focus-visible:ring-destructive/20",
               )}
             />
-            {/* 只在校验失败时出声。只读状态由 disabled 的输入框自己表达，再写一行
-                字既冗余，又会把这一行撑得比同卡片里的其它行高。 */}
+            {/* Only speak up on validation failure. The read-only state is expressed by the disabled input itself;
+                adding another line of text would be redundant and would make this row taller than the others in the same card. */}
             {projectNameInvalid ? (
               <p
                 id="workspace-project-name-description"

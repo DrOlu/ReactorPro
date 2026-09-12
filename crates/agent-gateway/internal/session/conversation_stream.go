@@ -143,7 +143,8 @@ type conversationStream struct {
 	conversationID string
 	streamEpoch    string
 	workdir        string
-	// agentID 是会话流的归属 Agent；streams 以 agent_id + conversation_id 组合键索引。
+	// agentID is the owning Agent of the conversation stream; streams are indexed by the
+	// composite agent_id + conversation_id key.
 	agentID           string
 	lastSeq           int64
 	events            []*ConversationEvent
@@ -985,8 +986,8 @@ func (s *conversationStreamStore) updateChatCommandDedupeLocked(
 // StartChatCommand registers a webui-issued chat command. For a known
 // conversation the seeded payloads (rebased/user_message) are appended to the
 // log immediately; for a draft conversation they are buffered until the first
-// agent signal binds the run to a real conversation id. agentID 是解析后的
-// 目标 Agent，盖到会话流上供事件打标与取消路由。
+// agent signal binds the run to a real conversation id. agentID is the resolved
+// target Agent, stamped onto the conversation stream for event tagging and cancel routing.
 func (m *Manager) StartChatCommand(
 	agentID string,
 	runID string,

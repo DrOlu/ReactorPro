@@ -1,16 +1,16 @@
 fn open_memory_connection(db_path: &Path) -> Result<Connection, String> {
     if let Some(parent) = db_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建记忆数据库目录失败：{e}"))?;
+        fs::create_dir_all(parent).map_err(|e| format!("failed to create memory database directory: {e}"))?;
     }
-    let conn = Connection::open(db_path).map_err(|e| format!("打开记忆数据库失败：{e}"))?;
+    let conn = Connection::open(db_path).map_err(|e| format!("failed to open memory database: {e}"))?;
     conn.busy_timeout(Duration::from_secs(5))
-        .map_err(|e| format!("设置记忆数据库 busy_timeout 失败：{e}"))?;
+        .map_err(|e| format!("failed to set memory database busy_timeout: {e}"))?;
     if let Err(error) = integrity_check(&conn) {
         quarantine_db_files(db_path)?;
         drop(conn);
-        let conn = Connection::open(db_path).map_err(|e| format!("重建记忆数据库失败：{e}"))?;
+        let conn = Connection::open(db_path).map_err(|e| format!("failed to rebuild memory database: {e}"))?;
         conn.busy_timeout(Duration::from_secs(5))
-            .map_err(|e| format!("设置记忆数据库 busy_timeout 失败：{e}"))?;
+            .map_err(|e| format!("failed to set memory database busy_timeout: {e}"))?;
         init_schema(&conn)?;
         eprintln!("memory index was quarantined and rebuilt: {error}");
         return Ok(conn);
@@ -28,10 +28,10 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
              DROP TABLE IF EXISTS memory_audit_log;
              DROP TABLE IF EXISTS memory_schema_version;",
         )
-        .map_err(|e| format!("重建旧版记忆索引表失败：{e}"))?;
+        .map_err(|e| format!("failed to rebuild legacy memory index table: {e}"))?;
     }
     conn.execute_batch(MEMORY_SCHEMA_DDL)
-        .map_err(|e| format!("初始化记忆索引表失败：{e}"))?;
+        .map_err(|e| format!("failed to initialize memory index table: {e}"))?;
     ensure_organize_runs_v4_columns(conn)
 }
 
@@ -55,7 +55,7 @@ fn ensure_organize_runs_v4_columns(conn: &Connection) -> Result<(), String> {
                 &format!("ALTER TABLE memory_organize_runs ADD COLUMN {name} {declaration}"),
                 [],
             )
-            .map_err(|e| format!("迁移 memory_organize_runs 列 {name} 失败：{e}"))?;
+            .map_err(|e| format!("failed to migrate memory_organize_runs column {name}: {e}"))?;
         }
     }
     Ok(())
@@ -75,7 +75,7 @@ fn memory_schema_needs_rebuild(conn: &Connection) -> Result<bool, String> {
             [],
             |row| row.get::<_, i64>(0),
         )
-        .map_err(|e| format!("读取记忆 schema 版本失败：{e}"))?;
+        .map_err(|e| format!("failed to read memory schema version: {e}"))?;
     if version < 3 {
         return Ok(true);
     }
@@ -131,19 +131,19 @@ fn sqlite_table_exists(conn: &Connection, name: &str) -> Result<bool, String> {
         |row| row.get::<_, i64>(0),
     )
     .map(|value| value != 0)
-    .map_err(|e| format!("检查记忆索引表是否存在失败：{e}"))
+    .map_err(|e| format!("failed to check whether the memory index table exists: {e}"))
 }
 
 fn table_columns(conn: &Connection, table: &str) -> Result<HashSet<String>, String> {
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({table})"))
-        .map_err(|e| format!("读取记忆索引表列失败：{e}"))?;
+        .map_err(|e| format!("failed to read memory index table columns: {e}"))?;
     let rows = stmt
         .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|e| format!("读取记忆索引表列失败：{e}"))?;
+        .map_err(|e| format!("failed to read memory index table columns: {e}"))?;
     let mut out = HashSet::new();
     for row in rows {
-        out.insert(row.map_err(|e| format!("读取记忆索引表列失败：{e}"))?);
+        out.insert(row.map_err(|e| format!("failed to read memory index table columns: {e}"))?);
     }
     Ok(out)
 }
@@ -151,11 +151,11 @@ fn table_columns(conn: &Connection, table: &str) -> Result<HashSet<String>, Stri
 fn integrity_check(conn: &Connection) -> Result<(), String> {
     let result = conn
         .query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))
-        .map_err(|e| format!("记忆数据库 integrity_check 失败：{e}"))?;
+        .map_err(|e| format!("memory database integrity_check failed: {e}"))?;
     if result == "ok" {
         Ok(())
     } else {
-        Err(format!("记忆数据库 integrity_check 异常：{result}"))
+        Err(format!("memory database integrity_check abnormality: {result}"))
     }
 }
 
@@ -166,7 +166,7 @@ fn quarantine_db_files(db_path: &Path) -> Result<(), String> {
     let quarantine = root
         .join(".quarantine")
         .join(format!("corrupt-{}", now_ms()));
-    fs::create_dir_all(&quarantine).map_err(|e| format!("创建记忆数据库隔离目录失败：{e}"))?;
+    fs::create_dir_all(&quarantine).map_err(|e| format!("failed to create memory database quarantine directory: {e}"))?;
     for suffix in ["", "-wal", "-shm"] {
         let src = PathBuf::from(format!("{}{}", db_path.to_string_lossy(), suffix));
         if src.exists() {
@@ -175,7 +175,7 @@ fn quarantine_db_files(db_path: &Path) -> Result<(), String> {
                 .map(|name| name.to_os_string())
                 .unwrap_or_else(|| format!("memory-index.sqlite3{suffix}").into());
             fs::rename(&src, quarantine.join(file_name))
-                .map_err(|e| format!("隔离损坏记忆数据库失败：{e}"))?;
+                .map_err(|e| format!("failed to quarantine corrupt memory database: {e}"))?;
         }
     }
     Ok(())
@@ -198,7 +198,7 @@ fn index_parsed_file(
     } else {
         String::new()
     };
-    let metadata = fs::metadata(path).map_err(|e| format!("读取记忆文件元数据失败：{e}"))?;
+    let metadata = fs::metadata(path).map_err(|e| format!("failed to read memory file metadata: {e}"))?;
     let file_mtime = metadata
         .modified()
         .ok()
@@ -248,13 +248,13 @@ fn index_parsed_file(
         source_json_with_confidence(parsed.meta.source_json.clone(), &confidence)
     };
     let source_json =
-        serde_json::to_string(&source_for_index).map_err(|e| format!("序列化记忆来源失败：{e}"))?;
+        serde_json::to_string(&source_for_index).map_err(|e| format!("failed to serialize memory source: {e}"))?;
     let links_json = serde_json::to_string(&parsed.meta.links_json)
-        .map_err(|e| format!("序列化记忆链接失败：{e}"))?;
+        .map_err(|e| format!("failed to serialize memory link: {e}"))?;
     let body_hash = sha256_hex(parsed.body.as_bytes());
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启记忆索引事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin memory index transaction: {e}"))?;
     upsert_index_rows(
         &tx,
         &scope,
@@ -277,7 +277,7 @@ fn index_parsed_file(
         &parsed.body,
     )?;
     tx.commit()
-        .map_err(|e| format!("提交记忆索引事务失败：{e}"))
+        .map_err(|e| format!("failed to commit memory index transaction: {e}"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -330,12 +330,12 @@ fn upsert_index_rows(
             links_json
         ],
     )
-    .map_err(|e| format!("写入 memory_meta 失败：{e}"))?;
+    .map_err(|e| format!("failed to write memory_meta: {e}"))?;
     tx.execute(
         "DELETE FROM memory_fts WHERE scope = ?1 AND workdir_hash = ?2 AND slug = ?3",
         params![scope, workdir_hash, slug],
     )
-    .map_err(|e| format!("删除旧 memory_fts 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete old memory_fts rows: {e}"))?;
     tx.execute(
         "INSERT INTO memory_fts (slug, scope, workdir_hash, type, description, headline, body)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -349,18 +349,18 @@ fn upsert_index_rows(
             body
         ],
     )
-    .map_err(|e| format!("写入 memory_fts 失败：{e}"))?;
+    .map_err(|e| format!("failed to write memory_fts: {e}"))?;
     tx.execute(
         "DELETE FROM memory_fts_tri WHERE scope = ?1 AND workdir_hash = ?2 AND slug = ?3",
         params![scope, workdir_hash, slug],
     )
-    .map_err(|e| format!("删除旧 memory_fts_tri 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete old memory_fts_tri rows: {e}"))?;
     tx.execute(
         "INSERT INTO memory_fts_tri (slug, scope, workdir_hash, description, headline, body)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![slug, scope, workdir_hash, description, headline, body],
     )
-    .map_err(|e| format!("写入 memory_fts_tri 失败：{e}"))?;
+    .map_err(|e| format!("failed to write memory_fts_tri: {e}"))?;
     Ok(())
 }
 
@@ -372,24 +372,24 @@ fn delete_index_rows(
 ) -> Result<(), String> {
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启记忆删除事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin memory delete transaction: {e}"))?;
     tx.execute(
         "DELETE FROM memory_meta WHERE scope = ?1 AND workdir_hash = ?2 AND slug = ?3",
         params![scope, workdir_hash, slug],
     )
-    .map_err(|e| format!("删除 memory_meta 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete memory_meta rows: {e}"))?;
     tx.execute(
         "DELETE FROM memory_fts WHERE scope = ?1 AND workdir_hash = ?2 AND slug = ?3",
         params![scope, workdir_hash, slug],
     )
-    .map_err(|e| format!("删除 memory_fts 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete memory_fts rows: {e}"))?;
     tx.execute(
         "DELETE FROM memory_fts_tri WHERE scope = ?1 AND workdir_hash = ?2 AND slug = ?3",
         params![scope, workdir_hash, slug],
     )
-    .map_err(|e| format!("删除 memory_fts_tri 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete memory_fts_tri rows: {e}"))?;
     tx.commit()
-        .map_err(|e| format!("提交记忆删除事务失败：{e}"))
+        .map_err(|e| format!("failed to commit memory delete transaction: {e}"))
 }
 
 fn delete_project_index_rows(
@@ -403,22 +403,22 @@ fn delete_project_index_rows(
 ) -> Result<(), String> {
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启项目记忆删除事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin project memory delete transaction: {e}"))?;
     tx.execute(
         "DELETE FROM memory_meta WHERE scope = 'project' AND workdir_hash = ?1",
         params![workdir_hash],
     )
-    .map_err(|e| format!("删除项目 memory_meta 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete project memory_meta rows: {e}"))?;
     tx.execute(
         "DELETE FROM memory_fts WHERE scope = 'project' AND workdir_hash = ?1",
         params![workdir_hash],
     )
-    .map_err(|e| format!("删除项目 memory_fts 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete project memory_fts rows: {e}"))?;
     tx.execute(
         "DELETE FROM memory_fts_tri WHERE scope = 'project' AND workdir_hash = ?1",
         params![workdir_hash],
     )
-    .map_err(|e| format!("删除项目 memory_fts_tri 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete project memory_fts_tri rows: {e}"))?;
 
     let mut detail = json!({
         "workdir": workdir,
@@ -447,9 +447,9 @@ fn delete_project_index_rows(
             detail_json
         ],
     )
-    .map_err(|e| format!("写入项目记忆删除审计日志失败：{e}"))?;
+    .map_err(|e| format!("failed to write project memory deletion audit log: {e}"))?;
     tx.commit()
-        .map_err(|e| format!("提交项目记忆删除事务失败：{e}"))
+        .map_err(|e| format!("failed to commit project memory delete transaction: {e}"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -486,7 +486,7 @@ fn insert_audit_log(
         ],
     )
     .map(|_| ())
-    .map_err(|e| format!("写入记忆审计日志失败：{e}"))
+    .map_err(|e| format!("failed to write memory audit log: {e}"))
 }
 
 fn load_all_meta(conn: &Connection) -> Result<Vec<MemoryMeta>, String> {
@@ -498,7 +498,7 @@ fn load_all_meta(conn: &Connection) -> Result<Vec<MemoryMeta>, String> {
             FROM memory_meta
             ",
         )
-        .map_err(|e| format!("准备记忆列表查询失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare memory list query: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let source_json: Option<String> = row.get(11)?;
@@ -531,9 +531,9 @@ fn load_all_meta(conn: &Connection) -> Result<Vec<MemoryMeta>, String> {
                 file_size: row.get(12)?,
             }))
         })
-        .map_err(|e| format!("查询记忆列表失败：{e}"))?;
+        .map_err(|e| format!("failed to query memory list: {e}"))?;
     rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取记忆列表失败：{e}"))
+        .map_err(|e| format!("failed to read memory list: {e}"))
 }
 
 fn count_non_daily_entries(
@@ -553,7 +553,7 @@ fn count_non_daily_entries(
             |row| row.get::<_, i64>(0),
         )
     }
-    .map_err(|e| format!("读取记忆配额失败：{e}"))?;
+    .map_err(|e| format!("failed to read memory quota: {e}"))?;
     Ok(count.max(0) as usize)
 }
 
@@ -639,7 +639,7 @@ fn scope_quota_summary(
             params![scope, workdir_hash],
             |row| row.get::<_, i64>(0),
         )
-        .map_err(|e| format!("读取归档记忆数量失败：{e}"))?
+        .map_err(|e| format!("failed to read archived memory count: {e}"))?
         .max(0) as usize;
 
     // `unreviewed` lives inside source_json, so fold in Rust (<=500 rows/scope).
@@ -648,16 +648,16 @@ fn scope_quota_summary(
             "SELECT created_at, source_json FROM memory_meta
              WHERE type != 'daily' AND scope = ?1 AND workdir_hash = ?2",
         )
-        .map_err(|e| format!("准备记忆配额扫描失败：{e}"))?;
+        .map_err(|e| format!("failed to prepare memory quota scan: {e}"))?;
     let rows = stmt
         .query_map(params![scope, workdir_hash], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
         })
-        .map_err(|e| format!("扫描记忆配额失败：{e}"))?;
+        .map_err(|e| format!("failed to scan memory quota: {e}"))?;
     let mut unreviewed_count = 0usize;
     let mut oldest_unreviewed: Option<i64> = None;
     for row in rows {
-        let (created_at, source_json) = row.map_err(|e| format!("读取记忆配额行失败：{e}"))?;
+        let (created_at, source_json) = row.map_err(|e| format!("failed to read memory quota row: {e}"))?;
         let unreviewed = source_json
             .as_deref()
             .and_then(|raw| serde_json::from_str::<Value>(raw).ok())

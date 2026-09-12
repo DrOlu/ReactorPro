@@ -108,8 +108,8 @@ function stripTrailingUrlPunctuation(value: string) {
 function cleanInferredSourceTitle(value: string) {
   const title = value
     .replace(/^[\s>*\-+•\d.)、]+/g, "")
-    .replace(/(?:参考|来源|source|sources|reference|references)\s*[:：-]?\s*$/i, "")
-    .replace(/[:：\-–—|丨\s]+$/g, "")
+    .replace(/(?:source|sources|reference|references)\s*[:：-]?\s*$/i, "")
+    .replace(/[:：\-–—|\s]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
   if (!title || title.length > 180) return "";
@@ -327,7 +327,7 @@ function findHostedSearchTextSplitIndex(text: string, block: HostedSearchBlock) 
       if (index < 0) break;
       const sentence = sentenceAround(text, index);
       const hasSearchAction =
-        /联网|搜索|搜寻|检索|查询|查找|查阅|搜索中|search|searching|searched|lookup|look up/i.test(
+        /search|searching|searched|lookup|look up/i.test(
           sentence,
         );
       const end = sentenceEndAfter(text, index + candidate.length);
@@ -364,7 +364,13 @@ function isAsciiPeriodSentenceTerminator(text: string, index: number) {
   const previous = text[index - 1] ?? "";
   const next = text[index + 1] ?? "";
   if (/\d/.test(previous) && /\d/.test(next)) return false;
-  return !next || /\s/.test(next) || isClosingSentenceChar(next);
+  if (!next || /\s/.test(next) || isClosingSentenceChar(next)) return true;
+  // Text blocks are concatenated without a separator before boundary resolution,
+  // so an English sentence that ends one block and an uppercase sentence that
+  // starts the next arrive here as "…complete.Task…". Treat a period followed by
+  // an uppercase letter as a sentence end too, otherwise hosted-search cards are
+  // placed after the whole answer instead of in position.
+  return /[A-Z]/.test(next) && /[a-z]/.test(previous);
 }
 
 function isSentenceTerminatorAt(text: string, index: number) {

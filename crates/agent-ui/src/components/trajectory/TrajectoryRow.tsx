@@ -1,8 +1,8 @@
 /**
- * 账本单行。
+ * Ledger single row.
  *
- * 一行一条记录：角色徽标 + 摘要 + 工具结果 + 自身耗时。溢出交给 CSS 省略，
- * 完整内容在详情面板里看。
+ * One record per row: role badge + summary + tool result + own duration. Overflow is left to CSS ellipsis,
+ * with the full content shown in the detail panel.
  */
 
 import { useLocale } from "../../i18n/index";

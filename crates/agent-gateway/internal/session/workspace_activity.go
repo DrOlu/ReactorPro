@@ -24,7 +24,7 @@ type workspaceActivityHub struct {
 	subscribers map[int]*workspaceActivitySubscriber
 }
 
-// workspaceWatchKey 按明确的 agentID + workdir 标识一个订阅目标。
+// workspaceWatchKey identifies a subscription target by an explicit agentID + workdir.
 type workspaceWatchKey struct {
 	agentID string
 	workdir string
@@ -126,7 +126,7 @@ func (m *Manager) broadcastWorkspaceActivity(agentID string, event *gatewayv2.Wo
 	}
 }
 
-// hasWorkspaceWatchInterest 报告 agent_id 是否有工作区订阅。
+// hasWorkspaceWatchInterest reports whether agent_id has any workspace subscription.
 func (m *Manager) hasWorkspaceWatchInterest(agentID string) bool {
 	agentID = strings.TrimSpace(agentID)
 	m.workspaceHub.mu.Lock()
@@ -139,8 +139,8 @@ func (m *Manager) hasWorkspaceWatchInterest(agentID string) bool {
 	return false
 }
 
-// pushWorkspaceWatchSet 把 agentID 的完整工作区订阅集合推送给该 Agent。
-// 此操作为 best-effort 且不阻塞：
+// pushWorkspaceWatchSet pushes agentID's complete set of workspace subscriptions
+// to that Agent. This operation is best-effort and non-blocking:
 // the set is re-pushed on every change and on agent reconnect, so a dropped
 // push heals itself.
 func (m *Manager) pushWorkspaceWatchSet(agentID string) {

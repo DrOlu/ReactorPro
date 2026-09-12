@@ -3,14 +3,15 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 /**
- * WebDAV 同步设置面板的纯逻辑。覆盖的都是「出了错用户才会发现」的判断：
- * 保存后能否自动测连接、后台同步失败的横幅何时挂起何时消失。
+ * Pure logic of the WebDAV sync settings panel. It covers the decisions users only notice when
+ * something goes wrong: whether a connection can be auto-tested after saving, and when the
+ * background-sync failure banner appears and disappears.
  */
 
 const loader = createTsModuleLoader();
 const form = loader.loadModule("src/pages/settings/backupSyncForm.ts");
 
-/** 一份完整可用的后端视图，各用例按需覆盖字段。 */
+/** A complete, valid backend view; each test overrides fields as needed. */
 function makeView(overrides = {}) {
   return {
     url: "https://dav.example.test/dav/",
@@ -27,7 +28,7 @@ function makeView(overrides = {}) {
 
 test("preset detection matches on host, not substring", () => {
   assert.equal(form.detectPreset("https://dav.jianguoyun.com/dav/"), "jianguoyun");
-  // 关键：`dav.jianguoyun.com.evil.test` 不是坚果云，按 host 判断才拦得住。
+  // Key point: `dav.jianguoyun.com.evil.test` is not Jianguoyun, and only a host-based check catches it.
   assert.equal(form.detectPreset("https://dav.jianguoyun.com.evil.test/dav/"), "custom");
   assert.equal(form.detectPreset("https://server/remote.php/dav/files/USER/"), "nextcloud");
   assert.equal(form.detectPreset("http://192.168.1.2:5005/"), "synology");
@@ -40,18 +41,18 @@ test("the form starts with an empty password and is clean right after loading", 
   const view = makeView({ autoSync: true, lastSyncAt: 1_700_000_000_000 });
   const loaded = form.formFromView(view);
 
-  // 后端从不回传密码；表单若回填占位符，原样提交会把占位符写成真密码。
+  // The backend never returns the password; if the form backfilled a placeholder, submitting as-is would write the placeholder as the real password.
   assert.equal(loaded.password, "");
   assert.equal(loaded.passwordTouched, false);
-  assert.equal(form.isDirty(loaded, view), false, "刚加载完不该被当成有未保存改动");
+  assert.equal(form.isDirty(loaded, view), false, "a freshly loaded form must not be treated as having unsaved changes");
 });
 
 test("touching the password alone makes the form dirty", () => {
   const view = makeView();
   const touched = { ...form.formFromView(view), password: "s3cret", passwordTouched: true };
 
-  // 密码不在视图里，只能靠 passwordTouched 判断 —— 否则改完密码「测试连接」
-  // 按钮仍然可用，测的却是库里的旧密码。
+  // The password is not in the view, so only passwordTouched can decide --- otherwise after changing
+  // the password the "Test connection" button would still be enabled yet test the old stored password.
   assert.equal(form.isDirty(touched, view), true);
 });
 
@@ -61,8 +62,8 @@ test("a null view is always dirty so upload/download stay disabled before load",
 
 test("connection test is skipped until every credential field is filled", () => {
   assert.equal(form.canTestSyncConnection(makeView()), true);
-  // 只填了地址就先存一版是很正常的操作，此时自动测连接必然失败，
-  // 会把一次成功的保存渲染成红色错误。
+  // Filling in only the URL and saving a first version is a normal action; auto-testing the connection
+  // then necessarily fails and would render a successful save as a red error.
   assert.equal(form.canTestSyncConnection(makeView({ username: "" })), false);
   assert.equal(form.canTestSyncConnection(makeView({ hasPassword: false })), false);
   assert.equal(form.canTestSyncConnection(makeView({ url: "" })), false);
@@ -72,11 +73,11 @@ test("an auto-sync failure event raises the persistent banner", () => {
   const prev = makeView({ lastSyncAt: 1_700_000_000_000 });
   const next = form.applySyncStatusEvent(prev, {
     lastSyncAt: null,
-    lastError: "WebDAV 认证失败（401）",
+    lastError: "WebDAV authentication failed (401)",
   });
 
-  assert.equal(next.lastError, "WebDAV 认证失败（401）");
-  // 失败不该抹掉上次成功的时间 —— 用户需要知道配置是从什么时候起不再同步的。
+  assert.equal(next.lastError, "WebDAV authentication failed (401)");
+  // A failure must not wipe the last success time --- users need to know when the configuration stopped syncing.
   assert.equal(next.lastSyncAt, prev.lastSyncAt);
   assert.equal(form.isAutoSyncSuccess({ lastSyncAt: null, lastError: "boom" }), false);
 });
@@ -88,16 +89,16 @@ test("a later success clears the stale failure banner", () => {
     lastError: null,
   });
 
-  assert.equal(recovered.lastError, null, "链路恢复后旧横幅必须消失");
+  assert.equal(recovered.lastError, null, "the old banner must disappear once the link recovers");
   assert.equal(recovered.lastSyncAt, 1_700_000_123_000);
   assert.equal(form.isAutoSyncSuccess({ lastSyncAt: 1_700_000_123_000, lastError: null }), true);
 });
 
 test("status events before the view loads are ignored instead of synthesizing one", () => {
-  // 视图还没加载完就收到事件时返回 null，而不是凭事件拼一个残缺视图出来。
+  // When an event arrives before the view has finished loading, return null rather than synthesizing a partial view from the event.
   assert.equal(form.applySyncStatusEvent(null, { lastSyncAt: 1, lastError: null }), null);
 
-  // 既没时间也没错误的事件不算成功，也不该产生新对象触发无意义的重渲染。
+  // An event with neither a time nor an error does not count as success, and must not produce a new object that triggers a pointless re-render.
   const view = makeView();
   assert.equal(form.applySyncStatusEvent(view, { lastSyncAt: null, lastError: null }), view);
   assert.equal(form.isAutoSyncSuccess({ lastSyncAt: null, lastError: null }), false);

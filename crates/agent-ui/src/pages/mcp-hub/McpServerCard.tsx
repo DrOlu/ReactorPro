@@ -38,10 +38,10 @@ function ConfigurationCount(props: { count: number; label: string }) {
 }
 
 /**
- * OAuth 授权徽章 + Connect/断开（docs/design/mcp-oauth.md §5）。授权流仅桌面
- * 端可发起（系统浏览器）；WebUI 查不到授权状态（invoke 通道不通），只显示
- * 中性的鉴权类型徽章 + 「桌面端管理」提示。token 永不过前端，这里只消费
- * 状态摘要。
+ * OAuth authorization badge + Connect/disconnect (docs/design/mcp-oauth.md §5). The authorization
+ * flow can only be initiated on desktop (system browser); the WebUI cannot query authorization
+ * status (the invoke channel is unavailable) and only shows a neutral auth-type badge + a "manage on
+ * desktop" hint. The token never passes through the frontend; only a status summary is consumed here.
  */
 function OauthControls(props: { server: McpServerConfig }) {
   const { server } = props;
@@ -59,7 +59,7 @@ function OauthControls(props: { server: McpServerConfig }) {
         if (!cancelled) setStatus(next);
       })
       .catch(() => {
-        // 状态查询失败按未知处理（不阻塞卡片渲染）。
+        // A failed status query is treated as unknown (does not block card rendering).
       });
     return () => {
       cancelled = true;
@@ -67,9 +67,10 @@ function OauthControls(props: { server: McpServerConfig }) {
   }, [isWebui, server]);
 
   const state = status?.state ?? "none";
-  // status 为 null = 状态未知：WebUI 的 invoke 通道不实现这些命令（永远查
-  // 不到），桌面端则是查询尚未返回/失败。未知时只标注鉴权类型，不冒充
-  // 「未授权」——桌面端实际已授权时 WebUI 显示「未授权」是错误信息。
+  // status null = unknown status: the WebUI's invoke channel does not implement these commands (it
+  // can never query them), while on desktop the query has not returned yet/failed. When unknown, only
+  // the auth type is labeled, without pretending to be "unauthorized" -- showing "unauthorized" in the
+  // WebUI when desktop is actually authorized would be wrong information.
   const statusUnknown = status === null;
   const stateLabel = statusUnknown
     ? t("mcpHub.authOauth")
@@ -78,7 +79,8 @@ function OauthControls(props: { server: McpServerConfig }) {
       : state === "expired"
         ? t("mcpHub.oauthStatusExpired")
         : t("mcpHub.oauthStatusNone");
-  // 设计约束：卡片内禁用裸色板 class，一律走 Badge 语义 variant。
+  // Design constraint: raw palette classes are banned inside the card; always use Badge semantic
+  // variants.
   const badgeVariant =
     state === "authorized" ? "success" : state === "expired" ? "destructive" : "muted";
 
@@ -86,7 +88,8 @@ function OauthControls(props: { server: McpServerConfig }) {
     setBusy(true);
     setError(null);
     try {
-      // authorize 阻塞至浏览器回调/超时；resolve 即拿到最新状态。
+      // authorize blocks until the browser callback/timeout; resolving means the latest status has
+      // been obtained.
       const next = await mcpOauthAuthorize(server);
       setStatus(next);
     } catch (err) {
@@ -204,9 +207,11 @@ export const McpServerCard = memo(function McpServerCard(props: {
   const docsLink = resolveMcpDocsHref(server.docsUrl);
 
   return (
-    // 容器查询挂在 article 上:行宽 < 520px(手机、或桌面侧栏占位后的窄内容区)
-    // 时把 计数/策略/编辑/删除 整组换到第二行。此前四组里只有名称列可收缩,
-    // 其余全是 shrink-0,窄屏下名称列被挤成 0 宽,文字溢出到徽章底下(重叠)。
+    // The container query is attached to the article: when the row width < 520px (phones, or a narrow
+    // content area left after a desktop sidebar placeholder), the count/policy/edit/delete group wraps
+    // to the second row. Previously only the name column among the four groups could shrink and the
+    // rest were all shrink-0, so on a narrow screen the name column was squeezed to 0 width and text
+    // overflowed underneath the badges (overlapping).
     <article className="skill-card-enter group @container flex min-h-16 w-full flex-wrap items-center gap-3 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/30">
       <ResourceActivationSwitch
         checked={enabled}
@@ -217,8 +222,9 @@ export const McpServerCard = memo(function McpServerCard(props: {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-w-0 items-center gap-1.5 @max-[520px]:flex-wrap">
-          {/* truncate 必须落在 button 自身:SearchHighlight 渲出的是 inline span,
-              overflow/text-overflow 对 inline 盒无效,文字会越过 button 边界。 */}
+          {/* truncate must be on the button itself: SearchHighlight renders an inline span, and
+              overflow/text-overflow have no effect on inline boxes, so text would cross the button
+              boundary. */}
           <button
             type="button"
             onClick={onEdit}
@@ -261,8 +267,9 @@ export const McpServerCard = memo(function McpServerCard(props: {
         ) : null}
       </div>
 
-      {/* 窄行时 basis-full 强制整组换行:计数靠左、操作靠右(ml-auto);宽行时
-          还是原来的一行四组。计数组自身允许折行,不再用 max-w-48 硬夹。 */}
+      {/* On a narrow row basis-full forces the whole group to wrap: counts on the left, actions on the
+          right (ml-auto); on a wide row it stays the original one-line four-group layout. The count
+          group itself may wrap and is no longer hard-clamped with max-w-48. */}
       <div className="flex shrink-0 items-center gap-3 @max-[520px]:basis-full @max-[520px]:flex-wrap">
         {argsCount > 0 || envCount > 0 || headerCount > 0 ? (
           <div className="flex min-w-0 max-w-48 flex-wrap justify-end gap-1 @max-[520px]:max-w-none @max-[520px]:justify-start">
@@ -298,9 +305,10 @@ export const McpServerCard = memo(function McpServerCard(props: {
           <ConfirmDeletePopover
             name={server.id || `Server ${idx + 1}`}
             onConfirm={() => {
-              // OAuth server 删除时同步清理 keychain 条目（best effort，失败不阻塞
-              // 删除，但要留痕——卡片随删除卸载，无处挂 error 态，与 mcpManagerTools
-              // 的 runtimeWarnings 对应的最低限度是 console.warn）。
+              // When an OAuth server is deleted, clean up the keychain entry too (best effort; failure
+              // does not block deletion but must leave a trace -- the card unmounts with the deletion
+              // and has nowhere to attach an error state, so the minimum corresponding to
+              // mcpManagerTools' runtimeWarnings is console.warn).
               if (isOauthServer(server) && !isGatewayWebuiRuntime()) {
                 void mcpOauthClear(server.id).catch((err: unknown) => {
                   console.warn(

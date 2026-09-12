@@ -76,7 +76,7 @@ test("removeWorkspaceProjectFromGroups preserves identity when no group contains
 });
 
 test("ensureWorktreeProjectGroup reuses the group by sourceProjectPath after rename", () => {
-  const renamed = group("g1", "用户改名后的组", ["/work/repo"], {
+  const renamed = group("g1", "Group renamed by user", ["/work/repo"], {
     sourceProjectPath: "/work/repo",
   });
   const ensured = ensureWorktreeProjectGroup([renamed], {
@@ -117,7 +117,7 @@ test("buildWorkspaceProjectSections orders sections by earliest member index", (
   const repo = project("repo", "/work/repo");
   const activeWt = project("wt", "/work/wt");
   const middle = project("middle", "/work/middle");
-  // 子项目更活跃 → 输入列表中下标更小 → 整组提前
+  // A more active subproject -> a smaller index in the input list -> the whole group moves up
   const sections = buildWorkspaceProjectSections(
     [activeWt, repo, middle],
     [
@@ -161,7 +161,7 @@ test("sliceWorkspaceProjectSections never splits a group", () => {
       group("g3", "b", ["/work/b"]),
     ],
   );
-  // g1 有 2 个成员，超出上限 1 时整组都放不下 → 整组隐藏，绝不拆开。
+  // g1 has 2 members; with a cap of 1 the whole group cannot fit -> the whole group is hidden, never split apart.
   const sliced = sliceWorkspaceProjectSections(sections, 1);
   assert.equal(sliced.sections.grouped.length, 0);
   assert.equal(sliced.sections.ungrouped.length, 0);
@@ -190,7 +190,7 @@ test("sliceWorkspaceProjectSections fills remaining capacity with ungrouped", ()
     [repo, wt, a, b],
     [group("g1", "repo", ["/work/repo", "/work/wt"])],
   );
-  // g1 占 2 个名额，上限 4 的剩余 2 个分给未分组项目。
+  // g1 occupies 2 slots; the remaining 2 of the cap of 4 go to ungrouped projects.
   const sliced = sliceWorkspaceProjectSections(sections, 4);
   assert.equal(sliced.sections.grouped.length, 1);
   assert.equal(sliced.sections.grouped[0].projects.length, 2);

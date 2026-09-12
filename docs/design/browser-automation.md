@@ -1,126 +1,126 @@
-# 浏览器自动化：原生 `Browser` 工具（Phase B）
+# Browser Automation: Native `Browser` Tool (Phase B)
 
-| 元数据 | 内容 |
+| Metadata | Content |
 |---|---|
-| 状态 | In Progress |
-| 版本 | v0.1 |
-| 日期 | 2026-08-25 |
-| 上游 | `docs/design/2026h2-capability-roadmap.md` 第 4 节 |
+| Status | In Progress |
+| Version | v0.1 |
+| Date | 2026-08-25 |
+| Upstream | `docs/design/2026h2-capability-roadmap.md` section 4 |
 
-> 本文档实现路线图第 4 点 Phase B：Rust 直连 CDP 的原生 `Browser` 工具。Phase A（Playwright-MCP 推荐预设卡片）作为独立小改动另行提交。
+> This document implements Phase B of point 4 in the roadmap: a native `Browser` tool that connects to CDP directly from Rust. Phase A (Playwright-MCP recommended-preset card) is submitted separately as an independent small change.
 
-## 0. 双模式：扩展桥接（复用用户浏览器）与独立启动
+## 0. Dual Mode: Extension Bridge (Reusing the User's Browser) and Standalone Launch
 
-参照 Claude Code in Chrome 的形态，Browser 工具支持两种接入模式，由设置项 `settings.system.browserAutomationMode` 控制（设置页「系统工具 → 浏览器自动化」行内选择）：
+Following the shape of Claude Code in Chrome, the Browser tool supports two access modes, controlled by the setting `settings.system.browserAutomationMode` (selected inline on the settings page under "System Tools → Browser Automation"):
 
-| 设置值 | 语义 |
+| Setting value | Semantics |
 |---|---|
-| `auto`（缺省） | 扩展已连接 → extension 模式；否则回退 launcher |
-| `userProfile` | 只用 extension 模式；扩展未连接时**报错并附安装引导**，绝不静默降级（用户显式要登录态时，降级到无登录态浏览器会造成"看似在操作我的账号实际不是"的误判） |
-| `isolated` | 只用 launcher 模式，即使扩展在线也不碰用户浏览器 |
+| `auto` (default) | Extension connected → extension mode; otherwise fall back to launcher |
+| `userProfile` | extension mode only; when the extension is not connected, **report an error along with installation guidance** and never silently downgrade (when the user explicitly wants a logged-in session, downgrading to a browser without login state would cause the misjudgment that "it looks like it's operating my account but actually isn't") |
+| `isolated` | launcher mode only; never touch the user's browser even if the extension is online |
 
-模式取值以持久化设置为唯一权威：`browser_action` 命令层经 `load_runtime_browser_automation_mode()` 服务端回查（同 `load_runtime_command_safety_mode` 范式，不信任渲染进程/网关透传），改设置后下一次动作即生效；既有会话与新模式冲突（如 isolated 下挂着 extension 会话）时自动收掉重建。TS/Rust 两侧 normalize 未知值一律回 `auto`（行为选择而非安全约束，无需 fail-closed）。
+The mode value uses the persisted setting as the sole authority: the `browser_action` command layer performs a server-side lookup via `load_runtime_browser_automation_mode()` (same paradigm as `load_runtime_command_safety_mode`, not trusting the renderer process / gateway passthrough), and changing the setting takes effect on the next action; when an existing session conflicts with the new mode (e.g. an extension session still alive under isolated), it is automatically torn down and rebuilt. Normalization of unknown values on both the TS and Rust sides always falls back to `auto` (a behavioral choice rather than a security constraint, so fail-closed is unnecessary).
 
-| 模式 | 载体 | 登录态 | 进程 |
+| Mode | Carrier | Login state | Process |
 |---|---|---|---|
-| **extension** | 用户日常浏览器 + LiveAgent 浏览器扩展（`crates/agent-gui/browser-extension/`，MV3） | **复用用户登录态** | 无新进程，新开自动化标签页 |
-| **launcher** | `--remote-debugging-port` + 独立 profile 拉起的新浏览器实例 | 隔离，无登录态 | LiveAgent 子进程，随 app 退出回收 |
+| **extension** | User's everyday browser + ReactorPro browser extension (`crates/agent-gui/browser-extension/`, MV3) | **Reuses the user's login state** | No new process; opens a new automation tab |
+| **launcher** | `--remote-debugging-port` + a new browser instance launched with an isolated profile | Isolated, no login state | ReactorPro child process, reclaimed when the app exits |
 
-工作方式：
+How it works:
 
-- Rust 侧 `bridge.rs` 在 `127.0.0.1:19222`（`LIVEAGENT_BROWSER_BRIDGE_PORT` 可覆盖）起 WebSocket 服务，扩展 service worker 反向连接（握手校验 `Origin: chrome-extension://`），断线由扩展的 alarm 定期重连。
-- 扩展用 `chrome.debugger` 中继 CDP：browser-level 的 `Target.getTargets / createTarget / attachToTarget / closeTarget` 由扩展模拟（**只登记并暴露它自己创建的标签页**，用户其它标签页对桌面端不可见）；session-level 命令按 sessionId→tabId 映射转发 `chrome.debugger.sendCommand`，`chrome.debugger.onEvent` 反向转发为事件帧。线型与原生 CDP 一致，`CdpConnection`/`PageSession` 零改动复用。
-- `BrowserManager` 起会话时先查桥接是否有存活扩展连接：有则 `Target.createTarget` 新开标签页附着（extension 模式）；否则回退 launcher。`browser_close` 在 extension 模式下关自动化标签页（`Target.closeTarget`），launcher 模式 kill 进程树。
-- extension 模式的边界：Chrome 会在被调试标签页顶端显示"正在被调试"横幅，用户点"取消"即剥离（`onDetach`），桌面端经 target 存活探测感知并按需重建；本机恶意进程可伪造 Origin 头连上桥接，但能拿到的能力仅限"在用户浏览器里开一个新标签页并驱动它"，与用户手动开 tab 等价的攻击面之外主要增量是读取该 tab 内容——后续可加 token 握手收紧。
-- 扩展安装引导：浏览器不允许外部程序静默安装扩展（企业策略除外），能自动化的上限是给出目录 + 步骤。扩展的安装目录固定为 `~/.liveagent/extension`——Chrome 加载解压扩展记录的是绝对路径，指向 bundle resources 会随应用更新（安装目录整体替换）失效；应用每次启动把内置扩展资源（打包产物经 tauri.conf.json `bundle.resources` 带出，dev 为 target 下的 resources 拷贝、兜底仓库源码目录）整目录同步到该稳定路径。`browser_extension_install_info` 返回扩展连接状态与该目录（目录缺失时按需补同步自愈）；`browser_extension_reveal_dir` 在文件管理器中打开该目录。设置页在 browser 行下内联模式选择 + 连接状态徽标（5s 轮询），未连接且模式需要扩展时展开引导卡（chrome://extensions → 开发者模式 → 加载已解压）。WebUI 端命令不可用（shim 抛错）时引导区隐藏，仅保留模式选择（经 settings sync 到桌面端生效）。
+- On the Rust side, `bridge.rs` starts a WebSocket service on `127.0.0.1:19222` (overridable via `LIVEAGENT_BROWSER_BRIDGE_PORT`), and the extension service worker connects back (handshake validates `Origin: chrome-extension://`); after a disconnect, the extension's alarm periodically reconnects.
+- The extension relays CDP using `chrome.debugger`: browser-level `Target.getTargets / createTarget / attachToTarget / closeTarget` are emulated by the extension (**registering and exposing only the tabs it created itself**; the user's other tabs are invisible to the desktop side); session-level commands are forwarded to `chrome.debugger.sendCommand` according to a sessionId→tabId mapping, and `chrome.debugger.onEvent` is forwarded back as event frames. The wire format is identical to native CDP, so `CdpConnection`/`PageSession` are reused with zero changes.
+- When `BrowserManager` starts a session, it first checks whether the bridge has a live extension connection: if so, it opens a new tab via `Target.createTarget` and attaches (extension mode); otherwise it falls back to launcher. In extension mode, `browser_close` closes the automation tab (`Target.closeTarget`); in launcher mode it kills the process tree.
+- Boundaries of extension mode: Chrome displays a "being debugged" banner at the top of the debugged tab; if the user clicks "Cancel" the debugger detaches (`onDetach`), and the desktop side detects this via target liveness probing and rebuilds on demand; a malicious local process can forge the Origin header to connect to the bridge, but the capabilities it can obtain are limited to "opening a new tab in the user's browser and driving it", which beyond the attack surface equivalent to the user manually opening a tab mainly adds reading that tab's content—a token handshake can be added later to tighten this.
+- Extension installation guidance: browsers do not allow external programs to silently install extensions (except under enterprise policy), so the most that can be automated is providing the directory + steps. The extension's installation directory is fixed at `~/.liveagent/extension`—Chrome records an absolute path when loading an unpacked extension, and pointing at bundle resources would become invalid as the app updates (the installation directory is wholly replaced); on every startup the app syncs the built-in extension resources (packaged artifacts brought out via tauri.conf.json `bundle.resources`; in dev, a copy of the resources under target, with the repository source directory as fallback) as a whole directory to that stable path. `browser_extension_install_info` returns the extension connection state and that directory (re-syncing on demand to self-heal when the directory is missing); `browser_extension_reveal_dir` opens that directory in the file manager. The settings page shows an inline mode selector under the browser row + a connection status badge (5s polling); when not connected and the mode requires the extension, it expands a guidance card (chrome://extensions → Developer mode → Load unpacked). When the command is unavailable on the WebUI side (the shim throws), the guidance area is hidden and only the mode selector remains (synced to the desktop side via settings sync and taking effect there).
 
-## 1. 目标
+## 1. Goals
 
-- 单一 `Browser` 工具 + `action` 参数（navigate / snapshot / click / type / screenshot / eval / wait / back），沿用仓库 manager 风格（参照 `McpManager`），减少 schema 数量。
-- 以 `--remote-debugging-port` + 独立 profile（`~/.liveagent/browser-profile`）拉起用户已装的 Chrome/Edge，与日常 profile 隔离，防凭据暴露。
-- `snapshot` 输出 a11y 树 + ref id（aria-snapshot 风格），token 效率优先；`screenshot` 走现有 image content block 渲染链路。
-- 安全：新 `group:browser` 默认 `ask`；`sandboxOffline` 下工具不注入且 executor fail-closed。
+- A single `Browser` tool + `action` parameter (navigate / snapshot / click / type / screenshot / eval / wait / back), following the repository's manager style (cf. `McpManager`), to reduce the number of schemas.
+- Launch the user's already-installed Chrome/Edge with `--remote-debugging-port` + an isolated profile (`~/.liveagent/browser-profile`), isolated from the everyday profile to prevent credential exposure.
+- `snapshot` outputs the a11y tree + ref ids (aria-snapshot style), prioritizing token efficiency; `screenshot` goes through the existing image content block rendering pipeline.
+- Security: the new `group:browser` defaults to `ask`; under `sandboxOffline` the tool is not injected and the executor fails closed.
 
-## 2. Rust 侧：`services/browser/`
+## 2. Rust Side: `services/browser/`
 
-模块结构（仿 `services/code_index/` 的多文件服务 + `services/stt/` 的 WS 会话模式）：
+Module structure (modeled on the multi-file service of `services/code_index/` + the WS session pattern of `services/stt/`):
 
 ```
 services/browser/
-  mod.rs        # BrowserManager：单例浏览器会话（extension/launcher 双模式），Arc 管理，注册于 lib.rs run()
-  bridge.rs     # 扩展桥接 WS 服务：accept 扩展反向连接，Origin 校验，持有最新连接
-  launcher.rs   # Chrome/Edge 可执行文件发现 + 独立 profile 启动 + DevTools 端口解析（回退模式）
-  cdp.rs        # CDP WebSocket 客户端（tokio-tungstenite），请求/响应 id 配对 + 事件分发；connect 拨号与 from_stream 包裹 accept 连接两种入口
-  page.rs       # 高层操作：navigate/click/type/screenshot/eval/wait/back；attach（首个既有 target）与 attach_new_tab（扩展模式新开标签页）
-  snapshot.rs   # Accessibility.getFullAXTree → 精简 aria 树文本 + ref id 映射
-  types.rs      # serde 参数/响应类型
+  mod.rs        # BrowserManager: singleton browser session (extension/launcher dual mode), Arc-managed, registered in lib.rs run()
+  bridge.rs     # Extension bridge WS service: accepts extension connections back, validates Origin, holds the latest connection
+  launcher.rs   # Chrome/Edge executable discovery + isolated profile launch + DevTools port resolution (fallback mode)
+  cdp.rs        # CDP WebSocket client (tokio-tungstenite), request/response id pairing + event dispatch; two entry points: connect dialing and from_stream wrapping an accepted connection
+  page.rs       # High-level operations: navigate/click/type/screenshot/eval/wait/back; attach (first existing target) and attach_new_tab (open a new tab in extension mode)
+  snapshot.rs   # Accessibility.getFullAXTree → condensed aria tree text + ref id mapping
+  types.rs      # serde parameter/response types
 ```
 
-### 2.1 浏览器发现与启动（launcher.rs）
+### 2.1 Browser Discovery and Launch (launcher.rs)
 
-- 按平台固定候选路径探测 Chrome → Edge → Chromium（macOS `/Applications/...`、Windows `Program Files`、Linux `which`），不支持 Firefox（路线图待拍板项，先绑 Chromium 系）。
-- 启动参数：`--remote-debugging-port=0`（随机端口防冲突）、`--user-data-dir=~/.liveagent/browser-profile`、`--no-first-run`、`--no-default-browser-check`、`--disable-sync`、`--new-window about:blank`。
-- 端口获取：优先读 profile 下 Chrome 写出的 `DevToolsActivePort` 文件（轮询 ≤10s），成功后 `GET http://127.0.0.1:<port>/json/version` 拿 `webSocketDebuggerUrl`。
-- 进程生命周期：`std::process::Command` + `configure_child_process_group`（同 MCP stdio）；`BrowserManager::shutdown` 与 app `ExitRequested` 清理块调用 kill-tree（`runtime/process.rs` 现有 helper）。
+- Probe for Chrome → Edge → Chromium via fixed candidate paths per platform (macOS `/Applications/...`, Windows `Program Files`, Linux `which`); Firefox is not supported (a roadmap item pending decision; Chromium-based browsers are bound first).
+- Launch arguments: `--remote-debugging-port=0` (random port to avoid conflicts), `--user-data-dir=~/.liveagent/browser-profile`, `--no-first-run`, `--no-default-browser-check`, `--disable-sync`, `--new-window about:blank`.
+- Port acquisition: prefer reading the `DevToolsActivePort` file written by Chrome under the profile (polling ≤10s); on success, `GET http://127.0.0.1:<port>/json/version` to obtain `webSocketDebuggerUrl`.
+- Process lifecycle: `std::process::Command` + `configure_child_process_group` (same as MCP stdio); `BrowserManager::shutdown` and the app `ExitRequested` cleanup block call kill-tree (the existing helper in `runtime/process.rs`).
 
-### 2.2 CDP 客户端（cdp.rs）
+### 2.2 CDP Client (cdp.rs)
 
-- `tokio-tungstenite` 连 browser-level WS；`Target.getTargets`/`Target.attachToTarget`（flatten 模式）拿页面 session。
-- 命令 = 自增 id 的 JSON，`oneshot` 通道配对响应；事件（如 `Page.loadEventFired`）广播给等待者。
-- 全部跑在 `tauri::async_runtime::spawn`，对外暴露 async 方法；错误统一 `Result<T, String>`（仓库惯例，不引入 anyhow/tracing）。
+- `tokio-tungstenite` connects to the browser-level WS; `Target.getTargets`/`Target.attachToTarget` (flatten mode) obtains a page session.
+- A command = JSON with a self-incrementing id, with responses paired via a `oneshot` channel; events (e.g. `Page.loadEventFired`) are broadcast to waiters.
+- Everything runs on `tauri::async_runtime::spawn`, exposing async methods externally; errors uniformly use `Result<T, String>` (repository convention; no anyhow/tracing introduced).
 
-### 2.3 动作映射
+### 2.3 Action Mapping
 
 | action | CDP |
 |---|---|
-| navigate | scheme 校验（仅 http/https）→ `Page.navigate`，按响应中的 `loaderId` 轮询 `Page.getFrameTree` 等该 loader 提交且 readyState 就绪（同文档导航无 loaderId，立即完成），返回落地 URL+标题+精简 snapshot |
-| snapshot | `Accessibility.getFullAXTree` → 过滤 ignored/generic 空节点 → 缩进文本 `- role "name" [ref=eN]`；ref→backendDOMNodeId 存会话映射；name 压平换行/转义引号（不可信页面文本不得伪造快照行结构） |
-| click | ref → `DOM.scrollIntoViewIfNeeded`/`DOM.getBoxModel` 取中心坐标 → `Input.dispatchMouseEvent` press+release |
-| type | click 聚焦后全选，`Input.insertText`（空文本＝清空字段）；`submit: true` 时补 Enter（keyDown 带 `text:"\r"` 以产生 keypress 语义，否则表单不会隐式提交） |
+| navigate | scheme validation (http/https only) → `Page.navigate`, poll `Page.getFrameTree` by the `loaderId` in the response until that loader commits and readyState is ready (same-document navigation has no loaderId, so it completes immediately), returning the landed URL + title + condensed snapshot |
+| snapshot | `Accessibility.getFullAXTree` → filter out ignored/generic empty nodes → indented text `- role "name" [ref=eN]`; ref→backendDOMNodeId stored in a session mapping; name has newlines flattened and quotes escaped (untrusted page text must not be able to forge snapshot line structure) |
+| click | ref → `DOM.scrollIntoViewIfNeeded`/`DOM.getBoxModel` to get the center coordinates → `Input.dispatchMouseEvent` press+release |
+| type | click to focus, then select all, `Input.insertText` (empty text = clear the field); when `submit: true`, add Enter (keyDown with `text:"\r"` to produce keypress semantics, otherwise the form will not implicitly submit) |
 | screenshot | `Page.captureScreenshot`(jpeg q80) → base64 image content block |
-| eval | `Runtime.evaluate`（returnByValue + awaitPromise），存在 `exceptionDetails` 即报错（含抛出原语值），结果 JSON 截断 ≤8k 字符 |
-| wait | 等 selector 出现（`Runtime.evaluate` 轮询 `document.querySelector`）或纯延时 |
-| back | `Page.getNavigationHistory` + `Page.navigateToHistoryEntry`，load 事件只作 ≤3s 快路径信号，readyState 轮询兜底 |
+| eval | `Runtime.evaluate` (returnByValue + awaitPromise); any `exceptionDetails` is an error (including thrown primitive values); result JSON truncated to ≤8k characters |
+| wait | wait for a selector to appear (`Runtime.evaluate` polling `document.querySelector`) or a plain delay |
+| back | `Page.getNavigationHistory` + `Page.navigateToHistoryEntry`; the load event serves only as a ≤3s fast-path signal, with readyState polling as the fallback |
 
-navigate/click/type/back/wait 成功后自动附带新 snapshot（可用 `includeSnapshot: false` 关闭），保证模型每步都有页面状态；附带 snapshot 失败不连累已成功执行的动作（错误降级为结果备注，防模型误判失败而重复副作用）。snapshot 预算按 UTF-8 字节数（28k bytes ≈ 7k tokens，bytes/token 跨文字系统近似恒定，CJK 页面不超验收线）。
+After a successful navigate/click/type/back/wait, a new snapshot is automatically attached (can be disabled with `includeSnapshot: false`) so the model has page state at every step; failure of the attached snapshot does not implicate the successfully executed action (the error is downgraded to a result note, preventing the model from misjudging failure and repeating side effects). The snapshot budget is measured in UTF-8 bytes (28k bytes ≈ 7k tokens; bytes/token is approximately constant across writing systems, so CJK pages do not exceed the acceptance line).
 
-### 2.4 命令层
+### 2.4 Command Layer
 
-`commands/integration/browser.rs`：`browser_action(args) -> Result<BrowserActionResponse, String>` 单命令承载全部 action（Rust 侧 dispatch），另加 `browser_status` / `browser_close`。注册进 `app_invoke_handler!`。
+`commands/integration/browser.rs`: `browser_action(args) -> Result<BrowserActionResponse, String>` is a single command carrying all actions (dispatched on the Rust side), plus `browser_status` / `browser_close`. Registered into `app_invoke_handler!`.
 
-**当前限制（后续迭代）**：动作执行期间不可取消（TS 侧仅在发起前检查 AbortSignal，未接 `runtime_cancel` run-id 链路），且 `BrowserManager` 单锁贯穿整个动作——执行中的动作会让 `browser_status`/`browser_close` 排队等待（最长一个动作超时 120s）。接取消链路时应一并把生命周期管理与动作执行拆锁。
+**Current limitations (follow-up iterations)**: actions cannot be cancelled during execution (the TS side only checks AbortSignal before initiating, and does not hook into the `runtime_cancel` run-id chain), and `BrowserManager` holds a single lock across an entire action—an action in progress makes `browser_status`/`browser_close` queue up and wait (up to one action timeout of 120s). When hooking into the cancellation chain, lifecycle management and action execution should be split onto separate locks at the same time.
 
-### 2.5 会话生命周期与失效恢复
+### 2.5 Session Lifecycle and Failure Recovery
 
-- 浏览器进程随 app `ExitRequested` 清理块回收；`shutdown_cleanup` 先 `try_lock` 取出会话触发 kill-tree，拿不到锁（退出瞬间有动作在跑）时按旁路记录的 pid 直接 `signal_process_tree_by_pid` 兜底，避免残留实例锁死 profile。
-- 会话失效自动重建，两类失效都覆盖：WS 断开（用户整个退出浏览器）；WS 未断但页面 target 消失（用户只关自动化窗口/标签、tab 崩溃）——每次动作前经 browser-level `Target.getTargets` 探测 target 存活。
+- The browser process is reclaimed by the app `ExitRequested` cleanup block; `shutdown_cleanup` first `try_lock`s to take out the session and trigger kill-tree, and when the lock cannot be acquired (an action is running at the moment of exit) it falls back to `signal_process_tree_by_pid` directly using the pid recorded on the side path, avoiding a leftover instance locking up the profile.
+- An invalid session is automatically rebuilt, covering both failure types: WS disconnect (the user quit the browser entirely); WS not disconnected but the page target disappears (the user closed only the automation window/tab, or the tab crashed)—target liveness is probed before every action via the browser-level `Target.getTargets`.
 
-## 3. TS 侧
+## 3. TS Side
 
-- `agent-ui/src/contracts/builtinTools.ts`：`BuiltinToolGroupId` 加 `"browser"`；新增 `BrowserResultDetails` 入 details union。
-- `agent-gui/src/lib/tools/browserTools.ts`：`createBrowserTools({ sandbox })` bundle，typebox schema（action union + url/ref/text/selector/timeoutMs/snapshot 等可选参数），executor 调 `invoke("browser_action")`；`sandbox.enabled && !allowNetwork`（即 sandboxOffline）时 executor 直接拒绝（双保险）。
-- `builtinRegistry.ts`：条件注册——sandboxOffline 下整个 bundle 不注入（模型不可见）。
-- `toolPolicy.ts`：resolver 中 `group:browser` 未显式配置时默认 `ask`（现有 fall-through 是 allow，需专门分支）；缺省同时声明在 `builtinToolCatalog` 的 `defaultPolicy` 字段——设置页据此展示真实缺省，且用户显式选 `allow` 时写显式键（而非删键回落到 ask），两处保持同步。
-- `toolExecutionPrompt.ts`：`has("Browser")` 使用指引段 + Available Tools 条目。
-- `builtinToolCatalog.ts` + i18n（en/zh）：设置页可配 policy。
-- 截图渲染：`{type:"image", data, mimeType}` content block，桌面/WebUI 现有链路零改动；proto 无需变更（tool 事件 JSON 直通）。非截图结果由 `ToolResultDisplay` 的 `kind === "browser"` 分支渲染（MetaTags 概览 + 正文/快照），错误与状态行摘要经共享 `summarizeToolCall` 的 Browser 分支。
+- `agent-ui/src/contracts/builtinTools.ts`: add `"browser"` to `BuiltinToolGroupId`; add `BrowserResultDetails` to the details union.
+- `agent-gui/src/lib/tools/browserTools.ts`: the `createBrowserTools({ sandbox })` bundle, a typebox schema (action union + optional parameters url/ref/text/selector/timeoutMs/snapshot, etc.), with the executor calling `invoke("browser_action")`; when `sandbox.enabled && !allowNetwork` (i.e. sandboxOffline), the executor rejects outright (belt and suspenders).
+- `builtinRegistry.ts`: conditional registration—under sandboxOffline the whole bundle is not injected (invisible to the model).
+- `toolPolicy.ts`: in the resolver, `group:browser` defaults to `ask` when not explicitly configured (the existing fall-through is allow, so a dedicated branch is needed); the default is also declared in the `defaultPolicy` field of `builtinToolCatalog`—the settings page uses this to display the real default, and when the user explicitly selects `allow` an explicit key is written (rather than deleting the key to fall back to ask), keeping the two in sync.
+- `toolExecutionPrompt.ts`: a `has("Browser")` usage-guidance section + Available Tools entry.
+- `builtinToolCatalog.ts` + i18n (en/zh): policy configurable on the settings page.
+- Screenshot rendering: a `{type:"image", data, mimeType}` content block, with the existing desktop/WebUI pipeline unchanged; proto needs no changes (tool event JSON passes through directly). Non-screenshot results are rendered by the `kind === "browser"` branch of `ToolResultDisplay` (MetaTags overview + body/snapshot), and errors and status-line summaries go through the Browser branch of the shared `summarizeToolCall`.
 
-## 4. 安全模型
+## 4. Security Model
 
-1. `group:browser` 默认 `ask`——每次 Browser 调用出审批卡（用户可 approve_session）。
-2. `sandboxOffline`：注册期跳过 + executor fail-closed 拒绝，离线语义覆盖浏览器出网。
-3. 登录态边界按模式分层：launcher 模式独立 profile，不读用户日常浏览器登录态/Cookie；extension 模式刻意复用登录态（这正是该模式的价值），但可见/可控范围严格限定在自动化自己创建的标签页，且系统提示词要求模型把已登录页面上的操作视为"以用户身份行事"、对提交/发布/购买/删除类动作保守。
-4. navigate 仅放行 http/https：`file://` 会绕过应用文件权限模型读任意本地文件，`chrome://` 等特权页面同理，Rust 侧统一拒绝（URL allowlist 仍为后续预留项）。
-5. 审批摘要按 action 精确展示对应参数（`summarizeToolCallForApproval` 特判）：navigate 显 URL、click 显 ref、type 完整显示输入文本（含 +Enter）、eval 完整显示表达式——不能取"第一个非空字段"，否则模型可用无关字段（如 eval 附带 url）顶掉真实执行内容。
-6. a11y snapshot 中的页面文本（name/valuetext）压平换行并转义引号，防不可信页面伪造快照树行（如注入假 `[ref=..]` 行）。
+1. `group:browser` defaults to `ask`—every Browser call produces an approval card (the user can approve_session).
+2. `sandboxOffline`: skipped at registration time + executor fails closed and rejects; the offline semantics cover browser network access.
+3. The login-state boundary is layered by mode: launcher mode uses an isolated profile and does not read the user's everyday browser login state/Cookies; extension mode deliberately reuses login state (that is precisely the value of this mode), but the visible/controllable scope is strictly limited to the tabs the automation created itself, and the system prompt requires the model to treat operations on logged-in pages as "acting on the user's behalf" and to be conservative about submit/publish/purchase/delete-type actions.
+4. navigate only allows http/https: `file://` would bypass the app's file permission model to read arbitrary local files, and privileged pages such as `chrome://` are the same; the Rust side rejects them uniformly (a URL allowlist remains a reserved item for later).
+5. The approval summary precisely displays the corresponding parameters per action (`summarizeToolCallForApproval` special-case): navigate shows the URL, click shows the ref, type fully displays the input text (including +Enter), eval fully displays the expression—one must not take "the first non-empty field", otherwise the model could use an irrelevant field (e.g. a url attached to eval) to overshadow the actual content being executed.
+6. Page text in the a11y snapshot (name/valuetext) has newlines flattened and quotes escaped, preventing an untrusted page from forging snapshot tree lines (e.g. injecting a fake `[ref=..]` line).
 
-## 5. 验收（对齐路线图）
+## 5. Acceptance (Aligned with the Roadmap)
 
-- [x] 「打开文档站 → 检索 → 提取内容 → 截图佐证」闭环（手动 e2e：`cargo test -p liveagent browser_e2e -- --ignored --nocapture`，实测 tauri.app 首页，截图见 `docs/images/browser-automation-e2e-tauri-app.jpg`）
-- [x] a11y snapshot 单页 <8k tokens（tauri.app 首页实测 13194 字符 ≈ 3.3k tokens）
-- [x] 独立 profile 无法读取用户日常浏览器登录态（`~/.liveagent/browser-profile` 独立 user-data-dir）
-- [x] 审批/沙箱策略生效（`group:browser` 默认 ask；sandboxOffline 下 bundle 不注册 + executor fail-closed）
+- [x] The "open the docs site → search → extract content → screenshot as evidence" loop (manual e2e: `cargo test -p liveagent browser_e2e -- --ignored --nocapture`, actually tested on the tauri.app homepage; screenshot at `docs/images/browser-automation-e2e-tauri-app.jpg`)
+- [x] a11y snapshot under 8k tokens for a single page (measured 13194 characters ≈ 3.3k tokens on the tauri.app homepage)
+- [x] Isolated profile cannot read the user's everyday browser login state (`~/.liveagent/browser-profile` isolated user-data-dir)
+- [x] Approval/sandbox policy takes effect (`group:browser` defaults to ask; under sandboxOffline the bundle is not registered + the executor fails closed)
 
-## 6. 非目标（本次不做）
+## 6. Non-Goals (Not Done This Time)
 
-- Phase A 预设卡片（独立提交）；Right Dock Browser 面板（后续 UI 迭代）；URL allowlist（预留 policy 位，scheme 级 http/https 限制已内置）；Firefox 支持；多 tab 管理（单页会话，navigate 复用同一 target）；动作中途取消与生命周期/执行拆锁（见 2.4 当前限制）；跨 snapshot 的 ref 代际校验（ref 每次快照重编号，模型侧以"页面变化后必须用新快照"提示约束）。
+- Phase A preset card (separate submission); Right Dock Browser panel (a later UI iteration); URL allowlist (a reserved policy slot; the scheme-level http/https restriction is already built in); Firefox support; multi-tab management (single-page session; navigate reuses the same target); mid-action cancellation and splitting the lifecycle/execution locks (see the current limitations in 2.4); cross-snapshot ref generation validation (refs are renumbered on every snapshot, and the model side is constrained by the hint "after the page changes you must use a new snapshot").

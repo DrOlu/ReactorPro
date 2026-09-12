@@ -1,7 +1,8 @@
-//! 配置自动同步：把连续的配置变更合并成一次 WebDAV 上传。
+//! Automatic config sync: coalesces consecutive config changes into a single WebDAV upload.
 //!
-//! **只上传，不下载。** 自动拉取远端会在用户毫无察觉的情况下覆盖本机配置，
-//! 出错方向不可接受，因此拉取永远是手动动作。
+//! **Upload only, never download.** Automatically pulling the remote would overwrite local config
+//! without the user noticing; that failure direction is unacceptable, so pulling is always a manual
+//! action.
 
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -12,14 +13,16 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::{sync::mpsc, time::Duration};
 
-/// 变更后等待这么久没有新变更才上传。
+/// Wait this long with no new change after a change before uploading.
 const DEBOUNCE: Duration = Duration::from_secs(1);
-/// 防抖的硬上限。持续编辑（例如逐字输入 API Key）会不断刷新防抖窗口，
-/// 没有上限的话可以无限推迟上传。
+/// Hard upper bound on debouncing. Continuous editing (e.g. typing an API key character by
+/// character) keeps refreshing the debounce window, and without a bound the upload could be
+/// postponed indefinitely.
 const MAX_WAIT: Duration = Duration::from_secs(10);
 
-/// 自动同步结果事件。手动同步的成败由命令的返回值同步告知前端，
-/// 不走这个事件 —— 所以收到事件就意味着「后台自动同步」。
+/// Auto-sync result event. The success or failure of a manual sync is reported to the frontend
+/// synchronously via the command's return value and does not go through this event -- so receiving
+/// this event always means "background auto-sync".
 const STATUS_EVENT: &str = "backup-sync-status-updated";
 
 static DIRTY_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
@@ -28,12 +31,12 @@ static SUPPRESSION: AtomicUsize = AtomicUsize::new(0);
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AutoSyncStatus {
-    /// 毫秒时间戳，仅成功时有值。
+    /// Millisecond timestamp; only set on success.
     last_sync_at: Option<i64>,
     last_error: Option<String>,
 }
 
-/// 抑制期计数器的 RAII 句柄。
+/// RAII handle for the suppression counter.
 pub struct AutoSyncSuppressionGuard;
 
 impl Drop for AutoSyncSuppressionGuard {
@@ -42,22 +45,24 @@ impl Drop for AutoSyncSuppressionGuard {
     }
 }
 
-/// 下载并应用远端快照期间必须持有。
+/// Must be held while downloading and applying a remote snapshot.
 ///
-/// 应用快照走的是各配置域的 `save_*`，它们会标脏；
-/// 不抑制就会把刚从远端拉下来的数据原样推回去。
+/// Applying a snapshot goes through each config domain's `save_*`, which marks the config dirty;
+/// without suppression, the data just pulled from the remote would be pushed straight back.
 pub fn suppress() -> AutoSyncSuppressionGuard {
     SUPPRESSION.fetch_add(1, Ordering::SeqCst);
     AutoSyncSuppressionGuard
 }
 
-/// 标记配置已变更。未启动自动同步任务时为空操作（单测环境即如此）。
+/// Marks the config as changed. It is a no-op when the auto-sync task has not been started (as in
+/// the unit-test environment).
 pub fn mark_dirty() {
     if suppressed() {
         return;
     }
     if let Some(tx) = DIRTY_TX.get() {
-        // 容量 1：已有未处理的脏信号时直接丢弃，防抖窗口本就会把它们合并成一次上传。
+        // Capacity 1: drop directly when an unprocessed dirty signal already exists; the debounce
+        // window would coalesce them into a single upload anyway.
         let _ = tx.try_send(());
     }
 }
@@ -76,7 +81,7 @@ pub fn start(app: AppHandle) {
 
 async fn run(app: AppHandle, mut rx: mpsc::Receiver<()>) {
     loop {
-        // 空闲时阻塞在这里，第一个脏信号开启一个防抖窗口。
+        // Block here while idle; the first dirty signal opens a debounce window.
         if rx.recv().await.is_none() {
             return;
         }
@@ -85,9 +90,10 @@ async fn run(app: AppHandle, mut rx: mpsc::Receiver<()>) {
         tokio::pin!(cap);
         loop {
             tokio::select! {
-                // 静默满 DEBOUNCE：窗口内的所有变更合并成下面这一次上传。
+                // Quiet for a full DEBOUNCE: all changes in the window coalesce into the single
+                // upload below.
                 _ = tokio::time::sleep(DEBOUNCE) => break,
-                // 一直有新变更时也不能无限等。
+                // Must not wait forever when new changes keep arriving.
                 _ = &mut cap => break,
                 signal = rx.recv() => {
                     if signal.is_none() {
@@ -102,15 +108,17 @@ async fn run(app: AppHandle, mut rx: mpsc::Receiver<()>) {
 }
 
 async fn sync_once(app: &AppHandle) {
-    // 防抖期间用户可能开始了手动下载，这里再确认一次。
+    // During debouncing the user may have started a manual download, so confirm once more here.
     //
-    // 直接 return 会丢掉这次已经被 `rx.recv()` 消费掉的脏信号（通道容量 1，
-    // 且抑制期内 `mark_dirty` 是空操作，不会有新信号补进来），于是抑制窗口里
-    // 攒下的所有本地改动永远等不到下一次上传。补一次标脏：此刻 SUPPRESSION
-    // 尚未归零，`mark_dirty` 仍会被挡掉，所以要绕过它直接投递。
+    // Returning directly would discard the dirty signal already consumed by `rx.recv()` (channel
+    // capacity 1, and `mark_dirty` is a no-op during suppression, so no new signal would come in),
+    // meaning every local change accumulated during the suppression window would never get another
+    // upload. Re-mark dirty once: SUPPRESSION has not dropped to zero yet, so `mark_dirty` would
+    // still be blocked, so deliver directly, bypassing it.
     //
-    // 代价是抑制期间这里每 DEBOUNCE（1s）空转一次，直到守卫释放。下载是秒级
-    // 操作，多几次纯内存的重投递不值得为它引入条件变量之类的额外机制。
+    // The cost is that during suppression this spins once per DEBOUNCE (1s) until the guard is
+    // released. A download is a second-scale operation, and a few extra purely in-memory
+    // re-deliveries are not worth introducing extra machinery like a condition variable.
     if suppressed() {
         if let Some(tx) = DIRTY_TX.get() {
             let _ = tx.try_send(());
@@ -119,7 +127,7 @@ async fn sync_once(app: &AppHandle) {
     }
 
     match crate::commands::settings::auto_upload_backup_snapshot().await {
-        // 未开启自动同步或凭据不全，静默跳过，不打扰用户。
+        // Auto-sync is off or credentials are incomplete; skip silently without disturbing the user.
         Ok(None) => {}
         Ok(Some(last_sync_at)) => emit_status(
             app,
@@ -128,7 +136,8 @@ async fn sync_once(app: &AppHandle) {
                 last_error: None,
             },
         ),
-        // 自动同步失败不能阻塞任何操作，只推事件让 UI 显示横幅。
+        // Auto-sync failure must not block any operation; just push an event so the UI shows a
+        // banner.
         Err(error) => emit_status(
             app,
             AutoSyncStatus {
@@ -149,29 +158,32 @@ fn emit_status(app: &AppHandle, status: AutoSyncStatus) {
 mod tests {
     use super::*;
 
-    /// 抑制的进入/嵌套/退出合并成一个用例：`SUPPRESSION` 是进程级全局，
-    /// 拆成多个用例会在并行测试下互相踩踏。
+    /// Entering/nesting/exiting suppression are combined into one case: `SUPPRESSION` is a
+    /// process-wide global, so splitting it into multiple cases would make them stomp on each other
+    /// under parallel testing.
     #[test]
     fn suppression_is_reference_counted_and_gates_dirty_marks() {
-        assert!(!suppressed(), "初始状态不应处于抑制期");
+        assert!(!suppressed(), "initial state should not be suppressed");
 
         let outer = suppress();
         assert!(suppressed());
-        // 抑制期内标脏必须无效，否则应用远端快照会立刻把数据推回远端。
+        // Marking dirty must have no effect during suppression, otherwise applying a remote snapshot
+        // would immediately push the data back to the remote.
         mark_dirty();
 
         {
             let _inner = suppress();
             assert!(suppressed());
         }
-        // 内层释放不能提前解除外层的抑制。
-        assert!(suppressed(), "仍有外层 guard 存活时必须保持抑制");
+        // Releasing the inner guard must not lift the outer suppression early.
+        assert!(suppressed(), "must stay suppressed while an outer guard is still alive");
 
         drop(outer);
-        assert!(!suppressed(), "全部 guard 释放后应恢复标脏");
+        assert!(!suppressed(), "marking dirty should resume after all guards are released");
     }
 
-    /// 容量 1 的 channel 把窗口内的多次变更压成一个信号 —— 这是防抖合并的基础。
+    /// A capacity-1 channel compresses multiple changes in the window into one signal -- this is the
+    /// basis of debounce coalescing.
     #[test]
     fn dirty_channel_coalesces_bursts_into_one_signal() {
         let (tx, mut rx) = mpsc::channel::<()>(1);
@@ -179,6 +191,6 @@ mod tests {
             let _ = tx.try_send(());
         }
         assert!(rx.try_recv().is_ok());
-        assert!(rx.try_recv().is_err(), "5 次变更只应留下 1 个待处理信号");
+        assert!(rx.try_recv().is_err(), "5 changes should leave only 1 pending signal");
     }
 }

@@ -1,6 +1,6 @@
-// 工具审批策略三态控件(allow/ask/deny)。抽出后供系统工具设置页与 MCP Hub 就地
-// 复用,保证各处外观一致。
-// 两端直接复用本共享组件。
+// Three-state tool approval policy control (allow/ask/deny). Extracted for in-place reuse by the system tools settings page and MCP Hub,
+// guaranteeing a consistent appearance everywhere.
+// Both ends reuse this shared component directly.
 
 import type { ToolPolicy } from "@liveagent/app/lib/settings";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -15,8 +15,8 @@ const POLICY_ACTIVE_STYLE: Record<ToolPolicy, string> = {
 };
 
 /**
- * 三态审批策略切换。value 为当前生效策略,onChange 回传所选。ariaLabel 给无障碍
- * 定位(工具名 / server id / 组名)。size="sm" 用于内联到卡片旁的紧凑场景。
+ * Three-state approval policy toggle. value is the currently effective policy, onChange reports the selection. ariaLabel provides the accessible
+ * locator (tool name / server id / group name). size="sm" is for compact scenarios inline next to a card.
  */
 export function ToolPolicyToggle(props: {
   value: ToolPolicy;
@@ -29,7 +29,7 @@ export function ToolPolicyToggle(props: {
   const buttonPad = size === "sm" ? "px-2 py-0.5" : "px-2.5 py-1";
   return (
     <fieldset
-      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML 允许 fieldset 担任 radiogroup；互斥单选语义需要向读屏表达。
+      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML allows fieldset to serve as radiogroup; the mutually exclusive radio semantics need to be expressed to screen readers.
       role="radiogroup"
       aria-label={ariaLabel}
       className="inline-flex min-w-0 shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
@@ -37,7 +37,7 @@ export function ToolPolicyToggle(props: {
       {POLICY_ORDER.map((option) => {
         const active = value === option;
         return (
-          // biome-ignore lint/a11y/useSemanticElements: 分段控件保留 button 样式；互斥语义用 radio 表达，改原生 radio input 需要视觉重构。
+          // biome-ignore lint/a11y/useSemanticElements: the segmented control keeps button styling; exclusivity is expressed with radio, and switching to native radio inputs would require a visual rework.
           <button
             key={option}
             type="button"

@@ -6,7 +6,7 @@ import {
 
 const OPEN_TAG = "<think>";
 const CLOSE_TAG = "</think>";
-/** 正文恰好以 `<` 开头时不能无限等下去——超过这个长度就判定不是思考标签。 */
+/** When the body starts exactly with `<`, we cannot wait forever — beyond this length it is judged not to be a think tag. */
 const MAX_PROBE_CHARS = 64;
 
 type Mode = "probing" | "thinking" | "answer" | "passthrough";
@@ -31,8 +31,8 @@ function rewriteContent(content: AssistantMessage["content"]): AssistantMessage[
   if (head?.type !== "text") return content;
   const split = splitInlineThinkText(head.text);
   if (!split.matched) return content;
-  // 思考块无条件保留（哪怕为空），否则事件流里的 contentIndex 位移会和最终消息
-  // 的数组下标对不上，后续工具调用会被错位读取。
+  // The thinking block is retained unconditionally (even if empty); otherwise the contentIndex shift in the event stream would not line up with the
+  // final message's array indices, causing subsequent tool calls to be read at the wrong offset.
   const rewritten: AssistantMessage["content"] = [{ type: "thinking", thinking: split.thinking }];
   if (split.answer.length > 0) rewritten.push({ ...head, text: split.answer });
   return [...rewritten, ...content.slice(1)];
@@ -43,7 +43,7 @@ function rewriteMessage(message: AssistantMessage): AssistantMessage {
   return content === message.content ? message : { ...message, content };
 }
 
-/** 末尾最长的、构成 `tag` 前缀的子串长度——用于跨 chunk 切分的闭合标签。 */
+/** Length of the longest suffix that forms a prefix of `tag` — for closing tags split across chunks. */
 function partialTagSuffixLength(buffer: string, tag: string) {
   const max = Math.min(buffer.length, tag.length - 1);
   for (let length = max; length > 0; length -= 1) {
@@ -53,12 +53,12 @@ function partialTagSuffixLength(buffer: string, tag: string) {
 }
 
 /**
- * Ollama 的 OpenAI 兼容端点会把推理模型的思考过程以字面量 `<think>...</think>`
- * 内联在 `content` 里，而不是走 `reasoning_content` 字段。这里在事件流层把它拆成
- * 独立的 thinking 块，让上层拿到和原生推理供应商一致的事件序列。
+ * Ollama's OpenAI-compatible endpoint inlines the reasoning model's thinking process as literal `<think>...</think>`
+ * inside `content` rather than via the `reasoning_content` field. Here, at the event-stream layer, it is split into
+ * a separate thinking block so upper layers receive an event sequence consistent with native reasoning providers.
  *
- * 只有源 contentIndex 0 的文本块开头（允许前导空白）才参与识别；原生推理供应商的
- * 0 号块是 thinking，天然不会命中。
+ * Only the beginning of the text block with source contentIndex 0 (leading whitespace allowed) participates in recognition; native reasoning providers'
+ * block 0 is thinking, so it naturally never matches.
  */
 export function wrapInlineThinkTagStream(
   source: AssistantMessageEventStream,
@@ -102,7 +102,7 @@ export function wrapInlineThinkTagStream(
   const pushAnswer = (chunk: string, partial: AssistantMessage) => {
     let text = chunk;
     if (!answerBlockCreated) {
-      // `</think>` 与正文之间的换行不属于回答内容。
+      // The newline between `</think>` and the body is not part of the answer content.
       text = text.replace(/^\s+/, "");
       if (!text) return;
       answerBlockCreated = true;
@@ -136,7 +136,7 @@ export function wrapInlineThinkTagStream(
 
   const rejectProbe = (partial: AssistantMessage) => {
     mode = "passthrough";
-    // 只补发源真的发过的 text_start，否则透传就不再是恒等的了。
+    // Only re-emit text_start if the source actually emitted one, otherwise pass-through would no longer be an identity.
     if (headTextStartSeen) {
       output.push({ type: "text_start", contentIndex: 0, partial: rewriteMessage(partial) });
     }
@@ -165,7 +165,7 @@ export function wrapInlineThinkTagStream(
     rejectProbe(partial);
   };
 
-  /** 用完整文本做权威对账，补齐流式期间因缓冲而未发出的尾巴。 */
+  /** Reconcile authoritatively using the full text, filling in tails buffered during streaming that were not yet emitted. */
   const settleHead = (content: string, partial: AssistantMessage) => {
     if (headSettled || mode === "passthrough") return;
     headSettled = true;
@@ -214,7 +214,7 @@ export function wrapInlineThinkTagStream(
       settleHead(head.text, message);
       return;
     }
-    // 中断得太早，最终消息里连 0 号文本块都没有。
+    // Interrupted too early; the final message does not even have text block 0.
     headSettled = true;
     if (mode === "probing") {
       if (headBuffer) rejectProbe(message);
@@ -238,7 +238,7 @@ export function wrapInlineThinkTagStream(
           output.push(event);
           break;
         case "text_start":
-          // 0 号块暂扣：还不知道它会变成 thinking_start 还是普通正文。
+          // Block 0 withheld: it is not yet known whether it will become thinking_start or ordinary body text.
           if (event.contentIndex === 0) {
             headTextStartSeen = true;
             break;
@@ -275,7 +275,7 @@ export function wrapInlineThinkTagStream(
             partial: rewriteMessage(event.partial),
           });
           break;
-        // 0 号块已经是原生思考块，说明供应商走的是 reasoning_content，直接放行。
+        // Block 0 is already a native thinking block, meaning the provider uses reasoning_content; let it through directly.
         case "thinking_start":
           if (mode === "probing" && event.contentIndex === 0) {
             mode = "passthrough";

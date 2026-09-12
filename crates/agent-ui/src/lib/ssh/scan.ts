@@ -264,7 +264,7 @@ export async function scanSshImportCandidates(
 ): Promise<SshScanResult> {
   const homePath = await findHomePath();
   if (!homePath) {
-    throw new Error("无法定位用户目录。");
+    throw new Error("Unable to locate the user home directory.");
   }
 
   const entries = await listSshDirectory(homePath);

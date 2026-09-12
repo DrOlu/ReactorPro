@@ -157,12 +157,12 @@ test("manual compaction terminal events retain status and stay conversation-scop
 
 test("manual compaction terminal frames tolerate malformed payloads (defect #1)", () => {
   const store = createTranscriptStore();
-  // 唯一直读载荷形状的分支必须防御式解构：可靠 ingress journal 会重放本帧，缺
-  // 字段/畸形帧一旦抛错会在每次重订阅时复现。以下畸形帧全部丢弃且绝不抛错。
+  // The only branch that reads the payload shape directly must destructure defensively: the reliable
+  // ingress journal replays this frame, and a missing-field/malformed frame that throws would recur on every resubscribe. All malformed frames below are discarded and never throw.
   assert.doesNotThrow(() => {
-    // 无 operationId。
+    // No operationId.
     store.applyEvent({ type: "manual_compaction_result", conversation_id: "conv-1", seq: 1 });
-    // operationId 非字符串。
+    // operationId is not a string.
     store.applyEvent({
       type: "manual_compaction_result",
       conversation_id: "conv-1",
@@ -170,7 +170,7 @@ test("manual compaction terminal frames tolerate malformed payloads (defect #1)"
       operationId: 123,
       status: "failed",
     });
-    // status 不在白名单。
+    // status is not in the allowlist.
     store.applyEvent({
       type: "manual_compaction_result",
       conversation_id: "conv-1",
@@ -178,7 +178,7 @@ test("manual compaction terminal frames tolerate malformed payloads (defect #1)"
       operationId: "op-bogus-status",
       status: "bogus",
     });
-    // operationId 仅空白。
+    // operationId is whitespace only.
     store.applyEvent({
       type: "manual_compaction_result",
       conversation_id: "conv-1",
@@ -190,7 +190,7 @@ test("manual compaction terminal frames tolerate malformed payloads (defect #1)"
   });
   assert.equal(store.getSnapshot().manualCompactionResult, null);
 
-  // 合法帧仍正常受理；message 非字符串降级为空串。
+  // Valid frames are still accepted; a non-string message degrades to an empty string.
   store.applyEvent({
     type: "manual_compaction_result",
     conversation_id: "conv-1",
@@ -211,7 +211,7 @@ test("assistant meta merge never wipes an existing anchor with a later own-undef
   const store = createTranscriptStore();
   store.applyEvent(userMessage("run-1", 1, "hello"));
   store.applyEvent(runStarted("run-1", 2));
-  // 首帧携带 usage（用量环锚点的现算输入）。
+  // The first frame carries usage (the live-computed input for the usage-ring anchor).
   store.applyEvent({
     type: "token",
     conversation_id: "conv-1",
@@ -224,8 +224,8 @@ test("assistant meta merge never wipes an existing anchor with a later own-undef
   });
   store.flush();
 
-  // 同轮后续帧带其他 meta 字段但不带 usage：旧代码会用 own-undefined
-  // 键把锚点输入抹掉；修复后 usage 保留，新字段并入。
+  // Later frames in the same round carry other meta fields but not usage: the old code would
+  // wipe the anchor input with an own-undefined key; after the fix, usage is preserved and new fields are merged in.
   store.applyEvent({
     type: "token",
     conversation_id: "conv-1",
@@ -822,12 +822,12 @@ test("first prompt: rows are exactly [user, assistant] with a stable user key", 
   // user row followed by one assistant row, with the optimistic bubble's
   // identity stable throughout.
   const store = createTranscriptStore();
-  store.addOptimisticUserEntry({ clientRequestId: "client-1", text: "什么是磁重联放电" });
+  store.addOptimisticUserEntry({ clientRequestId: "client-1", text: "What is magnetic reconnection discharge" });
   store.flush();
   const userKey = allRows(store.getSnapshot())[0].key;
 
   store.applyEvent(
-    userMessage("run-1", 1, "什么是磁重联放电", { client_request_id: "client-1" }),
+    userMessage("run-1", 1, "What is magnetic reconnection discharge", { client_request_id: "client-1" }),
   );
   store.applyEvent(runStarted("run-1", 2, { client_request_id: "client-1" }));
   // DeepSeek-style thinking-first reply with a leading meta-only token.
@@ -845,9 +845,9 @@ test("first prompt: rows are exactly [user, assistant] with a stable user key", 
     conversation_id: "conv-1",
     run_id: "run-1",
     seq: 4,
-    text: "思考中……",
+    text: "Thinking...",
   });
-  store.applyEvent(token("run-1", 5, "磁重联是…"));
+  store.applyEvent(token("run-1", 5, "Magnetic reconnection is..."));
   store.applyEvent(runFinished("run-1", 6));
   store.flush();
 
@@ -926,27 +926,27 @@ test("enrich with a thinking-first persisted reply adds no avatar row above the 
   // row builder drops content-less rounds — the meta carrier can never
   // become a floating avatar row above the first user bubble.
   const store = createTranscriptStore();
-  store.addOptimisticUserEntry({ clientRequestId: "client-1", text: "查询磁重联" });
-  store.applyEvent(userMessage("run-1", 1, "查询磁重联", { client_request_id: "client-1" }));
+  store.addOptimisticUserEntry({ clientRequestId: "client-1", text: "Query magnetic reconnection" });
+  store.applyEvent(userMessage("run-1", 1, "Query magnetic reconnection", { client_request_id: "client-1" }));
   store.applyEvent(runStarted("run-1", 2));
   store.applyEvent({
     type: "thinking",
     conversation_id: "conv-1",
     run_id: "run-1",
     seq: 3,
-    text: "推理…",
+    text: "Reasoning...",
   });
-  store.applyEvent(token("run-1", 4, "结论"));
+  store.applyEvent(token("run-1", 4, "Conclusion"));
   store.applyEvent(runFinished("run-1", 5));
   store.flush();
 
   store.applyHistorySnapshot(
     [
-      { id: "hu:m1", kind: "user", text: "查询磁重联", attachments: [], messageRef: messageRef("m1") },
+      { id: "hu:m1", kind: "user", text: "Query magnetic reconnection", attachments: [], messageRef: messageRef("m1") },
       // Meta-only carrier the parser emits before a leading thinking block.
       { id: "ht:hu:m1>0", kind: "assistant", text: "", round: 1, meta: { provider: "deepseek" } },
-      { id: "ht:hu:m1>1", kind: "thinking", text: "推理…", round: 1 },
-      { id: "ht:hu:m1>2", kind: "assistant", text: "结论", round: 1 },
+      { id: "ht:hu:m1>1", kind: "thinking", text: "Reasoning...", round: 1 },
+      { id: "ht:hu:m1>2", kind: "assistant", text: "Conclusion", round: 1 },
     ],
     { mode: "enrich" },
   );
@@ -1153,14 +1153,14 @@ test("active sync trims a history-first copy of the running exchange", () => {
       {
         id: "hu:m1",
         kind: "user",
-        text: "明天是什么天气",
+        text: "What's the weather tomorrow",
         attachments: [],
         messageRef: messageRef("m1"),
       },
       {
         id: "ht:hu:m1>0",
         kind: "assistant",
-        text: "请告诉我你所在的城市",
+        text: "Please tell me the city you are in",
         round: 1,
       },
     ],
@@ -1187,14 +1187,14 @@ test("active sync trims a history-first copy of the running exchange", () => {
         {
           id: "snapshot-user",
           kind: "user",
-          text: "明天是什么天气",
+          text: "What's the weather tomorrow",
           attachments: [],
           messageId: "m1",
         },
         {
           id: "snapshot-assistant",
           kind: "assistant",
-          text: "请告诉我你所在的城市",
+          text: "Please tell me the city you are in",
           round: 1,
         },
       ]),
@@ -1227,11 +1227,11 @@ test("active sync preserves an older completed exchange with the same prompt tex
       {
         id: "hu:m1",
         kind: "user",
-        text: "重复问题",
+        text: "Repeated question",
         attachments: [],
         messageRef: messageRef("m1"),
       },
-      { id: "ht:hu:m1>0", kind: "assistant", text: "相同回答", round: 1 },
+      { id: "ht:hu:m1>0", kind: "assistant", text: "Same answer", round: 1 },
     ],
     { mode: "replace" },
   );
@@ -1256,14 +1256,14 @@ test("active sync preserves an older completed exchange with the same prompt tex
         {
           id: "snapshot-user",
           kind: "user",
-          text: "重复问题",
+          text: "Repeated question",
           attachments: [],
           messageId: "m2",
         },
         {
           id: "snapshot-assistant",
           kind: "assistant",
-          text: "相同回答，继续生成",
+          text: "Same answer, keep generating",
           round: 1,
         },
       ]),
@@ -1279,8 +1279,8 @@ test("active sync preserves an older completed exchange with the same prompt tex
   assert.equal(allRows(snapshot).filter((row) => row.kind === "user").length, 2);
   assert.equal(allRows(snapshot).filter((row) => row.kind === "assistant").length, 2);
   const text = allRows(snapshot).map((row) => rowText(row)).join("\n");
-  assert.match(text, /相同回答/);
-  assert.match(text, /相同回答，继续生成/);
+  assert.match(text, /Same answer/);
+  assert.match(text, /Same answer, keep generating/);
   assert.equal(snapshot.activeRun?.runId, "run-2");
 });
 
@@ -1339,7 +1339,7 @@ test("retry attempts mirror into the snapshot, survive plain status updates and 
     conversation_id: "conv-1",
     run_id: "run-1",
     seq: 2,
-    status: "连接已断开，正在重试 (1/5)...",
+    status: "Connection lost, retrying (1/5)...",
     retryAttempts: [{ attempt: 1, maxAttempts: 5, errorMessage: "503 service unavailable" }],
   });
   store.flush();
@@ -1355,12 +1355,12 @@ test("retry attempts mirror into the snapshot, survive plain status updates and 
     conversation_id: "conv-1",
     run_id: "run-1",
     seq: 3,
-    status: "模型生成中...",
+    status: "Model generating...",
     retryAttempts: null,
   });
   store.flush();
   snapshot = store.getSnapshot();
-  assert.equal(snapshot.toolStatus, "模型生成中...");
+  assert.equal(snapshot.toolStatus, "Model generating...");
   assert.equal(snapshot.retryAttempts.length, 1, "plain status update keeps retry history");
 
   // An explicit empty array clears the list (fresh network attempt).
@@ -1369,7 +1369,7 @@ test("retry attempts mirror into the snapshot, survive plain status updates and 
     conversation_id: "conv-1",
     run_id: "run-1",
     seq: 4,
-    status: "模型生成中...",
+    status: "Model generating...",
     retryAttempts: [],
   });
   store.flush();
@@ -1380,7 +1380,7 @@ test("retry attempts mirror into the snapshot, survive plain status updates and 
     conversation_id: "conv-1",
     run_id: "run-1",
     seq: 5,
-    status: "连接已断开，正在重试 (1/5)...",
+    status: "Connection lost, retrying (1/5)...",
     retryAttempts: [{ attempt: 1, maxAttempts: 5, errorMessage: "rate limited" }],
   });
   store.applyEvent(runFinished("run-1", 6));
@@ -1396,7 +1396,7 @@ test("retry attempts reset at the next run_started", () => {
     conversation_id: "conv-1",
     run_id: "run-1",
     seq: 2,
-    status: "连接已断开，正在重试 (2/5)...",
+    status: "Connection lost, retrying (2/5)...",
     retryAttempts: [
       { attempt: 1, maxAttempts: 5, errorMessage: "503" },
       { attempt: 2, maxAttempts: 5, errorMessage: "timeout" },
@@ -1627,9 +1627,9 @@ test("identical prompts across exchanges keep distinct keys through enrich", () 
     ["run-1", 0],
     ["run-2", 4],
   ]) {
-    store.applyEvent(userMessage(runId, base + 1, "继续"));
+    store.applyEvent(userMessage(runId, base + 1, "Continue"));
     store.applyEvent(runStarted(runId, base + 2));
-    store.applyEvent(token(runId, base + 3, runId === "run-1" ? "第一次回复" : "第二次回复"));
+    store.applyEvent(token(runId, base + 3, runId === "run-1" ? "First reply" : "Second reply"));
     store.applyEvent(runFinished(runId, base + 4));
   }
   store.flush();
@@ -1639,10 +1639,10 @@ test("identical prompts across exchanges keep distinct keys through enrich", () 
 
   store.applyHistorySnapshot(
     [
-      { id: "hu:ma", kind: "user", text: "继续", attachments: [], messageRef: messageRef("ma") },
-      { id: "ht:hu:ma>0", kind: "assistant", text: "第一次回复", round: 1 },
-      { id: "hu:mb", kind: "user", text: "继续", attachments: [], messageRef: messageRef("mb", 2) },
-      { id: "ht:hu:mb>0", kind: "assistant", text: "第二次回复", round: 1 },
+      { id: "hu:ma", kind: "user", text: "Continue", attachments: [], messageRef: messageRef("ma") },
+      { id: "ht:hu:ma>0", kind: "assistant", text: "First reply", round: 1 },
+      { id: "hu:mb", kind: "user", text: "Continue", attachments: [], messageRef: messageRef("mb", 2) },
+      { id: "ht:hu:mb>0", kind: "assistant", text: "Second reply", round: 1 },
     ],
     { mode: "enrich" },
   );
@@ -2626,8 +2626,8 @@ test("manual compaction checkpoint stays a single card after the next exchange's
   const { parseHistoryMessagesJson } = loader.loadModule("src/lib/chatUi.ts");
   const store = createTranscriptStore();
 
-  // 手动压缩 run：无 user_message，只有 checkpoint token（gatewayBridgeEvents
-  // 的 queueCheckpoint 形状）+ historyRequired 终态。
+  // Manual compaction run: no user_message, only a checkpoint token (the queueCheckpoint shape from
+  // gatewayBridgeEvents) + a historyRequired terminal state.
   store.applyEvent(runStarted("run-compact", 1));
   store.applyEvent({
     type: "token",
@@ -2661,15 +2661,15 @@ test("manual compaction checkpoint stays a single card after the next exchange's
     "one checkpoint card right after compaction",
   );
 
-  // 下一轮发送落定。
+  // The next round's send settles.
   store.applyEvent(runStarted("run-2", 4));
   store.applyEvent(userMessage("run-2", 5, "next prompt", { message_id: "user-2" }));
   store.applyEvent(token("run-2", 6, "reply"));
   store.applyEvent(runFinished("run-2", 7));
   store.flush();
 
-  // 历史刷新把同一检查点（同 summaryId）并进折叠区：压缩 turn 无用户消息
-  // 锚点、无法被对齐覆盖，其检查点副本必须在行构建层被内容身份去重。
+  // The history refresh merges the same checkpoint (same summaryId) into the collapsed region: the
+  // compaction turn has no user-message anchor and cannot be overwritten by alignment, so its checkpoint copy must be deduplicated by content identity at the row-building layer.
   const historyEntries = parseHistoryMessagesJson(
     JSON.stringify([
       {
@@ -2710,7 +2710,7 @@ test("a compaction inside a streaming reply renders one assistant row with an in
   const liveRowBefore = allRows(before).at(-1);
   assert.equal(liveRowBefore.kind, "assistant");
 
-  // 运行中压缩：checkpoint token 落在同一 run 内，之后继续流式。
+  // Compaction during a run: the checkpoint token lands within the same run, then streaming continues.
   store.applyEvent({
     type: "token",
     conversation_id: "conv-1",
@@ -2752,7 +2752,7 @@ test("a compaction inside a streaming reply renders one assistant row with an in
   store.applyEvent(runFinished("run-1", 6));
   store.flush();
 
-  // 历史刷新后的形态：assistant → summary → assistant，同样缝合成一条。
+  // Shape after history refresh: assistant -> summary -> assistant, likewise stitched into one row.
   const historyEntries = parseHistoryMessagesJson(
     JSON.stringify([
       { role: "user", id: "user-1", content: "do a lot", timestamp: 500 },

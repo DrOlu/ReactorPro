@@ -191,13 +191,13 @@ test("web renders a compact trigger whose task list never occupies layout space"
 
   assert.equal(root.type, "div");
   assert.equal(root.props["data-task-progress-root"], "");
-  // 药丸按内容收缩，不再撑成固定宽度的常驻卡片。
+  // The pill shrinks to its content instead of stretching into a fixed-width always-on card.
   assert.match(root.props.className, /\binline-flex\b/);
   assert.match(root.props.className, /group\/task-progress/);
   assert.doesNotMatch(root.props.className, /max-w-\[440px\]/);
   assert.doesNotMatch(root.props.className, /\bmb-4\b/);
 
-  // 触发器只留状态图标与步进文案。
+  // The trigger keeps only the status icon and the step text.
   assert.equal(treeText(trigger), "Step 2 of 3");
   assert.equal(trigger.props["aria-label"], "Task progress · Step 2 of 3 · 1/3 completed · Running");
   assert.equal(trigger.props["aria-describedby"], panel.props.id);
@@ -205,7 +205,7 @@ test("web renders a compact trigger whose task list never occupies layout space"
   assert.equal(otherButtons.length, 0);
   assert.equal(statusIcons(trigger)[0].props.state, "running");
 
-  // 浮层绝对定位在触发器之上，默认透明且不吃指针，hover / 键盘聚焦才显形。
+  // The popover is absolutely positioned above the trigger, transparent and pointer-transparent by default, appearing only on hover / keyboard focus.
   assert.equal(panel.props.role, "tooltip");
   assert.match(panel.props.className, /\babsolute\b/);
   assert.match(panel.props.className, /\bbottom-full\b/);
@@ -249,11 +249,11 @@ test("web clamps long subjects to two lines and reveals the full text through on
     createIndicatorHarness().render(),
   );
 
-  // 列表容器本身永不出现横向滚动条：无空格长串在行内折行，其余溢出一律裁掉。
+  // The list container itself never shows a horizontal scrollbar: long unbroken strings wrap within the line, and any other overflow is clipped.
   assert.match(list.props.className, /\boverflow-x-hidden\b/);
   assert.match(list.props.className, /\boverflow-y-auto\b/);
 
-  // 每一行都是同一个 tooltip 的分离式触发器，payload 携带完整标题。
+  // Each row is a detached trigger for the same tooltip, with the payload carrying the full title.
   assert.equal(subjectTriggers.length, rows.length);
   const handle = tooltip.props.handle;
   assert.equal(handle.kind, "tooltip-handle");
@@ -270,11 +270,11 @@ test("web clamps long subjects to two lines and reveals the full text through on
     assert.match(textClass, /\bmin-w-0\b/);
     assert.match(textClass, /\bflex-1\b/);
   }
-  // 运行中的行加粗、已完成的行降为次要色，与之前的行样式一致。
+  // Running rows are bold and completed rows drop to the muted color, consistent with the previous row styling.
   assert.match(subjectTriggers[0].props.render.props.className, /text-muted-foreground/);
   assert.match(subjectTriggers[1].props.render.props.className, /font-medium/);
 
-  // 只有真被 line-clamp 截断的行才允许弹出；完整可见的行取消这次打开。
+  // Only rows actually truncated by line-clamp are allowed to pop up; fully visible rows cancel this open.
   assert.equal(tooltip.props.disableHoverablePopup, true);
   const attemptOpen = (open, trigger) => {
     let canceled = false;
@@ -288,27 +288,29 @@ test("web clamps long subjects to two lines and reveals the full text through on
   };
   assert.equal(attemptOpen(true, { scrollHeight: 60, clientHeight: 40 }), false);
   assert.equal(attemptOpen(true, { scrollHeight: 40, clientHeight: 40 }), true);
-  // 亚像素舍入带来的 1px 差值不算截断。
+  // A 1px difference from subpixel rounding does not count as truncation.
   assert.equal(attemptOpen(true, { scrollHeight: 41, clientHeight: 40 }), true);
   assert.equal(attemptOpen(true, undefined), true);
-  // 关闭请求从不拦截，否则弹层会卡在打开态。
+  // Close requests are never intercepted, otherwise the popover would get stuck open.
   assert.equal(attemptOpen(false, undefined), false);
-  // 弹层本就没开时，否决不会多余地触发一次关闭。
+  // When the popover was not open, vetoing it does not trigger a redundant close.
   await Promise.resolve();
   assert.equal(handle.closeCalls, 0);
 
-  // 弹层还挂在上一条被截断的行上、指针直接滑进相邻完整行：hover 逻辑把它当作
-  // "换触发器"而不主动收起，这里否决新行的同时必须把旧弹层关掉，否则会卡住不动。
+  // The popover is still anchored to the previous truncated row while the pointer slides directly
+  // into an adjacent fully visible row: the hover logic treats this as "switching triggers" and
+  // does not retract on its own, so vetoing the new row here must also close the old popover,
+  // otherwise it gets stuck.
   handle.isOpen = true;
   assert.equal(attemptOpen(true, { scrollHeight: 20, clientHeight: 20 }), true);
   await Promise.resolve();
   assert.equal(handle.closeCalls, 1);
-  // 换到另一条同样被截断的行则交给 tooltip 自己迁移锚点，不能误关。
+  // Switching to another equally truncated row delegates anchor migration to the tooltip itself and must not close it by mistake.
   assert.equal(attemptOpen(true, { scrollHeight: 60, clientHeight: 40 }), false);
   await Promise.resolve();
   assert.equal(handle.closeCalls, 1);
 
-  // 弹层内容就是当前触发行的完整标题，且不吃指针，避免盖住上一行时把外层 hover 面板打断。
+  // The popover content is exactly the current trigger row's full title and does not capture pointer events, avoiding breaking the outer hover panel while overlapping the previous row.
   const content = tooltip.props.children({ payload: "Implement completion criteria" });
   assert.equal(content.type.name, "TooltipContent");
   assert.equal(content.props.children, "Implement completion criteria");
@@ -411,7 +413,7 @@ test("web reflects pending, paused, and completed states in the trigger and rows
   });
   const completedView = readIndicator(indicator.render({ snapshot: completed }));
   assert.equal(statusIcons(completedView.trigger)[0].props.state, "completed");
-  // 计划跑完后药丸改用汇总文案，步进数字已无信息量。
+  // After the plan finishes, the pill switches to summary copy since the step numbers no longer add information.
   assert.equal(treeText(completedView.trigger), "All completed");
   assert.match(completedView.progress.props["aria-label"], /All completed/);
   assert.equal(completedView.rows.length, 3);

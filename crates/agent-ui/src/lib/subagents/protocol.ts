@@ -1,8 +1,9 @@
 /**
  * Subagent UI wire protocol.
  *
- * 本文件是 GUI/WebUI 的单一协议真源，必须保持零依赖；两端只依据这些随
- * tool_call/tool_result 传输的结构渲染子代理工具调用。
+ * This file is the single source of truth for the protocol shared by the GUI/WebUI and must stay
+ * dependency-free; both ends render subagent tool calls solely from these structures transported
+ * alongside tool_call/tool_result.
  */
 
 export type SubagentProtocolMode = "readonly" | "worktree";

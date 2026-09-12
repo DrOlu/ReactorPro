@@ -32,7 +32,7 @@ test("webui normalizes LaTeX delimiters with the mirrored parser", () => {
 p_0 = p \cdot 10^{\frac{H}{18400(1+t/273)}}
 \]
 
-其中 \(p_0\) 是海平面气压。`;
+where \(p_0\) is the sea-level pressure.`;
 
   assert.equal(
     normalizeLatexDelimiters(content),
@@ -40,7 +40,7 @@ p_0 = p \cdot 10^{\frac{H}{18400(1+t/273)}}
 p_0 = p \cdot 10^{\frac{H}{18400(1+t/273)}}
 $$
 
-其中 $$p_0$$ 是海平面气压。`,
+where $$p_0$$ is the sea-level pressure.`,
   );
 });
 
@@ -51,11 +51,11 @@ test("webui preserves code and supports an incomplete streaming formula", () => 
 });
 
 test("webui converts single-dollar math and keeps currency literal", () => {
-  assert.equal(normalizeLatexDelimiters("质能方程 $E = mc^2$。"), "质能方程 $$E = mc^2$$。");
+  assert.equal(normalizeLatexDelimiters("mass-energy equation $E = mc^2$."), "mass-energy equation $$E = mc^2$$.");
 
-  const currency = "价格 $5，成本 $10。";
+  const currency = "price $5, cost $10.";
   assert.equal(normalizeLatexDelimiters(currency), currency);
 
-  const streamingInline = "计算 $E = mc^";
+  const streamingInline = "compute $E = mc^";
   assert.equal(normalizeLatexDelimiters(streamingInline, true), streamingInline);
 });

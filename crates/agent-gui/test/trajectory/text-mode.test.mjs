@@ -28,8 +28,8 @@ function loadTurn(streamImpl) {
           ...state,
           messages: [...(state.messages ?? []), ...messages],
         }),
-        // tokenLedger.getMessageObservedTokens（轮次 meta 的权威锚点）依赖它
-        // 识别压缩检查点消息；测试消息都不是检查点。
+        // tokenLedger.getMessageObservedTokens (the authoritative anchor for turn meta) relies on it
+        // to identify compaction checkpoint messages; the test messages are never checkpoints.
         isCompactionAssistantMessage: () => false,
       },
       [resolve("src/lib/chat/memory/extractionController.ts")]: {

@@ -217,29 +217,29 @@ pub(crate) fn probe_process_start_time(_pid: u32) -> ProcessProbe {
     ProcessProbe::Unknown
 }
 
-/// 启动时间比对的容差：超出即认为这个 pid 已被别的进程复用，不能再对它发信号。
+/// Tolerance for start-time comparison: beyond this, the pid is considered reused by another process and must not be signaled.
 ///
-/// unix 侧 `ps -o etime=` 只有秒级精度，换算出来的启动时间必然有抖动，所以这里必须
-/// 留出宽容度；windows 侧 `GetProcessTimes` 直接给出创建时间，精确到 100ns，同样的
-/// 宽容度只是稍宽一点，不会漏判 pid 复用。**这个常量必须在所有平台都可见**——它被
-/// 非 `cfg` 门控的 `terminate_process_tree_by_pid_if_same` 使用，只在 unix 下定义会让
-/// windows 构建直接报 E0425（CI 的 Rust 检查只跑 Linux，发现不了）。
+/// On unix, `ps -o etime=` only has second-level precision, so the derived start time inevitably jitters, hence the slack
+/// here; on windows, `GetProcessTimes` gives the creation time directly, accurate to 100ns, and the same slack is merely
+/// a bit wider and won't cause a missed pid-reuse detection. **This constant must be visible on all platforms**—it is used by
+/// the non-`cfg`-gated `terminate_process_tree_by_pid_if_same`, and defining it only under unix would make
+/// the windows build fail with E0425 (the CI Rust check only runs on Linux and would not catch it).
 const PID_START_TIME_TOLERANCE_MS: i64 = 2_000;
 
-/// 按 pid 终止进程树，但先确认这个 pid 仍是当初启动的那个进程。
+/// Terminates the process tree by pid, but first confirms this pid is still the process that was originally started.
 ///
-/// 收尸线程会在子进程退出后立刻 `wait()` 掉它，此后 pid 可以被内核复用——
-/// 对一个"已经不是我们子进程"的 pid 发 TERM/KILL 会误伤无辜。所以调用方在启动时
-/// 记下 `started_at_ms`，这里先比对启动时间：进程已消失（被判 Dead）或启动时间
-/// 对不上（pid 复用）时直接返回。
+/// The reaper thread `wait()`s the child as soon as it exits, after which the kernel may reuse the pid—
+/// sending TERM/KILL to a pid that is "no longer our child" would harm an innocent process. So callers record
+/// `started_at_ms` at spawn time, and here we first compare start times: if the process has vanished (judged Dead) or the start
+/// time doesn't match (pid reuse), we return immediately.
 pub(crate) fn terminate_process_tree_by_pid_if_same(
     pid: u32,
     started_at_ms: Option<i64>,
     grace: Duration,
 ) {
     let Some(expected_started_at_ms) = started_at_ms else {
-        // 启动时没探测到启动时间（`ps` 失败等）：退回旧的 pid-only 语义，
-        // 与 managed_process 的既有取舍一致。
+        // Start time wasn't probed at spawn (e.g. `ps` failed): fall back to the old pid-only semantics,
+        // consistent with managed_process's existing tradeoff.
         terminate_process_tree_by_pid(pid, grace);
         return;
     };
@@ -248,7 +248,7 @@ pub(crate) fn terminate_process_tree_by_pid_if_same(
         ProcessProbe::Alive {
             started_at_ms: actual,
         } if (actual - expected_started_at_ms).abs() > PID_START_TIME_TOLERANCE_MS => return,
-        // Unknown（探测失败）沿用旧行为：保守发信号，宁可多杀一次进程组。
+        // Unknown (probe failed) keeps the old behavior: signal conservatively, preferring to kill the process group one extra time.
         ProcessProbe::Alive { .. } | ProcessProbe::Unknown => {}
     }
     terminate_process_tree_by_pid(pid, grace);
@@ -256,12 +256,12 @@ pub(crate) fn terminate_process_tree_by_pid_if_same(
 
 /// Spawn a fire-and-forget child and reap it on a detached thread.
 ///
-/// `std::process::Child` 不实现 drop-reap：`spawn()` 之后把 Child 丢掉，子进程退出
-/// 时没有人 `wait()`，它就会在本进程下挂成 `<defunct>`，直到本进程退出为止。
-/// 系统启动器（`open` / `explorer.exe` / `xdg-open`）必须"不等它、但要收尸"——
-/// 否则每次在 Finder/资源管理器中显示文件都漏一个僵尸，长会话里 PID 表持续增长。
+/// `std::process::Child` does not drop-reap: if the Child is dropped after `spawn()` and nobody `wait()`s
+/// when the child exits, it hangs as a `<defunct>` under this process until this process exits.
+/// System launchers (`open` / `explorer.exe` / `xdg-open`) must "not wait for it, but still reap it"—
+/// otherwise every reveal-in-Finder/Explorer leaks a zombie, and the PID table keeps growing across long sessions.
 ///
-/// 返回子进程 pid，供调用方记录与测试观察。
+/// Returns the child pid for callers to record and tests to observe.
 pub(crate) fn spawn_and_reap(command: &mut Command) -> io::Result<u32> {
     let child = command.spawn()?;
     let pid = child.id();
@@ -269,10 +269,10 @@ pub(crate) fn spawn_and_reap(command: &mut Command) -> io::Result<u32> {
     Ok(pid)
 }
 
-/// 在分离线程里 `wait()` 掉一个不再需要句柄的子进程。
+/// `wait()`s a child process whose handle is no longer needed, on a detached thread.
 ///
-/// 线程创建失败（极端资源耗尽）时这个子进程会退化成未收尸——比在这里 panic
-/// 或阻塞调用方都更可接受，且这是可观测的：它会在进程表里显示为 `<defunct>`。
+/// If thread creation fails (extreme resource exhaustion), the child degrades to unreaped—more acceptable than
+/// panicking here or blocking the caller, and it is observable: it shows up as `<defunct>` in the process table.
 pub(crate) fn spawn_child_reaper(mut child: Child) {
     let spawned = std::thread::Builder::new()
         .name("child-reaper".to_string())
@@ -288,7 +288,7 @@ pub(crate) fn spawn_child_reaper(mut child: Child) {
 mod tests {
     use super::*;
 
-    /// `ps -o stat=` 的首字符（`Z` 即僵尸）；进程已消失时返回 None。
+    /// First character of `ps -o stat=` (`Z` means zombie); returns None if the process has vanished.
     #[cfg(test)]
     fn process_state_flag(pid: u32) -> Option<String> {
         let output = Command::new("ps")
@@ -346,9 +346,9 @@ mod tests {
 
     #[test]
     fn detached_child_is_reaped_instead_of_left_defunct() {
-        // 回归锁：`spawn()` 之后丢掉 Child 的写法会让子进程退出后一直挂在父进程下
-        // 当 `<defunct>`（系统启动器每次调用漏一个）；收尸线程必须把它从进程表里清掉。
-        // 旧实现下这个循环会一直读到 "Z"，最终 panic。
+        // Regression lock: dropping the Child after `spawn()` leaves the child hanging as `<defunct>` under the parent
+        // after it exits (one leaked per system-launcher call); the reaper thread must clear it from the process table.
+        // Under the old implementation this loop would keep reading "Z" and eventually panic.
         let mut command = Command::new("true");
         command
             .stdin(Stdio::null())
@@ -359,7 +359,7 @@ mod tests {
         let mut zombies = Vec::new();
         for _ in 0..150 {
             match process_state_flag(pid) {
-                // 已收尸：进程表里不再有这一项。
+                // Reaped: the process table no longer has this entry.
                 None => return,
                 Some(state) if !state.starts_with('Z') => return,
                 Some(state) => zombies.push(state),

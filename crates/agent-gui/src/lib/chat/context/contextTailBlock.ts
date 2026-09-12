@@ -5,9 +5,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * display-image 工具结果不能当锚点：requestContextSanitizer 会把这类消息的
- * content 整体替换为单个 text 块（见其 isDisplayImageToolResult 分支），
- * 追加在尾部的增量块会在下一次净化时被静默销毁。
+ * display-image tool results cannot be anchors: requestContextSanitizer replaces
+ * the content of these messages wholesale with a single text block (see its
+ * isDisplayImageToolResult branch), so incremental blocks appended to the tail are
+ * silently destroyed on the next sanitization pass.
  */
 function isDisplayImageToolResult(message: ToolResultMessage) {
   if (message.isError) return false;
@@ -16,15 +17,16 @@ function isDisplayImageToolResult(message: ToolResultMessage) {
 }
 
 /**
- * subagent 卡片工具结果不能当锚点：净化时整条被过滤掉，挂上去的内容随之消失。
+ * subagent card tool results cannot be anchors: the whole message is filtered out during
+ * sanitization, and anything attached to it disappears with it.
  */
 function isSubagentCardToolResult(message: ToolResultMessage) {
   return isRecord(message.details) && message.details.kind === "subagent_card";
 }
 
 /**
- * 紧跟在 aborted assistant 之后的工具结果不能当锚点：
- * stripAbortedMessagesForModelContext 会连同它们一起丢弃。
+ * Tool results immediately following an aborted assistant cannot be anchors:
+ * stripAbortedMessagesForModelContext discards them together with it.
  */
 function followsAbortedAssistant(messages: Message[], index: number) {
   for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
@@ -36,15 +38,17 @@ function followsAbortedAssistant(messages: Message[], index: number) {
 }
 
 /**
- * 找出可以承载尾部块的那条工具结果消息，返回它的 toolCallId。
+ * Finds the tool result message that can carry the tail blocks and returns its toolCallId.
  *
- * 锚点只在最后一条 user 消息之后寻找：缓存断点最多写到最后一条 user 消息，
- * 其后的工具循环消息每轮本就重读，追加不额外损失命中率；越过 user 消息则会
- * 改写已缓存前缀，比不改还糟。
+ * Anchors are only searched for after the last user message: a cache breakpoint can at most extend to the
+ * last user message, and the tool-loop messages after it are re-read every round anyway, so appending loses
+ * no extra cache hits; crossing the user message would rewrite the already-cached prefix, which is worse than
+ * not appending at all.
  *
- * toolCallId 为空的消息不能当锚点：钉不住的锚点等于没有锚点，后续轮次会退化成
- * 重新搜索，正是本模块要消灭的漂移。返回 null 表示本轮没有安全锚点，调用方据此
- * 判定“挂不上”，不推进游标、下一轮重试。
+ * A message with an empty toolCallId cannot be an anchor: an anchor that cannot be pinned is no anchor, and
+ * later rounds would degrade into re-searching, exactly the drift this module exists to eliminate. Returning
+ * null means there is no safe anchor this round, and the caller treats it as "cannot attach", advancing no
+ * cursor and retrying next round.
  */
 export function resolveTailBlockAnchorId(messages: Message[]): string | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -61,27 +65,30 @@ export function resolveTailBlockAnchorId(messages: Message[]): string | null {
   return null;
 }
 
-/** 一段已经投递过的尾部内容，连同它首次挂上的那条消息的 toolCallId。 */
+/** A tail content segment already delivered, together with the toolCallId of the message it was first attached to. */
 export type PinnedTailBlock = {
-  /** 首次挂上时解析到的锚点；后续轮次原样重挂到同一条消息。 */
+  /** The anchor resolved when first attached; later rounds reattach it unchanged to the same message. */
   anchorToolCallId: string;
   text: string;
 };
 
 /**
- * 把已钉住的尾部块重挂到各自的锚点消息上。
+ * Reattaches pinned tail blocks to their respective anchor messages.
  *
- * **锚点必须钉死，不能每轮重新搜索**：工具循环推进后“最后一条工具结果”会变，
- * 重新搜索会让块从上一轮的消息搬到新消息上——那条旧消息的字节随之变回去，
- * 前缀从它开始整段作废。这正是把内容移出 systemPrompt 想躲的问题，换个位置
- * 再犯一遍没有意义（实测：3 轮工具循环里第 2 轮起每轮都在旧消息处分叉）。
+ * **Anchors must be pinned down, never re-searched each round**: as the tool loop advances, the
+ * "last tool result" changes, and re-searching would move a block from the previous round's message to a
+ * new one -- the old message's bytes then revert, invalidating the entire prefix from that point on. That is
+ * exactly the problem that moving content out of systemPrompt set out to avoid, and committing it again in a
+ * different place is pointless (observed: in a 3-round tool loop, from round 2 onward every round diverges at
+ * the old message).
  *
- * 同一锚点上的多个块按投递顺序拼成独立 text 块，顺序固定即字节固定。
- * 锚点已不在消息列表里（压缩截断等）时，该块本轮不挂——调用方在压缩边界本就
- * 会清空累积并重新冻结，不需要在这里兜底搬家。
+ * Multiple blocks on the same anchor are concatenated in delivery order into separate text blocks; a fixed
+ * order means fixed bytes. When an anchor is no longer in the message list (compaction truncation, etc.), that
+ * block is not attached this round -- the caller already clears accumulated state and re-freezes at the
+ * compaction boundary, so there is no need to fall back to relocating here.
  *
- * 不做原地修改——消息对象与运行时状态、会话状态共享引用。
- * 一个块都没挂上时原样返回入参数组（引用相等）。
+ * No in-place mutation -- message objects share references with runtime state and session state.
+ * If no block was attached, the input array is returned unchanged (reference-equal).
  */
 export function attachPinnedTailBlocks(
   messages: Message[],

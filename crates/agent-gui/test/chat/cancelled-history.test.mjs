@@ -48,7 +48,7 @@ test("persistable cancelled snapshot strips incomplete tool artifacts but keeps 
       {
         round: 1,
         blocks: [
-          { kind: "text", text: "先看看这个文件。" },
+          { kind: "text", text: "Let's take a look at this file." },
           {
             kind: "tool",
             item: {
@@ -65,7 +65,7 @@ test("persistable cancelled snapshot strips incomplete tool artifacts but keeps 
   assert.equal(messages.length, 1);
   assert.equal(messages[0].role, "assistant");
   assert.equal(messages[0].stopReason, "aborted");
-  assert.deepEqual(messages[0].content, [{ type: "text", text: "先看看这个文件。" }]);
+  assert.deepEqual(messages[0].content, [{ type: "text", text: "Let's take a look at this file." }]);
 });
 
 test("persistable cancelled snapshot keeps visible provider hosted search blocks", () => {
@@ -74,7 +74,7 @@ test("persistable cancelled snapshot keeps visible provider hosted search blocks
     id: "search-1",
     provider: "codex",
     status: "searching",
-    queries: ["LiveAgent web search"],
+    queries: ["ReactorPro web search"],
     sources: [],
   };
   const messages = chatAbort.buildPersistableMessagesFromSnapshot({
@@ -170,18 +170,18 @@ test("persistable cancelled snapshot restores suppressed parent Agent trace with
 test("continuation request context skips cancelled rounds by default but can include them explicitly", () => {
   const state = conversationState.createConversationStateFromContext({
     messages: [
-      user("先读取文件", 1),
+      user("Read the file first", 1),
       {
         role: "assistant",
         content: [
-          { type: "text", text: "我先读一下。" },
+          { type: "text", text: "Let me read it first." },
           toolCall("call-1"),
         ],
         stopReason: "aborted",
         timestamp: 2,
       },
       toolResult("call-1", "Read", "partial tool output", 3),
-      user("继续", 4),
+      user("continue", 4),
     ],
   });
 
@@ -192,7 +192,7 @@ test("continuation request context skips cancelled rounds by default but can inc
   );
   assert.deepEqual(
     requestContext.messages.map((message) => message.content),
-    ["先读取文件", "继续"],
+    ["Read the file first", "continue"],
   );
 
   const rawContext = conversationState.buildRequestContext(state, {
@@ -225,7 +225,7 @@ test("model request sanitizer drops aborted hosted search rounds", () => {
 
   const context = requestContextSanitizer.sanitizeContextForModelRequest({
     messages: [
-      user("https://github.com/superzhang21/weibo-like-someone 请你多次联网搜索", 1),
+      user("https://github.com/superzhang21/weibo-like-someone please search the web several times", 1),
       {
         role: "assistant",
         content: [
@@ -268,10 +268,10 @@ test("model request sanitizer zeros aggregated usage after stripping hosted sear
         id: "hs-usage",
         provider: "openai",
         status: "completed",
-        queries: ["西安 新闻"],
+        queries: ["Xi'an news"],
         sources: [],
       },
-      { type: "text", text: "要点" },
+      { type: "text", text: "key points" },
     ],
     stopReason: "stop",
     usage: {

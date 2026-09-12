@@ -1,16 +1,17 @@
-//! MCP OAuth 2.1 服务（docs/design/mcp-oauth.md，roadmap P1-③）。
+//! MCP OAuth 2.1 service (docs/design/mcp-oauth.md, roadmap P1-3).
 //!
-//! 分层：
-//! - `discovery` 发现链（RFC 9728/8414 + 旧规范 fallback）
-//! - `register` RFC 7591 动态注册
-//! - `flow` PKCE/loopback/token 端点机械件
-//! - `store` keychain 存储 + 文件降级 + 进程内缓存
+//! Layers:
+//! - `discovery` discovery chain (RFC 9728/8414 + legacy-spec fallback)
+//! - `register` RFC 7591 dynamic registration
+//! - `flow` PKCE/loopback/token endpoint machinery
+//! - `store` keychain storage + file fallback + in-process cache
 //!
-//! 本模块编排两条路径：
-//! 1. **交互授权**（`authorize`）——仅由显式用户手势触发（MCP Hub Connect），
-//!    弹系统浏览器；同 server 进程内互斥。
-//! 2. **运行时供 token**（`ensure_bearer` / `refresh_after_unauthorized`）——
-//!    transport 每请求取 Bearer，将过期主动刷新、401 被动刷新；绝不弹浏览器。
+//! This module orchestrates two paths:
+//! 1. **Interactive authorization** (`authorize`) -- triggered only by an explicit user gesture
+//!    (MCP Hub Connect), opening the system browser; mutually exclusive per server within the process.
+//! 2. **Runtime token supply** (`ensure_bearer` / `refresh_after_unauthorized`) -- the transport
+//!    fetches a Bearer on every request, proactively refreshes on near-expiry and reactively on
+//!    401; it never opens a browser.
 
 pub mod discovery;
 pub mod flow;
@@ -22,23 +23,24 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
 use store::TokenRecord;
 
-/// 稳定标记：错误信息含它即「需要用户去 MCP Hub 完成授权」，前端据此引导。
+/// Stable marker: an error message containing it means "the user must complete authorization
+/// in MCP Hub", and the frontend guides accordingly.
 pub const AUTH_REQUIRED_MARKER: &str = "MCP_OAUTH_AUTHORIZATION_REQUIRED";
 
 #[derive(Debug, Clone)]
 pub struct OauthServer {
     pub id: String,
     pub url: String,
-    /// 配置里的 scope 覆盖（优先于 PRM scopes_supported）。
+    /// Scope override from configuration (takes precedence over PRM scopes_supported).
     pub scope_override: Option<String>,
-    /// 静态 client_id（企业 AS 场景；配置后跳过动态注册）。
+    /// Static client_id (enterprise AS scenario; dynamic registration is skipped once configured).
     pub static_client_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct OauthStatusInfo {
-    /// "none" | "authorized" | "expired"（expired 且 refreshable 时运行时会自愈）。
+    /// "none" | "authorized" | "expired" (when expired and refreshable, the runtime self-heals).
     pub state: String,
     pub refreshable: bool,
     /// "keychain" | "file" | "unknown"
@@ -78,7 +80,8 @@ fn status_of(record: &TokenRecord) -> OauthStatusInfo {
     }
 }
 
-/// 读取记录并校验其 server_url 与当前配置一致；不一致视作无 token（防串用）。
+/// Loads a record and verifies its server_url matches the current configuration; a mismatch is
+/// treated as no token (prevents cross-use).
 fn load_matching(server_id: &str, url: &str) -> Option<TokenRecord> {
     let record = store::load(server_id)?;
     let canonical = discovery::canonical_resource(url).ok()?;
@@ -92,23 +95,24 @@ pub fn status(server: &OauthServer) -> OauthStatusInfo {
     }
 }
 
-/// 卸载 server / 用户断开授权时调用：清 keychain 与文件降级条目。
+/// Called when uninstalling a server / when the user disconnects authorization: clears the
+/// keychain and file-fallback entries.
 pub fn clear(server_id: &str) -> Result<(), String> {
     clear_client_suspect(server_id);
     store::delete(server_id)
 }
 
 fn http_client() -> Result<reqwest::blocking::Client, String> {
-    // 出站纪律：与 MCP transport 同走应用代理，代理配置异常 fail fast。
+    // Egress discipline: uses the app proxy like the MCP transport, and fails fast on proxy misconfiguration.
     crate::services::system_proxy::blocking_client_builder()
-        .map_err(|e| format!("创建 OAuth HTTP client 失败：{e}"))?
+        .map_err(|e| format!("Failed to create OAuth HTTP client: {e}"))?
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(20))
         .build()
-        .map_err(|e| format!("创建 OAuth HTTP client 失败：{e}"))
+        .map_err(|e| format!("Failed to create OAuth HTTP client: {e}"))
 }
 
-// ---- 交互授权（进程内同 server 互斥） ----
+// ---- Interactive authorization (mutually exclusive per server within the process) ----
 
 fn authorize_guard() -> &'static Mutex<HashSet<String>> {
     static GUARD: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
@@ -121,10 +125,10 @@ impl AuthorizeSlot {
     fn acquire(server_id: &str) -> Result<Self, String> {
         let mut guard = authorize_guard()
             .lock()
-            .map_err(|_| "授权互斥锁失败".to_string())?;
+            .map_err(|_| "Authorization mutex lock failed".to_string())?;
         if !guard.insert(server_id.to_string()) {
             return Err(format!(
-                "server `{server_id}` 的授权正在进行中，请先完成或等待超时"
+                "Authorization for server `{server_id}` is already in progress; finish it or wait for it to time out"
             ));
         }
         Ok(Self(server_id.to_string()))
@@ -139,10 +143,11 @@ impl Drop for AuthorizeSlot {
     }
 }
 
-/// 浏览器阶段/换码失败过的存量 client（server id 集合，进程内）。命中的
-/// server 下次授权跳过复用、直接动态重注册自愈；keychain 记录原样保留——
-/// 授权失败可能只是超时/用户关页，存量 token/refresh_token 运行时仍有效，
-/// 不能因一次未完成的 Reauthorize 就销毁可用凭据。
+/// Stored clients that failed during the browser phase/code exchange (a set of server ids,
+/// in-process). A matched server skips reuse on the next authorization and self-heals via direct
+/// dynamic re-registration; the keychain record is kept as-is -- an authorization failure may be
+/// just a timeout or the user closing the page, and the stored token/refresh_token are still valid
+/// at runtime, so usable credentials must not be destroyed over one incomplete Reauthorize.
 fn suspect_clients() -> &'static Mutex<HashSet<String>> {
     static SUSPECTS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
     SUSPECTS.get_or_init(|| Mutex::new(HashSet::new()))
@@ -167,27 +172,29 @@ fn clear_client_suspect(server_id: &str) {
     }
 }
 
-/// 完整交互授权流（阻塞数分钟，必须在 spawn_blocking 里跑）。
-/// `open_url` 由命令层注入（tauri-plugin-opener），保持服务层无 Tauri 依赖。
+/// The full interactive authorization flow (blocks for minutes; must run inside spawn_blocking).
+/// `open_url` is injected by the command layer (tauri-plugin-opener), keeping the service layer
+/// free of Tauri dependencies.
 pub fn authorize(
     server: &OauthServer,
     open_url: &dyn Fn(&str) -> Result<(), String>,
 ) -> Result<OauthStatusInfo, String> {
     let server_id = server.id.trim();
     if server_id.is_empty() {
-        return Err("server id 不能为空".to_string());
+        return Err("server id must not be empty".to_string());
     }
     let _slot = AuthorizeSlot::acquire(server_id)?;
 
     let client = http_client()?;
     let discovered = discovery::discover(&client, &server.url)?;
 
-    // 先绑端口再定 redirect_uri，动态注册才能带上准确的回调地址。
+    // Bind the port before fixing redirect_uri, so dynamic registration carries the exact callback address.
     let loopback = flow::Loopback::bind()?;
     let redirect_uri = loopback.redirect_uri();
 
-    // client 凭据：静态配置 > keychain 存量注册（issuer 一致才复用）> 动态注册。
-    // 上次授权失败过的存量 client 视作可疑，跳过复用直接重注册。
+    // Client credentials: static config > stored keychain registration (reused only if the issuer
+    // matches) > dynamic registration. A stored client that failed the previous authorization is
+    // treated as suspect, so reuse is skipped and it is re-registered directly.
     let stored = load_matching(server_id, &server.url);
     let reused_stored_client = !is_client_suspect(server_id)
         && stored.as_ref().is_some_and(|record| {
@@ -209,7 +216,7 @@ pub fn authorize(
     } else {
         let endpoint = discovered.registration_endpoint.as_deref().ok_or_else(|| {
             format!(
-                "授权服务器 {} 未开放动态注册，请在 server 配置里填写 OAuth Client ID",
+                "Authorization server {} does not expose dynamic registration; provide an OAuth Client ID in the server configuration",
                 discovered.issuer
             )
         })?;
@@ -247,15 +254,16 @@ pub fn authorize(
         scope.as_deref(),
     )?;
     if !flow::is_safe_browser_url(&authorize_url) {
-        return Err(format!("拒绝打开不安全的授权 URL：{authorize_url}"));
+        return Err(format!("Refusing to open an unsafe authorization URL: {authorize_url}"));
     }
     open_url(&authorize_url)?;
 
     let code = match loopback.wait_for_code(&state, flow::AUTHORIZE_TIMEOUT) {
         Ok(code) => code,
         Err(error) => {
-            // 失败原因无法区分「AS 作废了复用的 client」与超时/用户关页等无关
-            // 故障，只标记 client 可疑（下次授权重注册），存量 token 保留。
+            // The failure reason cannot distinguish "the AS invalidated the reused client" from
+            // unrelated faults like a timeout or the user closing the page, so only mark the client
+            // suspect (re-register on the next authorization) and keep the stored token.
             if reused_stored_client && server.static_client_id.is_none() {
                 mark_client_suspect(server_id);
             }
@@ -278,7 +286,7 @@ pub fn authorize(
         &discovered.resource,
     )
     .map_err(|error| {
-        // 换码被拒（如 invalid_client）同样只标记，等下次授权走重注册。
+        // A rejected code exchange (e.g. invalid_client) likewise only marks the client, deferring re-registration to the next authorization.
         if reused_stored_client && server.static_client_id.is_none() {
             mark_client_suspect(server_id);
         }
@@ -310,7 +318,7 @@ pub fn authorize(
     Ok(status_of(&record))
 }
 
-// ---- 运行时 token 供给 ----
+// ---- Runtime token supply ----
 
 fn refresh_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
     static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
@@ -328,10 +336,11 @@ fn refresh_lock_for(server_id: &str) -> Arc<Mutex<()>> {
         .clone()
 }
 
-/// 刷新并落盘；单飞：并发到达的请求拿锁后重读，若别人刚刷完直接复用。
+/// Refreshes and persists; single-flight: concurrent requests re-read after taking the lock and
+/// reuse the result if someone else just finished refreshing.
 fn refresh_record(server_id: &str, stale: &TokenRecord) -> Result<TokenRecord, String> {
     let lock = refresh_lock_for(server_id);
-    let _guard = lock.lock().map_err(|_| "刷新互斥锁失败".to_string())?;
+    let _guard = lock.lock().map_err(|_| "Refresh mutex lock failed".to_string())?;
 
     if let Some(current) = store::load(server_id) {
         if current.access_token != stale.access_token && !current.is_expiring(store::now_ms()) {
@@ -340,7 +349,7 @@ fn refresh_record(server_id: &str, stale: &TokenRecord) -> Result<TokenRecord, S
         let refresh_token = current
             .refresh_token
             .clone()
-            .ok_or_else(|| "无 refresh_token，需重新授权".to_string())?;
+            .ok_or_else(|| "No refresh_token; re-authorization is required".to_string())?;
 
         let client = http_client()?;
         let credentials = flow::ClientCredentials {
@@ -359,7 +368,7 @@ fn refresh_record(server_id: &str, stale: &TokenRecord) -> Result<TokenRecord, S
         let now = store::now_ms();
         let mut next = current.clone();
         next.access_token = tokens.access_token;
-        // RFC 6749 §6：AS 可轮换 refresh_token；未返回则沿用旧值。
+        // RFC 6749 §6: the AS may rotate refresh_token; if not returned, keep the old value.
         if let Some(rotated) = tokens.refresh_token {
             next.refresh_token = Some(rotated);
         }
@@ -373,30 +382,32 @@ fn refresh_record(server_id: &str, stale: &TokenRecord) -> Result<TokenRecord, S
         store::save(server_id, &next)?;
         Ok(next)
     } else {
-        Err("token 记录已不存在，需重新授权".to_string())
+        Err("Token record no longer exists; re-authorization is required".to_string())
     }
 }
 
-/// transport 每请求取 Bearer：无记录/URL 不符返回 None（请求裸发，401 走被动
-/// 路径）；将过期且可刷新时主动刷新，刷新失败仍返回旧 token 兜底尝试。
+/// The transport fetches a Bearer on every request: returns None when there is no record / the URL
+/// does not match (the request goes out bare, and 401 takes the reactive path); proactively refreshes
+/// when near expiry and refreshable, and still returns the old token as a fallback if the refresh fails.
 pub fn ensure_bearer(server_id: &str, url: &str) -> Option<String> {
     let record = load_matching(server_id, url)?;
     if record.is_expiring(store::now_ms()) && record.refresh_token.is_some() {
         match refresh_record(server_id.trim(), &record) {
             Ok(next) => return Some(next.access_token),
             Err(error) => {
-                eprintln!("[MCP OAuth] server `{server_id}` 主动刷新失败，回退旧 token：{error}");
+                eprintln!("[MCP OAuth] proactive refresh for server `{server_id}` failed; falling back to the old token: {error}");
             }
         }
     }
     Some(record.access_token)
 }
 
-/// 401 被动刷新：成功返回新 Bearer；不可行（无记录/无 refresh_token/刷新被拒）
-/// 返回 Err——调用方应转成带 [`AUTH_REQUIRED_MARKER`] 的用户可见错误。
+/// 401 reactive refresh: returns the new Bearer on success; when infeasible (no record / no
+/// refresh_token / refresh rejected) returns Err -- the caller should convert it into a user-visible
+/// error carrying [`AUTH_REQUIRED_MARKER`].
 pub fn refresh_after_unauthorized(server_id: &str, url: &str) -> Result<String, String> {
     let record = load_matching(server_id, url)
-        .ok_or_else(|| "尚未完成 OAuth 授权（无 token 记录）".to_string())?;
+        .ok_or_else(|| "OAuth authorization not yet completed (no token record)".to_string())?;
     let refreshed = refresh_record(server_id.trim(), &record)?;
     Ok(refreshed.access_token)
 }
@@ -409,15 +420,15 @@ mod tests {
     fn authorize_slot_blocks_concurrent_same_server() {
         let slot = AuthorizeSlot::acquire("dup-server").expect("first");
         let second = AuthorizeSlot::acquire("dup-server");
-        assert!(second.is_err(), "同 server 并发授权必须被拒");
+        assert!(second.is_err(), "concurrent authorization for the same server must be rejected");
         assert!(
             AuthorizeSlot::acquire("other-server").is_ok(),
-            "不同 server 不受影响"
+            "other servers are unaffected"
         );
         drop(slot);
         assert!(
             AuthorizeSlot::acquire("dup-server").is_ok(),
-            "释放后可再授权"
+            "authorization is possible again after release"
         );
     }
 
@@ -425,11 +436,11 @@ mod tests {
     fn suspect_marking_skips_reuse_without_touching_other_servers() {
         assert!(!is_client_suspect("suspect-a"));
         mark_client_suspect("suspect-a");
-        assert!(is_client_suspect("suspect-a"), "标记后下次授权应跳过复用");
-        assert!(!is_client_suspect("suspect-b"), "标记只影响该 server");
+        assert!(is_client_suspect("suspect-a"), "after marking, the next authorization should skip reuse");
+        assert!(!is_client_suspect("suspect-b"), "the mark only affects that server");
         clear_client_suspect("suspect-a");
-        assert!(!is_client_suspect("suspect-a"), "授权成功/clear 后解除标记");
-        // 重复 clear 幂等。
+        assert!(!is_client_suspect("suspect-a"), "the mark is cleared after a successful authorization/clear");
+        // Repeated clear is idempotent.
         clear_client_suspect("suspect-a");
         assert!(!is_client_suspect("suspect-a"));
     }

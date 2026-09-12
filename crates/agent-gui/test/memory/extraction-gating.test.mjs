@@ -16,40 +16,44 @@ test("empty and punctuation-only messages are skipped", () => {
     "empty-user-message",
   );
   assert.equal(
-    extractionSkipReason({ ...base, latestUserText: "！？。。。！！？" }),
+    extractionSkipReason({ ...base, latestUserText: "!?...??!" }),
     "punctuation-only-user-message",
   );
 });
 
-test("short messages skip, including CJK grapheme counting", () => {
-  assert.equal(extractionSkipReason({ ...base, latestUserText: "好啊" }), "user-message-too-short");
+test("short messages skip, by grapheme count", () => {
+  assert.equal(extractionSkipReason({ ...base, latestUserText: "sure" }), "user-message-too-short");
   assert.equal(extractionSkipReason({ ...base, latestUserText: "ok!" }), "user-message-too-short");
-  // 6+ CJK graphemes pass the length gate
-  assert.equal(extractionSkipReason({ ...base, latestUserText: "我以后都用中文写代码注释" }), null);
+  // 6+ graphemes pass the length gate
+  assert.equal(
+    extractionSkipReason({ ...base, latestUserText: "I will always write code comments in English" }),
+    null,
+  );
 });
 
 test("greetings, thanks, and acks are skipped only when short", () => {
-  assert.equal(extractionSkipReason({ ...base, latestUserText: "你好呀今天怎么样" }), "greeting");
+  assert.equal(extractionSkipReason({ ...base, latestUserText: "hello there" }), "greeting");
   assert.equal(
-    extractionSkipReason({ ...base, latestUserText: "谢谢你帮我搞定" }),
+    extractionSkipReason({ ...base, latestUserText: "thanks for your help" }),
     "acknowledgement-thanks",
   );
   assert.equal(
-    extractionSkipReason({ ...base, latestUserText: "好的收到明白" }),
+    extractionSkipReason({ ...base, latestUserText: "ok got it" }),
     "acknowledgement-ok",
   );
   // long tail after the ack carries new instructions → must reach the LLM
   assert.equal(
     extractionSkipReason({
       ...base,
-      latestUserText: "谢谢你，请以后默认用中文回答我的所有问题，包括代码注释和提交信息",
+      latestUserText:
+        "thanks, please answer all my questions in English from now on, including code comments and commit messages",
     }),
     null,
   );
 });
 
 test("short confirmations pass only with a confirmable hypothesis", () => {
-  const text = "是的";
+  const text = "yes";
   assert.equal(
     extractionSkipReason({ latestUserText: text, hasConfirmableHypothesis: false, now: 1 }),
     "user-message-too-short",
@@ -63,13 +67,13 @@ test("short confirmations pass only with a confirmable hypothesis", () => {
 });
 
 test("isConfirmationDeferral identifies the deferral shape", () => {
-  assert.equal(isConfirmationDeferral("user-message-too-short", "是的"), true);
-  assert.equal(isConfirmationDeferral("user-message-too-short", "随便什么"), false);
-  assert.equal(isConfirmationDeferral(null, "是的"), false);
+  assert.equal(isConfirmationDeferral("user-message-too-short", "yes"), true);
+  assert.equal(isConfirmationDeferral("user-message-too-short", "whatever"), false);
+  assert.equal(isConfirmationDeferral(null, "yes"), false);
 });
 
 test("min-interval throttle uses injected state", () => {
-  const text = "我以后都用中文写代码注释";
+  const text = "I will always write code comments in English";
   assert.equal(
     extractionSkipReason({ ...base, latestUserText: text, lastRunAt: 995_000 }),
     "throttled-min-interval",
@@ -81,7 +85,7 @@ test("min-interval throttle uses injected state", () => {
 });
 
 test("no-new-user-message skips re-extraction of the same turn", () => {
-  const text = "我以后都用中文写代码注释";
+  const text = "I will always write code comments in English";
   assert.equal(
     extractionSkipReason({
       ...base,
@@ -103,13 +107,13 @@ test("no-new-user-message skips re-extraction of the same turn", () => {
 });
 
 test("confirmation word list is normalized against punctuation", () => {
-  assert.equal(isShortMemoryConfirmationText("  是的。 "), true);
+  assert.equal(isShortMemoryConfirmationText("  yes. "), true);
   assert.equal(isShortMemoryConfirmationText("Yes!"), true);
-  assert.equal(isShortMemoryConfirmationText("也许吧"), false);
+  assert.equal(isShortMemoryConfirmationText("maybe"), false);
 });
 
 test("grapheme length counts emoji clusters as single units", () => {
   assert.equal(graphemeLength("abc"), 3);
-  assert.equal(graphemeLength("你好"), 2);
+  assert.equal(graphemeLength("hi"), 2);
   assert.ok(graphemeLength("👍🏻👍🏻") <= 4);
 });

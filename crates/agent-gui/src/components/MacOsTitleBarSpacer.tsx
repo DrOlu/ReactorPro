@@ -143,8 +143,8 @@ export function MacOsTitleBarToggle({
         <button
           type="button"
           onClick={onOpenSettings}
-          // 自动化脚本按 testid 定位；可读名走 i18n——屏幕阅读器念给用户
-          // 听的东西不该为了脚本方便固定成英文。
+          // Automation scripts locate by testid; the readable name goes through i18n -- what a screen
+          // reader reads to the user should not be pinned to English just for script convenience.
           data-testid="open-settings"
           aria-label={t("tooltip.settings")}
           title={t("tooltip.settings")}

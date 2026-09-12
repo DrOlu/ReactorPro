@@ -346,7 +346,7 @@ test("checkpoint requests and responses round-trip through the agent-scoped gate
 });
 
 test("adapters convert int64/uint64 fields to Number at realistic maxima", () => {
-  // 毫秒时间戳（2100 年）与 MAX_SAFE_INTEGER 边界都必须无损转换。
+  // Millisecond timestamps (year 2100) and the MAX_SAFE_INTEGER boundary must both convert losslessly.
   const year2100Ms = 4102444800000;
   const maxSafe = Number.MAX_SAFE_INTEGER;
 
@@ -384,7 +384,7 @@ test("adapters convert int64/uint64 fields to Number at realistic maxima", () =>
   );
   assert.equal(activityDecoded.payload.updated_at, year2100Ms);
 
-  // uint64 revision（tunnel_state）同样落在 Number 域。
+  // uint64 revision (tunnel_state) likewise falls within the Number domain.
   const tunnelDecoded = decodeServerFrame(
     roundtrip(
       serverFrame({
@@ -414,7 +414,7 @@ test("decodeServerFrame dispatches on the oneof arm", () => {
     message: "agent offline",
   });
 
-  // status 臂：带 request_id 是响应，空 request_id 是广播。
+  // status arm: a non-empty request_id is a response, an empty request_id is a broadcast.
   const statusResponse = decodeServerFrame(
     roundtrip(serverFrame({ request_id: "req-2", status: { online: true } })),
     { agentOnline: false },
@@ -432,7 +432,7 @@ test("decodeServerFrame dispatches on the oneof arm", () => {
   );
   assert.deepEqual(ack, { kind: "response", requestId: "req-3", agentId: "", payload: { ok: true } });
 
-  // agent_response 的 error 臂映射为统一请求错误。
+  // The agent_response error arm maps to a unified request error.
   const agentError = decodeServerFrame(
     roundtrip(
       serverFrame({
@@ -444,7 +444,7 @@ test("decodeServerFrame dispatches on the oneof arm", () => {
   );
   assert.deepEqual(agentError, { kind: "error", requestId: "req-4", agentId: "", message: "boom" });
 
-  // 空载荷帧被忽略。
+  // Empty payload frames are ignored.
   const empty = decodeServerFrame(pb.create(v2.WebServerFrameSchema, {}), { agentOnline: false });
   assert.equal(empty, null);
 });
@@ -476,7 +476,7 @@ test("chat_event payload_json roundtrips to the expected event object", () => {
     conversation_id: "conversation-1",
     run_id: "run-1",
     seq: 42,
-    text: "你好 · emoji 🎯",
+    text: "Hello · emoji 🎯",
     usage: { input: 10, output: 20 },
   };
   const decoded = decodeServerFrame(
@@ -495,7 +495,7 @@ test("chat_event payload_json roundtrips to the expected event object", () => {
   assert.equal(decoded.type, "chat.event");
   assert.deepEqual(decoded.payload, payload);
 
-  // chat_subscribed 的 events_json 逐条解析。
+  // chat_subscribed's events_json is parsed entry by entry.
   const subscribed = decodeServerFrame(
     roundtrip(
       serverFrame({
@@ -537,7 +537,7 @@ test("process_state injects the client-tracked agent_online flag", () => {
   assert.equal(online.payload.agent_online, true);
   assert.equal(online.payload.revision, 7);
   assert.equal(online.payload.processes[0].started_at, 1700000000000);
-  // 未置位的 optional finished_at / exit_code 不出现在结果中。
+  // Unset optional finished_at / exit_code do not appear in the result.
   assert.equal("finished_at" in online.payload.processes[0], false);
   assert.equal("exit_code" in online.payload.processes[0], false);
 
@@ -573,7 +573,7 @@ test("encodeRequestFrame maps request types onto GatewayEnvelope arms", () => {
   assert.equal(terminalFrame.payload.value.payload.value.action, "create");
   assert.equal(terminalFrame.payload.value.payload.value.cols, 120);
 
-  // chat.command 的 64 位字段在出站边界收窄为 bigint。
+  // chat.command's 64-bit fields narrow to bigint at the outbound boundary.
   const commandFrame = decodeClientFrame(
     encodeRequestFrame("req-3", "chat.command", {
       type: "chat.submit",
@@ -646,8 +646,9 @@ test("trajectory fetch keeps prompt section ids and subagent run ids in separate
   assert.equal(request.includeSubagentRuns, true);
 });
 
-// Computer Use 设置页只中继两个只读 action；返回的 JSON 就是桌面端那两条 Tauri
-// 命令的原始返回值，设置页在两端读到的是同一个对象。
+// The Computer Use settings page relays only two read-only actions; the returned
+// JSON is the raw return value of those two Tauri commands on the desktop, so
+// the settings page reads the same object on both ends.
 test("cua driver status requests carry the read-only action and decode the host payload verbatim", () => {
   const probe = decodeClientFrame(
     encodeRequestFrame("cua-1", "cua.driver.probe", {}, "agent-1"),

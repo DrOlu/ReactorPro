@@ -25,7 +25,7 @@ fn main() {
         });
     println!("cargo:rustc-env=LIVEAGENT_APP_VERSION={app_version}");
 
-    // v2 业务消息与 WebSocket 帧壳共用 agent-gateway 目录为 include 根。
+    // The v2 business messages and the WebSocket frame shell share the agent-gateway directory as the include root.
     let gateway_root = std::path::Path::new(&manifest_dir)
         .join("..")
         .join("..")

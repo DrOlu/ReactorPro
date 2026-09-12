@@ -16,7 +16,7 @@ function entry(overrides = {}) {
     slug: "user-name",
     scope: "global",
     memoryType: "user",
-    description: "用户叫苏枫",
+    description: "User is named Alex",
     headline: "",
     dateLocal: null,
     updatedAt: Date.now(),
@@ -41,7 +41,7 @@ function overview(overrides = {}) {
 test("index renders compact lines with slug/type/age markers", () => {
   const text = formatMemoryOverview(overview({ user: [entry()] }));
   assert.ok(text.startsWith("# Memory Index"));
-  assert.ok(text.includes("- 用户叫苏枫 [user-name|u|d0]"));
+  assert.ok(text.includes("- User is named Alex [user-name|u|d0]"));
 });
 
 test("unreviewed entries carry the *:confidence marker and their own bucket", () => {
@@ -90,7 +90,7 @@ test("oversized overview truncates at the prompt cap with a suffix", () => {
     entry({
       slug: `ref-${i}`,
       memoryType: "reference",
-      description: "很长的描述".repeat(60),
+      description: "a very long description".repeat(60),
     }),
   );
   const text = formatMemoryOverview(overview({ global: entries, user: entries, project: entries }));
@@ -107,8 +107,8 @@ test("tools suffix embeds the memory usage rules exactly once", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 新鲜度分桶:绝对天数会让 system prompt 每天漂移一次,整条缓存前缀作废。
-// 分桶把漂移压到仅跨桶边界发生。
+// Freshness bucketing: absolute day counts would make the system prompt drift once a day, invalidating the
+// entire cache prefix. Bucketing confines the drift to bucket boundaries only.
 
 test("freshness buckets land on the documented boundaries", () => {
   assert.equal(freshnessBucket(0), "d0");
@@ -120,15 +120,15 @@ test("freshness buckets land on the documented boundaries", () => {
 });
 
 test("freshness bucket is a pure function of the day count", () => {
-  // 非法/缺失天数退化到 d0,与 daysAgo 的兜底一致,不得抛错。
+  // Invalid/missing day counts degrade to d0, consistent with daysAgo's fallback, and must not throw.
   assert.equal(freshnessBucket(-1), "d0");
   assert.equal(freshnessBucket(Number.NaN), "d0");
   assert.equal(freshnessBucket(3), freshnessBucket(3));
   assert.equal(freshnessBucket(10_000), "old");
 });
 
-// 跨天稳定性是本次改动的核心收益:同一条 entry 只要还在同一个桶内,
-// 无论 updatedAt 差几天,渲染出的 overview 必须字节一致。
+// Cross-day stability is the core benefit of this change: as long as an entry stays within the same bucket,
+// the rendered overview must be byte-identical no matter how many days apart the updatedAt values are.
 function overviewAtAge(days) {
   return formatMemoryOverview(
     overview({ user: [entry({ updatedAt: Date.now() - days * DAY_MS })] }),
@@ -149,7 +149,7 @@ test("crossing midnight inside one bucket keeps the overview byte-identical", ()
     assert.equal(
       overviewAtAge(from),
       overviewAtAge(to),
-      `${from}d 与 ${to}d 同桶,输出应完全相同`,
+      `expected identical output for ${from}d and ${to}d in the same bucket`,
     );
   }
 });
@@ -161,8 +161,8 @@ test("crossing a bucket boundary is the only case that changes the overview", ()
 });
 
 // ---------------------------------------------------------------------------
-// 用阶段 ① 的前缀哈希对账做端到端验证:memory 段是 system prompt 的一部分,
-// 跨天但同桶时,归因必须是 unchanged(改动前此处为 "system")。
+// End-to-end verification via phase 1's prefix-hash reconciliation: the memory section is part of the system
+// prompt, so when crossing days within a bucket the attribution must be unchanged (it was "system" before the change).
 
 function shapeForAge(days) {
   return capturePrefixShape({

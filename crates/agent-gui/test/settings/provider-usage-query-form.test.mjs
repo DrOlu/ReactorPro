@@ -76,22 +76,24 @@ test("each query mode keeps its own script and empty modes show their preset", (
   const customPreset = forms.USAGE_QUERY_PRESET_SCRIPTS.custom;
   const generalPreset = forms.USAGE_QUERY_PRESET_SCRIPTS.general;
   const newapiPreset = forms.USAGE_QUERY_PRESET_SCRIPTS.newapi;
-  // 一比一复刻 cc-switch:custom 空骨架、general 带 UA + isValid、newapi 带 UA。
+  // A one-to-one copy of cc-switch: custom is an empty skeleton, general has UA + isValid, newapi has
+  // UA.
   assert.ok(customPreset.includes('url: ""'));
   assert.ok(generalPreset.includes("{{baseUrl}}/user/balance"));
-  assert.ok(generalPreset.includes('"User-Agent": "LiveAgent/1.0"'));
+  assert.ok(generalPreset.includes('"User-Agent": "ReactorPro/1.0"'));
   assert.ok(generalPreset.includes("isValid: response.is_active || true"));
   assert.ok(newapiPreset.includes("{{baseUrl}}/api/user/self"));
-  assert.ok(newapiPreset.includes('"User-Agent": "LiveAgent/1.0"'));
+  assert.ok(newapiPreset.includes('"User-Agent": "ReactorPro/1.0"'));
 
-  // 没填写过的模式显示各自的模板预设(custom 为空骨架)。
+  // A mode never filled in shows its own template preset (custom is an empty skeleton).
   const filled = forms.applyUsageQueryModePreset({ ...usageQuery, script: "" }, "general");
   assert.equal(filled.mode, "general");
   assert.equal(filled.script, generalPreset);
   const skeleton = forms.applyUsageQueryModePreset({ ...usageQuery, script: "" }, "custom");
   assert.equal(skeleton.script, customPreset);
 
-  // 各模式脚本独立:newapi 里的编辑在切走再切回后原样恢复。
+  // Each mode's script is independent: an edit in newapi is restored exactly after switching away
+  // and back.
   const editedNewapi = forms.setUsageQueryScript(
     { ...usageQuery, mode: "newapi", script: newapiPreset },
     "(my newapi script)",
@@ -104,7 +106,8 @@ test("each query mode keeps its own script and empty modes show their preset", (
   assert.equal(backToNewapi.script, "(my newapi script)");
   assert.equal(backToNewapi.scripts.general, "(my general script)");
 
-  // 非脚本模式不动编辑器内容;再切回脚本模式时从槽位恢复。
+  // A non-script mode does not touch the editor content; switching back to script mode restores from
+  // the slot.
   const onBalance = forms.applyUsageQueryModePreset(backToNewapi, "balance");
   assert.equal(onBalance.mode, "balance");
   assert.equal(onBalance.script, "(my newapi script)");
@@ -130,9 +133,10 @@ test("serialization folds the editor content into the per-mode script slot", () 
 });
 
 test("preset scripts stay in sync with the Rust builtin presets", async () => {
-  // KEEP IN SYNC 锚点:与 src-tauri/src/services/provider_usage.rs 的
-  // GENERAL_SCRIPT/NEWAPI_SCRIPT 逐字符一致。custom 骨架仅前端填充
-  // (Rust 对空 custom 脚本直接报错,无兜底),不参与比对。
+  // KEEP IN SYNC anchor: character-for-character identical to GENERAL_SCRIPT/NEWAPI_SCRIPT in
+  // src-tauri/src/services/provider_usage.rs. The custom skeleton is filled in only by the frontend
+  // (Rust errors directly on an empty custom script, with no fallback) and does not participate in
+  // the comparison.
   const { readFile } = await import("node:fs/promises");
   const { fileURLToPath } = await import("node:url");
   const rustSource = await readFile(

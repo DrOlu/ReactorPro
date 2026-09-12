@@ -180,8 +180,9 @@ test("registry without a subagent runtime exposes neither Agent nor SendMessage"
   // Sanity: the base surface is otherwise intact.
   assert.ok(names.includes("Read"));
   assert.ok(names.includes("mcp_docs_search"));
-  // 内置工具不再声明 JSON-schema 约束采样(部分 provider 在 strict 模式下
-  // 按白名单校验 schema 关键字,minimum/maxItems 等会 400 整轮请求)。
+  // Built-in tools no longer declare JSON-schema constraint samples (some
+  // providers validate schema keywords against a whitelist in strict mode, so
+  // minimum/maxItems etc. would 400 the entire request).
   assert.equal(
     registry.tools.find((tool) => tool.name === "Read").constrainedSampling,
     undefined,
@@ -420,17 +421,20 @@ test("plan mode filters the registry to read-only + plan + collaboration tools",
     },
   });
   const names = registry.tools.map((tool) => tool.name);
-  // 只读、计划闸门与子代理协作工具在表内。
+  // Read-only, plan-gate, and subagent-collaboration tools are in the table.
   for (const expected of ["Read", "Glob", "Grep", "TaskList", "AskUserQuestion", "ExitPlanMode", "Agent", "SendMessage"]) {
     assert.ok(names.includes(expected), `expected ${expected} in plan-mode tools`);
   }
-  // 一切写能力(内置与 MCP)不进模型工具表。
+  // Every write capability (built-in and MCP) is excluded from the model tool
+  // table.
   for (const excluded of ["Bash", "Write", "Edit", "Delete", "TaskCreate", "TaskUpdate", "McpManager", "MemoryManager", "CronTaskManager", "mcp_docs_search"]) {
     assert.ok(!names.includes(excluded), `did not expect ${excluded} in plan-mode tools`);
   }
-  // Agent 工具描述带 plan mode 提示(validate 层同时强制 readonly)。
+  // The Agent tool description carries a plan mode hint (the validate layer also
+  // enforces readonly).
   assert.match(registry.tools.find((tool) => tool.name === "Agent").description, /PLAN MODE/);
-  // executeToolCall 仍能执行被裁掉的工具吗?——不应依赖:执行层由 gate 后备拦截。
+  // Can executeToolCall still execute a trimmed tool? -- it must not be relied
+  // upon: the execution layer is intercepted by the gate as a backstop.
 });
 
 test("MCP deferral registers ToolSearch and keeps all tools in the execution registry", async () => {
@@ -450,22 +454,28 @@ test("MCP deferral registers ToolSearch and keeps all tools in the execution reg
     toolSearch: { conversationId: "conversation-defer" },
   };
 
-  // mock 的 docs server 只有一个小工具:低于阈值,不延迟、不注册 ToolSearch。
+  // The mocked docs server has only one small tool: below the threshold, so no
+  // delay and no ToolSearch registration.
   const light = await buildBuiltinToolRegistry(baseParams);
   assert.equal(light.mcpToolDeferralActive, false);
   assert.ok(!light.tools.some((tool) => tool.name === "ToolSearch"));
   assert.ok(light.tools.some((tool) => tool.name === "mcp_docs_search"));
 
-  // 阈值判定是纯函数,超阈值场景由 tool-search-tools 单测覆盖;这里再验证
-  // 判定函数与注册表口径一致(同一批工具、同一估算函数)。
+  // The threshold decision is a pure function; the over-threshold scenario is
+  // covered by the tool-search-tools unit test; here we additionally verify
+  // that the decision function and the registry use the same basis (same tool
+  // batch, same estimate function).
   const mcpTools = light.tools.filter((tool) => tool.name.startsWith("mcp_"));
   assert.equal(toolSearchModule.shouldDeferMcpTools(mcpTools), false);
   assert.equal(toolSearchModule.shouldDeferMcpTools(mcpTools, 1), true);
 });
 
-// 超阈值的生产形态回归:延迟判定与 ToolSearch 目录必须来自 MCP 业务工具
-// bundle 的直接引用。曾按 groupId "mcp" find 定位 bundle,命中先注册的
-// McpManager(同 groupId),判定永远低于阈值,整个 ToolSearch 特性静默失效。
+// Regression for the over-threshold production shape: the delay decision and
+// the ToolSearch catalog must come from a direct reference to the MCP
+// business-tool bundle. Previously the bundle was located by find on groupId
+// "mcp", which hit the earlier-registered McpManager (same groupId), so the
+// decision was always below threshold and the whole ToolSearch feature silently
+// failed.
 test("MCP deferral activates above threshold and the catalog covers business tools", async () => {
   const bulkDescription = "x".repeat(4_000);
   const harness = createRegistryHarness({
@@ -495,20 +505,22 @@ test("MCP deferral activates above threshold and the catalog covers business too
 
   assert.equal(registry.mcpToolDeferralActive, true);
   assert.ok(registry.tools.some((tool) => tool.name === "ToolSearch"));
-  // 执行层保持全量注册。
+  // The execution layer keeps the full registration.
   assert.ok(registry.tools.some((tool) => tool.name === "mcp_docs_search_0"));
 
   const filter = toolSearchModule.buildMcpRequestToolFilter({
     conversationId,
     metadataByName: registry.metadataByName,
   });
-  // 未激活的 MCP 业务工具不进请求;McpManager 不是延迟对象,必须恒可见。
+  // Inactive MCP business tools do not enter the request; McpManager is not a
+  // delayed object and must always be visible.
   assert.equal(filter("mcp_docs_search_0"), false);
   assert.equal(filter("McpManager"), true);
   assert.equal(filter("ToolSearch"), true);
   assert.equal(filter("Read"), true);
 
-  // 目录来自业务工具 bundle:检索能命中并激活真实的 mcp_docs_* 工具。
+  // The catalog comes from the business-tool bundle: a search can hit and
+  // activate the real mcp_docs_* tools.
   const searchResult = await registry.executeToolCall({
     type: "toolCall",
     id: "call-tool-search",
@@ -524,8 +536,10 @@ test("MCP deferral activates above threshold and the catalog covers business too
   toolSearchModule.clearMcpToolActivation(conversationId);
 });
 
-// Plan mode 的只读承诺必须穿透到子代理:平时 readonly 子代理放行 MCP 业务
-// 工具(isReadOnly:false 也放,调研便利),plan mode 下这条通道就是写泄漏面。
+// Plan mode's read-only promise must penetrate to subagents: normally
+// read-only subagents allow MCP business tools (even isReadOnly:false ones, for
+// research convenience), but under plan mode this channel is a write-leak
+// surface.
 test("plan mode readonly children do not inherit write-capable MCP business tools", async () => {
   const harness = createRegistryHarness();
   const { loader } = harness;
@@ -567,7 +581,8 @@ test("plan mode readonly children do not inherit write-capable MCP business tool
 
   assert.ok(names.includes("Read"));
   assert.ok(names.includes("SendMessage"));
-  // isReadOnly:false 的 MCP 业务工具在 plan mode 下不得进入子代理工具表。
+  // MCP business tools with isReadOnly:false must not enter the subagent tool
+  // table under plan mode.
   assert.ok(!names.includes("mcp_docs_search"));
   assert.ok(!names.includes("Write"));
   assert.ok(!names.includes("Bash"));

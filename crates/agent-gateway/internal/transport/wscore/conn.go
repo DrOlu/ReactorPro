@@ -12,48 +12,53 @@ import (
 	"github.com/liveagent/agent-gateway/internal/observability"
 )
 
-// 写泵行为常量，保持既有稳定取值。
+// Write-pump behaviour constants; keep the existing stable values.
 const (
-	// DefaultQueueSize 是数据队列默认容量。
+	// DefaultQueueSize is the default capacity of the data queue.
 	DefaultQueueSize = 512
-	// DefaultCtrlQueueSize 是控制队列默认容量。
+	// DefaultCtrlQueueSize is the default capacity of the control queue.
 	DefaultCtrlQueueSize = 64
-	// DefaultQueueBytes / DefaultCtrlQueueBytes 让队列同时受帧数与字节数约束。
+	// DefaultQueueBytes / DefaultCtrlQueueBytes bound the queues by both frame count and byte count.
 	DefaultQueueBytes     = 8 * 1024 * 1024
 	DefaultCtrlQueueBytes = 256 * 1024
 
 	defaultHeartbeatPeriod  = 15 * time.Second
 	heartbeatGraceFloor     = 5 * time.Second
 	defaultControlWriteWait = 10 * time.Second
-	// writeLoopBatchSize 是一次唤醒最多连续写出的帧数（控制帧优先穿插）。
+	// writeLoopBatchSize is the maximum number of frames written back-to-back per wake-up
+	// (control frames are interleaved with priority).
 	writeLoopBatchSize = 64
 )
 
-// Config 是连接运行时的行为参数；零值字段取默认。
+// Config holds the behaviour parameters of a connection runtime; zero-valued fields fall back to defaults.
 type Config struct {
-	// WriteTimeout 同时用作单帧写超时与入队等待上限。
+	// WriteTimeout is used both as the per-frame write timeout and as the upper bound on enqueue waits.
 	WriteTimeout time.Duration
-	// QueueSize / CtrlQueueSize 为两条队列的容量。
+	// QueueSize / CtrlQueueSize are the capacities of the two queues.
 	QueueSize     int
 	CtrlQueueSize int
-	// QueueBytes / CtrlQueueBytes 是两条队列的内存上限。
+	// QueueBytes / CtrlQueueBytes are the memory limits of the two queues.
 	QueueBytes     int64
 	CtrlQueueBytes int64
-	// HeartbeatPeriod / HeartbeatGrace 决定心跳周期与空闲驱逐窗口（IdleTimeout = 3*period + grace）。
+	// HeartbeatPeriod / HeartbeatGrace determine the heartbeat period and the idle-eviction window
+	// (IdleTimeout = 3*period + grace).
 	HeartbeatPeriod time.Duration
 	HeartbeatGrace  time.Duration
-	// Remote 是掉帧日志中的对端标识（通常为 RemoteAddr）。
+	// Remote is the peer identifier used in dropped-frame logs (usually RemoteAddr).
 	Remote string
-	// OnClose 在连接关闭时恰好回调一次（done 已关闭、底层 ws 尚未关闭），供协议层清理订阅等资源。
+	// OnClose is invoked exactly once when the connection closes (done is already closed, the
+	// underlying ws is not yet), letting the protocol layer clean up subscriptions and other resources.
 	OnClose func()
 }
 
-// Conn 是单条 WebSocket 连接的传输运行时。Outbox/CtrlOutbox 由任意 goroutine 经 Enqueue
-// 生产、由唯一写泵 goroutine 消费；两通道导出仅为白盒测试，业务代码一律走 Enqueue。
+// Conn is the transport runtime of a single WebSocket connection. Outbox/CtrlOutbox are produced by
+// any goroutine via Enqueue and consumed by the single write-pump goroutine; the two channels are
+// exported only for white-box tests, and business code always goes through Enqueue.
 type Conn struct {
-	// Outbox 是数据队列（写泵独占消费；除测试外勿直接读写）。
+	// Outbox is the data queue (consumed exclusively by the write pump; do not read or write it directly outside tests).
 	Outbox chan Frame
-	// CtrlOutbox 是控制队列，写泵优先消费它，使拥塞无法饿死心跳与流恢复信号。
+	// CtrlOutbox is the control queue; the write pump consumes it first so congestion cannot starve
+	// heartbeats and stream-recovery signals.
 	CtrlOutbox chan Frame
 
 	ws  *websocket.Conn
@@ -72,8 +77,8 @@ type Conn struct {
 	closeOnce sync.Once
 	done      chan struct{}
 
-	// authorized 只在鉴权成功后置位；置位前入站活动不刷新读超时——客户端只有一个
-	// IdleTimeout 窗口完成鉴权。
+	// authorized is set only after successful authentication; before that, inbound activity does not
+	// refresh the read deadline — the client has a single IdleTimeout window to complete authentication.
 	authorized atomic.Bool
 
 	lastInboundMu sync.Mutex
@@ -83,7 +88,7 @@ type Conn struct {
 	heartbeatOnce sync.Once
 }
 
-// NewConn 构造连接运行时。ws 允许为 nil（仅入队语义的单元测试）。
+// NewConn builds a connection runtime. ws may be nil (for unit tests of enqueue semantics only).
 func NewConn(ws *websocket.Conn, cfg Config) *Conn {
 	if cfg.QueueSize <= 0 {
 		cfg.QueueSize = DefaultQueueSize
@@ -108,12 +113,13 @@ func NewConn(ws *websocket.Conn, cfg Config) *Conn {
 	}
 }
 
-// Done 返回连接关闭信号通道。
+// Done returns the connection-close signal channel.
 func (c *Conn) Done() <-chan struct{} {
 	return c.done
 }
 
-// Close 幂等关闭连接：先发布 done、回调 OnClose 清理，最后关底层 ws。
+// Close idempotently closes the connection: publish done first, run the OnClose cleanup
+// callback, and finally close the underlying ws.
 func (c *Conn) Close() {
 	c.closeOnce.Do(func() {
 		close(c.done)
@@ -126,12 +132,13 @@ func (c *Conn) Close() {
 	})
 }
 
-// SetAuthorized 标记鉴权完成；此后入站活动开始刷新读超时。
+// SetAuthorized marks authentication as complete; from then on inbound activity refreshes the read deadline.
 func (c *Conn) SetAuthorized() {
 	c.authorized.Store(true)
 }
 
-// TouchInboundActivity 记录入站活动并（鉴权后）后推读超时；读循环收到任何帧及 WS pong 回调须调用。
+// TouchInboundActivity records inbound activity and (after authentication) pushes back the read
+// deadline; the read loop must call it on any received frame and on the WS pong callback.
 func (c *Conn) TouchInboundActivity() {
 	c.lastInboundMu.Lock()
 	c.lastInboundAt = time.Now()
@@ -142,7 +149,7 @@ func (c *Conn) TouchInboundActivity() {
 	_ = c.ws.SetReadDeadline(time.Now().Add(c.IdleTimeout()))
 }
 
-// IdleTimeout 是空闲驱逐窗口：3 个心跳周期加宽限。
+// IdleTimeout is the idle-eviction window: 3 heartbeat periods plus grace.
 func (c *Conn) IdleTimeout() time.Duration {
 	period := c.cfg.HeartbeatPeriod
 	if period <= 0 {
@@ -155,7 +162,7 @@ func (c *Conn) IdleTimeout() time.Duration {
 	return period*3 + grace
 }
 
-// ControlWriteTimeout 是入队等待与控制帧写出的时间上限。
+// ControlWriteTimeout is the time limit for enqueue waits and control-frame writes.
 func (c *Conn) ControlWriteTimeout() time.Duration {
 	if c.cfg.WriteTimeout > 0 {
 		return c.cfg.WriteTimeout
@@ -163,23 +170,25 @@ func (c *Conn) ControlWriteTimeout() time.Duration {
 	return defaultControlWriteWait
 }
 
-// DroppedFrames 返回累计掉帧数（观测与测试用）。
+// DroppedFrames returns the cumulative number of dropped frames (for observability and tests).
 func (c *Conn) DroppedFrames() int64 {
 	return c.droppedFrames.Load()
 }
 
-// WriterCloses 返回写泵因底层写错误而关闭连接的累计次数。
+// WriterCloses returns how many times the write pump closed the connection due to an underlying write error.
 func (c *Conn) WriterCloses() int64 {
 	return c.writerCloses.Load()
 }
 
-// QueueByteOverflows 返回帧或聚合队列超过字节预算的累计次数。
+// QueueByteOverflows returns how many times a frame or an aggregate queue exceeded the byte budget.
 func (c *Conn) QueueByteOverflows() int64 {
 	return c.queueByteOverflows.Load()
 }
 
-// Enqueue 将帧交给写泵：控制/心跳帧走优先队列；数据帧持续拥塞时丢弃并返回
-// ErrWriteQueueFull；FrameResponse 掉帧则关连接，让客户端重连重试而非挂到超时。
+// Enqueue hands a frame to the write pump: control/heartbeat frames use the priority queue;
+// data frames are dropped with ErrWriteQueueFull under sustained congestion; dropping a
+// FrameResponse closes the connection so the client reconnects and retries instead of hanging
+// until timeout.
 func (c *Conn) Enqueue(frame Frame) error {
 	if frame.Class == FrameControl || frame.Class == FramePing {
 		err := c.enqueueControl(frame)
@@ -198,7 +207,8 @@ func (c *Conn) Enqueue(frame Frame) error {
 	return err
 }
 
-// enqueueData 在数据队列瞬时满载时最多等 ControlWriteTimeout，持续积压才报 ErrWriteQueueFull；快速路径零分配。
+// enqueueData waits up to ControlWriteTimeout when the data queue is momentarily full; only
+// sustained backlog reports ErrWriteQueueFull. The fast path is zero-allocation.
 func (c *Conn) enqueueData(frame Frame) error {
 	return c.enqueueBounded(frame, "data", c.Outbox, &c.dataBytes, c.cfg.QueueBytes, c.dataFreed)
 }
@@ -212,7 +222,8 @@ func (c *Conn) enqueueControl(frame Frame) error {
 		case <-c.done:
 			return errors.New("connection closed")
 		default:
-			// 心跳是周期性的：控制队列满时静默丢弃，下个周期自然取代。
+			// Heartbeats are periodic: when the control queue is full, drop silently since the
+			// next period will naturally replace it.
 			c.noteDroppedFrame(frame, "control", "queue_full")
 			return nil
 		}
@@ -320,7 +331,7 @@ func releaseQueueBytes(queuedBytes *atomic.Int64, frameBytes int64, freed chan<-
 
 func (c *Conn) noteDroppedFrame(frame Frame, lane string, reason string) {
 	dropped := c.droppedFrames.Add(1)
-	// 只记第一次与每第 100 次：生产可见掉帧，突发期不刷屏。
+	// Log only the first and every 100th drop: visible in production without flooding during bursts.
 	if dropped == 1 || dropped%100 == 0 {
 		slog.Warn("websocket: shed frame for slow client",
 			"lane", lane,
@@ -353,14 +364,16 @@ func writeQueueDropReason(err error) string {
 	return "queue_full"
 }
 
-// StartWriteLoop 启动写泵（幂等），协议层在鉴权成功后调用——鉴权前队列无人消费。
+// StartWriteLoop starts the write pump (idempotent); the protocol layer calls it after successful
+// authentication — before that nothing consumes the queues.
 func (c *Conn) StartWriteLoop() {
 	c.writeLoopOnce.Do(func() {
 		go c.writeLoop()
 	})
 }
 
-// writeLoop 优先清空控制队列再消费数据队列，使拥塞无法饿死心跳与流恢复帧。
+// writeLoop drains the control queue before consuming the data queue so congestion cannot starve
+// heartbeats and stream-recovery frames.
 func (c *Conn) writeLoop() {
 	for {
 		select {
@@ -397,7 +410,8 @@ func (c *Conn) writeLoop() {
 	}
 }
 
-// deliverQueuedFrame 在第一次写错误时立即关闭连接；可靠恢复必须发生在新连接上。
+// deliverQueuedFrame closes the connection immediately on the first write error; reliable recovery
+// must happen on a new connection.
 func (c *Conn) deliverQueuedFrame(frame Frame, control bool) bool {
 	if control {
 		defer releaseQueueBytes(&c.controlBytes, int64(len(frame.Data)), c.controlFreed)

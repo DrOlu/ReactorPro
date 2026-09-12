@@ -60,8 +60,9 @@ test("the processing trace, its rows and the sparkle share one 12px icon column"
   // rather than left-aligned to it.
   assert.match(workTraceSource, /className="flex w-3 shrink-0 items-center justify-center"/);
   assert.match(sparkleSource, /className="flex h-5 w-3 shrink-0 items-center justify-center"/);
-  // 工具组正文的外扩量必须大于行内元素的外扩量（行是 -mx-1.5 = 6px），
-  // 否则 overflow-hidden 的裁剪线正好落在行的悬停底色与圆角上。
+  // The outward expansion of the tool-group body must exceed that of inline elements (the row is
+  // -mx-1.5 = 6px), otherwise the overflow-hidden clip line lands exactly on the row's hover
+  // background and rounded corners.
   assert.match(toolTraceSource, /className="-mx-3 overflow-hidden px-3 pt-0\.5"/);
   assert.match(toolCallItemSource, /flex h-3\.5 w-3 shrink-0 items-center justify-center/);
 });

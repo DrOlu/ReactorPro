@@ -53,8 +53,8 @@ test("missing local model selection points to the composer control", () => {
   assert.throws(
     () => modelSelection.resolveEffectiveChatModelSelection({ settings: app }),
     (error) => {
-      assert.match(error.message, /输入框左下角选择一个模型/);
-      assert.doesNotMatch(error.message, /左上角/);
+      assert.match(error.message, /bottom-left of the input box/);
+      assert.doesNotMatch(error.message, /top-left/);
       return true;
     },
   );
@@ -79,7 +79,7 @@ test("remote chat model selection does not fall back to another provider with th
           providerType: "codex",
         },
       }),
-    /供应商不存在/,
+    /does not exist/,
   );
 });
 
@@ -99,7 +99,7 @@ test("remote chat model selection rejects provider type drift", () => {
           providerType: "codex",
         },
       }),
-    /供应商类型.*不一致/,
+    /provider type.*does not match/,
   );
 });
 
@@ -125,7 +125,7 @@ test("remote chat model selection rejects models that are no longer enabled", ()
           providerType: "codex",
         },
       }),
-    /未在桌面端启用/,
+    /not enabled on the desktop/,
   );
 });
 
@@ -208,7 +208,7 @@ test("invalid conversation selection throws like an invalid default", () => {
         settings: app,
         conversationSelectedModel: { customProviderId: "missing", model: "gpt-5" },
       }),
-    /供应商不存在/,
+    /does not exist/,
   );
 });
 

@@ -704,9 +704,10 @@ test("DeepSeek sends user image input on the wire for vision-capable models", as
 });
 
 test("DeepSeek degrades user image input for text-only models instead of failing the request", async () => {
-  // 曾行为：fetch 之前直接抛 "DeepSeek Responses does not support image input"，
-  // 而用户消息留在历史里，此后每一轮都会以同一原因失败。现在图片能力听
-  // model.input，纯文本模型交给 pi-ai 降级成占位文本，请求照常发出。
+  // Former behavior: threw "DeepSeek Responses does not support image input" directly before
+  // fetch, while the user message stayed in history, so every subsequent round failed for the same
+  // reason. Now image capability follows model.input, and for text-only models pi-ai downgrades it
+  // to placeholder text so the request is sent as usual.
   const imageBase64 = "iVBORw0KGgoAAAANSUhEUg".repeat(32);
   const calls = [];
   const stream = deepseek.streamDeepSeekResponses(

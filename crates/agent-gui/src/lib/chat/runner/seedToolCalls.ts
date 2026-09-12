@@ -62,7 +62,7 @@ function stableStringifyComparable(value: unknown): string {
   return JSON.stringify(String(value));
 }
 
-/** 工具调用的稳定比较键（名称 + 规范序参数），用于结构化调用与文本恢复调用去重。 */
+/** Stable comparison key for tool calls (name + canonical-order arguments), used to deduplicate structured calls from text-recovered calls. */
 export function comparableToolCall(toolCall: ToolCall) {
   return `${toolCall.name}:${stableStringifyComparable(toolCall.arguments ?? {})}`;
 }

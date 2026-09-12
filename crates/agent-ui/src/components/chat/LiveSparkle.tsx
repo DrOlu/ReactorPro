@@ -56,8 +56,9 @@ export function LiveSparkle({
       data-live-sparkle=""
       data-paused={paused ? "" : undefined}
     >
-      {/* 星标本体 20px，比思考/工具行的 12px 图标列宽：装进一个图标列宽度的
-          盒子里居中溢出，星群才和上面那列图标共用同一条竖中轴。 */}
+      {/* The sparkle body is 20px, wider than the 12px icon column of thinking/tool rows: it
+          overflows centered from a box one icon-column wide, so the sparkle cluster shares the same
+          vertical center axis as the icon column above it. */}
       <span aria-hidden="true" className="flex h-5 w-3 shrink-0 items-center justify-center">
         <svg
           aria-hidden="true"

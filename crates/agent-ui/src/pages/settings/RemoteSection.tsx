@@ -143,7 +143,7 @@ type GatewayRuntimeStatus = {
   connectedSince?: number | null;
   lastHeartbeat?: number | null;
   lastError?: string | null;
-  /** 当前链路协议："v2"（WebSocket+Protobuf）或 "v1"（弃用的 WebSocket 回退）。 */
+  /** Current link protocol: "v2" (WebSocket+Protobuf) or "v1" (the deprecated WebSocket fallback). */
   protocol?: string | null;
 };
 

@@ -148,10 +148,13 @@ function sanitizeTextBlocksForModelContext(message: Message): Message {
   return changed ? ({ ...message, content: content as Message["content"] } as Message) : message;
 }
 
-// 清零 input / totalTokens / cacheWrite，而不是整份 usage：这两项是托管搜索
-// 的聚合值（搜索全文计入 input），assistantAnchorTokens 会把环钉在 80k–120k。
-// cacheRead + output 仍是下一请求规模，留给 hostedSearchFollowUpTokens；全零
-// 会逼账本在 beginRequest 时改走 encrypted 估算，空闲 36k、短回复后再掉到 32k。
+// Zero out input / totalTokens / cacheWrite rather than the whole usage: those
+// two are aggregate values for hosted search (the full search text counts
+// toward input), and assistantAnchorTokens would pin the ring at 80k-120k.
+// cacheRead + output still reflect the next request's size, so leave them for
+// hostedSearchFollowUpTokens; zeroing everything would force the ledger to fall
+// back to the encrypted estimate at beginRequest, landing at 36k when idle and
+// dropping to 32k after a short reply.
 function zeroedAggregatedUsage(previous?: Usage): Usage {
   const keep = (value: unknown): number =>
     typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
@@ -190,11 +193,14 @@ export function sanitizeMessageForModelContext(message: Message): Message {
       nextMessage = {
         ...nextMessage,
         content: nextContent as Message["content"],
-        // 托管搜索轮的 input / totalTokens 是服务端多次内部调用的聚合值（实测
-        // 报 input ~105k 而真实持久上下文仅 ~31k）。hostedSearch 块是整段锚点
-        // 排除的内容级证据，剥除后这两项必须清零——否则 TokenLedger 对净化后
-        // 上下文 rebase 时会把聚合值当真实锚点（7% → 40%）。cacheRead+output
-        // 保留给 hostedSearchFollowUpTokens。供应商从不读输入消息的 usage。
+        // For a hosted search turn, input / totalTokens are aggregate values from
+        // multiple server-side internal calls (observed input ~105k while the real
+        // persisted context is only ~31k). The hostedSearch block is content-level
+        // evidence that the whole anchor was excluded, so once it is stripped these
+        // two must be zeroed -- otherwise, when TokenLedger rebases against the
+        // sanitized context, it would treat the aggregate as the real anchor
+        // (7% -> 40%). cacheRead+output are left for hostedSearchFollowUpTokens.
+        // Providers never read the usage of input messages.
         ...(strippedHostedSearch
           ? { usage: zeroedAggregatedUsage((nextMessage as { usage?: Usage }).usage) }
           : {}),

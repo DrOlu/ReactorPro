@@ -1008,8 +1008,9 @@ export function createTranscriptStore(options?: {
 
   function applyOne(event: ConversationStreamEvent) {
     editResendStash = null;
-    // 轨迹不在 run snapshot 里，必须先于 transcript cursor 分流。其自身按完整事件
-    // 身份去重，因此重连重放不会重复，也不会被 snapshot.asOfSeq 错误吞掉。
+    // Trajectory is not in the run snapshot, so it must be routed before the transcript cursor. It
+    // deduplicates by full event identity itself, so a reconnect replay does not duplicate and is not
+    // wrongly swallowed by snapshot.asOfSeq.
     if (absorbTrajectoryChatEvent(event)) return;
     const seq = readEventSeq(event);
     if (seq > 0) {
@@ -1127,10 +1128,12 @@ export function createTranscriptStore(options?: {
         return;
       }
       case "manual_compaction_result": {
-        // 本分支是 switch 里唯一直读载荷形状的地方，必须与相邻 case 一样防御式
-        // 解构：可靠 ingress journal 会重放本帧，缺字段的畸形帧若抛 TypeError 会
-        // 在每次重订阅时复现并打断整条应用链。operationId 非字符串/空、status 不在
-        // 白名单内、message 非字符串——一律降级（丢帧或空串），永不抛错。
+        // This branch is the only place in the switch that reads the payload shape directly, so it must
+        // destructure defensively like the adjacent cases: the reliable ingress journal replays this
+        // frame, and a malformed frame missing fields would throw a TypeError, recur on every
+        // resubscribe, and break the whole application chain. A non-string/empty operationId, a status
+        // outside the whitelist, or a non-string message -- all degrade (drop the frame or use an empty
+        // string) and never throw.
         const rawOperationId = (event as { operationId?: unknown }).operationId;
         const operationId = typeof rawOperationId === "string" ? rawOperationId.trim() : "";
         if (!operationId) return;

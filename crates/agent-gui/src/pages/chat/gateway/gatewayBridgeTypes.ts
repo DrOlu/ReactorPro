@@ -139,9 +139,10 @@ export function normalizeGatewayExecutionMode(
   }
 }
 
-// 命令安全模式的网关归一化。返回 undefined(而非某个默认模式)表示"远端未指定",
-// 让 useSendChatTurn 的优先级链回落到本地 settings.system.commandSafetyMode;绝不
-// 默认成 "auto",以免静默下调桌面端已选的更严格模式(fail-closed)。
+// Gateway normalization of the command safety mode. Returning undefined (rather than some default
+// mode) means "not specified by the remote", letting useSendChatTurn's priority chain fall back to
+// the local settings.system.commandSafetyMode; never default to "auto", to avoid silently downgrading
+// a stricter mode already selected on the desktop (fail-closed).
 export function normalizeGatewayCommandSafetyMode(
   value: string | null | undefined,
 ): CommandSafetyMode | undefined {

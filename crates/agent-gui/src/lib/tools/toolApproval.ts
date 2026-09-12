@@ -1,18 +1,20 @@
-// 工具审批服务(桌面端权威):策略为 ask 的工具在 beforeToolCall 处挂起,等用户
-// 在聊天里的审批卡片作出决定。与 AskUserQuestion 同构的挂起/落定/超时/中止模型
-// (见 askUserQuestionTools.ts),差异有二:
-//   1. 被审批的是普通工具调用(Bash/插件工具…),挂起发生在其执行之前,而非工具
-//      自身;因此卡片需要响应式感知 pending 的出现/消失(useSyncExternalStore)。
-//   2. 超时缺省为“拒绝”(权限不该默认放行),比 AskUserQuestion 的“自动选推荐”保守。
-// 远端(WebUI)应答经 gateway chat_queue.tool_approval 转发到桌面后走同一入口
-// answerToolApproval(第 3 步接线)。
+// Tool approval service (desktop is authoritative): tools whose policy is ask suspend at beforeToolCall and wait
+// for the user to decide via the approval card in chat. It shares the suspend/settle/timeout/abort model of
+// AskUserQuestion (see askUserQuestionTools.ts), with two differences:
+//   1. What is approved is an ordinary tool call (Bash/plugin tool...), and the suspension happens before its
+//      execution rather than in the tool itself; so the card must reactively observe the appearance/disappearance
+//      of pending entries (useSyncExternalStore).
+//   2. Timeout defaults to "deny" (permission should not be granted by default), more conservative than
+//      AskUserQuestion's "auto-select the recommendation".
+// A remote (WebUI) answer forwarded to the desktop via gateway chat_queue.tool_approval goes through the same
+// answerToolApproval entry point (wired up in step 3).
 
 import { ASK_USER_QUESTION_TIMEOUT_MS } from "@liveagent/ui/lib/chat/askUserQuestion";
 
-/** 审批窗口毫秒数:复用 AskUserQuestion 的时长常量,行为口径一致。 */
+/** Approval window in milliseconds: reuses AskUserQuestion's duration constant for consistent behavior. */
 export const TOOL_APPROVAL_TIMEOUT_MS = ASK_USER_QUESTION_TIMEOUT_MS;
 
-/** approve:本次放行;deny:本次拒绝;approve_session:本会话内该工具后续免审。 */
+/** approve: allow this time; deny: reject this time; approve_session: skip approval for this tool for the rest of the session. */
 export type ToolApprovalDecision = "approve" | "deny" | "approve_session";
 
 export type ToolApprovalSettlement =
@@ -23,21 +25,21 @@ export type ToolApprovalSettlement =
 type PendingToolApproval = {
   conversationId: string;
   toolName: string;
-  /** 命令/参数摘要(供审批栏统一展示;Bash 显示命令等)。 */
+  /** Command/argument summary (for uniform display in the approval bar; e.g. Bash shows the command). */
   summary: string;
-  /** 权威应答截止时间戳(毫秒);卡片倒计时与超时兜底同源。 */
+  /** Authoritative answer deadline timestamp (ms); the card countdown and the timeout fallback share this source. */
   deadlineAt: number;
   settle: (settlement: ToolApprovalSettlement) => void;
 };
 
 const pendingByToolCallId = new Map<string, PendingToolApproval>();
 
-// 本会话内“记住(approve_session)”的工具名集合,按 conversationId 分区。
-// 只存内存、随会话生命周期存在;持久化的策略走 settings.system.toolPolicies。
+// Set of tool names "remembered (approve_session)" for this session, partitioned by conversationId.
+// In-memory only and lives with the session lifetime; persisted policies go through settings.system.toolPolicies.
 const sessionAllowByConversation = new Map<string, Set<string>>();
 
-// useSyncExternalStore 订阅:pending 表变更时 bump version 并通知,驱动审批卡片
-// 在挂起出现/落定时重渲染(被审批的工具调用本身早已在转录中)。
+// useSyncExternalStore subscription: bump the version and notify when the pending table changes, driving the
+// approval card to re-render when a suspension appears/settles (the approved tool call itself is already in the transcript).
 const listeners = new Set<() => void>();
 const listenersByConversation = new Map<string, Set<() => void>>();
 const pendingSnapshotsByConversation = new Map<string, PendingToolApprovalSummary[]>();
@@ -96,8 +98,8 @@ export function getToolApprovalDeadlineAt(toolCallId: string): number | null {
   return pendingByToolCallId.get(toolCallId.trim())?.deadlineAt ?? null;
 }
 
-/** 某会话当前全部待审批项(供输入框上方的集中审批栏遍历)。随 pending 表变更,
- *  经 subscribeToolApprovals/getToolApprovalVersion 的订阅响应式刷新。 */
+/** All current pending approvals for a conversation (iterated by the centralized approval bar above the input box).
+ *  Refreshes reactively with pending-table changes via the subscribeToolApprovals/getToolApprovalVersion subscription. */
 export type PendingToolApprovalSummary = {
   toolCallId: string;
   toolName: string;
@@ -151,7 +153,7 @@ function rememberSessionApproval(conversationId: string, toolName: string) {
 
 export type AnswerToolApprovalOutcome = { ok: boolean; message?: string };
 
-/** 应答一个挂起的审批;远端通道必须带 conversationId 防串会话应答。 */
+/** Answer a pending approval; the remote channel must carry conversationId to prevent cross-session answers. */
 export function answerToolApproval(
   toolCallId: string,
   decision: ToolApprovalDecision,
@@ -169,7 +171,7 @@ export function answerToolApproval(
   return { ok: true };
 }
 
-/** 会话销毁兜底:挂起中的审批按“取消(未批准)”落定。正常中止由 AbortSignal 处理。 */
+/** Fallback on conversation destruction: pending approvals settle as "cancelled (not approved)". Normal aborts are handled by AbortSignal. */
 export function cancelPendingToolApprovalsForConversation(conversationId: string) {
   const targetConversationId = conversationId.trim();
   for (const [toolCallId, pending] of pendingByToolCallId) {
@@ -182,10 +184,10 @@ export function cancelPendingToolApprovalsForConversation(conversationId: string
 }
 
 /**
- * 挂起等待用户对一次工具调用作出审批决定。由 beforeToolCall 的审批门调用。
- * - AbortSignal(turn 停止)→ 落定为 cancelled。
- * - 超过窗口 → 落定为 timeout(门控按“拒绝”处理)。
- * - approve_session → 记入本会话免审集合。
+ * Suspend and wait for the user to make an approval decision on a tool call. Called by beforeToolCall's approval gate.
+ * - AbortSignal (turn stopped) -> settles as cancelled.
+ * - Window exceeded -> settles as timeout (the gate treats it as deny).
+ * - approve_session -> recorded in this session's approval-exempt set.
  */
 export function requestToolApproval(params: {
   toolCallId: string;
@@ -206,7 +208,7 @@ export function requestToolApproval(params: {
 
   return new Promise<ToolApprovalSettlement>((resolve) => {
     const settle = (settlement: ToolApprovalSettlement) => {
-      // 幂等:首个到达的落定(用户决定/超时/中止)清理其余监听并广播。
+      // Idempotent: the first settlement to arrive (user decision/timeout/abort) clears the remaining listeners and broadcasts.
       if (pendingByToolCallId.get(toolCallId) === pending) {
         pendingByToolCallId.delete(toolCallId);
       }

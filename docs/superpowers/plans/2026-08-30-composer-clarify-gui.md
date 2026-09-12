@@ -1,41 +1,41 @@
-# 输入框提示词澄清 · 计划 1：agent-ui 共享组件 + 桌面 GUI 接线 实施计划
+# Composer Prompt Clarification · Plan 1: agent-ui Shared Components + Desktop GUI Wiring Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在聊天输入框旁提供「澄清」按钮：LLM 小对话持续追问用户澄清需求，产出优化后的提示词放回输入框（只替换文本段，附件与提及保留）。
+**Goal:** Provide a "Clarify" button next to the chat composer: a small LLM conversation keeps asking the user follow-up questions to clarify requirements, then produces an optimized prompt and puts it back into the composer (replacing only the text segment; attachments and mentions are preserved).
 
-**Architecture:** agent-ui 新增 `components/chat/clarify/` 模块（类型 + 协议解析 + 状态机 + 面板组件）；`ChatComposerBar` 通过新增可选 props `runClarifyTurn` / `clarifyContext` 注入 LLM 执行器，缺省不渲染按钮；桌面宿主（`ChatPage.tsx` 的 composer binding）包装现有 `streamAssistantMessage` 纯文本调用。Web（agent-gateway）接线是独立的计划 2，本计划不做。
+**Architecture:** agent-ui adds a new `components/chat/clarify/` module (types + protocol parsing + state machine + panel component); `ChatComposerBar` injects the LLM executor via two new optional props `runClarifyTurn` / `clarifyContext`, and renders no button when absent; the desktop host (the composer binding in `ChatPage.tsx`) wraps the existing text-only `streamAssistantMessage` call. Web (agent-gateway) wiring is a separate Plan 2 and is out of scope here.
 
-**Tech Stack:** TypeScript / React（无新依赖）、`@earendil-works/pi-ai` Context 类型、`node:test`（经 `crates/agent-gui/test/helpers/load-ts-module.mjs` 的 TS 加载器）。
+**Tech Stack:** TypeScript / React (no new dependencies), `@earendil-works/pi-ai` Context types, `node:test` (via the TS loader in `crates/agent-gui/test/helpers/load-ts-module.mjs`).
 
 **Spec:** `docs/superpowers/specs/2026-08-30-composer-clarify-design.md`
 
 ## Global Constraints
 
-- 终稿协议标记：`[CLARIFY_QUESTION]` / `[CLARIFY_FINAL]`，单行置于回复开头（spec「终稿协议」节）。
-- 最多 5 轮提问；第 6 轮起前端自动注入终稿指令（spec「错误处理」表）。
-- 产物落框：只替换草稿 `type: "text"` 段，其余 segment 与 pendingUploadedFiles 原样保留（spec「终稿落框」）。
-- i18n：所有 UI 文案走 `chat.clarify.*` 键，`zhCNCommon.ts` 与 `enUSCommon.ts` 两份（spec「i18n」）。
-- 澄清会话不持久化、不进会话历史；面板关闭即丢弃（spec「错误处理」表）。
-- 面板打开期间发送按钮禁用（`handleComposerSend` 守卫），输入框本体仍可编辑。
-- 测试用 `node:test` + `createTsModuleLoader`，放 `crates/agent-gui/test/chat/`，不新建测试框架（spec「测试」）。
-- 代码注释风格跟随周边：中文注释、说明「为什么」。
+- Final-draft protocol markers: `[CLARIFY_QUESTION]` / `[CLARIFY_FINAL]`, placed on a single line at the start of the reply (spec "final-draft protocol" section).
+- At most 5 rounds of questions; from round 6 the frontend automatically injects the final-draft instruction (spec "error handling" table).
+- Applying the result to the composer: replace only draft segments with `type: "text"`, keeping all other segments and pendingUploadedFiles unchanged (spec "final draft into composer").
+- i18n: all UI copy goes through `chat.clarify.*` keys, in both `zhCNCommon.ts` and `enUSCommon.ts` (spec "i18n").
+- Clarify sessions are not persisted and do not enter conversation history; closing the panel discards them (spec "error handling" table).
+- The send button is disabled while the panel is open (guard in `handleComposerSend`); the composer body itself remains editable.
+- Tests use `node:test` + `createTsModuleLoader`, placed under `crates/agent-gui/test/chat/`, with no new test framework (spec "testing").
+- Code comment style follows the surroundings: Chinese comments explaining "why".
 
-## 现有代码事实（实施者必读）
+## Existing Code Facts (required reading for implementers)
 
-- `MentionComposerHandle`（`crates/agent-ui/src/components/chat/MentionComposerModel.ts:104`）：`getDraft()` 返回 `MentionComposerDraft`（`segments: MentionComposerDraftSegment[]`，segment 判别字段 `type: "text" | "fileMention" | ...`）；`setDraft(draft)` 会清空编辑器并按 `draft.segments` 逐个重建 DOM（`MentionComposer.tsx:806`），stale 的派生字段（text/mentions 数组）会被忽略；`focus()`。
-- `streamAssistantMessage`（`crates/agent-gui/src/lib/providers/runtime/textOnlyRuntime.ts:183`）：参数 `providerId / model / runtime / context {systemPrompt, messages:[{role,content,timestamp}]} / signal / onTextDelta / cacheRetention / nativeWebSearch`；返回 assistant message，用 `assistantMessageToText`（`crates/agent-gui/src/lib/providers/llm.ts`）转纯文本。调用范式见 `conversationTitleJob.ts`。
-- 模型解析：`resolveEffectiveChatModelSelection({ settings, conversationSelectedModel })`（`crates/agent-gui/src/pages/chat/runtime/modelSelection.ts:28`）返回 `{ provider, providerId, model }`；runtime 构造用 `createProviderRuntimeConfig(provider, model, runtimeControls)`（`crates/agent-gui/src/lib/providers/llm.ts`）。
-- `ChatComposerBar`（`crates/agent-ui/src/pages/chat/ChatComposerBar.tsx:313`）底部工具行在 `ChatComposerBar.tsx:1010`：`<div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-1">`，左侧 cluster `<div className="flex min-w-0 flex-1 items-center gap-1">`（1011 行起：加号菜单 → 计划模式 pill → STT 按钮）。面板（队列/审批栏）插在 `glassCardRef` 卡片（887 行起）之外、其上方——`approvalBar` 渲染于 885 行。编辑器容器在 980 行。
-- GUI 宿主 composer binding：`crates/agent-gui/src/pages/ChatPage.tsx:2988` 的 `composer: {...}` 对象；`ConversationComposerBindings`（`ConversationPaneHostEnvironment.tsx:25`）是 `Omit<ChatComposerBarProps, ...>`，新增 props 自动透传，无需改该文件。
-- 图标：`crates/agent-ui/src/components/IconSet.tsx` 已导出 `WandSparkles`（621 行）、`Loader2` 等，lucide `~icons` 直接 import 也可。
-- i18n：`crates/agent-ui/src/i18n/translations/zhCNCommon.ts` / `enUSCommon.ts` 扁平键（如 `"chat.queue.title": "等待队列 {count}"`）。
-- 测试：`crates/agent-gui/test/` 下 `.mjs`，`import test from "node:test"` + `createTsModuleLoader`（见 `test/providers/text-only-failover.test.mjs` 头部），运行 `cd crates/agent-gui && npm test`（`scripts/run-node-tests.mjs test`）。
-- 类型检查：`cd crates/agent-gui && npx tsc --noEmit`（agent-ui 无独立 tsconfig 引用链时的实际命令以仓库现状为准，缺省用 GUI 侧的 tsc）。
+- `MentionComposerHandle` (`crates/agent-ui/src/components/chat/MentionComposerModel.ts:104`): `getDraft()` returns `MentionComposerDraft` (`segments: MentionComposerDraftSegment[]`, segment discriminant field `type: "text" | "fileMention" | ...`); `setDraft(draft)` clears the editor and rebuilds the DOM segment by segment from `draft.segments` (`MentionComposer.tsx:806`), and stale derived fields (text/mentions arrays) are ignored; `focus()`.
+- `streamAssistantMessage` (`crates/agent-gui/src/lib/providers/runtime/textOnlyRuntime.ts:183`): parameters `providerId / model / runtime / context {systemPrompt, messages:[{role,content,timestamp}]} / signal / onTextDelta / cacheRetention / nativeWebSearch`; returns the assistant message, converted to plain text with `assistantMessageToText` (`crates/agent-gui/src/lib/providers/llm.ts`). See `conversationTitleJob.ts` for the calling pattern.
+- Model resolution: `resolveEffectiveChatModelSelection({ settings, conversationSelectedModel })` (`crates/agent-gui/src/pages/chat/runtime/modelSelection.ts:28`) returns `{ provider, providerId, model }`; construct the runtime with `createProviderRuntimeConfig(provider, model, runtimeControls)` (`crates/agent-gui/src/lib/providers/llm.ts`).
+- `ChatComposerBar` (`crates/agent-ui/src/pages/chat/ChatComposerBar.tsx:313`): the bottom toolbar row is at `ChatComposerBar.tsx:1010`: `<div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-1">`, with the left cluster `<div className="flex min-w-0 flex-1 items-center gap-1">` (starting at line 1011: plus menu → plan mode pill → STT button). Panels (queue/approval bar) are inserted outside the `glassCardRef` card (starting at line 887) and above it — `approvalBar` renders at line 885. The editor container is at line 980.
+- GUI host composer binding: the `composer: {...}` object at `crates/agent-gui/src/pages/ChatPage.tsx:2988`; `ConversationComposerBindings` (`ConversationPaneHostEnvironment.tsx:25`) is `Omit<ChatComposerBarProps, ...>`, so new props pass through automatically without modifying that file.
+- Icons: `crates/agent-ui/src/components/IconSet.tsx` already exports `WandSparkles` (line 621), `Loader2`, etc.; direct imports from lucide `~icons` also work.
+- i18n: `crates/agent-ui/src/i18n/translations/zhCNCommon.ts` / `enUSCommon.ts` flat keys (e.g. `"chat.queue.title": "Waiting queue {count}"`).
+- Tests: `.mjs` files under `crates/agent-gui/test/`, `import test from "node:test"` + `createTsModuleLoader` (see the top of `test/providers/text-only-failover.test.mjs`); run with `cd crates/agent-gui && npm test` (`scripts/run-node-tests.mjs test`).
+- Type checking: `cd crates/agent-gui && npx tsc --noEmit` (when agent-ui has no independent tsconfig reference chain, use the actual command per repo state; default to the GUI-side tsc).
 
 ---
 
-### Task 1: clarifyTypes + clarifyProtocol（标记解析 + 系统提示词）
+### Task 1: clarifyTypes + clarifyProtocol (marker parsing + system prompt)
 
 **Files:**
 - Create: `crates/agent-ui/src/components/chat/clarify/clarifyTypes.ts`
@@ -43,19 +43,19 @@
 - Test: `crates/agent-gui/test/chat/clarify-protocol.test.mjs`
 
 **Interfaces:**
-- Consumes: 无（首个任务）。
-- Produces（后续任务依赖的确切签名）:
+- Consumes: none (first task).
+- Produces (exact signatures that subsequent tasks depend on):
   - `type ClarifyMessage = { role: "user" | "assistant" | "system"; content: string }`
   - `type ClarifyContext = { workdir: string; gitBranch?: string }`
-  - `type RunClarifyTurn = (messages: ClarifyMessage[], signal: AbortSignal, onTextDelta?: (delta: string) => void) => Promise<string>`（返回完整回复文本）
-  - `const CLARIFY_QUESTION_MARKER = "[CLARIFY_QUESTION]"`；`const CLARIFY_FINAL_MARKER = "[CLARIFY_FINAL]"`；`const CLARIFY_MAX_QUESTIONS = 5`
+  - `type RunClarifyTurn = (messages: ClarifyMessage[], signal: AbortSignal, onTextDelta?: (delta: string) => void) => Promise<string>` (returns the full reply text)
+  - `const CLARIFY_QUESTION_MARKER = "[CLARIFY_QUESTION]"`; `const CLARIFY_FINAL_MARKER = "[CLARIFY_FINAL]"`; `const CLARIFY_MAX_QUESTIONS = 5`
   - `parseClarifyTurn(raw: string): { kind: "question" | "final"; text: string }`
-  - `stripLeadingMarker(partial: string): string`（流式显示用）
+  - `stripLeadingMarker(partial: string): string` (for streaming display)
   - `buildClarifySystemPrompt(context?: ClarifyContext): string`
   - `buildForceFinalInstruction(): string`
-  - `buildClarifyMessages(sessionMessages: ClarifyMessage[], context?: ClarifyContext): ClarifyMessage[]`（前置 system 消息）
+  - `buildClarifyMessages(sessionMessages: ClarifyMessage[], context?: ClarifyContext): ClarifyMessage[]` (prepends a system message)
 
-- [ ] **Step 1: 写失败测试**
+- [ ] **Step 1: Write the failing test**
 
 ```js
 // crates/agent-gui/test/chat/clarify-protocol.test.mjs
@@ -73,40 +73,40 @@ const protocol = await loader.import(
 );
 
 test("question marker parses", () => {
-  const r = protocol.parseClarifyTurn("[CLARIFY_QUESTION]\n要做什么功能？");
+  const r = protocol.parseClarifyTurn("[CLARIFY_QUESTION]\nWhat feature do you want to build?");
   assert.equal(r.kind, "question");
-  assert.equal(r.text, "要做什么功能？");
+  assert.equal(r.text, "What feature do you want to build?");
 });
 
 test("final marker parses", () => {
-  const r = protocol.parseClarifyTurn("[CLARIFY_FINAL]\n优化后的提示词正文");
+  const r = protocol.parseClarifyTurn("[CLARIFY_FINAL]\nOptimized prompt body");
   assert.equal(r.kind, "final");
-  assert.equal(r.text, "优化后的提示词正文");
+  assert.equal(r.text, "Optimized prompt body");
 });
 
 test("no marker falls back to question", () => {
-  const r = protocol.parseClarifyTurn("直接一句没有标记的话");
+  const r = protocol.parseClarifyTurn("A plain sentence without a marker");
   assert.equal(r.kind, "question");
-  assert.equal(r.text, "直接一句没有标记的话");
+  assert.equal(r.text, "A plain sentence without a marker");
 });
 
 test("marker after body text still recognized", () => {
-  const r = protocol.parseClarifyTurn("[CLARIFY_FINAL]\n\n  带空行的终稿  ");
+  const r = protocol.parseClarifyTurn("[CLARIFY_FINAL]\n\n  Final draft with blank lines  ");
   assert.equal(r.kind, "final");
-  assert.equal(r.text, "带空行的终稿");
+  assert.equal(r.text, "Final draft with blank lines");
 });
 
 test("stripLeadingMarker hides complete and partial markers during streaming", () => {
   assert.equal(protocol.stripLeadingMarker("[CLARIFY_QUE"), "");
-  assert.equal(protocol.stripLeadingMarker("[CLARIFY_QUESTION]\n问题正文"), "问题正文");
-  assert.equal(protocol.stripLeadingMarker("普通文本"), "普通文本");
+  assert.equal(protocol.stripLeadingMarker("[CLARIFY_QUESTION]\nQuestion body"), "Question body");
+  assert.equal(protocol.stripLeadingMarker("plain text"), "plain text");
 });
 
 test("system prompt contains workspace context and rules", () => {
   const p = protocol.buildClarifySystemPrompt({ workdir: "/repo/x", gitBranch: "main" });
   assert.match(p, /\/repo\/x/);
   assert.match(p, /main/);
-  assert.match(p, /一次只问一个问题/);
+  assert.match(p, /Ask exactly ONE question per reply/);
   const bare = protocol.buildClarifySystemPrompt();
   assert.doesNotMatch(bare, /workdir/i);
 });
@@ -121,30 +121,30 @@ test("buildClarifyMessages prepends system", () => {
 });
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [ ] **Step 2: Run to confirm failure**
 
 Run: `cd crates/agent-gui && npm test -- test/chat/clarify-protocol.test.mjs`
-Expected: FAIL（模块不存在 / import 报错）
+Expected: FAIL (module does not exist / import error)
 
-- [ ] **Step 3: 实现**
+- [ ] **Step 3: Implement**
 
 ```ts
 // crates/agent-ui/src/components/chat/clarify/clarifyTypes.ts
-/** 澄清小对话的消息。与 pi-ai Context 的 messages 同构，但独立于会话运行时。 */
+/** Messages of the small clarification conversation. Isomorphic to pi-ai Context messages, but independent of the conversation runtime. */
 export type ClarifyMessage = {
   role: "user" | "assistant" | "system";
   content: string;
 };
 
-/** 轻量工作区信息：只喂路径/分支，不含文件内容（见设计文档「上下文感知」）。 */
+/** Lightweight workspace info: only feeds the path/branch, no file contents (see the design doc "context awareness"). */
 export type ClarifyContext = {
   workdir: string;
   gitBranch?: string;
 };
 
 /**
- * 执行一轮澄清补全。messages 含 system；返回完整回复文本（已由宿主拼装）。
- * onTextDelta 用于面板流式上屏；signal 由状态机贯穿取消。
+ * Execute one round of clarification completion. messages include the system message; returns the full reply text (already assembled by the host).
+ * onTextDelta is used for streaming into the panel; signal threads cancellation through the state machine.
  */
 export type RunClarifyTurn = (
   messages: ClarifyMessage[],
@@ -159,12 +159,12 @@ import type { ClarifyContext, ClarifyMessage } from "./clarifyTypes";
 
 export const CLARIFY_QUESTION_MARKER = "[CLARIFY_QUESTION]";
 export const CLARIFY_FINAL_MARKER = "[CLARIFY_FINAL]";
-/** 超过硬上限后前端强制注入终稿指令，防止 LLM 无限提问（设计文档「错误处理」）。 */
+/** After the hard cap is exceeded, the frontend force-injects the final-draft instruction to prevent the LLM from asking unlimited questions (design doc "error handling"). */
 export const CLARIFY_MAX_QUESTIONS = 5;
 
 export type ParsedClarifyTurn = { kind: "question" | "final"; text: string };
 
-/** 完整回复解析：识别首行标记；无标记整体当 question 兜底。 */
+/** Full reply parsing: recognizes a marker on the first line; with no marker, treats the whole thing as a question fallback. */
 export function parseClarifyTurn(raw: string): ParsedClarifyTurn {
   const value = raw ?? "";
   for (const [marker, kind] of [
@@ -179,8 +179,9 @@ export function parseClarifyTurn(raw: string): ParsedClarifyTurn {
 }
 
 /**
- * 流式显示用：剥掉开头已到/未到的标记前缀。流首 token 往往劈在标记中间，
- * 前 20 个字符在凑齐标记（或确认不是标记）之前一律隐藏。
+ * For streaming display: strips a complete or partial marker prefix at the start. The first token of a stream
+ * is often split in the middle of the marker, so the first 20 characters are hidden until the marker is
+ * assembled (or confirmed not to be a marker).
  */
 export function stripLeadingMarker(partial: string): string {
   const value = partial ?? "";
@@ -190,8 +191,9 @@ export function stripLeadingMarker(partial: string): string {
   if (value.startsWith(CLARIFY_QUESTION_MARKER)) {
     return value.slice(CLARIFY_QUESTION_MARKER.length).replace(/^\s+/, "");
   }
-  // 尚未排除标记可能性：标记最长 16 字符，前缀不足 16 字符且每个字符都
-  // 与某一标记前缀一致时先隐藏，避免标记碎片闪现在气泡里。
+  // The marker possibility is not yet ruled out: the longest marker is 16 characters, so when the prefix is
+  // shorter than 16 characters and every character matches a marker prefix, hide it first to avoid marker
+  // fragments flashing in the bubble.
   const prefixWindow = value.slice(0, CLARIFY_QUESTION_MARKER.length);
   const couldBeMarker =
     CLARIFY_QUESTION_MARKER.startsWith(prefixWindow) ||
@@ -202,7 +204,7 @@ export function stripLeadingMarker(partial: string): string {
   return value;
 }
 
-/** 从 superpowers brainstorming 技能拆编：一次一问、聚焦目的/约束/成功标准。 */
+/** Adapted from the superpowers brainstorming skill: one question at a time, focused on purpose/constraints/success criteria. */
 export function buildClarifySystemPrompt(context?: ClarifyContext): string {
   const workspace = context?.workdir?.trim();
   const branch = context?.gitBranch?.trim();
@@ -225,12 +227,12 @@ export function buildClarifySystemPrompt(context?: ClarifyContext): string {
   ].join("\n");
 }
 
-/** 「直接生成」/轮数超限时注入的用户指令：绕过剩余提问直接出终稿。 */
+/** User instruction injected on "generate now" / when the round cap is exceeded: bypass the remaining questions and produce the final draft directly. */
 export function buildForceFinalInstruction(): string {
-  return "直接给出最终优化后的提示词（以 " + CLARIFY_FINAL_MARKER + " 开头），不要再提问。";
+  return "Give the final optimized prompt directly (starting with " + CLARIFY_FINAL_MARKER + "), and do not ask any more questions.";
 }
 
-/** 完整 LLM 输入：system 前置 + 会话消息。 */
+/** Full LLM input: system prepended + session messages. */
 export function buildClarifyMessages(
   sessionMessages: ClarifyMessage[],
   context?: ClarifyContext,
@@ -239,10 +241,10 @@ export function buildClarifyMessages(
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [ ] **Step 4: Run to confirm it passes**
 
 Run: `cd crates/agent-gui && npm test -- test/chat/clarify-protocol.test.mjs`
-Expected: PASS（全部 7 个用例）
+Expected: PASS (all 7 cases)
 
 - [ ] **Step 5: Commit**
 
@@ -253,20 +255,20 @@ git commit -m "feat(clarify): add protocol parsing and system prompt for compose
 
 ---
 
-### Task 2: useClarifySession 状态机
+### Task 2: useClarifySession state machine
 
 **Files:**
 - Create: `crates/agent-ui/src/components/chat/clarify/useClarifySession.ts`
 - Test: `crates/agent-gui/test/chat/clarify-session.test.mjs`
 
 **Interfaces:**
-- Consumes: Task 1 的 `ClarifyMessage`、`RunClarifyTurn`、`parseClarifyTurn`、`buildClarifyMessages`、`buildForceFinalInstruction`、`CLARIFY_MAX_QUESTIONS`。
+- Consumes: Task 1's `ClarifyMessage`, `RunClarifyTurn`, `parseClarifyTurn`, `buildClarifyMessages`, `buildForceFinalInstruction`, `CLARIFY_MAX_QUESTIONS`.
 - Produces:
   - `type ClarifySessionStatus = "idle" | "asking" | "awaitingInput" | "synthesizing" | "done" | "error"`
   - `type ClarifySessionState = { status; visibleMessages: ClarifyMessage[]; streamingText: string; error: string | null; questionCount: number; finalText: string | null }`
   - `useClarifySession(runTurn: RunClarifyTurn, clarifyContext: ClarifyContext | undefined, callbacks: { onFinal: (text: string) => void }): { state; start(draftText: string): void; submitAnswer(text: string): void; forceFinal(): void; retry(): void; close(): void }`
 
-- [ ] **Step 1: 写失败测试**
+- [ ] **Step 1: Write the failing test**
 
 ```js
 // crates/agent-gui/test/chat/clarify-session.test.mjs
@@ -279,7 +281,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const abs = (rel) => path.join(rootDir, rel);
 
-// React mock：hook 只用 useState/useRef/useCallback/useEffect，全部可空实现。
+// React mock: the hook only uses useState/useRef/useCallback/useEffect, all with no-op implementations.
 const reactMock = {
   useState: (initial) => [initial, () => {}],
   useRef: (initial) => ({ current: initial }),
@@ -296,8 +298,8 @@ const protocol = await loader.import(
   abs("../agent-ui/src/components/chat/clarify/clarifyProtocol.ts"),
 );
 
-const QUESTION = "[CLARIFY_QUESTION]\n要做什么功能？";
-const FINAL = "[CLARIFY_FINAL]\n优化后的提示词";
+const QUESTION = "[CLARIFY_QUESTION]\nWhat feature do you want to build?";
+const FINAL = "[CLARIFY_FINAL]\nOptimized prompt";
 
 test("happy path: question then final", async () => {
   const seenInputs = [];
@@ -308,13 +310,13 @@ test("happy path: question then final", async () => {
   };
   const finals = [];
   const session = mod.createClarifySessionCore(runTurn, { onFinal: (t) => finals.push(t) });
-  await session.start("帮我写个脚本");
+  await session.start("Help me write a script");
   assert.equal(session.getState().status, "awaitingInput");
   assert.equal(session.getState().questionCount, 1);
-  await session.submitAnswer("批量改文件名");
+  await session.submitAnswer("Rename files in bulk");
   assert.equal(session.getState().status, "done");
-  assert.deepEqual(finals, ["优化后的提示词"]);
-  // 第二轮输入应包含第一轮问答 + system
+  assert.deepEqual(finals, ["Optimized prompt"]);
+  // The second round's input should contain the first round's Q&A + system
   const second = seenInputs[1];
   assert.equal(second[0].role, "system");
   assert.equal(second.filter((m) => m.role === "assistant").length, 1);
@@ -325,7 +327,7 @@ test("exceeding max questions force-injects final instruction", async () => {
   const runTurn = async (messages) => {
     calls += 1;
     if (messages.at(-1).content.includes("CLARIFY_FINAL")) {
-      return FINAL; // 已是强制指令轮
+      return FINAL; // already the forced-instruction round
     }
     return QUESTION;
   };
@@ -334,7 +336,7 @@ test("exceeding max questions force-injects final instruction", async () => {
   for (let i = 0; i < mod.CLARIFY_MAX_QUESTIONS; i++) {
     await session.submitAnswer(`a${i}`);
   }
-  // 第 6 轮：不追加提问，直接强制终稿
+  // Round 6: no further question is appended; the final draft is forced directly
   assert.equal(session.getState().status, "done");
   assert.ok(calls <= mod.CLARIFY_MAX_QUESTIONS + 1);
 });
@@ -346,7 +348,7 @@ test("forceFinal injects instruction and produces final", async () => {
   const session = mod.createClarifySessionCore(runTurn, { onFinal: (t) => finals.push(t) });
   await session.start("d");
   await session.forceFinal();
-  assert.deepEqual(finals, ["优化后的提示词"]);
+  assert.deepEqual(finals, ["Optimized prompt"]);
 });
 
 test("error state keeps messages; retry resends", async () => {
@@ -363,24 +365,24 @@ test("error state keeps messages; retry resends", async () => {
   fail = false;
   await session.retry();
   assert.equal(session.getState().status, "done");
-  assert.deepEqual(finals, ["优化后的提示词"]);
+  assert.deepEqual(finals, ["Optimized prompt"]);
 });
 
 test("unmarked reply falls back to question", async () => {
-  const runTurn = async () => "没有标记的一句话";
+  const runTurn = async () => "A sentence with no marker";
   const session = mod.createClarifySessionCore(runTurn, { onFinal: () => {} });
   await session.start("d");
   assert.equal(session.getState().status, "awaitingInput");
-  assert.equal(session.getState().visibleMessages.at(-1).content, "没有标记的一句话");
+  assert.equal(session.getState().visibleMessages.at(-1).content, "A sentence with no marker");
 });
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [ ] **Step 2: Run to confirm failure**
 
 Run: `cd crates/agent-gui && npm test -- test/chat/clarify-session.test.mjs`
-Expected: FAIL（模块不存在）
+Expected: FAIL (module does not exist)
 
-- [ ] **Step 3: 实现**
+- [ ] **Step 3: Implement**
 
 ```ts
 // crates/agent-ui/src/components/chat/clarify/useClarifySession.ts
@@ -403,9 +405,9 @@ export type ClarifySessionStatus =
 
 export type ClarifySessionState = {
   status: ClarifySessionStatus;
-  /** 面板可见消息（不含 system）。 */
+  /** Panel-visible messages (excluding system). */
   visibleMessages: ClarifyMessage[];
-  /** 当轮流式文本（未解析，渲染时剥标记前缀）。 */
+  /** Streaming text for the current round (unparsed; the marker prefix is stripped at render time). */
   streamingText: string;
   error: string | null;
   questionCount: number;
@@ -431,8 +433,8 @@ export type ClarifySessionCore = {
 };
 
 /**
- * 澄清会话核心（框架无关，便于 node:test 直测）。React hook 只是把 core 的
- * state 镜像进 useState。一次 start 对应一次会话；close 丢弃全部状态。
+ * Clarify session core (framework-agnostic, so node:test can test it directly). The React hook merely mirrors
+ * the core's state into useState. One start corresponds to one session; close discards all state.
  */
 export function createClarifySessionCore(
   runTurn: RunClarifyTurn,
@@ -477,7 +479,7 @@ export function createClarifySessionCore(
         visibleMessages: sessionMessages.slice(),
       });
     } catch (error) {
-      // 用户取消走 close()，不产生 error 态；此处只兜网络/模型错误。
+      // User cancellation goes through close() and does not produce an error state; only network/model errors are handled here.
       setState({ status: "error", error: error instanceof Error ? error.message : String(error) });
     } finally {
       controller = null;
@@ -499,7 +501,7 @@ export function createClarifySessionCore(
       sessionMessages.push({ role: "user", content: text });
       setState({ visibleMessages: sessionMessages.slice() });
       if (questionCount >= CLARIFY_MAX_QUESTIONS) {
-        // 硬上限：不再放行提问，直接注入终稿指令（设计文档「错误处理」）。
+        // Hard cap: no more questions are allowed; inject the final-draft instruction directly (design doc "error handling").
         return ask({ role: "user", content: buildForceFinalInstruction() });
       }
       return ask();
@@ -508,7 +510,7 @@ export function createClarifySessionCore(
       return ask({ role: "user", content: buildForceFinalInstruction() });
     },
     retry() {
-      // 失败重试重发当前轮：把最后一条 assistant 之外的尾巴原样再发一次。
+      // Retry resends the current round: resend the tail after the last assistant message as-is.
       const last = sessionMessages.at(-1);
       if (last?.role === "user" && state.status === "error") {
         const retryTail = last;
@@ -528,7 +530,7 @@ export function createClarifySessionCore(
   };
 }
 
-/** React 包装：把 core 状态镜像进组件态。 */
+/** React wrapper: mirrors the core state into component state. */
 export function useClarifySession(
   runTurn: RunClarifyTurn,
   _clarifyContext: ClarifyContext | undefined,
@@ -539,7 +541,7 @@ export function useClarifySession(
   if (!coreRef.current) {
     const core = createClarifySessionCore(runTurn, callbacks);
     core.subscribe = (listener: () => void) => {
-      // createClarifySessionCore 未导出 subscribe 时在此补充（见下）。
+      // When createClarifySessionCore does not export subscribe, add it here (see below).
       return () => {};
     };
     coreRef.current = core;
@@ -548,12 +550,12 @@ export function useClarifySession(
 }
 ```
 
-注意：上面的 `useClarifySession` 是占位草案——实施时把 `createClarifySessionCore` 加上 `subscribe(listener): () => void` 返回（`emit` 已有），hook 内 `useSyncExternalStore(core.subscribe, core.getState)` 驱动重渲染，`runTurn`/`callbacks` 经 ref 保持最新。测试只测 `createClarifySessionCore`，hook 部分手测（Task 5）。
+Note: the `useClarifySession` above is a placeholder draft — during implementation, add `subscribe(listener): () => void` to `createClarifySessionCore` and return it (`emit` already exists), drive re-renders in the hook with `useSyncExternalStore(core.subscribe, core.getState)`, and keep `runTurn`/`callbacks` current via refs. Tests only cover `createClarifySessionCore`; the hook part is manually tested (Task 5).
 
-- [ ] **Step 4: 运行确认通过**
+- [ ] **Step 4: Run to confirm it passes**
 
 Run: `cd crates/agent-gui && npm test -- test/chat/clarify-session.test.mjs`
-Expected: PASS（5 个用例）
+Expected: PASS (5 cases)
 
 - [ ] **Step 5: Commit**
 
@@ -564,39 +566,22 @@ git commit -m "feat(clarify): add clarify session state machine"
 
 ---
 
-### Task 3: ClarifyPanel 组件 + i18n 键
+### Task 3: ClarifyPanel component + i18n keys
 
 **Files:**
 - Create: `crates/agent-ui/src/components/chat/clarify/ClarifyPanel.tsx`
-- Modify: `crates/agent-ui/src/i18n/translations/zhCNCommon.ts`（文件尾部 `chat.*` 键区域附近，新增一节）
-- Modify: `crates/agent-ui/src/i18n/translations/enUSCommon.ts`（同上）
+- Modify: `crates/agent-ui/src/i18n/translations/zhCNCommon.ts` (near the `chat.*` key area at the end of the file, adding a new section)
+- Modify: `crates/agent-ui/src/i18n/translations/enUSCommon.ts` (same as above)
 
 **Interfaces:**
-- Consumes: Task 1 `stripLeadingMarker`；Task 2 `useClarifySession`、`ClarifySessionState`。
+- Consumes: Task 1 `stripLeadingMarker`; Task 2 `useClarifySession`, `ClarifySessionState`.
 - Produces:
   - `ClarifyPanel(props: { state: ClarifySessionState; onSubmitAnswer: (text: string) => void; onForceFinal: () => void; onRetry: () => void; onClose: () => void; busy: boolean }): JSX.Element`
-  - i18n 键（两个文件都要）：`chat.clarify.title`、`chat.clarify.buttonTitle`、`chat.clarify.buttonDisabled`、`chat.clarify.answerPlaceholder`、`chat.clarify.generate`、`chat.clarify.retry`、`chat.clarify.close`、`chat.clarify.thinking`、`chat.clarify.writing`、`chat.clarify.applied`、`chat.clarify.errorPrefix`
+  - i18n keys (both files): `chat.clarify.title`, `chat.clarify.buttonTitle`, `chat.clarify.buttonDisabled`, `chat.clarify.answerPlaceholder`, `chat.clarify.generate`, `chat.clarify.retry`, `chat.clarify.close`, `chat.clarify.thinking`, `chat.clarify.writing`, `chat.clarify.applied`, `chat.clarify.errorPrefix`
 
-- [ ] **Step 1: 加 i18n 键**
+- [ ] **Step 1: Add the i18n keys**
 
-`zhCNCommon.ts`（在既有 `chat.queue.*` 键组附近追加）：
-
-```ts
-  // 提示词澄清面板（输入框旁的按钮唤起）
-  "chat.clarify.title": "澄清提示词",
-  "chat.clarify.buttonTitle": "澄清提示词",
-  "chat.clarify.buttonDisabled": "请先输入提示词草稿",
-  "chat.clarify.answerPlaceholder": "回答问题，或补充说明…（Enter 发送）",
-  "chat.clarify.generate": "直接生成提示词",
-  "chat.clarify.retry": "重试",
-  "chat.clarify.close": "关闭",
-  "chat.clarify.thinking": "思考中…",
-  "chat.clarify.writing": "正在生成最终提示词…",
-  "chat.clarify.applied": "已写入输入框，可继续编辑",
-  "chat.clarify.errorPrefix": "请求失败",
-```
-
-`enUSCommon.ts` 对应英文：
+`zhCNCommon.ts` (append near the existing `chat.queue.*` key group):
 
 ```ts
   // Prompt clarify panel (opened from the composer toolbar button)
@@ -613,9 +598,26 @@ git commit -m "feat(clarify): add clarify session state machine"
   "chat.clarify.errorPrefix": "Request failed",
 ```
 
-- [ ] **Step 2: 实现 ClarifyPanel**
+`enUSCommon.ts` corresponding English:
 
-无组件测试基建（仓库无 react-testing 库），本任务以类型检查 + 手测验收（Task 5）。
+```ts
+  // Prompt clarify panel (opened from the composer toolbar button)
+  "chat.clarify.title": "Clarify prompt",
+  "chat.clarify.buttonTitle": "Clarify prompt",
+  "chat.clarify.buttonDisabled": "Type a draft prompt first",
+  "chat.clarify.answerPlaceholder": "Answer or add details… (Enter to send)",
+  "chat.clarify.generate": "Generate prompt now",
+  "chat.clarify.retry": "Retry",
+  "chat.clarify.close": "Close",
+  "chat.clarify.thinking": "Thinking…",
+  "chat.clarify.writing": "Writing the final prompt…",
+  "chat.clarify.applied": "Applied to the composer — edit freely",
+  "chat.clarify.errorPrefix": "Request failed",
+```
+
+- [ ] **Step 2: Implement ClarifyPanel**
+
+There is no component testing infrastructure (the repo has no react-testing library), so this task is accepted via type checking + manual testing (Task 5).
 
 ```tsx
 // crates/agent-ui/src/components/chat/clarify/ClarifyPanel.tsx
@@ -635,7 +637,7 @@ type ClarifyPanelProps = {
   onClose: () => void;
 };
 
-/** 输入框上方内嵌的澄清面板：问答气泡 + 回答输入行 + 操作按钮。 */
+/** Clarify panel embedded above the composer: Q&A bubbles + answer input row + action buttons. */
 export function ClarifyPanel(props: ClarifyPanelProps) {
   const { state, busy, onSubmitAnswer, onForceFinal, onRetry, onClose } = props;
   const { t } = useLocale();
@@ -759,12 +761,12 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
 }
 ```
 
-（`RefreshCw`、`X` 若 IconSet 未导出，用 `~icons/lucide/refresh-cw`、`~icons/lucide/x` 直接 import——仓库已配 unplugin-icons，见 IconSet.tsx 用法。）
+(If `RefreshCw` or `X` are not exported by IconSet, import them directly from `~icons/lucide/refresh-cw` and `~icons/lucide/x` — the repo already configures unplugin-icons; see usage in IconSet.tsx.)
 
-- [ ] **Step 3: 类型检查**
+- [ ] **Step 3: Type check**
 
 Run: `cd crates/agent-gui && npx tsc --noEmit`
-Expected: 无错误（若仓库有独立 lint 脚本一并跑 `npm run lint`）
+Expected: no errors (if the repo has a separate lint script, run `npm run lint` as well)
 
 - [ ] **Step 4: Commit**
 
@@ -775,29 +777,29 @@ git commit -m "feat(clarify): add ClarifyPanel UI component and i18n strings"
 
 ---
 
-### Task 4: ChatComposerBar 集成（按钮 + 面板 + 落框）
+### Task 4: ChatComposerBar integration (button + panel + applying the result)
 
 **Files:**
-- Modify: `crates/agent-ui/src/pages/chat/ChatComposerBar.tsx`（props 类型 229 行起、组件顶部解构、工具行 1010-1127、编辑器容器 980 行、发送守卫 `handleComposerSend` 507 行）
+- Modify: `crates/agent-ui/src/pages/chat/ChatComposerBar.tsx` (props type from line 229, component top-level destructuring, toolbar row 1010-1127, editor container line 980, send guard `handleComposerSend` line 507)
 
 **Interfaces:**
-- Consumes: Task 1-3 全部产物（`RunClarifyTurn`、`ClarifyContext`、`useClarifySession`、`ClarifyPanel`）。
-- Produces: `ChatComposerBarProps` 新增可选字段：
+- Consumes: all Task 1-3 outputs (`RunClarifyTurn`, `ClarifyContext`, `useClarifySession`, `ClarifyPanel`).
+- Produces: new optional fields on `ChatComposerBarProps`:
   - `runClarifyTurn?: RunClarifyTurn`
   - `clarifyContext?: ClarifyContext`
 
-- [ ] **Step 1: props 与状态**
+- [ ] **Step 1: props and state**
 
-在 `ChatComposerBarProps`（`ChatComposerBar.tsx:229`）的 `onHeightChange?: (height: number) => void;` 之前加：
+In `ChatComposerBarProps` (`ChatComposerBar.tsx:229`), before `onHeightChange?: (height: number) => void;`, add:
 
 ```ts
-  /** 提示词澄清执行器：注入后在工具行渲染「澄清」按钮（GUI 已接；Web 见计划 2）。 */
+  /** Prompt clarify executor: once injected, renders the "Clarify" button in the toolbar row (GUI already wired; Web is Plan 2). */
   runClarifyTurn?: RunClarifyTurn;
-  /** 澄清系统提示词附带的轻量工作区信息。 */
+  /** Lightweight workspace info attached to the clarify system prompt. */
   clarifyContext?: ClarifyContext;
 ```
 
-顶部 import：
+Top imports:
 
 ```ts
 import { ClarifyPanel } from "@liveagent/ui/components/chat/clarify/ClarifyPanel";
@@ -808,19 +810,19 @@ import type {
 import { useClarifySession } from "@liveagent/ui/components/chat/clarify/useClarifySession";
 ```
 
-（import 风格：本文件统一 `@liveagent/ui/...` 绝对路径，照抄。）
+(Import style: this file uniformly uses `@liveagent/ui/...` absolute paths; copy that.)
 
-组件解构加 `runClarifyTurn, clarifyContext`；body 加：
+Add `runClarifyTurn, clarifyContext` to the component destructuring; add to the body:
 
 ```tsx
-  // 澄清会话：面板即开即用，关闭即丢弃（设计文档：不持久化）。
+  // Clarify session: the panel is usable immediately and discarded on close (design doc: not persisted).
   const [clarifyOpen, setClarifyOpen] = useState(false);
   const applyClarifyFinal = useCallback(
     (finalText: string) => {
       const composer = composerRef.current;
       if (!composer) return;
-      // 只替换文本段：附件/提及 chips 原样保留（设计文档「终稿落框」）。
-      // setDraft 按 segments 重建 DOM，stale 派生字段会被忽略。
+      // Replace only text segments: attachment/mention chips are preserved as-is (design doc "final draft into composer").
+      // setDraft rebuilds the DOM from segments, and stale derived fields are ignored.
       const draft = composer.getDraft();
       const preserved = draft.segments.filter((segment) => segment.type !== "text");
       composer.setDraft({
@@ -850,7 +852,7 @@ import { useClarifySession } from "@liveagent/ui/components/chat/clarify/useClar
     setClarifyOpen(true);
     void clarifySession.core.start(draftText);
   }, [clarifyEnabled, clarifyOpen, clarifySession.core]);
-  // 切会话时丢弃进行中的澄清（组件按 conversationId 重挂载，保险起见也显式关）。
+  // Discard any in-progress clarification when switching conversations (the component remounts by conversationId; also close explicitly to be safe).
   useEffect(() => {
     clarifySession.core.close();
     setClarifyOpen(false);
@@ -858,20 +860,20 @@ import { useClarifySession } from "@liveagent/ui/components/chat/clarify/useClar
   }, [conversationId]);
 ```
 
-发送守卫（`handleComposerSend`，507 行）：
+Send guard (`handleComposerSend`, line 507):
 
 ```tsx
   const handleComposerSend = useCallback(() => {
-    // 澄清进行中禁发：避免把半成品草稿发出去（设计文档「交互」）。
+    // Block sending while clarification is in progress: avoid sending a half-finished draft (design doc "interaction").
     if (clarifyOpen) return;
     setComposerExpanded(false);
     onSend();
   }, [clarifyOpen, onSend, setComposerExpanded]);
 ```
 
-- [ ] **Step 2: 工具行按钮**
+- [ ] **Step 2: Toolbar row button**
 
-在计划模式 pill（1113-1125 行 `{isAgentMode && chatRuntimeControls.planModeEnabled ? (...) : null}` 之后、STT 块 `{stt.available ? (` 之前）插入：
+Insert after the plan mode pill (lines 1113-1125 `{isAgentMode && chatRuntimeControls.planModeEnabled ? (...) : null}` and before the STT block `{stt.available ? (`):
 
 ```tsx
               {clarifyEnabled ? (
@@ -895,11 +897,11 @@ import { useClarifySession } from "@liveagent/ui/components/chat/clarify/useClar
               ) : null}
 ```
 
-`WandSparkles` 加入本文件 IconSet import。
+Add `WandSparkles` to this file's IconSet import.
 
-- [ ] **Step 3: 面板渲染**
+- [ ] **Step 3: Panel rendering**
 
-在编辑器容器（980 行 `<div className={cn("relative flex flex-1 pl-4 pr-12", ...)}>` 之前、用量环容器（959-968 行）之后）插入：
+Insert before the editor container (line 980 `<div className={cn("relative flex flex-1 pl-4 pr-12", ...)}>` and after the usage ring container (lines 959-968)):
 
 ```tsx
           {clarifyOpen && runClarifyTurn ? (
@@ -917,10 +919,10 @@ import { useClarifySession } from "@liveagent/ui/components/chat/clarify/useClar
           ) : null}
 ```
 
-- [ ] **Step 4: 类型检查 + 全量测试**
+- [ ] **Step 4: Type check + full test run**
 
 Run: `cd crates/agent-gui && npx tsc --noEmit && npm test`
-Expected: tsc 无错误；既有测试全绿（本任务不新增测试——逻辑都在 Task 1/2 测过，组件接线手测）。
+Expected: tsc has no errors; all existing tests pass (this task adds no new tests — the logic was tested in Tasks 1/2, and the component wiring is manually tested).
 
 - [ ] **Step 5: Commit**
 
@@ -931,19 +933,19 @@ git commit -m "feat(clarify): wire clarify panel and toolbar button into ChatCom
 
 ---
 
-### Task 5: GUI 宿主接线（ChatPage → streamAssistantMessage）
+### Task 5: GUI host wiring (ChatPage → streamAssistantMessage)
 
 **Files:**
-- Modify: `crates/agent-gui/src/pages/ChatPage.tsx`（composer binding，2988 行起）
+- Modify: `crates/agent-gui/src/pages/ChatPage.tsx` (composer binding, from line 2988)
 - Test: `crates/agent-gui/test/chat/clarify-runner.test.mjs`
 
 **Interfaces:**
-- Consumes: Task 1 `RunClarifyTurn`；`streamAssistantMessage` / `assistantMessageToText`（`crates/agent-gui/src/lib/providers/llm.ts`）、`resolveEffectiveChatModelSelection`（`runtime/modelSelection.ts`）、`createProviderRuntimeConfig`（`lib/providers/llm.ts`）。
-- Produces: 无下游依赖（终端接线任务）。
+- Consumes: Task 1 `RunClarifyTurn`; `streamAssistantMessage` / `assistantMessageToText` (`crates/agent-gui/src/lib/providers/llm.ts`), `resolveEffectiveChatModelSelection` (`runtime/modelSelection.ts`), `createProviderRuntimeConfig` (`lib/providers/llm.ts`).
+- Produces: no downstream dependency (terminal wiring task).
 
-- [ ] **Step 1: 写失败测试（runner 包装函数）**
+- [ ] **Step 1: Write the failing test (runner wrapper function)**
 
-为可测性，把包装函数放进独立文件 `crates/agent-gui/src/pages/chat/runtime/clarifyRunner.ts`（与 conversationTitleJob 同目录），测试 mock `streamAssistantMessage`：
+For testability, put the wrapper function in its own file `crates/agent-gui/src/pages/chat/runtime/clarifyRunner.ts` (same directory as conversationTitleJob), and mock `streamAssistantMessage` in the test:
 
 ```js
 // crates/agent-gui/test/chat/clarify-runner.test.mjs
@@ -996,12 +998,12 @@ test("runGuiClarifyTurn maps messages into a text-only stream call", async () =>
 });
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [ ] **Step 2: Run to confirm failure**
 
 Run: `cd crates/agent-gui && npm test -- test/chat/clarify-runner.test.mjs`
-Expected: FAIL（模块不存在）
+Expected: FAIL (module does not exist)
 
-- [ ] **Step 3: 实现 clarifyRunner**
+- [ ] **Step 3: Implement clarifyRunner**
 
 ```ts
 // crates/agent-gui/src/pages/chat/runtime/clarifyRunner.ts
@@ -1012,8 +1014,9 @@ import type { EffectiveChatModelSelection } from "./modelSelection";
 type RuntimeLike = Parameters<typeof streamAssistantMessage>[0]["runtime"];
 
 /**
- * 桌面宿主的澄清执行器：当前会话模型跑一次纯文本补全。模型/runtime 在每
- * 次调用时惰性解析（getter），保证澄清用的始终是面板打开当下的选择。
+ * Clarify executor for the desktop host: runs one text-only completion with the current conversation model.
+ * The model/runtime are resolved lazily on every call (getters), so clarification always uses the selection
+ * from when the panel was opened.
  */
 export function createGuiClarifyRunner(
   getSelection: () => EffectiveChatModelSelection,
@@ -1043,16 +1046,16 @@ export function createGuiClarifyRunner(
 }
 ```
 
-注意：`buildClarifyMessages`（Task 1）已在消息数组前置 system；`streamAssistantMessage` 的 `context.systemPrompt` 留空即可——`buildTextOnlyCallContext` 会追加 text-only 后缀。若实现时发现 pi-ai 要求 systemPrompt 非空，把 system 消息挪到 `context.systemPrompt` 字段并在测试中断言，保持 LLM 输入语义不变。
+Note: `buildClarifyMessages` (Task 1) already prepends the system message to the message array; leaving `streamAssistantMessage`'s `context.systemPrompt` empty is fine — `buildTextOnlyCallContext` appends the text-only suffix. If implementation reveals that pi-ai requires a non-empty systemPrompt, move the system message into the `context.systemPrompt` field and assert that in the test, keeping the LLM input semantics unchanged.
 
-- [ ] **Step 4: 运行确认通过**
+- [ ] **Step 4: Run to confirm it passes**
 
 Run: `cd crates/agent-gui && npm test -- test/chat/clarify-runner.test.mjs`
 Expected: PASS
 
-- [ ] **Step 5: ChatPage 接线**
+- [ ] **Step 5: ChatPage wiring**
 
-`crates/agent-gui/src/pages/ChatPage.tsx` composer binding（2988 行 `composer: {` 对象内、`loadHistoryPrompts` 附近）加：
+In `crates/agent-gui/src/pages/ChatPage.tsx` composer binding (inside the `composer: {` object at line 2988, near `loadHistoryPrompts`), add:
 
 ```tsx
         runClarifyTurn: useMemo(
@@ -1074,15 +1077,15 @@ Expected: PASS
         },
 ```
 
-接线细节（实施者按仓库实际微调，语义不变）：
-- `resolveEffectiveChatModelSelection` 的 `conversationSelectedModel` 取当前 pane 的会话模型——与 `currentModelLabel: paneModelLabel` 同源（grep `paneModelLabel` 的上游）。若该 binding 处拿不到 pane 模型，退回 `{ settings }` 即页面级选中模型，并在注释说明。
-- `currentGitBranch`：ChatPage 若无现成分支状态，先传 `undefined`（`clarifyContext.gitBranch` 可选），不为此新拉 git 状态。
-- `createProviderRuntimeConfig` 与 `resolveEffectiveChatModelSelection` 的 import 从 `../../../lib/providers/llm` / `./chat/runtime/modelSelection` 引入（ChatPage 现有 import 区）。
+Wiring details (implementers adjust to the actual repo, semantics unchanged):
+- Use the current pane's conversation model for `resolveEffectiveChatModelSelection`'s `conversationSelectedModel` — same source as `currentModelLabel: paneModelLabel` (grep the upstream of `paneModelLabel`). If the pane model is unavailable at that binding, fall back to `{ settings }`, i.e. the page-level selected model, and explain in a comment.
+- `currentGitBranch`: if ChatPage has no existing branch state, pass `undefined` first (`clarifyContext.gitBranch` is optional); do not fetch git state just for this.
+- Import `createProviderRuntimeConfig` and `resolveEffectiveChatModelSelection` from `../../../lib/providers/llm` / `./chat/runtime/modelSelection` (in ChatPage's existing import section).
 
-- [ ] **Step 6: 全量验证**
+- [ ] **Step 6: Full verification**
 
 Run: `cd crates/agent-gui && npx tsc --noEmit && npm test`
-Expected: 全绿
+Expected: all green
 
 - [ ] **Step 7: Commit**
 
@@ -1093,37 +1096,37 @@ git commit -m "feat(clarify): wire GUI host clarify runner into composer binding
 
 ---
 
-### Task 6: 端到端手测
+### Task 6: End-to-end manual testing
 
-**Files:** 无新文件（验证任务）。
+**Files:** no new files (verification task).
 
-- [ ] **Step 1: 启动应用**
+- [ ] **Step 1: Start the app**
 
-用 `run` 技能（或仓库既有启动方式）启动桌面 GUI。
+Start the desktop GUI using the `run` skill (or the repo's existing startup method).
 
-- [ ] **Step 2: 验收清单（设计文档「交互」「错误处理」逐条）**
+- [ ] **Step 2: Acceptance checklist (item by item from the design doc "interaction" and "error handling")**
 
-1. 输入框输入模糊草稿（如「帮我优化下登录页」）→ 点魔棒按钮 → 面板出现在输入框上方，首问出现
-2. 回答 1-2 轮 → 点「直接生成提示词」→ 终稿写入输入框，面板关闭
-3. 草稿含 @文件提及 → 澄清后文件 chip 仍在，文本被替换
-4. 澄清进行中按 Enter → 不发送主会话
-5. 断网/错 key 场景 → 面板出现错误行 + 重试可恢复
-6. 草稿为空 → 按钮禁用，title 提示
-7. 连问 5 轮 → 第 6 次回答后自动出终稿
-8. 中英文 UI 各切一遍，文案正确
+1. Type a vague draft in the composer (e.g. "Help me improve the login page") → click the wand button → the panel appears above the composer and the first question appears
+2. Answer 1-2 rounds → click "Generate prompt now" → the final draft is written into the composer and the panel closes
+3. The draft contains an @file mention → after clarification the file chip is still there and the text is replaced
+4. Press Enter while clarification is in progress → the main conversation is not sent
+5. Offline/bad key scenario → an error row appears in the panel and retry recovers
+6. The draft is empty → the button is disabled with a title hint
+7. Ask 5 rounds in a row → the final draft is produced automatically after the 6th answer
+8. Switch the UI between Chinese and English → the copy is correct
 
-- [ ] **Step 3: 修复发现的问题（每修一个跑 `npm test`），全部通过后收尾 commit**
+- [ ] **Step 3: Fix any issues found (run `npm test` after each fix), and once everything passes, finish with a commit**
 
 ```bash
 git add -A
 git commit -m "fix(clarify): polish from manual verification pass"
 ```
-（无问题则跳过本步。）
+(Skip this step if there are no issues.)
 
 ---
 
-## Self-Review 记录
+## Self-Review Notes
 
-- Spec 覆盖：UI 形态（T3/T4）、当前会话模型（T5）、LLM 判定+手动兜底（T1/T2）、5 轮上限（T2）、只换文本保附件（T4）、轻量工作区（T1/T5）、错误处理全表（T2/T3/T6）、i18n（T3）、测试（T1/T2/T5 各任务内联）——全部有对应任务。Web surface 归计划 2。
-- 占位符：T2 的 `useClarifySession` hook 部分标注了「实施时用 useSyncExternalStore 完善」——core 全量代码完整可测，hook 是 10 行镜像，属实现指引非占位；T5 Step 5 标注了两处「按仓库实际微调」的接线点，语义已锁死。
-- 类型一致性：`RunClarifyTurn(messages, signal, onTextDelta?)` 贯穿 T1/T2/T4/T5；`ClarifySessionState` 字段名在 T2/T3/T4 一致。
+- Spec coverage: UI shape (T3/T4), current conversation model (T5), LLM decision + manual fallback (T1/T2), 5-round cap (T2), text-only replacement preserving attachments (T4), lightweight workspace (T1/T5), full error-handling table (T2/T3/T6), i18n (T3), tests (inline in T1/T2/T5 respectively) — all have corresponding tasks. The Web surface belongs to Plan 2.
+- Placeholders: the `useClarifySession` hook part of T2 is marked "complete during implementation with useSyncExternalStore" — the core code is complete and testable, and the hook is a 10-line mirror, so this is an implementation guide rather than a placeholder; T5 Step 5 marks two "adjust to the actual repo" wiring points whose semantics are already locked down.
+- Type consistency: `RunClarifyTurn(messages, signal, onTextDelta?)` runs through T1/T2/T4/T5; the `ClarifySessionState` field names are consistent across T2/T3/T4.

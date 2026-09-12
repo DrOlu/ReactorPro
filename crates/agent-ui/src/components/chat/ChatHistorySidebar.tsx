@@ -1934,9 +1934,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           <Button
             type="button"
             variant="ghost"
-            // 与 macOS 标题栏那个设置入口同一个 testid：自动化脚本据此定位，
-            // 不必靠文案或坐标去猜。可读名走 i18n——屏幕阅读器念给用户听的
-            // 东西不该为了脚本方便固定成英文。
+            // Same testid as the settings entry in the macOS title bar: automation
+            // scripts locate it by this, without guessing from wording or coordinates.
+            // The readable name goes through i18n -- what a screen reader reads to the
+            // user should not be pinned to English just to make scripting easier.
             data-testid="open-settings"
             onClick={() => onOpenSettings()}
             className="h-8 w-full justify-start gap-2.5 rounded-lg px-2.5 text-[calc(13px*var(--zone-font-scale,1))] font-normal text-foreground/85 shadow-none hover:bg-foreground/[0.08] hover:text-foreground"

@@ -10,7 +10,7 @@ import { isExtensionRetryableError, type RetryErrorExtension } from "./streamRet
 /**
  * Provider auto-failover runtime (cc-switch inspired).
  *
- * Mirrors cc-switch's proxy-side design adapted to LiveAgent's client-side
+ * Mirrors cc-switch's proxy-side design adapted to ReactorPro's client-side
  * streaming architecture:
  * - a per-target circuit breaker ("consecutive failures → open → cooldown →
  *   half-open probe") keyed by `customProviderId::model`;
@@ -21,10 +21,10 @@ import { isExtensionRetryableError, type RetryErrorExtension } from "./streamRet
  *   withStreamRetry's buffering semantics so the consumer never sees events
  *   from a discarded attempt.
  *
- * Unlike cc-switch (which always routes by queue priority, P1 first), LiveAgent
+ * Unlike cc-switch (which always routes by queue priority, P1 first), ReactorPro
  * keeps the user's per-conversation model selection first and uses the queue as
  * fallback order. The breaker intentionally skips cc-switch's half-open permit
- * accounting: LiveAgent's request concurrency is bounded (one chat turn plus a
+ * accounting: ReactorPro's request concurrency is bounded (one chat turn plus a
  * handful of subagents), so unlimited half-open probes are acceptable and much
  * simpler.
  */
@@ -191,7 +191,7 @@ export function isFailoverEligibleAssistantError(
   const errorMessage = (message as { errorMessage?: string }).errorMessage ?? "";
   if (FAILOVER_INELIGIBLE_ERROR_PATTERN.test(errorMessage)) return false;
   if (isRetryableAssistantError(message)) return true;
-  // Same LiveAgent extension as withStreamRetry: a transient relay 5xx (#608)
+  // Same ReactorPro extension as withStreamRetry: a transient relay 5xx (#608)
   // or a user-defined pattern is worth trying a different provider for — a
   // fallback relay holds an independent origin/key and may not hit the same
   // Cloudflare edge. Matches pi-ai's existing 524 → failover-eligible behavior.

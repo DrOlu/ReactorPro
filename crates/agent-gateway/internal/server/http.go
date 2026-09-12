@@ -20,26 +20,18 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/pbws"
 	"github.com/liveagent/agent-gateway/internal/session"
-	"github.com/liveagent/agent-gateway/internal/stt"
 )
 
-// NewHTTPServer 构造 HTTP 路由；生产启动时 tokens 始终是已初始化的 Agent 目录与凭证存储。
-func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store, sttManagers ...*stt.Manager) http.Handler {
+// NewHTTPServer builds the HTTP routes; in production tokens is always an initialized Agent directory and credential store.
+func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store) http.Handler {
 	rootMux := http.NewServeMux()
 	rootMux.HandleFunc("GET /healthz", handler.Health())
 
-	// v2 统一协议（WebSocket+Protobuf）三链路。
+	// The three links of the unified v2 protocol (WebSocket+Protobuf).
 	v2 := pbws.NewServer(cfg, sm, tokens)
 	rootMux.Handle("/ws/v2", v2.BrowserHandler())
 	rootMux.Handle("/ws/v2/agent", v2.AgentHandler())
 	rootMux.Handle("/ws/v2/terminal", v2.TerminalHandler())
-	var sttManager *stt.Manager
-	if len(sttManagers) > 0 {
-		sttManager = sttManagers[0]
-	}
-	if sttManager != nil {
-		rootMux.Handle("/ws/v2/stt", sttManager.WebSocketHandler(cfg.Token))
-	}
 
 	rootMux.HandleFunc("/t/", publicTunnelProxy(sm))
 	rootMux.HandleFunc("GET /image-proxy", handler.ImageProxy(cfg.RequestTimeout))
@@ -49,15 +41,11 @@ func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.S
 	apiMux.HandleFunc("GET /api/status", handler.Status(sm))
 	apiMux.HandleFunc("POST /api/files/import", handler.ImportReadableFiles(sm, cfg.RequestTimeout))
 	apiMux.HandleFunc("POST /api/files/import-directory", handler.ImportDirectory(sm, cfg.RequestTimeout))
-	// Agent 目录与凭证管理，仅管理 token 可访问。
+	// Agent directory and credential management, accessible only with the admin token.
 	apiMux.HandleFunc("GET /api/agents", handler.ListAgents(sm, tokens))
 	apiMux.HandleFunc("POST /api/agents/{id}/token", handler.IssueAgentToken(sm, tokens))
 	apiMux.HandleFunc("PATCH /api/agents/{id}", handler.UpdateAgentName(tokens))
 	apiMux.HandleFunc("DELETE /api/agents/{id}", handler.DeleteAgent(sm, tokens))
-	if sttManager != nil {
-		apiMux.Handle("/api/v2/stt/settings", sttManager.SettingsHandler())
-		apiMux.Handle("/api/v2/stt/settings/test", sttManager.TestHandler())
-	}
 	rootMux.Handle("/api/", auth.HTTPMiddleware(cfg.Token, apiMux))
 
 	webFS, err := fs.Sub(gateway.WebUIAssets, "web/dist")
@@ -169,10 +157,10 @@ func writePublicHistoryShareError(w http.ResponseWriter, status int, message str
 	})
 }
 
-// resolveHistoryShareAcrossAgents 依次向各在线 Agent 解析公开分享 token（分享属于
-// 某一台桌面端，URL 不携带 agent 信息）：首个成功命中者胜；全部未命中返回最后一个
-// 分享层错误（error=99 臂）以保留 not-found 语义。≤10 Agent 且是公开低频端点，
-// 串行短超时探询已足够。
+// resolveHistoryShareAcrossAgents resolves a public share token against each online Agent in turn (a share belongs to
+// a single desktop instance, so the URL carries no agent info): the first successful hit wins; if none hit, the last
+// share-layer error (the error=99 arm) is returned to preserve not-found semantics. With ≤10 Agents and a low-frequency public endpoint,
+// serial probing with short timeouts is sufficient.
 func resolveHistoryShareAcrossAgents(
 	ctx context.Context,
 	sm *session.Manager,
@@ -189,7 +177,7 @@ func resolveHistoryShareAcrossAgents(
 		probeCtx := ctx
 		var cancel context.CancelFunc
 		if len(agentIDs) > 1 {
-			// 均分剩余时限，避免第一个无响应的 Agent 吃满整个窗口。
+			// Split the remaining deadline evenly so the first unresponsive Agent cannot consume the whole window.
 			probeCtx, cancel = context.WithTimeout(ctx, perAgentShareTimeout(ctx, len(agentIDs)-index))
 		}
 		response, err := sm.AwaitUnaryResponse(probeCtx, agentID, requestID+"-"+agentID, &gatewayv2.GatewayEnvelope{

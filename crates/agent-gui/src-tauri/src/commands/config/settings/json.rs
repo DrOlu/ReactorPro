@@ -1,22 +1,22 @@
 fn serialize_json(value: &Value, label: &str) -> Result<String, String> {
-    serde_json::to_string(value).map_err(|e| format!("序列化 {label} 失败：{e}"))
+    serde_json::to_string(value).map_err(|e| format!("Failed to serialize {label}: {e}"))
 }
 
 fn parse_json(raw: &str, label: &str) -> Result<Value, String> {
-    serde_json::from_str::<Value>(raw).map_err(|e| format!("解析 {label} JSON 失败：{e}"))
+    serde_json::from_str::<Value>(raw).map_err(|e| format!("Failed to parse {label} JSON: {e}"))
 }
 
 fn expect_object(value: Value, label: &str) -> Result<Map<String, Value>, String> {
     match value {
         Value::Object(map) => Ok(map),
-        _ => Err(format!("{label} 必须是对象")),
+        _ => Err(format!("{label} must be an object")),
     }
 }
 
 fn expect_array(value: Value, label: &str) -> Result<Vec<Value>, String> {
     match value {
         Value::Array(items) => Ok(items),
-        _ => Err(format!("{label} 必须是数组")),
+        _ => Err(format!("{label} must be an array")),
     }
 }
 
@@ -30,7 +30,7 @@ fn extract_non_empty_string(
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| format!("{label}.{key} 不能为空"))?;
+        .ok_or_else(|| format!("{label}.{key} must not be empty"))?;
     Ok(value.to_string())
 }
 
@@ -56,7 +56,7 @@ fn extract_bool_with_default(
     match object.get(key) {
         Some(Value::Bool(value)) => Ok(*value),
         Some(Value::Null) | None => Ok(default),
-        Some(_) => Err(format!("{label}.{key} 必须是布尔值")),
+        Some(_) => Err(format!("{label}.{key} must be a boolean")),
     }
 }
 
@@ -66,12 +66,12 @@ fn extract_string_array(value: Option<&Value>, label: &str) -> Result<Vec<String
     };
     let items = value
         .as_array()
-        .ok_or_else(|| format!("{label} 必须是字符串数组"))?;
+        .ok_or_else(|| format!("{label} must be an array of strings"))?;
 
     let mut out = Vec::with_capacity(items.len());
     for item in items {
         let Some(text) = item.as_str() else {
-            return Err(format!("{label} 必须是字符串数组"));
+            return Err(format!("{label} must be an array of strings"));
         };
         out.push(text.trim().to_string());
     }

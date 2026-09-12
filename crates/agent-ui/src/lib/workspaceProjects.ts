@@ -379,11 +379,12 @@ export function findWorkspaceProject(
 }
 
 // ---------------------------------------------------------------------------
-// 侧边栏项目分组（纯函数）：分组定义存 settings.system.workspaceProjectGroups，
-// 成员用原始路径存储，匹配时经 workspaceProjectPathKey 归一化。
+// Sidebar project grouping (pure functions): group definitions live in
+// settings.system.workspaceProjectGroups, members are stored with raw paths, and matching is
+// normalized through workspaceProjectPathKey.
 // ---------------------------------------------------------------------------
 
-/** 把项目移入目标分组：先解除其他分组的归属，再幂等加入目标组。 */
+/** Moves a project into the target group: first remove membership from other groups, then idempotently add it to the target group. */
 export function assignWorkspaceProjectToGroup(
   groups: readonly WorkspaceProjectGroup[],
   groupId: string,
@@ -407,13 +408,14 @@ export function assignWorkspaceProjectToGroup(
         : group.projectPaths.filter((path) => workspaceProjectPathKey(path) !== targetKey),
     };
   });
-  // 无变化时返回原引用，让调用方的 `next === prev` 短路生效，
-  // 避免幂等操作触发多余的 settings 写入/同步。参数虽声明 readonly，
-  // 实际调用方（settings 系统）传入的都是可变数组，原样返回满足契约。
+  // Return the original reference when nothing changed, so the caller's `next === prev`
+  // short-circuit applies and an idempotent operation does not trigger redundant settings
+  // writes/syncs. Although the parameter is declared readonly, actual callers (the settings
+  // system) always pass mutable arrays, so returning it as-is satisfies the contract.
   return touched ? next : (groups as WorkspaceProjectGroup[]);
 }
 
-/** 从所有分组移除项目路径，避免删除工作空间后留下不可见的陈旧成员。 */
+/** Removes a project path from all groups, so deleting a workspace does not leave invisible stale members. */
 export function removeWorkspaceProjectFromGroups(
   groups: readonly WorkspaceProjectGroup[],
   projectPath: string,
@@ -438,8 +440,8 @@ export function removeWorkspaceProjectFromGroups(
 }
 
 /**
- * 为 worktree 派生工作区创建/复用自动分组：按 `sourceProjectPath` 匹配
- * （而非名称），用户重命名分组后仍能复用同一个组。
+ * Creates/reuses an automatic group for a worktree-derived workspace: matched by
+ * `sourceProjectPath` (not by name), so the same group can be reused even after the user renames it.
  */
 export function ensureWorktreeProjectGroup(
   groups: readonly WorkspaceProjectGroup[],
@@ -467,11 +469,11 @@ export function ensureWorktreeProjectGroup(
 }
 
 /**
- * 把已按活动排序的项目列表组装成侧边栏区块：分组区块 + 未分组项目。
+ * Assembles an activity-sorted project list into sidebar sections: grouped sections + ungrouped projects.
  *
- * - 组内成员按输入排序保持顺序；组间按组内最早成员的下标排序，
- *   让 pinned/running 成员把整组提前。
- * - 组内路径在列表中不存在时被忽略；空组仍保留（用户可从 UI 删除）。
+ * - Members within a group keep the input order; groups are ordered by the index of their earliest
+ *   member, so pinned/running members pull the whole group forward.
+ * - A group path that does not exist in the list is ignored; empty groups are kept (the user can delete them from the UI).
  */
 export type WorkspaceProjectSection = {
   group: WorkspaceProjectGroup;
@@ -483,7 +485,7 @@ export type WorkspaceProjectSections = {
   ungrouped: WorkspaceProject[];
 };
 
-/** 返回未分组项目中 pinned 区块与普通区块之间的分隔位置。 */
+/** Returns the split position between the pinned block and the normal block among ungrouped projects. */
 export function firstUnpinnedWorkspaceProjectIndex(projects: readonly WorkspaceProject[]) {
   if (projects[0]?.isPinned !== true) return -1;
   const index = projects.findIndex((project) => project.isPinned !== true);
@@ -533,9 +535,10 @@ export function buildWorkspaceProjectSections(
   return { grouped, ungrouped };
 }
 
-/** 折叠视图按区块切片（绝不拆开分组）；hiddenProjectCount 为被隐藏的成员数。
- * 上限是项目总数：分组整组纳入直到容量耗尽，剩余容量分给未分组项目，
- * 保证未分组项目（常见场景）也受渲染上限约束。
+/** Collapsed view slices by section (never splitting a group); hiddenProjectCount is the number
+ *  of hidden members. The cap is the total project count: groups are included whole until capacity
+ *  runs out, and the remaining capacity goes to ungrouped projects, so ungrouped projects (the
+ *  common case) are also bounded by the render cap.
  */
 export function sliceWorkspaceProjectSections(
   sections: WorkspaceProjectSections,

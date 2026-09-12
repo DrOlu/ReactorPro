@@ -26,12 +26,12 @@ const TITLE_MAX_CHARS = 80;
 const CJK_CHAR_PATTERN = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/g;
 
 // Must match BRANCH_DEFAULT_TITLE in src-tauri/src/commands/history/chat_history/branch.rs.
-export const BRANCH_CONVERSATION_DEFAULT_TITLE = "新分支";
+export const BRANCH_CONVERSATION_DEFAULT_TITLE = "New Branch";
 
 /** System prompt for the lightweight first-turn title job. Follows UI locale. */
 export function buildConversationTitleSystemPrompt(locale: Locale) {
   if (locale === "zh-CN") {
-    return "你负责生成简洁的会话标题。只输出标题本身，不要解释、不要引号。标题必须使用简体中文；专有名词（如 Grok、API）可保留原文。";
+    return "You generate concise conversation titles. Output the title only, with no explanation and no quotes. The title must be in Simplified Chinese; proper nouns (such as Grok, API) may keep their original form.";
   }
   return "You generate concise conversation titles. Output the title only, with no extra explanation or quotes.";
 }
@@ -42,7 +42,7 @@ export function buildConversationTitleSystemPrompt(locale: Locale) {
  */
 export function buildConversationTitlePrompt(content: string, locale: Locale) {
   if (locale === "zh-CN") {
-    return `根据以下内容，为本次会话生成一个简练的简体中文标题（约 8～18 个字，概括主题，不要照抄整句问话），直接输出标题，不要其他内容：\n${content}`;
+    return `Based on the following content, generate a concise Simplified Chinese title for this conversation (about 8-18 characters, summarizing the topic, without copying the whole question); output the title directly with nothing else:\n${content}`;
   }
   return `Based on the following content, generate a title within 10 words for this conversation and output it directly without any other content:\n${content}`;
 }
@@ -93,7 +93,7 @@ export function normalizeGeneratedConversationTitle(raw: string) {
 
 export function buildFallbackConversationTitle(content: string) {
   const singleLine = content.replace(/\s+/g, " ").trim();
-  if (!singleLine) return "新对话";
+  if (!singleLine) return "New conversation";
   if (singleLine.length <= FALLBACK_TITLE_MAX_CHARS) return singleLine;
   return `${singleLine.slice(0, FALLBACK_TITLE_MAX_CHARS).trimEnd()}...`;
 }

@@ -9,8 +9,10 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// 直通白名单与限额校验：本文件明确限定浏览器可发起的操作——未列入白名单的载荷臂（内部推送臂、须走网关编排的 chat_command、ping 等）
-// 一律拒绝；功能开关门控与字段限额在转发前施加；list 类响应后处理经 finalize 钩子执行。
+// Passthrough allowlist and limit validation: this file precisely delimits the operations the browser
+// may initiate -- payload arms not on the allowlist (internal push arms, chat_command which must go
+// through gateway orchestration, ping, etc.) are rejected outright; feature-flag gating and field
+// limits are applied before forwarding; post-processing of list-type responses runs via the finalize hook.
 
 const (
 	maxHistoryListLimit        = 200
@@ -19,14 +21,15 @@ const (
 	maxWorkspaceRootGrants     = 64
 )
 
-// vetAgentRequest 校验并（必要时）原地修正一条直通请求；返回错误则拒绝转发，错误信息面向客户端。
-// 门控按目标 Agent 的视图判定（sm 为绑定 agent_id 的只读视图）。
+// vetAgentRequest validates a passthrough request and (when necessary) corrects it in place; returning
+// an error rejects forwarding, and the error message is client-facing.
+// Gating is decided against the target Agent's view (sm is a read-only view bound to agent_id).
 func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error {
 	switch payload := env.GetPayload().(type) {
 	case nil:
 		return errors.New("agent_request payload is required")
 
-	// ---- 普通直通臂（无门控） ----
+	// ---- Plain passthrough arms (no gating) ----
 	case *gatewayv2.GatewayEnvelope_HistoryList:
 		clampHistoryList(payload.HistoryList)
 		return nil
@@ -51,8 +54,9 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		*gatewayv2.GatewayEnvelope_SkillTextRead,
 		*gatewayv2.GatewayEnvelope_SkillManage,
 		*gatewayv2.GatewayEnvelope_FileMentionList,
-		// 已安装应用清单（@ 应用提及）：只读宿主能力，桌面端返回什么由
-		// 桌面自己裁决（枚举实现见 services/cua_driver/installed_apps.rs）。
+		// Installed-apps list (@ app mentions): read-only host capability; what the
+		// desktop returns is decided by the desktop itself (enumeration implementation
+		// lives in services/cua_driver/installed_apps.rs).
 		*gatewayv2.GatewayEnvelope_InstalledAppsList,
 		*gatewayv2.GatewayEnvelope_UploadedImagePreview,
 		*gatewayv2.GatewayEnvelope_MemoryManage,
@@ -67,10 +71,12 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		*gatewayv2.GatewayEnvelope_FsDelete,
 		*gatewayv2.GatewayEnvelope_FsReadEditableText,
 		*gatewayv2.GatewayEnvelope_FsReadWorkspaceImage,
-		// 轨迹只读：不含任何写能力，也不触碰工作区，直通即可。
+		// Trajectory is read-only: it carries no write capability and does not touch
+		// the workspace, so it can pass straight through.
 		*gatewayv2.GatewayEnvelope_TrajectoryFetch,
 		*gatewayv2.GatewayEnvelope_ChatQueue,
-		// 澄清轮次：一次纯文本补全，载荷转发给桌面端执行，无网关侧门控。
+		// Clarify turn: a plain-text completion, its payload is forwarded to the
+		// desktop to execute, with no gateway-side gating.
 		*gatewayv2.GatewayEnvelope_ClarifyTurn:
 		return nil
 	case *gatewayv2.GatewayEnvelope_ChatFileOpen:
@@ -82,7 +88,7 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 	case *gatewayv2.GatewayEnvelope_CuaDriver:
 		return vetCuaDriver(payload.CuaDriver)
 
-	// ---- 带功能门控 / 限额的直通臂 ----
+	// ---- Passthrough arms with feature gating / limits ----
 	case *gatewayv2.GatewayEnvelope_GitRequest:
 		action := strings.TrimSpace(payload.GitRequest.GetAction())
 		if gitActionIsWrite(action) && !sm.WebGitEnabled() {
@@ -114,17 +120,21 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		}
 		return nil
 
-	// ---- 明确拒绝的臂 ----
+	// ---- Explicitly rejected arms ----
 	default:
-		// 含 chat_command（须走网关编排）、ping（探活由网关发起）、upload_readable_files
-		// （走 HTTP 上传）、history_share_resolve（公共分享端点专用）及网关内部推送臂。
+		// Includes chat_command (must go through gateway orchestration), ping (liveness
+		// probing is initiated by the gateway), upload_readable_files (goes through the HTTP
+		// upload path), history_share_resolve (dedicated to the public share endpoint), and
+		// the gateway's internal push arms.
 		return errors.New("unsupported agent_request payload")
 	}
 }
 
-// vetCuaDriver 只放行 Computer Use 设置页的两个只读 action。安装（在宿主上联网执行安装脚本）与授权
-// （在宿主屏幕上弹 macOS TCC 对话框）是桌面本机动作，浏览器这端确认不了命令全文也点不到弹窗，
-// 一律不经网关下发；桌面端 handle_cua_driver 有同一份白名单兜底。
+// vetCuaDriver only allows the two read-only actions from the Computer Use settings page. Installation
+// (running an install script with network access on the host) and authorization (raising a macOS TCC
+// dialog on the host screen) are local desktop actions -- the browser side cannot confirm the full
+// command nor click the dialog, so they are never sent through the gateway; the desktop-side
+// handle_cua_driver keeps the same allowlist as a fallback.
 func vetCuaDriver(req *gatewayv2.CuaDriverRequest) error {
 	switch strings.TrimSpace(req.GetAction()) {
 	case "probe", "permissions_status":
@@ -260,8 +270,9 @@ func vetChatFileOpen(req *gatewayv2.ChatFileOpenRequest) error {
 	return nil
 }
 
-// gitActionIsWrite 判定 git 直通请求是否为写操作：写操作受桌面端 Remote 设置
-// enable_web_git 门控，读操作（status/log/diff 等）始终放行。
+// gitActionIsWrite determines whether a passthrough git request is a write operation: write
+// operations are gated by the desktop Remote setting enable_web_git, while read operations
+// (status/log/diff, etc.) are always allowed.
 func gitActionIsWrite(action string) bool {
 	switch action {
 	case "clone", "clone_start", "clone_cancel", "clone_dismiss", "init", "switch_branch", "create_branch", "create_worktree", "stage", "stage_all", "unstage", "unstage_all", "discard", "discard_all", "add_to_gitignore", "commit", "fetch", "pull", "set_remote", "push", "delete_branch", "rename_branch", "remove_worktree", "stash_push", "stash_pop":
@@ -271,7 +282,7 @@ func gitActionIsWrite(action string) bool {
 	}
 }
 
-// clampHistoryList 施加历史列表的分页默认值与上限。
+// clampHistoryList applies the pagination defaults and upper bounds for history lists.
 func clampHistoryList(req *gatewayv2.HistoryListRequest) {
 	if req == nil {
 		return

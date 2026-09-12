@@ -31,9 +31,9 @@ pub(crate) async fn run_blocking<R: Send + 'static>(
         .map_err(|e| format!("{label} join failed: {e}"))?
 }
 
-/// OAuth 鉴权配置（docs/design/mcp-oauth.md）。缺省/`type:"none"` = 现状
-/// （静态 `headers` 继续生效）；`type:"oauth"` 且 transport 为 http/sse 时
-/// 启用 Bearer 注入与 401 刷新链。
+/// OAuth authentication config (docs/design/mcp-oauth.md). Absent / `type:"none"` = current behavior
+/// (static `headers` keep applying); when `type:"oauth"` and the transport is http/sse,
+/// Bearer injection and the 401 refresh chain are enabled.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct McpAuthConfig {
@@ -121,13 +121,15 @@ fn build_stdio_command(cmd: &str, args: &[String], cwd: Option<&Path>) -> Comman
         if is_windows_batch_program(&program) {
             use std::os::windows::process::CommandExt;
 
-            // .cmd/.bat 无法被 CreateProcess 直接执行，需经 cmd.exe 转发。
-            // /C 后的命令行必须用 raw_arg 原样传入：arg() 会按 MSVCRT 规则
-            // 把内嵌引号转义成 `\"`，cmd.exe 不识别该转义，子进程瞬退，
-            // stdin 写入报 os error 232（issue #205）。
-            // /E:ON 保证命令扩展可用（`%%cd:~,` 防展开 hack 依赖它），
-            // /V:OFF 关闭延迟展开，防止参数里的 `!VAR!` 被替换；
-            // 均与 std `make_bat_command_line` 的 `/e:ON /v:OFF` 对齐。
+            // .cmd/.bat cannot be executed directly by CreateProcess; they must be
+            // forwarded through cmd.exe. The command line after /C must be passed
+            // verbatim with raw_arg: arg() escapes embedded quotes as `\"` per MSVCRT
+            // rules, which cmd.exe does not recognize, so the child process exits
+            // immediately and writing to stdin reports os error 232 (issue #205).
+            // /E:ON keeps command extensions enabled (the `%%cd:~,` anti-expansion
+            // hack depends on it); /V:OFF disables delayed expansion so `!VAR!` in
+            // arguments is not substituted; both align with std
+            // `make_bat_command_line`'s `/e:ON /v:OFF`.
             let mut command = Command::new("cmd.exe");
             command
                 .arg("/E:ON")
@@ -153,8 +155,9 @@ fn is_windows_batch_program(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// 组装 `cmd.exe /S /C` 之后的整段命令行：外层再包一对引号，`/S` 语义下
-/// cmd 仅剥掉首尾引号，剩余部分按原样执行。
+/// Assemble the entire command line after `cmd.exe /S /C`: wrap it in another pair
+/// of quotes; under `/S` semantics cmd strips only the leading/trailing quotes and
+/// executes the rest verbatim.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn windows_cmd_c_argument(program: &Path, args: &[String]) -> String {
     let line = std::iter::once(program.to_string_lossy().into_owned())
@@ -165,12 +168,16 @@ fn windows_cmd_c_argument(program: &Path, args: &[String]) -> String {
     format!("\"{line}\"")
 }
 
-/// 引号包裹单个参数，转义规则对齐 std `sys/args/windows.rs::append_bat_arg`：
-/// - 内嵌引号前的反斜杠补齐至 2n 再把引号翻倍（cmd.exe 不识别 `\"`）；
-/// - 收尾引号前的尾部反斜杠同样翻倍，防止 `C:\dir\` 这类参数把闭合引号
-///   转义掉、与后一个参数粘连；
-/// - `%`/`\r` 前插入 `%%cd:~,` no-op（yt-dlp hack，依赖 `/E:ON`），阻止
-///   `%VAR%` 被 cmd 当环境变量展开，子进程仍收到原文。
+/// Quote-wrap a single argument, with escaping rules aligned to std
+/// `sys/args/windows.rs::append_bat_arg`:
+/// - backslashes before an embedded quote are padded to 2n and then the quote is
+///   doubled (cmd.exe does not recognize `\"`);
+/// - trailing backslashes before the closing quote are likewise doubled, so an
+///   argument like `C:\dir\` cannot escape the closing quote and merge with the
+///   next argument;
+/// - before `%`/`\r`, insert the `%%cd:~,` no-op (the yt-dlp hack, which relies on
+///   `/E:ON`) to stop `%VAR%` from being expanded as an environment variable by
+///   cmd, while the child still receives the original text.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn windows_cmd_quote_arg(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len() + 2);
@@ -205,14 +212,15 @@ pub struct McpToolInfo {
     pub input_schema: Value,
 }
 
-/// 发给前端的工具结果内容块。
+/// Tool result content block sent to the frontend.
 ///
-/// 注意 serde 的坑：enum 上的 `rename_all` 只重命名**变体名**（`Image` →
-/// `"image"`），**不作用于变体内部字段**——字段要靠变体上的 `rename_all`
-/// 单独声明。漏掉的话 `mime_type` 会原样以 snake_case 出去，而 TS 侧
-/// （pi-ai、UI 预览）读的是 `mimeType`，拿到 undefined 后拼出
-/// `data:undefined;base64,…`，下一轮请求带上这条工具结果时被 provider
-/// 整个拒掉。字段形状有 `mcp_content_image_serializes_camel_case` 钉住。
+/// Beware of a serde pitfall: `rename_all` on an enum only renames **variant names**
+/// (`Image` → `"image"`), **not the fields inside variants** — fields need their own
+/// `rename_all` on the variant. If you miss it, `mime_type` goes out as snake_case
+/// while the TS side (pi-ai, UI preview) reads `mimeType`, gets undefined, and builds
+/// `data:undefined;base64,…`; when the next request carries this tool result, the
+/// provider rejects the whole thing. The field shape is pinned by
+/// `mcp_content_image_serializes_camel_case`.
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum McpContent {
@@ -281,7 +289,7 @@ pub struct McpRuntimeTestResponse {
     pub tools: Vec<McpDiagnosticToolInfo>,
     pub error: Option<String>,
     pub stderr_tail: Option<String>,
-    /// oauth 启用时的授权诊断（状态/过期/存储后端），永不含 token 本体。
+    /// Authorization diagnostics when oauth is enabled (status/expiry/storage backend), never containing the token itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oauth: Option<crate::services::mcp_oauth::OauthStatusInfo>,
 }
@@ -304,7 +312,7 @@ struct JsonRpcError {
 enum McpTransportError {
     Message(String),
     SessionExpired404,
-    /// oauth 启用时的 401：上层做一次被动刷新重试，不可行则转标记性错误。
+    /// 401 when oauth is enabled: the upper layer does one passive refresh retry, and if that is not viable it converts to a marker error.
     Unauthorized,
 }
 
@@ -321,17 +329,19 @@ fn build_header_map(headers: &Option<BTreeMap<String, String>>) -> Result<Header
     };
     for (k, v) in headers {
         let name =
-            HeaderName::from_bytes(k.as_bytes()).map_err(|_| format!("无效 header name：{k}"))?;
-        let value = HeaderValue::from_str(v).map_err(|_| format!("无效 header value：{k}"))?;
+            HeaderName::from_bytes(k.as_bytes()).map_err(|_| format!("invalid header name: {k}"))?;
+        let value = HeaderValue::from_str(v).map_err(|_| format!("invalid header value: {k}"))?;
         map.insert(name, value);
     }
     Ok(map)
 }
 
-/// 合并静态 headers 与 OAuth Bearer。Bearer 必须经 `HeaderMap::insert` 覆盖
-/// 同名条目：静态配置里残留的 `Authorization`（如迁移到 OAuth 前手工填的
-/// token）若走 reqwest `RequestBuilder::header`（append 语义）追加，请求会
-/// 带上两个 Authorization 头，server/代理可能取错凭据或直接拒收。
+/// Merge static headers with the OAuth Bearer. The Bearer must overwrite a
+/// same-named entry via `HeaderMap::insert`: if a leftover `Authorization` from the
+/// static config (e.g. a manually entered token from before migrating to OAuth)
+/// were appended via reqwest `RequestBuilder::header` (append semantics), the
+/// request would carry two Authorization headers, and the server/proxy could pick
+/// the wrong credential or reject it outright.
 fn headers_with_bearer(static_headers: &HeaderMap, bearer: Option<&str>) -> HeaderMap {
     let mut merged = static_headers.clone();
     if let Some(bearer) = bearer {
@@ -444,7 +454,7 @@ impl StdioTransport {
     fn spawn(config: &McpServerConfig) -> Result<Self, String> {
         let cmd = config.command.trim();
         if cmd.is_empty() {
-            return Err("MCP server command 不能为空（transport=stdio）".to_string());
+            return Err("MCP server command must not be empty (transport=stdio)".to_string());
         }
 
         let cwd = config
@@ -461,8 +471,9 @@ impl StdioTransport {
             .stderr(Stdio::piped());
         maybe_augment_macos_path(&mut command);
         configure_child_process_group(&mut command);
-        // 应用代理 env 先注入（含 NO_PROXY 环回豁免），server 配置的 env 后写保持更高优先级；
-        // 代理配置异常时 fail fast，不静默直连。
+        // Inject the app-proxy env first (including the NO_PROXY loopback exemption);
+        // env from the server config is written afterwards so it keeps higher priority;
+        // fail fast on a broken proxy config rather than silently connecting directly.
         for (key, value) in crate::services::system_proxy::shell_proxy_envs()? {
             command.env(key, value);
         }
@@ -475,19 +486,19 @@ impl StdioTransport {
 
         let mut child = command
             .spawn()
-            .map_err(|e| format!("启动 MCP server 失败：{e}"))?;
+            .map_err(|e| format!("failed to start MCP server: {e}"))?;
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| "无法获取 MCP server stdin".to_string())?;
+            .ok_or_else(|| "cannot obtain MCP server stdin".to_string())?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| "无法获取 MCP server stdout".to_string())?;
+            .ok_or_else(|| "cannot obtain MCP server stdout".to_string())?;
         let stderr = child
             .stderr
             .take()
-            .ok_or_else(|| "无法获取 MCP server stderr".to_string())?;
+            .ok_or_else(|| "cannot obtain MCP server stderr".to_string())?;
 
         let stderr_tail: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         {
@@ -654,18 +665,19 @@ impl HttpTransport {
     fn spawn(config: &McpServerConfig) -> Result<Self, String> {
         let url = config
             .url_trimmed()
-            .ok_or_else(|| "MCP http transport 需要 url".to_string())?;
-        let endpoint = Url::parse(url).map_err(|e| format!("MCP url 无效：{url} ({e})"))?;
+            .ok_or_else(|| "MCP http transport requires a url".to_string())?;
+        let endpoint = Url::parse(url).map_err(|e| format!("invalid MCP url: {url} ({e})"))?;
 
         let headers = build_header_map(&config.headers)?;
 
-        // 经 system_proxy 构建：应用代理启用时走代理（环回地址豁免），异常配置 fail fast。
+        // Built via system_proxy: routes through the proxy when the app proxy is enabled
+        // (with a loopback-address exemption); fail fast on a broken config.
         let client = crate::services::system_proxy::blocking_client_builder()
-            .map_err(|e| format!("创建 HTTP client 失败：{e}"))?
+            .map_err(|e| format!("failed to create HTTP client: {e}"))?
             .connect_timeout(Duration::from_secs(10))
             .timeout(config.timeout())
             .build()
-            .map_err(|e| format!("创建 HTTP client 失败：{e}"))?;
+            .map_err(|e| format!("failed to create HTTP client: {e}"))?;
 
         Ok(Self {
             endpoint,
@@ -772,7 +784,8 @@ impl HttpTransport {
                 McpTransportError::msg(format!("MCP HTTP request failed: method={method} err={e}"))
             })?;
 
-        // oauth 启用时 401 走专属通道：被动刷新一次后重试（上层处理）。
+        // With oauth enabled, a 401 takes the dedicated path: one passive refresh
+        // then retry (handled by the upper layer).
         if oauth && resp.status() == StatusCode::UNAUTHORIZED {
             return Err(McpTransportError::Unauthorized);
         }
@@ -857,8 +870,8 @@ impl SseTransport {
     fn spawn(config: &McpServerConfig) -> Result<Self, String> {
         let url = config
             .url_trimmed()
-            .ok_or_else(|| "MCP sse transport 需要 url（SSE endpoint）".to_string())?;
-        let sse_url = Url::parse(url).map_err(|e| format!("MCP url 无效：{url} ({e})"))?;
+            .ok_or_else(|| "MCP sse transport requires a url (SSE endpoint)".to_string())?;
+        let sse_url = Url::parse(url).map_err(|e| format!("invalid MCP url: {url} ({e})"))?;
 
         let headers = build_header_map(&config.headers)?;
 
@@ -869,23 +882,24 @@ impl SseTransport {
                 Url::parse(raw)
                     .or_else(|_| sse_url.join(raw))
                     .map(Some)
-                    .map_err(|e| format!("messageUrl 无效：{raw} ({e})"))?
+                    .map_err(|e| format!("invalid messageUrl: {raw} ({e})"))?
             }
         };
 
-        // 两个 client 均经 system_proxy 构建（GET 长连接不设总超时），语义同 HttpTransport。
+        // Both clients are built via system_proxy (the GET long connection sets no
+        // overall timeout), with the same semantics as HttpTransport.
         let client_get = crate::services::system_proxy::blocking_client_builder()
-            .map_err(|e| format!("创建 SSE http client 失败：{e}"))?
+            .map_err(|e| format!("failed to create SSE http client: {e}"))?
             .connect_timeout(Duration::from_secs(10))
             .build()
-            .map_err(|e| format!("创建 SSE http client 失败：{e}"))?;
+            .map_err(|e| format!("failed to create SSE http client: {e}"))?;
 
         let client_post = crate::services::system_proxy::blocking_client_builder()
-            .map_err(|e| format!("创建 POST http client 失败：{e}"))?
+            .map_err(|e| format!("failed to create POST http client: {e}"))?
             .connect_timeout(Duration::from_secs(10))
             .timeout(config.timeout())
             .build()
-            .map_err(|e| format!("创建 POST http client 失败：{e}"))?;
+            .map_err(|e| format!("failed to create POST http client: {e}"))?;
 
         let post_url: Arc<Mutex<Option<Url>>> = Arc::new(Mutex::new(message_url_override.clone()));
 
@@ -897,15 +911,18 @@ impl SseTransport {
         let thread_headers = headers.clone();
         let thread_stop = stop.clone();
         let thread_client = client_get.clone();
-        // oauth：GET 长连在每次（重）连时取当下 Bearer——token 刷新后重连即生效，
-        // 不把 spawn 时刻的 token 固化进线程。
+        // oauth: the GET long connection fetches the current Bearer on every
+        // (re)connect — a token refresh takes effect on reconnect, rather than
+        // baking the spawn-time token into the thread.
         let thread_oauth = config.oauth_enabled();
         let thread_server_id = config.id.trim().to_string();
         let thread_server_url = url.to_string();
 
-        // 失败重连用退避：固定 1s 会在上游不可达时以每秒一次的频率反复建连
-        //（DNS + TCP + TLS 握手），而"配置了 SSE server 却连不上"时这个循环是
-        // 常驻的。连上一次即复位，避免把瞬时抖动放大成持续退避。
+        // Failed reconnects use backoff: a fixed 1s would repeatedly reconnect once
+        // per second while the upstream is unreachable (DNS + TCP + TLS handshake),
+        // and that loop is permanent when an SSE server is configured but cannot be
+        // reached. Reset on a successful connection so a transient blip is not
+        // amplified into sustained backoff.
         const SSE_RECONNECT_MIN: Duration = Duration::from_secs(1);
         const SSE_RECONNECT_MAX: Duration = Duration::from_secs(30);
         let handle = std::thread::spawn(move || {
@@ -929,8 +946,9 @@ impl SseTransport {
 
             let resp = match builder.send() {
                 Ok(r) => {
-                    // 建连成功即复位退避：下一次失败重新从最小间隔起，避免把
-                    // 瞬时抖动累积成持续 30s 才重连一次。
+                    // Reset backoff on a successful connection: the next failure
+                    // starts again from the minimum interval, so a transient blip is
+                    // not accumulated into reconnecting only once every 30s.
                     backoff = SSE_RECONNECT_MIN;
                     r
                 }
@@ -1210,8 +1228,10 @@ impl McpTransport {
         }
     }
 
-    /// oauth 启用时取当前 Bearer（进程内缓存 + 将过期主动刷新）；未授权返回
-    /// None，请求裸发，401 由上层转成「需授权」标记错误。
+    /// Fetch the current Bearer when oauth is enabled (in-process cache + active
+    /// refresh before expiry); returns None when unauthorized, the request goes out
+    /// bare, and a 401 is converted by the upper layer into an "authorization
+    /// required" marker error.
     fn bearer_for(cfg: &McpServerConfig) -> Option<String> {
         if !cfg.oauth_enabled() {
             return None;
@@ -1264,19 +1284,20 @@ impl McpTransport {
 #[derive(Debug)]
 struct McpClient {
     config: McpServerConfig,
-    /// spawn 时的应用代理配置 revision。transport 的 reqwest client 与
-    /// stdio 子进程 env 都在 spawn 时固化，ensure_client 据此在代理配置
-    /// 变更后重建连接。
+    /// App-proxy config revision at spawn time. The transport's reqwest client and
+    /// the stdio child process env are both fixed at spawn, so ensure_client uses
+    /// this to rebuild the connection after the proxy config changes.
     proxy_revision: u64,
     transport: McpTransport,
     next_id: u64,
     initialized: bool,
 }
 
-/// 组成带稳定标记的「需授权」错误：前端/诊断按标记引导用户去 MCP Hub Connect。
+/// Compose an "authorization required" error carrying a stable marker: the frontend
+/// and diagnostics use the marker to guide the user to Connect in MCP Hub.
 fn oauth_required_error(cfg: &McpServerConfig, reason: &str) -> String {
     format!(
-        "MCP server `{}` 需要 OAuth 授权（{}）。请在 MCP Hub 中对该 server 执行 Connect 完成授权。原因：{reason}",
+        "MCP server `{}` requires OAuth authorization ({}). Run Connect on this server in MCP Hub to complete authorization. Reason: {reason}",
         cfg.id.trim(),
         crate::services::mcp_oauth::AUTH_REQUIRED_MARKER
     )
@@ -1284,8 +1305,9 @@ fn oauth_required_error(cfg: &McpServerConfig, reason: &str) -> String {
 
 impl McpClient {
     fn spawn(config: McpServerConfig) -> Result<Self, String> {
-        // 在建 transport 之前取 revision：若 spawn 期间代理配置变更，
-        // 记录的旧值会在下次 ensure_client 触发重建，宁可多建一次。
+        // Read the revision before building the transport: if the proxy config
+        // changes during spawn, the recorded stale value will trigger a rebuild on
+        // the next ensure_client — better to rebuild once too often.
         let proxy_revision = crate::services::system_proxy::revision();
         let transport = match config.transport().trim() {
             "http" => McpTransport::Http(HttpTransport::spawn(&config)?),
@@ -1308,13 +1330,14 @@ impl McpClient {
         id
     }
 
-    /// 401 被动刷新（每次调用点只允许一次）。成功后 transport 下个请求会经
-    /// `bearer_for` 拿到新 token；失败返回「需授权」标记错误。
+    /// Passive 401 refresh (allowed only once per call site). On success the
+    /// transport's next request gets the new token via `bearer_for`; on failure it
+    /// returns an "authorization required" marker error.
     fn recover_unauthorized(&mut self) -> Result<(), String> {
         let url = self
             .config
             .url_trimmed()
-            .ok_or_else(|| oauth_required_error(&self.config, "server 未配置 URL"))?;
+            .ok_or_else(|| oauth_required_error(&self.config, "server has no URL configured"))?;
         crate::services::mcp_oauth::refresh_after_unauthorized(self.config.id.trim(), url)
             .map(|_| ())
             .map_err(|reason| oauth_required_error(&self.config, &reason))
@@ -1333,14 +1356,16 @@ impl McpClient {
             "2024-10-07",
         ];
         let mut last_err: Option<String> = None;
-        // 整个 initialize 尝试序列共享一次被动刷新额度：401 与协议版本无关，
-        // 刷新后重试当前版本；再 401 或刷新失败直接判「需授权」，不再空转其余版本。
+        // The whole initialize attempt sequence shares a single passive refresh
+        // allowance: a 401 is unrelated to the protocol version, so retry the current
+        // version after refreshing; another 401 or a refresh failure is immediately
+        // judged "authorization required" without spinning through the other versions.
         let mut auth_retry_used = false;
 
         for v in candidates {
             let init_params = json!({
                 "protocolVersion": v,
-                "clientInfo": { "name": "LiveAgent", "version": crate::app_version() },
+                "clientInfo": { "name": "ReactorPro", "version": crate::app_version() },
                 "capabilities": {}
             });
 
@@ -1362,7 +1387,7 @@ impl McpClient {
                     }
                     Err(McpTransportError::Unauthorized) => {
                         if auth_retry_used {
-                            return Err(oauth_required_error(&self.config, "刷新后仍返回 401"));
+                            return Err(oauth_required_error(&self.config, "still returned 401 after refresh"));
                         }
                         auth_retry_used = true;
                         self.recover_unauthorized()?;
@@ -1404,7 +1429,7 @@ impl McpClient {
                     Ok(v) => Ok(v),
                     Err(McpTransportError::Message(msg)) => Err(msg),
                     Err(McpTransportError::Unauthorized) => {
-                        Err(oauth_required_error(&self.config, "会话重建后返回 401"))
+                        Err(oauth_required_error(&self.config, "returned 401 after session rebuild"))
                     }
                     Err(McpTransportError::SessionExpired404) => Err(
                         "MCP session still returned 404 after retry (the server may be unhealthy)"
@@ -1413,7 +1438,7 @@ impl McpClient {
                 }
             }
             Err(McpTransportError::Unauthorized) => {
-                // token 过期/被撤销：被动刷新一次后重试原请求。
+                // Token expired/revoked: one passive refresh, then retry the original request.
                 self.recover_unauthorized()?;
 
                 let retry_id = self.next_rpc_id();
@@ -1424,7 +1449,7 @@ impl McpClient {
                     Ok(v) => Ok(v),
                     Err(McpTransportError::Message(msg)) => Err(msg),
                     Err(McpTransportError::Unauthorized) => {
-                        Err(oauth_required_error(&self.config, "刷新后仍返回 401"))
+                        Err(oauth_required_error(&self.config, "still returned 401 after refresh"))
                     }
                     Err(McpTransportError::SessionExpired404) => Err(
                         "MCP session returned 404 right after refresh (the server may be unhealthy)"
@@ -1600,7 +1625,7 @@ fn validate_runtime_config(cfg: &McpServerConfig) -> Result<(), String> {
 }
 
 fn classify_start_failure(error: &str) -> &'static str {
-    if error.contains("启动 MCP server")
+    if error.contains("failed to start MCP server")
         || error.contains("Failed to start")
         || error.contains("No such file")
         || error.contains("os error 2")
@@ -1629,7 +1654,8 @@ fn run_client_test(
             if !initialized {
                 phase = "initialize".to_string();
             }
-            // 401 →「需授权」标记错误发生后再取一次状态，让 expired 等新鲜可见。
+            // After a 401 → "authorization required" marker error occurs, fetch the
+            // status once more so fresh state such as expired becomes visible.
             let oauth = oauth_diag(&client.config);
             return McpRuntimeTestResponse {
                 server_id: id,
@@ -1682,13 +1708,14 @@ impl McpRuntimeManager {
         let existing = self
             .clients
             .lock()
-            .map_err(|_| "MCP 状态锁失败".to_string())?
+            .map_err(|_| "MCP state lock failed".to_string())?
             .get(&id)
             .cloned();
         if let Some(existing) = existing.as_ref() {
             // Restart if config changed. Same-id calls serialize on the client
             // lock (protocol streams cannot be shared), other servers do not.
-            // 应用代理配置变更（revision 变化）同样视作配置变化重建连接。
+            // An app-proxy config change (revision change) also counts as a config
+            // change and rebuilds the connection.
             let proxy_revision = crate::services::system_proxy::revision();
             let same_config = existing
                 .lock()
@@ -1702,10 +1729,13 @@ impl McpRuntimeManager {
         let client = match McpClient::spawn(cfg) {
             Ok(client) => client,
             Err(error) => {
-                // 重建失败必须逐出已判定过期的旧 client：mcp_call_tool 直读 map
-                // 不经本函数，留着旧 client 会让失效配置（如无效应用代理）下的
-                // 调用继续走旧通道，违背 fail fast 不静默直连的语义。
-                // 仅在 map 里仍是同一个 Arc 时移除，避免误杀并发换上的新 client。
+                // A failed rebuild must evict the old client already judged stale:
+                // mcp_call_tool reads the map directly without going through this
+                // function, so keeping the old client would let calls under an
+                // invalid config (e.g. a broken app proxy) continue on the old
+                // channel, violating the fail-fast, never-silently-direct semantics.
+                // Remove only when the map still holds the same Arc, to avoid
+                // killing a new client swapped in concurrently.
                 if let Some(stale) = existing {
                     if let Ok(mut map) = self.clients.lock() {
                         if map
@@ -1722,7 +1752,7 @@ impl McpRuntimeManager {
         let arc = Arc::new(Mutex::new(client));
         self.clients
             .lock()
-            .map_err(|_| "MCP 状态锁失败".to_string())?
+            .map_err(|_| "MCP state lock failed".to_string())?
             .insert(id, arc.clone());
         Ok(arc)
     }
@@ -1878,7 +1908,7 @@ pub async fn mcp_list_tools(
             let server_id = cfg.id.clone();
             let tools = match manager.ensure_client(cfg.clone()) {
                 Ok(client) => {
-                    let mut locked = client.lock().map_err(|_| "MCP client 锁失败".to_string())?;
+                    let mut locked = client.lock().map_err(|_| "MCP client lock failed".to_string())?;
                     locked.tools_list()
                 }
                 Err(err) => Err(err),
@@ -1891,7 +1921,7 @@ pub async fn mcp_list_tools(
                 }
                 Err(err) => {
                     eprintln!(
-                        "[MCP] 跳过 server `{}` 的 tools/list，继续对话流程：{}",
+                        "[MCP] Skipping tools/list for server `{}`, continuing the conversation flow: {}",
                         server_id, err
                     );
                     failures.push(format!("{server_id}: {err}"));
@@ -1899,11 +1929,13 @@ pub async fn mcp_list_tools(
             }
         }
 
-        // 部分失败沿用跳过语义；全军覆没（如应用代理配置异常一次性击毁全部
-        // server）必须让前端可见（onLoadError/throw），否则工具静默消失无从排查。
+        // Partial failures keep the skip semantics; a total wipeout (e.g. a broken
+        // app-proxy config taking down every server at once) must be visible to the
+        // frontend (onLoadError/throw), otherwise tools silently vanish with no way
+        // to diagnose.
         if succeeded == 0 && !failures.is_empty() {
             return Err(format!(
-                "所有已启用的 MCP server 都不可用：\n{}",
+                "All enabled MCP servers are unavailable:\n{}",
                 failures.join("\n")
             ));
         }
@@ -2044,9 +2076,10 @@ mod tests {
 
     #[test]
     fn mcp_content_image_serializes_camel_case() {
-        // TS 侧（pi-ai 的 data URL 拼接、UI 预览）读的是 `mimeType`。字段一旦
-        // 以 snake_case 出去，前端拿到 undefined，拼出 `data:undefined;base64,…`
-        // ——图片进不了模型上下文，还会让下一轮 provider 请求整个失败。
+        // The TS side (pi-ai's data URL assembly, UI preview) reads `mimeType`. If the
+        // field goes out as snake_case, the frontend gets undefined and builds
+        // `data:undefined;base64,…` — the image cannot enter the model context, and it
+        // also makes the next provider request fail entirely.
         let image = McpContent::Image {
             data: "aW1n".to_string(),
             mime_type: "image/png".to_string(),
@@ -2110,16 +2143,16 @@ mod tests {
         assert_eq!(
             values.len(),
             1,
-            "OAuth Bearer 必须覆盖静态 Authorization，不能追加"
+            "the OAuth Bearer must overwrite the static Authorization, not append"
         );
         assert_eq!(values[0], "Bearer fresh");
         assert_eq!(
             merged.get("x-extra").unwrap(),
             "keep",
-            "其余静态 header 保留"
+            "other static headers are preserved"
         );
 
-        // 无 bearer 时原样透传（含静态 Authorization 的现状行为）。
+        // With no bearer, pass through unchanged (current behavior including the static Authorization).
         let untouched = headers_with_bearer(&static_headers, None);
         assert_eq!(untouched.get(AUTHORIZATION).unwrap(), "Bearer stale");
     }
@@ -2127,14 +2160,14 @@ mod tests {
     #[test]
     fn oauth_enabled_requires_remote_transport_and_oauth_type() {
         let mut cfg = url_config("srv", "http", Some("https://mcp.example.com/mcp"));
-        assert!(!cfg.oauth_enabled(), "无 auth 配置 = 现状");
+        assert!(!cfg.oauth_enabled(), "no auth config = current behavior");
 
         cfg.auth = Some(McpAuthConfig {
             auth_type: "none".to_string(),
             scope: None,
             client_id: None,
         });
-        assert!(!cfg.oauth_enabled(), "type=none = 现状");
+        assert!(!cfg.oauth_enabled(), "type=none = current behavior");
 
         cfg.auth = Some(McpAuthConfig {
             auth_type: "oauth".to_string(),
@@ -2145,9 +2178,9 @@ mod tests {
         let server = cfg.oauth_server().expect("oauth server");
         assert_eq!(server.id, "srv");
         assert_eq!(server.scope_override.as_deref(), Some("mcp.read"));
-        assert_eq!(server.static_client_id, None, "空串 client_id 视作未配置");
+        assert_eq!(server.static_client_id, None, "an empty client_id is treated as unconfigured");
 
-        // stdio 上配 oauth 无意义，必须不生效。
+        // Configuring oauth on stdio is meaningless and must not take effect.
         let mut stdio = stdio_config("local", "server-bin");
         stdio.auth = Some(McpAuthConfig {
             auth_type: "oauth".to_string(),
@@ -2274,8 +2307,9 @@ mod tests {
             .ensure_client(offline_http_config("srv"))
             .expect("initial ensure");
 
-        // 换成必然 spawn 失败的配置（URL 通过存在性校验但解析失败）：
-        // 旧 client 必须被逐出，否则 mcp_call_tool 直读 map 会继续走失效通道。
+        // Switch to a config that is guaranteed to fail spawn (the URL passes the
+        // presence check but fails to parse): the old client must be evicted, or
+        // mcp_call_tool reading the map directly would keep using the invalid channel.
         manager
             .ensure_client(url_config("srv", "http", Some("::not-a-url::")))
             .expect_err("respawn must fail");
@@ -2356,7 +2390,7 @@ mod tests {
 
     #[test]
     fn windows_cmd_quote_arg_doubles_embedded_quotes() {
-        // cmd.exe 不认 `\"` 转义，翻倍才能保持引号配对。
+        // cmd.exe does not recognize the `\"` escape; doubling keeps quotes paired.
         assert_eq!(windows_cmd_quote_arg("-y"), r#""-y""#);
         assert_eq!(windows_cmd_quote_arg(r#"a"b"#), r#""a""b""#);
         assert_eq!(windows_cmd_quote_arg("with space"), r#""with space""#);
@@ -2364,18 +2398,21 @@ mod tests {
 
     #[test]
     fn windows_cmd_quote_arg_doubles_backslashes_before_quotes() {
-        // 内嵌引号前的反斜杠须补齐至 2n，重解析后还原为 n 个反斜杠 + 字面引号。
+        // Backslashes before an embedded quote are padded to 2n; after re-parsing they
+        // resolve back to n backslashes plus a literal quote.
         assert_eq!(windows_cmd_quote_arg(r#"a\"b"#), r#""a\\""b""#);
-        // 尾部反斜杠若不翻倍会把闭合引号转义掉，与后一个参数粘连。
+        // If trailing backslashes were not doubled they would escape the closing quote
+        // and merge with the next argument.
         assert_eq!(windows_cmd_quote_arg(r"C:\data\"), r#""C:\data\\""#);
-        // 非贴引号的反斜杠保持原样（路径分隔符不受影响）。
+        // Backslashes not adjacent to a quote are left as-is (path separators are unaffected).
         assert_eq!(windows_cmd_quote_arg(r"C:\a\b"), r#""C:\a\b""#);
         assert_eq!(windows_cmd_quote_arg(""), r#""""#);
     }
 
     #[test]
     fn windows_cmd_quote_arg_neutralizes_percent_expansion() {
-        // `%%cd:~,` no-op 打断 %VAR% 配对，cmd 展开后子进程仍收到原文。
+        // The `%%cd:~,` no-op breaks up the %VAR% pairing, so after cmd expands it the
+        // child still receives the original text.
         assert_eq!(windows_cmd_quote_arg("%PATH%"), r#""%%cd:~,%PATH%%cd:~,%""#);
         assert_eq!(windows_cmd_quote_arg("100%"), r#""100%%cd:~,%""#);
         assert_eq!(windows_cmd_quote_arg("a\rb"), "\"a%%cd:~,\rb\"");
@@ -2383,7 +2420,8 @@ mod tests {
 
     #[test]
     fn windows_cmd_c_argument_wraps_whole_line_for_slash_s() {
-        // `/S` 语义：cmd 剥掉首尾引号后必须还原出可执行的完整命令行。
+        // `/S` semantics: after cmd strips the leading/trailing quotes, the full
+        // executable command line must be recovered.
         let program = Path::new(r"C:\Program Files\nodejs\npx.cmd");
         let args = vec!["-y".to_string(), "@playwright/mcp".to_string()];
         assert_eq!(
@@ -2403,7 +2441,7 @@ mod tests {
 
     #[test]
     fn windows_cmd_c_argument_survives_trailing_backslash_arg() {
-        // filesystem 类 MCP server 常见传法：目录参数带尾部反斜杠。
+        // A common way filesystem-type MCP servers are invoked: a directory argument with a trailing backslash.
         let program = Path::new(r"C:\Program Files\nodejs\npx.cmd");
         let args = vec![
             "-y".to_string(),

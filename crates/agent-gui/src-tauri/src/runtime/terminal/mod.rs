@@ -1,18 +1,19 @@
-//! 终端运行时模块（拆分自原单文件 terminal.rs，代码逐字迁移，行为不变）。
+//! Terminal runtime module (split from the original single-file terminal.rs, code migrated
+//! verbatim, behavior unchanged).
 //!
-//! - [`types`]：对外 DTO / 事件负载与响应结构
-//! - [`state`]：会话内部状态（会话表项、SSH 会话运行时、挂起提示等）
-//! - [`output`]：输出环形缓冲、回显判定与尾部读取
-//! - [`registry`]：`TerminalSessionRegistry` 核心生命周期（创建/列表/输入/尺寸/关闭/订阅）
-//! - [`ssh_session`]：SSH 会话编排（创建/提示应答/重连/延迟/exec）
-//! - [`tabs`]：SSH 终端标签页快照与清理
-//! - [`events`]：事件广播与终端流分发
-//! - [`ssh_connect`]：SSH 传输建立与 HTTP/SOCKS5 代理
-//! - [`ssh_auth`]：SSH 认证材料解析、身份路径展开与键盘交互认证
-//! - [`ssh_channel`]：SSH shell/exec/SFTP 通道
-//! - [`ssh_io`]：SSH 会话 IO 泵与重连执行器
-//! - [`shell`]：本地 shell 解析、PTY 环境与进程清理
-//! - [`util`]：小型辅助函数
+//! - [`types`]: external DTOs / event payloads and response structures
+//! - [`state`]: internal session state (session entries, SSH session runtime, pending prompts, etc.)
+//! - [`output`]: output ring buffer, echo detection and tail reads
+//! - [`registry`]: `TerminalSessionRegistry` core lifecycle (create/list/input/resize/close/subscribe)
+//! - [`ssh_session`]: SSH session orchestration (create/prompt reply/reconnect/delay/exec)
+//! - [`tabs`]: SSH terminal tab snapshots and cleanup
+//! - [`events`]: event broadcast and terminal stream dispatch
+//! - [`ssh_connect`]: SSH transport establishment and HTTP/SOCKS5 proxy
+//! - [`ssh_auth`]: SSH auth material parsing, identity path expansion and keyboard-interactive auth
+//! - [`ssh_channel`]: SSH shell/exec/SFTP channels
+//! - [`ssh_io`]: SSH session IO pump and reconnect executor
+//! - [`shell`]: local shell parsing, PTY environment and process cleanup
+//! - [`util`]: small helper functions
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;

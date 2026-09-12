@@ -44,13 +44,17 @@ export type ManualCompactionResult = {
 export type ManualCompactionRequest = {
   conversationId?: string;
   operationId?: string;
-  // 中继层受理回调：探针通过、真正开始压缩时同步调用一次。被拒绝的压缩
-  // 从不触发它，中继层据返回值同步回包（accepted:false + message）。
+  // Relay-layer acceptance callback: invoked synchronously once, when the probe
+  // passes and compaction actually begins. A rejected compaction never triggers
+  // it; the relay layer replies synchronously based on the return value
+  // (accepted:false + message).
   onAccepted?: () => void;
 };
 
-// 手动压缩的读数快照：优先用控制器账本，缺失（本会话尚未发过请求）才退到
-// 转录扫描；fixedTokens 缺省时探针的 rebase 会按当前上下文自行估算。
+// Reading snapshot for manual compaction: prefer the controller ledger, and only
+// fall back to a transcript scan when it is missing (no request sent in this
+// conversation yet); when fixedTokens is absent the probe's rebase estimates from
+// the current context on its own.
 function resolveManualContextUsage(
   controller: CompactionController,
   runtimeEntry: ConversationRuntimeEntry,
@@ -66,23 +70,30 @@ function resolveManualContextUsage(
 type ConversationStopHandler = (options: { force: boolean; requestVersion: number }) => void;
 
 /**
- * 手动压缩的装配单点：把发送链路同源的 sinks / providerConfig / gateway bridge
- * 组装为一次 CompactionController.compactManually 调用。仅空闲时执行；压缩进行
- * 状态与检查点经既有 bridge 通道镜像到 WebUI。
+ * Single assembly point for manual compaction: assemble the sinks / providerConfig
+ * / gateway bridge that the send path shares into one
+ * CompactionController.compactManually call. Runs only when idle; compaction
+ * progress state and checkpoints are mirrored to the WebUI over the existing
+ * bridge channel.
  *
- * 不变量（run 生命周期只在真正压缩时成立）：桥接事件走可靠 ingress，网关会
- * 为任意 run 的首个 delta 建立真实 run activity——因此任何 run 痕迹都必须推迟
- * 到探针通过之后。前置校验（running/runtime/模型/compactionStatus）全程零 run
- * 痕迹；gateway_chat_mark_local_started、registerGatewayRunMirror 只在
- * compactManually 的 onProceed 回调里发生（onProceed=true 才置 proceeded）；
- * finally 的 queueManualCompactionResult / finishGatewayRunMirror 只在 proceeded
- * 时执行。被拒绝的压缩什么事件都不发，结果经返回值由中继层同步回包，避免伪造
- * 空 run（WebUI 折叠转录、composer 忙碌、空 run 永久重放）。
+ * Invariant (the run lifecycle holds only when compaction actually happens):
+ * bridge events go over reliable ingress, and the gateway establishes real run
+ * activity for any run's first delta -- so any run trace must be deferred until
+ * after the probe passes. Pre-checks (running/runtime/model/compactionStatus) leave
+ * zero run trace throughout; gateway_chat_mark_local_started and
+ * registerGatewayRunMirror only happen inside compactManually's onProceed
+ * callback (proceeded is set only when onProceed=true); the finally block's
+ * queueManualCompactionResult / finishGatewayRunMirror run only when proceeded.
+ * A rejected compaction emits no events at all; the result goes back
+ * synchronously through the return value, avoiding a fabricated empty run (which
+ * would collapse the WebUI transcript, keep the composer busy, and replay the
+ * empty run forever).
  *
- * 停止语义：压缩期间注册与发送链路同款的停止处理器 + abort controller。用户
- * 停止时经 cancellation.userStop.abort() 中止 compactManually（返回 aborted），
- * 并在 finally 消费 stop intent（否则吞掉下一条消息 / 二次 force 与队列 drain
- * 并发）。
+ * Stop semantics: during compaction, register the same stop handler and abort
+ * controller as the send path. When the user stops, cancellation.userStop.abort()
+ * aborts compactManually (returning aborted), and the finally block consumes the
+ * stop intent (otherwise it would swallow the next message / race a second force
+ * against the queue drain).
  */
 export function useManualCompaction(params: {
   settings: AppSettings;
@@ -121,8 +132,10 @@ export function useManualCompaction(params: {
   finishGatewayRunMirror: (input: FinishGatewayRunMirrorInput) => Promise<void>;
   persistConversation: PersistConversationAction;
   setErrorMessage: (message: string | null) => void;
-  // 与发送链路同源的提示词构建：当前会话据当前工作区解析 skills/memory 提示词；
-  // 后台会话（跨会话中继）拿不到这些上下文，返回空串（见调用点注释）。
+  // Prompt construction shared with the send path: the current conversation
+  // resolves skills/memory prompts from the current workspace; a background
+  // conversation (cross-conversation relay) cannot get that context and returns
+  // empty strings (see the call-site comment).
   resolveManualCompactionPromptInputs: (input: {
     isCurrentConversation: boolean;
     workdir?: string;
@@ -163,7 +176,8 @@ export function useManualCompaction(params: {
         return { status: "skipped", message: t("chat.manualCompactRejected") };
       }
 
-      // await 后 ref 可能已切换会话，重读判定，勿冻结在闭包创建时。
+      // After an await the ref may have switched conversations; re-read the
+      // check rather than freezing it at closure creation time.
       const isCurrentConversation = () =>
         conversationId === currentConversationIdRef.current.trim();
       const hasRemoteGatewayTarget =
@@ -190,8 +204,9 @@ export function useManualCompaction(params: {
       let stopHandlerRegistered = false;
       let stopRequestVersion: number | null = null;
       let flushTrajectory: (() => Promise<void>) | null = null;
-      // 停止处理器与发送链路 handleConversationStop 同款：记录版本号供 finally
-      // 消费 stop intent；abort 使 compactManually 中止（controller 返回 aborted）。
+      // Same stop handler as the send path's handleConversationStop: record the
+      // version number for the finally block to consume the stop intent; abort
+      // makes compactManually stop (the controller returns aborted).
       const handleStop: ConversationStopHandler = (options) => {
         stopRequestVersion = options.requestVersion;
         cancellation.userStop.abort();
@@ -220,7 +235,7 @@ export function useManualCompaction(params: {
           case "skipped":
             return { status: "skipped", message: messageForSkipReason(outcome.reason) };
           default:
-            // 中止（用户停止）落到 skipped + 取消文案；其余失败带失败详情。
+            // Aborted (user stop) maps to skipped + cancellation message; other failures carry failure details.
             return outcome.aborted
               ? { status: "skipped", message: t("chat.manualCompactCancelled") }
               : {
@@ -240,8 +255,10 @@ export function useManualCompaction(params: {
           return { status: "busy", message: t("chat.manualCompactRejected") };
         }
 
-        // 运行时快照解析：当前会话用可见状态，但历史仍在水合时可见状态为空，
-        // active segment 无消息即复核一次 runtime cache（否则误报"无可压缩内容"）。
+        // Runtime snapshot resolution: the current conversation uses visible
+        // state, but visible state is empty while history is still hydrating, so
+        // if the active segment has no messages, re-check the runtime cache once
+        // (otherwise it would falsely report "nothing to compact").
         let runtimeEntry: ConversationRuntimeEntry;
         if (isCurrentConversation()) {
           const visibleEntry = buildRuntimeEntryFromVisibleState();
@@ -261,13 +278,13 @@ export function useManualCompaction(params: {
           runtimeEntry = cached;
         }
 
-        // 水合可能耗时，重核一次运行态后再占用 running 标志。
+        // Hydration may take a while; re-check the running state once more before claiming the running flag.
         if (isConversationRunning(conversationId)) {
           return { status: "busy", message: t("chat.manualCompactRejected") };
         }
         setConversationRunningState(conversationId, true);
         runningStateClaimed = true;
-        // 注册停止处理器与 abort controller（若已请求停止会立刻回调并 abort）。
+        // Register the stop handler and abort controller (if a stop was already requested it fires immediately and aborts).
         setConversationStopHandler(conversationId, handleStop);
         setConversationAbortController(conversationId, cancellation.userStop);
         stopHandlerRegistered = true;
@@ -291,9 +308,11 @@ export function useManualCompaction(params: {
         const { provider, providerId, model, selectedModel } = effective;
         const runtime = createProviderRuntimeConfig(provider, model, settings.chatRuntimeControls);
 
-        // 与发送链路同源的检查点上下文：注入 agent/skills/memory 提示词与 tools，
-        // 使 checkpoint contextTokensAfter（两端环的权威锚点）计入系统提示词与
-        // 工具重量，否则少算导致压缩后两端环读数偏低。
+        // Checkpoint context shared with the send path: inject the agent/skills/
+        // memory prompts and tools so that the checkpoint's contextTokensAfter
+        // (the authoritative anchor for both ends' rings) includes the system
+        // prompt and tool weight; otherwise it undercounts and both rings read low
+        // after compaction.
         const {
           activeAgentPrompt: resolvedAgentPrompt,
           skillsPrompt,
@@ -302,14 +321,19 @@ export function useManualCompaction(params: {
           isCurrentConversation: isCurrentConversation(),
           workdir: runtimeEntry.workdir,
         });
-        // memory 段已在首轮冻结进 system prompt，这里必须沿用同一份快照与同一批
-        // 增量块：否则压缩轮用新读的快照、下一轮发送又翻回冻结的那份，system 段
-        // 白翻两次，保留下来的 user 消息字节也对不上。还没有基线时（例如后台会话）
-        // 退回原来现读的结果。
+        // The memory section was frozen into the system prompt on the first turn,
+        // so we must reuse the same snapshot and the same batch of delta blocks
+        // here: otherwise the compaction turn uses a freshly read snapshot while
+        // the next send flips back to the frozen one, flipping the system section
+        // twice for nothing and leaving the retained user message bytes mismatched.
+        // When there is no baseline yet (e.g. a background conversation), fall back
+        // to the freshly read result.
         const memoryPrompt = memoryTurnInjection.getSystemText(conversationId) ?? freshMemoryPrompt;
         const memoryTurnUpdates = memoryTurnInjection.getMessageUpdates(conversationId);
-        // 压缩后保留下来的 user 消息必须连同已挂上的显式提及块一起重放,否则那几条
-        // 消息的字节与发出去时对不上,压缩省下的前缀又被自己废掉。
+        // User messages retained after compaction must be replayed together with
+        // the explicit mention blocks already attached to them; otherwise those
+        // messages' bytes no longer match what was sent, and the prefix saved by
+        // compaction is wasted again.
         const skillMentionUpdates = skillMentionInjection.getMessageUpdates(conversationId);
 
         let compactionFailureMessage = "";
@@ -346,16 +370,21 @@ export function useManualCompaction(params: {
               createdAt: runtimeEntry.createdAt,
               titlePromise: null,
             }),
-          // 压缩把携带 memory 增量块的 user 消息移出 active segment;丢弃注入
-          // 状态后,下一轮发送的 getSystemText 回退到现读快照并重新冻结。
+          // Compaction moves the user messages carrying memory delta blocks out of
+          // the active segment; after discarding the injection state, the next
+          // send's getSystemText falls back to a freshly read snapshot and freezes
+          // it again.
           onCompacted: () => memoryTurnInjection.invalidate(conversationId),
         };
 
         const compactionController = getCompactionController(conversationId);
-        // 重启后直接手动压缩：控制器还没有任何轮次注入过 provider 边界追加段
-        //（agent 模式 toolsSuffix 实测 ~4k），检查点权威值会系统性偏低，下一次
-        // 发送时环台阶式上跳。按持久化工具集补一份回退估算；本会话已有轮次
-        // 注入的现值（出自真实请求参数）优先，绝不覆盖。
+        // Manual compaction right after a restart: the controller has not yet had
+        // any turn inject the provider boundary suffix (in agent mode toolsSuffix
+        // measures ~4k), so the authoritative checkpoint value is systematically
+        // low and the ring jumps up in steps on the next send. Supply a fallback
+        // estimate from the persisted tool set; if this conversation already has a
+        // current value injected by a turn (derived from real request params),
+        // prefer it and never overwrite.
         if (compactionController.contextFixedOverheadTokens === 0) {
           const persistedTools = runtimeEntry.state.meta.tools;
           if (Array.isArray(persistedTools) && persistedTools.length > 0) {
@@ -443,9 +472,11 @@ export function useManualCompaction(params: {
             onProceed: () => {
               proceeded = true;
               if (hasRemoteGatewayTarget) {
-                // 与 useSendChatTurn 同款注册镜像：userMessage 取最近一条用户消息
-                // （已在历史里的真实消息），transcriptStore 现成。缺 userMessage 会让
-                // 网关 checkpoint 请求撞 lastError、TTL 清扫器判死未注册 mirror。
+                // Same mirror registration as useSendChatTurn: userMessage takes the
+                // most recent user message (a real message already in history), and
+                // transcriptStore is ready. A missing userMessage makes the gateway
+                // checkpoint request hit lastError and the TTL sweeper declare the
+                // unregistered mirror dead.
                 const activeMessages = getActiveSegment(runtimeEntry.state)?.messages ?? [];
                 let lastUserMessage: (typeof activeMessages)[number] | undefined;
                 for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
@@ -464,7 +495,7 @@ export function useManualCompaction(params: {
                     state: "running",
                   });
                 }
-                // ledger 记账：2s 心跳的 active_runs 为 summarizer 静默期续命。
+                // Ledger accounting: the 2s-heartbeat active_runs keeps the summarizer alive during its silent period.
                 void invoke("gateway_chat_mark_local_started", {
                   request_id: bridgeRequestId,
                   conversation_id: conversationId,
@@ -505,12 +536,13 @@ export function useManualCompaction(params: {
         if (runningStateClaimed) {
           setConversationRunningState(conversationId, false);
         }
-        // 停止意图必须消费，否则残留会吞掉该会话的下一条消息。版本号不匹配
-        // 说明其后又有新的停止请求，交由后续路径处理。
+        // The stop intent must be consumed, or the leftover would swallow that
+        // conversation's next message. A version mismatch means a newer stop
+        // request came after, to be handled by the subsequent path.
         if (stopRequestVersion !== null) {
           consumeConversationStop(conversationId, stopRequestVersion);
         }
-        // 只有真正开始压缩才有 run 痕迹需要收尾；被拒绝的压缩什么都不发。
+        // Only a compaction that actually started has a run trace to wind down; a rejected compaction emits nothing.
         if (proceeded) {
           try {
             gatewayBridgeEvents.queueManualCompactionResult(
@@ -527,8 +559,10 @@ export function useManualCompaction(params: {
             console.warn("manual compaction bridge flush failed", error);
           }
           if (hasRemoteGatewayTarget) {
-            // 终态记账：compacted→completed+historyRequired（WebUI 保留检查点行经
-            // 持久化历史收敛）；failed→failed；skipped（含取消）走完成态收敛。
+            // Terminal-state accounting: compacted -> completed + historyRequired
+            // (the WebUI retains the checkpoint row via persisted-history
+            // convergence); failed -> failed; skipped (including cancellation)
+            // converges as completed.
             try {
               await finishGatewayRunMirror({
                 runId: bridgeRequestId,

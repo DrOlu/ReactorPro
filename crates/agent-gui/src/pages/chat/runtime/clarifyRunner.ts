@@ -20,9 +20,10 @@ function createZeroUsage() {
 }
 
 /**
- * 澄清历史里的 assistant 消息 → pi-ai AssistantMessage。协议只关心文本；api/
- * usage 等字段是类型要求的占位（compaction summarizer 同款拼法），provider
- * 载荷装配只读取其中的 text 块。
+ * Assistant messages from the clarification history → pi-ai AssistantMessage.
+ * The protocol only cares about text; fields such as api/usage are placeholders
+ * required by the type (assembled the same way as the compaction summarizer),
+ * and provider payload assembly reads only the text blocks among them.
  */
 function toAssistantContextMessage(
   message: ClarifyMessage,
@@ -42,10 +43,12 @@ function toAssistantContextMessage(
 }
 
 /**
- * 澄清消息 → pi-ai Context。pi-ai 的 Message 联合类型（user/assistant/
- * toolResult）没有 system 角色，直接塞进 messages 既过不了类型检查也会被各
- * provider 载荷装配丢弃；因此把 system 消息并入 systemPrompt，其余消息原样
- * 映射（text-only 后缀由 buildTextOnlyCallContext 统一追加）。
+ * Clarification messages → pi-ai Context. pi-ai's Message union type
+ * (user/assistant/toolResult) has no system role; stuffing one directly into
+ * messages would both fail the type check and be dropped by each provider's
+ * payload assembly. So system messages are merged into systemPrompt, and the
+ * rest are mapped as-is (the text-only suffix is appended uniformly by
+ * buildTextOnlyCallContext).
  */
 export function buildClarifyCallContext(
   messages: ClarifyMessage[],
@@ -72,8 +75,10 @@ export function buildClarifyCallContext(
 }
 
 /**
- * 桌面宿主的澄清执行器：当前会话模型跑一次纯文本补全。模型/runtime 在每
- * 次调用时惰性解析（getter），保证澄清用的始终是面板打开当下的选择。
+ * The desktop host's clarification executor: runs one plain-text completion
+ * with the current conversation model. The model/runtime are resolved lazily
+ * (via getters) on each call, ensuring clarification always uses the selection
+ * as of when the panel was opened.
  */
 export function createGuiClarifyRunner(
   getSelection: () => EffectiveChatModelSelection,

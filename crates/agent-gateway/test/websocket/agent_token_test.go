@@ -1,6 +1,7 @@
 package websocket_test
 
-// 每 Agent 凭证（agenttoken）集成测试：角色-凭证绑定、签发/轮换/撤销、撤销踢线。
+// Per-agent credential (agenttoken) integration tests: role-credential binding,
+// issuance/rotation/revocation, and connection kick on revocation.
 
 import (
 	"errors"
@@ -43,7 +44,8 @@ func agentTokenAuthenticates(
 	return false
 }
 
-// openAgentTokenDB 打开共享池并初始化凭证表（测试清理时关闭池）。
+// openAgentTokenDB opens the shared pool and initializes the credential table
+// (the pool is closed during test cleanup).
 func openAgentTokenDB(t *testing.T, path string) (*db.DB, *agenttoken.Store) {
 	t.Helper()
 	database, err := db.Open(path)
@@ -58,7 +60,7 @@ func openAgentTokenDB(t *testing.T, path string) (*db.DB, *agenttoken.Store) {
 	return database, store
 }
 
-// dialV2AgentHello 拨号 agent 链路并发送 hello，返回服务端的 hello 判定。
+// dialV2AgentHello dials the agent link and sends hello, returning the server's hello verdict.
 func dialV2AgentHello(t *testing.T, handler http.Handler, agentID, token string) *gatewayv2.ServerHello {
 	t.Helper()
 	conn, cleanup := dialV2(t, handler)
@@ -131,15 +133,15 @@ func TestAgentCredentialsRequireIssuedToken(t *testing.T) {
 	cfg := newV2TestConfig()
 	srv := pbws.NewServer(cfg, sm, store)
 
-	// 正确凭证 + 正确 id：通过。
+	// Correct credential + correct id: accepted.
 	if hello := dialV2AgentHello(t, srv.AgentHandler(), "agent-a", tokenA); !hello.GetOk() {
 		t.Fatalf("agent-a with own token rejected: %q", hello.GetMessage())
 	}
-	// A 的凭证声明 B 的身份：拒绝（凭证按 id 绑定）。
+	// A's credential claiming B's identity: rejected (credentials are bound by id).
 	if hello := dialV2AgentHello(t, srv.AgentHandler(), "agent-b", tokenA); hello.GetOk() {
 		t.Fatal("agent-a token must not authenticate agent-b")
 	}
-	// agent_id 必填。
+	// agent_id is required.
 	if hello := dialV2AgentHello(t, srv.AgentHandler(), "", tokenA); hello.GetOk() {
 		t.Fatal("empty agent_id must be rejected")
 	}
@@ -284,7 +286,8 @@ func TestAgentTokenRejectedOnBrowserLink(t *testing.T) {
 	conn, cleanup := dialV2(t, handler)
 	defer cleanup()
 
-	// Agent 凭证冒充浏览器（控制端）：必须拒绝——角色-凭证绑定的另一半。
+	// An agent credential impersonating a browser (controller side): must be
+	// rejected — the other half of role-credential binding.
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "hello-agent-token",
 		Payload: &gatewayv2.WebClientFrame_Hello{
@@ -334,7 +337,8 @@ func TestDeleteInvalidatesAndSurvivesReload(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	// 落盘后重开（模拟网关重启）：凭证仍有效，删除也持久化。
+	// Reopen after persisting (simulating a gateway restart): the credential is
+	// still valid and deletions are persisted too.
 	reloadedDB, reloaded := openAgentTokenDB(t, path)
 	if !agentTokenAuthenticates(t, reloaded, "agent-a", token) {
 		t.Fatal("token must survive store reload")

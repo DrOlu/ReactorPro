@@ -25,10 +25,6 @@ pub(crate) fn load_gateway_settings_sync_snapshot(conn: &Connection) -> Result<V
         )]))))?,
     );
     snapshot.insert(
-        "stt".to_string(),
-        load_stt_redacted(conn)?.unwrap_or_else(|| json!({})),
-    );
-    snapshot.insert(
         "automationCron".to_string(),
         load_masked_automation_cron(conn)?,
     );
@@ -72,7 +68,7 @@ fn load_masked_automation_cron(conn: &Connection) -> Result<Value, String> {
     for task in &mut snapshot.tasks {
         crate::services::automation::validate::mask_request_headers(&mut task.requests);
     }
-    serde_json::to_value(&snapshot).map_err(|e| format!("序列化 automation cron 快照失败：{e}"))
+    serde_json::to_value(&snapshot).map_err(|e| format!("failed to serialize automation cron snapshot: {e}"))
 }
 
 fn load_masked_automation_hooks(conn: &Connection) -> Result<Value, String> {
@@ -81,7 +77,7 @@ fn load_masked_automation_hooks(conn: &Connection) -> Result<Value, String> {
     for hook in &mut snapshot.hooks {
         crate::services::automation::validate::mask_request_headers(&mut hook.requests);
     }
-    serde_json::to_value(&snapshot).map_err(|e| format!("序列化 automation hooks 快照失败：{e}"))
+    serde_json::to_value(&snapshot).map_err(|e| format!("failed to serialize automation hooks snapshot: {e}"))
 }
 
 pub(crate) fn redact_gateway_settings_sync_payload(payload: Value) -> Result<Value, String> {
@@ -90,8 +86,6 @@ pub(crate) fn redact_gateway_settings_sync_payload(payload: Value) -> Result<Val
     snapshot.remove(PROVIDER_USAGE_QUERY_SECRET_UPDATES_FIELD);
     snapshot.remove(SSH_SECRET_UPDATES_FIELD);
     snapshot.remove(SYSTEM_PROXY_PASSWORD_UPDATE_FIELD);
-    snapshot.remove(STT_SECRET_SYNC_FIELD);
-    snapshot.remove(STT_SECRET_UPDATE_FIELD);
     if let Some(providers) = snapshot.remove("customProviders") {
         snapshot.insert(
             "customProviders".to_string(),
@@ -103,10 +97,6 @@ pub(crate) fn redact_gateway_settings_sync_payload(payload: Value) -> Result<Val
     }
     if let Some(ssh) = snapshot.remove("ssh") {
         snapshot.insert("ssh".to_string(), redact_ssh_settings(ssh)?);
-    }
-    if let Some(mut stt) = snapshot.remove("stt") {
-        redact_stt_secrets(&mut stt);
-        snapshot.insert("stt".to_string(), stt);
     }
     if let Some(remote) = snapshot.remove("remote") {
         snapshot.insert("remote".to_string(), redact_remote_settings(remote)?);
@@ -205,7 +195,7 @@ fn redact_ssh_proxy_secret(proxy: Value) -> Result<Value, String> {
     Ok(Value::Object(payload))
 }
 
-/// system 快照出口脱敏：systemProxy.password 摘除并写 passwordConfigured 标记。
+/// Redaction at the system snapshot exit: strip systemProxy.password and write the passwordConfigured flag.
 fn redact_system_settings(system: Value) -> Result<Value, String> {
     let mut payload = expect_object(system, "system settings payload")?;
     if let Some(proxy) = payload.remove(SYSTEM_SYSTEM_PROXY_KEY) {

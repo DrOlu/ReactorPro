@@ -50,7 +50,7 @@ function createModel(api) {
 
 test("DeepSeek inlines multiple large pastes while preserving ordinary Read attachments", async () => {
   const { loader, calls } = createLoader({
-    "/workspace/.liveagent/paste-1.txt": "first pasted body\n第二行",
+    "/workspace/.liveagent/paste-1.txt": "first pasted body\nsecond line",
     "/workspace/.liveagent/paste-2.txt": "second pasted body",
   });
   const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
@@ -101,7 +101,7 @@ test("DeepSeek inlines multiple large pastes while preserving ordinary Read atta
   const content = context.messages[0].content;
   assert.equal(calls.length, 2);
   assert.ok(calls.every((call) => call.command === "system_read_uploaded_native_attachment"));
-  assert.match(content, /first pasted body\n第二行/);
+  assert.match(content, /first pasted body\nsecond line/);
   assert.match(content, /second pasted body/);
   assert.doesNotMatch(content, /\[Pasted text/);
   assert.doesNotMatch(content, /paste-1\.txt \(text/);

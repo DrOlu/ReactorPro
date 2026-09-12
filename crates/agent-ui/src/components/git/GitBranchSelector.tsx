@@ -126,9 +126,9 @@ export function GitBranchSelector(props: {
   canWrite?: boolean;
   disabledMessage?: string;
   onStateChange?: (state: GitRepositoryState) => void;
-  /** 创建 worktree 成功后，用后端返回的仓库身份与路径把工作区加入侧边栏。 */
+  /** After a worktree is created successfully, add the workspace to the sidebar using the repository identity and path returned by the backend. */
   onOpenWorktree?: (worktree: { path: string; repositoryPath: string; branch: string }) => void;
-  /** Worktree 删除成功后，让宿主清理对应的工作空间登记。 */
+  /** After a worktree is deleted successfully, let the host clean up the corresponding workspace registration. */
   onWorktreeRemoved?: (worktree: { path: string; repositoryPath: string; branch: string }) => void;
 }) {
   const {
@@ -650,7 +650,7 @@ export function GitBranchSelector(props: {
     workdir,
   ]);
 
-  // 分支被 linked worktree 检出时，删除入口切换为真实 Worktree 删除。
+  // When the branch is checked out by a linked worktree, the delete entry switches to a real Worktree delete.
   const checkedOutWorktree = branchAction
     ? gitClient?.removeWorktree
       ? worktrees.find((worktree) => worktree.branch === branchAction.branch.fullName)
@@ -839,8 +839,8 @@ export function GitBranchSelector(props: {
     workdir,
   ]);
 
-  // Worktree 起点：默认当前分支，可切换为任意本地/远程分支
-  // （后端 validate_start_point 接受任意可 rev-parse 的 ref）。
+  // Worktree start point: defaults to the current branch and can be switched to any local/remote branch
+  // (the backend validate_start_point accepts any ref that can be rev-parse'd).
   const defaultWorktreeStartPoint = state.head && state.head !== "(detached)" ? state.head : "HEAD";
   const [worktreeStartPoint, setWorktreeStartPoint] = useState("");
   const worktreeStartPointOptions = useMemo(() => {

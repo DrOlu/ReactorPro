@@ -96,6 +96,6 @@ test("classifies scriptable and unresolvable targets as unsupported", () => {
 test("heading slugs approximate the GitHub anchor format", () => {
   assert.equal(assets.workspaceMarkdownHeadingSlug("Quick Start"), "quick-start");
   assert.equal(assets.workspaceMarkdownHeadingSlug("  A & B  "), "a--b");
-  assert.equal(assets.workspaceMarkdownHeadingSlug("使用说明"), "使用说明");
+  assert.equal(assets.workspaceMarkdownHeadingSlug("せつめい"), "せつめい");
   assert.equal(assets.workspaceMarkdownHeadingSlug("v1.2.3 (beta)"), "v123-beta");
 });

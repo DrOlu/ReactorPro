@@ -34,7 +34,7 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : String(error ?? "");
-          setState({ status: "error", error: message || "读取分享会话失败" });
+          setState({ status: "error", error: message || "Failed to load shared conversation" });
         }
       }
     })();
@@ -45,7 +45,7 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
   }, [token]);
 
   const summary = state.status === "ready" ? state.detail.conversation : undefined;
-  const title = summary?.title?.trim() || "分享会话";
+  const title = summary?.title?.trim() || "Shared Conversation";
   const updatedAt = useMemo(
     () => formatSharedHistoryTimestamp(summary?.updated_at),
     [summary?.updated_at],
@@ -72,7 +72,7 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
               />
               <div className="min-w-0">
                 <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                  LiveAgent Shared Conversation
+                  ReactorPro Shared Conversation
                 </div>
                 <h1 className="mt-1 truncate text-lg font-semibold text-foreground" title={title}>
                   {title}
@@ -81,7 +81,7 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
             </div>
             {state.status === "ready" ? (
               <div className="history-share-meta">
-                <span>{summary?.message_count ?? state.entries.length} 条消息</span>
+                <span>{summary?.message_count ?? state.entries.length} messages</span>
                 {updatedAt ? <span>{updatedAt}</span> : null}
               </div>
             ) : null}
@@ -91,7 +91,7 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
             {state.status === "loading" ? (
               <div className="history-share-state">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                <div className="text-sm font-medium text-foreground/85">正在加载分享会话</div>
+                <div className="text-sm font-medium text-foreground/85">Loading shared conversation</div>
               </div>
             ) : state.status === "error" ? (
               <div className="history-share-state">
@@ -100,13 +100,13 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
                 </div>
                 <div className="text-sm font-medium text-foreground/85">{state.error}</div>
                 <div className="max-w-md text-center text-xs leading-5 text-muted-foreground">
-                  分享可能已被关闭，或桌面端当前不在线。
+                  The share may have been closed, or the desktop is currently offline.
                 </div>
               </div>
             ) : state.entries.length === 0 ? (
               <div className="history-share-state">
                 <MessageSquareText className="h-5 w-5 text-muted-foreground" />
-                <div className="text-sm font-medium text-foreground/85">该会话暂无可展示内容</div>
+                <div className="text-sm font-medium text-foreground/85">This conversation has no content to display yet</div>
               </div>
             ) : (
               <ScrollArea className="history-share-scroll">

@@ -16,7 +16,7 @@ const {
   cancelPendingToolApprovalsForConversation,
 } = approval;
 
-test("approve 决定使门放行,并从挂起表移除", async () => {
+test("approve decision lets the gate through and removes it from the pending table", async () => {
   const promise = requestToolApproval({
     toolCallId: "c1",
     toolName: "Bash",
@@ -30,7 +30,7 @@ test("approve 决定使门放行,并从挂起表移除", async () => {
   assert.equal(hasPendingToolApproval("c1"), false);
 });
 
-test("approve_session 记住本会话该工具,后续 isSessionApproved 为真", async () => {
+test("approve_session remembers this tool for the conversation, so isSessionApproved is true afterwards", async () => {
   const promise = requestToolApproval({
     toolCallId: "c2",
     toolName: "Bash",
@@ -43,7 +43,7 @@ test("approve_session 记住本会话该工具,后续 isSessionApproved 为真",
   assert.equal(isSessionApproved("other", "Bash"), false);
 });
 
-test("deny 决定返回 decided/deny", async () => {
+test("deny decision returns decided/deny", async () => {
   const promise = requestToolApproval({
     toolCallId: "c3",
     toolName: "Delete",
@@ -53,7 +53,7 @@ test("deny 决定返回 decided/deny", async () => {
   assert.deepEqual(await promise, { kind: "decided", decision: "deny" });
 });
 
-test("超时落定为 timeout", async () => {
+test("a timeout settles as timeout", async () => {
   const settlement = await requestToolApproval({
     toolCallId: "c4",
     toolName: "Bash",
@@ -64,7 +64,7 @@ test("超时落定为 timeout", async () => {
   assert.equal(hasPendingToolApproval("c4"), false);
 });
 
-test("AbortSignal 触发 → cancelled;已 aborted 的信号立即 cancelled", async () => {
+test("an AbortSignal trigger → cancelled; an already-aborted signal cancels immediately", async () => {
   const controller = new AbortController();
   const promise = requestToolApproval({
     toolCallId: "c5",
@@ -86,7 +86,7 @@ test("AbortSignal 触发 → cancelled;已 aborted 的信号立即 cancelled", a
   assert.deepEqual(immediate, { kind: "cancelled" });
 });
 
-test("串会话应答被拒;正确会话应答通过", async () => {
+test("a cross-conversation answer is rejected; the correct conversation's answer passes", async () => {
   const promise = requestToolApproval({
     toolCallId: "c7",
     toolName: "Bash",
@@ -100,7 +100,7 @@ test("串会话应答被拒;正确会话应答通过", async () => {
   await promise;
 });
 
-test("会话取消:挂起审批落定为 cancelled 并清理免审集合", async () => {
+test("conversation cancellation: pending approvals settle as cancelled and the session-approval set is cleared", async () => {
   const promise = requestToolApproval({
     toolCallId: "c8",
     toolName: "Bash",
@@ -113,7 +113,7 @@ test("会话取消:挂起审批落定为 cancelled 并清理免审集合", async
   assert.equal(hasPendingToolApproval("c8"), false);
 });
 
-test("订阅版本号在挂起出现/落定时变化", async () => {
+test("the subscription version changes when a pending entry appears/settles", async () => {
   let notified = 0;
   const unsubscribe = subscribeToolApprovals(() => {
     notified += 1;

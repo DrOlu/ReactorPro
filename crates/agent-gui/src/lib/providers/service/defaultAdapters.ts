@@ -5,10 +5,12 @@ import { registerAdapter } from "./registry";
 let installed = false;
 
 /**
- * 安装默认适配器（幂等）。
+ * Install the default adapters (idempotent).
  *
- * 由分发针孔（runtime/streamByApi.ts 兼容壳）与 llm.stream() 各自在模块加载
- * 时调用：无论消费方从哪个入口进来，注册表都已就绪；重复调用零开销。
+ * Called at module load by both the distribution pinhole (the compatibility
+ * shell in runtime/streamByApi.ts) and llm.stream(): whichever entry point a
+ * consumer comes through, the registry is already ready; repeated calls cost
+ * nothing.
  */
 export function ensureDefaultLlmAdapters(): void {
   if (installed) return;

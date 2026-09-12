@@ -333,8 +333,8 @@ export function RightDockTabStrip(props: RightDockTabStripProps) {
           session.title,
           t("projectTools.terminalTitle"),
         );
-        // 拖入画板(租约)的会话不在 dock 列表里,这里的 tab 都可自由进入
-        // 工作台;菜单是拖拽之外的键盘/指针等价入口。
+        // Sessions dragged onto the board (leased) are not in the dock list, so every tab here
+        // can freely enter the workbench; the menu is the keyboard/pointer equivalent of dragging.
         const menuItems = onOpenTerminalInWorkbench ? (
           <DropdownMenuItem
             onSelect={() => onOpenTerminalInWorkbench(session)}

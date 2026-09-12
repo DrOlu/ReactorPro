@@ -21,7 +21,7 @@ function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
-// drop 事务实现已共享给 WebUI:源码断言指向 @liveagent/ui 中的实现。
+// The drop transaction implementation is now shared with the WebUI: the source assertions point to the implementation in @liveagent/ui.
 const terminalDropCommitSource = readSource(
   "../../../agent-ui/src/lib/workbench/terminalDropCommit.ts",
 );

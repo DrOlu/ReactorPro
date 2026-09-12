@@ -28,10 +28,12 @@ export function HubBackdrop(props: { tone?: "amber" | "violet" | "neutral" }) {
   );
 }
 
-// 侧栏开关不在这里渲染：AppWorkbenchChrome(ChatHeader)常驻于所有视图之上，
-// 侧栏收起时已经提供了同一个按钮。Hub 自己再画一个就会在窄屏上叠出两枚
-// PanelLeft(#501 之前 Hub 页面没有顶栏，才需要自带一枚)。
-// 顶栏也已预留 macOS 窗口控件空间，Hub 内容无需再次添加标题栏占位。
+// The sidebar toggle is not rendered here: AppWorkbenchChrome (ChatHeader) is
+// always present above all views and already provides the same button when the
+// sidebar is collapsed. Hub drawing its own would stack two PanelLeft icons on
+// narrow screens (before #501 the Hub page had no top bar, which is why it needed
+// its own). The top bar also already reserves space for the macOS window controls,
+// so Hub content needs no additional title-bar placeholder.
 export function HubHeader(props: {
   icon?: ReactNode;
   title: string;

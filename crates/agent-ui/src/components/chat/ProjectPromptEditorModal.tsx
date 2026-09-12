@@ -44,7 +44,8 @@ export function ProjectPromptSettingsPanel(props: {
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{t("chat.projectPromptTitle")}</h3>
-          {/* 只解释当前选中的组合策略，随切换实时更新。 */}
+          {/* Explains only the currently selected combination strategy and
+              updates live as it switches. */}
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             {t(
               strategy === "append"

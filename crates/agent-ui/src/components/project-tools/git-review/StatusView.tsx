@@ -673,7 +673,7 @@ export function GitReviewStatusView(props: {
           className="layer-popover absolute min-w-56"
           style={{ right: changesMenu.right, top: changesMenu.y }}
         >
-          {/* biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。 */}
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: onClick only stops propagation to prevent the window "click" from closing the menu; the keyboard is handled via Escape and menuitem buttons. */}
           <div
             role="menu"
             className={cn("w-full", CONTEXT_MENU_CONTAINER_CLASS)}
@@ -734,7 +734,7 @@ export function GitReviewStatusView(props: {
         </div>
       ) : null}
       {changeContextMenu && contextEntry ? (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。
+        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick only stops propagation to prevent the window "click" from closing the menu; the keyboard is handled via Escape and menuitem buttons.
         <div
           ref={changeContextMenuRef}
           role="menu"

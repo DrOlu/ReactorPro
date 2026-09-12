@@ -3,18 +3,18 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// PR #521 review P1:「多 Pane 下原生文件拖放必须归属落点 Pane 的会话」。
-// 几何 hit-test 之外，这里断言真正的 upload 归属:drop 时刻从落点 composer
-// 同步取出 conversationId(data-file-upload-conversation-id),沿
-// importUploadZonePaths → importReadableFilePaths → captureUploadTarget 显式
-// 传递,不再依赖异步的焦点切换(currentConversationIdRef)。
+// PR #521 review P1: "Native file drag-and-drop under multiple Panes must belong to the conversation of the drop-target Pane".
+// Beyond the geometric hit-test, this asserts the real upload ownership: at drop time the
+// conversationId (data-file-upload-conversation-id) is read synchronously from the drop-target
+// composer and passed explicitly along importUploadZonePaths -> importReadableFilePaths ->
+// captureUploadTarget, rather than relying on asynchronous focus switching (currentConversationIdRef).
 
 function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
 // ---------------------------------------------------------------------------
-// 1) drop 点 → conversationId:直接从命中的 composer 元素读取归属标记。
+// 1) drop point -> conversationId: read the ownership marker directly from the hit composer element.
 // ---------------------------------------------------------------------------
 
 const routingLoader = createTsModuleLoader();
@@ -29,7 +29,7 @@ function composerZone(conversationId, rect) {
 }
 
 function twoPaneDocument() {
-  // 两个并列 Pane 的 composer:A 在左半屏,B 在右半屏。
+  // Two side-by-side Pane composers: A on the left half of the screen, B on the right half.
   return {
     querySelectorAll(selector) {
       if (selector !== routing.FILE_UPLOAD_DROP_ZONE_SELECTOR) return [];
@@ -72,7 +72,7 @@ test("a drop outside every composer resolves no upload conversation", () => {
 
 test("physical drop coordinates are normalized before attribution (Windows DPI)", () => {
   const doc = twoPaneDocument();
-  // 物理 (1800, 1300) @2x → 逻辑 (900, 650),命中 conv-b。
+  // Physical (1800, 1300) @2x -> logical (900, 650), hitting conv-b.
   assert.equal(
     routing.resolveNativeUploadConversationId(
       { x: 1800, y: 1300 },
@@ -83,7 +83,7 @@ test("physical drop coordinates are normalized before attribution (Windows DPI)"
 });
 
 // ---------------------------------------------------------------------------
-// 2) usePendingUploads:显式 target 覆盖焦点会话,文件与 workdir 都跟着落点走。
+// 2) usePendingUploads: an explicit target overrides the focused conversation, so both files and workdir follow the drop point.
 // ---------------------------------------------------------------------------
 
 function createHookHarness() {
@@ -175,7 +175,7 @@ test("an explicit drop target routes the import to that conversation and workdir
     invokeImpl: () => ({ files: [uploadedFile("dropped.txt")], skipped: [] }),
   });
 
-  // 焦点会话是 conv-a,落点是 conv-b:文件必须只出现在 conv-b。
+  // The focused conversation is conv-a and the drop point is conv-b: the file must appear only in conv-b.
   await hook.importReadableFilePaths(["/tmp/dropped.txt"], {
     conversationId: "conv-b",
     workdir: "/ws/b",
@@ -266,8 +266,9 @@ test("a full target conversation still imports so duplicates can be merged", asy
   const { hook, uploadStore, notifications, invokeCalls } = mountPendingUploads({
     invokeImpl: () => ({ files: [], skipped: [] }),
   });
-  // 落点会话已满 9 个时仍需交给导入层识别重复；合并后保持 9 个，
-  // 而不是在拿到稳定 dedupeKey 前提前拒绝。
+  // Even when the drop-point conversation already has 9 items, it must still be handed to the import
+  // layer to identify duplicates; after merging it stays at 9, rather than rejecting early before a
+  // stable dedupeKey is obtained.
   uploadStore.set(
     "conv-b",
     Array.from({ length: 9 }, (_, index) => uploadedFile(`existing-${index}.txt`)),
@@ -284,16 +285,16 @@ test("a full target conversation still imports so duplicates can be merged", asy
 });
 
 // ---------------------------------------------------------------------------
-// 3) 源级防回归:drop 管线不得回退到「焦点会话」路由。
+// 3) Source-level regression guard: the drop pipeline must not fall back to "focused conversation" routing.
 // ---------------------------------------------------------------------------
 
 test("the native drop pipeline resolves its conversation at drop time", () => {
   const tauriFileDrop = readSource("../../src/pages/chat/hooks/useTauriFileDrop.ts");
-  // drop 分支必须从最终 drop 坐标解析归属会话,并把它传给 upload 管线。
+  // The drop branch must resolve the owning conversation from the final drop coordinates and pass it to the upload pipeline.
   assert.match(tauriFileDrop, /resolveNativeUploadConversationId\(event\.payload\.position/);
   assert.match(tauriFileDrop, /importUploadZonePaths\(event\.payload\.paths,\s*targetConversationId\)/);
 
   const composerBar = readSource("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx");
-  // 每个 composer 落区都携带自己的会话归属标记。
+  // Each composer drop zone carries its own conversation ownership marker.
   assert.match(composerBar, /data-file-upload-conversation-id=\{conversationId\}/);
 });

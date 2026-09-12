@@ -3,8 +3,9 @@ import { cn } from "../../lib/shared/utils";
 
 const COLLAPSE_ANIMATION_MS = 220;
 
-// 内容首次展开时才挂载；收起时保留到退出动画结束，运行中的内容还可继续
-// 保留内部状态。这样大块工具结果不会常驻 DOM，同时展开和收缩都有完整动画。
+// Content mounts only on first expansion; on collapse it is kept until the exit animation ends,
+// and running content can keep its internal state. This way large tool results do not stay
+// resident in the DOM, while both expansion and collapse have full animations.
 export function LazyCollapse(props: {
   open: boolean;
   retainWhileClosed?: boolean;

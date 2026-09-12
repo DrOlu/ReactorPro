@@ -16,13 +16,13 @@ export type ModelOption = SharedModelOption<ProviderId>;
 declare const PROVIDER_RUNTIME_CONFIG_BRAND: unique symbol;
 
 /**
- * 供应商请求运行时配置——全仓唯一定义，唯一构造点是
- * createProviderRuntimeConfig()（见 ./providerRuntimeConfig）。
+ * Provider request runtime config -- the single definition in the repo; its only construction point is
+ * createProviderRuntimeConfig() (see ./providerRuntimeConfig).
  *
- * 品牌字段让手写对象字面量一律编译不过：字段几乎全是可选的，逐字段转抄漏掉
- * customHeaders / promptCacheRetention 时 TypeScript 不会报警，而那正是自定义
- * 请求头在聊天全链路上失效的根因。需要派生请用展开（{...runtime, reasoning}），
- * 品牌随展开保留。
+ * The brand field makes hand-written object literals fail to compile: nearly all fields are optional, and when
+ * copying field by field and dropping customHeaders / promptCacheRetention, TypeScript would not complain -- which
+ * is exactly the root cause of custom request headers silently failing across the chat pipeline. To derive one,
+ * use spread ({...runtime, reasoning}); the brand is preserved through the spread.
  */
 export type ProviderRuntimeConfig = {
   readonly [PROVIDER_RUNTIME_CONFIG_BRAND]: true;
@@ -37,7 +37,7 @@ export type ProviderRuntimeConfig = {
   promptCacheRetention?: "short" | "long";
   nativeWebSearchEnabled?: boolean;
   useSystemProxy?: boolean;
-  /** 供应商级流内重试策略；缺省 = 全局默认。failover 逐候选独立携带。 */
+  /** Provider-level in-stream retry policy; absent = global default. failover carries it per candidate. */
   retryPolicy?: ProviderRetryPolicy;
   modelConfig?: ProviderModelConfig;
 };
@@ -53,8 +53,8 @@ export type ToolChoice =
 
 export type StreamOptionsEx = SimpleStreamOptions & {
   /**
-   * 注意：pi-ai 的 streamSimpleAnthropic() 在内部会通过 buildBaseOptions() 丢弃 toolChoice，
-   * 所以这里我们自己调用 streamAnthropic() 并把 toolChoice 显式传下去。
+   * Note: pi-ai's streamSimpleAnthropic() internally drops toolChoice via buildBaseOptions(),
+   * so here we call streamAnthropic() ourselves and pass toolChoice down explicitly.
    */
   toolChoice?: ToolChoice;
   /** DeepSeek-only wire override for callers that must explicitly disable thinking. */

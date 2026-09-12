@@ -48,12 +48,12 @@ pub async fn gateway_connect(
             Some(value) => parse_remote_settings_payload(value)?,
             None => persisted.clone(),
         };
-        // Agent ID 始终取本地持久化身份，调用方不能借连接命令临时覆盖。
+        // Agent ID always comes from the locally persisted identity; callers cannot temporarily override it via the connect command.
         requested.agent_id = persisted.agent_id;
         Ok::<_, String>(requested)
     })
     .await
-    .map_err(|e| format!("gateway_connect join 失败：{e}"))??;
+    .map_err(|e| format!("gateway_connect join failed: {e}"))??;
     config.enabled = true;
     gateway_controller.apply_config(config)
 }

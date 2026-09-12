@@ -8,7 +8,7 @@ pub(crate) fn load_model_failover(conn: &Connection) -> Result<Option<Value>, St
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|e| format!("读取 {MODEL_FAILOVER_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("failed to read {MODEL_FAILOVER_SETTINGS_TABLE}: {e}"))?;
 
     match payload_json {
         Some(raw) => Ok(Some(parse_json(&raw, MODEL_FAILOVER_SETTINGS_TABLE)?)),
@@ -23,12 +23,12 @@ fn save_model_failover(conn: &mut Connection, payload: Value) -> Result<(), Stri
     let updated_at = now_ms();
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启 {MODEL_FAILOVER_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("failed to begin {MODEL_FAILOVER_SETTINGS_TABLE} transaction: {e}"))?;
     tx.execute(
         &format!("DELETE FROM {MODEL_FAILOVER_SETTINGS_TABLE} WHERE config_id = 'default'"),
         [],
     )
-    .map_err(|e| format!("清空 {MODEL_FAILOVER_SETTINGS_TABLE} 失败：{e}"))?;
+    .map_err(|e| format!("failed to clear {MODEL_FAILOVER_SETTINGS_TABLE}: {e}"))?;
     tx.execute(
         &format!(
             "INSERT INTO {MODEL_FAILOVER_SETTINGS_TABLE} (config_id, payload_json, updated_at) VALUES ('default', ?1, ?2)"
@@ -38,10 +38,10 @@ fn save_model_failover(conn: &mut Connection, payload: Value) -> Result<(), Stri
             updated_at
         ],
     )
-    .map_err(|e| format!("写入 {MODEL_FAILOVER_SETTINGS_TABLE} 失败：{e}"))?;
+    .map_err(|e| format!("failed to write {MODEL_FAILOVER_SETTINGS_TABLE}: {e}"))?;
     tx.commit()
-        .map_err(|e| format!("提交 {MODEL_FAILOVER_SETTINGS_TABLE} 事务失败：{e}"))?;
-    // 标脏放在 commit 之后：事务回滚时不该触发自动同步。
+        .map_err(|e| format!("failed to commit {MODEL_FAILOVER_SETTINGS_TABLE} transaction: {e}"))?;
+    // Mark dirty after commit: an auto-sync must not be triggered when the transaction rolls back.
     crate::services::webdav_auto_sync::mark_dirty();
     Ok(())
 }

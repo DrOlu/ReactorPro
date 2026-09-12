@@ -649,7 +649,7 @@ function DeviceRow(props: {
       await onUpdateName(nameDraft);
       setEditing(false);
     } catch {
-      // 父组件保留页面级错误；编辑区继续打开，便于用户修正后重试。
+      // The parent component keeps the page-level error; the editor stays open so the user can correct and retry.
     }
   }
 

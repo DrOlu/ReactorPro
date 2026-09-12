@@ -55,7 +55,7 @@ fn validate_cron_expression_accepts_six_field_syntax() {
 #[test]
 fn validate_cron_expression_rejects_five_field_syntax() {
     let error = validate_cron_expression("* * * * *").expect_err("reject five-field cron");
-    assert!(error.contains("六段"));
+    assert!(error.contains("six-field"));
 }
 
 #[test]
@@ -150,7 +150,7 @@ fn cron_apply_reorder_requires_full_permutation() {
             }],
         ))
         .expect_err("partial reorder rejected");
-    assert!(error.contains("全部"));
+    assert!(error.contains("all "));
 
     let reordered = store
         .cron_apply(apply_input(

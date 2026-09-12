@@ -66,10 +66,11 @@ pub(crate) fn history_share_resolve_error_code(message: &str) -> i32 {
     if normalized.is_empty() {
         return 500;
     }
-    if normalized.contains("分享 token 不能为空") {
+    if normalized.contains("Share token must not be empty") {
         return 400;
     }
-    if normalized.contains("分享链接不存在或已关闭") || normalized.contains("未找到对应的历史对话")
+    if normalized.contains("Share link does not exist or has been closed")
+        || normalized.contains("No matching history conversation found")
     {
         return 404;
     }

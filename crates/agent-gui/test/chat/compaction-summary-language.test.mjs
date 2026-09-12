@@ -37,7 +37,7 @@ test("english conversations keep the default english summary", () => {
 test("chinese-dominant conversations are detected as Chinese", () => {
   assert.equal(
     detectCompactionSummaryLanguage(
-      payloadWith({ userTexts: ["帮我重构这个配置加载器，然后补上单元测试。"] }),
+      payloadWith({ userTexts: ["\u5E2E\u6211\u91CD\u6784\u8FD9\u4E2A\u914D\u7F6E\u52A0\u8F7D\u5668\uFF0C\u7136\u540E\u8865\u4E0A\u5355\u5143\u6D4B\u8BD5\u3002"] }),
     ),
     "Chinese",
   );
@@ -47,7 +47,7 @@ test("mixed chinese with english identifiers still detects Chinese", () => {
   assert.equal(
     detectCompactionSummaryLanguage(
       payloadWith({
-        userTexts: ["把 src/lib/config.ts 里的 loadConfig 改成异步实现，注意保留 retry 逻辑。"],
+        userTexts: ["\u628A src/lib/config.ts \u91CC\u7684 loadConfig \u6539\u6210\u5F02\u6B65\u5B9E\u73B0\uFF0C\u6CE8\u610F\u4FDD\u7559 retry \u903B\u8F91\u3002"],
       }),
     ),
     "Chinese",
@@ -57,7 +57,7 @@ test("mixed chinese with english identifiers still detects Chinese", () => {
 test("japanese conversations are detected as Japanese", () => {
   assert.equal(
     detectCompactionSummaryLanguage(
-      payloadWith({ userTexts: ["この設定ローダーをリファクタリングしてテストを追加してください。"] }),
+      payloadWith({ userTexts: ["\u3053\u306E\u8A2D\u5B9A\u30ED\u30FC\u30C0\u30FC\u3092\u30EA\u30D5\u30A1\u30AF\u30BF\u30EA\u30F3\u30B0\u3057\u3066\u30C6\u30B9\u30C8\u3092\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044\u3002"] }),
     ),
     "Japanese",
   );
@@ -66,7 +66,7 @@ test("japanese conversations are detected as Japanese", () => {
 test("korean conversations are detected as Korean", () => {
   assert.equal(
     detectCompactionSummaryLanguage(
-      payloadWith({ userTexts: ["이 설정 로더를 리팩터링하고 테스트를 추가해 주세요."] }),
+      payloadWith({ userTexts: ["\uC774 \uC124\uC815 \uB85C\uB354\uB97C \uB9AC\uD329\uD130\uB9C1\uD558\uACE0 \uD14C\uC2A4\uD2B8\uB97C \uCD94\uAC00\uD574 \uC8FC\uC138\uC694."] }),
     ),
     "Korean",
   );
@@ -75,14 +75,14 @@ test("korean conversations are detected as Korean", () => {
 test("next_user_message participates in detection", () => {
   assert.equal(
     detectCompactionSummaryLanguage(
-      payloadWith({ userTexts: [], nextUserMessage: "继续，把剩下的模块也迁移完。" }),
+      payloadWith({ userTexts: [], nextUserMessage: "\u7EE7\u7EED\uFF0C\u628A\u5269\u4E0B\u7684\u6A21\u5757\u4E5F\u8FC1\u79FB\u5B8C\u3002" }),
     ),
     "Chinese",
   );
 });
 
 test("tiny samples fall back to the english default", () => {
-  assert.equal(detectCompactionSummaryLanguage(payloadWith({ userTexts: ["好"] })), undefined);
+  assert.equal(detectCompactionSummaryLanguage(payloadWith({ userTexts: ["\u597D"] })), undefined);
   assert.equal(detectCompactionSummaryLanguage(payloadWith({ userTexts: [] })), undefined);
 });
 
@@ -93,7 +93,7 @@ test("assistant/tool messages do not affect detection", () => {
     role: "assistant",
     timestamp: 99,
     stopReason: "stop",
-    text: "这里是一大段助手输出的中文内容，不应参与语言判定。".repeat(10),
+    text: "\u8FD9\u91CC\u662F\u4E00\u5927\u6BB5\u52A9\u624B\u8F93\u51FA\u7684\u4E2D\u6587\u5185\u5BB9\uFF0C\u4E0D\u5E94\u53C2\u4E0E\u8BED\u8A00\u5224\u5B9A\u3002".repeat(10),
   });
   assert.equal(detectCompactionSummaryLanguage(payload), undefined);
 });
@@ -114,13 +114,13 @@ test("buildCompactionSystemPrompt embeds the detected language directive", () =>
 test("summarizeConversation sends the language directive for chinese payloads", async () => {
   const { summarizeConversation } = loader.loadModule("src/lib/chat/compaction/summarizer.ts");
   const validXml = `<summary>
-<task>重构压缩子系统</task>
-<state>已修改 src/app.ts，${"细节说明。".repeat(60)}</state>
+<task>\u91CD\u6784\u538B\u7F29\u5B50\u7CFB\u7EDF</task>
+<state>\u5DF2\u4FEE\u6539 src/app.ts\uFF0C${"\u7EC6\u8282\u8BF4\u660E\u3002".repeat(60)}</state>
 <artifacts>
-- [file] src/app.ts | modified | 重写入口
+- [file] src/app.ts | modified | \u91CD\u5199\u5165\u53E3
 </artifacts>
 <next_steps>
-1. 接好 controller
+1. \u63A5\u597D controller
 </next_steps>
 </summary>`;
   const calls = [];
@@ -133,13 +133,13 @@ test("summarizeConversation sends the language directive for chinese payloads", 
       system_prompt: "base prompt",
       previous_summary: null,
       active_segment_messages: [
-        { index: 0, role: "user", timestamp: 1, content: "请帮我修改 src/app.ts 的入口逻辑。" },
+        { index: 0, role: "user", timestamp: 1, content: "\u8BF7\u5E2E\u6211\u4FEE\u6539 src/app.ts \u7684\u5165\u53E3\u903B\u8F91\u3002" },
         {
           index: 1,
           role: "assistant",
           timestamp: 2,
           stopReason: "stop",
-          text: "已修改 src/app.ts。",
+          text: "\u5DF2\u4FEE\u6539 src/app.ts\u3002",
         },
       ],
     },
@@ -172,5 +172,5 @@ test("summarizeConversation sends the language directive for chinese payloads", 
       "You MUST write the free-text summary content in Chinese",
     ),
   );
-  assert.ok(result.summaryText.includes("重构压缩子系统"));
+  assert.ok(result.summaryText.includes("\u91CD\u6784\u538B\u7F29\u5B50\u7CFB\u7EDF"));
 });

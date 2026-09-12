@@ -17,10 +17,11 @@ export type ConversationContextBuildOptions = {
 };
 
 /**
- * 组成 system prompt 的各段原文。
+ * The raw text of each segment composing the system prompt.
  *
- * 轨迹按这些边界分段哈希去重：整文哈希在这里必然失效，因为 memory 段每轮重渲染，
- * 会让每一轮都产生一份新的全文快照。
+ * The trajectory hashes these boundaries per segment for dedup: whole-text
+ * hashing necessarily fails here because the memory segment is re-rendered every
+ * turn, producing a fresh full-text snapshot each turn.
  */
 export type PreparedSystemPromptSlots = {
   base?: string;
@@ -32,12 +33,13 @@ export type PreparedSystemPromptSlots = {
 };
 
 /**
- * 收集最近一次上下文构建的分段原文。
+ * Collects the segment raw text from the most recent context build.
  *
- * 用 holder 而不是返回值，是为了不改动 `buildPreparedContext` 的返回类型——它被
- * 多处以 `Context` 直接消费。
+ * A holder is used instead of a return value so as not to change
+ * `buildPreparedContext`'s return type — it is consumed directly as `Context` in
+ * several places.
  *
- * @returns capture 供构建器回调，read 供埋点读取最近一次结果。
+ * @returns capture for the builder callback, read for instrumentation to read the latest result.
  */
 export function createPreparedSystemPromptSlotHolder(): {
   capture: (slots: PreparedSystemPromptSlots) => void;
@@ -76,11 +78,13 @@ export function buildPreparedContext(params: {
   skillMentionUpdates?: SkillMentionUpdateMap | null;
   includeAbortedMessages?: boolean;
   includeUploadedFilesMetadata?: boolean;
-  /** 轨迹埋点用的分段回调；不传时零开销。 */
+  /** Segment callback for trajectory instrumentation; zero overhead when not passed. */
   captureSlots?: (slots: PreparedSystemPromptSlots) => void;
 }): Context {
-  // AGENTS / Skills / memory 段会拼进 systemPrompt，beginRequest 的 fixedTokens
-  // 按这份全文估算——不是「不算进用量」。它们只是不该再被单独叠进压缩输入。
+  // The AGENTS / Skills / memory segments are concatenated into systemPrompt,
+  // and beginRequest's fixedTokens is estimated from this full text — they are
+  // not "excluded from usage". They merely should not be stacked separately into
+  // the compaction input.
   const withTools = buildCompactionContext(params.state, params.tools, {
     includeAbortedMessages: params.includeAbortedMessages,
     includeUploadedFilesMetadata: params.includeUploadedFilesMetadata,
@@ -104,11 +108,15 @@ export function buildPreparedContext(params: {
     systemPrompt = appendSystemPrompt(systemPrompt, params.memoryPrompt);
   }
 
-  // memory 的动态部分挂在对应 user 消息尾部,而不是继续往 system 段里塞:
-  // system 段一变,整条缓存前缀连同全部历史一起作废。
-  // skills 的「显式提及」同理:它只对当轮有效,留在 system 段等于一次输入连废
-  // 两次前缀。两者都走同一个挂载口径,顺序固定(memory 在前、skills 在后),
-  // 已挂上的块在后续轮次原样重放,历史区间的字节才保持稳定。
+  // The dynamic part of memory is attached to the tail of the corresponding user
+  // message rather than being stuffed into the system segment: once the system
+  // segment changes, the entire cache prefix is invalidated along with all
+  // history. The same applies to skills' "explicit mentions": they are only
+  // valid for the current turn, and leaving them in the system segment would
+  // invalidate two prefixes with one input. Both use the same attachment
+  // convention with a fixed order (memory first, skills after), and
+  // already-attached blocks are replayed verbatim in later turns, so the bytes
+  // of the history range stay stable.
   const withMemory = attachMemoryTurnUpdates(withTools.messages, params.memoryTurnUpdates);
   const messages = attachMemoryTurnUpdates(withMemory, params.skillMentionUpdates);
   const withMessages = messages === withTools.messages ? withTools : { ...withTools, messages };

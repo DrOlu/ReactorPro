@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
 function freshModule() {
-  // 模块持有会话级缓冲，每个用例要一份干净的实例。
+  // The module holds conversation-level buffers, so each test case needs a clean instance.
   const loader = createWebModuleLoader({
     rootDir: fileURLToPath(new URL("../", import.meta.url)),
   });
@@ -99,7 +99,8 @@ test("the snapshot reference is stable until new events arrive", () => {
     event: { k: "step_start" },
   });
   const second = live.liveTrajectoryEvents("c1");
-  // useSyncExternalStore 用 Object.is 比较；同引用会让它认为「没变化」而不重渲染。
+  // useSyncExternalStore compares with Object.is; the same reference makes it
+  // think nothing changed and skip the re-render.
   assert.notEqual(second, first, "a new event must produce a new reference");
   assert.equal(second.length, 2);
 });

@@ -213,15 +213,18 @@ func TestImportDirectoryRejectsUnknownTarget(t *testing.T) {
 	}
 }
 
-// 目录总量越过网关/桌面端默认的 64 MiB WebSocket 消息上限时，必须仍以小块
-// envelope 流式送达；回归保护：整包发送会在 Agent 侧超限断连（PR #484 评审）。
+// When the total directory size exceeds the gateway/desktop default 64 MiB
+// WebSocket message limit, it must still be streamed in small envelopes;
+// regression guard: sending it as one package disconnects the Agent side for
+// exceeding the limit (PR #484 review).
 func TestImportDirectoryStreamsPayloadBeyondMessageLimit(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping 64 MiB+ end-to-end import in short mode")
 	}
 
-	// 几十次 chunk 往返共用同一个整体超时；放宽以免慢 CI 抖动。
+	// Dozens of chunk round trips share a single overall timeout; relax it to
+	// avoid flakiness on slow CI.
 	sm, agentSession, handler := newDirectoryImportServer(t, 30*time.Second)
 
 	const totalSize = (65 << 20) + 17
@@ -379,9 +382,12 @@ func TestImportDirectoryStreamsPayloadBeyondMessageLimit(t *testing.T) {
 	}
 }
 
-// RequestTimeout 是单次往返的空闲超时而非整个传输的绝对上限：只要每个
-// chunk 都在推进，累计耗时超过 RequestTimeout 的传输也必须成功（回归保护：
-// 旧实现整个传输复用同一个 context.WithTimeout，大目录在慢链路上会被整体取消）。
+// RequestTimeout is the idle timeout for a single round trip, not an absolute
+// cap on the whole transfer: as long as each chunk keeps making progress, a
+// transfer whose cumulative time exceeds RequestTimeout must still succeed
+// (regression guard: the old implementation reused one context.WithTimeout for
+// the entire transfer, so a large directory on a slow link was cancelled
+// wholesale).
 func TestImportDirectorySurvivesSlowChunkAcks(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -392,8 +398,9 @@ func TestImportDirectorySurvivesSlowChunkAcks(t *testing.T) {
 	const ackDelay = 300 * time.Millisecond
 	sm, agentSession, handler := newDirectoryImportServer(t, requestTimeout)
 
-	// 4 个 chunk + START + COMMIT = 6 次往返；按 ackDelay 累计 1.8s，
-	// 显著超过 1s 的 RequestTimeout，逼出"绝对超时"回归。
+	// 4 chunks + START + COMMIT = 6 round trips; at ackDelay they accumulate to
+	// 1.8s, well beyond the 1s RequestTimeout, flushing out the "absolute
+	// timeout" regression.
 	const totalSize = (3 << 20) + 17
 	content := bytes.Repeat([]byte("s"), totalSize)
 

@@ -180,7 +180,7 @@ function ensureWebUiEmbedStub() {
   mkdirSync(distDir, { recursive: true });
   writeFileSync(
     indexPath,
-    '<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><title>LiveAgent Gateway</title></head><body><p>WebUI embed stub. Start the WebUI dev server for the real SPA.</p></body></html>\n',
+    '<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><title>ReactorPro Gateway</title></head><body><p>WebUI embed stub. Start the WebUI dev server for the real SPA.</p></body></html>\n',
   );
 }
 
@@ -341,7 +341,7 @@ async function startService(service) {
   }
   if (await portIsListening(ports[service])) {
     console.error(
-      `${service}: port ${ports[service]} is occupied by an unmanaged process (${urls[service]}); stop that process before starting this checkout. An HTTP response does not identify it as LiveAgent.`,
+      `${service}: port ${ports[service]} is occupied by an unmanaged process (${urls[service]}); stop that process before starting this checkout. An HTTP response does not identify it as ReactorPro.`,
     );
     return false;
   }

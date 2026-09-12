@@ -27,17 +27,17 @@ const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 10;
 const MIN_REQUEST_TIMEOUT_SECS: u64 = 2;
 const MAX_REQUEST_TIMEOUT_SECS: u64 = 30;
 
-// KEEP IN SYNC:内置预设脚本与两端 providerUtils.ts 的 USAGE_QUERY_PRESET_SCRIPTS
-// 逐字符一致(前端选模板时填充可编辑副本;脚本为空的存量配置由这里兜底执行)。
-// 内容一比一复刻 cc-switch UsageScriptModal 的 GENERAL/NEW_API 模板,仅
-// User-Agent 品牌与 NewAPI 文案默认值(套餐名/失败消息须 locale 无关)不同。
+// KEEP IN SYNC: the built-in preset scripts and the USAGE_QUERY_PRESET_SCRIPTS of providerUtils.ts on both ends
+// are character-for-character identical (the frontend fills an editable copy when a template is selected; existing configs with an empty script are executed by the fallback here).
+// The content replicates cc-switch UsageScriptModal's GENERAL/NEW_API templates one-to-one, except for the
+// User-Agent branding and NewAPI copy defaults (plan names/failure messages must be locale-independent).
 const GENERAL_SCRIPT: &str = r#"({
   request: {
     url: "{{baseUrl}}/user/balance",
     method: "GET",
     headers: {
       "Authorization": "Bearer {{apiKey}}",
-      "User-Agent": "LiveAgent/1.0"
+      "User-Agent": "ReactorPro/1.0"
     }
   },
   extractor: function(response) {
@@ -56,7 +56,7 @@ const NEWAPI_SCRIPT: &str = r#"({
     headers: {
       "Content-Type": "application/json",
       "Authorization": "Bearer {{accessToken}}",
-      "User-Agent": "LiveAgent/1.0",
+      "User-Agent": "ReactorPro/1.0",
       "New-Api-User": "{{userId}}"
     },
   },
@@ -137,7 +137,7 @@ impl ProviderUsageService {
 
         match execute_prepared_query(&prepared).await {
             Ok(data) if data.is_empty() => {
-                // 空结果视为脚本/配置问题(确定性失败),不再展示旧值。
+                // An empty result is treated as a script/config problem (deterministic failure); do not display the old value.
                 self.cache().invalidate(provider_id);
                 failed_result("Usage query returned no entries".to_string())
             }
@@ -152,8 +152,8 @@ impl ProviderUsageService {
                     .record_success(provider_id, identity, result.clone());
                 result
             }
-            // 确定性失败(4xx 鉴权/配置、脚本错误)清掉快照立即透出;瞬时失败
-            // (网络/超时/5xx/429)保留上次成功值并标 isStale。
+            // Deterministic failures (4xx auth/config, script errors) clear the snapshot and are surfaced immediately; transient failures
+            // (network/timeout/5xx/429) keep the last successful value and mark it isStale.
             Err(failure) if failure.deterministic => {
                 self.cache().invalidate(provider_id);
                 failed_result(failure.message)
@@ -164,9 +164,9 @@ impl ProviderUsageService {
         }
     }
 
-    /// 「测试查询」:按前端草稿配置执行一次查询——忽略启用开关、不读写缓存、
-    /// 不落库。草稿以编辑器当前内容为准;WebUI 草稿的秘密被脱敏为空串,
-    /// *Configured=true 表示沿用已存密钥。
+    /// "Test query": run a query once using the frontend draft config — ignores the enable switch, does not read or write cache,
+    /// does not persist. The draft reflects the editor's current content; a WebUI draft's secret is redacted to an empty string,
+    /// and *Configured=true means reuse the stored key.
     pub async fn test(&self, provider_id: &str, draft_json: &str) -> ProviderUsageResult {
         let provider = match load_provider(provider_id) {
             Ok(provider) => provider,
@@ -191,7 +191,7 @@ async fn execute_draft_test(
     draft: UsageQueryConfig,
 ) -> ProviderUsageResult {
     provider.usage_query = merge_draft_config(draft, &provider.usage_query);
-    // 测试永远按草稿执行,不受启用开关限制。
+    // Tests always run from the draft and are not subject to the enable switch.
     provider.usage_query.enabled = true;
     let prepared = match prepare_query(&provider) {
         Ok(prepared) => prepared,
@@ -312,32 +312,32 @@ struct UsageQueryConfig {
     mode: String,
     script: String,
     base_url: String,
-    // 查询专用 API Key 覆盖(空则回退供应商自身的 apiKey)。
+    // Query-specific API Key override (empty falls back to the provider's own apiKey).
     #[serde(default)]
     api_key: String,
     access_token: String,
     user_id: String,
     access_key_id: String,
     secret_access_key: String,
-    // Token Plan 供应商(空=按 Base URL 自动检测;智谱团队与个人版 base_url
-    // 相同,必须靠显式选择路由)。
+    // Token Plan provider (empty = auto-detect by Base URL; the Zhipu team and personal editions share the same base_url,
+    // so routing must rely on an explicit selection).
     #[serde(default)]
     coding_plan_provider: String,
-    // 智谱团队套餐:组织/项目 ID(作为 bigmodel-organization / bigmodel-project
-    // 请求头,沿用供应商自身 API Key)。
+    // Zhipu team plan: organization/project ID (sent as bigmodel-organization / bigmodel-project
+    // request headers, reusing the provider's own API Key).
     #[serde(default)]
     team_organization_id: String,
     #[serde(default)]
     team_project_id: String,
-    // *Configured 标志仅在「按草稿测试」时使用:WebUI 草稿的秘密被脱敏为空串,
-    // true 表示沿用已存密钥;常规查询路径不读。
+    // The *Configured flag is only used for "test from draft": a WebUI draft's secret is redacted to an empty string,
+    // true means reuse the stored key; the regular query path does not read it.
     #[serde(default)]
     api_key_configured: bool,
     #[serde(default)]
     access_token_configured: bool,
     #[serde(default)]
     secret_access_key_configured: bool,
-    // 每供应商请求超时(秒,clamp 2-30,缺省 10)。
+    // Per-provider request timeout (seconds, clamped 2-30, default 10).
     #[serde(default)]
     timeout_secs: Option<f64>,
 }
@@ -362,8 +362,8 @@ fn parse_usage_mode(mode: &str) -> Result<UsageQueryMode, String> {
     }
 }
 
-/// 脚本类模式的生效脚本:general/newapi 允许用户编辑后的副本,为空时回退
-/// 内置预设(护住只选了模板未落脚本的存量配置);custom 必须非空。
+/// Effective script for script-based modes: general/newapi allow a user-edited copy, falling back to
+/// the built-in preset when empty (guarding existing configs that selected a template but never stored a script); custom must be non-empty.
 fn effective_script(
     mode: UsageQueryMode,
     config: &UsageQueryConfig,
@@ -405,8 +405,8 @@ fn resolve_timeout(config: &UsageQueryConfig) -> Duration {
 }
 
 fn provider_query_identity(provider: &StoredProvider) -> ProviderQueryIdentity {
-    // 缓存 identity 用生效脚本而非原始 script 字段:general/newapi 空脚本走
-    // 内置预设,预设升级(应用版本变化)也应正确失效缓存。
+    // Cache identity uses the effective script, not the raw script field: for general/newapi an empty script uses
+    // the built-in preset, and a preset upgrade (app version change) should also correctly invalidate the cache.
     let script_identity = parse_usage_mode(provider.usage_query.mode.as_str())
         .ok()
         .and_then(|mode| effective_script(mode, &provider.usage_query).ok().flatten())
@@ -494,8 +494,8 @@ enum QueryFailureKind {
 #[derive(Debug)]
 struct QueryFailure {
     kind: QueryFailureKind,
-    // 确定性失败(鉴权/配置/脚本错误)清快照立即透出;瞬时失败(网络、
-    // 5xx、429)保留上次成功值标 isStale。与前端展示语义耦合,勿随意改判。
+    // Deterministic failures (auth/config/script errors) clear the snapshot and surface immediately; transient failures (network,
+    // 5xx, 429) keep the last successful value and mark it isStale. Coupled to frontend display semantics; do not change the classification casually.
     deterministic: bool,
     message: String,
 }
@@ -518,7 +518,7 @@ impl QueryFailure {
     }
 }
 
-// 4xx 通常是鉴权/配置错(确定性),但超时/限流类除外:408/425/429 按瞬时处理。
+// 4xx is usually an auth/config error (deterministic), except timeout/rate-limit classes: 408/425/429 are treated as transient.
 fn deterministic_http_status(status: reqwest::StatusCode) -> bool {
     status.is_client_error()
         && !matches!(
@@ -566,7 +566,7 @@ fn prepare_query(provider: &StoredProvider) -> Result<PreparedQuery, String> {
         UsageQueryMode::General | UsageQueryMode::Newapi | UsageQueryMode::Custom => {
             let script = effective_script(mode, &provider.usage_query)?
                 .ok_or_else(|| "Usage script is unavailable".to_string())?;
-            // custom 之外的脚本模式强制与 Base URL 同源(HTTPS 由同源校验连带保证)。
+            // Script modes other than custom are forced to be same-origin with the Base URL (HTTPS is additionally guaranteed by the same-origin check).
             prepare_script_query(provider, script, mode != UsageQueryMode::Custom)
         }
     }
@@ -625,7 +625,7 @@ fn prepare_balance_query(provider: &StoredProvider) -> Result<PreparedQuery, Str
             ProviderAdapter::DeepSeek,
             "https://api.deepseek.com/user/balance",
         ),
-        // 国内站(CNY)与国际站(USD)是两套独立账号体系,按 host 直连各自端点。
+        // The China site (CNY) and the international site (USD) are two independent account systems; connect directly to each endpoint by host.
         "api.stepfun.com" => (
             ProviderAdapter::StepFun,
             "https://api.stepfun.com/v1/accounts",
@@ -668,9 +668,9 @@ fn prepare_coding_plan_query(provider: &StoredProvider) -> Result<PreparedQuery,
         .trim()
         .to_ascii_lowercase();
 
-    // 智谱团队套餐:base_url 与个人版相同无法自动区分,必须显式选择路由。
-    // 固定国内站,quota 同路径 + `?type=2` + 组织/项目请求头;响应 shape 与
-    // 个人版一致,复用 Zhipu 解析器(对齐 cc-switch query_zhipu_team)。
+    // Zhipu team plan: its base_url is identical to the personal edition and cannot be auto-distinguished, so the route must be selected explicitly.
+    // Fixed to the China site, quota on the same path + `?type=2` + organization/project headers; the response shape matches
+    // the personal edition, so the Zhipu parser is reused (matching cc-switch query_zhipu_team).
     if plan == "zhipu_team" {
         let organization = provider.usage_query.team_organization_id.trim();
         let project = provider.usage_query.team_project_id.trim();
@@ -703,8 +703,8 @@ fn prepare_coding_plan_query(provider: &StoredProvider) -> Result<PreparedQuery,
         ));
     }
 
-    // ZenMux 支持查询专用 baseUrl/apiKey 覆盖(cc-switch 同款);其余供应商
-    // 一律用供应商自身凭据与地址。
+    // ZenMux supports a query-specific baseUrl/apiKey override (same as cc-switch); other providers
+    // always use their own credentials and address.
     let zenmux = plan == "zenmux";
     let base_source = if zenmux && !provider.usage_query.base_url.trim().is_empty() {
         provider.usage_query.base_url.trim()
@@ -898,9 +898,9 @@ async fn execute_prepared_request(
                 QueryFailureKind::Transient => "Volcengine usage request failed",
             };
             let mut failure = QueryFailure::new(kind, message);
-            // 火山错误体只区分 Auth/Soft(Soft 才触发 fallback);限流/服务端故障
-            // (429/5xx + FlowLimitExceeded 等错误体)的确定性以 HTTP 状态为准,
-            // 保住 keep-last-good 快照。
+            // The Volcano error body only distinguishes Auth/Soft (only Soft triggers fallback); the determinism of rate-limit/server failures
+            // (429/5xx + FlowLimitExceeded and similar error bodies) follows the HTTP status,
+            // preserving the keep-last-good snapshot.
             if kind != QueryFailureKind::Auth && !response.status.is_success() {
                 failure.deterministic = deterministic_http_status(response.status);
             }
@@ -970,11 +970,11 @@ async fn send_bounded_request(
     request: &HttpRequest,
     timeout: Duration,
 ) -> Result<HttpResponse, QueryFailure> {
-    // 出网统一走应用代理配置(显式 no_proxy 语义,代理未启用即直连);本地
-    // 与公网地址均默认放行,代理配置无效时 fail fast。
-    // 例外:回环目标(localhost/127.x/::1)永远直连——代理侧的 localhost 指向
-    // 代理所在机器,经代理必然打不到本机服务(本地 NewAPI/one-api 中转是用量
-    // 查询的常见目标)。
+    // Outbound requests uniformly use the app proxy config (explicit no_proxy semantics; direct connection when the proxy is disabled); local
+    // and public addresses are allowed by default, and an invalid proxy config fails fast.
+    // Exception: loopback targets (localhost/127.x/::1) always connect directly — a proxy-side localhost points to
+    // the proxy's machine, and going through the proxy can never reach a service on this host (local NewAPI/one-api relays are common
+    // targets for usage queries).
     let builder = if is_loopback_destination(&request.url) {
         reqwest::Client::builder().no_proxy()
     } else {
@@ -1111,7 +1111,7 @@ fn parse_adapter_response(
 }
 
 fn parse_deepseek(body: &Value) -> Result<Vec<UsageData>, String> {
-    // 对齐 cc-switch:顶层 is_available=false 表示账户不可用(欠费/暂停)。
+    // Matching cc-switch: a top-level is_available=false means the account is unavailable (arrears/suspended).
     let unavailable = body.get("is_available").and_then(Value::as_bool) == Some(false);
     let infos = body
         .get("balance_infos")
@@ -1288,7 +1288,7 @@ fn parse_volcengine_coding(body: &Value) -> Vec<UsageData> {
         .collect()
 }
 
-// 配额窗口用稳定 token 作 planName(前端 i18n 映射;未识别 token 原样展示)。
+// Quota windows use a stable token as planName (mapped by frontend i18n; an unrecognized token is displayed as-is).
 const WINDOW_5H: &str = "window:5h";
 const WINDOW_WEEKLY: &str = "window:weekly";
 const WINDOW_MONTHLY: &str = "window:monthly";
@@ -1640,9 +1640,9 @@ fn validate_script_request(request: ScriptRequest) -> Result<HttpRequest, String
     })
 }
 
-// extractor 返回值校验:对齐 cc-switch validate_single_usage——单对象自动包
-// 数组、八字段全可选、null 视为缺失、类型不符逐字段报错;total 允许 -1(前端
-// 渲染 ∞)。完全空的条目视为脚本缺陷。
+// extractor return value validation: matching cc-switch validate_single_usage — a single object is automatically wrapped
+// as an array, all eight fields are optional, null is treated as missing, and type mismatches are reported field by field; total allows -1 (the frontend
+// renders ∞). A completely empty entry is treated as a script defect.
 fn parse_script_result(result: &Value) -> Result<Vec<UsageData>, String> {
     let items = if let Some(items) = result.as_array() {
         if items.is_empty() {
@@ -1663,7 +1663,7 @@ fn parse_script_usage(item: &Value) -> Result<UsageData, String> {
         .as_object()
         .ok_or_else(|| "Usage script result entries must be objects".to_string())?;
     let data = UsageData {
-        // 兼容旧脚本的 label 字段;planName 优先。
+        // Compatible with the old script's label field; planName takes precedence.
         plan_name: script_string(object, "planName", 128)?.or(script_string(object, "label", 128)?),
         extra: script_string(object, "extra", 256)?,
         is_valid: script_bool(object, "isValid")?,
@@ -1768,7 +1768,7 @@ mod tests {
         assert!(validate_destination("file:///etc/passwd").is_err());
         assert!(validate_destination("not a url").is_err());
         assert!(validate_destination("https://api.example.test").is_ok());
-        // 本地/私网地址与 http 默认放行(经应用代理配置出网)。
+        // Local/private addresses and http are allowed by default (outbound through the app proxy config).
         assert!(validate_destination("http://127.0.0.1:8080").is_ok());
         assert!(validate_destination("https://[::1]").is_ok());
         assert!(validate_destination("http://192.168.1.10:3000").is_ok());
@@ -1829,7 +1829,7 @@ mod tests {
             "https://api.example.test/v1",
         )
         .is_ok());
-        // 本地 http 端点(如自建 NewAPI)默认放行,但仍要求与 Base URL 同源。
+        // A local http endpoint (such as a self-hosted NewAPI) is allowed by default, but must still be same-origin with the Base URL.
         assert!(validate_standard_destination(
             "http://127.0.0.1:3000/user/balance",
             "http://127.0.0.1:3000/v1",
@@ -1928,8 +1928,8 @@ mod tests {
         timeout.usage_query.timeout_secs = Some(20.0);
         assert_ne!(base_identity, provider_query_identity(&timeout));
 
-        // general 空脚本走内置预设:显式落一份与预设一致的脚本不改变 identity,
-        // 改动脚本内容才改变。
+        // An empty general script uses the built-in preset: explicitly storing a script identical to the preset does not change identity,
+        // only changing the script content does.
         let mut explicit = base.clone();
         explicit.usage_query.script = GENERAL_SCRIPT.to_string();
         assert_eq!(base_identity, provider_query_identity(&explicit));
@@ -1964,7 +1964,7 @@ mod tests {
                 ProviderAdapter::StepFun,
                 "https://api.stepfun.com/v1/accounts",
             ),
-            // 国际站独立账号体系:不得把 .ai 的 Key 发往国内站端点。
+            // The international site is an independent account system: a .ai Key must not be sent to the China-site endpoint.
             (
                 "https://api.stepfun.ai/v1",
                 ProviderAdapter::StepFunIntl,
@@ -2075,8 +2075,8 @@ mod tests {
 
     #[test]
     fn balance_adapters_flag_unavailable_and_exhausted_accounts() {
-        // 对齐 cc-switch:DeepSeek is_available=false、OpenRouter/Novita 零余额
-        // 都要带 isValid=false 让前端标红,而不是渲染成正常余额行。
+        // Matching cc-switch: DeepSeek is_available=false, OpenRouter/Novita zero balance
+        // must all carry isValid=false so the frontend marks them red rather than rendering a normal balance row.
         let deepseek = parse_adapter_response(
             ProviderAdapter::DeepSeek,
             &json!({
@@ -2306,7 +2306,7 @@ mod tests {
         assert_eq!(valid[0].remaining, Some(4.2));
         assert_eq!(valid[0].unit.as_deref(), Some("USD"));
 
-        // 富模型:字段全可选、类型校验、多套餐数组、total=-1 表示无限。
+        // Rich model: all fields optional, type validation, multiple plan arrays, total=-1 means unlimited.
         let rich = extract_script_entries(
             script,
             &ScriptVariables::default(),
@@ -2504,7 +2504,7 @@ mod tests {
         persisted.access_token = "saved-token".to_string();
         persisted.secret_access_key = "saved-secret".to_string();
 
-        // WebUI 草稿:秘密被脱敏为空串 + Configured=true → 沿用已存密钥。
+        // WebUI draft: secret redacted to an empty string + Configured=true -> reuse the stored key.
         let mut redacted = test_provider("newapi", "https://api.example.test/v1").usage_query;
         redacted.api_key_configured = true;
         redacted.access_token_configured = true;
@@ -2514,7 +2514,7 @@ mod tests {
         assert_eq!(merged.access_token, "saved-token");
         assert_eq!(merged.secret_access_key, "saved-secret");
 
-        // 显式清空(Configured=false)不得回捡旧密钥;新填值优先。
+        // Explicit clearing (Configured=false) must not fall back to the old key; a newly entered value takes precedence.
         let mut cleared = test_provider("newapi", "https://api.example.test/v1").usage_query;
         cleared.access_token = "fresh-token".to_string();
         let merged = merge_draft_config(cleared, &persisted);
@@ -2525,8 +2525,8 @@ mod tests {
 
     #[tokio::test]
     async fn draft_test_runs_editor_config_even_when_usage_query_is_disabled() {
-        // 「测试查询」以编辑器草稿为准:已存配置是"未启用 + general",草稿是
-        // 自定义脚本——必须按草稿执行并真实发出请求。
+        // "Test query" uses the editor draft: the stored config is "disabled + general", while the draft is
+        // a custom script — it must run from the draft and actually send a request.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind test server");
@@ -2604,8 +2604,8 @@ mod tests {
 
     #[test]
     fn zhipu_team_plan_routes_by_explicit_selection_with_org_headers() {
-        // 与个人版 base_url 相同,靠显式 coding_plan_provider 路由:同路径 +
-        // ?type=2 + 组织/项目请求头,Authorization 不加 Bearer(对齐 cc-switch)。
+        // Same base_url as the personal edition; route via an explicit coding_plan_provider: same path +
+        // ?type=2 + organization/project headers, without adding Bearer to Authorization (matching cc-switch).
         let mut provider = test_provider("coding-plan", "https://open.bigmodel.cn/api/paas/v4");
         provider.usage_query.coding_plan_provider = "zhipu_team".to_string();
         provider.usage_query.team_organization_id = "org-1".to_string();
@@ -2631,12 +2631,12 @@ mod tests {
             Some("proj-1"),
         );
 
-        // 组织/项目缺一不可。
+        // Organization/project are both required.
         let mut missing = provider.clone();
         missing.usage_query.team_project_id = String::new();
         assert!(prepare_query(&missing).is_err());
 
-        // 未显式选择团队版时,同一 base_url 仍走个人版端点(不带 ?type=2)。
+        // When the team edition is not explicitly selected, the same base_url still uses the personal-edition endpoint (without ?type=2).
         let personal = test_provider("coding-plan", "https://open.bigmodel.cn/api/paas/v4");
         let prepared = prepare_query(&personal).expect("prepare personal zhipu query");
         assert_eq!(
@@ -2671,7 +2671,7 @@ mod tests {
 
     #[test]
     fn script_modes_fall_back_to_builtin_presets_when_script_is_empty() {
-        // 选了模板但没落脚本的存量配置必须仍可查询。
+        // Existing configs that selected a template but stored no script must still be queryable.
         let general = test_provider("general", "https://api.example.test/v1");
         let prepared = prepare_query(&general).expect("general preset fallback");
         assert_eq!(
@@ -2694,7 +2694,7 @@ mod tests {
                 .headers
                 .get("User-Agent")
                 .map(String::as_str),
-            Some("LiveAgent/1.0"),
+            Some("ReactorPro/1.0"),
         );
 
         let mut newapi = test_provider("newapi", "https://api.example.test/v1");
@@ -2705,7 +2705,7 @@ mod tests {
             prepared.primary.request.url.as_str(),
             "https://api.example.test/v1/api/user/self"
         );
-        // {{accessToken}}/{{userId}} 必须替换进请求头,不得残留占位符。
+        // {{accessToken}}/{{userId}} must be substituted into the request headers with no placeholder left behind.
         assert_eq!(
             prepared
                 .primary
@@ -2734,8 +2734,8 @@ mod tests {
 
     #[tokio::test]
     async fn general_preset_substitutes_variables_end_to_end() {
-        // 全链路实测:预设脚本经 QuickJS 渲染 → Rust 发出 HTTP → 捕获线上请求
-        // 字节,证明 {{baseUrl}}/{{apiKey}} 真实替换;extractor 再解析响应。
+        // End-to-end: the preset script is rendered via QuickJS -> Rust sends HTTP -> captures the live request
+        // bytes, proving {{baseUrl}}/{{apiKey}} are really substituted; the extractor then parses the response.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind test server");
@@ -2774,7 +2774,7 @@ mod tests {
             "unexpected request line: {raw_request}",
         );
         assert!(raw_request.contains("authorization: bearer query-secret"));
-        assert!(raw_request.contains("user-agent: liveagent/1.0"));
+        assert!(raw_request.contains("user-agent: reactorpro/1.0"));
         assert!(
             !raw_request.contains("{{"),
             "unreplaced placeholder reached the wire"
@@ -2783,9 +2783,9 @@ mod tests {
 
     #[tokio::test]
     async fn user_style_custom_script_reaches_local_server() {
-        // 回归:自定义脚本打 http://localhost 本地服务(硬编码 URL、顶层尾分号、
-        // 行内注释、全角字符、可选链/空值合并、extractor 返回数组)必须真实发出
-        // 请求并解析回包——复刻用户实测脚本的全部语法特征。
+        // Regression: a custom script hitting a local http://localhost service (hardcoded URL, trailing top-level semicolon,
+        // inline comments, full-width characters, optional chaining/nullish coalescing, extractor returning an array) must actually send
+        // the request and parse the response — replicating every syntax feature of the user's real-world script.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind test server");
@@ -2820,32 +2820,32 @@ mod tests {
 
   extractor: function (response) {
     const plans = [];
-    const IND = "　　"; // 全角缩进
+    const IND = "  "; // indent
     const BRANCH = "├─ ";
     const LAST = "└─ ";
 
-    // 余额
+    // balance
     plans.push({
-      planName: "余额",
+      planName: "Balance",
       remaining: response.balance,
       unit: "USD",
       isValid: true,
     });
 
-    // 订阅（总）
+    // subscription (total)
     if (response.subscription) {
       plans.push({
-        planName: "订阅 ▶",
+        planName: "Subscription ▶",
         total: response.subscription.total_quota,
         used: response.subscription.used_quota,
         remaining: response.subscription.remaining_quota,
         unit: "USD",
         isValid: true,
-        extra: `共 ${response.subscription.active_subscription_count ?? response.subscriptions?.length ?? 0} 个订阅`,
+        extra: `${response.subscription.active_subscription_count ?? response.subscriptions?.length ?? 0} subscription(s)`,
       });
     }
 
-    // 子订阅
+    // sub-subscription
     const subs = Array.isArray(response.subscriptions)
       ? response.subscriptions
       : [];
@@ -2853,7 +2853,7 @@ mod tests {
       const prefix = idx === subs.length - 1 ? LAST : BRANCH;
 
       const expire = sub.expired_at?.slice(0, 10) ?? "-";
-      const resetText = sub.reset_today ? "已重置" : "未重置";
+      const resetText = sub.reset_today ? "Reset" : "Not reset";
 
       plans.push({
         planName: `${IND}${prefix}${sub.name}`,
@@ -2862,7 +2862,7 @@ mod tests {
         used: sub.total_quota - sub.remaining_quota,
         unit: "USD",
         isValid: true,
-        extra: `到期：${expire} · 今日：${resetText}`,
+        extra: `Expires: ${expire} · Today: ${resetText}`,
       });
     });
 
@@ -2878,7 +2878,7 @@ mod tests {
             .await
             .expect("user custom script query");
         assert_eq!(data.len(), 1);
-        assert_eq!(data[0].plan_name.as_deref(), Some("余额"));
+        assert_eq!(data[0].plan_name.as_deref(), Some("Balance"));
         assert_eq!(data[0].is_valid, Some(true));
         assert_eq!(data[0].unit.as_deref(), Some("USD"));
 
@@ -2981,12 +2981,12 @@ mod tests {
 
     #[test]
     fn failure_determinism_matches_keep_last_good_policy() {
-        // 确定性(清快照):鉴权、非超时/限流类的 4xx、脚本/解析错误。
+        // Deterministic (clear snapshot): auth, non-timeout/rate-limit 4xx, script/parse errors.
         assert!(QueryFailure::new(QueryFailureKind::Auth, "auth").deterministic);
         assert!(QueryFailure::new(QueryFailureKind::Soft, "script").deterministic);
         assert!(QueryFailure::http(reqwest::StatusCode::NOT_FOUND, "404").deterministic);
         assert!(QueryFailure::http(reqwest::StatusCode::BAD_REQUEST, "400").deterministic);
-        // 瞬时(保留旧值标 isStale):网络、5xx、408/425/429。
+        // Transient (keep the old value marked isStale): network, 5xx, 408/425/429.
         assert!(!QueryFailure::new(QueryFailureKind::Transient, "net").deterministic);
         assert!(!QueryFailure::http(reqwest::StatusCode::REQUEST_TIMEOUT, "408").deterministic);
         assert!(!QueryFailure::http(reqwest::StatusCode::TOO_EARLY, "425").deterministic);
@@ -2999,8 +2999,8 @@ mod tests {
 
     #[tokio::test]
     async fn volcengine_throttling_body_stays_transient_for_keep_last_good() {
-        // 429/5xx + 火山错误体(FlowLimitExceeded 等):kind 仍为 Soft(可触发
-        // fallback),但确定性必须跟随 HTTP 状态——不得误清 keep-last-good 快照。
+        // 429/5xx + Volcano error body (FlowLimitExceeded etc.): kind is still Soft (can trigger
+        // fallback), but determinism must follow the HTTP status — must not mistakenly clear the keep-last-good snapshot.
         let (url, server) = serve_once(|_| {
             let body = r#"{"ResponseMetadata":{"Error":{"Code":"FlowLimitExceeded","Message":"throttled"}}}"#;
             format!(
@@ -3041,7 +3041,7 @@ mod tests {
         assert!(!provider.usage_query.enabled);
         assert!(provider.usage_query.mode.is_empty());
 
-        // 缺新增字段(apiKey/timeoutSecs)的存量 usageQuery JSON 也必须能反序列化。
+        // Existing usageQuery JSON missing the newly added fields (apiKey/timeoutSecs) must still deserialize.
         let provider: StoredProvider = serde_json::from_value(serde_json::json!({
             "type": "codex",
             "baseUrl": "https://api.example.test/v1",

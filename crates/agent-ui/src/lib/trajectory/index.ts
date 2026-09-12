@@ -1,7 +1,8 @@
 /**
- * 轨迹域对外导出面。
+ * Public export surface of the trajectory domain.
  *
- * 宿主与 UI 只从这里导入，不深入具体模块，便于后续内部重组。
+ * Hosts and the UI import only from here, not into specific modules, easing later
+ * internal restructuring.
  */
 
 export type { TrajectoryTurnWalkEntry } from "./contentIndex";

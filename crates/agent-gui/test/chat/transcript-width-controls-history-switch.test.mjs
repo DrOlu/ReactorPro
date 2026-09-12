@@ -3,20 +3,25 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
-// #749：打开历史会话后宽度手柄不可用，收起侧栏才恢复。源码里有两条分支能造成
-// 同一表象：(1) 历史加载遮罩（z-30、不透传指针）在挂载期间压住 z-10 的手柄；
-// (2) 宿主 ≤ 624px 时组件整体不渲染，只有 ResizeObserver 再次送达才恢复。
-// 本测试用 jsdom + 真实 react-dom 验证修复后的不变量：
-// - 遮罩挂载期间手柄挂起；遮罩离开的同一次 commit 里手柄回来，且宿主被同步重测；
-// - 宿主跨过 624/625px 阈值时手柄由观察器自动隐藏/恢复；
-// - 无关的父级重渲染不改变手柄状态；
-// - 根节点常驻并带 data-transcript-width-state，运行时能直接读出手柄被哪道闸关掉。
+// #749: after opening a history conversation the width handle was unusable, and only collapsed
+// back once the sidebar was hidden. Two branches in the source can produce the same symptom:
+// (1) the history loading overlay (z-30, not pointer-transparent) covers the z-10 handle while
+// mounted; (2) when the host is <= 624px the component does not render at all, and only recovers
+// when the ResizeObserver delivers again. This test uses jsdom + real react-dom to verify the
+// post-fix invariants:
+// - The handle is suspended while the overlay is mounted; in the same commit the overlay leaves,
+//   the handle returns and the host is re-measured synchronously;
+// - When the host crosses the 624/625px threshold the handle is automatically hidden/restored by
+//   the observer;
+// - Unrelated parent re-renders do not change handle state;
+// - The root node is persistent and carries data-transcript-width-state, so at runtime one can
+//   directly read which gate turned the handle off.
 
 const env = await createDomTestEnv();
 const { React, act, createRoot } = env;
 const doc = env.dom.window.document;
 
-// jsdom 没有 ResizeObserver：桩记录被观察的宿主，测试按需"送达一次尺寸变化"。
+// jsdom has no ResizeObserver: the stub records observed hosts, and the test "delivers one size change" on demand.
 const observers = [];
 class ResizeObserverStub {
   constructor(callback) {
@@ -43,7 +48,7 @@ const widthModel = env.loadModule("@liveagent/ui/lib/transcript-width/transcript
 
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
-// 与 ChatTranscript 同构：宽度 owner → 转录根（hostRef）→ 控件是根的子节点。
+// Isomorphic to ChatTranscript: width owner -> transcript root (hostRef) -> the control is a child of the root.
 function Stage(props) {
   const hostRef = React.useRef(null);
   return React.createElement(
@@ -84,7 +89,7 @@ async function mountStage({ stageWidth, width = 768, suspended = false, onWidthC
   };
   await render();
   const host = container.querySelector('[data-testid="host"]');
-  // 宿主实测宽度由测试控制；挂载 RAF 此刻还没跑，第一次测量就读到它。
+  // The host's measured width is controlled by the test; the mount RAF has not run yet, so the first measurement already reads it.
   host.getBoundingClientRect = () => ({
     x: 0,
     y: 0,
@@ -147,7 +152,7 @@ test("a stage below the hide threshold keeps the root mounted with a readable re
   assert.equal(controls.dataset.transcriptWidthState, "stage-narrow");
   assert.equal(controls.dataset.transcriptWidthMax, String(widthModel.MIN_CHAT_TRANSCRIPT_WIDTH));
   assert.equal(controls.hidden, true);
-  // 变量仍被钳到舞台上限：宿主 600 → 上限 560。
+  // The variable is still clamped to the stage cap: host 600 -> cap 560.
   assert.equal(stage.owner.style.getPropertyValue(CHAT_TRANSCRIPT_WIDTH_CSS_VAR), "560px");
   await stage.unmount();
 });
@@ -177,7 +182,7 @@ test("handles suspend behind a loading overlay and return, re-measured, when it 
   assert.equal(stage.controls().dataset.transcriptWidthState, "suspended");
   assert.equal(stage.controls().hidden, true);
 
-  // 遮罩期间 Pane 变宽，但观察器没有送达（模拟被吞掉/尚未派发的通知）。
+  // During the overlay the Pane widens, but the observer delivers nothing (simulating a swallowed/not-yet-dispatched notification).
   stage.stage.width = 1100;
   await stage.render({ suspended: false });
 
@@ -216,7 +221,7 @@ test("an overlay arriving mid-drag commits the dragged width and drops the liste
 
   await stage.render({ suspended: true });
 
-  // 右侧手柄拖 40px → 宽度 +80 → 848，落在 936 的舞台上限之内。
+  // Dragging the right handle 40px -> width +80 -> 848, within the stage cap of 936.
   assert.deepEqual(committed, [848]);
   assert.equal(doc.body.style.cursor, "", "drag cleanup restored the body cursor");
   assert.equal(stage.separator(), null);
@@ -254,7 +259,7 @@ test("desktop pairs the history overlay with the suspended handles in one condit
     /<TranscriptWidthControls[\s\S]*?suspended=\{isTranscriptBusy\}[\s\S]*?\/>/,
   );
   assert.match(transcriptSource, /\{isTranscriptBusy \? <HistorySwitchLoadingOverlay \/> : null\}/);
-  // 遮罩仍在手柄之上且拦截指针：选择"挂起手柄"而非"提升 z-index"，两端一致。
+  // The overlay remains above the handle and intercepts the pointer: we choose "suspend the handle" rather than "raise z-index", consistently on both ends.
   assert.match(overlaySource, /className="absolute inset-0 z-30"/);
   assert.doesNotMatch(overlaySource, /pointer-events-none/);
 });

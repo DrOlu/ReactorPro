@@ -276,7 +276,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
     draft: MentionComposerDraft,
     files: PendingUploadedFile[],
     workdir: string,
-    // 大段粘贴导入期间的"上传中"状态归属会话:多 Pane 下只禁用目标 Pane。
+    // The "uploading" state during large-paste import belongs to the session: with multiple Panes only the target Pane is disabled.
     targetConversationId?: string,
   ) => {
     let text = normalizeLogicalLineEndings(
@@ -298,7 +298,7 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
           pastes: draft.largePastes,
         });
         if (apiRef.current?.getActiveAgent().trim() !== agentID) {
-          throw new Error("Agent 已切换，已取消发送本次大段粘贴内容。");
+          throw new Error("The agent has changed, so sending this large-paste content has been cancelled.");
         }
         text = buildTextFromComposerDraft(draft, imported.fileByPasteId);
         uploadedFiles = mergePendingUploadedFiles(files, imported.files);

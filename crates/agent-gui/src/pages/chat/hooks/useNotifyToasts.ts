@@ -36,7 +36,7 @@ export function useNotifyToasts(params: UseNotifyToastsParams) {
 
   useEffect(() => {
     if (compactionStatus.phase === "failed") {
-      addNotify("error", `上下文压缩失败：${compactionStatus.message}`);
+      addNotify("error", `Context compaction failed: ${compactionStatus.message}`);
     }
   }, [compactionStatus, addNotify]);
 

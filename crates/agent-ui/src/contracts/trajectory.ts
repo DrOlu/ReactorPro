@@ -1,22 +1,23 @@
 /**
- * 轨迹视图对宿主的能力要求。
+ * The capabilities the trajectory view requires from its host.
  *
- * 共享 UI 只认这个契约：GUI 用 Tauri invoke 实现，WebUI 用 Gateway 请求实现。
- * 刻意保持窄小——轨迹是只读诊断视图，不需要任何写能力。
+ * The shared UI recognizes only this contract: the GUI implements it with Tauri invoke, and the
+ * WebUI with Gateway requests. Deliberately kept narrow -- the trajectory is a read-only diagnostic
+ * view and needs no write capability.
  */
 
 import type { ChatFileLink } from "../lib/chat/chatFileLinks";
 import type { TrajectorySection, TrajectorySubagentRun } from "../lib/trajectory/types";
 
 export type TrajectoryEventsPayload = {
-  /** 事件的扁平 JSON 数组文本。 */
+  /** Flat JSON array text of the events. */
   eventsJson: string;
-  /** 是否有分段因损坏或触顶而缺失，UI 据此提示轨迹不完整。 */
+  /** Whether some segments are missing due to corruption or hitting the cap; the UI uses this to flag the trajectory as incomplete. */
   truncated: boolean;
 };
 
 export type TrajectoryEventsWindowPayload = TrajectoryEventsPayload & {
-  /** 本窗口最早的 segment；作为继续向前分页的游标。 */
+  /** The earliest segment in this window; used as the cursor for paging further back. */
   oldestSegmentIndex: number;
   returnedSegmentCount: number;
   totalSegmentCount: number;
@@ -25,30 +26,32 @@ export type TrajectoryEventsWindowPayload = TrajectoryEventsPayload & {
 
 export type TrajectoryHost = {
   /**
-   * 从尾部按 segment 读取一页已落盘事件；传游标时继续向前分页。
+   * Read one page of persisted events by segment from the tail; passing a cursor continues paging backward.
    *
-   * WebUI 在断线重连后以最新窗口与桌面端对账，实时事件仍由账本层幂等合并。
+   * After a reconnect, the WebUI reconciles with the desktop side using the latest window, while
+   * live events are still merged idempotently by the ledger layer.
    */
   loadWindow: (
     conversationId: string,
     beforeSegmentIndex?: number,
   ) => Promise<TrajectoryEventsWindowPayload>;
   /**
-   * 按需取 prompt 分段全文。
+   * Fetch the full text of prompt segments on demand.
    *
-   * 分段动辄几十 KB，不进实时事件流；只有用户展开 SYSTEM 行详情时才拉。
+   * A segment can be tens of KB, so it does not enter the live event stream; it is only pulled
+   * when the user expands a SYSTEM row's details.
    */
   loadSections: (
     conversationId: string,
     sectionIds: readonly string[],
   ) => Promise<readonly TrajectorySection[]>;
-  /** 按事件引用的 runId 批量取子代理运行；不支持时省略。 */
+  /** Batch-fetch subagent runs by the runId referenced in events; omitted when unsupported. */
   loadSubagentRuns?: (
     conversationId: string,
     runIds: readonly string[],
   ) => Promise<readonly TrajectorySubagentRun[]>;
-  /** 宿主的权威读取链路恢复或失效时通知视图重新对账。 */
+  /** Notify the view to reconcile when the host's authoritative read path recovers or fails. */
   subscribeRefresh?: (listener: () => void) => () => void;
-  /** 在宿主里打开一个工作区文件；不支持时省略。 */
+  /** Open a workspace file in the host; omitted when unsupported. */
   openFileLink?: (link: ChatFileLink) => void;
 };

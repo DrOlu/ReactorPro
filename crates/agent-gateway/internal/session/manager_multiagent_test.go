@@ -29,7 +29,7 @@ func TestMultiAgentSessionsCoexist(t *testing.T) {
 		t.Fatalf("connected ids = %v, want [agent-a agent-b]", ids)
 	}
 
-	// 定向发送只命中目标 Agent 的出站队列。
+	// Targeted send only hits the target Agent's outbound queue.
 	env := &gatewayv2.GatewayEnvelope{RequestId: "to-b"}
 	go func() { _ = m.SendToAgentContext(context.Background(), "agent-b", env) }()
 	select {
@@ -52,7 +52,7 @@ func TestSetSessionDisplacesOnlySameAgentID(t *testing.T) {
 	b := newTestSession(m, "agent-b", "session-b1")
 	m.SetSession(b)
 
-	// 同 id 重连：顶掉 agent-a 的旧会话，agent-b 不受影响。
+	// Reconnect with the same id: it displaces agent-a's old session and leaves agent-b unaffected.
 	a2 := newTestSession(m, "agent-a", "session-a2")
 	m.SetSession(a2)
 	t.Cleanup(func() { m.ClearSession(a2); m.ClearSession(b) })
@@ -292,7 +292,7 @@ func TestAgentStatusesIncludesOfflineEntries(t *testing.T) {
 	if len(statuses) != 2 {
 		t.Fatalf("statuses = %d entries, want 2", len(statuses))
 	}
-	// 断线 entry 保留（目录渲染离线 Agent），按 id 排序。
+	// Disconnected entries are retained (so the directory can render offline Agents), sorted by id.
 	if statuses[0].AgentID != "agent-a" || !statuses[0].Online {
 		t.Fatalf("statuses[0] = %#v, want online agent-a", statuses[0])
 	}

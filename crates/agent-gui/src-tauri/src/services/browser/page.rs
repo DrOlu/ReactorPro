@@ -1,5 +1,6 @@
-//! 页面级高层操作：每个动作对应一组 CDP 调用。会话持有 page target 的
-//! sessionId 与最近一次 snapshot 的 ref→backendDOMNodeId 映射。
+//! Page-level high-level operations: each action maps to a set of CDP calls. The
+//! session holds the page target's sessionId and the ref→backendDOMNodeId mapping
+//! from the most recent snapshot.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,10 +12,11 @@ use serde_json::{json, Value};
 use super::cdp::CdpConnection;
 use super::snapshot::{render_ax_tree, SnapshotOutcome};
 
-/// snapshot 预算按 UTF-8 字节数（非字符数）控制：bytes/token 跨文字系统近似
-/// 恒定（ASCII ~1B/char、4 chars/token ≈ 4B/token；CJK ~3B/char、~1.5 chars/token
-/// ≈ 4.5B/token），28k 字节 ≈ 6-7k tokens，稳守 <8k tokens 验收线。若按字符数
-/// 计，CJK 页面会放大到 ~3 倍 tokens 直接超线。
+/// The snapshot budget is controlled by UTF-8 byte count (not character count):
+/// bytes/token is roughly constant across writing systems (ASCII ~1B/char, 4
+/// chars/token ≈ 4B/token; CJK ~3B/char, ~1.5 chars/token ≈ 4.5B/token), so 28k
+/// bytes ≈ 6-7k tokens, safely under the <8k tokens acceptance line. Counting
+/// characters would inflate a CJK page to ~3x tokens and blow past the line.
 const SNAPSHOT_MAX_BYTES: usize = 28_000;
 const EVAL_RESULT_MAX_CHARS: usize = 8_000;
 
@@ -26,7 +28,7 @@ pub(crate) struct PageSession {
 }
 
 impl PageSession {
-    /// attach 到首个 page target 并启用所需 domain。
+    /// Attach to the first page target and enable the required domains.
     pub(crate) async fn attach(connection: Arc<CdpConnection>) -> Result<Self, String> {
         let timeout = Duration::from_secs(10);
         let targets = connection
@@ -47,13 +49,14 @@ impl PageSession {
             })
             .and_then(|info| info.get("targetId").and_then(Value::as_str))
             .map(str::to_string)
-            .ok_or_else(|| "未找到可附着的页面 target".to_string())?;
+            .ok_or_else(|| "no attachable page target found".to_string())?;
         Self::attach_target(connection, target_id).await
     }
 
-    /// 扩展桥接模式入口：在用户浏览器里新开一个自动化标签页并附着。
-    /// 不 attach 既有标签页——自动化的可见/可控范围要严格限定在自己
-    /// 创建的 tab（扩展侧同样只授权该 tab 的 chrome.debugger）。
+    /// Extension bridging-mode entry point: open a new automation tab in the user's
+    /// browser and attach to it. Does not attach to existing tabs — the visible/
+    /// controllable scope of automation must be strictly limited to the tab it
+    /// created (the extension side likewise only authorizes chrome.debugger on that tab).
     pub(crate) async fn attach_new_tab(connection: Arc<CdpConnection>) -> Result<Self, String> {
         let timeout = Duration::from_secs(10);
         let created = connection
@@ -68,7 +71,7 @@ impl PageSession {
             .get("targetId")
             .and_then(Value::as_str)
             .map(str::to_string)
-            .ok_or_else(|| "Target.createTarget 未返回 targetId".to_string())?;
+            .ok_or_else(|| "Target.createTarget did not return a targetId".to_string())?;
         Self::attach_target(connection, target_id).await
     }
 
@@ -88,7 +91,7 @@ impl PageSession {
         let session_id = attached
             .get("sessionId")
             .and_then(Value::as_str)
-            .ok_or_else(|| "Target.attachToTarget 未返回 sessionId".to_string())?
+            .ok_or_else(|| "Target.attachToTarget did not return a sessionId".to_string())?
             .to_string();
 
         let session = Self {
@@ -108,7 +111,7 @@ impl PageSession {
         Ok(session)
     }
 
-    /// 关闭附着的页面 target（extension 模式收尾：关自动化标签页）。
+    /// Close the attached page target (extension-mode teardown: close the automation tab).
     pub(crate) async fn close_target(&self) -> Result<(), String> {
         self.connection
             .call(
@@ -131,9 +134,11 @@ impl PageSession {
         !self.connection.is_closed()
     }
 
-    /// 附着的页面 target 是否仍存在。用户只关掉自动化窗口/标签页（browser-level
-    /// WS 不断）或 tab 崩溃时，session 已死但 `is_connected` 仍为真，需以此探测。
-    /// 走 browser-level 命令，不受页面 JS 卡死影响；探测失败一律按已失效处理。
+    /// Whether the attached page target still exists. When the user closes only the
+    /// automation window/tab (the browser-level WS stays up) or the tab crashes, the
+    /// session is dead but `is_connected` is still true, so this probe is needed. It
+    /// uses browser-level commands and is unaffected by page JS hangs; any probe
+    /// failure is treated as invalidated.
     pub(crate) async fn target_alive(&self) -> bool {
         let Ok(targets) = self
             .connection
@@ -189,15 +194,16 @@ impl PageSession {
         } else {
             format!("https://{url}")
         };
-        // 只放行 http/https：file:// 可绕过应用文件权限模型读任意本地文件，
-        // chrome://、devtools:// 等特权页面同理，一律拒绝（fail-closed）。
+        // Only http/https is allowed: file:// can bypass the app's file permission
+        // model to read arbitrary local files, and privileged pages like chrome:// and
+        // devtools:// are the same, so all are rejected (fail-closed).
         let scheme_allowed = {
             let lower = normalized.trim_start().to_ascii_lowercase();
             lower.starts_with("https://") || lower.starts_with("http://")
         };
         if !scheme_allowed {
             return Err(format!(
-                "仅支持 http/https URL，拒绝打开 \"{normalized}\"（file://、chrome:// 等本地或特权 scheme 不可用）"
+                "only http/https URLs are supported; refusing to open \"{normalized}\" (local or privileged schemes such as file:// and chrome:// are unavailable)"
             ));
         }
         let result = self
@@ -205,13 +211,16 @@ impl PageSession {
             .await?;
         if let Some(error_text) = result.get("errorText").and_then(Value::as_str) {
             if !error_text.is_empty() {
-                return Err(format!("导航失败：{error_text}"));
+                return Err(format!("navigation failed: {error_text}"));
             }
         }
-        // loaderId 精确绑定本次导航：轮询到该 loader 的文档提交且就绪才算完成，
-        // 不依赖 Page.loadEventFired——按 (method, session) 匹配的事件 waiter 会被
-        // 迟到的旧导航 load 事件误触发，且未提交前读 readyState 会读到旧文档。
-        // 同文档导航（锚点等）不产生新 loader（无 loaderId 返回），立即完成。
+        // loaderId precisely binds this navigation: completion is when the document
+        // for that loader has committed and is ready, rather than relying on
+        // Page.loadEventFired — an event waiter matched by (method, session) can be
+        // falsely triggered by a late load event from an old navigation, and reading
+        // readyState before commit would read the old document. Same-document
+        // navigations (anchors, etc.) produce no new loader (no loaderId returned) and
+        // complete immediately.
         if let Some(loader_id) = result.get("loaderId").and_then(Value::as_str) {
             let loader_id = loader_id.to_string();
             self.wait_for_navigation_commit(&loader_id, timeout).await?;
@@ -220,8 +229,8 @@ impl PageSession {
         Ok(())
     }
 
-    /// 等待指定 loader 的文档提交（frame 当前 loaderId 与之相符）且 readyState
-    /// 达到 interactive/complete。
+    /// Wait for the specified loader's document to commit (the frame's current
+    /// loaderId matches) and readyState to reach interactive/complete.
     async fn wait_for_navigation_commit(
         &self,
         loader_id: &str,
@@ -240,7 +249,7 @@ impl PageSession {
                 return Ok(());
             }
             if started.elapsed() >= timeout {
-                return Err("等待页面加载超时".to_string());
+                return Err("timed out waiting for page load".to_string());
             }
             tokio::time::sleep(Duration::from_millis(150)).await;
         }
@@ -267,7 +276,7 @@ impl PageSession {
                 return Ok(());
             }
             if started.elapsed() >= timeout {
-                return Err("等待页面加载超时".to_string());
+                return Err("timed out waiting for page load".to_string());
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
@@ -280,7 +289,7 @@ impl PageSession {
         let nodes = tree
             .get("nodes")
             .and_then(Value::as_array)
-            .ok_or_else(|| "Accessibility.getFullAXTree 未返回 nodes".to_string())?;
+            .ok_or_else(|| "Accessibility.getFullAXTree did not return nodes".to_string())?;
         let SnapshotOutcome {
             text,
             ref_to_backend_node,
@@ -293,10 +302,10 @@ impl PageSession {
         self.ref_to_backend_node
             .get(ref_id.trim().trim_start_matches("ref="))
             .copied()
-            .ok_or_else(|| format!("未知 ref \"{ref_id}\"：请先执行 snapshot 获取最新 ref 列表"))
+            .ok_or_else(|| format!("unknown ref \"{ref_id}\": run snapshot first to get the latest ref list"))
     }
 
-    /// ref → 元素中心视口坐标；必要时先滚动进视口。
+    /// ref → viewport coordinates of the element center; scrolls it into view first when needed.
     async fn center_of_ref(&self, ref_id: &str, timeout: Duration) -> Result<(f64, f64), String> {
         let backend_node_id = self.backend_node_for_ref(ref_id)?;
         let _ = self
@@ -313,14 +322,14 @@ impl PageSession {
                 timeout,
             )
             .await
-            .map_err(|e| format!("元素不可见或已从页面移除（{e}）"))?;
+            .map_err(|e| format!("element is not visible or was removed from the page ({e})"))?;
         let quad = box_model
             .pointer("/model/content")
             .and_then(Value::as_array)
-            .ok_or_else(|| "DOM.getBoxModel 未返回 content quad".to_string())?;
+            .ok_or_else(|| "DOM.getBoxModel did not return a content quad".to_string())?;
         let numbers: Vec<f64> = quad.iter().filter_map(Value::as_f64).collect();
         if numbers.len() < 8 {
-            return Err("content quad 数据不完整".to_string());
+            return Err("content quad data is incomplete".to_string());
         }
         let center_x = (numbers[0] + numbers[2] + numbers[4] + numbers[6]) / 4.0;
         let center_y = (numbers[1] + numbers[3] + numbers[5] + numbers[7]) / 4.0;
@@ -354,7 +363,7 @@ impl PageSession {
         timeout: Duration,
     ) -> Result<(), String> {
         self.click(ref_id, timeout).await?;
-        // 先清空既有内容（全选后插入覆盖）。
+        // Clear existing content first (select all, then overwrite by inserting).
         let backend_node_id = self.backend_node_for_ref(ref_id)?;
         let _ = self
             .call(
@@ -373,7 +382,8 @@ impl PageSession {
         )
         .await?;
         if text.is_empty() {
-            // 空文本 = 清空字段：Input.insertText 传空串是 no-op，改为删除全选内容。
+            // Empty text = clear the field: Input.insertText with an empty string is a
+            // no-op, so delete the selected content instead.
             self.call(
                 "Runtime.evaluate",
                 json!({
@@ -388,9 +398,10 @@ impl PageSession {
                 .await?;
         }
         if submit {
-            // keyDown 必须带 text 才会产生 keypress 语义：无 text 时 CDP 按
-            // rawKeyDown 派发，多数表单/搜索框不会触发隐式提交（Puppeteer 对
-            // Enter 同样发 text:"\r"）。keyUp 不带 text。
+            // keyDown must carry text to produce keypress semantics: without text CDP
+            // dispatches it as rawKeyDown and most forms/search boxes will not trigger
+            // implicit submit (Puppeteer likewise sends text:"\r" for Enter). keyUp
+            // does not carry text.
             for (event_type, key_text) in [("keyDown", Some("\r")), ("keyUp", None)] {
                 let mut params = json!({
                     "type": event_type,
@@ -420,11 +431,11 @@ impl PageSession {
         let data = result
             .get("data")
             .and_then(Value::as_str)
-            .ok_or_else(|| "Page.captureScreenshot 未返回数据".to_string())?;
-        // 校验 base64 合法性，避免坏数据进聊天渲染链路。
+            .ok_or_else(|| "Page.captureScreenshot did not return data".to_string())?;
+        // Validate the base64 to keep bad data out of the chat rendering path.
         base64::engine::general_purpose::STANDARD
             .decode(data)
-            .map_err(|e| format!("截图 base64 解码失败：{e}"))?;
+            .map_err(|e| format!("screenshot base64 decode failed: {e}"))?;
         Ok((data.to_string(), "image/jpeg".to_string()))
     }
 
@@ -440,8 +451,9 @@ impl PageSession {
                 timeout,
             )
             .await?;
-        // 有 exceptionDetails 即失败。message 依可用性取：Error 有 description；
-        // 抛出原语（throw "..."/Promise.reject(42)）只有 value；再退 text 字段。
+        // Any exceptionDetails means failure. Take the message by availability: an Error
+        // has description; a thrown primitive (throw "..."/Promise.reject(42)) only has
+        // value; fall back to the text field last.
         if let Some(details) = result.get("exceptionDetails") {
             let message = details
                 .pointer("/exception/description")
@@ -459,7 +471,7 @@ impl PageSession {
                         .map(str::to_string)
                 })
                 .unwrap_or_else(|| "unknown".to_string());
-            return Err(format!("eval 抛出异常：{message}"));
+            return Err(format!("eval threw an exception: {message}"));
         }
         let value = result
             .pointer("/result/value")
@@ -498,7 +510,7 @@ impl PageSession {
                 return Ok(());
             }
             if started.elapsed() >= timeout {
-                return Err(format!("等待 selector 超时：{selector}"));
+                return Err(format!("timed out waiting for selector: {selector}"));
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
@@ -513,17 +525,17 @@ impl PageSession {
             .and_then(Value::as_i64)
             .unwrap_or(0);
         if current_index <= 0 {
-            return Err("没有可回退的历史记录".to_string());
+            return Err("no history entry to go back to".to_string());
         }
         let entries = history
             .get("entries")
             .and_then(Value::as_array)
-            .ok_or_else(|| "Page.getNavigationHistory 未返回 entries".to_string())?;
+            .ok_or_else(|| "Page.getNavigationHistory did not return entries".to_string())?;
         let entry_id = entries
             .get((current_index - 1) as usize)
             .and_then(|entry| entry.get("id"))
             .and_then(Value::as_i64)
-            .ok_or_else(|| "历史记录条目缺少 id".to_string())?;
+            .ok_or_else(|| "history entry is missing its id".to_string())?;
         let load_event = self
             .connection
             .wait_event("Page.loadEventFired", Some(&self.session_id));
@@ -533,9 +545,11 @@ impl PageSession {
             timeout,
         )
         .await?;
-        // load 事件只作快路径信号（同文档回退不产生 load 事件），最多等 3s，
-        // 无论是否等到都以 readyState 复核——事件 waiter 可能被迟到的旧导航
-        // 事件误触发；慢页面由 readyState 轮询在完整 timeout 内兜住。
+        // The load event is only a fast-path signal (same-document back navigation
+        // produces no load event), waiting at most 3s; either way readyState is used to
+        // re-verify — the event waiter can be falsely triggered by a late event from an
+        // old navigation, and slow pages are covered by readyState polling within the
+        // full timeout.
         let _ = tokio::time::timeout(timeout.min(Duration::from_secs(3)), load_event).await;
         self.wait_for_ready_state(timeout).await?;
         self.ref_to_backend_node.clear();

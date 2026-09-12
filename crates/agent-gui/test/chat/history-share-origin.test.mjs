@@ -20,7 +20,7 @@ test("resolveShareOrigin applies the gateway port to explicit origins", () => {
     resolveShareOrigin("https://gw.example.com", 8443),
     "https://gw.example.com:8443",
   );
-  // 端口语义与桌面端 WS build_ws_url 一致：设置端口覆盖基址自带端口。
+  // Port semantics match the desktop WS build_ws_url: the configured port overrides any port in the base.
   assert.equal(
     resolveShareOrigin("https://gw.example.com:9000", 8443),
     "https://gw.example.com:8443",
@@ -30,7 +30,7 @@ test("resolveShareOrigin applies the gateway port to explicit origins", () => {
 test("resolveShareOrigin omits default ports for their schemes", () => {
   assert.equal(resolveShareOrigin("https://gw.example.com", 443), "https://gw.example.com");
   assert.equal(resolveShareOrigin("http://localhost", 80), "http://localhost");
-  // https + 80 是非默认组合，必须保留。
+  // https + 80 is a non-default combination and must be preserved.
   assert.equal(resolveShareOrigin("https://gw.example.com", 80), "https://gw.example.com:80");
 });
 

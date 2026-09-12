@@ -66,8 +66,8 @@ type pendingTunnelPing struct {
 type tunnelStream struct {
 	streamID string
 	tunnelID string
-	// agentID 是流所属 record 的归属 Agent；入站帧按它校验，防止 Agent A
-	// 伪造 stream_id 向 Agent B 的访问者注入数据。
+	// agentID is the owning agent of the record the stream belongs to; inbound frames are validated against it to prevent Agent A
+	// from forging a stream_id and injecting data into Agent B's visitors.
 	agentID string
 	ch      chan *gatewayv2.TunnelFrame
 	done    chan struct{}
@@ -147,7 +147,7 @@ func (l *TunnelStreamLease) Done() <-chan struct{} {
 	return l.stream.done
 }
 
-// AgentID 返回租约所属隧道的归属 Agent（访问者帧的路由目标）。
+// AgentID returns the owning agent of the tunnel this lease belongs to (the routing target for visitor frames).
 func (l *TunnelStreamLease) AgentID() string {
 	if l == nil {
 		return ""
@@ -203,8 +203,8 @@ func (m *Manager) ApplyDesiredState(agentID string, desired *gatewayv2.TunnelDes
 		seen[id] = true
 		record := m.tunnels.records[id]
 		if record != nil && record.agentID != agentID {
-			// 隧道 id 撞上他人的 record：拒绝接管（id 是 Agent 本地生成的，
-			// 跨 Agent 撞车只能来自伪造或配置复制），保持原归属不变。
+			// Tunnel id collides with someone else's record: refuse takeover (ids are generated locally by the agent,
+			// so a cross-agent collision can only come from forgery or copied configuration); the original ownership is left unchanged.
 			continue
 		}
 		if record == nil {
@@ -277,7 +277,7 @@ func (m *Manager) dropTunnelRecordLocked(record *tunnelRecord) []*tunnelStream {
 	return dropped
 }
 
-// cancelTunnelStreams 向各流的归属 Agent 发送 CANCEL（过期清扫可能跨多个 Agent）。
+// cancelTunnelStreams sends CANCEL to the owning agent of each stream (expired sweeps may span multiple agents).
 func (m *Manager) cancelTunnelStreams(streams []*tunnelStream) {
 	for _, stream := range streams {
 		_ = m.SendTunnelFrameToAgent(stream.agentID, &gatewayv2.TunnelFrame{
@@ -435,7 +435,7 @@ func (m *Manager) AcquireTunnel(slug string, streamID string) (*TunnelStreamLeas
 	if record == nil {
 		return nil, ErrTunnelNotFound
 	}
-	// 在线判定按 record 归属 Agent，与其他 Agent 的状态无关。
+	// Online determination follows the record's owning agent and is independent of other agents' state.
 	if !m.IsOnline(record.agentID) {
 		return nil, ErrAgentOffline
 	}
@@ -479,7 +479,7 @@ func (m *Manager) releaseTunnelStream(stream *tunnelStream) {
 	m.tunnels.mu.Unlock()
 }
 
-// SendTunnelFrameToAgent 把访问者帧送往目标 Agent。
+// SendTunnelFrameToAgent sends a visitor frame to the target agent.
 func (m *Manager) SendTunnelFrameToAgent(agentID string, frame *gatewayv2.TunnelFrame) error {
 	if frame == nil {
 		return fmt.Errorf("tunnel frame is required")
@@ -520,7 +520,7 @@ func (m *Manager) dispatchTunnelFrame(agentID string, frame *gatewayv2.TunnelFra
 		return
 	}
 	if stream.agentID != agentID {
-		// 跨 Agent 伪造 stream_id：直接丢弃，不给探测反馈。
+		// Cross-agent forged stream_id: drop directly without giving probing feedback.
 		return
 	}
 	select {
@@ -605,8 +605,8 @@ func (m *Manager) setRelayHealth(agentID string, health *gatewayv2.TunnelHealth)
 	if agentID == "" {
 		return
 	}
-	// 永久删除后，删除前已发出的异步探测可能迟到；不存在的登记项不得重新
-	// 写回 relay 状态。普通离线仍保留 registry entry，因此不受影响。
+	// After permanent deletion, async probes sent before deletion may arrive late; a non-existent
+	// registry entry must not be written back into relay state. Plain offline keeps the registry entry, so it is unaffected.
 	m.tunnels.mu.Lock()
 	m.registry.mu.RLock()
 	_, registered := m.registry.agents[agentID]
@@ -647,8 +647,8 @@ func (m *Manager) onAgentSessionCleared(agentID string) {
 	m.broadcastStatus(agentID)
 }
 
-// purgeAgentTunnels 仅用于永久删除 Agent：普通断线继续保留 specs，删除则同步
-// 移除公开 slug、记录、访问流、探测状态和 relay 状态，使旧 /t/* 立即变为 404。
+// purgeAgentTunnels is only used for permanent agent deletion: a plain disconnect keeps the specs, whereas deletion synchronously
+// removes the public slug, records, visitor streams, probe state and relay state, so old /t/* URLs immediately become 404.
 func (m *Manager) purgeAgentTunnels(agentID string) {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {

@@ -284,8 +284,10 @@ const llmMock = {
     return override ?? "none";
   },
   describeAnthropicCacheShape(providerId, baseUrl, cacheRetention) {
-    // 与真实实现同构的最小桩:只有 claude_code + 非 none 才谈得上断点策略,
-    // 官方域名走顶层自动断点,其余(代理)退回显式断点。
+    // A minimal stub isomorphic to the real implementation: only claude_code +
+    // non-none involves a breakpoint strategy; official domains use top-level
+    // automatic breakpoints, and the rest (proxies) fall back to explicit
+    // breakpoints.
     if (providerId !== "claude_code" || !cacheRetention || cacheRetention === "none") {
       return { cacheRetention: cacheRetention ?? "", breakpointStrategy: "none" };
     }
@@ -297,8 +299,9 @@ const llmMock = {
     };
   },
   describeCodexCacheShape(providerId, baseUrl, configuredMode, modelApi, sessionId, cacheRetention) {
-    // 与真实实现同构的最小桩:codex 之外恒 none;codex 按「显式配置 → responses
-    // API → 官方域名」解析 hint 模式,sessionId 截断到 64 字符作 cacheKey。
+    // A minimal stub isomorphic to the real implementation: always none outside
+    // codex; for codex, resolve the hint mode by "explicit config -> responses
+    // API -> official domain", truncating sessionId to 64 chars as the cacheKey.
     if (providerId !== "codex" || cacheRetention === "none") {
       return { cacheRetention: cacheRetention ?? "", breakpointStrategy: "none" };
     }
@@ -315,8 +318,10 @@ const llmMock = {
     };
   },
   describeProviderCacheShape(params) {
-    // 与真实实现同构的最小桩:providers 层统一分发,codex 走 codex 描述,
-    // 其余走 anthropic 描述。runner 侧只面对这一个入口。
+    // A minimal stub isomorphic to the real implementation: the providers layer
+    // dispatches uniformly, codex uses the codex description and the rest use
+    // the anthropic description. The runner side only faces this one entry
+    // point.
     if (params.providerId === "codex") {
       return llmMock.describeCodexCacheShape(
         params.providerId,
@@ -374,8 +379,9 @@ const llmMock = {
       },
     };
   },
-  // runner 经统一入口 llm.stream() 出站；mock 同构转发到上面的
-  // streamSimpleByApi，两个入口共享同一份请求记账。
+  // The runner egresses through the unified entry point llm.stream(); the mock
+  // forwards isomorphically to streamSimpleByApi above, and both entry points
+  // share the same request accounting.
   llm: {
     stream(request) {
       return llmMock.streamSimpleByApi(request.model, request.context, request.options);
@@ -860,7 +866,7 @@ test("runAssistantWithTools runs consecutive Agent tool calls in parallel", asyn
     executedToolCalls.map((call) => call.id).sort(),
     ["call-agent-a", "call-agent-b"],
   );
-  assert.ok(statuses.some((status) => /并行执行 2 个 Agent 调用/.test(status)));
+  assert.ok(statuses.some((status) => /Running 2 Agent calls in parallel/.test(status)));
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
     ["assistant", "toolResult", "toolResult", "assistant"],
@@ -916,7 +922,7 @@ test("runAssistantWithTools canonicalizes lowercase Agent calls before parallel 
     executedToolCalls.map((call) => call.name),
     ["Agent", "Agent"],
   );
-  assert.ok(statuses.some((status) => /并行执行 2 个 Agent 调用/.test(status)));
+  assert.ok(statuses.some((status) => /Running 2 Agent calls in parallel/.test(status)));
   assert.deepEqual(
     result.emittedMessages[0].content.map((block) => block.name),
     ["Agent", "Agent"],
@@ -1067,7 +1073,7 @@ test("runAssistantWithTools keeps consecutive Bash calls sequential", async () =
     executedToolCalls.map((call) => call.id),
     ["call-bash-a", "call-bash-b", "call-bash-c"],
   );
-  assert.equal(statuses.some((status) => /并行执行 3 个 Bash 命令/.test(status)), false);
+  assert.equal(statuses.some((status) => /Running 3 Bash commands in parallel/.test(status)), false);
 });
 
 test("runAssistantWithTools applies turn context overrides without duplicating compacted messages", async () => {
@@ -1153,10 +1159,11 @@ test("runAssistantWithTools delivers wireTailText only on the wire, never into a
   const result = await runAssistantWithTools(params);
 
   assert.equal(observedStreamContexts.length, 3);
-  // 第 1 次请求在任何 override 之前，不含尾部文本。
+  // The first request is before any override and contains no tail text.
   assert.equal(JSON.stringify(observedStreamContexts[0].messages).includes("BUS DELTA"), false);
 
-  // 第 2 次请求：尾部文本挂在最后一个工具结果上，且只存在于出站请求。
+  // Second request: the tail text hangs on the last tool result and exists only
+  // in the outbound request.
   const secondWire = observedStreamContexts[1].messages;
   const secondTail = secondWire[secondWire.length - 1];
   assert.equal(secondTail.role, "toolResult");
@@ -1165,8 +1172,10 @@ test("runAssistantWithTools delivers wireTailText only on the wire, never into a
     ["result:Read", "BUS DELTA ROUND 1"],
   );
 
-  // 第 3 次请求：累积重挂——每轮的块留在它首次挂上的那条消息上，不随工具循环
-  // 推进搬到新消息上。搬家会让上一轮挂过块的消息字节变回去，前缀从它开始整段作废。
+  // Third request: cumulative re-attachment -- each round's block stays on the
+  // message it was first attached to, rather than moving to a new message as the
+  // tool loop advances. Moving it would revert the bytes of the message the
+  // previous round attached to, invalidating the prefix from there on.
   const thirdWire = observedStreamContexts[2].messages;
   const thirdTail = thirdWire[thirdWire.length - 1];
   assert.equal(thirdTail.role, "toolResult");
@@ -1174,7 +1183,7 @@ test("runAssistantWithTools delivers wireTailText only on the wire, never into a
   assert.deepEqual(
     thirdTail.content.map((block) => block.text),
     ["result:Read", "BUS DELTA ROUND 2"],
-    "第 2 轮的块钉在第 2 轮的工具结果上",
+    "round 2's block is pinned to round 2's tool result",
   );
 
   const thirdFirstAnchor = thirdWire.find(
@@ -1183,20 +1192,22 @@ test("runAssistantWithTools delivers wireTailText only on the wire, never into a
   assert.deepEqual(
     thirdFirstAnchor.content.map((block) => block.text),
     ["result:Read", "BUS DELTA ROUND 1"],
-    "第 1 轮的块必须留在原锚点上",
+    "round 1's block must stay on its original anchor",
   );
 
-  // 该锚点消息在第 2、3 次请求之间必须逐字节稳定——这正是钉死锚点要保住的东西。
+  // That anchor message must be byte-for-byte stable between the second and third
+  // requests -- exactly what pinning the anchor preserves.
   const secondFirstAnchor = secondWire.find(
     (message) => message.role === "toolResult" && message.toolCallId === "call-read-1",
   );
   assert.deepEqual(
     JSON.parse(JSON.stringify(thirdFirstAnchor)),
     JSON.parse(JSON.stringify(secondFirstAnchor)),
-    "已挂过块的锚点消息不得在后续轮次变化",
+    "an anchor message that has already carried a block must not change in later rounds",
   );
 
-  // agent 状态与产出（持久化 / UI / 记忆抽取的输入）不得含尾部文本。
+  // Agent state and output (inputs to persistence / UI / memory extraction) must
+  // not contain the tail text.
   assert.equal(JSON.stringify(result.messages).includes("BUS DELTA"), false);
   assert.equal(JSON.stringify(result.emittedMessages).includes("BUS DELTA"), false);
 });
@@ -1220,8 +1231,9 @@ test("runAssistantWithTools clears accumulated wireTailText when an override omi
           wireTailText: "STALE TAIL",
         };
       }
-      // 压缩/重冻结分支不带 wireTailText：旧尾部内容已并入重算后的快照，
-      // runner 必须清空累积，否则会重复投递。
+      // The compaction / re-freeze branch omits wireTailText: the old tail content
+      // has been merged into the recomputed snapshot, so the runner must clear
+      // the accumulation, otherwise it would be delivered twice.
       return {
         context: snapshot.runtimeContext,
         emittedMessages: snapshot.emittedMessages,
@@ -1236,7 +1248,7 @@ test("runAssistantWithTools clears accumulated wireTailText when an override omi
   assert.equal(
     JSON.stringify(observedStreamContexts[2].messages).includes("STALE TAIL"),
     false,
-    "不带 wireTailText 的 override 之后，累积的尾部文本不得再出现在出站请求里",
+    "after an override without wireTailText, the accumulated tail text must not appear in outbound requests again",
   );
 });
 
@@ -1330,9 +1342,9 @@ test("runAssistantWithTools preserves flattened text while executing only the st
       [
         {
           type: "text",
-          text: `✅ JS 文件 2 个：server.js + public/app.js
+          text: `✅ 2 JS files: server.js + public/app.js
 
-## 4️⃣ Grep 文本搜索
+## 4️⃣ Grep text search
 
 Historical tool call (read-only, not repeating):
 tool_name: Grep
@@ -1380,7 +1392,8 @@ arguments: {"pattern": "express", "file_pattern": "**/*.js", "ignore_case": true
     ["assistant", "toolResult", "assistant"],
   );
 
-  // DeepSeek 元数据不再触发文本重写；下一轮只依赖已经存在的结构化工具调用。
+  // DeepSeek metadata no longer triggers text rewriting; the next round only
+  // relies on the already-existing structured tool call.
   const followUpAssistant = observedStreamContexts
     .at(-1)
     .messages.find((message) => message.role === "assistant");
@@ -1810,7 +1823,7 @@ test("runAssistantWithTools preserves bare tool_name text without duplicate exec
       [
         {
           type: "text",
-          text: `继续检查 JS 路由。
+          text: `Continue checking the JS route.
 
 tool_name: Grep
 arguments:
@@ -1869,14 +1882,14 @@ test("runAssistantWithTools preserves malformed historical tool text without gue
       [
         {
           type: "text",
-          text: `**Edit / Write 正常。** 继续测试 **Bash、MemoryManager 和管道类工具**：
+          text: `**Edit / Write works.** Continue testing **Bash, MemoryManager, and pipeline-style tools**:
 
 Historical assistant tool request (read-only context; do not repeat):
 tool_call_id: call_00_malformed_bash
 tool_name: Bash
 arguments:
 {
-  "command": "echo 'Node: $(node --version 2>/dev/null || echo "未安装")'"
+  "command": "echo 'Node: $(node --version 2>/dev/null || echo "not installed")'"
 }`,
         },
         bashCall,
@@ -1929,7 +1942,7 @@ test("runAssistantWithTools preserves non-DeepSeek bare tool_name text", async (
       [
         {
           type: "text",
-          text: `继续检查 JS 路由。
+          text: `Continue checking the JS route.
 
 tool_name: Grep
 arguments:
@@ -2054,7 +2067,7 @@ test("runAssistantWithTools does not bridge a DSML text web_search call", async 
 
 test("runAssistantWithTools silently bridges structured compatible web_search tool calls", async () => {
   const webSearchCall = createToolCall("dsml-tool-call-structured-search", "web_search", {
-    query: "LiveAgent DeepSeek structured DSML search",
+    query: "ReactorPro DeepSeek structured DSML search",
   });
   resetFakeStreams(
     createAssistant(
@@ -2097,7 +2110,7 @@ test("runAssistantWithTools silently bridges structured compatible web_search to
   assert.equal(beforeNextTurnSnapshots[0].toolResults[0].isError, false);
   assert.match(
     beforeNextTurnSnapshots[0].toolResults[0].content[0].text,
-    /LiveAgent DeepSeek structured DSML search/,
+    /ReactorPro DeepSeek structured DSML search/,
   );
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
@@ -2111,7 +2124,7 @@ test("runAssistantWithTools ends the turn when a leaked web_fetch arrives after 
   });
   resetFakeStreams(
     createAssistant(
-      [{ type: "text", text: "今天长沙的主要新闻整理如下：高温黄色预警，最高气温超35℃。" }, webFetchCall],
+      [{ type: "text", text: "Here are the main news items from Changsha today: a yellow heat alert, with the high exceeding 35°C." }, webFetchCall],
       "stop",
       {
         api: "anthropic-messages",
@@ -2157,7 +2170,7 @@ test("runAssistantWithTools keeps the follow-up turn for leaked web_search witho
   });
   resetFakeStreams(
     createAssistant(
-      [{ type: "text", text: "我先联网搜索一下长沙今天的新闻。" }, webSearchCall],
+      [{ type: "text", text: "Let me search online for today's news in Changsha." }, webSearchCall],
       "stop",
       {
         api: "anthropic-messages",
@@ -2244,7 +2257,7 @@ test("runAssistantWithTools ends the turn for leaked web_search covered by in-ro
     resetFakeStreams(
       createAssistant(
         [
-          { type: "text", text: "今天长沙的主要新闻整理如下：高温黄色预警与楼市新政落地。" },
+          { type: "text", text: "Here are the main news items from Changsha today: a yellow heat alert and a new housing policy taking effect." },
           webSearchCall,
         ],
         "stop",
@@ -2512,11 +2525,13 @@ test("runAssistantWithTools ignores malformed toolUse turns that have no tool re
   assert.equal(result.assistant.stopReason, "toolUse");
 });
 
-test("runAssistantWithTools 的前缀归因按 sessionId 隔离,多会话交错不污染基线", async () => {
-  // 三次 runner 调用模拟主会话与子代理交错:A → B(system 不同)→ A(与首轮
-  // 完全一致)。旧实现的 runner 局部变量在第二次 A 调用时只能报 initial(跨
-  // 调用不存续);若改成全局单槽则会拿 B 的快照比出 system 变更。按 sessionId
-  // 键控后,A 的第二轮必须是 unchanged。
+test("runAssistantWithTools isolates prefix attribution by sessionId, so interleaved conversations do not pollute the baseline", async () => {
+  // Three runner calls simulate a main conversation interleaved with a subagent:
+  // A -> B (different system) -> A (identical to the first round). The old
+  // implementation's runner-local variable could only report initial on the
+  // second A call (not persisted across calls); switching to a global single
+  // slot would compare against B's snapshot and report a system change. Keyed by
+  // sessionId, A's second round must be unchanged.
   const prefixCaptures = [];
   const createCapturingLogger = () => ({
     enabled: true,
@@ -2555,18 +2570,22 @@ test("runAssistantWithTools 的前缀归因按 sessionId 隔离,多会话交错�
 
   assert.equal(prefixCaptures.length, 3);
   assert.equal(prefixCaptures[0].prefixChangeSummary, "initial");
-  // B 是自己的首轮,不得拿 A 的快照比出 system 变更。
+  // B is its own first round and must not compare against A's snapshot to report
+  // a system change.
   assert.equal(prefixCaptures[1].prefixChangeSummary, "initial");
-  // A 的第二轮与首轮字节一致:基线跨 runner 调用存续,且未被 B 污染。
+  // A's second round is byte-identical to the first: the baseline persists across
+  // runner calls and is not polluted by B.
   assert.equal(prefixCaptures[2].prefixChangeSummary, "unchanged");
   assert.equal(prefixCaptures[2].prefixChanged, false);
   assert.equal(prefixCaptures[2].prefixHash, prefixCaptures[0].prefixHash);
 });
 
 test("requestToolFilter re-evaluates per round: activation mid-run exposes the tool next round", async () => {
-  // 轮中激活的正式验证(MCP 懒加载 spike):
-  // 第 1 轮请求不含被延迟的 mcp 工具;ToolSearch 风格的激活发生在第 1 轮的
-  // 工具执行里;第 2 轮请求(同一 run 内)必须包含它,且执行层始终找得到。
+  // Formal verification of mid-run activation (MCP lazy-load spike):
+  // the round 1 request does not contain the deferred mcp tool; the
+  // ToolSearch-style activation happens during round 1's tool execution; the
+  // round 2 request (within the same run) must include it, and the execution
+  // layer can always find it.
   const activation = new Set();
   const requestObserverContexts = [];
   const deferredTool = {
@@ -2611,7 +2630,7 @@ test("requestToolFilter re-evaluates per round: activation mid-run exposes the t
   const result = await runAssistantWithTools(params);
 
   assert.equal(result.assistant.stopReason, "stop");
-  // 第 1 轮:延迟工具不在请求里;ToolSearch 在。
+  // Round 1: the deferred tool is not in the request; ToolSearch is.
   const round1Names = observedStreamContexts[0].tools.map((tool) => tool.name);
   assert.ok(round1Names.includes("ToolSearch"));
   assert.ok(!round1Names.includes("mcp_docs_search"));
@@ -2620,11 +2639,11 @@ test("requestToolFilter re-evaluates per round: activation mid-run exposes the t
     round1Names,
     "request observers must receive the exact filtered provider context",
   );
-  // 第 2 轮(激活后,同一 run):延迟工具进入请求。
+  // Round 2 (after activation, same run): the deferred tool enters the request.
   const round2Names = observedStreamContexts[1].tools.map((tool) => tool.name);
   assert.ok(round2Names.includes("mcp_docs_search"));
   assert.deepEqual(requestObserverContexts[1].tools.map((tool) => tool.name), round2Names);
-  // 执行层全程找得到:两次调用都真实执行。
+  // The execution layer can find it throughout: both calls actually execute.
   assert.deepEqual(
     executedToolCalls.map((call) => call.name),
     ["ToolSearch", "mcp_docs_search"],
@@ -2633,8 +2652,9 @@ test("requestToolFilter re-evaluates per round: activation mid-run exposes the t
 
 
 test("resolveToolTermination ends the run after the flagged tool call (no wrap-up round)", async () => {
-  // 计划批准语义:ExitPlanMode 获批后本轮就此结束——只消耗 1 个模型轮,
-  // 不再为"收尾话"请求下一轮(队列因此立即放行续轮)。
+  // Plan approval semantics: once ExitPlanMode is approved the turn ends here --
+  // consuming only 1 model round, with no next round requested for a
+  // "wrap-up" (so the queue immediately releases the continuation turn).
   const planCall = createToolCall("call-plan", "ExitPlanMode", { plan: "# plan" });
   resetFakeStreams(
     createToolUseAssistant(planCall),
@@ -2655,17 +2675,19 @@ test("resolveToolTermination ends the run after the flagged tool call (no wrap-u
   const result = await runAssistantWithTools(params);
 
   assert.deepEqual(executedToolCalls.map((call) => call.name), ["ExitPlanMode"]);
-  // 只发出了一次模型请求:terminate 阻止了收尾轮。
+  // Only one model request was issued: terminate prevented the wrap-up round.
   assert.equal(observedStreamContexts.length, 1);
   assert.equal(textDeltas.join(""), "");
   assert.equal(result.assistant.stopReason, "toolUse");
 });
 
 test("resolveToolTermination spreads across a mixed parallel batch (still ends the run)", async () => {
-  // pi-agent-core 的批终止是 all-or-nothing:批内每个调用都标记 terminate 才
-  // 生效。ExitPlanMode 与普通并行调用(Read 等)同批时,谓词必须铺展到整批——
-  // 否则一个 Read 就静默作废"提交即结束本轮"的保证,run 继续跑收尾轮,
-  // 待决计划与仍在运行的轮次互相竞态。
+  // pi-agent-core's batch termination is all-or-nothing: it takes effect only if
+  // every call in the batch is flagged terminate. When ExitPlanMode shares a
+  // batch with ordinary parallel calls (Read etc.), the predicate must spread to
+  // the whole batch -- otherwise one Read silently voids the "submit ends this
+  // turn" guarantee, the run keeps going into a wrap-up round, and the pending
+  // plan races against the still-running turn.
   const planCall = createToolCall("call-plan", "ExitPlanMode", { plan: "# plan" });
   const readCall = createToolCall("call-read", "Read", { file_path: "/tmp/a" });
   resetFakeStreams(
@@ -2691,7 +2713,8 @@ test("resolveToolTermination spreads across a mixed parallel batch (still ends t
 
   const result = await runAssistantWithTools(params);
 
-  // 同批的并行调用照常执行(结果保留在历史),随后 run 就地终止。
+  // Parallel calls in the same batch execute as usual (results stay in history),
+  // and then the run terminates in place.
   assert.deepEqual(
     executedToolCalls.map((call) => call.name).sort(),
     ["ExitPlanMode", "Read"],

@@ -31,8 +31,8 @@ test("locale defaults to the system language when no saved preference exists", a
     assert.equal(settings.getDefaultSettings().locale, "en-US");
     assert.equal(settings.normalizeSettings({}).locale, "en-US");
     assert.equal(settings.normalizeSettings({ locale: "en-US" }).locale, "en-US");
-    assert.equal(settings.normalizeSettings({ locale: "fr-FR" }).locale, "zh-CN");
-    assert.equal(settings.normalizeSettings({ locale: null }).locale, "zh-CN");
+    assert.equal(settings.normalizeSettings({ locale: "fr-FR" }).locale, "en-US");
+    assert.equal(settings.normalizeSettings({ locale: null }).locale, "en-US");
   });
 });
 
@@ -90,7 +90,7 @@ test("codex provider normalization strips route suffixes and keeps only configur
   assert.equal(provider.baseUrl, "https://api.openai.com/v1");
   assert.equal(provider.apiKey, "key");
   assert.equal(provider.requestFormat, "openai-responses");
-  // Codex 默认自动选择端点支持的缓存提示协议。
+  // Codex automatically selects the cache-hint protocol supported by the endpoint by default.
   assert.equal(provider.promptCachingEnabled, true);
   assert.equal(provider.promptCacheHintMode, "auto");
   assert.equal(provider.nativeWebSearchEnabled, false);
@@ -229,7 +229,7 @@ test("claude provider normalization keeps the long cache retention preference", 
 });
 
 test("model config normalization drops legacy persisted pricing", () => {
-  // 计费功能已移除：旧设置里持久化的 cost 键在读侧归一时被丢弃。
+  // Billing has been removed: the cost key persisted in old settings is dropped during read-side normalization.
   const provider = settings.normalizeCustomProvider({
     id: "relay-1",
     type: "codex",
@@ -320,8 +320,8 @@ test("DeepSeek provider normalization keeps native routing and native search", (
 });
 
 test("legacy Codex-group DeepSeek configs stay untouched — migration is user-driven", () => {
-  // 存量 codex 分组挂 DeepSeek 的配置不做自动改判：用户自行迁移到正式
-  // deepseek 分组（避免归一化层堆积一次性迁移逻辑）。
+  // Existing codex groups configured with DeepSeek are not auto-reclassified: users migrate on their own to the official
+  // deepseek group (avoiding one-off migration logic piling up in the normalization layer).
   const legacy = settings.normalizeCustomProvider({
     id: "legacy-deepseek",
     name: "DeepSeek",
@@ -390,7 +390,7 @@ test("custom settings migrate the legacy font family and normalize each typograp
 });
 
 test("composer context display normalizes to the three-state union", () => {
-  // 三档枚举（docs/design/composer-context-stats-bar.md §4.7）：默认统计状态栏。
+  // Three-level enum (docs/design/composer-context-stats-bar.md §4.7): stats status bar by default.
   assert.equal(settings.getDefaultSettings().customSettings.composerContextDisplay, "statsBar");
   assert.equal(
     settings.normalizeSettings({ customSettings: {} }).customSettings.composerContextDisplay,
@@ -406,7 +406,7 @@ test("composer context display normalizes to the three-state union", () => {
       .customSettings.composerContextDisplay,
     "both",
   );
-  // 脏值/历史遗留值（如曾经设想过的 "auto"）一律落回默认，不留第四态。
+  // Dirty/legacy values (such as the once-considered "auto") all fall back to default, leaving no fourth state.
   assert.equal(
     settings.normalizeSettings({ customSettings: { composerContextDisplay: "auto" } })
       .customSettings.composerContextDisplay,
@@ -415,7 +415,7 @@ test("composer context display normalizes to the three-state union", () => {
 });
 
 test("prompt clarify settings keep the follow-current fallback contract", () => {
-  // 总开关缺省开启：老配置无此字段时澄清按钮保持可见（上线前行为）。
+  // The master switch defaults to on: when an old config lacks this field the clarify button stays visible (pre-launch behavior).
   assert.equal(settings.getDefaultSettings().customSettings.promptClarifyEnabled, true);
   assert.equal(
     settings.normalizeSettings({ customSettings: {} }).customSettings.promptClarifyEnabled,
@@ -436,7 +436,7 @@ test("prompt clarify settings keep the follow-current fallback contract", () => 
     models: ["model-1"],
     activeModels: ["model-1"],
   };
-  // 有效选择保留；模型失效清空回「跟随当前对话模型」（commitMessageModel 同契约）。
+  // Valid selections are kept; an invalid model clears back to "follow the current conversation model" (same contract as commitMessageModel).
   const kept = settings.normalizeSettings({
     customProviders: [provider],
     customSettings: { promptClarifyModel: { customProviderId: "provider-1", model: "model-1" } },
@@ -453,7 +453,7 @@ test("prompt clarify settings keep the follow-current fallback contract", () => 
     undefined,
   );
 
-  // 运行时解析器（两端共用）：未选/失效回退 null，由调用方落回当前对话模型。
+  // Runtime resolver (shared by both ends): unselected/invalid falls back to null, and the caller falls back to the current conversation model.
   assert.deepEqual(settings.resolvePromptClarifyModel(kept), {
     provider: kept.customProviders.find((item) => item.id === "provider-1"),
     model: "model-1",
@@ -649,10 +649,10 @@ test("chat runtime controls default and follow provider model reasoning support"
     },
   });
 
-  // 没有 modelId 就无法解析目录，拿不到任何档位。
+  // Without a modelId the catalog cannot be resolved and no levels can be obtained.
   assert.deepEqual(settings.getChatRuntimeReasoningLevelsForProvider({}), []);
 
-  // claude-opus-4-5：目录（models.dev）三档 low/medium/high，无 minimal/xhigh/max。
+  // claude-opus-4-5: catalog (models.dev) has three levels low/medium/high, no minimal/xhigh/max.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "claude_code",
@@ -660,7 +660,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["low", "medium", "high"],
   );
-  // claude-sonnet-5：目录声明 xhigh/max（adaptive 世代无 minimal）。
+  // claude-sonnet-5: catalog declares xhigh/max (the adaptive generation has no minimal).
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "claude_code",
@@ -668,7 +668,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["low", "medium", "high", "xhigh", "max"],
   );
-  // gpt-5.1：目录 none/low/medium/high → off + 三档。
+  // gpt-5.1: catalog none/low/medium/high -> off + three levels.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "codex",
@@ -677,7 +677,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["low", "medium", "high"],
   );
-  // gpt-5.2：目录额外声明 xhigh，仍无 max。
+  // gpt-5.2: catalog additionally declares xhigh, still no max.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "codex",
@@ -686,7 +686,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["low", "medium", "high", "xhigh"],
   );
-  // 目录外的聚合命名（qwen/qwen3-32b 带斜杠，生成期跳过）：标准四档兜底。
+  // Aggregate naming not in the catalog (qwen/qwen3-32b with a slash, skipped during generation): standard four-level fallback.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "codex",
@@ -695,7 +695,7 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["minimal", "low", "medium", "high"],
   );
-  // gemini-2.5-flash：预算式（budget_tokens）→ 标准四档，无 xhigh/max。
+  // gemini-2.5-flash: budget-based (budget_tokens) -> standard four levels, no xhigh/max.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "gemini",
@@ -703,8 +703,8 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["minimal", "low", "medium", "high"],
   );
-  // gemini-3-pro-image：目录只有两档 low/high（gemini-3-pro-preview 已随
-  // #425 上游目录刷新移除，改用同为两档的模型覆盖该路径）。
+  // gemini-3-pro-image: catalog has only two levels low/high (gemini-3-pro-preview was removed with
+  // the #425 upstream catalog refresh, so a model with the same two levels now covers that path).
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "gemini",
@@ -712,8 +712,8 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["low", "high"],
   );
-  // 中转挂载的国产厂商模型走跨供应商回查命中真实档位：glm-4.7 是纯 toggle
-  // 形态（单 "high" 档 + 可关），不再吃标准四档兜底。
+  // Domestic vendor models mounted through a relay hit their real levels via cross-provider lookup: glm-4.7 is a pure toggle
+  // shape (a single "high" level + off), no longer falling back to the standard four levels.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "codex",
@@ -729,8 +729,8 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["high"],
   );
-  // DeepSeek 正式供应商只暴露 Responses 模型：Flash 与 Pro 都遵循
-  // 官方 none/low/high/max 映射，并支持关闭思考。
+  // The official DeepSeek provider exposes only Responses models: both Flash and Pro follow
+  // the official none/low/high/max mapping and support disabling thinking.
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "deepseek",
@@ -799,14 +799,14 @@ test("chat runtime controls default and follow provider model reasoning support"
       thinkingEnabled: true,
       nativeWebSearchEnabled: true,
       planModeEnabled: false,
-      // 目录未命中（聚合命名）走标准四档兜底：存量 xhigh 钳回默认 high。
+      // A catalog miss (aggregate naming) falls to the standard four levels: an existing xhigh is clamped back to the default high.
       reasoning: "high",
       reasoningByProvider: {
         claude_code: "xhigh",
         codex_openai_responses: "xhigh",
         codex_openai_completions: "high",
-        // gemini / xai 未在 reasoningByProvider 输入里显式给出，也未参与本次调用
-        // 的当前 provider key，因此只继承顶层 reasoning 原值，不做钳制。
+        // gemini / xai are not explicitly given in the reasoningByProvider input and do not participate in this call's
+        // current provider key, so they only inherit the top-level reasoning value without clamping.
         gemini: "xhigh",
         xai: "xhigh",
         deepseek: "xhigh",
@@ -1987,7 +1987,7 @@ test("gateway settings sync applies redacted providers without clearing local ap
   assert.equal(redacted.chatRuntimeControls.reasoning, "xhigh");
   assert.equal(redacted.chatRuntimeControls.reasoningByProvider.claude_code, "xhigh");
   assert.equal(redacted.chatRuntimeControls.reasoningByProvider.codex_openai_responses, "minimal");
-  // gateway sync 没有 model 上下文，无法按 provider 钳制，保留传入的原始合法档位。
+  // gateway sync has no model context and cannot clamp per provider, so the incoming valid level is preserved.
   assert.equal(redacted.chatRuntimeControls.reasoningByProvider.gemini, "xhigh");
   assert.deepEqual(redacted.customSettings.conversationTitleModel, {
     customProviderId: "provider-1",
@@ -2593,7 +2593,7 @@ test("mcp auth config keeps oauth with trimmed fields and drops none/invalid sha
   });
   assert.deepEqual(oauthBare.auth, { type: "oauth" });
 
-  // "none"/未知/非对象 一律不落壳对象——旧配置形态零变化。
+  // "none"/unknown/non-object never writes a shell object -- legacy config shapes are unchanged.
   for (const auth of [{ type: "none" }, { type: "basic" }, "oauth", 42, null, undefined]) {
     const normalized = settings.normalizeMcpServerConfig({
       id: "srv",
@@ -2764,13 +2764,13 @@ test("gateway sync merge keeps system proxy password against redacted payloads",
     },
   });
 
-  // 脱敏 system（password 空 + passwordConfigured=true）不得冲掉本地密码。
+  // A redacted system (empty password + passwordConfigured=true) must not overwrite the local password.
   const redactedIncoming = sync.buildGatewaySettingsSyncPayload(current);
   const merged = sync.applyGatewaySettingsSyncPayload(current, redactedIncoming);
   assert.equal(merged.system.systemProxy.password, "secret");
   assert.equal(merged.system.systemProxy.passwordConfigured, true);
 
-  // sidecar 回填新密码。
+  // The sidecar backfills the new password.
   const withUpdate = sync.applyGatewaySettingsSyncPayload(current, {
     ...redactedIncoming,
     systemProxyPasswordUpdate: "next-secret",
@@ -2778,7 +2778,7 @@ test("gateway sync merge keeps system proxy password against redacted payloads",
   assert.equal(withUpdate.system.systemProxy.password, "next-secret");
   assert.equal(withUpdate.system.systemProxy.passwordConfigured, true);
 
-  // passwordConfigured === false 是显式清除信号。
+  // passwordConfigured === false is an explicit clear signal.
   const clearedIncoming = sync.buildGatewaySettingsSyncPayload(current);
   clearedIncoming.system = {
     ...clearedIncoming.system,
@@ -2792,7 +2792,7 @@ test("gateway sync merge keeps system proxy password against redacted payloads",
   assert.equal(cleared.system.systemProxy.password, "");
   assert.equal(cleared.system.systemProxy.passwordConfigured, false);
 
-  // 其余 systemProxy 字段随 incoming 收敛（host/port 变化生效）。
+  // The remaining systemProxy fields converge with incoming (host/port changes take effect).
   const hostChanged = sync.buildGatewaySettingsSyncPayload(current);
   hostChanged.system = {
     ...hostChanged.system,
@@ -2806,7 +2806,7 @@ test("gateway sync merge keeps system proxy password against redacted payloads",
 
 test("xai provider model defaults come from the generated model catalog", () => {
   assert.equal(settings.getProviderModelDefaults("xai", "grok-4.5").contextWindow, 500_000);
-  // 上游（models.dev）已下架的旧模型与目录未收录的模型一样吃供应商兜底值。
+  // Old models delisted upstream (models.dev) get the provider fallback value just like models not in the catalog.
   assert.equal(settings.getProviderModelDefaults("xai", "grok-3").contextWindow, 400_000);
   assert.equal(settings.getProviderModelDefaults("xai", "grok-unknown").contextWindow, 400_000);
 });
@@ -2839,8 +2839,8 @@ test("gateway sync keeps all desktop font families local", () => {
 });
 
 test("gateway sync carries the composer context display mode across surfaces", () => {
-  // 与字体/宽度等设备本地偏好不同：展示样式是全局产品偏好，不进
-  // syncableCustomSettings 的重置清单，桌面端与 WebUI 同步生效。
+  // Unlike device-local preferences such as font/width: display style is a global product preference and does not go into
+  // syncableCustomSettings' reset list, taking effect in sync on desktop and WebUI.
   const current = settings.normalizeSettings({});
   for (const mode of ["ring", "both"]) {
     const incoming = sync.buildGatewaySettingsSyncPayload(
@@ -2856,40 +2856,40 @@ test("gateway sync carries the composer context display mode across surfaces", (
 });
 
 test("degenerate catalog limits (output == context window) are clamped in the snapshot", () => {
-  // 社区目录对不公布输出上限的供应商记"输出=窗口"（grok-4.5 上游 500K/500K），
-  // 照单全收会把压缩阈值挤到下限。生成期统一钳到 min(32K, 窗口/4)。
+  // The community catalog records "output = window" for providers that do not publish an output limit (grok-4.5 upstream 500K/500K),
+  // and taking it at face value would squeeze the compaction threshold to its floor. Generation clamps it uniformly to min(32K, window/4).
   const grok45 = settings.getProviderModelDefaults("xai", "grok-4.5");
   assert.equal(grok45.contextWindow, 500_000);
   assert.equal(grok45.maxOutputToken, 32_000);
   const grokBuild = settings.getProviderModelDefaults("xai", "grok-build-0.1");
   assert.equal(grokBuild.contextWindow, 256_000);
   assert.equal(grokBuild.maxOutputToken, 32_000);
-  // 非退化条目原样透传（grok-4.3 = 1M/30K）。
+  // Non-degenerate entries pass through as-is (grok-4.3 = 1M/30K).
   const grok43 = settings.getProviderModelDefaults("xai", "grok-4.3");
   assert.equal(grok43.contextWindow, 1_000_000);
   assert.equal(grok43.maxOutputToken, 30_000);
 });
 
 test("cross-provider models resolve real catalog limits instead of provider fallback", () => {
-  // 中转聚合把别家模型挂在本供应商类型下：grok-4.5 配在 anthropic 下也要
-  // 显示真实限额（500K/32K），而不是 claude_code 兜底 200K/32K。
+  // Relay aggregation mounts other vendors' models under this provider type: grok-4.5 configured under anthropic must also
+  // show its real limits (500K/32K), not the claude_code fallback 200K/32K.
   const grokUnderAnthropic = settings.getProviderModelDefaults("claude_code", "grok-4.5");
   assert.equal(grokUnderAnthropic.contextWindow, 500_000);
   assert.equal(grokUnderAnthropic.maxOutputToken, 32_000);
-  // 反向同理：claude 模型挂在 OpenAI 兼容供应商下读 anthropic 目录。
+  // The reverse holds too: a claude model mounted under an OpenAI-compatible provider reads the anthropic catalog.
   const claudeUnderCodex = settings.getProviderModelDefaults("codex", "claude-opus-4-5");
   assert.equal(claudeUnderCodex.contextWindow, 200_000);
   assert.equal(claudeUnderCodex.maxOutputToken, 64_000);
   const geminiUnderXai = settings.getProviderModelDefaults("xai", "gemini-2.5-pro");
   assert.equal(geminiUnderXai.contextWindow, 1_048_576);
   assert.equal(geminiUnderXai.maxOutputToken, 65_536);
-  // 装饰 id 的候选链对跨供应商回查同样生效。
+  // The decorated-id candidate chain applies to cross-provider lookup as well.
   assert.equal(
     settings.getProviderModelDefaults("claude_code", "GROK-4.5@prod").contextWindow,
     500_000,
   );
-  // 国内厂商模型（deepseek/glm/qwen/kimi/MiniMax 等分区）配在任一类型下，
-  // 都经跨供应商回查取真实限额。
+  // Domestic vendor models (deepseek/glm/qwen/kimi/MiniMax and similar partitions) configured under any type
+  // fetch their real limits via cross-provider lookup.
   const deepseekUnderClaude = settings.getProviderModelDefaults(
     "claude_code",
     "deepseek-v4-flash",
@@ -2899,15 +2899,15 @@ test("cross-provider models resolve real catalog limits instead of provider fall
   const glmUnderCodex = settings.getProviderModelDefaults("codex", "glm-4.7");
   assert.equal(glmUnderCodex.contextWindow, 204_800);
   assert.equal(glmUnderCodex.maxOutputToken, 131_072);
-  // 混合大小写目录 id（MiniMax-M2.1）：小写配置经索引小写别名命中。
+  // Mixed-case catalog id (MiniMax-M2.1): a lowercase config hits via the indexed lowercase alias.
   assert.equal(settings.getProviderModelDefaults("codex", "minimax-m2.1").contextWindow, 204_800);
-  // 全目录未收录的模型仍吃本供应商兜底值。
+  // A model absent from the whole catalog still gets this provider's fallback value.
   assert.equal(
     settings.getProviderModelDefaults("claude_code", "some-custom-model").contextWindow,
     200_000,
   );
-  // Anthropic 形态的未知 id（[1m]/adaptive 启发式）优先级高于跨供应商回查：
-  // [1m] 是用户对部署窗口的显式声明。
+  // Unknown ids in Anthropic form ([1m]/adaptive heuristics) take priority over cross-provider lookup:
+  // [1m] is the user's explicit declaration of the deployment window.
   assert.equal(
     settings.getProviderModelDefaults("claude_code", "grok-4.5[1m]").contextWindow,
     1_000_000,
@@ -2915,10 +2915,10 @@ test("cross-provider models resolve real catalog limits instead of provider fall
 });
 
 test("stale fallback limits persisted for cross-provider models are repaired on read", () => {
-  // 跨供应商回查上线前，grok-4.5 挂 anthropic 下会以 200K/32K 兜底对落库：
-  // 读侧识别并替换为目录真实限额，不需要用户删除重加。存量无 limitsSource
-  // 字段，推断规则判其为 fallback（落库值恰等于当时的兜底对），随即按
-  // catalog/fallback 重解析规则刷新为当前目录真值，来源改记 catalog。
+  // Before cross-provider lookup shipped, grok-4.5 under anthropic was persisted with the 200K/32K fallback pair:
+  // the read side recognizes it and replaces it with the catalog's real limits, without the user deleting and re-adding. Existing rows have no limitsSource
+  // field, the inference rule judges it fallback (the persisted value exactly equals the then-current fallback pair), and it is then refreshed
+  // to the current catalog truth by the catalog/fallback re-resolution rule, with the source recorded as catalog.
   const repaired = settings.normalizeProviderModelConfig(
     { id: "grok-4.5", contextWindow: 200_000, maxOutputToken: 32_000 },
     "claude_code",
@@ -2926,7 +2926,7 @@ test("stale fallback limits persisted for cross-provider models are repaired on 
   assert.equal(repaired.contextWindow, 500_000);
   assert.equal(repaired.maxOutputToken, 32_000);
   assert.equal(repaired.limitsSource, "catalog");
-  // 任一值偏离兜底对 = 用户显式配置，推断为 user，原样保留、不重解析。
+  // Either value deviating from the fallback pair = an explicit user config, inferred as user, kept as-is and not re-resolved.
   const custom = settings.normalizeProviderModelConfig(
     { id: "grok-4.5", contextWindow: 200_000, maxOutputToken: 30_000 },
     "claude_code",
@@ -2934,9 +2934,9 @@ test("stale fallback limits persisted for cross-provider models are repaired on 
   assert.equal(custom.contextWindow, 200_000);
   assert.equal(custom.maxOutputToken, 30_000);
   assert.equal(custom.limitsSource, "user");
-  // 目录外的本供应商 id（claude-opus-4-1 不在当前目录快照里）不受存量修复
-  // 误伤：落库值恰好等于兜底对，推断链判定为 fallback，数值不变、来源如实
-  // 记为 fallback（并非目录真值，只是巧合相等）。
+  // A provider-native id outside the catalog (claude-opus-4-1 is not in the current catalog snapshot) escapes the legacy-repair
+  // false positive: the persisted value exactly equals the fallback pair, the inference chain judges fallback, the numbers are unchanged and the source is truthfully
+  // recorded as fallback (it is not the catalog truth, merely coincidentally equal).
   const native = settings.normalizeProviderModelConfig(
     { id: "claude-opus-4-1", contextWindow: 200_000, maxOutputToken: 32_000 },
     "claude_code",
@@ -2944,7 +2944,7 @@ test("stale fallback limits persisted for cross-provider models are repaired on 
   assert.equal(native.contextWindow, 200_000);
   assert.equal(native.maxOutputToken, 32_000);
   assert.equal(native.limitsSource, "fallback");
-  // 新增（无存量限额）直接拿跨供应商默认值，来源记 catalog。
+  // New entries (no legacy limits) take the cross-provider default directly, with the source recorded as catalog.
   const fresh = settings.normalizeProviderModelConfig("grok-4.5", "claude_code");
   assert.equal(fresh.contextWindow, 500_000);
   assert.equal(fresh.maxOutputToken, 32_000);
@@ -2952,19 +2952,19 @@ test("stale fallback limits persisted for cross-provider models are repaired on 
 });
 
 test("legacy configs without limitsSource infer catalog/fallback/user by matching stored value", () => {
-  // 推断规则 1：落库值等于当前目录解析结果 → catalog。
+  // Inference rule 1: persisted value equals the current catalog resolution -> catalog.
   const catalogMatch = settings.normalizeProviderModelConfig(
     { id: "grok-4.5", contextWindow: 500_000, maxOutputToken: 32_000 },
     "xai",
   );
   assert.equal(catalogMatch.limitsSource, "catalog");
-  // 推断规则 2：落库值等于当前供应商兜底常量、且目录/跨供应商都查不到 → fallback。
+  // Inference rule 2: persisted value equals the current provider fallback constant and neither catalog nor cross-provider lookup finds it -> fallback.
   const fallbackMatch = settings.normalizeProviderModelConfig(
     { id: "relay-only-model", contextWindow: 400_000, maxOutputToken: 142_000 },
     "xai",
   );
   assert.equal(fallbackMatch.limitsSource, "fallback");
-  // 推断规则 3：两者都不等 → user（无法证明不是用户手改，保守保留原值）。
+  // Inference rule 3: neither matches -> user (cannot prove it was not hand-edited, conservatively keep the original).
   const userMatch = settings.normalizeProviderModelConfig(
     { id: "relay-only-model", contextWindow: 300_000, maxOutputToken: 50_000 },
     "xai",
@@ -2975,8 +2975,8 @@ test("legacy configs without limitsSource infer catalog/fallback/user by matchin
 });
 
 test("provider-sourced limits are not reparsed on load; user-sourced limits are never touched", () => {
-  // provider 来源：供应商上次刷新自带的真实限额，加载阶段没有新的接口响应
-  // 可用，原样保留落库值，即使它和当前目录/兜底值都不一致。
+  // provider source: the real limits carried by the provider's last refresh; at load time no new API response
+  // is available, so the persisted value is kept as-is even if it disagrees with the current catalog/fallback.
   const providerSourced = settings.normalizeProviderModelConfig(
     { id: "grok-4.5", contextWindow: 999_000, maxOutputToken: 40_000, limitsSource: "provider" },
     "xai",
@@ -2984,8 +2984,8 @@ test("provider-sourced limits are not reparsed on load; user-sourced limits are 
   assert.equal(providerSourced.contextWindow, 999_000);
   assert.equal(providerSourced.maxOutputToken, 40_000);
   assert.equal(providerSourced.limitsSource, "provider");
-  // user 来源：即使数值恰好等于当前目录真值，也保持 user 标记，不被目录更新
-  // 悄悄"升级"回 catalog（避免用户下次手动改动时被目录波动覆盖的假象）。
+  // user source: even if the value happens to equal the current catalog truth, the user marker is kept and not
+  // silently "upgraded" back to catalog (avoiding the illusion of being overwritten by catalog churn on the user's next manual edit).
   const userSourced = settings.normalizeProviderModelConfig(
     { id: "grok-4.5", contextWindow: 500_000, maxOutputToken: 32_000, limitsSource: "user" },
     "xai",
@@ -2996,9 +2996,9 @@ test("provider-sourced limits are not reparsed on load; user-sourced limits are 
 });
 
 test("provider-declared limits from a fresh /v1/models response are always tagged provider", () => {
-  // extractProviderDeclaredLimits 命中（如 OpenRouter 的 context_length）时
-  // 无条件记 provider，即使旧存档已有 limitsSource 也会被本次响应覆盖——
-  // 这是唯一比落库值更新鲜的数据源。
+  // When extractProviderDeclaredLimits hits (e.g. OpenRouter's context_length)
+  // the source is unconditionally recorded as provider, overwriting even a legacy archive's limitsSource --
+  // this is the only data source fresher than the persisted value.
   const declared = settings.normalizeProviderModelConfig(
     {
       id: "some-openrouter-model",
@@ -3016,27 +3016,27 @@ test("provider-declared limits from a fresh /v1/models response are always tagge
 });
 
 test("persisted degenerate limits are repaired at normalize time for every provider", () => {
-  // 坏目录数据落库期间加入的模型：读侧修复，不需要用户重新添加。
+  // Models added while bad catalog data was persisted: the read side repairs them, so the user need not re-add them.
   const repaired = settings.normalizeProviderModelConfig(
     { id: "grok-4.5", contextWindow: 500_000, maxOutputToken: 500_000 },
     "xai",
   );
   assert.equal(repaired.contextWindow, 500_000);
   assert.equal(repaired.maxOutputToken, 32_000);
-  // 用户显式配置的合法输出上限保持不动。
+  // A valid output limit explicitly configured by the user is left untouched.
   const custom = settings.normalizeProviderModelConfig(
     { id: "grok-4.5", contextWindow: 500_000, maxOutputToken: 64_000 },
     "xai",
   );
   assert.equal(custom.maxOutputToken, 64_000);
-  // 小窗口退化条目按窗口 1/4 保底留输入预算。
+  // Degenerate small-window entries reserve an input budget of at least window/4.
   const tiny = settings.normalizeProviderModelConfig(
     { id: "relay-grok", contextWindow: 8_192, maxOutputToken: 8_192 },
     "xai",
   );
   assert.equal(tiny.contextWindow, 8_192);
   assert.equal(tiny.maxOutputToken, 2_048);
-  // 修复规则对所有供应商统一生效（不是 xai 特例）。
+  // The repair rule applies uniformly to all providers (it is not an xai special case).
   const codex = settings.normalizeProviderModelConfig(
     { id: "custom-model", contextWindow: 128_000, maxOutputToken: 128_000 },
     "codex",
@@ -3057,23 +3057,23 @@ test("usage query defaults disabled and redacts query credentials", () => {
   assert.equal(provider.usageQuery.mode, "newapi");
   assert.equal(provider.usageQuery.timeoutSecs, 10);
 
-  // balance(官方余额适配器)是合法模式;未知值统一回退自定义脚本。
+  // balance (the official balance adapter) is a valid mode; unknown values uniformly fall back to the custom script.
   const balance = settings.normalizeCustomProvider({ usageQuery: { mode: "balance" } });
   assert.equal(balance.usageQuery.mode, "balance");
   const unknown = settings.normalizeCustomProvider({ usageQuery: { mode: "mystery" } });
   assert.equal(unknown.usageQuery.mode, "newapi");
-  // 默认查询方式是 NewAPI 模板;显式保存过的 custom 保持不变。
+  // The default query method is the NewAPI template; an explicitly saved custom is kept unchanged.
   assert.equal(settings.getDefaultUsageQueryConfig().mode, "newapi");
   const explicitCustom = settings.normalizeCustomProvider({ usageQuery: { mode: "custom" } });
   assert.equal(explicitCustom.usageQuery.mode, "custom");
 
-  // 每模式独立脚本:逐项 trim、空槽位与未知键丢弃。
+  // Per-mode independent scripts: each entry trimmed, empty slots and unknown keys dropped.
   const withScripts = settings.normalizeCustomProvider({
     usageQuery: { scripts: { custom: "  (a)  ", general: "   ", bogus: "(x)" } },
   });
   assert.deepEqual(withScripts.usageQuery.scripts, { custom: "(a)" });
 
-  // 超时 clamp:2-30 秒。
+  // Timeout clamp: 2-30 seconds.
   const clamped = settings.normalizeCustomProvider({ usageQuery: { timeoutSecs: 500 } });
   assert.equal(clamped.usageQuery.timeoutSecs, 30);
 
@@ -3122,8 +3122,8 @@ test("usage query secret updates are emitted and applied without exposing the va
 });
 
 test("clearing a configured usage query secret emits an explicit empty update", () => {
-  // WebUI 侧秘密恒被脱敏为空串,值比较发现不了"删除已配置密钥"——
-  // Configured true→false 是显式清除信号,必须产出空串 sidecar 条目。
+  // On the WebUI side secrets are always redacted to an empty string, so value comparison cannot detect "deleting a configured key" --
+  // Configured true->false is an explicit clear signal and must produce an empty-string sidecar entry.
   const previous = settings.normalizeSettings({
     customProviders: [
       { id: "provider-1", usageQuery: { apiKey: "", apiKeyConfigured: true } },

@@ -5,20 +5,22 @@ function hasParentTraversalSegment(pathKey: string): boolean {
 }
 
 /**
- * 前端护栏:判断一个 cwd 是否落在 project 范围内。
+ * Frontend guardrail: determines whether a cwd falls within a project's scope.
  *
- * 只做规范化后的字符串形状判断——不解析符号链接、不访问文件系统,所以它
- * 会漏掉软链逃逸。真正的授权边界在 Rust 侧 `canonicalize_workdir_within`
- * (双边 canonicalize + 包含性校验),这里的作用是让越界的 Pane 在投放/
- * 恢复时就被挡掉,而不是等后端报错才暴露。布局 JSON 不是授权凭据:即使
- * 前端放行,后端仍会独立复核。
+ * It only checks normalized string shape — no symlink resolution and no
+ * filesystem access, so it will miss symlink escapes. The real authorization
+ * boundary is the Rust-side `canonicalize_workdir_within` (canonicalize on both
+ * sides + containment check); this exists to block out-of-bounds panes already
+ * at drop/restore time instead of exposing the problem only when the backend
+ * errors. Layout JSON is not an authorization credential: even if the frontend
+ * lets it through, the backend still re-verifies independently.
  */
 export function pathIsInsideProject(path: unknown, projectPathKey: unknown): boolean {
   const projectKey = workspaceProjectPathKey(projectPathKey);
   if (!projectKey) return false;
   const pathKey = workspaceProjectPathKey(path);
   if (!pathKey) return false;
-  // `..` 无法在不触碰文件系统的前提下安全解析,一律视为越界。
+  // `..` cannot be resolved safely without touching the filesystem, so it is always treated as out of bounds.
   if (hasParentTraversalSegment(pathKey) || hasParentTraversalSegment(projectKey)) return false;
   if (pathKey === projectKey) return true;
   const prefix = projectKey.endsWith("/") ? projectKey : `${projectKey}/`;
@@ -26,12 +28,14 @@ export function pathIsInsideProject(path: unknown, projectPathKey: unknown): boo
 }
 
 /**
- * 终端 surface 的 launchSpec.cwd 是否与其 ProjectRef 同源。
+ * Whether a terminal surface's launchSpec.cwd shares the same origin as its
+ * ProjectRef.
  *
- * 对 `localTerminal` 与 `sshTerminal` 一视同仁:两种 surface 的 cwd 都是
- * **本地 project 锚点**——`create_ssh` 同样会在本地 canonicalize 它(它是
- * SFTP 的 local root),而不是远端工作目录。因此包含性判断在两种 kind 上
- * 语义一致,越界的 Pane 在投放/恢复阶段就被挡掉。
+ * `localTerminal` and `sshTerminal` are treated the same: for both surface kinds
+ * the cwd is a **local project anchor** — `create_ssh` also canonicalizes it
+ * locally (it is the local root for SFTP) rather than a remote working
+ * directory. So the containment check has identical semantics for both kinds,
+ * and out-of-bounds panes are blocked at drop/restore time.
  */
 export function terminalLaunchSpecIsInProject(surface: {
   kind: "localTerminal" | "sshTerminal";

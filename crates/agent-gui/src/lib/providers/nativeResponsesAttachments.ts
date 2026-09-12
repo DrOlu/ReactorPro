@@ -72,21 +72,28 @@ type GeminiNativeAttachmentCandidate = {
 };
 
 /**
- * 原生内联策略（按附件 kind 分层，五家 provider 统一）：
+ * Native inlining policy (layered by attachment kind, uniform across the five
+ * providers):
  *
- * - image：各家都是标准 block（input_image / image_url / image / inlineData），
- *   兼容中转也认，零往返成本，保留原生内联。codex / deepseek / gemini 分支沿用
- *   原有的 model.input 含 "image" 门控；anthropic 分支按 modelFactory 的约定不读
- *   model.input（见 buildAnthropicNativeAttachmentContentPart）。
- * - pdf：document / input_file / inlineData 都是各家专有结构，第三方
- *   Anthropic/OpenAI/Gemini 兼容中转普遍不认（Kimi Coding、z.ai 等直接 400
- *   "Invalid request"），只在各家官方端点内联；其余端点退回 Read（lopdf 抽文本）。
- * - text / word / spreadsheet / notebook / archive：一律不内联，走 Read。
- *   这正是在兼容中转上出错的类型，而 Read 对它们的结果与内联等价。
+ * - image: every provider has a standard block (input_image / image_url / image /
+ *   inlineData), and compatible relays accept it too, at zero round-trip cost, so
+ *   native inlining is kept. The codex / deepseek / gemini branches keep the
+ *   existing model.input-contains-"image" gate; the anthropic branch does not read
+ *   model.input per modelFactory's convention (see
+ *   buildAnthropicNativeAttachmentContentPart).
+ * - pdf: document / input_file / inlineData are all provider-specific structures
+ *   that third-party Anthropic/OpenAI/Gemini compatible relays generally reject
+ *   (Kimi Coding, z.ai, etc. return a straight 400 "Invalid request"), so it is
+ *   inlined only on each provider's official endpoint; other endpoints fall back
+ *   to Read (lopdf text extraction).
+ * - text / word / spreadsheet / notebook / archive: never inlined, always via
+ *   Read. These are exactly the types that fail on compatible relays, and Read
+ *   produces equivalent results for them.
  *
- * 用户消息里原本的两行 Read 指令头（uploadedFiles.ts）在至少一个附件被内联时
- * 换成下面的版本，并给被内联的附件行加 "inlined" 标注，让模型明确知道哪些
- * 已经在请求里、哪些必须 Read。
+ * The two-line Read instruction header normally in the user message
+ * (uploadedFiles.ts) is replaced with the version below whenever at least one
+ * attachment is inlined, and inlined attachment lines get an "inlined" tag so the
+ * model knows exactly which are already in the request and which must be Read.
  */
 function buildNativeUploadInstruction(requestLabel: string, inputLabel: string) {
   return [
@@ -151,9 +158,11 @@ function parseHostname(baseUrl: string | undefined) {
 }
 
 /**
- * PDF 只在各家官方端点原生内联。判断依据是请求 baseUrl 的主机名，而不是
- * provider 类型——`claude_code` / `codex` / `gemini` 类型同样用于第三方兼容
- * 中转（Kimi Coding、z.ai、各类 new-api 等），它们不接受专有 document 结构。
+ * PDF is natively inlined only on each provider's official endpoint. The basis
+ * for the decision is the hostname of the request baseUrl, not the provider type
+ * — the `claude_code` / `codex` / `gemini` types are also used for third-party
+ * compatible relays (Kimi Coding, z.ai, various new-api, etc.), which do not
+ * accept the provider-specific document structure.
  */
 function supportsNativePdfInline(model: Model<Api>, baseUrl: string | undefined) {
   const hostname = parseHostname(baseUrl);
@@ -170,17 +179,20 @@ function supportsNativePdfInline(model: Model<Api>, baseUrl: string | undefined)
       return hostname === "api.anthropic.com";
     case "google-generative-ai":
       return hostname === "generativelanguage.googleapis.com";
-    // deepseek-responses 有意落在这里：官方《图像理解》指南只把 file / input_file
-    // 用于图片（file_id 指向 Files API 上传的图），没有承诺 PDF 的 document 结构，
-    // 所以 DeepSeek 的 PDF 一律退回 Read 抽文本。
+    // deepseek-responses deliberately falls through here: the official
+    // "Image Understanding" guide uses file / input_file only for images (with
+    // file_id pointing to an image uploaded via the Files API) and does not
+    // promise a PDF document structure, so DeepSeek PDFs always fall back to
+    // Read text extraction.
     default:
       return false;
   }
 }
 
 /**
- * 附件 kind 是否进入原生内联候选。image 总是候选（MIME 与模型图片能力沿用各
- * adapter 原有的筛法），pdf 仅官方端点，其余 kind 一律交给 Read。
+ * Whether an attachment kind is a native-inline candidate. image is always a
+ * candidate (MIME and model image capability keep each adapter's existing
+ * filtering), pdf only on official endpoints, and every other kind goes to Read.
  */
 function isNativeInlineCandidate(
   file: PendingUploadedFile,
@@ -204,11 +216,13 @@ function isOpenAICompletionsModel(model: Model<Api>) {
   return model.api === "openai-completions";
 }
 
-// DeepSeek 的 Responses 端点与 OpenAI 同形：{ input_image } 内容块、图片只允许出现
-// 在 user 消息（官方《图像理解》指南）。这里刻意不 import deepSeekNative 的
-// DEEPSEEK_RESPONSES_API：本模块由 node 测试用 esbuild loader 直接加载，引
-// deepSeekNative 会把 pi-ai 的 openai-responses 子路径一并拖进来，逼所有附件测试
-// 都补 mock。字面量的一致性由 providers/deepseek-native 测试锁住。
+// DeepSeek's Responses endpoint has the same shape as OpenAI's: { input_image }
+// content blocks, with images allowed only in user messages (official "Image
+// Understanding" guide). We deliberately do not import deepSeekNative's
+// DEEPSEEK_RESPONSES_API here: this module is loaded directly by node tests with
+// an esbuild loader, and importing deepSeekNative would drag in pi-ai's
+// openai-responses subpath, forcing every attachment test to add mocks. Literal
+// consistency is locked down by the providers/deepseek-native tests.
 const DEEPSEEK_RESPONSES_API_ID = "deepseek-responses";
 
 function isResponsesApiModel(model: Model<Api>) {
@@ -253,8 +267,10 @@ async function readNativeAttachment(params: {
   workdir: string;
   file: PendingUploadedFile;
 }): Promise<NativeAttachmentCommandResponse> {
-  // 附件读取只走导入时返回的绝对路径；旧版本仅持久化 workdir 相对路径的
-  // 附件不再兼容，直接走各 adapter 的 Read-fallback 分支。
+  // Attachment reads use only the absolute path returned at import time;
+  // attachments from older versions that persisted only a workdir-relative path
+  // are no longer supported and go straight through each adapter's Read-fallback
+  // branch.
   const absolutePath =
     typeof params.file.absolutePath === "string" ? params.file.absolutePath.trim() : "";
   if (!absolutePath) {
@@ -570,9 +586,11 @@ async function buildAnthropicNativeAttachmentContentPart(params: {
 }): Promise<AnthropicNativeAttachmentContentPart | null> {
   const { file, model, workdir, baseUrl } = params;
   if (!isNativeInlineCandidate(file, model, baseUrl)) return null;
-  // Anthropic 分支不读 model.input：modelFactory 给所有自定义 Anthropic 模型
-  // 硬编码 input: ["text"]，且用户 inputModalities 覆盖也不作用于此处。
-  // 若在这里加图片门控，k3 / glm 等一切非目录模型的图片内联都会失效。
+  // The Anthropic branch does not read model.input: modelFactory hardcodes
+  // input: ["text"] for all custom Anthropic models, and a user's
+  // inputModalities override does not apply here either. Adding an image gate
+  // here would disable image inlining for k3 / glm and every other
+  // non-catalog model.
 
   const attachment = await readNativeAttachment({ workdir, file });
   const mimeType = normalizeMimeType(attachment.mimeType);

@@ -6,8 +6,9 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// AwaitUnaryResponse 以单次请求-响应语义向目标 Agent 发送信封并等待首条关联响应；
-// 取消/超时由调用方 ctx 控制；agentID 必须明确且非空。
+// AwaitUnaryResponse sends an envelope to the target agent with single request-response
+// semantics and waits for the first correlated response; cancellation/timeout is controlled by
+// the caller's ctx; agentID must be explicit and non-empty.
 func (m *Manager) AwaitUnaryResponse(
 	ctx context.Context,
 	agentID string,

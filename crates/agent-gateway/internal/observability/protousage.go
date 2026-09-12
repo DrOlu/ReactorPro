@@ -2,8 +2,8 @@ package observability
 
 import "sync/atomic"
 
-// ProtoUsage 统计 v2 协议链路使用量：进程内原子计数，经 /api/status 的
-// protocol_usage 字段暴露。
+// ProtoUsage tracks v2 protocol link usage: in-process atomic counters, exposed
+// via the protocol_usage field of /api/status.
 type ProtoUsage struct {
 	V2BrowserConnectionsTotal            atomic.Int64
 	V2BrowserConnectionsActive           atomic.Int64
@@ -22,10 +22,10 @@ type ProtoUsage struct {
 	WebSocketQueueByteOverflowsTotal     atomic.Int64
 }
 
-// Usage 是进程级单例；各协议层直接打点。
+// Usage is a process-level singleton; each protocol layer increments it directly.
 var Usage ProtoUsage
 
-// Snapshot 导出当前计数（键名即对外 JSON 字段名）。
+// Snapshot exports the current counts (keys are the external JSON field names).
 func (u *ProtoUsage) Snapshot() map[string]int64 {
 	return map[string]int64{
 		"v2_browser_connections_total":             u.V2BrowserConnectionsTotal.Load(),

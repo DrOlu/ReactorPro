@@ -35,10 +35,10 @@ pub async fn settings_list_ccswitch_providers() -> Result<CcsProvidersResponse, 
                 .iter()
                 .map(|path| path.display().to_string())
                 .collect::<Vec<_>>()
-                .join("；");
-            format!("未发现 ccswitch LiveAgent 供应商，已检查：{checked}")
+                .join("; ");
+            format!("No ccswitch ReactorPro providers found; checked: {checked}")
         } else {
-            format!("发现 {} 个 ccswitch LiveAgent 供应商", providers.len())
+            format!("Found {} ccswitch ReactorPro providers", providers.len())
         };
         Ok(CcsProvidersResponse {
             status: "success".to_string(),
@@ -47,13 +47,15 @@ pub async fn settings_list_ccswitch_providers() -> Result<CcsProvidersResponse, 
         })
     })
     .await
-    .map_err(|e| format!("settings_list_ccswitch_providers join 失败：{e}"))?
+    .map_err(|e| format!("settings_list_ccswitch_providers join failed: {e}"))?
 }
 
-/// ccswitch (Tauri 应用 id `com.ccswitch.desktop`) 允许用户把数据目录整体迁移到
-/// 自定义路径（例如同步到 OneDrive），迁移后真正使用的数据库不再位于默认的
-/// `~/.cc-switch/` 下，而是记录在其自身配置目录的 `app_paths.json` 里
-/// （`app_config_dir_override` 字段）。这里优先用该 override 目录，找不到再回退默认目录。
+/// ccswitch (Tauri app id `com.ccswitch.desktop`) lets users migrate the whole
+/// data directory to a custom path (for example syncing to OneDrive); after
+/// migration the database actually in use is no longer under the default
+/// `~/.cc-switch/` but recorded in `app_paths.json` in its own config directory
+/// (the `app_config_dir_override` field). Prefer that override directory here
+/// and fall back to the default directory when it is not found.
 fn ccswitch_db_candidates() -> Vec<PathBuf> {
     let filename = format!("{}-{}.db", "cc", "switch");
     let mut candidates = Vec::new();
@@ -61,9 +63,11 @@ fn ccswitch_db_candidates() -> Vec<PathBuf> {
         candidates.push(override_dir.join(&filename));
     }
     candidates.push(ccswitch_legacy_config_dir().join(&filename));
-    // Windows 上 `HOME` 可能被 Git/MSYS 等注入且不等于真实用户目录，ccswitch
-    // v3.10.3 曾据此把数据库写到 `%HOME%\.cc-switch\`，上游至今保留该位置作读取
-    // 兜底（见其 config.rs get_app_config_dir），这里同样纳入候选。
+    // On Windows, `HOME` may be injected by Git/MSYS and differ from the real
+    // user directory; ccswitch v3.10.3 used it to write the database to
+    // `%HOME%\.cc-switch\`, and upstream still keeps that location as a read
+    // fallback (see get_app_config_dir in its config.rs), so include it as a
+    // candidate here as well.
     #[cfg(windows)]
     if let Ok(home_env) = std::env::var("HOME") {
         let trimmed = home_env.trim();
@@ -98,8 +102,9 @@ fn ccswitch_override_config_dir() -> Option<PathBuf> {
     Some(expand_home_prefix(override_dir))
 }
 
-/// 与上游 ccswitch 的 `resolve_path` 对齐：支持 `~`、`~/`、`~\` 三种写法
-/// （Windows 用户习惯用反斜杠书写迁移路径，ccswitch 自身能解析这些形式）。
+/// Aligned with upstream ccswitch's `resolve_path`: supports the three forms
+/// `~`, `~/`, and `~\` (Windows users tend to write migrated paths with a
+/// backslash, and ccswitch itself can parse these forms).
 fn expand_home_prefix(path: &str) -> PathBuf {
     if path == "~" {
         if let Some(home) = dirs::home_dir() {
@@ -121,12 +126,13 @@ fn list_ccswitch_liveagent_providers_from_db(
     }
 
     let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| format!("打开 ccswitch 数据库失败 {}：{e}", path.display()))?;
-    // meta 是 ccswitch providers 表的独立列（TEXT NOT NULL DEFAULT '{}'），
-    // Claude Desktop 的接入模式、上游格式与模型路由都存在这里，而不在
-    // settings_config。极老的 v0 库尚未迁移出 meta 列（LiveAgent 只读打开、
-    // 不会触发 ccswitch 迁移），这种库也早于 Claude Desktop 支持，退化为
-    // 空 meta 查询即可。
+        .map_err(|e| format!("failed to open ccswitch database {}: {e}", path.display()))?;
+    // meta is a separate column of the ccswitch providers table (TEXT NOT NULL
+    // DEFAULT '{}'); Claude Desktop's access mode, upstream format, and model
+    // routes are all stored here rather than in settings_config. Very old v0
+    // databases have not yet migrated out of the meta column (ReactorPro opens
+    // read-only and does not trigger a ccswitch migration); such databases also
+    // predate Claude Desktop support, so fall back to an empty meta query.
     let has_meta_column = ccswitch_providers_has_meta_column(&conn);
     let meta_select = if has_meta_column { "meta" } else { "NULL" };
     let sql = format!(
@@ -162,7 +168,7 @@ fn list_ccswitch_liveagent_providers_from_db(
     );
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("读取 ccswitch providers 表失败：{e}"))?;
+        .map_err(|e| format!("failed to read ccswitch providers table: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             Ok((
@@ -173,16 +179,17 @@ fn list_ccswitch_liveagent_providers_from_db(
                 row.get::<_, Option<String>>(4)?,
             ))
         })
-        .map_err(|e| format!("查询 ccswitch providers 失败：{e}"))?;
+        .map_err(|e| format!("failed to query ccswitch providers: {e}"))?;
 
     let mut providers = Vec::new();
     for row in rows {
         let (source_id, app_type, name, settings_config, meta_str) =
-            row.map_err(|e| format!("读取 ccswitch provider 行失败：{e}"))?;
+            row.map_err(|e| format!("failed to read ccswitch provider row: {e}"))?;
         let Ok(config) = serde_json::from_str::<Value>(&settings_config) else {
             continue;
         };
-        // meta 解析失败按空处理，不影响该行其余字段的导入。
+        // A failed meta parse is treated as empty and does not affect import of
+        // the row's other fields.
         let meta = meta_str
             .as_deref()
             .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
@@ -220,10 +227,12 @@ fn ccs_provider_from_value(
 ) -> Option<CcsProviderImportItem> {
     let mapped_provider_type = ccs_provider_type_from_app_type(app_type)?;
 
-    // Claude Desktop（ccswitch app_type=claude-desktop）供应商归入 Anthropic 协议标签，
-    // 但只有 Anthropic 原生格式的才可直接作为 claude_code 导入：代理模式声明的
-    // openai_chat / openai_responses / gemini_native 上游需要本地转协议，直接当作
-    // Anthropic 供应商导入会得到协议不符的坏配置，这里跳过。
+    // Claude Desktop (ccswitch app_type=claude-desktop) providers are grouped
+    // under the Anthropic protocol tag, but only those in the native Anthropic
+    // format can be imported directly as claude_code: upstreams declared by
+    // proxy mode as openai_chat / openai_responses / gemini_native require local
+    // protocol translation, and importing them as an Anthropic provider would
+    // yield a broken config with a mismatched protocol, so skip them here.
     let is_claude_desktop = ccs_is_claude_desktop_app_type(app_type);
     if is_claude_desktop && !ccs_claude_desktop_is_anthropic(meta) {
         return None;
@@ -243,8 +252,9 @@ fn ccs_provider_from_value(
 
     let mut models = ccs_extract_models(provider_type, config);
     if is_claude_desktop {
-        // Claude Desktop 的模型不写在 env，而是 meta.claudeDesktopModelRoutes：
-        // 直连模式 route_id 即模型名，映射模式取 route.model 的真实上游模型。
+        // Claude Desktop models are not written in env but in
+        // meta.claudeDesktopModelRoutes: in direct mode route_id is the model
+        // name, while in mapped mode route.model holds the real upstream model.
         for model in ccs_extract_claude_desktop_models(meta) {
             if !models.iter().any(|item| item == &model) {
                 models.push(model);
@@ -275,7 +285,7 @@ fn ccs_provider_from_value(
         request_format: if provider_type == "deepseek" {
             "openai-completions".to_string()
         } else if provider_type == "xai" {
-            // Grok / xAI 在 LiveAgent 固定 Responses。
+            // Grok / xAI is fixed to Responses in ReactorPro.
             "openai-responses".to_string()
         } else if provider_type == "codex" && ccs_is_chat_protocol(config) {
             "openai-completions".to_string()
@@ -289,12 +299,14 @@ fn ccs_provider_from_value(
 fn ccs_provider_type_from_app_type(app_type: &str) -> Option<&'static str> {
     match app_type.trim().to_ascii_lowercase().as_str() {
         "codex" => Some("codex"),
-        // Claude Desktop 与 Claude Code CLI 同为 Anthropic 协议供应商。
+        // Claude Desktop and the Claude Code CLI are both Anthropic protocol
+        // providers.
         "claude" | "claude-code" | "claude_code" | "claude-desktop" | "claude_desktop"
         | "claudedesktop" => Some("claude_code"),
         "gemini" => Some("gemini"),
         "deepseek" => Some("deepseek"),
-        // CC-Switch Grok Build 应用桶（与上游 AppType::GrokBuild 别名对齐）。
+        // CC-Switch Grok Build app bucket (aligned with the upstream
+        // AppType::GrokBuild aliases).
         "grokbuild" | "grok-build" | "grok_build" | "grok" | "xai" => Some("xai"),
         _ => None,
     }
@@ -307,11 +319,13 @@ fn ccs_is_claude_desktop_app_type(app_type: &str) -> bool {
     )
 }
 
-/// Claude Desktop 供应商是否使用 Anthropic 原生上游格式。
+/// Whether a Claude Desktop provider uses the native Anthropic upstream format.
 ///
-/// ccswitch 直连模式固定写 meta.apiFormat = "anthropic"；映射（proxy）模式可以声明
-/// openai_chat / openai_responses / gemini_native 等格式，由 ccswitch 内置网关转协议。
-/// 缺省（历史数据无 apiFormat）按 Anthropic 处理，与 ccswitch 的默认值一致。
+/// ccswitch direct mode always writes meta.apiFormat = "anthropic"; mapped
+/// (proxy) mode may declare formats such as openai_chat / openai_responses /
+/// gemini_native, with protocol translation done by ccswitch's built-in
+/// gateway. The default (historical data without apiFormat) is treated as
+/// Anthropic, matching ccswitch's own default.
 fn ccs_claude_desktop_is_anthropic(meta: &Value) -> bool {
     match meta.get("apiFormat").and_then(Value::as_str) {
         Some(format) => format.trim().eq_ignore_ascii_case("anthropic") || format.trim().is_empty(),
@@ -319,11 +333,12 @@ fn ccs_claude_desktop_is_anthropic(meta: &Value) -> bool {
     }
 }
 
-/// 从 meta.claudeDesktopModelRoutes 提取 Claude Desktop 的模型列表。
+/// Extract the Claude Desktop model list from meta.claudeDesktopModelRoutes.
 ///
-/// 路由表形如 { "<route_id>": { "model": "<上游模型>", ... } }：直连模式下 route_id
-/// 就是模型名（model 字段同值）；映射模式下 model 字段才是真实上游模型。统一优先取
-/// model 字段，为空时回退 route_id。
+/// The route table looks like { "<route_id>": { "model": "<upstream model>", ... } }:
+/// in direct mode route_id is the model name (the model field has the same
+/// value); in mapped mode the model field holds the real upstream model.
+/// Uniformly prefer the model field and fall back to route_id when it is empty.
 fn ccs_extract_claude_desktop_models(meta: &Value) -> Vec<String> {
     let Some(routes) = meta
         .get("claudeDesktopModelRoutes")
@@ -392,8 +407,8 @@ fn ccs_extract_models(provider_type: &str, config: &Value) -> Vec<String> {
             }
         }
         "xai" => {
-            // Grok Build：settings_config.config 为 TOML，[models].default 与
-            // [model."<id>"].model 为模型 id。
+            // Grok Build: settings_config.config is TOML, where
+            // [models].default and [model."<id>"].model hold model ids.
             if let Some(config_text) = config.get("config").and_then(Value::as_str) {
                 if let Some(model) = ccs_extract_toml_string_value(config_text, "default") {
                     push_model(model);
@@ -453,7 +468,7 @@ fn ccs_extract_base_url(provider_type: &str, config: &Value) -> Option<String> {
                     .and_then(|value| ccs_string_at(value, &["base_url", "baseURL"]))
             })
             .or_else(|| {
-                // Grok Build：config 字段是完整 TOML 文本。
+                // Grok Build: the config field is full TOML text.
                 config
                     .get("config")
                     .and_then(Value::as_str)
@@ -519,7 +534,7 @@ fn ccs_extract_api_key(provider_type: &str, config: &Value) -> Option<String> {
                     .and_then(|value| ccs_string_at(value, &["apiKey", "api_key"]))
             })
             .or_else(|| {
-                // Grok Build TOML：api_key = "..."
+                // Grok Build TOML: api_key = "..."
                 config
                     .get("config")
                     .and_then(Value::as_str)
@@ -611,7 +626,8 @@ fn ccs_extract_toml_string_value(text: &str, key: &str) -> Option<String> {
 
 fn strip_ccswitch_suffix(name: &str) -> &str {
     name.trim()
-        .strip_suffix("（ccswitch）")
+        // Fullwidth parentheses, written as escapes so the source stays ASCII.
+        .strip_suffix("\u{ff08}ccswitch\u{ff09}")
         .or_else(|| name.trim().strip_suffix("(ccswitch)"))
         .unwrap_or_else(|| name.trim())
 }

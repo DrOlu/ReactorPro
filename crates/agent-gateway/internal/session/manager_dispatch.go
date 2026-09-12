@@ -7,8 +7,8 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// DispatchFromAgent 是显式 Agent 测试/嵌入入口；生产 WebSocket 链路使用
-// DispatchFromAgentForSession，把身份绑定到已认证连接。
+// DispatchFromAgent is the explicit Agent test/embedding entry point; the production WebSocket link
+// uses DispatchFromAgentForSession, binding the identity to the authenticated connection.
 func (m *Manager) DispatchFromAgent(agentID string, env *gatewayv2.AgentEnvelope) {
 	session, err := m.resolveSession(agentID)
 	if err != nil {
@@ -22,7 +22,8 @@ func (m *Manager) DispatchFromAgentForSession(session *AgentSession, env *gatewa
 }
 
 func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.AgentEnvelope) {
-	// 严格校验 expected 仍是所属登记项的在线会话；被顶替连接的迟到事件直接丢弃。
+	// Strictly verify that expected is still the online session of its registration entry; late events
+	// from a superseded connection are discarded directly.
 	var session *AgentSession
 	m.registry.mu.RLock()
 	if entry := m.registry.entryForSessionLocked(expected); entry != nil {
@@ -32,8 +33,9 @@ func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.Agent
 	if session == nil {
 		return
 	}
-	// 所有入站事件按已认证会话的 agent_id 打标入账——这是跨 Agent 隔离的唯一
-	// 事实源：Agent 无法伪造他人身份的事件（身份来自握手，不来自载荷）。
+	// All inbound events are tagged and recorded with the authenticated session's agent_id -- this is
+	// the sole source of truth for cross-Agent isolation: an Agent cannot forge events as another
+	// identity (the identity comes from the handshake, not from the payload).
 	agentID := session.AgentID
 	reliableChatIngress := session.SupportsCapability(gatewayv2.ChatIngressV1Capability)
 

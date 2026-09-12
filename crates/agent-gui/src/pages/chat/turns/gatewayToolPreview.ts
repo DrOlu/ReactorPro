@@ -28,12 +28,14 @@ import { getToolApprovalDeadlineAt, hasPendingToolApproval } from "../../../lib/
 
 const GATEWAY_TOOL_TEXT_PREVIEW_MAX_CHARS = 4000;
 
-// 审批栏摘要上限:够绝大多数命令完整展示,同时防止同步标记载荷过大;
-// 极端超长时截断兜底(审批栏内命令块另有 max-height + 滚动)。
+// Approval bar summary limit: enough to fully display the vast majority of commands while
+// preventing the sync marker payload from growing too large; extremely long cases fall back to
+// truncation (the command block inside the approval bar also has max-height + scrolling).
 const TOOL_APPROVAL_SUMMARY_MAX_CHARS = 2000;
 
-// 待审批工具的摘要,供审批栏统一完整展示(Bash/ManagedProcess 保留原始命令含换行,
-// 其余工具复用 summarizeToolCall 的参数摘要)。仅在极端超长时截断。
+// Summary of the tool awaiting approval, for the approval bar to display completely and uniformly
+// (Bash/ManagedProcess keep the raw command including newlines; other tools reuse
+// summarizeToolCall's argument summary). Truncated only in extremely long cases.
 export function summarizeToolCallForApproval(
   toolCall: Pick<ToolCall, "id" | "name" | "arguments">,
 ): string {
@@ -43,13 +45,15 @@ export function summarizeToolCallForApproval(
     (toolCall.name === "Bash" || toolCall.name === "ManagedProcess") &&
     typeof args.command === "string"
   ) {
-    // 命令保留原始换行(审批栏以 pre-wrap 完整展示),不折叠空白。
+    // Commands keep their original newlines (the approval bar displays them fully with pre-wrap); whitespace is not collapsed.
     text = args.command.trim();
   } else if (toolCall.name === "Browser" && typeof args.action === "string") {
-    // 浏览器审批摘要必须按 action 精确取对应参数,不能取"第一个非空字段":
-    // 模型可能同时传入与本 action 无关的字段(如 eval 带 url),那会把无害目标
-    // 顶到摘要里、掩盖真实执行内容。type 的输入文本与 eval 的表达式属于
-    // 高危信息,完整展示(审批栏 pre-wrap,超长由末尾统一截断兜底)。
+    // The browser approval summary must pick the argument corresponding precisely to the action,
+    // not "the first non-empty field": the model may pass fields unrelated to this action at the
+    // same time (for example eval carrying a url), which would push a harmless target into the
+    // summary and obscure the real execution content. The type input text and the eval expression
+    // are high-risk information and are displayed in full (the approval bar uses pre-wrap, with
+    // extreme length falling back to unified truncation at the end).
     const pick = (value: unknown) =>
       typeof value === "string" && value.trim() ? value.trim() : undefined;
     const action = args.action;
@@ -128,9 +132,11 @@ export function buildGatewayToolCallPreviewArguments(
   toolCall: Pick<ToolCall, "id" | "name" | "arguments">,
 ) {
   const sourceArgs = toolCall.arguments || {};
-  // 待审批标记:任意工具在 beforeToolCall 处挂起等待批准时,盖到同步给 WebUI 的
-  // 参数上,让远端渲染审批卡片并显示与桌面同源的倒计时。审批消解后重发的快照
-  // 不再带此标记,卡片随之隐藏。__ 前缀合成参数不入展示、不影响本地执行。
+  // Pending-approval marker: when any tool suspends at beforeToolCall waiting for approval, stamp
+  // it onto the arguments synced to the WebUI so the remote renders the approval card and shows a
+  // countdown from the same source as the desktop. Snapshots re-sent after approval resolves no
+  // longer carry this marker, and the card hides accordingly. Synthetic arguments with a __ prefix
+  // are not displayed and do not affect local execution.
   const approvalOverlay: Record<string, unknown> | null =
     toolCall.id && hasPendingToolApproval(toolCall.id)
       ? {
@@ -139,17 +145,19 @@ export function buildGatewayToolCallPreviewArguments(
           [TOOL_APPROVAL_SUMMARY_ARG]: summarizeToolCallForApproval(toolCall),
         }
       : null;
-  // AskUserQuestion：附带权威应答截止时间，WebUI 卡片倒计时与桌面计时同源
-  //（execute 挂起时复用同一预置值；见 askUserQuestionTools）。ask 工具只读、
-  // 永不进入审批门,故此处无需叠加 approvalOverlay。
+  // AskUserQuestion: carries the authoritative answer deadline, so the WebUI card countdown shares
+  // the same source as the desktop timer (the same preset value is reused when execute suspends;
+  // see askUserQuestionTools). The ask tool is read-only and never enters the approval gate, so no
+  // approvalOverlay needs to be layered on here.
   if (toolCall.name === ASK_USER_QUESTION_TOOL_NAME) {
     return {
       ...sourceArgs,
       [ASK_USER_QUESTION_DEADLINE_ARG]: ensureAskUserQuestionDeadlineAt(toolCall.id),
     };
   }
-  // ExitPlanMode：附带待决/已批准标记(桌面登记表权威),WebUI 卡片据此渲染
-  // 批准按钮与落定态;快照/事件每次经此重建,状态翻转随补发事件同步。
+  // ExitPlanMode: carries a pending/approved marker (authoritative from the desktop registry), and
+  // the WebUI card uses it to render the approve button and the settled state; the snapshot/event
+  // is rebuilt through here each time, and state flips sync with the re-sent events.
   if (toolCall.name === EXIT_PLAN_MODE_TOOL_NAME) {
     return {
       ...sourceArgs,

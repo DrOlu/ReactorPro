@@ -53,7 +53,7 @@ export function isAbortLikeError(error: unknown) {
   return (
     normalized.includes("cancelled") ||
     normalized.includes("canceled") ||
-    normalized.includes("已取消") ||
+    normalized.includes("cancelled") ||
     normalized.includes("abort") ||
     normalized.includes("aborted")
   );

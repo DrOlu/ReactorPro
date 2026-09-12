@@ -22,7 +22,7 @@ import type { ProviderRuntimeConfig } from "./types";
 
 export { isValidCustomHeaderKey } from "@liveagent/ui/lib/providers/customHeaders";
 
-// 每个供应商只带自家标准的 API Key 请求头，绝不双头齐发。
+// Each provider carries only its own standard API key header, never sending both.
 export function buildAnthropicAuthHeaders(apiKey: string): Record<string, string> {
   return {
     "x-api-key": apiKey,
@@ -60,19 +60,21 @@ export function buildProviderRequestHeaders(
     return {
       ...authHeaders,
       ...ANTHROPIC_DEFAULT_REQUEST_HEADERS,
-      // 官方 CLI 每请求都带 X-Claude-Code-Session-Id（client.ts:108）。
+      // The official CLI sends X-Claude-Code-Session-Id on every request (client.ts:108).
       ...(requestSessionId ? { [CLAUDE_SESSION_ID_HEADER]: requestSessionId } : {}),
     };
   }
   if (providerId === "codex") {
-    // 标准 Chat Completions 是无状态协议，只需 Authorization——
-    // 会话身份头是 Responses（Codex CLI）链路专属，不得泄漏进 completions。
+    // Standard Chat Completions is a stateless protocol and needs only Authorization --
+    // session identity headers belong exclusively to the Responses (Codex CLI) path
+    // and must not leak into completions.
     if (requestFormat === "openai-completions") return authHeaders;
     const requestSessionId = normalizeSessionId(sessionId) ?? createUuid();
     return {
       ...authHeaders,
-      // 现行 Codex CLI（codex-api responses.rs）：session-id / thread-id /
-      // x-client-request-id。下划线旧名留给既有中转与 LiveAgent 存量链路。
+      // Current Codex CLI (codex-api responses.rs): session-id / thread-id /
+      // x-client-request-id. The old underscore names are kept for existing relays and
+      // ReactorPro legacy paths.
       [CODEX_OFFICIAL_SESSION_ID_HEADER]: requestSessionId,
       [CODEX_THREAD_ID_HEADER]: requestSessionId,
       [CLIENT_REQUEST_ID_HEADER]: requestSessionId,
@@ -80,13 +82,15 @@ export function buildProviderRequestHeaders(
       [CODEX_CONVERSATION_ID_HEADER]: requestSessionId,
     };
   }
-  // 其它 OpenAI 兼容端：仅 Bearer。
+  // Other OpenAI-compatible endpoints: Bearer only.
   return authHeaders;
 }
 
 /**
- * 供应商上游请求的唯一装配入口：内置头 → 合并用户自定义头 → 过本地反代。
- * 聊天 / 文本 / 摘要三条链路都走这里，杜绝各自重复装配时漏掉 customHeaders。
+ * The single assembly point for provider upstream requests: built-in headers -> merge
+ * user custom headers -> go through the local reverse proxy. All three chains (chat /
+ * text / summary) go through here, preventing any of them from omitting customHeaders
+ * when assembling requests independently.
  */
 export async function prepareProviderRequest(
   providerId: ProviderId,
@@ -130,14 +134,15 @@ export function resolveProviderCacheRetention(
   requestOverride?: CacheRetention,
   providerPreference?: CacheRetention,
 ): CacheRetention | undefined {
-  // Codex 的 wire 策略由 promptCacheHintMode 处理；这里保留 short 让供应商级
-  // none 仍可被单模型覆盖。请求级 none 则始终优先，供标题/压缩等辅助请求禁用。
+  // Codex's wire policy is handled by promptCacheHintMode; short is kept here so a
+  // provider-level none can still be overridden per model. A request-level none always
+  // takes precedence, used to disable caching for auxiliary requests such as titles/compaction.
   if (providerId !== "claude_code" && providerId !== "codex") return undefined;
   if (providerId === "codex") return requestOverride ?? "short";
   if (promptCachingEnabled === false) return "none";
-  // 请求级 override 优先（压缩/标题等辅助请求强制 none）。
+  // Request-level override takes precedence (auxiliary requests such as compaction/titles force none).
   if (requestOverride) return requestOverride;
-  // 用户可选 long：官方 Anthropic API 上由缓存中间件映射为 1h TTL 断点。
+  // User-selectable long: on the official Anthropic API it is mapped by the cache middleware to a 1h TTL breakpoint.
   if (providerId === "claude_code" && providerPreference === "long") return "long";
   return "short";
 }

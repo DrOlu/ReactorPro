@@ -1,9 +1,10 @@
 /**
- * 记录 → 可测量的虚拟行。
+ * Records -> measurable virtual rows.
  *
- * 分隔符类记录（`requestOnly`）本身零高度。让虚拟化器持有零高度条目会让滚动定位
- * 失准，因此把它们并进下一条内容行；序列末尾的分隔符单独成行并保留 CSS 约定的下缘
- * 留白。
+ * Separator-type records (`requestOnly`) are zero-height themselves. Letting the virtualizer hold
+ * zero-height entries would make scroll positioning inaccurate, so they are merged into the next
+ * content row; a separator at the end of the sequence becomes its own row and keeps the CSS-defined
+ * bottom margin.
  */
 
 import type { TrajectoryRecord } from "./types";
@@ -12,10 +13,10 @@ const CONTENT_ROW_HEIGHT = 30;
 const COLLAPSED_SUMMARY_HEIGHT = 20;
 const TERMINAL_BOUNDARY_HEIGHT = 9;
 
-/** 虚拟行投影所需的最小记录形状。 */
+/** Minimal record shape required for virtual row projection. */
 export type VirtualizableTrajectoryRecord = {
   record: TrajectoryRecord;
-  /** 折叠摘要行的类别；普通内容行为 undefined。 */
+  /** Category of a collapsed summary row; undefined for a normal content row. */
   collapsedSummaryKind?: "turn" | "assistant";
 };
 
@@ -31,10 +32,10 @@ export type TrajectoryVirtualRow<T extends VirtualizableTrajectoryRecord> = {
 };
 
 /**
- * React key、虚拟化器与滚动锚点共用的行身份。
+ * Row identity shared by the React key, the virtualizer, and the scroll anchor.
  *
- * @param item - 待取身份的显示项。
- * @returns 对 DOM 安全的稳定身份。
+ * @param item - The display item to derive an identity for.
+ * @returns A stable DOM-safe identity.
  */
 export function trajectoryVirtualRowKey(item: VirtualizableTrajectoryRecord): string {
   const identity = encodeURIComponent(item.record.recordId);
@@ -44,10 +45,10 @@ export function trajectoryVirtualRowKey(item: VirtualizableTrajectoryRecord): st
 }
 
 /**
- * 把显示项序列折成可测量的虚拟行。
+ * Fold the display item sequence into measurable virtual rows.
  *
- * @param items - 搜索与折叠过滤后的最终显示序列。
- * @returns 虚拟行；每行保留其成员的原始逻辑下标。
+ * @param items - The final display sequence after search and collapse filtering.
+ * @returns Virtual rows; each row retains the original logical indices of its members.
  */
 export function groupTrajectoryVirtualRows<T extends VirtualizableTrajectoryRecord>(
   items: readonly T[],

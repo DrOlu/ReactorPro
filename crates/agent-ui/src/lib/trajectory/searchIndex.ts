@@ -1,8 +1,9 @@
 /**
- * 账本的增量全文索引。
+ * Incremental full-text index for the ledger.
  *
- * 会话级常驻：只有某条记录的源字段真正变化时才重建它的索引项，流式期间反复重算
- * 整个会话会把主线程拖垮。
+ * Resident per conversation: a record's index entry is rebuilt only when its source fields
+ * actually change, since recomputing the entire conversation repeatedly during streaming would
+ * overwhelm the main thread.
  */
 
 import { flattenTrajectoryRecords } from "./layout";
@@ -49,16 +50,16 @@ function recordSources(
   ];
 }
 
-/** 视图级索引实例；随会话视图创建与销毁。 */
+/** View-level index instance; created and destroyed with the conversation view. */
 export class TrajectorySearchIndex {
   private readonly entries = new Map<string, SearchEntry>();
   private source: readonly (readonly TrajectoryTurnModel[])[] | undefined;
 
   /**
-   * 同步一批布局切片（已完成布局 + 流式布局）。
+   * Synchronizes a batch of layout slices (completed layouts + streaming layout).
    *
-   * @param layouts - 同一视图的布局切片。
-   * @returns 索引版本是否变化。
+   * @param layouts - layout slices of the same view.
+   * @returns whether the index version changed.
    */
   update(layouts: readonly (readonly TrajectoryTurnModel[])[]): boolean {
     if (this.source === layouts) return false;
@@ -88,10 +89,10 @@ export class TrajectorySearchIndex {
   }
 
   /**
-   * 对最新索引版本匹配查询。
+   * Matches a query against the latest index version.
    *
-   * @param query - 空格分隔的大小写不敏感词，全部命中才算匹配。
-   * @returns 命中的记录身份；空查询返回 null 表示「不过滤」。
+   * @param query - space-separated case-insensitive terms; all must hit to count as a match.
+   * @returns the identities of matching records; an empty query returns null meaning "no filtering".
    */
   search(query: string): ReadonlySet<string> | null {
     const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
@@ -105,11 +106,12 @@ export class TrajectorySearchIndex {
 }
 
 /**
- * 把命中的记录身份换算成记录下标，供时间轴高亮与账本过滤共用。
+ * Converts matching record identities into record indexes, shared by timeline highlighting and
+ * ledger filtering.
  *
- * @param layouts - 与索引同源的布局切片。
- * @param matched - `search` 的返回值。
- * @returns 命中下标集合；`matched` 为 null 时同样返回 null。
+ * @param layouts - layout slices from the same source as the index.
+ * @param matched - the return value of `search`.
+ * @returns the set of matching indexes; returns null when `matched` is null as well.
  */
 export function trajectorySearchMatchIndexes(
   layouts: readonly (readonly TrajectoryTurnModel[])[],

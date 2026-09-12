@@ -130,7 +130,7 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
       maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
       includeActiveSegment: true,
     });
-    if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
+    if (!record.activeSegment) throw new Error("History window is missing an active segment");
     const state = buildConversationStateFromWindow(record);
     installHistoryRuntime({
       conversationId: record.conversation.id,

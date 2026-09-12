@@ -1038,9 +1038,11 @@ export function createSidebarStore(
         merged.updatedAt,
       );
       if (!inScope && !wasVisible) {
-        // 会话不属于当前作用域且原本不可见：保持 conversations 引用稳定。
-        // 否则每次调用都会产生新列表引用，调用方若依据“列表里没有该会话”
-        // 反复重插，会形成同步更新风暴（Maximum update depth exceeded）。
+        // The conversation is outside the current scope and was not visible:
+        // keep the conversations reference stable. Otherwise every call would
+        // produce a new list reference, and a caller that repeatedly re-inserts
+        // based on "the list does not contain this conversation" would create a
+        // synchronous update storm (Maximum update depth exceeded).
         commit({ byId, workdirActivity });
         return;
       }

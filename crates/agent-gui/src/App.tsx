@@ -35,7 +35,6 @@ import {
   normalizeSettings,
   resolveEffectiveTheme,
   resolveWorkspaceProjects,
-  type SttProviderId,
   subscribeToSystemThemePreference,
   THEME_OPTIONS,
   type Theme,
@@ -47,7 +46,6 @@ import {
   publishGatewaySettingsSync,
   type SettingsSaveState,
 } from "./lib/settings/storage";
-import { desktopSttSettingsService } from "./lib/stt/desktopSttSettingsService";
 import type { SectionId } from "./pages/settings/types";
 
 let chatPageModule: Promise<typeof import("./pages/ChatPage")> | null = null;
@@ -139,16 +137,8 @@ function hasSensitiveSettingsUpdatesPayload(payload: unknown) {
           providerApiKeyUpdates?: unknown;
           providerUsageQuerySecretUpdates?: unknown;
           sshSecretUpdates?: unknown;
-          sttSecretUpdate?: unknown;
         })
       : {};
-  if (
-    source.sttSecretUpdate &&
-    typeof source.sttSecretUpdate === "object" &&
-    !Array.isArray(source.sttSecretUpdate)
-  ) {
-    return true;
-  }
   const providerUpdates = source.providerApiKeyUpdates;
   if (
     providerUpdates &&
@@ -172,7 +162,8 @@ function hasSensitiveSettingsUpdatesPayload(payload: unknown) {
         accessToken?: unknown;
         secretAccessKey?: unknown;
       };
-      // 显式携带字段(含空串=清除已配置密钥)即视为敏感更新,不得被丢弃。
+      // Explicitly carrying a field (including an empty string = clear the
+      // configured secret) counts as a sensitive update and must not be dropped.
       return (
         typeof update.apiKey === "string" ||
         typeof update.accessToken === "string" ||
@@ -226,7 +217,6 @@ export default function App() {
   const [settingsReady, setSettingsReady] = useState(false);
   const [backgroundHostsReady, setBackgroundHostsReady] = useState(false);
   const [settings, setSettingsState] = useState<AppSettings>(() => getBootAlignedDefaultSettings());
-  const [sttProviderOverride, setSttProviderOverride] = useState<SttProviderId | null>(null);
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>({
     status: "idle",
   });
@@ -244,10 +234,6 @@ export default function App() {
   // crypto.randomUUID() inside caller updaters) twice per call.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Saved provider changes invalidate the temporary card selection.
-  useEffect(() => {
-    setSttProviderOverride(null);
-  }, [settings.stt.provider]);
   const [systemThemeVersion, setSystemThemeVersion] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: The version is an explicit invalidation signal for the system media query, which resolveEffectiveTheme reads outside React.
   const effectiveTheme = useMemo(
@@ -262,7 +248,7 @@ export default function App() {
     });
   }, [settings.theme]);
 
-  // 同步主题 class 到 <html> 根节点
+  // Sync the theme class to the <html> root element
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", effectiveTheme === "dark");
@@ -289,7 +275,8 @@ export default function App() {
     });
   }, [settingsReady, settings.closeWindowBehavior]);
 
-  // 启动时恢复本机保存的全局快捷键（桌面端专属，非 Tauri 环境内部自动忽略）。
+  // Restore locally saved global shortcuts on startup (desktop-only; ignored
+  // automatically inside non-Tauri environments).
   useEffect(() => {
     let disposed = false;
     let cleanup: (() => void) | undefined;
@@ -306,8 +293,9 @@ export default function App() {
     };
   }, []);
 
-  // 窗口置顶状态：Rust 侧是唯一事实源（快捷键或指示器切换都经它广播），
-  // 挂载时查询一次以覆盖 webview 重载后指示器丢失的情况。
+  // Window pin state: the Rust side is the single source of truth (both the
+  // shortcut and indicator toggles broadcast through it); query once on mount
+  // to cover the indicator being lost after a webview reload.
   const [windowPinned, setWindowPinned] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -317,7 +305,7 @@ export default function App() {
         if (!cancelled) setWindowPinned(Boolean(pinned));
       })
       .catch(() => {
-        // 非 Tauri 环境或旧版桌面壳：忽略。
+        // Non-Tauri environment or older desktop shell: ignore.
       });
     listen<boolean>("global-shortcut:pin-changed", (event) => {
       setWindowPinned(Boolean(event.payload));
@@ -330,7 +318,7 @@ export default function App() {
         unlisten = nextUnlisten;
       })
       .catch(() => {
-        // 非 Tauri 环境忽略。
+        // Non-Tauri environment: ignore.
       });
     return () => {
       cancelled = true;
@@ -422,16 +410,11 @@ export default function App() {
           const publishTarget = normalizeSettings({
             ...next,
             ...(persistResult.ssh ? { ssh: persistResult.ssh } : {}),
-            ...(persistResult.stt ? { stt: persistResult.stt } : {}),
           });
-          if (
-            (persistResult.ssh || persistResult.stt) &&
-            saveSequenceRef.current === saveSequence
-          ) {
+          if (persistResult.ssh && saveSequenceRef.current === saveSequence) {
             const merged = normalizeSettings({
               ...settingsRef.current,
               ...(persistResult.ssh ? { ssh: persistResult.ssh } : {}),
-              ...(persistResult.stt ? { stt: persistResult.stt } : {}),
             });
             settingsRef.current = merged;
             setSettingsState(merged);
@@ -505,7 +488,8 @@ export default function App() {
     }));
   }, [setSettings]);
 
-  // 托盘外观子菜单的直达设置（identity bail-out 避免重复落盘）。
+  // Direct setting from the tray appearance submenu (identity bail-out avoids
+  // redundant persistence).
   const setTheme = useCallback(
     (theme: Theme) => {
       setSettings((prev) => (prev.theme === theme ? prev : { ...prev, theme }));
@@ -536,8 +520,10 @@ export default function App() {
 
   const closeSettings = closeSettingsOverlay;
 
-  // 动作总线（Rust `app:action`）中 App 拥有的动作：主题/打开设置/网关开关/
-  // 检查更新，以及「新建对话」时先收起设置覆盖层（会话侧由 ChatPage 处理）。
+  // Actions owned by App in the action bus (Rust `app:action`): theme / open
+  // settings / gateway toggle / check for updates, and on "new conversation"
+  // first collapse the settings overlay (the conversation side is handled by
+  // ChatPage).
   const closeSettingsRef = useRef(closeSettings);
   closeSettingsRef.current = closeSettings;
   const settingsOpenRef = useRef(settingsOpen);
@@ -575,8 +561,10 @@ export default function App() {
           break;
         }
         case "gateway-toggle": {
-          // 与设置页远程开关同一条路径：settings 保存链会落库并 apply_config，
-          // DB / 控制器 / 设置页开关三方保持一致（勿改为 Rust 直连开关）。
+          // Same path as the remote toggle on the settings page: the settings save
+          // chain persists and calls apply_config, keeping the DB / controller /
+          // settings-page toggle consistent (do not change to a direct Rust
+          // toggle).
           setSettings((prev) => ({
             ...prev,
             remote: { ...prev.remote, enabled: !prev.remote.enabled },
@@ -595,7 +583,7 @@ export default function App() {
         unlisten = nextUnlisten;
       })
       .catch(() => {
-        // 非 Tauri 环境忽略。
+        // Non-Tauri environment: ignore.
       });
     return () => {
       cancelled = true;
@@ -645,7 +633,8 @@ export default function App() {
     messages: appUpdateMessages,
     beforeRestart: beforeAppRestart,
   });
-  // 托盘「检查更新」动作：controller 在监听 effect 之后创建，经 ref 回填。
+  // Tray "check for updates" action: the controller is created after the
+  // listening effect, backfilled via ref.
   runUpdateCheckRef.current = () => {
     void appUpdate.runCheck().catch(() => undefined);
   };
@@ -727,7 +716,6 @@ export default function App() {
             <ChatPage
               settings={settings}
               setSettings={setSettings}
-              sttProviderOverride={sttProviderOverride}
               getMcpSettings={getMcpSettings}
               getToolPolicies={getToolPolicies}
               context={context}
@@ -763,8 +751,6 @@ export default function App() {
                   initialSection={settingsSection}
                   initialProviderId={settingsProviderId}
                   appUpdate={appUpdate}
-                  sttSettingsService={desktopSttSettingsService}
-                  onSttProviderChange={setSttProviderOverride}
                   reloadSettings={reloadPersistedSettings}
                 />
               </Suspense>

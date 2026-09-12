@@ -106,7 +106,7 @@ function persistenceCursor(item) {
 function summaryFor(conversationId, updatedAt) {
   return {
     id: conversationId,
-    title: "对话",
+    title: "Conversation",
     providerId: "anthropic",
     model: "claude",
     createdAt: 1,
@@ -125,7 +125,7 @@ function persistParams({
     conversationId,
     providerId: "anthropic",
     model: "claude",
-    title: "对话",
+    title: "Conversation",
     updatedAt: state.segments[state.activeSegmentIndex].updatedAt,
     state,
     getPersistenceCursor: () => {
@@ -269,8 +269,9 @@ test("final persist catches up multiple segment jumps one append at a time", asy
   assert.equal(recorder.calls[0].args.input.previousSegment.segmentId, "seg-0");
   assert.equal(recorder.calls[0].args.input.segment.segmentId, "seg-1");
   assert.equal(recorder.calls[0].args.input.conversation.activeSegmentIndex, 1);
-  // 中间步必须是"该步落库后"的精确值：后端 append 前置校验要求
-  // totalSegmentCount == 现有值 + 1，一致性校验按全表 COUNT/SUM 比对。
+  // The intermediate step must be the exact value "after this step is persisted": the backend's
+  // append pre-check requires totalSegmentCount == current value + 1, and the consistency check
+  // compares against a whole-table COUNT/SUM.
   assert.equal(recorder.calls[0].args.input.conversation.totalSegmentCount, 2);
   assert.equal(recorder.calls[0].args.input.conversation.totalMessageCount, 3);
 
@@ -337,13 +338,14 @@ test("partial multi-segment catch-up resumes from the durable cursor frontier", 
   assert.deepEqual(cursorRef.current, persistenceCursor(segC));
 });
 
-// 从历史重开的会话（openInitial → buildConversationStateFromWindow）内存里
-// 只有活跃段，meta 计数仍覆盖 SQLite 中全部封存行。header 若改为对内存段
-// 求和会少算封存段，被后端全表 SUM 一致性校验拒绝。
+// A conversation reopened from history (openInitial → buildConversationStateFromWindow) has only
+// the active segment in memory, while the meta counts still cover every sealed row in SQLite. If
+// the header were changed to sum only in-memory segments it would undercount sealed segments and
+// be rejected by the backend's whole-table SUM consistency check.
 test("reopened conversation keeps full header totals on active-segment persist", async () => {
   const recorder = createInvokeRecorder();
   const chatHistory = loadChatHistory(recorder.invoke);
-  // SQLite: seg0-2 共 270 条已封存；内存只载入活跃段 seg3(22 条)。
+  // SQLite: seg0-2 hold 270 sealed rows in total; memory loads only the active segment seg3 (22 rows).
   const segActive = segment(3, { messageCount: 22, endMessageId: "seg3-22" });
   const cursorRef = { current: persistenceCursor(segActive) };
   const state = buildState([segActive], 0, {
@@ -372,8 +374,9 @@ test("reopened conversation keeps full header totals on active-segment persist",
 test("reopened conversation catch-up append anchors totals on the full history", async () => {
   const recorder = createInvokeRecorder();
   const chatHistory = loadChatHistory(recorder.invoke);
-  // 重开后 run 中发生一次压缩：内存 = [seg3(24), seg4(1)]，SQLite 另有
-  // seg0-2 共 270 条。追赶 append 的 header 必须含全部封存行。
+  // After reopening, one compaction happens during the run: memory = [seg3(24), seg4(1)], while
+  // SQLite additionally holds seg0-2 with 270 rows. The catch-up append's header must include all
+  // sealed rows.
   const segLoaded = segment(3, { messageCount: 24, endMessageId: "seg3-24" });
   const segNew = segment(4, { messageCount: 1, endMessageId: "seg4-1" });
   const cursorRef = { current: persistenceCursor(segLoaded) };
@@ -469,7 +472,7 @@ test("history mutations share the per-conversation lock with runtime persistence
   const persist = chatHistory.persistConversationRuntime(
     persistParams({ cursorRef, state: stateWithAppendedSegment }),
   );
-  const rename = chatHistory.renameChatHistory("conv-1", "新标题");
+  const rename = chatHistory.renameChatHistory("conv-1", "New title");
   await flush();
 
   assert.equal(recorder.calls.length, 1);
@@ -479,7 +482,7 @@ test("history mutations share the per-conversation lock with runtime persistence
   assert.deepEqual(cursorRef.current, persistenceCursor(seg1Initial));
   assert.equal(recorder.calls.length, 2);
   assert.equal(recorder.calls[1].cmd, "chat_history_rename");
-  assert.deepEqual(recorder.calls[1].args, { id: "conv-1", title: "新标题" });
+  assert.deepEqual(recorder.calls[1].args, { id: "conv-1", title: "New title" });
 
   await resolveCall(recorder.calls[1], "conv-1", 31);
   await persist;

@@ -103,9 +103,6 @@ import type {
   SshProxyConfig,
   SshProxyType,
   SshSettings,
-  SttProviderId,
-  SttProviderSettings,
-  SttSettings,
   SystemProxyConfig,
   SystemSettings,
   ToolPolicy,
@@ -415,8 +412,9 @@ function normalizeChatRuntimeReasoningForLevels(
   }
   const reasoning = normalizeChatRuntimeReasoning(input);
   if (levels.includes(reasoning)) return reasoning;
-  // 存量档位不在该模型档位表内：先回默认档，默认档也不可用（如单档 toggle
-  // 模型、gpt-5.2-chat-latest 只有 medium）时钳到最近档，绝不返回表外档位。
+  // The stored level is not in this model's level table: first fall back to the default level; if
+  // that is also unavailable (e.g. a single-level toggle model, or gpt-5.2-chat-latest which only
+  // has medium), clamp to the nearest level and never return a level outside the table.
   const fallback = DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning;
   if (levels.includes(fallback)) return fallback;
   const clampSource = (reasoning === "off" ? fallback : reasoning) as ThinkingLevel;
@@ -445,8 +443,10 @@ export function normalizeChatRuntimeControls(input: unknown): ChatRuntimeControl
   return {
     thinkingEnabled: obj.thinkingEnabled !== false,
     nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
-    // Plan mode 是限制性开关,归一化取向与联网/思考相反:仅显式 true 生效,
-    // 旧配置/远端缺失字段一律回落 false,绝不把历史会话意外锁进只读。
+    // Plan mode is a restrictive toggle, so its normalization direction is the opposite of web
+    // search/thinking: only an explicit true takes effect, and a missing field in old config or
+    // remote data always falls back to false, never accidentally locking a historical conversation
+    // into read-only.
     planModeEnabled: obj.planModeEnabled === true,
     reasoning,
     reasoningByProvider: normalizeChatRuntimeReasoningByProvider(
@@ -554,7 +554,7 @@ function normalizeMcpTransport(input: unknown): McpTransport {
   return "stdio";
 }
 
-/** 工具策略表:丢弃空键与非法值;空表返回 undefined(与"无覆盖"语义一致)。 */
+/** Tool policy table: drops empty keys and invalid values; an empty table returns undefined (consistent with the "no override" semantic). */
 export function normalizeToolPolicies(input: unknown): Record<string, ToolPolicy> | undefined {
   if (!input || typeof input !== "object") return undefined;
   const out: Record<string, ToolPolicy> = {};
@@ -605,109 +605,6 @@ export function normalizeRemoteSettings(input: unknown): RemoteSettings {
   };
 }
 
-export const STT_PROVIDER_IDS: readonly SttProviderId[] = [
-  "tencent_cloud",
-  "volcengine_seed_v3",
-  "aliyun_dashscope",
-  "baidu_cloud",
-];
-
-function defaultSttProvider(id: SttProviderId): SttProviderSettings {
-  const providerDefaults: Partial<SttProviderSettings> =
-    id === "aliyun_dashscope"
-      ? {
-          websocketUrl: "wss://dashscope.aliyuncs.com/api-ws/v1/inference/",
-          model: "paraformer-realtime-v2",
-        }
-      : id === "volcengine_seed_v3"
-        ? {
-            websocketUrl: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
-          }
-        : id === "baidu_cloud"
-          ? { websocketUrl: "wss://vop.baidu.com/realtime_asr" }
-          : {};
-  return {
-    id,
-    configured: false,
-    websocketUrl: "",
-    model: "",
-    apiKey: "",
-    appId: "",
-    secretId: "",
-    secretKey: "",
-    accessToken: "",
-    cluster: "",
-    resourceId: "",
-    engineModelType: "16k_zh",
-    baiduAppId: "",
-    baiduApiKey: "",
-    devPid: "",
-    ...providerDefaults,
-  };
-}
-
-export function getDefaultSttSettings(): SttSettings {
-  return {
-    enabled: false,
-    provider: null,
-    providers: Object.fromEntries(
-      STT_PROVIDER_IDS.map((id) => [id, defaultSttProvider(id)]),
-    ) as Record<SttProviderId, SttProviderSettings>,
-  };
-}
-
-export function normalizeSttSettings(input: unknown): SttSettings {
-  const defaults = getDefaultSttSettings();
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const provider = STT_PROVIDER_IDS.includes(obj.provider as SttProviderId)
-    ? (obj.provider as SttProviderId)
-    : null;
-  const rawProviders =
-    obj.providers && typeof obj.providers === "object"
-      ? (obj.providers as Record<string, unknown>)
-      : {};
-  const providers = Object.fromEntries(
-    STT_PROVIDER_IDS.map((id) => {
-      const raw =
-        rawProviders[id] && typeof rawProviders[id] === "object"
-          ? (rawProviders[id] as Record<string, unknown>)
-          : {};
-      const base = defaults.providers[id];
-      const text = (key: string) => (typeof raw[key] === "string" ? raw[key].trim() : "");
-      return [
-        id,
-        {
-          ...base,
-          configured: raw.configured === true,
-          websocketUrl: text("websocketUrl") || base.websocketUrl,
-          model:
-            text("model") === "paraformer-realtime-8k-v2"
-              ? "paraformer-realtime-v2"
-              : text("model") || base.model,
-          apiKey: text("apiKey"),
-          appId: text("appId"),
-          secretId: text("secretId"),
-          secretKey: text("secretKey"),
-          accessToken: text("accessToken"),
-          cluster: text("cluster"),
-          resourceId: text("resourceId"),
-          engineModelType: text("engineModelType") || base.engineModelType,
-          baiduAppId: text("baiduAppId"),
-          baiduApiKey: text("baiduApiKey"),
-          devPid: text("devPid"),
-          ...(raw.clearSecrets === true ? { clearSecrets: true } : {}),
-        } satisfies SttProviderSettings,
-      ];
-    }),
-  ) as Record<SttProviderId, SttProviderSettings>;
-  return {
-    enabled: obj.enabled === true,
-    provider,
-    providers,
-    ...(obj.allowIncomplete === true ? { allowIncomplete: true } : {}),
-  };
-}
-
 function getKnownModelLimits(
   providerId: ProviderId,
   modelId: string | undefined,
@@ -715,9 +612,10 @@ function getKnownModelLimits(
 ): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> | undefined {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
-  // Anthropic 的有效窗口叠加了 1M beta/adaptive 世代的请求侧策略
-  // （contextWindow > 200K 即请求侧启用 1M beta 的开关），走策略层回查；
-  // 其余供应商直接读目录（数据已在生成期过统一语义规则）。
+  // Anthropic's effective window layers a request-side policy for the 1M beta/adaptive generation
+  // (contextWindow > 200K is the switch that enables the 1M beta request-side), resolved through
+  // the policy layer; other providers read the catalog directly (the data has already passed the
+  // uniform semantic rules at generation time).
   if (providerId === "claude_code") {
     return resolveAnthropicKnownModelLimits(trimmedId, baseUrl);
   }
@@ -749,9 +647,10 @@ export function getProviderModelDefaults(
     };
   }
 
-  // 中转聚合把别家模型挂在本供应商下（如 Anthropic 兼容中转供 grok）：按 id
-  // 跨供应商回查真实限额，避免吃错本供应商兜底值。Anthropic 的 1M/adaptive
-  // 窗口策略只约束目录内的 Anthropic 模型，跨供应商命中直接透传目录值。
+  // Relay aggregation mounts another vendor's model under this provider (e.g. an Anthropic-compatible
+  // relay serving grok): look up the real limits by id across providers to avoid wrongly taking
+  // this provider's fallback value. Anthropic's 1M/adaptive window policy only constrains Anthropic
+  // models in the catalog; a cross-provider hit passes the catalog value straight through.
   const crossProvider = resolveModelLimitsAcrossProviders(modelId);
   if (crossProvider) return { ...crossProvider, source: "catalog" };
 
@@ -807,9 +706,9 @@ export function normalizeProviderModelConfig(
     (typeof obj.ownedBy === "string" ? obj.ownedBy.trim() : "") ||
     (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
 
-  // 供应商 /v1/models 接口本次响应自带的真实限额（如 OpenRouter 的
-  // context_length）直接采信记 provider，不比对存量——这是唯一比落库
-  // 目录/兜底值更新鲜的数据源。
+  // Real limits carried in this response from the provider's /v1/models endpoint (e.g. OpenRouter's
+  // context_length) are trusted directly and recorded as provider, without comparing against stored
+  // values — this is the only data source fresher than the persisted catalog/fallback value.
   const providerDeclared = extractProviderDeclaredLimits(obj);
   const catalogDefaults = getProviderModelDefaults(providerId, id);
 
@@ -821,8 +720,9 @@ export function normalizeProviderModelConfig(
     limitsSource = "provider";
   } else {
     const storedSource = normalizeLimitsSource(obj.limitsSource);
-    // 退化限额（输出吃满窗口）可能来自坏目录数据落库期或手工配置，读侧统一
-    // 修复；规则与目录生成期同源（normalizeModelLimits），对所有来源一视同仁。
+    // A degenerate limit (output consuming the whole window) may come from bad catalog data at
+    // persistence time or from manual configuration; the read side repairs it uniformly, with rules
+    // from the same source as catalog generation (normalizeModelLimits), treating all origins alike.
     const storedLimits = normalizeModelLimits({
       contextWindow: normalizePositiveInteger(obj.contextWindow, catalogDefaults.contextWindow),
       maxOutputToken: normalizePositiveInteger(
@@ -834,10 +734,11 @@ export function normalizeProviderModelConfig(
       obj.contextWindow != null || obj.maxOutputToken != null || obj.maxTokens != null;
     const fallbackPair = getProviderFallbackLimits(providerId);
 
-    // 存量（无 limitsSource 字段）一次性推断：落库值等于当前目录解析结果→
-    // catalog；等于当前供应商兜底常量→fallback（多为跨供应商回查上线前落
-    // 库的坏默认值，下方 catalog/fallback 分支会立即重解析修复）；其余→
-    // user（无法证明不是用户手改的，保守当作用户配置）。
+    // One-time inference for stored data (no limitsSource field): a persisted value equal to the
+    // current catalog resolution → catalog; equal to the current provider fallback constant →
+    // fallback (mostly bad defaults persisted before cross-provider lookup shipped, which the
+    // catalog/fallback branch below immediately re-resolves and repairs); otherwise → user (it
+    // cannot be proven not to be a manual edit, so conservatively treat it as user config).
     const resolvedSource: ModelLimitsSource =
       storedSource ??
       (!hasStoredNumbers
@@ -851,15 +752,16 @@ export function normalizeProviderModelConfig(
             : "user");
 
     if (resolvedSource === "catalog" || resolvedSource === "fallback") {
-      // 加载时按当前目录/兜底重新解析，让目录更新自动传导。
+      // Re-resolve against the current catalog/fallback on load, so catalog updates propagate automatically.
       limits = {
         contextWindow: catalogDefaults.contextWindow,
         maxOutputToken: catalogDefaults.maxOutputToken,
       };
       limitsSource = catalogDefaults.source;
     } else {
-      // provider：供应商实时数据只在“刷新模型列表”那次抓取时存在，加载阶段
-      // 没有这份数据可用，保持落库值。user：永不自动覆盖。两者都原样保留。
+      // provider: real-time provider data exists only during the "refresh model list" fetch and is
+      // not available at load time, so the persisted value is kept. user: never auto-overwritten.
+      // Both are preserved as-is.
       limits = storedLimits;
       limitsSource = resolvedSource;
     }
@@ -875,19 +777,20 @@ export function normalizeProviderModelConfig(
     maxOutputToken: limits.maxOutputToken,
     limitsSource,
     ...(promptCacheHintMode ? { promptCacheHintMode } : {}),
-    // 用户手动的输入模态覆盖（如给未识别的多模态模型强制开启图片输入）；
-    // 经 normalizeInputModalities 归一化后透传（可能过滤非法值/补齐 text/
-    // 重排顺序），合法覆盖永不被自动删除。
+    // A user's manual input-modality override (e.g. forcing image input on for an unrecognized
+    // multimodal model); passed through after normalizeInputModalities (which may filter invalid
+    // values / fill in text / reorder), and a valid override is never automatically deleted.
     ...(inputModalities ? { inputModalities } : {}),
   };
 }
 
 /**
- * 输入模态覆盖的运行时归一化（设置加载与 modelFactory 共用的唯一校验）：
- * - 非数组、空数组、全部非法 -> undefined（等价于“无覆盖，用内置推断”）；
- * - 混合非法项采用“过滤合法项”的容错策略；
- * - 本应用的聊天协议始终发送文本，因此含 "image" 缺 "text" 时自动补齐；
- * - 输出固定为 ["text","image"] 规范顺序，避免同义配置产生持久化差异。
+ * Runtime normalization of the input-modality override (the single validation shared by settings
+ * loading and modelFactory):
+ * - non-array, empty array, all-invalid -> undefined (equivalent to "no override, use built-in inference");
+ * - a mixed array with invalid items uses the tolerant "filter to valid items" strategy;
+ * - this app's chat protocol always sends text, so "image" without "text" auto-fills text;
+ * - output is fixed to the canonical order ["text","image"], avoiding persistence differences from synonymous configs.
  */
 export function normalizeInputModalities(input: unknown): ModelInputModalitiesOverride | undefined {
   if (!Array.isArray(input)) return undefined;
@@ -958,7 +861,7 @@ function normalizeProviderId(input: unknown): ProviderId {
 }
 
 function normalizeProviderName(id: string, input: unknown): string {
-  const name = typeof input === "string" && input.trim() ? input.trim() : "未命名供应商";
+  const name = typeof input === "string" && input.trim() ? input.trim() : "Unnamed Provider";
   if (id === "builtin-claude_code" && name === "Claude Code") return "Anthropic";
   if (id === "builtin-codex" && name === "Codex") return "OpenAI";
   if (id === "builtin-xai" && (name === "xAI" || name === "XAI")) return "Grok";
@@ -1005,7 +908,7 @@ function normalizeUsageQueryMode(input: unknown): UsageQueryMode {
     case "custom":
       return input;
     default:
-      // 缺省与未知模式统一回退 NewAPI 模板(默认查询方式)。
+      // The default and unknown modes both fall back to the NewAPI template (the default query method).
       return "newapi";
   }
 }
@@ -1077,9 +980,10 @@ function normalizeUsageQueryConfig(input: unknown): UsageQueryConfig {
 }
 
 /**
- * 供应商级重试策略归一化。default 态在持久层不落字段（返回 undefined），
- * 保证旧配置零迁移；非法输入（未知 mode、custom 无有效次数）一律视为
- * default。custom 的 maxRetries（不含首次请求的重试次数）钳位 1..10。
+ * Provider-level retry policy normalization. The default state persists no field (returns
+ * undefined), guaranteeing zero migration for old configs; invalid input (unknown mode, custom
+ * without a valid count) is always treated as default. A custom maxRetries (retry count excluding
+ * the first request) is clamped to 1..10.
  */
 export function normalizeProviderRetryPolicy(input: unknown): ProviderRetryPolicy | undefined {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
@@ -1108,7 +1012,7 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     type === "codex" || type === "xai"
       ? normalizeCodexRouting(
           obj.baseUrl,
-          // xAI / Grok 固定走 Responses；忽略历史配置中的 completions。
+          // xAI / Grok always use Responses; ignore completions from historical config.
           type === "xai" ? "openai-responses" : obj.requestFormat,
           isFullUrl,
         )
@@ -1145,8 +1049,9 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     ),
     requestFormat: type === "xai" ? "openai-responses" : codexRouting?.requestFormat,
     reasoning: normalizeReasoningLevel(obj.reasoning),
-    // Anthropic 默认开启显式缓存；Codex 的布尔值仅保留旧设置兼容，实际 wire
-    // 行为由 promptCacheHintMode 决定。Gemini / xAI / DeepSeek 不使用这里的缓存控制。
+    // Anthropic enables explicit caching by default; Codex's boolean is kept only for old-settings
+    // compatibility, and the actual wire behavior is decided by promptCacheHintMode. Gemini / xAI /
+    // DeepSeek do not use the cache control here.
     promptCachingEnabled:
       type === "codex"
         ? promptCacheHintMode !== "none"
@@ -1172,7 +1077,7 @@ export function normalizeAgentPromptTemplate(input: unknown): AgentPromptTemplat
 
   return {
     id: typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : createUuid(),
-    name: typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : "未命名模板",
+    name: typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : "Unnamed Template",
     description: normalizeOptionalText(obj.description),
     prompt: normalizeOptionalText(obj.prompt),
     enabled: obj.enabled === true,
@@ -1225,7 +1130,7 @@ export function normalizeSshHostConfig(input: unknown): SshHostConfig {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const host = typeof obj.host === "string" ? obj.host.trim() : "";
   const name =
-    typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : host || "未命名 SSH";
+    typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : host || "Unnamed SSH";
   const authType = normalizeSshAuthType(obj.authType);
   const password = authType === "keyboardInteractive" ? "" : normalizeOptionalText(obj.password);
   const privateKey =
@@ -1355,12 +1260,14 @@ export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
 }
 
 /**
- * 命令安全模式归一。
+ * Command safety mode normalization.
  *
- * - 缺失 / null / 空串:沿用默认 `auto`(全新配置与旧快照的正常形态)。
- * - **存在但无法识别:收敛到最严格的 `ask`**(P2#6)。该设置全部意义在于约束,
- *   未来新增的模式值、回退到旧版本、手改配置的笔误若静默降级成最宽松的非 ask 值,
- *   等于悄悄放宽用户的约束选择;Rust 侧 normalize_command_safety_mode_value 同语义。
+ * - Missing / null / empty string: keep the default `auto` (the normal shape of a fresh config and old snapshots).
+ * - **Present but unrecognized: converge to the strictest `ask`** (P2#6). The whole point of this
+ *   setting is constraint; if a future added mode value, a rollback to an older version, or a typo
+ *   in a hand-edited config silently degraded to the loosest non-ask value, that would quietly
+ *   loosen the user's chosen constraint. The Rust side
+ *   normalize_command_safety_mode_value has the same semantic.
  */
 export function normalizeCommandSafetyMode(input: unknown): CommandSafetyMode {
   if (input === undefined || input === null) return "auto";
@@ -1378,8 +1285,8 @@ export function normalizeCommandSafetyMode(input: unknown): CommandSafetyMode {
 }
 
 /**
- * 严格度序:`auto` < `sandbox` < `sandboxOffline` < `ask`(逐次人工放行最严)。
- * 供“取更严格者”的钳制使用,不参与持久化。
+ * Strictness order: `auto` < `sandbox` < `sandboxOffline` < `ask` (per-invocation manual approval
+ * is the strictest). Used by the "take the stricter one" clamp; not persisted.
  */
 const COMMAND_SAFETY_MODE_STRICTNESS: Record<CommandSafetyMode, number> = {
   auto: 0,
@@ -1389,9 +1296,10 @@ const COMMAND_SAFETY_MODE_STRICTNESS: Record<CommandSafetyMode, number> = {
 };
 
 /**
- * 取更严格的一方(P3#9)。远端(WebUI / 网关)与排队快照携带的模式只允许“收紧”本地
- * 设置,绝不允许用一份陈旧快照把桌面用户刻意选择的 `sandboxOffline` 放宽成 `auto`
- * —— 桌面端是工具唯一执行处,约束强度不能由远端取值决定。
+ * Takes the stricter of the two (P3#9). A mode carried by a remote (WebUI / gateway) or a queued
+ * snapshot may only "tighten" the local setting, and must never use a stale snapshot to loosen a
+ * desktop user's deliberate `sandboxOffline` choice into `auto` — the desktop is the only place
+ * tools execute, so the constraint strength cannot be decided by a remote value.
  */
 export function strictestCommandSafetyMode(
   a: CommandSafetyMode,
@@ -1401,8 +1309,9 @@ export function strictestCommandSafetyMode(
 }
 
 /**
- * 浏览器接入模式归一。缺失/空串/未知值一律回 `auto`:该设置是行为选择而非
- * 安全约束(登录态使用与否由 group:browser 审批把关),未知值不需要 fail-closed。
+ * Browser automation mode normalization. Missing/empty/unknown values always return `auto`: this
+ * setting is a behavior choice rather than a security constraint (whether to use a logged-in state
+ * is gated by group:browser approval), so an unknown value does not need fail-closed handling.
  */
 export function normalizeBrowserAutomationMode(input: unknown): BrowserAutomationMode {
   if (typeof input !== "string") return "auto";
@@ -1418,7 +1327,7 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
     executionMode: normalizeExecutionMode(obj.executionMode),
     workdir: normalizeWorkdir(obj.workdir),
     toolPolicies: normalizeToolPolicies(obj.toolPolicies),
-    // 安全侧开关：任何非 true 的值都收敛成 false。
+    // Security-side switch: any value other than true converges to false.
     cuaAllowSelfTargeting: obj.cuaAllowSelfTargeting === true,
     commandSafetyMode: normalizeCommandSafetyMode(obj.commandSafetyMode),
     browserAutomationMode: normalizeBrowserAutomationMode(obj.browserAutomationMode),
@@ -1449,7 +1358,7 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
 function normalizeMcpAuthConfig(input: unknown): McpAuthConfig | undefined {
   if (!input || typeof input !== "object") return undefined;
   const obj = input as Record<string, unknown>;
-  if (obj.type !== "oauth") return undefined; // "none"/未知值 = 现状，不存壳对象
+  if (obj.type !== "oauth") return undefined; // "none"/unknown value = status quo; do not store a shell object
   const scope = typeof obj.scope === "string" ? obj.scope.trim() : "";
   const clientId = typeof obj.clientId === "string" ? obj.clientId.trim() : "";
   return {
@@ -1615,7 +1524,7 @@ export function normalizeCustomSettings(
       normalizeSelectedModel(obj.commitMessageModel),
       customProviders,
     ),
-    // 缺省开启：老配置无此字段时保持澄清按钮可见（与上线前行为一致）。
+    // Enabled by default: keep the clarify button visible when an old config lacks this field (consistent with pre-launch behavior).
     promptClarifyEnabled: obj.promptClarifyEnabled !== false,
     promptClarifyModel: normalizeSelectedModelForProviders(
       normalizeSelectedModel(obj.promptClarifyModel),
@@ -1628,7 +1537,7 @@ export function normalizeCustomSettings(
     sidebarShortcuts: normalizeSidebarShortcuts(obj.sidebarShortcuts),
     chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
     rightDock: normalizeRightDockSettings(obj.rightDock),
-    // 三档枚举：历史配置无此字段或值不合法（含曾设想过的 "auto"）一律落回默认的统计状态栏。
+    // Three-tier enum: a historical config missing this field or with an invalid value (including the once-considered "auto") always falls back to the default stats bar.
     composerContextDisplay:
       obj.composerContextDisplay === "ring" || obj.composerContextDisplay === "both"
         ? obj.composerContextDisplay
@@ -1691,7 +1600,6 @@ export function getDefaultSettings(): AppSettings {
       enableWebGit: false,
       enableWebTunnels: false,
     },
-    stt: getDefaultSttSettings(),
     memory: normalizeMemorySettings({}, customProviders),
     customSettings: normalizeCustomSettings({}, customProviders),
     modelFailover: normalizeModelFailoverSettings({}, customProviders),
@@ -1728,7 +1636,6 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
     agents: normalizeAgentPromptTemplates(obj.agents ?? defaults.agents),
     ssh: normalizeSshSettings(obj.ssh ?? defaults.ssh),
     remote: normalizeRemoteSettings(obj.remote ?? defaults.remote),
-    stt: normalizeSttSettings(obj.stt ?? defaults.stt),
     memory: normalizeMemorySettings(obj.memory ?? defaults.memory, customProviders),
     customSettings: normalizeCustomSettings(
       obj.customSettings ?? defaults.customSettings,
@@ -2073,9 +1980,11 @@ export function updateCustomSettings(
 }
 
 /**
- * 澄清提示词的模型覆盖解析（两端共用）。返回 null 表示「跟随当前对话模型」：
- * 未选择、供应商已删或模型已停用（与 commitMessageModel 同一回退契约——
- * normalize 已在落库时清掉失效选择，这里再挡一次会话内的时序空窗）。
+ * Resolves the model override for clarification prompts (shared by both clients). Returning null
+ * means "follow the current conversation model": nothing selected, the provider was deleted, or the
+ * model was disabled (the same fallback contract as commitMessageModel — normalize already cleared
+ * invalid selections at persistence time, and this guards once more against an in-session timing
+ * gap).
  */
 export function resolvePromptClarifyModel(
   settings: AppSettings,

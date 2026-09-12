@@ -140,10 +140,10 @@ function surfaceController(registry, conversationId, events = []) {
 }
 
 test("session workbench feature flag defaults to enabled with env opt-out", () => {
-  // GA 默认开启:未设置 / 空串走默认。
+  // GA is on by default: unset / empty string uses the default.
   assert.deepEqual(workbench.createSessionWorkbenchFeature(undefined), { enabled: true });
   assert.deepEqual(workbench.createSessionWorkbenchFeature(""), { enabled: true });
-  // 显式关闭是回退旧单 Pane 路径的逃生开关。
+  // Explicitly disabling is the escape hatch back to the legacy single-Pane path.
   assert.deepEqual(workbench.createSessionWorkbenchFeature("0"), { enabled: false });
   assert.deepEqual(workbench.createSessionWorkbenchFeature("false"), { enabled: false });
   assert.deepEqual(workbench.createSessionWorkbenchFeature(" true "), { enabled: true });

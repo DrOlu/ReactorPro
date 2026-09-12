@@ -1,11 +1,12 @@
 /**
- * 会话级 recorder 与 prompt 分段持有者的注册表。
+ * Registry of per-conversation recorders and prompt segment holders.
  *
- * recorder 必须跨轮存活：header 去重靠的就是「上一份 refs」这份状态，每轮新建
- * 会让每一轮都产生一份全新快照，分段去重立刻失效。
+ * The recorder must survive across turns: header dedup relies on the "previous refs"
+ * state, and creating a new one each turn would produce a fresh snapshot every turn,
+ * instantly breaking segment dedup.
  *
- * 用模块级注册表而不是 React state，与 `memoryExtraction` 控制器同构——运行时
- * 状态不该随组件重渲染重建。
+ * Using a module-level registry instead of React state, isomorphic to the
+ * `memoryExtraction` controller — runtime state should not be rebuilt on component re-render.
  */
 
 import {
@@ -23,25 +24,26 @@ import {
 type Entry = {
   recorder: TrajectoryRecorder;
   slots: ReturnType<typeof createPreparedSystemPromptSlotHolder>;
-  /** 当前活动 segment；每轮更新，recorder 通过闭包读它。 */
+  /** Currently active segment; updated each turn, read by the recorder via closure. */
   segmentIndex: number;
-  /** 当前回合的实时下发通道；同样每轮更新。 */
+  /** Real-time publish channel for the current turn; likewise updated each turn. */
   publish: TrajectoryPublish | undefined;
 };
 
 const entries = new Map<string, Entry>();
 
 /**
- * 取得（必要时创建）某会话的 recorder 与分段持有者。
+ * Get (creating if necessary) a conversation's recorder and segment holder.
  *
- * segmentIndex 与 publish 都走可变字段而不是构造期的闭包：recorder 跨轮存活，
- * 构造期闭包会把第一轮的 state 与 bridge 钉死，后续轮次的事件就会写进错误的
- * segment、或者发到已经关掉的通道上。
+ * segmentIndex and publish are mutable fields rather than constructor-time closures:
+ * the recorder survives across turns, and a constructor-time closure would pin the
+ * first turn's state and bridge, so later turns' events would be written to the wrong
+ * segment or sent to an already-closed channel.
  *
- * @param conversationId - 会话 id。
- * @param segmentIndex - 本轮的活动 segment 下标。
- * @param publish - 本轮的实时下发回调；未连 Gateway 时可省略。
- * @returns 该会话的 recorder 与分段读取器。
+ * @param conversationId - Conversation id.
+ * @param segmentIndex - Index of this turn's active segment.
+ * @param publish - This turn's real-time publish callback; may be omitted when not connected to a Gateway.
+ * @returns The conversation's recorder and segment reader.
  */
 export function acquireTrajectoryRecorder(
   conversationId: string,
@@ -72,7 +74,7 @@ export function acquireTrajectoryRecorder(
   return { recorder: entry.recorder, readSlots: slots.read };
 }
 
-/** 供上下文构建器写入分段原文。 */
+/** Used by context builders to write segment source text. */
 export function trajectorySlotCapture(
   conversationId: string,
 ): ((slots: PreparedSystemPromptSlots) => void) | undefined {
@@ -89,19 +91,21 @@ export function updateTrajectoryRecorderSegment(
   entry.segmentIndex = Math.max(0, Math.trunc(segmentIndex));
 }
 
-/** 会话关闭或 edit-resend 前释放；最后一次落盘由 recorder 自己完成。 */
+/** Released before conversation close or edit-resend; the recorder performs the final flush itself. */
 export async function releaseTrajectoryRecorder(conversationId: string): Promise<void> {
   const key = conversationId.trim();
   const entry = entries.get(key);
   if (entry === undefined) return;
   entries.delete(key);
   await entry.recorder.dispose();
-  // dispose 已把缓冲落盘；本进程不再持有该会话的实时尾巴。清掉 live 缓存后，
-  // 视图层会把持久化里仍 running 的遗留条目收敛为 aborted，而不是永远挂运行中。
+  // dispose has already flushed the buffer; this process no longer holds the
+  // conversation's live tail. After clearing the live cache, the view layer converges
+  // leftover entries still marked running in persistence to aborted instead of hanging
+  // as running forever.
   clearDesktopLiveTrajectory(key);
 }
 
-/** 会话已删除或缓存被淘汰时直接废弃，避免向已删除 segment 做最后一次写入。 */
+/** Discard directly when the conversation is deleted or the cache is evicted, avoiding a final write to a deleted segment. */
 export function discardTrajectoryRecorder(conversationId: string): void {
   const key = conversationId.trim();
   const entry = entries.get(key);

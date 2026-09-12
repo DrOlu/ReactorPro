@@ -73,7 +73,7 @@ function doubleDollarEnd(value: string, searchFrom: number) {
 // Pandoc's text-math closing rule, applied to the first unescaped "$" after
 // the opener: it must sit on the same line, directly after a non-space
 // character, and must not be followed by a digit — anything else rejects the
-// opener. This keeps currency ("$5 涨到 $10") and shell variables ("$PATH 和
+// opener. This keeps currency ("$5 rises to $10") and shell variables ("$PATH and
 // $HOME") literal while "$E = mc^2$" converts.
 function singleDollarClose(value: string, openIndex: number) {
   for (let index = openIndex + 1; index < value.length; index += 1) {

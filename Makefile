@@ -17,7 +17,7 @@ endif
 DESKTOP_WINDOWS_TARGET ?= x86_64-pc-windows-msvc
 DESKTOP_LINUX_TARGET ?= x86_64-unknown-linux-gnu
 DESKTOP_LINUX_BUNDLES ?= appimage deb rpm
-DESKTOP_MACOS_APP_NAME ?= LiveAgent
+DESKTOP_MACOS_APP_NAME ?= ReactorPro
 DESKTOP_MACOS_NOTARY_PROFILE ?= liveagent-notary
 DESKTOP_MACOS_TAURI_CONFIG ?= src-tauri/tauri.macos.conf.json
 DESKTOP_MACOS_DMG_SETTINGS ?= scripts/release/macos-dmg-settings.py
@@ -121,7 +121,7 @@ github-release-main: check-github-release-tag
 	pnpm --dir $(AGENT_GUI_DIR) test:release
 	cargo check --manifest-path $(AGENT_GUI_DIR)/src-tauri/Cargo.toml --tests
 	node scripts/release/prepare-app-version-from-tag.mjs "$(RELEASE_TAG)" --json
-	git tag -a "$(RELEASE_TAG)" -m "LiveAgent $(RELEASE_TAG)"
+	git tag -a "$(RELEASE_TAG)" -m "ReactorPro $(RELEASE_TAG)"
 	git push origin "$(RELEASE_TAG)"
 
 check-github-release-tag:
@@ -167,7 +167,7 @@ ensure-webui-embed-stub:
 		printf '%s\n' \
 			'<!doctype html>' \
 			'<html lang="en">' \
-			'<head><meta charset="utf-8"><title>LiveAgent Gateway</title></head>' \
+			'<head><meta charset="utf-8"><title>ReactorPro Gateway</title></head>' \
 			'<body><p>WebUI embed stub. Run <code>make dev-webui</code> for the real SPA.</p></body>' \
 			'</html>' \
 			> "$(AGENT_GATEWAY_WEB_DIR)/dist/index.html"; \
@@ -179,7 +179,7 @@ proto:
 	@command -v buf >/dev/null || (echo "buf is required. Run: mise install" && exit 1)
 	cd $(AGENT_GATEWAY_DIR) && buf generate
 
-# buf breaking 的对比基线（本地默认与当前 HEAD 对比；CI 覆写为 origin/main）。
+# Baseline for the buf breaking comparison (locally compares against the current HEAD by default; CI overrides it with origin/main).
 BUF_BREAKING_AGAINST ?= ../../.git\#subdir=$(AGENT_GATEWAY_DIR)
 
 proto-check:
@@ -276,41 +276,41 @@ desktop-verify-macos:
 
 help:
 	@printf "\n%s\n" "Desktop"
-	@printf "  %-34s %s\n" "make / make dev" "启动 Tauri 开发环境（Session Workbench 已默认启用）"
-	@printf "  %-34s %s\n" "make dev DEV_SESSION_WORKBENCH=0" "回退旧单会话布局启动 Tauri（逃生开关）"
-	@printf "  %-34s %s\n" "make dev-stack" "后台启动 Gateway、WebUI、桌面 LiveAgent 三端"
-	@printf "  %-34s %s\n" "make dev-stack-status" "检查三端与 MCP Bridge 状态"
-	@printf "  %-34s %s\n" "make dev-stack-logs" "查看三端最近日志"
-	@printf "  %-34s %s\n" "make dev-stack-stop" "停止脚本管理的三端进程"
-	@printf "  %-34s %s\n" "make check-fast" "编译、lint、基础测试与错误检查"
-	@printf "  %-34s %s\n" "make check-all" "执行 fast、完整测试与 Proto 检查"
-	@printf "  %-34s %s\n" "make check-strict" "执行 all，并将 Biome/Rust 告警视为错误"
-	@printf "  %-34s %s\n" "make build" "构建当前平台 Tauri 应用"
-	@printf "  %-34s %s\n" "make desktop-build-macos" "构建当前 Mac 芯片架构"
-	@printf "  %-34s %s\n" "make desktop-build-macos-release" "签名、公证并验证 macOS DMG"
-	@printf "  %-34s %s\n" "make desktop-store-macos-notary-profile" "保存 macOS 公证凭据到 Keychain"
-	@printf "  %-34s %s\n" "make desktop-wait-macos-notary" "等待指定 macOS 公证提交并 staple"
-	@printf "  %-34s %s\n" "make desktop-staple-macos" "对已通过公证的 macOS DMG 执行 staple"
-	@printf "  %-34s %s\n" "make desktop-verify-macos" "验证 macOS App/DMG 签名与公证"
-	@printf "  %-34s %s\n" "make desktop-build-macos-intel" "构建 macOS Intel 版本"
-	@printf "  %-34s %s\n" "make desktop-build-macos-m" "构建 macOS M 系列版本"
-	@printf "  %-34s %s\n" "make desktop-build-windows" "构建 Windows Tauri 应用"
-	@printf "  %-34s %s\n" "make desktop-build-linux" "构建 Linux AppImage/deb/rpm"
-	@printf "  %-34s %s\n" "make github-release-main RELEASE_TAG=vX.Y.Z" "从 main 打 tag 并触发 GitHub Release"
+	@printf "  %-34s %s\n" "make / make dev" "Start the Tauri development environment (Session Workbench is enabled by default)"
+	@printf "  %-34s %s\n" "make dev DEV_SESSION_WORKBENCH=0" "Start Tauri with the legacy single-session layout (escape hatch)"
+	@printf "  %-34s %s\n" "make dev-stack" "Start the Gateway, WebUI, and desktop ReactorPro tiers in the background"
+	@printf "  %-34s %s\n" "make dev-stack-status" "Check the status of the three tiers and the MCP Bridge"
+	@printf "  %-34s %s\n" "make dev-stack-logs" "View recent logs for the three tiers"
+	@printf "  %-34s %s\n" "make dev-stack-stop" "Stop the script-managed three-tier processes"
+	@printf "  %-34s %s\n" "make check-fast" "Compile, lint, run basic tests, and run error checks"
+	@printf "  %-34s %s\n" "make check-all" "Run fast, the full test suite, and Proto checks"
+	@printf "  %-34s %s\n" "make check-strict" "Run all, treating Biome/Rust warnings as errors"
+	@printf "  %-34s %s\n" "make build" "Build the Tauri app for the current platform"
+	@printf "  %-34s %s\n" "make desktop-build-macos" "Build for the current Mac chip architecture"
+	@printf "  %-34s %s\n" "make desktop-build-macos-release" "Sign, notarize, and verify the macOS DMG"
+	@printf "  %-34s %s\n" "make desktop-store-macos-notary-profile" "Store the macOS notarization credentials in the Keychain"
+	@printf "  %-34s %s\n" "make desktop-wait-macos-notary" "Wait for the specified macOS notarization submission and staple it"
+	@printf "  %-34s %s\n" "make desktop-staple-macos" "Staple an already-notarized macOS DMG"
+	@printf "  %-34s %s\n" "make desktop-verify-macos" "Verify macOS App/DMG signing and notarization"
+	@printf "  %-34s %s\n" "make desktop-build-macos-intel" "Build the macOS Intel version"
+	@printf "  %-34s %s\n" "make desktop-build-macos-m" "Build the macOS M-series version"
+	@printf "  %-34s %s\n" "make desktop-build-windows" "Build the Windows Tauri app"
+	@printf "  %-34s %s\n" "make desktop-build-linux" "Build the Linux AppImage/deb/rpm"
+	@printf "  %-34s %s\n" "make github-release-main RELEASE_TAG=vX.Y.Z" "Tag from main and trigger a GitHub Release"
 	@printf "\n%s\n" "Gateway development"
-	@printf "  %-34s %s\n" "make dev-gateway" "启动 agent-gateway Go 服务"
-	@printf "  %-34s %s\n" "make dev-webui" "启动 agent-gateway Web UI 开发服务"
+	@printf "  %-34s %s\n" "make dev-gateway" "Start the agent-gateway Go service"
+	@printf "  %-34s %s\n" "make dev-webui" "Start the agent-gateway Web UI development service"
 	@printf "\n%s\n" "Gateway build"
-	@printf "  %-34s %s\n" "make proto" "生成 agent-gateway protobuf 代码"
-	@printf "  %-34s %s\n" "make webui" "构建 agent-gateway Web UI"
-	@printf "  %-34s %s\n" "make gateway-build" "构建 agent-gateway 本地二进制"
-	@printf "  %-34s %s\n" "make gateway-docker-build" "构建 agent-gateway Docker 镜像"
-	@printf "  %-34s %s\n" "make gateway-docker-run" "本地运行 agent-gateway Docker 镜像"
-	@printf "  %-34s %s\n" "make gateway-docker-smoke" "构建并健康检查 agent-gateway Docker 镜像"
-	@printf "  %-34s %s\n" "make build-linux" "构建 agent-gateway Linux amd64 二进制"
-	@printf "  %-34s %s\n" "make build-linux-arm" "构建 agent-gateway Linux arm64 二进制"
-	@printf "  %-34s %s\n" "make build-windows" "构建 agent-gateway Windows amd64 二进制"
+	@printf "  %-34s %s\n" "make proto" "Generate agent-gateway protobuf code"
+	@printf "  %-34s %s\n" "make webui" "Build the agent-gateway Web UI"
+	@printf "  %-34s %s\n" "make gateway-build" "Build the local agent-gateway binary"
+	@printf "  %-34s %s\n" "make gateway-docker-build" "Build the agent-gateway Docker image"
+	@printf "  %-34s %s\n" "make gateway-docker-run" "Run the agent-gateway Docker image locally"
+	@printf "  %-34s %s\n" "make gateway-docker-smoke" "Build and health-check the agent-gateway Docker image"
+	@printf "  %-34s %s\n" "make build-linux" "Build the agent-gateway Linux amd64 binary"
+	@printf "  %-34s %s\n" "make build-linux-arm" "Build the agent-gateway Linux arm64 binary"
+	@printf "  %-34s %s\n" "make build-windows" "Build the agent-gateway Windows amd64 binary"
 	@printf "\n%s\n" "Maintenance"
-	@printf "  %-34s %s\n" "make all" "同时构建 GUI 和 agent-gateway"
-	@printf "  %-34s %s\n" "make clean" "清理 agent-gateway 构建产物"
-	@printf "  %-34s %s\n" "make help" "查看可用命令"
+	@printf "  %-34s %s\n" "make all" "Build both the GUI and agent-gateway"
+	@printf "  %-34s %s\n" "make clean" "Clean agent-gateway build artifacts"
+	@printf "  %-34s %s\n" "make help" "Show available commands"

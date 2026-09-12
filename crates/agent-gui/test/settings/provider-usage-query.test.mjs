@@ -85,7 +85,8 @@ test("draft test sends the editor config verbatim regardless of the enable switc
   assert.equal(invokeCalls[0].args.providerId, "provider-a");
   const draft = JSON.parse(invokeCalls[0].args.configJson);
   assert.equal(draft.mode, "custom");
-  // 草稿原样传输,启用与否由桌面端测试路径忽略。
+  // The draft is transmitted as-is; enabled or not is ignored by the desktop test
+  // path.
   assert.equal(draft.enabled, false);
 });
 
@@ -181,7 +182,7 @@ test("relative time buckets queried-at into just-now/minutes/hours/days", () => 
     kind: "daysAgo",
     value: 2,
   });
-  // 未来时间戳(时钟偏移)按"刚刚"处理。
+  // A future timestamp (clock skew) is treated as "just now".
   assert.deepEqual(usage.getUsageRelativeTime(now + 60_000, now), { kind: "justNow" });
 });
 
@@ -203,7 +204,8 @@ test("plan severity flags invalid plans and low remaining quota", () => {
   assert.equal(usage.getUsagePlanSeverity({ isValid: false }), "invalid");
   assert.equal(usage.getUsagePlanSeverity({ remaining: 5, total: 100 }), "low");
   assert.equal(usage.getUsagePlanSeverity({ remaining: 50, total: 100 }), "normal");
-  // 无 total 时不判 low;total=-1(无限)同样不判。
+  // Without total, low is not flagged; total=-1 (unlimited) is likewise not
+  // flagged.
   assert.equal(usage.getUsagePlanSeverity({ remaining: 0.1 }), "normal");
   assert.equal(usage.getUsagePlanSeverity({ remaining: 1, total: -1 }), "normal");
 });
@@ -230,7 +232,7 @@ test("plan display formats amounts, infinity totals, percents, and invalid state
   assert.equal(invalid.invalid, true);
   assert.equal(invalid.invalidMessage, "expired");
 
-  // remaining 缺失时退化到 total-used。
+  // When remaining is missing, fall back to total-used.
   const derived = usage.getUsagePlanDisplay({ used: 30, total: 100 });
   assert.equal(derived.amount, "70");
 });
@@ -266,11 +268,13 @@ test("provider card display stays in loading until the first result lands", () =
   const now = 1_700_000_000_000;
   const provider = { id: "p", usageQuery: { enabled: true } };
 
-  // 首个结果未回:无论请求是否已在途,都视为加载中(渲染等高骨架占位)。
+  // Before the first result returns: whether or not the request is already in
+  // flight, treat it as loading (render a fixed-height skeleton placeholder).
   assert.equal(usage.getProviderUsageCardDisplay(provider, undefined, false, now).loading, true);
   assert.equal(usage.getProviderUsageCardDisplay(provider, undefined, true, now).loading, true);
 
-  // 结果落地(即使数据为空/失败形态)即退出加载态;手动刷新不回到骨架。
+  // Once a result lands (even an empty or failure shape), exit the loading state;
+  // a manual refresh does not return to the skeleton.
   const empty = usage.getProviderUsageCardDisplay(
     provider,
     { data: [], queriedAt: now, error: null, isStale: false },

@@ -19,7 +19,7 @@ const gatewayAppSource = [
 test("manual compaction keeps its conversation and workspace running until terminal cleanup", () => {
   const runningConversationIds = new Set(["other-conversation"]);
   const runningProjectPathKeys = new Set(["/other/workspace"]);
-  // 向后兼容：单对象入参仍被接受。
+  // Backward compatible: a single-object argument is still accepted.
   const merged = mergeTransientSidebarRunningActivity(
     runningConversationIds,
     runningProjectPathKeys,
@@ -58,10 +58,10 @@ test("multiple manual compactions keep every pending conversation and workspace 
     [
       { conversationId: "conversation-1", workdir: "/workspace/one/" },
       { conversationId: "conversation-2", workdir: "/workspace/two/" },
-      // null/undefined 条目被跳过。
+      // null/undefined entries are skipped.
       null,
       undefined,
-      // 重复会话/工作区不重复计入。
+      // Duplicate conversations/workspaces are not counted twice.
       { conversationId: "conversation-1", workdir: "/workspace/one/" },
     ],
   );
@@ -77,7 +77,8 @@ test("multiple manual compactions keep every pending conversation and workspace 
 });
 
 test("manual compaction pending is keyed per conversation, never a global singleton (defect #3)", () => {
-  // pending 按会话 id 键化：state + ref 经唯一 setter/clearer 同步写。
+  // pending is keyed by conversation id: state + ref are written together through a
+  // single setter/clearer.
   assert.match(
     gatewayAppSource,
     /useState<\s*ReadonlyMap<string, ManualCompactPendingRequest>\s*>/,
@@ -86,12 +87,12 @@ test("manual compaction pending is keyed per conversation, never a global single
     gatewayAppSource,
     /const clearManualCompactPendingRequest = useCallback\(\s*\(conversationId: string, operationId: string\) => \{[\s\S]*?next\.delete\(conversationId\);/,
   );
-  // handleManualCompact 只在“同会话”已有 pending 时拒绝。
+  // handleManualCompact only refuses when the "same conversation" already has a pending.
   assert.match(
     gatewayAppSource,
     /manualCompactPendingRef\.current\.has\(conversationId\)/,
   );
-  // 受理拒绝（!accepted）按 (conversationId, operationId) 清 pending。
+  // A rejected acceptance (!accepted) clears pending by (conversationId, operationId).
   assert.match(
     gatewayAppSource,
     /!response\.accepted &&\s*clearManualCompactPendingRequest\(conversationId, operationId\) &&\s*isDisplayedConversation\(conversationId\)/,
@@ -99,8 +100,9 @@ test("manual compaction pending is keyed per conversation, never a global single
 });
 
 test("manual compaction terminal settlement surfaces the result even for background conversations (defect #4)", () => {
-  // settle 无条件 setChatError（不再以 isDisplayedConversation 门控），使切走的
-  // 会话压缩失败/跳过也能提示。
+  // settle calls setChatError unconditionally (no longer gated by
+  // isDisplayedConversation), so a compaction failure/skip on a switched-away
+  // conversation can still surface a notice.
   assert.match(
     gatewayAppSource,
     /if \(!clearManualCompactPendingRequest\(targetConversationId, result\.operationId\)\) return;[\s\S]*?setChatError\(result\.message \|\| translate\(fallbackKey, locale\)\);/,

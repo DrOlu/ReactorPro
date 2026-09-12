@@ -2,8 +2,8 @@
 name = "liveagent"
 # Release builds override this development version from the Git tag workflow.
 version = "1.3.0-dev.0"
-description = "LiveAgent desktop application"
-authors = ["you"]
+description = "ReactorPro desktop application"
+authors = ["Hyperspace Technologies <agent@reactorpro.ng>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -76,7 +76,7 @@ russh = "0.62.2"
 russh-sftp = "2.3.0"
 encoding_rs = "0.8.35"
 chardetng = "0.1.17"
-# MCP OAuth（docs/design/mcp-oauth.md）：token 只进 OS keystore；PKCE/state 熵源。
+# MCP OAuth (docs/design/mcp-oauth.md): the token goes only into the OS keystore; PKCE/state entropy source.
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 getrandom = "0.3.4"
 
@@ -86,7 +86,7 @@ objc2-av-foundation = { version = "0.3", default-features = false, features = ["
 objc2 = { version = "0.6", default-features = false, features = ["std"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSDictionary", "NSArray", "NSObject", "NSEnumerator", "NSGeometry", "objc2-core-foundation"] }
 block2 = "0.6"
-# 读 .app bundle 的 Info.plist（输入框 @ 应用提及的枚举）。
+# Reads the Info.plist of the .app bundle (enumeration for @ app mentions in the input box).
 plist = "1.10"
 
 [target.'cfg(windows)'.dependencies]
@@ -103,8 +103,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Registry",
     "Win32_System_LibraryLoader",
     "Win32_UI_WindowsAndMessaging",
-    # 已安装应用枚举（输入框 @ 应用提及）：SHGetFileInfoW 取图标需要
-    # Shell + Com（SHGetFileInfo 要求 COM 已初始化），位图转像素走 Gdi。
+    # Enumerate installed apps (for @ app mentions in the input box): SHGetFileInfoW to get icons requires
+    # Shell + Com (SHGetFileInfo requires COM to be initialized); bitmap-to-pixel conversion goes through Gdi.
     "Win32_UI_Shell",
     "Win32_Graphics_Gdi",
     "Win32_System_Com",

@@ -5,15 +5,15 @@ import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 const EmptyIcon = () => null;
 
 const T = {
-  "chat.contextCheckpoint.title": "上下文检查点",
-  "chat.contextCheckpoint.seam": "已压缩上下文，继续处理",
-  "chat.contextCheckpoint.messageCount": "{count} 条消息",
-  "chat.contextCheckpoint.tokensAfter": "压缩后 {tokens}",
-  "chat.work.running": "处理中",
-  "chat.work.activity": "已处理",
-  "chat.thinking": "思考中",
-  "chat.thoughtFor": "思考了",
-  "chat.thinkingProcess": "思考过程",
+  "chat.contextCheckpoint.title": "Context checkpoint",
+  "chat.contextCheckpoint.seam": "Context compacted, continuing",
+  "chat.contextCheckpoint.messageCount": "{count} messages",
+  "chat.contextCheckpoint.tokensAfter": "After compaction {tokens}",
+  "chat.work.running": "Processing",
+  "chat.work.activity": "Processed",
+  "chat.thinking": "Thinking",
+  "chat.thoughtFor": "Thought for",
+  "chat.thinkingProcess": "Thinking process",
 };
 
 const env = await createDomTestEnv({
@@ -51,7 +51,7 @@ function click(element) {
 const seam = {
   key: "summary-seg-1",
   summaryId: "sum-1",
-  content: "## 摘要\n之前完成了前 3 项任务。",
+  content: "## Summary\nPreviously completed the first 3 tasks.",
   coveredMessageCount: 94,
   generatedBy: { providerId: "deepseek", model: "deepseek-v4-flash" },
   contextUsageTokens: 18_400,
@@ -69,14 +69,14 @@ test("the seam row reads as one collapsed milestone and expands to the summary",
   assert.equal(row.dataset.summaryId, "sum-1");
   const button = row.querySelector("button");
   assert.equal(button.getAttribute("aria-expanded"), "false");
-  assert.match(button.textContent, /已压缩上下文，继续处理/);
-  assert.match(button.textContent, /94 条消息/);
-  assert.match(button.textContent, /压缩后 18\.4K/);
+  assert.match(button.textContent, /Context compacted, continuing/);
+  assert.match(button.textContent, /94 messages/);
+  assert.match(button.textContent, /After compaction 18\.4K/);
   assert.equal(container.querySelector("[data-md]"), null, "summary body stays unmounted");
 
   click(button);
   assert.equal(button.getAttribute("aria-expanded"), "true");
-  assert.match(container.querySelector("[data-md]").textContent, /前 3 项任务/);
+  assert.match(container.querySelector("[data-md]").textContent, /first 3 tasks/);
   assert.match(container.textContent, /deepseek · deepseek-v4-flash/);
 
   act(() => root.unmount());
@@ -99,7 +99,7 @@ test("a stitched reply renders one processing trace with the seam inline and one
     {
       round: 2,
       key: "p1:r2",
-      blocks: [{ kind: "text", id: "text-1", text: "第 3 轮测试已全部完成。" }],
+      blocks: [{ kind: "text", id: "text-1", text: "Round 3 tests are all complete." }],
       meta: { stopReason: "stop" },
     },
   ];
@@ -117,7 +117,7 @@ test("a stitched reply renders one processing trace with the seam inline and one
 
   const traces = container.querySelectorAll("[data-chat-work-trace]");
   assert.equal(traces.length, 1, "exactly one processing section for the whole reply");
-  assert.match(container.textContent, /第 3 轮测试已全部完成/);
+  assert.match(container.textContent, /Round 3 tests are all complete/);
 
   // A settled reply with an answer starts with its trace folded; the seam
   // lives inside that fold, never as a standalone card outside it.

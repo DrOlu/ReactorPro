@@ -39,7 +39,7 @@ test("identical content hashes identically and differing content does not", () =
 });
 
 test("hashing is stable for long multi-byte content", () => {
-  const long = "系统提示词".repeat(5_000);
+  const long = "sÿstém prömpt ".repeat(5_000);
   assert.equal(hashTrajectoryContent(long), hashTrajectoryContent(long));
   assert.notEqual(hashTrajectoryContent(long), hashTrajectoryContent(`${long}x`));
 });
@@ -111,7 +111,7 @@ test("only the changed slot is reported for persistence", () => {
     { base: "BASE", skills: "SKILLS", memory: "MEM-2", toolCatalog: "TOOLS" },
     { headerId: first.headerId, refs: first.refs },
   );
-  // memory 每轮重渲染，是唯一常变的槽位——只有它需要新落盘。
+  // memory is re-rendered every turn and is the only frequently changing slot — only it needs a new entry written.
   assert.equal(second.sections.length, 1);
   assert.equal(second.sections[0].slot, "memory");
   assert.equal(second.change, "system");

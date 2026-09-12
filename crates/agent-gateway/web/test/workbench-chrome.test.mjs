@@ -55,9 +55,11 @@ test("gateway shows the conversation view switcher in chrome only after an assis
 });
 
 test("web composer column clamps the clarify panel so new turns scroll inside it", () => {
-  // 输入层 absolute 贴底、聊天区 overflow-hidden：面板 max-h-[40vh] 在矮 Pane
-  // 里可能还没触顶就被外层裁掉，内部 overflow-y-auto 永不生效。列必须是
-  // 有上限的 flex 列，并允许 [data-clarify-panel] 收缩。
+  // The composer layer is absolutely pinned to the bottom and the chat area is
+  // overflow-hidden: in a short pane, the panel's max-h-[40vh] may be clipped by
+  // the outer container before it even hits its cap, so the inner
+  // overflow-y-auto never takes effect. The column must be a capped flex
+  // column and allow [data-clarify-panel] to shrink.
   assert.match(
     baseChatStyles,
     /\.gateway-composer-layer \{[\s\S]*?max-height: 100%;/,

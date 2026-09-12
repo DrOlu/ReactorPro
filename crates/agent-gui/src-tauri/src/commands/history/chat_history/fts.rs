@@ -174,8 +174,8 @@ fn load_chat_history_fts_conversation_info(
         },
     )
     .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => "未找到对应的历史对话".to_string(),
-        _ => format!("读取历史 FTS 对话信息失败：{e}"),
+        rusqlite::Error::QueryReturnedNoRows => "No matching history conversation found".to_string(),
+        _ => format!("failed to read history FTS conversation info: {e}"),
     })
 }
 
@@ -191,7 +191,7 @@ fn delete_chat_history_segment_fts(
         ",
         params![conversation_id, segment_index],
     )
-    .map_err(|e| format!("删除历史 FTS 元数据失败：{e}"))?;
+    .map_err(|e| format!("failed to delete history FTS metadata: {e}"))?;
     conn.execute(
         "
         DELETE FROM chatHistoryMessageFts
@@ -199,7 +199,7 @@ fn delete_chat_history_segment_fts(
         ",
         params![conversation_id, segment_index],
     )
-    .map_err(|e| format!("删除历史消息 FTS 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete history message FTS rows: {e}"))?;
     conn.execute(
         "
         DELETE FROM chatHistorySegmentFts
@@ -207,7 +207,7 @@ fn delete_chat_history_segment_fts(
         ",
         params![conversation_id, segment_index],
     )
-    .map_err(|e| format!("删除历史分段 FTS 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete history segment FTS rows: {e}"))?;
     Ok(())
 }
 
@@ -223,7 +223,7 @@ fn delete_chat_history_fts_from_segment(
         ",
         params![conversation_id, from_segment_index],
     )
-    .map_err(|e| format!("清理截断历史 FTS 元数据失败：{e}"))?;
+    .map_err(|e| format!("failed to clean up truncated history FTS metadata: {e}"))?;
     conn.execute(
         "
         DELETE FROM chatHistoryMessageFts
@@ -231,7 +231,7 @@ fn delete_chat_history_fts_from_segment(
         ",
         params![conversation_id, from_segment_index],
     )
-    .map_err(|e| format!("清理截断历史消息 FTS 行失败：{e}"))?;
+    .map_err(|e| format!("failed to clean up truncated history message FTS rows: {e}"))?;
     conn.execute(
         "
         DELETE FROM chatHistorySegmentFts
@@ -239,7 +239,7 @@ fn delete_chat_history_fts_from_segment(
         ",
         params![conversation_id, from_segment_index],
     )
-    .map_err(|e| format!("清理截断历史分段 FTS 行失败：{e}"))?;
+    .map_err(|e| format!("failed to clean up truncated history segment FTS rows: {e}"))?;
     Ok(())
 }
 
@@ -251,17 +251,17 @@ fn delete_chat_history_conversation_fts(
         "DELETE FROM chatHistoryFtsSegmentIndex WHERE conversation_id = ?1",
         params![conversation_id],
     )
-    .map_err(|e| format!("删除历史对话 FTS 元数据失败：{e}"))?;
+    .map_err(|e| format!("failed to delete history conversation FTS metadata: {e}"))?;
     conn.execute(
         "DELETE FROM chatHistoryMessageFts WHERE conversation_id = ?1",
         params![conversation_id],
     )
-    .map_err(|e| format!("删除历史对话消息 FTS 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete history conversation message FTS rows: {e}"))?;
     conn.execute(
         "DELETE FROM chatHistorySegmentFts WHERE conversation_id = ?1",
         params![conversation_id],
     )
-    .map_err(|e| format!("删除历史对话分段 FTS 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete history conversation segment FTS rows: {e}"))?;
     Ok(())
 }
 
@@ -290,7 +290,7 @@ fn is_chat_history_segment_fts_current(
             |_| Ok(()),
         )
         .optional()
-        .map_err(|e| format!("检查历史 FTS 当前状态失败：{e}"))?;
+        .map_err(|e| format!("failed to check current history FTS status: {e}"))?;
     Ok(current.is_some())
 }
 
@@ -335,7 +335,7 @@ fn index_chat_history_segment_fts(
             conversation.updated_at
         ],
     )
-    .map_err(|e| format!("写入历史分段 FTS 失败：{e}"))?;
+    .map_err(|e| format!("failed to write history segment FTS: {e}"))?;
 
     for message in messages {
         conn.execute(
@@ -370,7 +370,7 @@ fn index_chat_history_segment_fts(
                 conversation.updated_at
             ],
         )
-        .map_err(|e| format!("写入历史消息 FTS 失败：{e}"))?;
+        .map_err(|e| format!("failed to write history message FTS: {e}"))?;
     }
 
     conn.execute(
@@ -392,7 +392,7 @@ fn index_chat_history_segment_fts(
             conversation.updated_at,
         ],
     )
-    .map_err(|e| format!("写入历史 FTS 元数据失败：{e}"))?;
+    .map_err(|e| format!("failed to write history FTS metadata: {e}"))?;
 
     Ok(())
 }

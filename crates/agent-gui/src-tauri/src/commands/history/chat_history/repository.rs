@@ -85,8 +85,8 @@ fn get_summary_by_id(conn: &Connection, id: &str) -> Result<ChatHistorySummary, 
         row_to_summary,
     )
     .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => "未找到对应的历史对话".to_string(),
-        _ => format!("读取历史对话摘要失败：{e}"),
+        rusqlite::Error::QueryReturnedNoRows => "No matching history conversation found".to_string(),
+        _ => format!("Failed to read history conversation summary: {e}"),
     })
 }
 
@@ -125,8 +125,8 @@ fn get_record_by_id(conn: &Connection, id: &str) -> Result<ChatHistoryRecord, St
         row_to_record,
     )
     .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => "未找到对应的历史对话".to_string(),
-        _ => format!("读取历史对话失败：{e}"),
+        rusqlite::Error::QueryReturnedNoRows => "No matching history conversation found".to_string(),
+        _ => format!("Failed to read history conversation: {e}"),
     })
 }
 
@@ -148,7 +148,7 @@ fn read_message_timestamp(value: &Value) -> i64 {
 
 fn resolve_history_list_page_size(page_size: i64) -> Result<i64, String> {
     if page_size <= 0 {
-        Err("历史列表 pageSize 必须大于 0".to_string())
+        Err("History list pageSize must be greater than 0".to_string())
     } else {
         Ok(page_size.min(MAX_HISTORY_LIST_LIMIT))
     }
@@ -193,7 +193,7 @@ pub(crate) fn list_chat_history_sync_with_filter(
     } else {
         conn.query_row(&total_query, [], |row| row.get::<_, i64>(0))
     }
-    .map_err(|e| format!("统计历史列表失败：{e}"))?;
+    .map_err(|e| format!("Failed to count history list: {e}"))?;
 
     let mut stmt = conn
         .prepare(&format!(
@@ -224,22 +224,22 @@ pub(crate) fn list_chat_history_sync_with_filter(
             limit_param = if cwd_filter.is_some() { "?2" } else { "?1" },
             offset_param = if cwd_filter.is_some() { "?3" } else { "?2" },
         ))
-        .map_err(|e| format!("准备历史列表查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare history list query: {e}"))?;
 
     let mut out = Vec::new();
     if let Some(cwd) = cwd_filter.as_deref() {
         let rows = stmt
             .query_map(params![cwd, limit, offset], row_to_summary)
-            .map_err(|e| format!("查询历史列表失败：{e}"))?;
+            .map_err(|e| format!("Failed to query history list: {e}"))?;
         for row in rows {
-            out.push(row.map_err(|e| format!("读取历史列表行失败：{e}"))?);
+            out.push(row.map_err(|e| format!("Failed to read history list row: {e}"))?);
         }
     } else {
         let rows = stmt
             .query_map(params![limit, offset], row_to_summary)
-            .map_err(|e| format!("查询历史列表失败：{e}"))?;
+            .map_err(|e| format!("Failed to query history list: {e}"))?;
         for row in rows {
-            out.push(row.map_err(|e| format!("读取历史列表行失败：{e}"))?);
+            out.push(row.map_err(|e| format!("Failed to read history list row: {e}"))?);
         }
     }
     Ok(ChatHistoryListResponse {
@@ -261,7 +261,7 @@ pub(crate) fn list_chat_history_workdirs_sync(
             ORDER BY MAX(updated_at) DESC, TRIM(cwd) ASC
             ",
         )
-        .map_err(|e| format!("准备历史工作目录查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare history working directory query: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             Ok(ChatHistoryWorkdirSummary {
@@ -270,11 +270,11 @@ pub(crate) fn list_chat_history_workdirs_sync(
                 updated_at: row.get("updated_at")?,
             })
         })
-        .map_err(|e| format!("查询历史工作目录失败：{e}"))?;
+        .map_err(|e| format!("Failed to query history working directory: {e}"))?;
 
     let mut out = Vec::new();
     for row in rows {
-        let item = row.map_err(|e| format!("读取历史工作目录行失败：{e}"))?;
+        let item = row.map_err(|e| format!("Failed to read history working directory row: {e}"))?;
         if item.path.trim().is_empty() {
             continue;
         }

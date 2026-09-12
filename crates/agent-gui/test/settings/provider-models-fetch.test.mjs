@@ -109,7 +109,7 @@ test("buildProviderModelsAttempts uses Authorization first and official auth sec
     assert.equal(attempts[0].headers["x-goog-api-key"], undefined);
   }
 
-  // codex/xai/deepseek 官方形式与首次尝试一致，收敛为一次；claude_code/gemini 带官方鉴权头重试。
+  // For codex/xai/deepseek the official form matches the first attempt, converging to one; claude_code/gemini retry with official auth headers.
   const attemptsFor = Object.fromEntries(attemptsByProvider);
   for (const type of ["codex", "xai", "deepseek"]) {
     assert.deepEqual(
@@ -130,8 +130,10 @@ test("buildProviderModelsAttempts uses Authorization first and official auth sec
   assert.equal(attemptsFor.claude_code[1].headers["anthropic-version"], "2023-06-01");
   assert.equal(attemptsFor.gemini[1].headers["x-goog-api-key"], "test-key");
 
-  // 拉模型列表不带任何客户端身份:不开启伪装就照实发。SDK 指纹头更是推理请求才有
-  // 的东西,带上它们等于谎报了一次没发生的 SDK 调用,上游据此做限流/统计会被污染。
+  // Fetching the model list carries no client identity: without spoofing enabled it is
+  // sent as-is. SDK fingerprint headers belong only to inference requests, and including
+  // them would falsely report an SDK call that never happened, polluting the upstream's
+  // rate limiting/statistics.
   const neverAutoInjected = [
     "user-agent",
     "x-app",
@@ -157,14 +159,14 @@ test("buildProviderModelsAttempts uses Authorization first and official auth sec
 });
 
 test("custom headers reach the model-list request, and never override auth", () => {
-  // 不点「模拟 CLI」就没有任何身份头——伪装只能来自用户显式配置。
+  // Without clicking "Simulate CLI" there are no identity headers -- spoofing can only come from explicit user configuration.
   const [bare] = providerUtils.buildProviderModelsAttempts("claude_code", "test-key");
   assert.ok(!Object.keys(bare.headers).some((name) => name.toLowerCase() === "user-agent"));
 
   const [overridden] = providerUtils.buildProviderModelsAttempts("claude_code", "test-key", [
     { key: "user-agent", value: "my-relay/1.0" },
     { key: "X-Trace", value: "abc" },
-    // 保留头：鉴权头顶不掉，非法取值（CR/LF 注入）整条丢弃。
+    // Reserved headers: auth headers cannot be overridden, and illegal values (CR/LF injection) drop the whole entry.
     { key: "Authorization", value: "Bearer stolen" },
     { key: "X-Bad", value: "line\r\nInjected: 1" },
   ]);
@@ -407,7 +409,7 @@ test("fetchModelsFromApi requests OpenAI-compatible providers exactly once", asy
     await withFetchStub(
       () => jsonResponse(503, { error: "temporary failure" }),
       async (calls) => {
-        // 官方形式与首次尝试完全一致，失败后不得原样重发同一请求。
+        // The official form is identical to the first attempt; after failure the same request must not be resent verbatim.
         await assert.rejects(
           providerUtils.fetchModelsFromApi(type, `https://${type}.example.com/v1`, "test-key"),
           /temporary failure/,
@@ -482,8 +484,9 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
         models_url: "https://catalog.example.com/models?api-version=2026-01",
         provider_id: "provider-codex",
         is_full_url: true,
-        // WebView 的 fetch() 会静默丢掉 User-Agent，Gateway 路径必须把用户配的头
-        // 原样交给桌面端去落地，否则改了头也到不了上游。
+        // WebView's fetch() silently drops User-Agent, so the Gateway path must hand the
+        // user-configured header to the desktop side verbatim for it to apply; otherwise
+        // changing the header would never reach upstream.
         custom_headers: [{ key: "User-Agent", value: "claude-cli/2.1.88 (external, cli)" }],
       },
     ]);

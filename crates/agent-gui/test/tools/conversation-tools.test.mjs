@@ -223,7 +223,7 @@ test("ReadConversation reports revision changes instead of mixing windows", asyn
     references: [{ id: "old-1", title: "Earlier work" }],
     currentConversationId: "current",
     loadWindow: async () => {
-      throw new Error("历史版本已变化");
+      throw new Error("History version has changed");
     },
   });
   const cursor = encodeConversationCursor({

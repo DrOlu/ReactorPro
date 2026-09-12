@@ -4,7 +4,7 @@
 //! restarts and are restored into the registry; non-isolated leftovers are
 //! crash residue that gets reaped on the next launch and never displayed.
 //!
-//! Rows carry the owning LiveAgent instance's identity (pid + start time) so
+//! Rows carry the owning ReactorPro instance's identity (pid + start time) so
 //! a second concurrently-running instance never treats a live sibling's
 //! children as crash residue.
 
@@ -50,7 +50,7 @@ pub fn ensure_journal_schema(conn: &Connection) -> Result<(), String> {
         );
         ",
     )
-    .map_err(|e| format!("初始化 managed_processes 表失败：{e}"))?;
+    .map_err(|e| format!("failed to initialize managed_processes table: {e}"))?;
     // CREATE TABLE IF NOT EXISTS no-ops against a managed_processes table left
     // over from before the owner-identity columns existed, so old journals
     // (and any sibling instance racing this same migration) need an explicit
@@ -87,7 +87,7 @@ fn ensure_owner_columns(conn: &Connection) -> Result<(), String> {
                     columns = refreshed;
                     continue;
                 }
-                return Err(format!("迁移 managed_processes 列 {column} 失败：{error}"));
+                return Err(format!("failed to migrate managed_processes column {column}: {error}"));
             }
         }
     }
@@ -97,13 +97,13 @@ fn ensure_owner_columns(conn: &Connection) -> Result<(), String> {
 fn read_table_columns(conn: &Connection) -> Result<HashSet<String>, String> {
     let mut stmt = conn
         .prepare("PRAGMA table_info(managed_processes)")
-        .map_err(|e| format!("读取 managed_processes 表结构失败：{e}"))?;
+        .map_err(|e| format!("failed to read managed_processes table schema: {e}"))?;
     let rows = stmt
         .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|e| format!("查询 managed_processes 表结构失败：{e}"))?;
+        .map_err(|e| format!("failed to query managed_processes table schema: {e}"))?;
     let mut columns = HashSet::new();
     for row in rows {
-        columns.insert(row.map_err(|e| format!("读取 managed_processes 字段失败：{e}"))?);
+        columns.insert(row.map_err(|e| format!("failed to read managed_processes field: {e}"))?);
     }
     Ok(columns)
 }
@@ -121,7 +121,7 @@ pub fn persist_journal_revision(conn: &Connection, revision: u64) -> Result<(), 
          WHERE CAST(automation_meta.value AS INTEGER) < CAST(excluded.value AS INTEGER)",
         params![MANAGED_PROCESS_REVISION_KEY, (revision as i64).to_string()],
     )
-    .map_err(|e| format!("写入 managed process revision 失败：{e}"))?;
+    .map_err(|e| format!("failed to write managed process revision: {e}"))?;
     Ok(())
 }
 
@@ -132,7 +132,7 @@ pub fn insert_row(
     owner_started_at: i64,
 ) -> Result<(), String> {
     let payload = serde_json::to_string(record)
-        .map_err(|e| format!("序列化 managed process 记录失败：{e}"))?;
+        .map_err(|e| format!("failed to serialize managed process record: {e}"))?;
     conn.execute(
         "INSERT OR REPLACE INTO managed_processes
              (process_id, payload_json, isolated, pid, started_at, owner_pid, owner_started_at, updated_at)
@@ -148,7 +148,7 @@ pub fn insert_row(
             now_ms(),
         ],
     )
-    .map_err(|e| format!("写入 managed process journal 失败：{e}"))?;
+    .map_err(|e| format!("failed to write managed process journal: {e}"))?;
     Ok(())
 }
 
@@ -157,7 +157,7 @@ pub fn delete_row(conn: &Connection, id: &str) -> Result<(), String> {
         "DELETE FROM managed_processes WHERE process_id = ?1",
         params![id],
     )
-    .map_err(|e| format!("删除 managed process journal 行失败：{e}"))?;
+    .map_err(|e| format!("failed to delete managed process journal row: {e}"))?;
     Ok(())
 }
 
@@ -173,7 +173,7 @@ pub fn delete_non_isolated_rows(
          WHERE isolated = 0 AND owner_pid = ?1 AND owner_started_at = ?2",
         params![owner_pid as i64, owner_started_at],
     )
-    .map_err(|e| format!("清理 managed process journal 失败：{e}"))?;
+    .map_err(|e| format!("failed to clean up managed process journal: {e}"))?;
     Ok(())
 }
 
@@ -184,7 +184,7 @@ pub fn read_rows(conn: &Connection) -> Result<Vec<ManagedProcessJournalRow>, Str
         .prepare(
             "SELECT process_id, payload_json, owner_pid, owner_started_at FROM managed_processes",
         )
-        .map_err(|e| format!("读取 managed process journal 失败：{e}"))?;
+        .map_err(|e| format!("failed to read managed process journal: {e}"))?;
     let raw_rows = stmt
         .query_map([], |row| {
             Ok((
@@ -194,9 +194,9 @@ pub fn read_rows(conn: &Connection) -> Result<Vec<ManagedProcessJournalRow>, Str
                 row.get::<_, i64>(3)?,
             ))
         })
-        .map_err(|e| format!("读取 managed process journal 失败：{e}"))?
+        .map_err(|e| format!("failed to read managed process journal: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取 managed process journal 失败：{e}"))?;
+        .map_err(|e| format!("failed to read managed process journal: {e}"))?;
     drop(stmt);
 
     let mut rows = Vec::with_capacity(raw_rows.len());

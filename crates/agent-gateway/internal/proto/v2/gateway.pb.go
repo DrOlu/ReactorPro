@@ -225,8 +225,9 @@ const (
 	ChatEvent_TOOL_STATUS   ChatEvent_ChatEventType = 6
 	ChatEvent_HOSTED_SEARCH ChatEvent_ChatEventType = 7
 	ChatEvent_USER_MESSAGE  ChatEvent_ChatEventType = 8
-	// 轨迹骨架事件；data 是一条紧凑 TrajectoryEvent 的 JSON。分段全文不走这里，
-	// 由 TrajectoryFetchRequest 按需拉取，避免几十 KB 的 payload 撑爆中继窗口。
+	// Trajectory skeleton event; data is the JSON of a compact TrajectoryEvent. Full
+	// section text does not go through here, but is fetched on demand via
+	// TrajectoryFetchRequest, avoiding tens of KB payloads overflowing the relay window.
 	ChatEvent_TRAJECTORY ChatEvent_ChatEventType = 9
 )
 
@@ -2585,9 +2586,10 @@ type ChatRuntimeControls struct {
 	ThinkingEnabled        bool                   `protobuf:"varint,1,opt,name=thinking_enabled,json=thinkingEnabled,proto3" json:"thinking_enabled,omitempty"`
 	NativeWebSearchEnabled bool                   `protobuf:"varint,2,opt,name=native_web_search_enabled,json=nativeWebSearchEnabled,proto3" json:"native_web_search_enabled,omitempty"`
 	Reasoning              string                 `protobuf:"bytes,3,opt,name=reasoning,proto3" json:"reasoning,omitempty"`
-	// Plan mode(计划模式):true 表示本轮只注入只读工具 + ExitPlanMode。
-	// 限制性开关,桌面端按"只能收紧"合并(任一来源为 true 即生效);缺省 false
-	// 不得关闭桌面本地已开启的 plan mode。
+	// Plan mode: true means this turn injects only read-only tools + ExitPlanMode.
+	// A restrictive switch; the desktop merges it on a "can only tighten" basis
+	// (any source being true takes effect); the default false must not turn off
+	// plan mode already enabled locally on the desktop.
 	PlanModeEnabled bool `protobuf:"varint,4,opt,name=plan_mode_enabled,json=planModeEnabled,proto3" json:"plan_mode_enabled,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -2651,10 +2653,12 @@ func (x *ChatRuntimeControls) GetPlanModeEnabled() bool {
 	return false
 }
 
-// 澄清轮次（Web 计划 2）：浏览器经 gateway 转发到桌面 agent 的一次纯文本补全。
-// messages 走 JSON 字符串（ClarifyMessage[]，见 agent-ui clarifyTypes），system
-// 提示词（含工作区上下文）已在 Web 侧拼入 messages，无需单独字段；provider/
-// model/runtime 由 Web 当前选中下发，桌面端按 provider_id 查本地配置构造 runtime。
+// Clarification turn (Web plan 2): a single plain-text completion forwarded from the
+// browser through the gateway to the desktop agent. messages is carried as a JSON string
+// (ClarifyMessage[], see agent-ui clarifyTypes); the system prompt (including workspace
+// context) is already assembled into messages on the Web side, so no separate field is
+// needed; provider/model/runtime are sent as currently selected by the Web, and the
+// desktop looks up local config by provider_id to construct the runtime.
 type ClarifyTurnRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	MessagesJson    string                 `protobuf:"bytes,1,opt,name=messages_json,json=messagesJson,proto3" json:"messages_json,omitempty"`
@@ -2783,8 +2787,9 @@ func (x *ClarifyTurnResponse) GetErrorMessage() string {
 	return ""
 }
 
-// 澄清轮次流式增量。与 ClarifyTurnRequest 共用 request_id，但不结束 unary
-// 等待：gateway 拦截后转给发起该轮的浏览器，最终仍以 clarify_turn_resp 收束。
+// Streaming delta for a clarification turn. It shares request_id with ClarifyTurnRequest
+// but does not end the unary wait: the gateway intercepts it and routes it to the browser
+// that initiated the turn, and it is still ultimately concluded with clarify_turn_resp.
 type ClarifyTurnDelta struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
@@ -3077,12 +3082,13 @@ func (x *UploadReadableFilesResponse) GetSkipped() []string {
 	return nil
 }
 
-// 浏览器拖入的整个文件夹经 HTTP 上传后由网关转发到 Agent 宿主机落盘。
-// target 决定落盘基目录："workspace" 创建为新工作空间目录，
-// "project-root" 创建为待挂载的附属目录。
+// An entire folder dragged into the browser is uploaded over HTTP and then forwarded by
+// the gateway to the Agent host for writing to disk. target determines the base directory
+// on disk: "workspace" creates a new workspace directory, while "project-root" creates an
+// attached directory pending mount.
 type ImportDirectoryFile struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RelativePath  string                 `protobuf:"bytes,1,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"` // 文件夹内的相对路径，正斜杠分隔
+	RelativePath  string                 `protobuf:"bytes,1,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"` // relative path within the folder, separated by forward slashes
 	Content       []byte                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3134,20 +3140,21 @@ func (x *ImportDirectoryFile) GetContent() []byte {
 
 type ImportDirectoryRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
-	Name   string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`     // START：拖入的文件夹名（单个路径组件）
-	Target string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // START："workspace" | "project-root"
-	// 旧版整目录信封，仅保留兼容；新客户端必须使用下面的分块字段。
+	Name   string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`     // START: name of the dragged folder (a single path component)
+	Target string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // START: "workspace" | "project-root"
+	// Legacy whole-directory envelope, kept only for compatibility; new clients must use
+	// the chunked fields below.
 	//
 	// Deprecated: Marked as deprecated in proto/v2/gateway.proto.
 	Files         []*ImportDirectoryFile   `protobuf:"bytes,3,rep,name=files,proto3" json:"files,omitempty"`
 	TransferId    string                   `protobuf:"bytes,4,opt,name=transfer_id,json=transferId,proto3" json:"transfer_id,omitempty"`
 	Operation     ImportDirectoryOperation `protobuf:"varint,5,opt,name=operation,proto3,enum=liveagent.gateway.v2.ImportDirectoryOperation" json:"operation,omitempty"`
-	TotalFiles    uint32                   `protobuf:"varint,6,opt,name=total_files,json=totalFiles,proto3" json:"total_files,omitempty"`        // START：目录文件总数
-	TotalBytes    uint64                   `protobuf:"varint,7,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`        // START：目录内容总字节数（不含协议开销）
-	RelativePath  string                   `protobuf:"bytes,8,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`   // WRITE_CHUNK：目录内相对路径
-	Offset        uint64                   `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`                                  // WRITE_CHUNK：当前文件内的连续字节偏移
-	Chunk         []byte                   `protobuf:"bytes,10,opt,name=chunk,proto3" json:"chunk,omitempty"`                                    // WRITE_CHUNK：单块最多 1 MiB
-	FileComplete  bool                     `protobuf:"varint,11,opt,name=file_complete,json=fileComplete,proto3" json:"file_complete,omitempty"` // WRITE_CHUNK：当前块是该文件最后一块
+	TotalFiles    uint32                   `protobuf:"varint,6,opt,name=total_files,json=totalFiles,proto3" json:"total_files,omitempty"`        // START: total number of files in the directory
+	TotalBytes    uint64                   `protobuf:"varint,7,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`        // START: total bytes of directory content (excluding protocol overhead)
+	RelativePath  string                   `protobuf:"bytes,8,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`   // WRITE_CHUNK: relative path within the directory
+	Offset        uint64                   `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`                                  // WRITE_CHUNK: contiguous byte offset within the current file
+	Chunk         []byte                   `protobuf:"bytes,10,opt,name=chunk,proto3" json:"chunk,omitempty"`                                    // WRITE_CHUNK: at most 1 MiB per chunk
+	FileComplete  bool                     `protobuf:"varint,11,opt,name=file_complete,json=fileComplete,proto3" json:"file_complete,omitempty"` // WRITE_CHUNK: this chunk is the last chunk of the file
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3262,7 +3269,7 @@ func (x *ImportDirectoryRequest) GetFileComplete() bool {
 
 type ImportDirectoryResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RootPath      string                 `protobuf:"bytes,1,opt,name=root_path,json=rootPath,proto3" json:"root_path,omitempty"` // Agent 宿主机上创建的目录绝对路径
+	RootPath      string                 `protobuf:"bytes,1,opt,name=root_path,json=rootPath,proto3" json:"root_path,omitempty"` // absolute path of the directory created on the Agent host
 	FileCount     int32                  `protobuf:"varint,2,opt,name=file_count,json=fileCount,proto3" json:"file_count,omitempty"`
 	Skipped       []string               `protobuf:"bytes,3,rep,name=skipped,proto3" json:"skipped,omitempty"`
 	TransferId    string                 `protobuf:"bytes,4,opt,name=transfer_id,json=transferId,proto3" json:"transfer_id,omitempty"`
@@ -4409,7 +4416,7 @@ type ManagedProcessRecord struct {
 	FinishedAt    *int64                 `protobuf:"varint,9,opt,name=finished_at,json=finishedAt,proto3,oneof" json:"finished_at,omitempty"` // unix ms
 	ExitCode      *int32                 `protobuf:"varint,10,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`      // absent for restored/pid-managed entries
 	Running       bool                   `protobuf:"varint,11,opt,name=running,proto3" json:"running,omitempty"`
-	Isolated      bool                   `protobuf:"varint,12,opt,name=isolated,proto3" json:"isolated,omitempty"` // survives LiveAgent exit
+	Isolated      bool                   `protobuf:"varint,12,opt,name=isolated,proto3" json:"isolated,omitempty"` // survives ReactorPro exit
 	Restored      bool                   `protobuf:"varint,13,opt,name=restored,proto3" json:"restored,omitempty"` // recovered after restart; managed by pid
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -6978,8 +6985,9 @@ type ChatRequest struct {
 	ClientRequestId string                 `protobuf:"bytes,8,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
 	RuntimeControls *ChatRuntimeControls   `protobuf:"bytes,9,opt,name=runtime_controls,json=runtimeControls,proto3" json:"runtime_controls,omitempty"`
 	QueuePolicy     string                 `protobuf:"bytes,10,opt,name=queue_policy,json=queuePolicy,proto3" json:"queue_policy,omitempty"`
-	// 命令安全模式(ask/auto/sandbox/sandboxOffline)。远端 WebUI 直带,桌面端据此
-	// 覆盖本地 settings.system.commandSafetyMode;空串表示未指定(回落本地设置)。
+	// Command safety mode (ask/auto/sandbox/sandboxOffline). The remote WebUI sends it
+	// directly, and the desktop uses it to override the local settings.system.commandSafetyMode;
+	// an empty string means unspecified (fall back to local settings).
 	CommandSafetyMode string `protobuf:"bytes,11,opt,name=command_safety_mode,json=commandSafetyMode,proto3" json:"command_safety_mode,omitempty"`
 	// Structured conversation references selected through the WebUI @ menu.
 	// The desktop runtime binds ReadConversation authorization to this list;
@@ -7183,7 +7191,8 @@ func (x *ChatMessageRef) GetContentHash() string {
 type CancelChatRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	// 可选运行 id 提示：v2 浏览器链路用它消除同会话并发运行的歧义；桌面端可忽略。
+	// Optional run id hint: the v2 browser link uses it to disambiguate concurrent runs in
+	// the same conversation; the desktop may ignore it.
 	RunId         string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -8521,28 +8530,32 @@ func (x *HistoryGetResponse) GetConversation() *ConversationSummary {
 	return nil
 }
 
-// 轨迹按需拉取。这是一次只做一件事的 tagged union，不是可组合查询：
+// On-demand trajectory fetch. This is a tagged union that does exactly one thing, not a
+// composable query:
 //
-//	include_subagent_runs=true → 只返回子代理运行，其余字段忽略；
-//	否则 section_ids 非空       → 只返回这些分段全文；
-//	否则                        → 只返回事件窗口。
+//	include_subagent_runs=true -> returns only subagent runs, other fields ignored;
+//	otherwise, if section_ids is non-empty -> returns only the full text of those sections;
+//	otherwise -> returns only the event window.
 //
-// 桌面端 handler 对三种形态互斥短路，组合字段不会得到合并结果 —— 调用方
-// 需要三类数据时必须分开请求。
+// The desktop handler short-circuits the three forms mutually exclusively, so combining
+// fields will not produce merged results -- callers that need all three kinds of data must
+// make separate requests.
 //
-// 刻意不把事件挂在 history_get 上：轨迹是偶尔打开的诊断视图，长会话的事件数组
-// 可达 MB 级，随每次开会话白传一遍不划算。分段更是只在展开 SYSTEM 行时才要。
+// Events are deliberately not attached to history_get: trajectories are a diagnostic view
+// opened occasionally, and the event array of a long conversation can reach the MB range,
+// so transferring it on every open is not worthwhile. Sections in particular are only
+// needed when a SYSTEM row is expanded.
 type TrajectoryFetchRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	// 非空 → 本请求只查这些分段全文（与事件窗口互斥）。
+	// Non-empty -> this request queries only the full text of these sections (mutually exclusive with the event window).
 	SectionIds []string `protobuf:"bytes,2,rep,name=section_ids,json=sectionIds,proto3" json:"section_ids,omitempty"`
-	// 仅事件窗口形态生效：按 segment 逆向分页；0 由 Agent 使用默认窗口。
+	// Effective only for the event-window form: pages backward by segment; 0 makes the Agent use the default window.
 	MaxSegments        int32  `protobuf:"varint,3,opt,name=max_segments,json=maxSegments,proto3" json:"max_segments,omitempty"`
 	BeforeSegmentIndex *int32 `protobuf:"varint,4,opt,name=before_segment_index,json=beforeSegmentIndex,proto3,oneof" json:"before_segment_index,omitempty"`
-	// true → 本请求只查子代理运行快照，优先级最高（section_ids 被忽略）。
+	// true -> this request queries only subagent run snapshots, with the highest priority (section_ids is ignored).
 	IncludeSubagentRuns bool `protobuf:"varint,5,opt,name=include_subagent_runs,json=includeSubagentRuns,proto3" json:"include_subagent_runs,omitempty"`
-	// include_subagent_runs=true 时按这些 run id 精确读取；与 prompt section id 分域。
+	// When include_subagent_runs=true, reads precisely by these run ids; a separate domain from prompt section ids.
 	SubagentRunIds []string `protobuf:"bytes,6,rep,name=subagent_run_ids,json=subagentRunIds,proto3" json:"subagent_run_ids,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -8692,7 +8705,7 @@ type TrajectoryFetchResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	EventsJson     string                 `protobuf:"bytes,2,opt,name=events_json,json=eventsJson,proto3" json:"events_json,omitempty"`
-	// 有分段损坏或触顶时为 true，UI 据此提示轨迹不完整。
+	// True when a section is corrupted or hits the cap; the UI uses this to indicate the trajectory is incomplete.
 	Truncated            bool                        `protobuf:"varint,3,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	Sections             []*TrajectorySectionPayload `protobuf:"bytes,4,rep,name=sections,proto3" json:"sections,omitempty"`
 	OldestSegmentIndex   int32                       `protobuf:"varint,5,opt,name=oldest_segment_index,json=oldestSegmentIndex,proto3" json:"oldest_segment_index,omitempty"`
@@ -9039,7 +9052,7 @@ func (x *HistoryRenameResponse) GetConversation() *ConversationSummary {
 
 // Copies the conversation prefix up to and including the assistant response
 // that answers the anchored user message (base_message_ref) into a brand-new
-// conversation titled "新分支".
+// conversation titled "New Branch".
 type HistoryBranchRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
@@ -10876,9 +10889,10 @@ func (x *FileMentionListResponse) GetTruncated() bool {
 	return false
 }
 
-// 桌面宿主的已安装应用（computer use 操作目标），供 WebUI 的 @ 弹层展示
-// 应用分组。Gateway 只直通转发，不自己枚举；字段对齐桌面 InstalledApp
-// 的序列化契约（services/cua_driver/installed_apps.rs）。
+// Installed applications on the desktop host (computer use operation targets), for the
+// WebUI @ popup to display app grouping. The Gateway only forwards directly and does not
+// enumerate; the fields align with the desktop InstalledApp serialization contract
+// (services/cua_driver/installed_apps.rs).
 type InstalledAppsListRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -10918,10 +10932,10 @@ func (*InstalledAppsListRequest) Descriptor() ([]byte, []int) {
 type InstalledAppEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// macOS bundle id；Windows 等无 bundle id 的平台留空，身份以 path 兜底。
+	// macOS bundle id; left empty on platforms without a bundle id such as Windows, where identity falls back to path.
 	BundleId string `protobuf:"bytes,2,opt,name=bundle_id,json=bundleId,proto3" json:"bundle_id,omitempty"`
 	Path     string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
-	// `data:image/png;base64,…` 应用图标；取不到时留空。
+	// `data:image/png;base64,...` application icon; left empty when unavailable.
 	IconDataUrl   string `protobuf:"bytes,4,opt,name=icon_data_url,json=iconDataUrl,proto3" json:"icon_data_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -11029,16 +11043,19 @@ func (x *InstalledAppsListResponse) GetApps() []*InstalledAppEntry {
 	return nil
 }
 
-// Computer Use（CUA）驱动的只读引导状态，供 WebUI 的 Computer Use 设置页
-// 展示桌面宿主上装没装 cua-driver、macOS 的 TCC 授权给了没有。Gateway 只
-// 直通转发，不自己探测。
+// Read-only bootstrap status of the Computer Use (CUA) driver, for the WebUI Computer Use
+// settings page to show whether cua-driver is installed on the desktop host and whether
+// macOS TCC permission has been granted. The Gateway only forwards directly and does not
+// probe on its own.
 //
-// 安装与授权**有意不在这条通道上**：安装是在宿主上联网下载并执行 shell
-// 脚本，授权会在宿主屏幕上弹 macOS 系统对话框——浏览器这端的人既确认不了
-// 前者的命令全文，也点不到后者的弹窗，只能在桌面端做。
+// Installation and authorization are **intentionally not on this channel**: installation
+// downloads from the network and executes a shell script on the host, and authorization
+// pops up a macOS system dialog on the host screen -- the person on the browser side can
+// neither confirm the full command of the former nor click the dialog of the latter, so
+// it can only be done on the desktop.
 type CuaDriverRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "probe" | "permissions_status"。写动作不走这里，网关侧亦按白名单拒绝。
+	// "probe" | "permissions_status". Write actions do not go through here, and the gateway side also rejects them via its allowlist.
 	Action        string `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -11084,9 +11101,9 @@ func (x *CuaDriverRequest) GetAction() string {
 type CuaDriverResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Action string                 `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
-	// 与桌面 invoke 同一份序列化：services/cua_driver 的 CuaDriverProbe /
-	// CuaDriverPermissions（camelCase）。走 JSON 而不是在 proto 里再刻一份
-	// 结构化镜像，是为了让两端拿到的就是同一个对象，不会各自漂移。
+	// The same serialization as the desktop invoke: services/cua_driver's CuaDriverProbe /
+	// CuaDriverPermissions (camelCase). Using JSON instead of carving out another structured
+	// mirror in proto ensures both ends get the exact same object and do not drift apart.
 	ResultJson    string `protobuf:"bytes,2,opt,name=result_json,json=resultJson,proto3" json:"result_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -12972,9 +12989,11 @@ func (x *ProviderCustomHeader) GetValue() string {
 	return ""
 }
 
-// 包一层 message 只为拿到字段存在性：repeated 无法区分「草稿没带」与「草稿把头
-// 清空了」，而这两种情况在已保存供应商分支上的处理相反（前者沿用落库的头，
-// 后者按空集发请求）。与 is_full_url 的 optional 同一套三态语义。
+// The wrapper message exists only to obtain field presence: repeated cannot distinguish
+// "the draft omitted it" from "the draft emptied the headers", and these two cases are
+// handled oppositely on the saved-provider branch (the former reuses the persisted headers,
+// while the latter sends a request with an empty set). The same tri-state semantics as
+// is_full_url's optional.
 type ProviderCustomHeaders struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
 	Headers       []*ProviderCustomHeader `protobuf:"bytes,1,rep,name=headers,proto3" json:"headers,omitempty"`
@@ -13025,14 +13044,15 @@ type ProviderModelsRequest struct {
 	BaseUrl        string                 `protobuf:"bytes,2,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
 	ApiKey         string                 `protobuf:"bytes,3,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
 	UseSystemProxy bool                   `protobuf:"varint,4,opt,name=use_system_proxy,json=useSystemProxy,proto3" json:"use_system_proxy,omitempty"`
-	// 可选的模型列表完整地址；非空时跳过基于 base_url 的端点推导。
+	// Optional full URL of the model list; when non-empty, skips endpoint derivation based on base_url.
 	ModelsUrl string `protobuf:"bytes,5,opt,name=models_url,json=modelsUrl,proto3" json:"models_url,omitempty"`
-	// WebUI 编辑已保存供应商时用于让桌面端复用本地密钥；密钥不返回浏览器。
+	// Used when the WebUI edits a saved provider to let the desktop reuse the local key; the key is not returned to the browser.
 	ProviderId string `protobuf:"bytes,6,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
-	// 当前草稿是否把 base_url 作为完整聊天端点解释；未提供时沿用已保存配置。
+	// Whether the current draft interprets base_url as a full chat endpoint; when not provided, the saved config is used.
 	IsFullUrl *bool `protobuf:"varint,7,opt,name=is_full_url,json=isFullUrl,proto3,oneof" json:"is_full_url,omitempty"`
-	// 用户在供应商设置里显式配置的自定义请求头；未提供时沿用已保存配置。
-	// 鉴权头与 host/content-length 等仍由落地侧的保留头名单兜底，不可被覆盖。
+	// Custom request headers explicitly configured by the user in provider settings; when
+	// not provided, the saved config is used. Auth headers and host/content-length etc. are
+	// still guarded by the reserved-header list on the implementing side and cannot be overridden.
 	CustomHeaders *ProviderCustomHeaders `protobuf:"bytes,8,opt,name=custom_headers,json=customHeaders,proto3" json:"custom_headers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -13172,8 +13192,9 @@ type ProviderUsageRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	ProviderId string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
 	Refresh    bool                   `protobuf:"varint,2,opt,name=refresh,proto3" json:"refresh,omitempty"`
-	// 非空时为「按草稿测试」:桌面端按此 JSON 配置(UsageQueryConfig 形状)执行
-	// 一次查询——忽略启用开关、不落库、不读写缓存;空串为常规查询。
+	// When non-empty, this is a "test as draft": the desktop executes one query using this
+	// JSON config (UsageQueryConfig shape), ignoring the enable switch, not persisting, and
+	// not reading or writing the cache; an empty string is a regular query.
 	ConfigJson    string `protobuf:"bytes,3,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

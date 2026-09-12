@@ -58,7 +58,7 @@ test("Bash tool keeps one Bash entry and uses Git Bash-first policy for Claude C
   const managedProcess = bundle.tools.find((tool) => tool.name === "ManagedProcess");
   assert.ok(managedProcess);
   assert.match(managedProcess.description, /never use it to intentionally delete workspace/);
-  assert.match(managedProcess.description, /use Delete so LiveAgent can track the deletion/);
+  assert.match(managedProcess.description, /use Delete so ReactorPro can track the deletion/);
   assert.doesNotMatch(bundle.tools[0].description, /native Windows shell chain/);
 
   const result = await bundle.executeToolCall(createBashCall());
@@ -902,7 +902,7 @@ test("Bash tool marks stdio-open shell responses as errors", async () => {
             exit_code: 0,
             shell: "zsh",
             stdout: "ready\n",
-            stderr: "LiveAgent warning: command exited, but stdout/stderr remained open after exit.",
+            stderr: "ReactorPro warning: command exited, but stdout/stderr remained open after exit.",
             stdout_truncated: false,
             stderr_truncated: true,
             timed_out: false,
@@ -1259,8 +1259,9 @@ test("resumable Bash yields a session without applying an implicit hard timeout"
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args.yield_time_ms, 10_000);
   assert.equal(calls[0].args.timeout_ms, undefined);
-  // Resumable 模式下 provider cap 不适用：显式 timeout_ms 与 max_timeout_ms
-  // 都按全局上限（600s）收敛，避免 codex 系 30s cap 误杀长任务。
+  // In Resumable mode the provider cap does not apply: both an explicit
+  // timeout_ms and max_timeout_ms converge to the global limit (600s), avoiding
+  // the codex-family 30s cap killing long tasks.
   assert.equal(calls[0].args.max_timeout_ms, 600_000);
   assert.equal(calls[0].args.provider_id, undefined);
   assert.equal(calls[0].args.sandbox, false);
@@ -1522,10 +1523,13 @@ test("resumable Bash blocks leading sleep polling but allows short or internal s
 });
 
 test("Bash tool spells out a provider-capped timeout instead of leaving the kill unexplained", async () => {
-  // 实测报告里的困惑："同一个构建连续跑了三次，前两次日志里看不到失败原因"。
-  // 这一层从来没有自动重试——重复执行都是模型自己发起的；前两次是被 provider
-  // 的 30s 上限杀掉的，而被外部杀死的命令自己的日志里当然什么都没有。所以工具
-  // 结果必须把"这是超时被杀，不是崩溃/脚本报错"写清楚，并给出可行替代做法。
+  // Confusion from a real report: "the same build ran three times in a row, and
+  // the first two runs' logs show no reason for the failure". This layer never
+  // auto-retried -- repeated executions were all initiated by the model; the first
+  // two were killed by the provider's 30s cap, and a command killed externally of
+  // course has nothing in its own log. So the tool result must state clearly that
+  // "this was killed by a timeout, not a crash/script error" and offer a workable
+  // alternative.
   const loader = createTsModuleLoader({
     mocks: {
       "@tauri-apps/api/core": {

@@ -11,8 +11,8 @@ const loader = createWebModuleLoader({
 const floorModel = loader.loadModule("@liveagent/ui/lib/chat-floor-nav/floorModel.ts");
 const floorBookmarks = loader.loadModule("@liveagent/ui/lib/chat-floor-nav/floorBookmarks.ts");
 
-// WebUI 的楼层来源是 TranscriptRow（kind/key/text/messageRef 结构子集与桌面端
-// RenderTimelineItem 兼容，floorModel 因此可字节镜像）。
+// The WebUI's floor source is TranscriptRow (a structural subset of kind/key/text/messageRef that is
+// compatible with the desktop's RenderTimelineItem, so floorModel can be a byte-for-byte mirror).
 function userRow(key, text, messageId) {
   return {
     key,
@@ -42,7 +42,7 @@ function assistantRow(key, text) {
     rounds: [
       {
         blocks: [
-          { kind: "thinking", text: "不会进入预览" },
+          { kind: "thinking", text: "does not enter the preview" },
           { kind: "text", text },
           { kind: "tool", item: {} },
         ],
@@ -54,8 +54,8 @@ function assistantRow(key, text) {
 test("buildFloorEntries keeps only user rows and builds previews", () => {
   const rows = [
     { key: "c1", origin: "history", kind: "checkpoint" },
-    userRow("u1", "  帮我看看\n这个 bug   在哪 ", "user-aaa"),
-    assistantRow("a1", " 已完成第一阶段，\n验证通过。 "),
+    userRow("u1", "  Help me look\nwhere this bug   is ", "user-aaa"),
+    assistantRow("a1", " First stage complete,\nverified. "),
     userRow("u2", "x".repeat(60), "user-bbb"),
     userRow("u3", "   ", undefined),
   ];
@@ -65,14 +65,14 @@ test("buildFloorEntries keeps only user rows and builds previews", () => {
     floors.map((f) => f.rowKey),
     ["u1", "u2", "u3"],
   );
-  assert.equal(floors[0].preview, "帮我看看 这个 bug 在哪");
-  assert.equal(floors[0].responsePreview, "已完成第一阶段， 验证通过。");
+  assert.equal(floors[0].preview, "Help me look where this bug is");
+  assert.equal(floors[0].responsePreview, "First stage complete, verified.");
   assert.equal(floors[0].messageId, "user-aaa");
   assert.ok(floors[1].preview.endsWith("…"));
   assert.equal(floors[1].preview.length, 49);
   assert.equal(floors[1].responsePreview, null);
   assert.equal(floors[2].preview, "…");
-  // 无 messageRef 时回退到行 key，收藏仍可用
+  // Falls back to the row key when there is no messageRef, so bookmarking still works
   assert.equal(floors[2].messageId, "u3");
 });
 
@@ -89,7 +89,8 @@ test("sampleFloorEntries keeps bookmarked floors and stays continuous at the cap
   assert.equal(sampled[0].rowKey, "u0");
   assert.equal(sampled[sampled.length - 1].rowKey, "u99");
 
-  // 越过上限时标记数连续过渡：25 层限 24 不应骤降到一半
+  // The marker count transitions continuously when over the cap: 25 floors limited to 24 should not
+  // suddenly drop to half
   const floors25 = floors.slice(0, 25);
   const sampled25 = floorModel.sampleFloorEntries(floors25, 24, new Set());
   assert.ok(sampled25.length >= 23, `expected >=23 markers, got ${sampled25.length}`);
@@ -139,11 +140,11 @@ test("floor bookmarks toggle and persist through localStorage", () => {
     assert.ok(floorBookmarks.getFloorBookmarks("conv-1").has("user-aaa"));
     assert.equal(notified, 1);
 
-    // 引用稳定：未写入时快照不变
+    // Stable reference: the snapshot is unchanged when nothing is written
     const snapshot = floorBookmarks.getFloorBookmarks("conv-1");
     assert.equal(floorBookmarks.getFloorBookmarks("conv-1"), snapshot);
 
-    // 重读磁盘（模拟重启）后收藏仍在
+    // Bookmarks are still present after re-reading the disk (simulating a restart)
     floorBookmarks.resetFloorBookmarksCacheForTest();
     assert.ok(floorBookmarks.getFloorBookmarks("conv-1").has("user-aaa"));
 
@@ -151,7 +152,7 @@ test("floor bookmarks toggle and persist through localStorage", () => {
     assert.equal(floorBookmarks.getFloorBookmarks("conv-1").size, 0);
     unsubscribe();
 
-    // 损坏数据不抛错
+    // Corrupt data does not throw
     store.set("liveagent.floor-bookmarks.v1", "{not json");
     floorBookmarks.resetFloorBookmarksCacheForTest();
     assert.equal(floorBookmarks.getFloorBookmarks("conv-1").size, 0);
@@ -172,10 +173,11 @@ test("bookmark eviction trims memory and disk together", () => {
     for (let i = 0; i < 205; i++) {
       floorBookmarks.toggleFloorBookmark(`conv-${i}`, `user-${i}`);
     }
-    // 内存立即淘汰最旧会话（与磁盘一致），最新会话保留
+    // The oldest conversation is evicted from memory immediately (consistent with disk), and the
+    // newest conversation is retained
     assert.equal(floorBookmarks.getFloorBookmarks("conv-0").size, 0);
     assert.equal(floorBookmarks.getFloorBookmarks("conv-204").size, 1);
-    // 重读磁盘后状态一致
+    // State is consistent after re-reading the disk
     floorBookmarks.resetFloorBookmarksCacheForTest();
     assert.equal(floorBookmarks.getFloorBookmarks("conv-0").size, 0);
     assert.equal(floorBookmarks.getFloorBookmarks("conv-204").size, 1);

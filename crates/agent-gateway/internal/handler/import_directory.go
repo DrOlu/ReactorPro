@@ -11,16 +11,19 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// 目录上传比单文件附件大得多（整个项目文件夹），上限独立于附件通道。
-// 内容总量与 Agent 端一致；HTTP body 另留 multipart 元数据空间。
+// A directory upload is far larger than a single-file attachment (an entire
+// project folder), so its limit is independent of the attachment channel.
+// The total content matches the Agent side; the HTTP body reserves extra room
+// for the multipart metadata.
 const maxDirectoryUploadBytes int64 = 200 << 20 // 200 MiB
 
 const maxDirectoryUploadBodyBytes int64 = maxDirectoryUploadBytes + (8 << 20)
 
 const maxDirectoryUploadFiles = 2000
 
-// Go WebSocket 服务端会把一条 protobuf 写成一个 frame；每块保持远低于
-// tungstenite 默认的 16 MiB frame 上限，避免大目录中断 Agent 主连接。
+// The Go WebSocket server writes one protobuf message per frame; keep each
+// chunk well below tungstenite's default 16 MiB frame limit so large
+// directories do not disrupt the Agent's main connection.
 const directoryImportChunkBytes = 1 << 20 // 1 MiB
 
 var directoryImportTargets = map[string]bool{
@@ -79,8 +82,10 @@ func abortDirectoryImport(
 	})
 }
 
-// ImportDirectory 把浏览器拖入的文件夹（multipart，文件名即目录内相对路径）
-// 转发给在线 Agent 落盘。网关自身不写磁盘，与 ImportReadableFiles 同构。
+// ImportDirectory forwards a folder dropped into the browser (multipart, where
+// the filename is the path relative to the directory) to an online Agent for
+// writing to disk. The gateway itself does not write to disk, mirroring
+// ImportReadableFiles.
 func ImportDirectory(
 	sm *session.Manager,
 	requestTimeout time.Duration,
@@ -131,8 +136,9 @@ func ImportDirectory(
 			writeError(w, http.StatusRequestEntityTooLarge, "uploaded directory has too many files")
 			return
 		}
-		// multipart 的 filename 会被 Go 侧 filepath.Base 削成末段，目录内的
-		// 相对路径改由与 files 按序对齐的 paths 字段承载。
+		// Go's multipart filename is trimmed to its last segment by
+		// filepath.Base, so the in-directory relative paths are carried by the
+		// paths field, aligned in order with files.
 		relativePaths := r.MultipartForm.Value["paths"]
 		if len(relativePaths) != len(fileHeaders) {
 			writeError(w, http.StatusBadRequest, "paths must align with files")
@@ -152,9 +158,12 @@ func ImportDirectory(
 			}
 		}
 
-		// 串行 chunk 往返的次数随目录尺寸增长，绝对超时会在传输仍正常推进
-		// 时整体取消；改为每次网关↔Agent 往返单独计时（空闲超时语义），
-		// 整体生命周期由客户端 HTTP 连接（r.Context()）兜底。
+		// The number of serial chunk round trips grows with the directory
+		// size, so an absolute timeout would cancel the whole transfer even
+		// while it is still progressing normally; instead time each
+		// gateway<->Agent round trip individually (idle-timeout semantics),
+		// with the overall lifetime bounded by the client HTTP connection
+		// (r.Context()).
 		sendOp := func(request *gatewayv2.ImportDirectoryRequest) (*gatewayv2.ImportDirectoryResponse, int, string) {
 			ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 			defer cancel()

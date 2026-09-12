@@ -3,14 +3,14 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 不变量:「点击 Right Dock 内的控件不改变 focusedPaneId」
-// (docs/design/session-workbench-pane-architecture.md §28、§30.2)。
-// Dock 位于 Canvas 之外,只做会话列表/工具面板;它既不持有布局命令通路
-// (源码层断言),reducer 也只在显式 FOCUS/OPEN 上改焦点(模型层断言)。
+// Invariant: "clicking a control inside the Right Dock does not change focusedPaneId"
+// (docs/design/session-workbench-pane-architecture.md §28, §30.2).
+// The Dock sits outside the Canvas and only does session lists / tool panels; it neither holds a layout command
+// path (source-level assertion) nor does the reducer change focus except on explicit FOCUS/OPEN (model-level assertion).
 //
-// 被 Pane 租用的终端与文件树都从 dock 整体隐藏(任一时刻只出现在一个宿主里),
-// 因此 dock 不保留 Pane 焦点入口。SSH overlay 的 shell tab 是唯一例外:它是
-// 连接管理入口,保留由页面注入的占位跳转回调。
+// Terminals and file trees leased by a Pane are hidden from the dock entirely (a tool appears in at most one host
+// at a time), so the dock keeps no Pane focus affordance. The SSH overlay's shell tab is the sole exception: it is
+// a connection-management entry point and keeps the placeholder jump callback injected by the page.
 
 function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
@@ -40,8 +40,8 @@ const DOCK_SOURCES = {
 const chatPageSource = readSource("../../src/pages/ChatPage.tsx");
 
 /**
- * 取出 ChatPage 中 `<RightDockPanel ... />` 的属性区文本。按 `{}` 深度扫描,
- * 对属性增删/换行重排稳健(不锚定行号)。
+ * Extract the props text of `<RightDockPanel ... />` in ChatPage. Scans by `{}` depth, robust to
+ * prop additions/removals and line reflow (does not anchor to line numbers).
  */
 function extractJsxProps(source, componentName) {
   const start = source.indexOf(`<${componentName}`);
@@ -60,10 +60,10 @@ function extractJsxProps(source, componentName) {
 
 test("dock components hold no workbench layout commands", () => {
   for (const [name, source] of Object.entries(DOCK_SOURCES)) {
-    // 直接调焦点命令 = 把 dock 点击接进焦点通路,正是本不变量要挡的写法。
+    // Calling a focus command directly = wiring dock clicks into the focus path, exactly the pattern this invariant blocks.
     assert.equal(source.includes("focusPane("), false, `${name} calls focusPane(`);
     assert.equal(source.includes("FOCUS_PANE"), false, `${name} dispatches FOCUS_PANE`);
-    // 更粗的护栏:dock 根本不该 import 布局层(reducer/commands/useWindowWorkbench)。
+    // Coarser guardrail: the dock should not import the layout layer at all (reducer/commands/useWindowWorkbench).
     assert.equal(source.includes("lib/workbench"), false, `${name} imports the workbench layout lib`);
     assert.equal(
       source.includes("applyWorkbenchCommand"),
@@ -75,17 +75,17 @@ test("dock components hold no workbench layout commands", () => {
 });
 
 test("leased sessions are hidden from dock terminal tabs, leaving no focus affordance", () => {
-  // 新语义:拖入画板的会话从 localSessions 整体过滤,dock 里不存在它的 tab、
-  // 视口或跳转按钮;detach 释放租约后自动回归。
+  // New semantics: a session dragged onto the canvas is filtered out of localSessions entirely, so the dock has no
+  // tab, viewport, or jump button for it; it returns automatically once detach releases the lease.
   assert.match(
     DOCK_SOURCES["useRightDockSessions.ts"],
     /!leasedSessionIds\?\.has\(session\.id\)/,
   );
-  // dock 本地终端路径不再有任何 Pane 焦点回调。
+  // The dock's local terminal path no longer has any Pane focus callback.
   assert.equal(DOCK_SOURCES["RightDockContent.tsx"].includes("onFocusWorkbenchPane"), false);
   assert.equal(DOCK_SOURCES["RightDockTabStrip.tsx"].includes("onFocusWorkbenchPane"), false);
   assert.equal(DOCK_SOURCES["RightDockPanel.tsx"].includes("onFocusWorkbenchPane"), false);
-  // leased 标记态随隐藏语义一并退场。
+  // The leased marker state is retired along with the hide semantics.
   assert.equal(DOCK_SOURCES["RightDockTabStrip.tsx"].includes("isLeased"), false);
   assert.equal(
     DOCK_SOURCES["RightDockContent.tsx"].includes("terminalLeasedPlaceholder"),
@@ -94,8 +94,8 @@ test("leased sessions are hidden from dock terminal tabs, leaving no focus affor
 });
 
 test("a leased project tool leaves the dock tab, content, and launcher", () => {
-  // 文件树/审查/内网穿透/SSH/后台任务共用同一套租约:布局里有该工具的 Pane,
-  // dock 就不再挂 tab、内容与新建入口。
+  // File tree / review / tunnels / SSH / background tasks share the same lease set: when the layout has a Pane for
+  // that tool, the dock no longer mounts its tab, content, or create entry.
   assert.match(
     DOCK_SOURCES["useRightDockProjectTabs.ts"],
     /getRightDockVisibleTabs\(\{[\s\S]*leasedTools/,
@@ -111,7 +111,7 @@ test("a leased project tool leaves the dock tab, content, and launcher", () => {
 
 test("dock tab selection routes through dock-local state, never through pane focus", () => {
   const sessions = DOCK_SOURCES["useRightDockSessions.ts"];
-  // 选中一个终端标签只写 dock 自己的 activeTabId(项目状态),不碰布局。
+  // Selecting a terminal tab only writes the dock's own activeTabId (project state), never the layout.
   assert.match(sessions, /activeTabId: session\.id/);
   assert.equal(sessions.includes("onFocusWorkbenchPane"), false);
   assert.equal(sessions.includes("paneId"), false);
@@ -119,15 +119,15 @@ test("dock tab selection routes through dock-local state, never through pane foc
 
 test("ChatPage passes only tool lease state into the dock", () => {
   const dockProps = extractJsxProps(chatPageSource, "RightDockPanel");
-  // Dock 只需要知道哪些工具被 Pane 租用,不应获得任何 Pane 聚焦能力。
+  // The Dock only needs to know which tools are leased by a Pane; it should gain no Pane focusing capability.
   assert.match(dockProps, /leasedTools=\{leasedDockTools\}/);
   assert.match(
     chatPageSource,
     /leasedProjectToolKinds\(workbench\.layout, terminalProjectPathKey, PROJECT_TOOL_SURFACE_KINDS\)/,
   );
   assert.equal(dockProps.includes("onFocusFileTreePane"), false);
-  // (onGitReviewFocusRequest* 是 git 面板内部的滚动/选中请求,与 Pane 焦点
-  // 无关,故按 "Pane" 过滤。)
+  // (onGitReviewFocusRequest* are scroll/selection requests inside the git panel, unrelated to Pane focus,
+  // so they are filtered out by the "Pane" match.)
   const paneFocusProps = [...dockProps.matchAll(/\bon[A-Za-z]*Focus[A-Za-z]*Pane[A-Za-z]*=/g)].map(
     (match) => match[0],
   );
@@ -135,8 +135,8 @@ test("ChatPage passes only tool lease state into the dock", () => {
 });
 
 test("the explicit jump only focuses a pane that actually holds the session's lease", () => {
-  // 白名单通路本身是收窄的:没有租约(会话仍在 dock)就什么都不做,
-  // 不会凭 sessionId 猜一个 Pane 去抢焦点。
+  // The allowlisted path itself is narrow: with no lease (the session is still in the dock) it does nothing and
+  // never guesses a Pane from the sessionId to steal focus.
   const helper = chatPageSource.slice(chatPageSource.indexOf("const focusWorkbenchTerminalPane"));
   const body = helper.slice(0, helper.indexOf("\n  );") + 5);
   assert.match(body, /terminalPaneLease\.paneIdFor\(sessionId\)/);
@@ -145,7 +145,7 @@ test("the explicit jump only focuses a pane that actually holds the session's le
 });
 
 // ---------------------------------------------------------------------------
-// 模型层:reducer 中只有显式 FOCUS/OPEN 改 focusedPaneId。
+// Model layer: only explicit FOCUS/OPEN change focusedPaneId in the reducer.
 // ---------------------------------------------------------------------------
 
 const loader = createTsModuleLoader();
@@ -192,7 +192,7 @@ function mustApply(layout, command) {
   return result.layout;
 }
 
-/** 会话 Pane + 从 dock 拖入的终端 Pane;焦点停在会话 Pane 上。 */
+/** Conversation Pane + a terminal Pane dragged in from the dock; focus rests on the conversation Pane. */
 function dockedLayout() {
   const withConversation = mustApply(createEmptyWorkbenchLayout(), {
     type: "OPEN_PANE",
@@ -208,7 +208,7 @@ function dockedLayout() {
 }
 
 test("dragging a dock session in is an explicit open: focus follows the new pane", () => {
-  // 例外(有意):显式打开就是显式跳转,与「点 dock 控件」不同。
+  // Intentional exception: an explicit open is an explicit jump, unlike "clicking a dock control".
   const layout = mustApply(
     mustApply(createEmptyWorkbenchLayout(), {
       type: "OPEN_PANE",
@@ -243,8 +243,8 @@ test("equalizing a split never moves focus", () => {
 });
 
 test("re-opening a session already living in a pane is rejected and leaves focus put", () => {
-  // dock 里被 Pane 取走的会话再次拖入:reducer 拒绝重复 surface;
-  // 「跳到已有 Pane」必须由调用方显式发 FOCUS_PANE,不是 OPEN 的副作用。
+  // Dragging in again a session already taken from the dock by a Pane: the reducer rejects the duplicate surface;
+  // "jump to an existing Pane" must be an explicit FOCUS_PANE from the caller, not a side effect of OPEN.
   const layout = dockedLayout();
   const result = apply(layout, {
     type: "OPEN_PANE",
@@ -271,7 +271,7 @@ test("a whole dock-shaped command run keeps focus until an explicit FOCUS_PANE",
     layout = mustApply(layout, step);
     assert.equal(layout.focusedPaneId, "pane-conv", `${step.type} moved focus`);
   }
-  // 失败命令同样不得改焦点。
+  // A failed command likewise must not change focus.
   const failed = apply(layout, { type: "RESIZE_SPLIT", splitId: "split-missing", ratio: 0.5 });
   assert.equal(failed.ok, false);
   assert.equal(failed.error.code, "target-not-found");
@@ -282,7 +282,7 @@ test("a whole dock-shaped command run keeps focus until an explicit FOCUS_PANE",
 });
 
 test("re-focusing the already focused pane is a no-op with no revision churn", () => {
-  // dock 占位上的「聚焦工作台面板」被连点时不产生布局版本/持久化抖动。
+  // Repeated clicks on the dock placeholder's "focus workbench panel" produce no layout revision/persistence churn.
   const layout = dockedLayout();
   const result = apply(layout, { type: "FOCUS_PANE", paneId: "pane-conv" });
   assert.equal(result.ok, true);
@@ -291,8 +291,8 @@ test("re-focusing the already focused pane is a no-op with no revision churn", (
 });
 
 test("the dock toggle badge counts only sessions still living in the dock", () => {
-  // 顶栏折叠按钮的 sessionCount 与 dock 内 tab 数保持一致:拖入画板(租约)
-  // 的会话不计入,detach 回归后恢复计入。
+  // The header collapse button's sessionCount stays consistent with the dock's tab count: sessions dragged onto the
+  // canvas (leased) are not counted, and are counted again once detach returns them.
   const start = chatPageSource.indexOf("const projectTerminalSessions = useMemo(");
   assert.notEqual(start, -1);
   const memo = chatPageSource.slice(start, chatPageSource.indexOf("]);", start) + 3);

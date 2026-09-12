@@ -9,20 +9,22 @@ import {
 import type { StreamOptionsEx } from "./types";
 
 // ---------------------------------------------------------------------------
-// Anthropic 1M 长上下文请求信号
+// Anthropic 1M long-context request signal
 // ---------------------------------------------------------------------------
-// 模型有效 contextWindow > 200K 是启用 1M 的唯一开关（压缩预算同源）。对需要
-// HTTP beta 信号的 Anthropic 兼容中转携带 `context-1m-2025-08-07`；官方 GA、
-// Vertex、DeepSeek、Bedrock 等端点由端点策略决定，不发送这个 HTTP 头。
+// A model effective contextWindow > 200K is the only switch that enables 1M (the compaction
+// budget has the same source). For Anthropic-compatible relays that need the HTTP beta signal,
+// carry `context-1m-2025-08-07`; official GA, Vertex, DeepSeek, Bedrock and other endpoints are
+// governed by endpoint policy and do not send this HTTP header.
 
 export const ANTHROPIC_CONTEXT_1M_BETA = "context-1m-2025-08-07";
 const ANTHROPIC_INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14";
 const ANTHROPIC_FINE_GRAINED_TOOL_STREAMING_BETA = "fine-grained-tool-streaming-2025-05-14";
 
-// pi-ai 的 mergeHeaders 对 options.headers 是整键覆盖而非追加，因此这里必须
-// 复现 createClient() 为非 OAuth 请求计算的基础 beta 集（顺序一致），再追加
-// context-1m。两个镜像条件与 pi-ai dist/api/anthropic-messages.js 逐字对应，
-// 由 anthropic-long-context 测试锁定；pi-ai 升级新增 beta 时需同步。
+// pi-ai's mergeHeaders replaces the whole key rather than appending for options.headers, so here
+// we must reproduce the base beta set computed by createClient() for non-OAuth requests (same
+// order), then append context-1m. The two mirror conditions correspond word-for-word to pi-ai
+// dist/api/anthropic-messages.js and are locked by the anthropic-long-context tests; they must be
+// kept in sync when a pi-ai upgrade adds a new beta.
 function buildAnthropicBetaHeaderValue(
   model: Model<"anthropic-messages">,
   context: Context | undefined,

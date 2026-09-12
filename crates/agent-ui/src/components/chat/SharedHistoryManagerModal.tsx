@@ -102,7 +102,7 @@ function RedactionPicker(props: {
   const { t } = useLocale();
   return (
     <fieldset
-      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML 允许 fieldset 担任 radiogroup；互斥单选语义需要向读屏表达。
+      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML allows fieldset to act as radiogroup; the mutually exclusive single-select semantics need to be conveyed to screen readers.
       role="radiogroup"
       aria-label={t("sharedHistory.redactionTitle")}
       className={cn(
@@ -110,7 +110,7 @@ function RedactionPicker(props: {
         disabled && "pointer-events-none opacity-60",
       )}
     >
-      {/* biome-ignore lint/a11y/useSemanticElements: 分段控件保留 button 样式；互斥语义用 radio 表达，改原生 radio input 需要视觉重构。 */}
+      {/* biome-ignore lint/a11y/useSemanticElements: the segmented control keeps button styling; mutual-exclusion semantics are expressed with radio, and switching to native radio inputs would require a visual rework. */}
       <button
         type="button"
         role="radio"
@@ -126,7 +126,7 @@ function RedactionPicker(props: {
       >
         {t("settings.enable")}
       </button>
-      {/* biome-ignore lint/a11y/useSemanticElements: 同上——radio 语义配 button 样式。 */}
+      {/* biome-ignore lint/a11y/useSemanticElements: same as above -- radio semantics with button styling. */}
       <button
         type="button"
         role="radio"

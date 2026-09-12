@@ -115,14 +115,14 @@ fn normalize_context(context: Option<HashMap<String, String>>) -> Vec<(String, S
 fn format_hook_script_failure(result: &ShellRunResponse) -> String {
     let mut message = if result.timed_out {
         format!(
-            "Hook 脚本超时（timeout={}ms, shell={}）",
+            "Hook script timed out (timeout={}ms, shell={})",
             result.effective_timeout_ms, result.shell
         )
     } else if result.cancelled {
-        format!("Hook 脚本已取消（shell={}）", result.shell)
+        format!("Hook script cancelled (shell={})", result.shell)
     } else {
         format!(
-            "Hook 脚本执行失败（exit={}, shell={}）",
+            "Hook script execution failed (exit={}, shell={})",
             result.exit_code, result.shell
         )
     };
@@ -148,7 +148,7 @@ pub(crate) fn run_hook_script_sync(
     let workdir = workdir
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| "Hook 需要一个工作目录（请先在会话中选择项目目录）".to_string())?;
+        .ok_or_else(|| "Hook requires a working directory (please select a project directory in the session first)".to_string())?;
     let cwd = resolve_workdir(Some(workdir))?;
 
     let scope_id = normalize_scope_id(scope_id);
@@ -166,7 +166,7 @@ pub(crate) fn run_hook_script_sync(
         None,
         token.clone(),
         &context,
-        // Hook 脚本是用户显式配置的自动化,不属于模型驱动面,不套沙箱。
+        // Hook scripts are automation explicitly configured by the user; they are not part of the model-driven surface and are not sandboxed.
         None,
     );
 
@@ -208,7 +208,7 @@ pub(crate) fn run_hook_http_requests_sync(
     scope_id: Option<String>,
 ) -> Result<HookHttpRunResponse, String> {
     if requests.is_empty() {
-        return Err("Hook 至少需要一个 HTTP 请求".to_string());
+        return Err("Hook requires at least one HTTP request".to_string());
     }
     let scope_id = normalize_scope_id(scope_id);
     let client = build_http_client(None)?;
@@ -283,7 +283,7 @@ pub async fn hook_run_script(
         run_hook_script_sync(&registry, workdir, script, timeout_ms, scope_id, envs)
     })
     .await
-    .map_err(|e| format!("hook_run_script join 失败：{e}"))?
+    .map_err(|e| format!("hook_run_script join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -297,7 +297,7 @@ pub async fn hook_run_http_requests(
         run_hook_http_requests_sync(&registry, requests, scope_id)
     })
     .await
-    .map_err(|e| format!("hook_run_http_requests join 失败：{e}"))?
+    .map_err(|e| format!("hook_run_http_requests join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -374,7 +374,7 @@ mod tests {
             Vec::new(),
         )
         .expect_err("reject missing workdir");
-        assert!(error.contains("工作目录"));
+        assert!(error.contains("working directory"));
     }
 
     #[test]

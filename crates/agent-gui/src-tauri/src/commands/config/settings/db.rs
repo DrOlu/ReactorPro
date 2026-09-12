@@ -9,15 +9,15 @@ static SCHEMA_INITIALIZED: OnceLock<()> = OnceLock::new();
 static SCHEMA_INITIALIZE_LOCK: Mutex<()> = Mutex::new(());
 
 pub(crate) fn config_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "Unable to locate the user directory".to_string())?;
     let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
-    fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败：{e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
     Ok(dir)
 }
 
 fn default_project_dir() -> Result<PathBuf, String> {
     let dir = config_dir()?.join(DEFAULT_PROJECT_DIRNAME);
-    fs::create_dir_all(&dir).map_err(|e| format!("创建默认工作目录失败：{e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create the default work directory: {e}"))?;
     Ok(dir)
 }
 
@@ -103,12 +103,8 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
             payload_json TEXT NOT NULL,
             updated_at INTEGER NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS stt_settings (
-            config_id TEXT PRIMARY KEY,
-            payload_json TEXT NOT NULL,
-            updated_at INTEGER NOT NULL
-        );
-        -- WebDAV 同步配置。独立成表是刻意的：见 mod.rs 上 BACKUP_SYNC_SETTINGS_TABLE 的注释。
+        -- WebDAV sync config. Keeping it as its own table is deliberate: see the
+        -- comment on BACKUP_SYNC_SETTINGS_TABLE in mod.rs.
         CREATE TABLE IF NOT EXISTS backup_sync_settings (
             config_id TEXT PRIMARY KEY,
             payload_json TEXT NOT NULL,
@@ -134,11 +130,12 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
         );
         CREATE INDEX IF NOT EXISTS idx_workspace_root_grants_project
             ON workspace_root_grants (project_id);
-        -- 'agent' 登录方式已移除，遗留配置回退为密码登录（与前端 normalize 的未知值兜底一致）
+        -- The 'agent' login method has been removed; legacy configs fall back to
+        -- password login (consistent with the frontend normalize fallback for unknown values).
         UPDATE ssh_settings SET auth_type = 'password' WHERE auth_type = 'agent';
         ",
     )
-    .map_err(|e| format!("初始化设置表失败：{e}"))?;
+    .map_err(|e| format!("Failed to initialize settings tables: {e}"))?;
     Ok(())
 }
 
@@ -148,9 +145,9 @@ pub(crate) fn config_db_path() -> Result<PathBuf, String> {
 
 pub(crate) fn open_db() -> Result<Connection, String> {
     let db_path = config_db_path()?;
-    let mut conn = Connection::open(db_path).map_err(|e| format!("打开设置数据库失败：{e}"))?;
+    let mut conn = Connection::open(db_path).map_err(|e| format!("Failed to open settings database: {e}"))?;
     conn.busy_timeout(Duration::from_secs(5))
-        .map_err(|e| format!("设置 SQLite busy_timeout 失败：{e}"))?;
+        .map_err(|e| format!("Failed to set SQLite busy_timeout: {e}"))?;
     if SCHEMA_INITIALIZED.get().is_none() {
         let _guard = SCHEMA_INITIALIZE_LOCK
             .lock()

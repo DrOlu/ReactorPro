@@ -146,7 +146,7 @@ export function DetailsPanel(props: {
   }, [neededSectionIds, props.loadSections, reloadToken]);
 
   if (record === null) {
-    // 窄容器为上下排布：空态占位直接隐藏，把整块高度让给列表。
+    // Narrow containers stack vertically: the empty-state placeholder is hidden outright, giving the whole block's height to the list.
     return (
       <aside
         className="relative flex min-w-[160px] max-w-[calc(100%-140px)] w-[var(--trajectory-details-width)] shrink-0 items-center justify-center border-l border-border/60 p-6 text-center text-[12px] text-muted-foreground @max-[520px]:p-3 @max-[640px]:hidden"

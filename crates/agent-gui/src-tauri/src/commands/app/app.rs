@@ -11,27 +11,27 @@ pub type CloseWindowBehaviorState = AtomicU8;
 pub const CLOSE_WINDOW_BEHAVIOR_MINIMIZE: u8 = 0;
 pub const CLOSE_WINDOW_BEHAVIOR_EXIT: u8 = 1;
 
-/// 已注册全局快捷键 -> 动作 的映射，供插件回调反查动作。
+/// Maps registered global shortcuts -> actions, so plugin callbacks can look up the action.
 #[derive(Default)]
 pub struct GlobalShortcutRegistry {
     entries: Mutex<Vec<(Shortcut, String)>>,
 }
 
-/// 主窗口置顶状态（快捷键切换用；独立 newtype 避免与其他 AtomicBool 状态类型冲突）。
+/// Main window pin state (used for shortcut toggling; a separate newtype avoids type conflicts with other AtomicBool state).
 #[derive(Default)]
 pub struct WindowPinState(pub AtomicBool);
 
 #[derive(Default)]
 pub struct FrontendReadyState(pub AtomicBool);
 
-/// 前端查询当前置顶状态（webview 重载后恢复置顶指示器）。
+/// Frontend queries the current pin state (to restore the pin indicator after a webview reload).
 #[tauri::command]
 pub fn app_window_pinned(pin_state: State<'_, Arc<WindowPinState>>) -> bool {
     pin_state.0.load(Ordering::SeqCst)
 }
 
-/// HTML 的静态启动骨架完成同步布局后再显示原生窗口，避免 WebView
-/// 导航到首个可绘制帧之间暴露系统默认白色背景。
+/// Show the native window only after the HTML static boot skeleton has completed synchronous layout,
+/// so WebView navigation up to the first paintable frame doesn't expose the system default white background.
 #[tauri::command]
 pub fn app_frontend_ready(
     window: tauri::WebviewWindow,
@@ -49,14 +49,14 @@ pub fn app_frontend_ready(
         .map_err(|error| format!("failed to focus frontend-ready window: {error}"))
 }
 
-/// 前端主动切换置顶（置顶指示器点击取消）；状态变更仍经
-/// `global-shortcut:pin-changed` 事件广播回前端。
+/// Frontend actively toggles pinning (clicking the pin indicator cancels it); state changes are still broadcast
+/// back to the frontend via the `global-shortcut:pin-changed` event.
 #[tauri::command]
 pub fn app_toggle_window_pin(app: AppHandle) {
     crate::toggle_main_window_pin(&app);
 }
 
-/// 软件内快捷键复用全局快捷键的动作总线，且要求调用窗口当前有焦点。
+/// In-app shortcuts reuse the global-shortcut action bus, and require the calling window to currently have focus.
 #[tauri::command]
 pub fn app_run_shortcut(app: AppHandle, window: tauri::WebviewWindow, action: String) {
     if window.is_focused().unwrap_or(false) {
@@ -95,9 +95,9 @@ pub struct GlobalShortcutFailure {
     pub error: String,
 }
 
-/// 全量替换式注册：本命令是插件注册的唯一入口，`unregister_all` 会清掉
-/// 插件上的所有快捷键。日后若有其他模块要注册全局快捷键，必须并入本命令
-/// 的 bindings 走同一条替换路径，不能自行调用插件 register。
+/// Full-replacement registration: this command is the sole entry point for plugin registration, and `unregister_all` clears
+/// all shortcuts on the plugin. If another module needs to register global shortcuts in the future, it must be folded into this command's
+/// bindings and follow the same replacement path, and must not call the plugin's register on its own.
 #[tauri::command]
 pub fn app_set_global_shortcuts(
     app: AppHandle,

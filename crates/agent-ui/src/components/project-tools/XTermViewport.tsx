@@ -51,8 +51,10 @@ type XTermViewportProps = {
 
 const SNAPSHOT_ATTACH_RETRY_MIN_MS = 500;
 const SNAPSHOT_ATTACH_RETRY_MAX_MS = 5_000;
-// 容器连续变化（divider 拖动）时的两级节流：视觉 fit 周期性执行保持跟手，
-// PTY resize 只在尺寸稳定后（尾沿）提交一次，避免拖动过程向后端刷 resize。
+// Two-level throttling while the container changes continuously (divider
+// drag): visual fit runs periodically to stay responsive, and PTY resize is
+// committed once after the size stabilizes (trailing edge), avoiding a flood
+// of resizes to the backend during the drag.
 const FIT_THROTTLE_MS = 80;
 const PTY_RESIZE_DEBOUNCE_MS = 100;
 
@@ -68,10 +70,13 @@ function terminalTheme(theme: "light" | "dark") {
       scrollbarSliderBackground: "rgba(148, 163, 184, 0.18)",
       scrollbarSliderHoverBackground: "rgba(148, 163, 184, 0.3)",
       scrollbarSliderActiveBackground: "rgba(148, 163, 184, 0.42)",
-      // xterm 的 css.toColor 不认关键字 "transparent"(canvas 回退路径遇到
-      // alpha<255 直接 throw),解析失败会静默落回默认色 #ffffff——overview
-      // ruler 每帧都会用该色画一条 1px 竖线(_renderRulerOutline),即终端右缘
-      // 的白线。8 位 hex 走独立分支不校验 alpha,才是真正的透明写法。
+      // xterm's css.toColor does not recognize the keyword "transparent" (the
+      // canvas fallback path throws outright on alpha<255), and a parse failure
+      // silently falls back to the default color #ffffff -- the overview ruler
+      // draws a 1px vertical line with that color every frame
+      // (_renderRulerOutline), i.e. the white line at the terminal's right edge.
+      // An 8-digit hex goes through a separate branch that does not validate
+      // alpha and is the true transparent form.
       overviewRulerBorder: "#00000000",
       black: "#1b2733",
       red: "#ef4444",
@@ -101,7 +106,8 @@ function terminalTheme(theme: "light" | "dark") {
     scrollbarSliderBackground: "rgba(100, 116, 139, 0.16)",
     scrollbarSliderHoverBackground: "rgba(100, 116, 139, 0.26)",
     scrollbarSliderActiveBackground: "rgba(100, 116, 139, 0.36)",
-    // 同暗色主题:8 位 hex 透明,勿改回 "transparent"(见上)。
+    // Same as the dark theme: 8-digit hex transparent; do not change back to
+    // "transparent" (see above).
     overviewRulerBorder: "#00000000",
     black: "#1f2933",
     red: "#dc2626",
@@ -127,8 +133,9 @@ function terminalContainerHasSize(container: HTMLElement) {
   return rect.width > 0 && rect.height > 0;
 }
 
-// execCommand("copy") 兜底：textarea.select() 会抢走焦点，复制完把焦点还给
-// 原元素（终端），避免用户复制一次后键盘输入丢失。
+// execCommand("copy") fallback: textarea.select() steals focus, so after
+// copying, return focus to the original element (the terminal) to avoid losing
+// keyboard input after the user copies once.
 function fallbackCopyTextToClipboard(text: string) {
   const active = document.activeElement;
   const textarea = document.createElement("textarea");
@@ -144,9 +151,10 @@ function fallbackCopyTextToClipboard(text: string) {
   if (active instanceof HTMLElement) active.focus();
 }
 
-// 非安全上下文（http 直连 gateway web）里 navigator.clipboard 整个不存在，
-// 所以「API 缺失」和「writeText 被拒绝」都必须落到 execCommand 兜底——
-// 只把兜底挂在 catch 上会让最需要它的环境静默失败。
+// In a non-secure context (http direct to gateway web), navigator.clipboard
+// does not exist at all, so both "API missing" and "writeText rejected" must
+// fall back to execCommand -- attaching the fallback only to catch would
+// silently fail in exactly the environment that needs it most.
 function writeTextToClipboard(text: string) {
   if (!text) return;
   if (navigator.clipboard?.writeText) {
@@ -337,14 +345,16 @@ export function XTermViewport({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
-    // 终端复制/粘贴快捷键：xterm 的键盘映射不处理 Ctrl+Shift+字母（^C 控制
-    // 字符分支要求无 shift）和 Cmd 组合，所以选中后按 Ctrl+Shift+C/Cmd+C
-    // 什么都不发生（#355）。挂自定义键盘处理：Ctrl+Shift+C/V（Linux/Windows）
-    // 和 Cmd+C/V（macOS）走剪贴板，其余按键全部放行由 xterm 自行处理。
-    // 命中分支必须 event.preventDefault()：返回 false 只跳过 xterm 自身处理，
-    // 浏览器默认行为仍会执行——Chromium 的 Ctrl+Shift+V 和 macOS 的 Cmd+V
-    // 会另行派发原生 paste 事件（xterm 在 textarea 上有原生 paste 监听），
-    // 不拦截同一次按键会粘贴两遍。
+    // Terminal copy/paste shortcuts: xterm's key map does not handle
+    // Ctrl+Shift+letter (the ^C control-character branch requires no shift) or
+    // Cmd combos, so after selecting, pressing Ctrl+Shift+C/Cmd+C does nothing
+    // (#355). Attach custom key handling: Ctrl+Shift+C/V (Linux/Windows) and
+    // Cmd+C/V (macOS) go through the clipboard, and all other keys pass through
+    // to xterm. A handled branch must call event.preventDefault(): returning
+    // false only skips xterm's own handling while the browser default still
+    // runs -- Chromium's Ctrl+Shift+V and macOS's Cmd+V separately dispatch a
+    // native paste event (xterm has a native paste listener on the textarea),
+    // so not intercepting would paste twice for the same keystroke.
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
       const key = event.key.toLowerCase();
@@ -360,8 +370,9 @@ export function XTermViewport({
       }
       if (isMod && key === "v") {
         const clipboard = navigator.clipboard;
-        // 非安全上下文里 readText 不存在，此时放行让原生 paste 事件路径
-        // （macOS Cmd+V / Chromium Ctrl+Shift+V）作为仅剩的粘贴通道。
+        // In a non-secure context readText does not exist, so pass through and let
+        // the native paste event path (macOS Cmd+V / Chromium Ctrl+Shift+V) be
+        // the only remaining paste channel.
         if (!clipboard?.readText) return true;
         event.preventDefault();
         void clipboard.readText().then((text) => {
@@ -371,8 +382,10 @@ export function XTermViewport({
       }
       return true;
     });
-    // WebGL 渲染器：多 Pane 同时渲染时 DOM 渲染器主线程压力线性叠加，WebGL
-    // 走 GPU。上下文创建失败（WebGL2 不可用）或运行中丢失时回退默认渲染器。
+    // WebGL renderer: with multiple panes rendering at once, the DOM renderer's
+    // main-thread pressure adds up linearly, while WebGL uses the GPU. Fall
+    // back to the default renderer if context creation fails (WebGL2
+    // unavailable) or the context is lost at runtime.
     let webglAddon: WebglAddon | null = null;
     try {
       const addon = new WebglAddon();
@@ -408,7 +421,8 @@ export function XTermViewport({
     let ptyResizeTimer: number | null = null;
     let lastVisualFitAt = 0;
 
-    // 视觉 fit：只重排 xterm 网格（term.cols/rows 随之更新），不触发后端。
+    // Visual fit: only re-layouts the xterm grid (term.cols/rows update
+    // accordingly) and does not touch the backend.
     const fitVisual = () => {
       if (disposed) return;
       if (!terminalContainerHasSize(container)) return;
@@ -420,8 +434,10 @@ export function XTermViewport({
       }
     };
 
-    // PTY resize 提交：尾沿去抖，尺寸稳定后一定提交最终值（streamBuffer 内部
-    // 还有 16ms 合并，双层叠加后拖动过程后端只收到稳定尺寸）。
+    // PTY resize commit: trailing-edge debounce, always committing the final
+    // value once the size stabilizes (streamBuffer internally coalesces for
+    // another 16ms, so with both layers the backend only receives stable sizes
+    // during a drag).
     const schedulePtyResizeCommit = () => {
       if (ptyResizeTimer !== null) {
         window.clearTimeout(ptyResizeTimer);
@@ -450,11 +466,13 @@ export function XTermViewport({
     window.addEventListener(CODE_FONT_FAMILY_CHANGE_EVENT, handleCodeFontFamilyChange);
 
     const resizeObserver = new ResizeObserver(() => {
-      // 拖动中周期性做视觉 fit 保持跟手（节流 FIT_THROTTLE_MS）……
+      // Periodically do a visual fit during the drag to stay responsive (throttled
+      // by FIT_THROTTLE_MS)...
       if (Date.now() - lastVisualFitAt >= FIT_THROTTLE_MS) {
         fitVisual();
       }
-      // ……尾沿再做一次最终 fit + PTY resize 提交，保证结束尺寸一定生效。
+      // ...and on the trailing edge do one final fit + PTY resize commit so the
+      // final size always takes effect.
       if (resizeTimerRef.current !== null) {
         window.clearTimeout(resizeTimerRef.current);
       }
@@ -743,11 +761,12 @@ export function XTermViewport({
       streamOutputUnsubscribe?.();
       streamInputUnsubscribe?.();
       streamHandle?.dispose();
-      // 先释放 WebGL 上下文再销毁 terminal，避免 dispose 顺序问题。
+      // Release the WebGL context before destroying the terminal to avoid dispose
+      // ordering issues.
       try {
         webglAddon?.dispose();
       } catch {
-        // 上下文已丢失时 dispose 可能抛错，忽略。
+        // When the context is already lost, dispose may throw; ignore it.
       }
       webglAddon = null;
       term.dispose();
@@ -797,12 +816,12 @@ export function XTermViewport({
 
 function terminalInputPausedMessage(state: TerminalStreamInputState) {
   if (state.reason === "offline") {
-    return "终端连接正在恢复，已暂停输入以避免过期按键。";
+    return "The terminal connection is recovering; input is paused to avoid stale keystrokes.";
   }
   if (state.reason === "closed") {
-    return "终端输入已关闭。";
+    return "Terminal input is closed.";
   }
-  return "终端连接较慢，已暂停输入以避免输入队列过大。";
+  return "The terminal connection is slow; input is paused to avoid an oversized input queue.";
 }
 
 function terminalSnapshotStartOffset(snapshot: TerminalSnapshot) {

@@ -64,7 +64,7 @@ function PathSurface({ path }: { path: string }) {
     <ToolSurface>
       <ToolSurfaceLabel label="path" />
       {onOpenFile ? (
-        // 文件引用可点击：与回复末尾变更卡一致，直接打开工作区编辑器。
+        // File references are clickable: consistent with the change card at the end of a reply, they open the workspace editor directly.
         <button
           type="button"
           onClick={() => onOpenFile(path)}

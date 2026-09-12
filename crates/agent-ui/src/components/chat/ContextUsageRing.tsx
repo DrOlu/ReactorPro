@@ -20,8 +20,9 @@ const RING_STROKE_BY_LEVEL = {
 
 const COARSE_POINTER_QUERY = "(hover: none), (pointer: coarse)";
 
-// 触屏形态可热切换（iPad 插拔键鼠、可翻转本翻转），订阅 matchMedia change
-// 而非挂载时一次性求值，交互模式（两段点按 vs 悬停）随设备形态实时切换。
+// Touch form factor can hot-swap (plugging a keyboard/mouse into an iPad, flipping a convertible), so subscribe to
+// matchMedia change rather than evaluating once at mount; the interaction mode (two-stage tap vs hover) switches in
+// real time with the device form factor.
 function subscribeCoarsePointer(onChange: () => void): () => void {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return () => {};
@@ -40,13 +41,15 @@ function isCoarsePointerNow(): boolean {
 }
 
 /**
- * 上下文用量环：composer 内展示当前会话上下文占用百分比，占用 ≥ 50%（黄档）
- * 起可点击弹出确认后触发手动压缩。阈值与 WebUI 补算口径见 lib/chat/contextUsage.ts。
- * 语义用 Meter（静态量度）而非 Progress（任务进度）。
+ * Context usage ring: shows the current session's context usage percentage inside the composer; from 50% (yellow
+ * tier) upward it becomes clickable and triggers manual compaction after a confirmation. Thresholds and the WebUI
+ * recomputation semantics are in lib/chat/contextUsage.ts. The semantics use Meter (static measurement) rather than
+ * Progress (task progress).
  *
- * 触屏（无 hover）环境没有悬停，tooltip 与压缩确认改为点按分段：首次点按只弹
- * 用量 tooltip，≥50% 时第二次点按收起 tooltip 再弹压缩确认——两个弹层同侧
- * 定位，必须互斥展示。桌面端保持悬停出 tooltip、点击出确认的原行为。
+ * Touch (no hover) environments have no hover, so the tooltip and compaction confirmation switch to staged taps:
+ * the first tap only shows the usage tooltip, and at >=50% a second tap dismisses the tooltip and shows the
+ * compaction confirmation -- the two popups are anchored on the same side and must be mutually exclusive. The
+ * desktop side keeps the original behavior of hover for tooltip and click for confirmation.
  */
 export function ContextUsageRing(props: {
   totalTokens?: number;
@@ -55,10 +58,10 @@ export function ContextUsageRing(props: {
   onConfirm?: (() => void) | (() => Promise<unknown>);
   className?: string;
   /**
-   * 占用低于警戒线（50%，即手动压缩尚不可用）时整枚环不渲染。展示样式改为
-   * 三档后 composer 仍不传此项——"ring" / "both" 模式环都必须 0% 起常显
-   * （docs/design/composer-context-stats-bar.md §4.7）。保留为共享环的通用显示
-   * 选项，供未来低占用需让位的挂载点使用。
+   * When usage is below the warning line (50%, i.e. manual compaction is not yet available) the whole ring is not
+   * rendered. After the display style changed to three tiers the composer still does not pass this -- rings in
+   * "ring" / "both" mode must always show from 0% (docs/design/composer-context-stats-bar.md §4.7). It is kept as a
+   * general display option for the shared ring, for future mount points where low usage should yield the space.
    */
   hideBelowWarn?: boolean;
 }) {
@@ -73,17 +76,18 @@ export function ContextUsageRing(props: {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const ratio = contextUsageRatio(totalTokens, contextWindow);
   const compactAvailable = canManualCompact(ratio) && !disabled && Boolean(onConfirm);
-  // 确认弹层只在可压缩分支渲染，而可压缩状态可能在弹层打开期间翻回 false
-  //（他端开始压缩/发消息使 disabled 置位、他端压缩完成后占用掉回阈值下）。
-  // 此时弹层随分支切换直接卸载，confirmOpen 若残留 true：恢复可压缩后弹层
-  // 会无操作自动弹开，残留期间还会经 tooltip 互斥守卫一直吞掉 tooltip 的
-  // 打开请求。渲染期归位（adjust-state-during-render）在绘制前完成，不闪现。
+  // The confirmation popover renders only in the compactable branch, but the compactable state can flip back to
+  // false while the popover is open (another side starting compaction/sending a message sets disabled, or that side
+  // completing compaction drops usage back below the threshold). At that point the popover unmounts outright as the
+  // branch switches; if confirmOpen is left true, once compactable returns the popover would pop open with no
+  // action, and while it lingers the tooltip mutual-exclusion guard would keep swallowing tooltip open requests.
+  // Re-syncing during render (adjust-state-during-render) completes before paint, so there is no flash.
   if (!compactAvailable && confirmOpen) {
     setConfirmOpen(false);
   }
-  // 低占用隐藏：环整枚不渲染，但组件仍挂载着 tooltipOpen。残留 true 会让占用
-  // 回到警戒线以上时 tooltip 无悬停自动弹开——与上面 confirmOpen 同一类问题，
-  // 同样在渲染期归位。
+  // Low-usage hiding: the whole ring is not rendered, but the component still has tooltipOpen mounted. A lingering
+  // true would make the tooltip pop open without hover once usage rises back above the warning line -- the same
+  // class of problem as confirmOpen above, likewise re-synced during render.
   const hiddenByLowUsage = hideBelowWarn === true && ratio < CONTEXT_USAGE_WARN_RATIO;
   if (hiddenByLowUsage && tooltipOpen) {
     setTooltipOpen(false);
@@ -93,8 +97,8 @@ export function ContextUsageRing(props: {
   }
   if (hiddenByLowUsage) return null;
 
-  // 只保留两个口径：展示值（取整、封顶 999）与画环/量度值（0-100 钳制，
-  // 二者共用避免 a11y 量度与弧线漂移）。contextUsageRatio 不会返回负数。
+  // Keep only two measures: the displayed value (rounded, capped at 999) and the ring/measurement value (clamped to
+  // 0-100; sharing the latter avoids drift between the a11y measurement and the arc). contextUsageRatio never returns a negative number.
   const displayedPercentage = Math.min(999, Math.round(ratio * 100));
   const clampedPercentage = Math.min(100, ratio * 100);
   const usageLine = `${displayedPercentage}% · ${t("chat.usageTotal")} ${formatTokenCount(
@@ -102,8 +106,8 @@ export function ContextUsageRing(props: {
     locale,
   )}`;
   const windowLine = `${t("chat.contextWindow")} ${formatTokenCount(contextWindow, locale)}`;
-  // a11y 量度/无障碍标签仍是单行字符串；tooltip 视觉上分两行（百分比+总计 /
-  // 上下文窗口），窄屏不再挤成一长条折行。
+  // The a11y measurement/accessible label is still a single-line string; the tooltip visually splits into two lines
+  // (percentage + total / context window), so narrow screens no longer cram it into one long wrapping strip.
   const usageLabel = `${usageLine} · ${windowLine}`;
   const usageTooltip = (
     <span className="flex flex-col gap-0.5">
@@ -113,7 +117,7 @@ export function ContextUsageRing(props: {
   );
 
   const handleTooltipOpenChange = (nextOpen: boolean) => {
-    // 确认弹层展示期间抑制 tooltip 的打开请求（悬停/点按），保证不重叠。
+    // While the confirmation popover is shown, suppress tooltip open requests (hover/tap) to guarantee no overlap.
     if (nextOpen && confirmOpen) return;
     setTooltipOpen(nextOpen);
   };
@@ -123,7 +127,7 @@ export function ContextUsageRing(props: {
       setConfirmOpen(false);
       return;
     }
-    // 触屏端首次点按只弹用量 tooltip；tooltip 已可见的第二次点按才进入确认。
+    // On touch, the first tap only shows the usage tooltip; a second tap while the tooltip is already visible enters confirmation.
     if (isCoarsePointer && !tooltipOpen) {
       setTooltipOpen(true);
       return;
@@ -167,9 +171,10 @@ export function ContextUsageRing(props: {
     </Meter>
   );
 
-  // 触屏端一律禁用 closeOnClick：trigger 按压关闭发生在 pointerdown，早于
-  // click 阶段的开合裁决——保留会让第二次点按先关掉 tooltip，裁决误判为
-  // "首次点按"而永远进不了确认弹层（span 分支同理会点按即关又即开）。
+  // On touch, always disable closeOnClick: the trigger's press-to-close happens on pointerdown, before the
+  // click-stage open/close decision -- keeping it would make the second tap close the tooltip first, so the decision
+  // misreads it as a "first tap" and never enters the confirmation popover (the span branch likewise would close and
+  // reopen on the same tap).
   if (!compactAvailable) {
     return (
       <LabelTooltip
@@ -219,8 +224,9 @@ export function ContextUsageRing(props: {
             onClick={open}
             aria-label={t("chat.manualCompactTitle")}
             className={cn(
-              // 悬停底色画在 inset-0.5 的伪元素上（28px），与环外径及 composer 右列
-              // 其余按钮的可见圆等大；不能改用 padding 收缩——内部 32px 的环会被挤偏。
+              // The hover background is painted on an inset-0.5 pseudo-element (28px), the same size as the ring's
+              // outer diameter and the visible circles of the other composer right-column buttons; shrinking with
+              // padding instead is not an option -- the inner 32px ring would be pushed off-center.
               "relative inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full outline-hidden before:absolute before:inset-0.5 before:rounded-full before:transition-colors hover:before:bg-muted/60 focus-visible:before:bg-muted/60",
               className,
             )}

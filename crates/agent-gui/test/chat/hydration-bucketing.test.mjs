@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 不变量:Hydration 生命周期按 conversationId 分桶(remaining-work R-3,
-// 任务文档 §312/§589)。两个 Pane 同时 hydrate 时状态互不覆盖;失败标记按
-// ID 隔离;重试只清本会话;Controller 快照经 lifecycle slice 暴露。
+// Invariant: the Hydration lifecycle is bucketed by conversationId (remaining-work R-3,
+// task doc §312/§589). When two Panes hydrate concurrently their states never overwrite each
+// other; failure marks are isolated per ID; a retry clears only its own conversation; Controller
+// snapshots are exposed via the lifecycle slice.
 
 const { loadModule } = createTsModuleLoader();
 const { createConversationHydrationStore } = loadModule(

@@ -15,8 +15,8 @@ export type TerminalPaneHostProps = Omit<
 >;
 
 /**
- * 桌面端终端 Pane 宿主:共享实现 + 桌面注入(Tauri 终端 client 与窗口级
- * 租约/绑定单例)。逻辑语义见 @liveagent/ui 的 TerminalPaneHost。
+ * Desktop terminal Pane host: shared implementation + desktop injection (Tauri terminal client
+ * and window-level lease/binding singletons). For logical semantics see @liveagent/ui's TerminalPaneHost.
  */
 export function TerminalPaneHost(props: TerminalPaneHostProps) {
   return (

@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
-// useConversationStats 的加载/缓存/节流验收
-// (docs/design/composer-context-stats-bar.md §4.1 行为 1-5、§9 hook 层)。
-// 用真实 react-dom 渲染，宿主 loadWindow 由假实现驱动：首窗 + 后台分页拼接、
-// live 与 persisted 重叠去重、authoritativeRevision 失效重载、1s 节流。
+// Acceptance for useConversationStats loading/caching/throttling
+// (docs/design/composer-context-stats-bar.md §4.1 behaviors 1-5, §9 hook layer).
+// Renders with real react-dom, with the loadWindow host driven by a fake: first window
+// + background pagination stitching, live and persisted overlap dedupe,
+// authoritativeRevision invalidating and reloading, and 1s throttling.
 
 const env = await createDomTestEnv();
 const { React, act, createRoot } = env;
@@ -20,7 +21,7 @@ function at() {
   return clock;
 }
 
-/** 一轮完整回合：user → step_start → first_token → step_end → turn_end。 */
+/** One complete turn: user -> step_start -> first_token -> step_end -> turn_end. */
 function turnEvents(turn, { outputTokens = 100 } = {}) {
   const start = at();
   return [
@@ -39,7 +40,7 @@ function turnEvents(turn, { outputTokens = 100 } = {}) {
   ];
 }
 
-/** 把事件按 segment 分页的假宿主；页从尾向前给，与后端 loadWindow 语义一致。 */
+/** A fake host that paginates events by segment; pages are given from the tail backward, matching the backend loadWindow semantics. */
 function createFakeHost(pages, { truncated = false } = {}) {
   const calls = [];
   return {
@@ -99,7 +100,7 @@ function mountHook(options) {
   };
 }
 
-/** 让排定的 idle/timer 回调跑完；分页是链式排定的，需要多轮。 */
+/** Runs the scheduled idle/timer callbacks to completion; pagination is chain-scheduled and needs multiple rounds. */
 async function drain(rounds = 8) {
   for (let index = 0; index < rounds; index += 1) {
     await act(async () => {
@@ -108,7 +109,7 @@ async function drain(rounds = 8) {
   }
 }
 
-test("首窗读数立即可用，后台分页把更早的段补齐", async () => {
+test("the first-window reading is available immediately and background pagination fills in earlier segments", async () => {
   clearConversationStatsCache();
   const pages = [turnEvents(1), turnEvents(2), turnEvents(3)];
   const { host, calls } = createFakeHost(pages);
@@ -122,29 +123,29 @@ test("首窗读数立即可用，后台分页把更早的段补齐", async () =>
   await probe.mount();
   await drain();
 
-  assert.equal(calls.length, 3, "三段应各拉一次");
-  assert.equal(calls[0].beforeSegmentIndex, undefined, "首窗不带游标");
+  assert.equal(calls.length, 3, "all three segments should each be fetched once");
+  assert.equal(calls[0].beforeSegmentIndex, undefined, "the first window carries no cursor");
   assert.deepEqual(
     calls.slice(1).map((call) => call.beforeSegmentIndex),
     [2, 1],
-    "后续分页沿 oldestSegmentIndex 向前",
+    "subsequent pagination moves forward along oldestSegmentIndex",
   );
   assert.equal(probe.seen.current.stats.turns, 3);
   assert.equal(probe.seen.current.stats.steps, 3);
-  assert.equal(probe.seen.current.stats.approximate, false, "读完全部段后不再是近似值");
+  assert.equal(probe.seen.current.stats.approximate, false, "no longer approximate after reading all segments");
   assert.equal(probe.seen.current.loading, false);
 
   await probe.unmount();
 });
 
-test("live 事件与 persisted 重叠时按身份去重，不双算", async () => {
+test("live events overlapping with persisted ones are deduped by identity, not double-counted", async () => {
   clearConversationStatsCache();
   const shared = turnEvents(1);
   const { host } = createFakeHost([shared]);
   const probe = mountHook({
     conversationId: "c-overlap",
     host,
-    // 整轮事件同时出现在实时通道里，模拟断线重连重放。
+    // The whole turn's events also appear on the live channel, simulating a reconnect replay.
     liveEvents: shared,
     enabled: true,
   });
@@ -153,14 +154,14 @@ test("live 事件与 persisted 重叠时按身份去重，不双算", async () =
   await drain();
 
   const stats = probe.seen.current.stats;
-  assert.equal(stats.turns, 1, "重放不应把同一轮算两次");
+  assert.equal(stats.turns, 1, "a replay should not count the same turn twice");
   assert.equal(stats.steps, 1);
-  assert.equal(stats.outputTokens, 100, "token 也不能双算");
+  assert.equal(stats.outputTokens, 100, "tokens must not be double-counted either");
 
   await probe.unmount();
 });
 
-test("authoritativeRevision 变化丢弃缓存整体重载", async () => {
+test("an authoritativeRevision change discards the cache and fully reloads", async () => {
   clearConversationStatsCache();
   const first = createFakeHost([turnEvents(1), turnEvents(2)]);
   const probe = mountHook({
@@ -176,17 +177,17 @@ test("authoritativeRevision 变化丢弃缓存整体重载", async () => {
   assert.equal(probe.seen.current.stats.turns, 2);
   const callsBefore = first.calls.length;
 
-  // edit-resend 砍掉第二轮：同一 host 现在只剩一段。
+  // edit-resend removes the second turn: the same host now has only one segment left.
   await probe.update({ authoritativeRevision: 1 });
   await drain();
 
-  assert.ok(first.calls.length > callsBefore, "权威版本变化必须重新拉取");
-  assert.equal(probe.seen.current.stats.turns, 2, "读数收敛到重载后的历史");
+  assert.ok(first.calls.length > callsBefore, "an authoritative revision change must refetch");
+  assert.equal(probe.seen.current.stats.turns, 2, "the reading converges to the history after reload");
 
   await probe.unmount();
 });
 
-test("缓存命中时切回同一会话不再打后端", async () => {
+test("switching back to the same conversation on a cache hit does not hit the backend again", async () => {
   clearConversationStatsCache();
   const { host, calls } = createFakeHost([turnEvents(1)]);
   const first = mountHook({
@@ -209,13 +210,13 @@ test("缓存命中时切回同一会话不再打后端", async () => {
   await second.mount();
   await drain();
 
-  assert.equal(calls.length, callsAfterFirst, "缓存完整时不应再次分页");
-  assert.equal(second.seen.current.stats.turns, 1, "读数直接来自缓存");
+  assert.equal(calls.length, callsAfterFirst, "no further pagination when the cache is complete");
+  assert.equal(second.seen.current.stats.turns, 1, "the reading comes directly from the cache");
 
   await second.unmount();
 });
 
-test("连续 live 通知在 1s 窗口内合并为一次重建", async () => {
+test("consecutive live notifications merge into a single rebuild within the 1s window", async () => {
   clearConversationStatsCache();
   const { host } = createFakeHost([turnEvents(1)]);
   const probe = mountHook({
@@ -228,7 +229,7 @@ test("连续 live 通知在 1s 窗口内合并为一次重建", async () => {
   await drain();
 
   const rendersBefore = probe.seen.renders;
-  // 三次不同的 live 快照连续到达：只有第一次立即生效，其余合并进节流窗口。
+  // Three different live snapshots arrive in succession: only the first takes effect immediately; the rest merge into the throttle window.
   await probe.update({ liveEvents: [{ k: "user", t: 9, at: 9_000, mi: 9 }] });
   await probe.update({ liveEvents: [{ k: "user", t: 9, at: 9_000, mi: 9 }, { k: "step_start", t: 9, s: 1, at: 9_010 }] });
   await probe.update({
@@ -242,19 +243,19 @@ test("连续 live 通知在 1s 窗口内合并为一次重建", async () => {
   const rendersAfterBurst = probe.seen.renders;
   assert.ok(
     rendersAfterBurst - rendersBefore <= 4,
-    `节流应压制重建次数，实际新增 ${rendersAfterBurst - rendersBefore}`,
+    `throttling should suppress rebuilds; actual increase ${rendersAfterBurst - rendersBefore}`,
   );
 
-  // 等过节流窗口，待处理的最后一份快照必须补上。
+  // Wait past the throttle window; the last pending snapshot must be applied.
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, STATS_REBUILD_THROTTLE_MS + 50));
   });
-  assert.equal(probe.seen.current.stats.turns, 2, "窗口结束后读数收敛到最新 live 快照");
+  assert.equal(probe.seen.current.stats.turns, 2, "after the window ends the reading converges to the latest live snapshot");
 
   await probe.unmount();
 });
 
-test("enabled 为 false 时不加载、读数为 null", async () => {
+test("when enabled is false nothing loads and the reading is null", async () => {
   clearConversationStatsCache();
   const { host, calls } = createFakeHost([turnEvents(1)]);
   const probe = mountHook({
@@ -267,14 +268,14 @@ test("enabled 为 false 时不加载、读数为 null", async () => {
   await probe.mount();
   await drain();
 
-  assert.equal(calls.length, 0, "禁用时不应打后端");
+  assert.equal(calls.length, 0, "the backend should not be hit when disabled");
   assert.equal(probe.seen.current.stats, null);
   assert.equal(probe.seen.current.loading, false);
 
   await probe.unmount();
 });
 
-test("truncated 段让读数保持近似", async () => {
+test("a truncated segment keeps the reading approximate", async () => {
   clearConversationStatsCache();
   const { host } = createFakeHost([turnEvents(1)], { truncated: true });
   const probe = mountHook({
@@ -292,7 +293,7 @@ test("truncated 段让读数保持近似", async () => {
   await probe.unmount();
 });
 
-test("无任何事件的会话读数为 null", async () => {
+test("a conversation with no events has a null reading", async () => {
   clearConversationStatsCache();
   const { host } = createFakeHost([[]]);
   const probe = mountHook({
@@ -305,13 +306,13 @@ test("无任何事件的会话读数为 null", async () => {
   await probe.mount();
   await drain();
 
-  assert.equal(probe.seen.current.stats, null, "老会话/text 模式整条隐藏");
+  assert.equal(probe.seen.current.stats, null, "legacy conversations/text mode are hidden entirely");
 
   await probe.unmount();
 });
 
-test("liveOwnership 语义沿用轨迹视图：authoritative 空集收敛僵尸，observed 保持运行", async () => {
-  // 持久化里有一个没收尾的 step（进程崩溃遗留）。
+test("liveOwnership semantics follow the trajectory view: an authoritative empty set converges zombies, observed keeps them running", async () => {
+  // Persisted history has an unfinished step (left over from a process crash).
   const orphan = [
     { k: "user", t: 1, at: 5_000, mi: 1 },
     { k: "step_start", t: 1, s: 1, at: 5_010 },
@@ -330,7 +331,7 @@ test("liveOwnership 语义沿用轨迹视图：authoritative 空集收敛僵尸�
   assert.equal(
     desktop.seen.current.stats.llmRunningSinceAt,
     null,
-    "桌面端空 live 集是权威证据，遗留 running 收敛为 aborted",
+    "an empty live set on the desktop is authoritative evidence, so the leftover running converges to aborted",
   );
   await desktop.unmount();
 
@@ -347,7 +348,7 @@ test("liveOwnership 语义沿用轨迹视图：authoritative 空集收敛僵尸�
   assert.equal(
     web.seen.current.stats.llmRunningSinceAt,
     5_010,
-    "观察端未收到实时流之前不判中断，运行段保持",
+    "the observer side does not judge an interruption before receiving the live stream, so the running segment is kept",
   );
   await web.unmount();
 });

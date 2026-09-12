@@ -100,7 +100,7 @@ export function useChatSkills(params: UseChatSkillsParams) {
         const msg = err instanceof Error ? err.message : String(err);
         setSkillsRootDir("");
         setAvailableSkills([]);
-        setSkillsLoadError(msg || "加载 skills 失败");
+        setSkillsLoadError(msg || "Failed to load skills");
         return null;
       } finally {
         if (mountedRef.current && requestSequenceRef.current === requestId) {

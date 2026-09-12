@@ -52,10 +52,10 @@ import {
   writeCuaProbeCache,
 } from "./cuaDriverForm";
 
-/** 引导步骤单步状态：完成 / 待办 / 未就绪 / 进行中 */
+/** Single-step state of an onboarding step: done / todo / not ready / in progress */
 type StepState = "done" | "current" | "todo" | "busy";
 
-/** 时间轴节点的视觉档位 */
+/** Visual tier of a timeline node */
 type NodeTone = "done" | "active" | "warn" | "neutral";
 
 const NODE_TONE_CLASS: Record<NodeTone, string> = {
@@ -66,13 +66,14 @@ const NODE_TONE_CLASS: Record<NodeTone, string> = {
 };
 
 /**
- * 竖向时间轴条目：左侧状态节点 + 连接线，右侧标题行与整宽卡片。
- * 每个配置独占一行，安装 → 授权 → 配置的推进顺序由节点颜色直接表达。
+ * Vertical timeline entry: a status node + connector on the left, a title row and full-width card
+ * on the right. Each configuration occupies its own row, and the install -> authorize -> configure
+ * progression is expressed directly by the node colors.
  */
 function TimelineItem(props: {
   node: ReactNode;
   tone: NodeTone;
-  /** 连接线到下一个节点的颜色；最后一项传 "none" 不画线 */
+  /** Color of the connector to the next node; pass "none" for the last item to draw no line */
   connector: "done" | "default" | "none";
   title: string;
   action?: ReactNode;
@@ -112,7 +113,7 @@ function TimelineItem(props: {
   );
 }
 
-/** 卡片内部区块 */
+/** Card inner section */
 function CardBlock(props: { className?: string; children: ReactNode }) {
   return (
     <div
@@ -155,7 +156,7 @@ function CopyButton({ value, className }: { value: string; className?: string })
   );
 }
 
-/** 顶栏 Hero 状态卡片：发光图标、状态 Badge 与主开关；推进进度由下方时间轴表达 */
+/** Top-bar Hero status card: glowing icon, status Badge, and main switch; progression is expressed by the timeline below */
 function HeroCard(props: {
   probing: boolean;
   installed: boolean;
@@ -196,7 +197,7 @@ function HeroCard(props: {
         running ? "border-emerald-500/30" : "border-border/75",
       )}
     >
-      {/* 动态光晕 */}
+      {/* dynamic glow */}
       <div
         className={cn(
           "pointer-events-none absolute -top-24 -right-16 h-64 w-64 rounded-full blur-3xl transition-colors duration-700",
@@ -261,7 +262,7 @@ function HeroCard(props: {
   );
 }
 
-/** 权限状态行 */
+/** Permission status row */
 function PermissionRow(props: {
   icon: IconComponent;
   name: string;
@@ -315,10 +316,12 @@ const TIMEOUT_PRESETS = [
 ];
 
 /**
- * `surface` 决定引导动作的可达性，而不是决定显示什么：探测与授权状态两端
- * 都经宿主真实读取（WebUI 走 gateway 中继），设置项两端同样可写；只有安装
- * 与授权这两个**必须在桌面主机那台机器上完成**的动作在 web 面收起——安装要
- * 用户先看清将要联网执行的命令全文，授权的系统对话框只弹在桌面机屏幕上。
+ * `surface` determines the reachability of onboarding actions, not what is displayed: probe and
+ * authorization state are genuinely read by the host on both sides (the WebUI goes through the
+ * gateway relay), and settings are writable on both sides; only install and authorize -- the two
+ * actions that **must be completed on the desktop host machine** -- are collapsed on the web
+ * surface: install requires the user to first read the full command that will run with network
+ * access, and the authorization system dialog only appears on the desktop machine's screen.
  */
 export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSurface }) {
   const { settings, setSettings, surface = "desktop" } = props;
@@ -337,7 +340,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
-  // 总开关的真实状态就是这个 MCP server 的启用状态
+  // The main switch's real state is exactly this MCP server's enabled state
   const serverEntry = findCuaDriverServer(settings.mcp.servers);
   const enabled = serverEntry?.enabled === true;
 
@@ -552,7 +555,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
 
   const probingInitial = checking && probe === null;
 
-  // 驱动节点：已装 → 完成；安装/首查中 → 进行中；未装 → 当前待办
+  // Driver node: installed -> done; installing/first check -> in progress; not installed -> current todo
   const driverTone: NodeTone = installed
     ? "done"
     : probingInitial || installing
@@ -567,7 +570,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
       <Download className="h-4 w-4" />
     );
 
-  // 授权节点：已授权 → 完成；查询中 → 进行中；缺权限 → 警示；其余 → 中性
+  // Authorization node: authorized -> done; checking -> in progress; missing permission -> warning; otherwise -> neutral
   const grantTone: NodeTone =
     grantState === "done" ? "done" : grantState === "current" ? "warn" : "neutral";
   const grantNode =
@@ -581,7 +584,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
 
   return (
     <div className="w-full space-y-6">
-      {/* 顶部全宽 Hero 仪表卡片 */}
+      {/* Top full-width Hero dashboard card */}
       <HeroCard
         probing={probingInitial}
         installed={installed}
@@ -591,7 +594,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
         onToggle={() => toggleEnabled(!enabled)}
       />
 
-      {/* 竖向时间轴：每个配置独占一行，节点颜色即推进状态 */}
+      {/* Vertical timeline: each configuration occupies its own row; node color is the progression state */}
       <div>
         <TimelineItem
           tone={driverTone}
@@ -683,7 +686,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
             </CardBlock>
           ) : null}
 
-          {/* 配置漂移 / 安装确认 / 日志 / 错误 */}
+          {/* Config drift / install confirmation / logs / errors */}
           {commandDrift || (confirmingInstall && preview) || log.length > 0 || error ? (
             <div className="space-y-3 border-t border-border/60 px-5 py-4">
               {commandDrift ? (
@@ -786,7 +789,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
           ) : null}
         </TimelineItem>
 
-        {/* macOS 权限授权：仅 macOS 平台展示 */}
+        {/* macOS permission authorization: shown only on the macOS platform */}
         {showPermissions ? (
           <TimelineItem
             tone={grantTone}
@@ -846,7 +849,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
           </TimelineItem>
         ) : null}
 
-        {/* 安全与审批 */}
+        {/* Security and approval */}
         <TimelineItem
           tone="neutral"
           node={<Shield className="h-4 w-4" />}
@@ -889,7 +892,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
           </CardBlock>
         </TimelineItem>
 
-        {/* 运行时参数 */}
+        {/* Runtime parameters */}
         <TimelineItem
           tone="neutral"
           node={<Clock3 className="h-4 w-4" />}
@@ -906,7 +909,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
               </p>
             </div>
             <fieldset
-              // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: 同 ToolPolicyToggle——互斥单选语义需要向读屏表达。
+              // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: same as ToolPolicyToggle -- the mutually exclusive single-select semantics need to be conveyed to screen readers.
               role="radiogroup"
               aria-label={t("settings.cuaDriver.timeoutLabel")}
               className="inline-flex shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
@@ -914,7 +917,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
               {TIMEOUT_PRESETS.map((preset) => {
                 const active = currentTimeout === preset.value;
                 return (
-                  // biome-ignore lint/a11y/useSemanticElements: 同 ToolPolicyToggle——分段控件保留 button 样式。
+                  // biome-ignore lint/a11y/useSemanticElements: same as ToolPolicyToggle -- the segmented control keeps button styling.
                   <button
                     key={preset.value}
                     type="button"
@@ -937,7 +940,7 @@ export function CuaDriverSection(props: SettingsSectionProps & { surface?: UiSur
           </CardBlock>
         </TimelineItem>
 
-        {/* 能力概览与参考 */}
+        {/* Capability overview and reference */}
         <TimelineItem
           tone="neutral"
           node={<Sparkles className="h-4 w-4" />}

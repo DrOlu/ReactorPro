@@ -1,4 +1,4 @@
-//! 安装源准备：GitHub / HTTP / 本地目录 / 压缩包，含下载与安全解压。
+//! Install source preparation: GitHub / HTTP / local directory / archive, including download and safe extraction.
 
 use std::fs;
 use std::io::{self, Read, Write};
@@ -111,7 +111,7 @@ where
         .map_err(|e| format!("Failed to download Skill source: {e}"))?;
     let status = response.status();
     if !status.is_success() {
-        // 注册表错误响应体通常带修复指引（如 ClawHub 409 要求 ownerHandle），截断后回显。
+        // A registry error response body usually carries remediation guidance (e.g. ClawHub 409 requiring ownerHandle); it is truncated and echoed back.
         let mut raw = Vec::new();
         let _ = response.take(2048).read_to_end(&mut raw);
         let body = String::from_utf8_lossy(&raw);

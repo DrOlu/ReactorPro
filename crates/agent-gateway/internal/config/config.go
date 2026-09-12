@@ -11,8 +11,8 @@ import (
 
 const DefaultMaxMessageBytes = 64 * 1024 * 1024
 
-// 三条 v2 链路并发连接上限的默认值；浏览器/终端按"每 Agent 数个会话"的
-// 使用形态放大（100 Agent × 若干浏览器页签/终端页）。
+// Default concurrent connection limits for the three v2 link types; browser/terminal
+// usage scales by "a few sessions per Agent" (100 Agents x several browser tabs/terminal pages).
 const (
 	DefaultMaxAgentConnections    = 256
 	DefaultMaxBrowserConnections  = 128
@@ -21,10 +21,10 @@ const (
 
 type Config struct {
 	Token string
-	// AgentDB 是每 Agent 凭证 SQLite 数据库路径；默认自动创建于用户配置目录。
+	// AgentDB is the path to the per-Agent credential SQLite database; created automatically in the user config directory by default.
 	AgentDB string
-	// 三条 v2 链路的并发连接上限（升级前检查，超限 503）；0/负值回落默认。
-	// 默认值按 100+ 桌面 Agent 的目标规模取整。
+	// Concurrent connection limits for the three v2 link types (checked before upgrade, over-limit returns 503); 0/negative falls back to defaults.
+	// Defaults are rounded to the target scale of 100+ desktop Agents.
 	MaxAgentConnections      int
 	MaxBrowserConnections    int
 	MaxTerminalConnections   int
@@ -81,8 +81,8 @@ func Load() *Config {
 
 	cfg.Token = strings.TrimSpace(cfg.Token)
 	cfg.AgentDB = strings.TrimSpace(cfg.AgentDB)
-	// Agent 凭证数据库是网关始终启用的基础能力；即使启动参数显式传空，也
-	// 回退到自动路径，不能通过空值关闭。
+	// The Agent credential database is a base capability always enabled on the gateway; even if
+	// the startup arg is explicitly empty, it falls back to the automatic path and cannot be disabled with an empty value.
 	if cfg.AgentDB == "" {
 		cfg.AgentDB = defaultAgentDBPath()
 	}
@@ -136,9 +136,11 @@ func Load() *Config {
 	return cfg
 }
 
-// normalizeLegacyArgs 在进入新版 FlagSet 前统一清理已删除参数。旧名称不再注册、
-// 不出现在帮助中，也不会恢复 v1/gRPC 或离线命令队列；真正未知的参数仍由 flag
-// 正常拒绝。消息大小参数仍有对应语义，因此转换为新名称；显式的新名称优先。
+// normalizeLegacyArgs uniformly cleans up removed arguments before entering the new FlagSet.
+// Old names are no longer registered, do not appear in help, and will not restore v1/gRPC or
+// the offline command queue; genuinely unknown arguments are still rejected by flag as usual.
+// The message size argument still has corresponding semantics, so it is converted to the new
+// name; an explicit new name takes precedence.
 func normalizeLegacyArgs(args []string) []string {
 	if len(args) == 0 {
 		return args

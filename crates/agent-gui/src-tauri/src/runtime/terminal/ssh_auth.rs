@@ -429,7 +429,7 @@ pub(crate) fn auth_result_can_continue_with_kbi(result: &client::AuthResult) -> 
 
 pub(crate) fn prompt_looks_like_password(prompt: &str) -> bool {
     let normalized = prompt.trim().to_ascii_lowercase();
-    normalized.contains("password") || prompt.contains("密码")
+    normalized.contains("password") || prompt.contains("passphrase")
 }
 
 pub(crate) fn classify_password_kbi_prompts(

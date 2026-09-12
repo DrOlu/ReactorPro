@@ -20,11 +20,11 @@ pub(crate) const WINDOW_STATE_FLAGS: tauri_plugin_window_state::StateFlags =
         .union(tauri_plugin_window_state::StateFlags::MAXIMIZED);
 const TRAY_SHOW_MENU_ON_LEFT_CLICK: bool = !cfg!(target_os = "windows");
 const TERMINAL_EXIT_REQUESTED_EVENT: &str = "terminal:exit-requested";
-/// 统一的「前端动作」事件：托盘菜单与全局快捷键中需要前端语义的动作
-/// （开会话/新建对话/切工作空间/改主题/停止运行等）都经此事件转发，
-/// 两端各自监听并只处理自己拥有的 action（App.tsx / ChatPage.tsx）。
+/// Unified "frontend action" event: actions from the tray menu and global shortcuts that need frontend
+/// semantics (open session / new chat / switch workspace / change theme / stop run, etc.) are all forwarded
+/// through this event; each side listens and only handles the actions it owns (App.tsx / ChatPage.tsx).
 const APP_ACTION_EVENT: &str = "app:action";
-/// Rust 直连动作的结果反馈（如托盘触发 cron）：前端收到后 toast 呈现。
+/// Result feedback for Rust-direct actions (e.g. tray-triggered cron): the frontend shows a toast on receipt.
 const APP_ACTION_FEEDBACK_EVENT: &str = "app:action-feedback";
 
 #[derive(Clone, serde::Serialize)]
@@ -93,7 +93,7 @@ macro_rules! app_invoke_handler {
             commands::fs::fs_glob,
             commands::fs::fs_grep,
             commands::fs::fs_mention_list,
-            // 会话检查点(rewind)
+            // Session checkpoints (rewind)
             commands::checkpoint::checkpoint_begin_turn,
             commands::checkpoint::checkpoint_list,
             commands::checkpoint::checkpoint_diff_stats,
@@ -164,14 +164,6 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_save_remote,
             commands::settings::settings_save_memory,
             commands::settings::settings_save_model_failover,
-            commands::settings::settings_save_stt,
-            commands::settings::settings_reveal_stt_secret,
-            services::stt::settings_test_stt,
-            services::stt::stt_request_microphone_permission,
-            services::stt::stt_start,
-            services::stt::stt_send_audio,
-            services::stt::stt_stop,
-            services::stt::stt_cancel,
             commands::settings::settings_backup_export,
             commands::settings::settings_backup_peek_import,
             commands::settings::settings_backup_apply_import,
@@ -385,7 +377,7 @@ fn toggle_main_window(app: &tauri::AppHandle) {
         if visible && focused {
             let _ = window.hide();
         } else if let Err(error) = show_main_window(app) {
-            eprintln!("failed to show LiveAgent window from global shortcut: {error}");
+            eprintln!("failed to show ReactorPro window from global shortcut: {error}");
         }
     }
 }
@@ -399,23 +391,23 @@ fn toggle_main_window_pin(app: &tauri::AppHandle) {
                 pin_state.0.store(next, Ordering::SeqCst);
                 if next {
                     if let Err(error) = show_main_window(app) {
-                        eprintln!("failed to show LiveAgent window when pinning: {error}");
+                        eprintln!("failed to show ReactorPro window when pinning: {error}");
                     }
                 }
                 let _ = app.emit("global-shortcut:pin-changed", next);
-                // 托盘勾选与置顶真源（WindowPinState）同步；托盘可能尚未建好。
+                // Sync the tray checkmark with the pin source of truth (WindowPinState); the tray may not be built yet.
                 if let Some(handles) = app.try_state::<Arc<services::tray::TrayMenuHandles>>() {
                     handles.set_pin_checked(next);
                 }
             }
-            Err(error) => eprintln!("failed to toggle LiveAgent window pin: {error}"),
+            Err(error) => eprintln!("failed to toggle ReactorPro window pin: {error}"),
         }
     }
 }
 
-/// 应用级动作总线：全局快捷键与托盘菜单的动作都收敛到这里执行。
-/// Rust 能独立完成的直接做（webview 卡死时托盘仍可用）；需要前端语义的
-/// 经 [`APP_ACTION_EVENT`] 转发（部分动作先呼出主窗口）。
+/// Application-level action bus: actions from global shortcuts and the tray menu all converge here for execution.
+/// Those Rust can complete on its own are done directly (the tray still works if the webview hangs); those needing
+/// frontend semantics are forwarded via [`APP_ACTION_EVENT`] (some actions first summon the main window).
 #[derive(Debug, Clone)]
 enum AppAction {
     Summon,
@@ -456,12 +448,12 @@ struct AppActionFeedbackEvent {
     ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
-    /// 结果附加值（如 cron 开关后的 "enabled"/"disabled"）。
+    /// Extra result value (e.g. "enabled"/"disabled" after toggling a cron task).
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<String>,
 }
 
-/// 托盘菜单项 ID → 动作。静态 ID 与动态前缀都定义在 `services::tray`。
+/// Tray menu item ID -> action. Static IDs and dynamic prefixes are both defined in `services::tray`.
 fn tray_menu_action(id: &str) -> Option<AppAction> {
     use services::tray as tray_ids;
     match id {
@@ -493,9 +485,9 @@ fn tray_menu_action(id: &str) -> Option<AppAction> {
     }
 }
 
-/// 转发前端动作。`show_window` 用于用户预期看到界面反馈的动作
-/// （开会话/新建对话/打开设置等）；后台型动作（停止运行/改主题/网关开关）
-/// 不抢焦点。
+/// Forward a frontend action. `show_window` is for actions where the user expects to see UI feedback
+/// (open session / new chat / open settings, etc.); background-type actions (stop run / change theme / gateway
+/// toggle) do not steal focus.
 fn forward_app_action(
     app: &tauri::AppHandle,
     action: &'static str,
@@ -505,7 +497,7 @@ fn forward_app_action(
 ) {
     if show_window {
         if let Err(error) = show_main_window(app) {
-            eprintln!("failed to show LiveAgent window for action {action}: {error}");
+            eprintln!("failed to show ReactorPro window for action {action}: {error}");
         }
     }
     if let Err(error) = app.emit(APP_ACTION_EVENT, AppActionEvent { action, id, value }) {
@@ -517,7 +509,7 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
     match action {
         AppAction::Summon => {
             if let Err(error) = show_main_window(app) {
-                eprintln!("failed to show LiveAgent window: {error}");
+                eprintln!("failed to show ReactorPro window: {error}");
             }
         }
         AppAction::ToggleWindow => toggle_main_window(app),
@@ -544,10 +536,10 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
         AppAction::OpenSettings => forward_app_action(app, "open-settings", None, None, true),
         AppAction::CheckUpdates => forward_app_action(app, "check-updates", None, None, true),
         AppAction::ToggleCronTask(task_id) => {
-            // 托盘的定时任务子项是启用开关：翻转走 AutomationStore 唯一的
-            // cron_apply 写路径（CAS），成功后 automation:cron-changed 会驱动
-            // 前端 store 与托盘勾选自然刷新。开关是后台动作，不呼出主窗口；
-            // 结果经 feedback 事件给前端 toast（窗口可见时提示文案）。
+            // The tray's scheduled-task submenu items are enable toggles: flipping goes through AutomationStore's
+            // sole cron_apply write path (CAS), and on success automation:cron-changed drives the frontend store
+            // and the tray checkmark to refresh naturally. The toggle is a background action, so it does not summon
+            // the main window; the result goes to a frontend toast via the feedback event (a text prompt when the window is visible).
             let Some(store) = app.try_state::<Arc<services::automation::AutomationStore>>() else {
                 return;
             };
@@ -586,10 +578,10 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
                         .opener()
                         .open_path(dir.to_string_lossy().to_string(), None::<&str>)
                     {
-                        eprintln!("failed to open LiveAgent data directory: {error}");
+                        eprintln!("failed to open ReactorPro data directory: {error}");
                     }
                 }
-                Err(error) => eprintln!("failed to resolve LiveAgent data directory: {error}"),
+                Err(error) => eprintln!("failed to resolve ReactorPro data directory: {error}"),
             }
         }
         AppAction::Quit => {
@@ -633,7 +625,7 @@ fn request_app_exit(
     let running_count = terminal_registry.running_session_count();
     if running_count > 0 {
         if let Err(error) = show_main_window(app) {
-            eprintln!("failed to show LiveAgent window before terminal exit confirm: {error}");
+            eprintln!("failed to show ReactorPro window before terminal exit confirm: {error}");
         }
         if let Err(error) = app.emit(
             TERMINAL_EXIT_REQUESTED_EVENT,
@@ -653,7 +645,7 @@ fn configure_system_tray(app: &tauri::App) -> tauri::Result<()> {
     let menu = skeleton.menu.clone();
 
     let mut tray_builder = TrayIconBuilder::new()
-        .tooltip("LiveAgent")
+        .tooltip("ReactorPro")
         .menu(&menu)
         .show_menu_on_left_click(TRAY_SHOW_MENU_ON_LEFT_CLICK)
         .on_menu_event(|app, event| {
@@ -667,7 +659,7 @@ fn configure_system_tray(app: &tauri::App) -> tauri::Result<()> {
                 ..
             } => {
                 if let Err(error) = show_main_window(tray.app_handle()) {
-                    eprintln!("failed to show LiveAgent window from tray double-click: {error}");
+                    eprintln!("failed to show ReactorPro window from tray double-click: {error}");
                 }
             }
             TrayIconEvent::Click {
@@ -675,11 +667,11 @@ fn configure_system_tray(app: &tauri::App) -> tauri::Result<()> {
                 button_state: MouseButtonState::Down,
                 ..
             } => {
-                // Windows 惯例：左键单击即激活主窗口（菜单在右键）。
-                // 其他平台左键弹菜单（TRAY_SHOW_MENU_ON_LEFT_CLICK）。
+                // Windows convention: left-click activates the main window (the menu is on right-click).
+                // Other platforms pop the menu on left-click (TRAY_SHOW_MENU_ON_LEFT_CLICK).
                 if cfg!(target_os = "windows") {
                     if let Err(error) = show_main_window(tray.app_handle()) {
-                        eprintln!("failed to show LiveAgent window from tray click: {error}");
+                        eprintln!("failed to show ReactorPro window from tray click: {error}");
                     }
                 }
             }
@@ -731,20 +723,20 @@ fn configure_windows_window_chrome(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // 最早期钩子:若本进程是 Windows 沙箱的自我再执行启动器(__sandbox_exec),
-    // 就在此建立受限令牌并运行真实命令,以其退出码退出——绝不继续初始化 Tauri。
-    // 非 Windows 平台为空操作。
+    // Earliest hook: if this process is the Windows sandbox's self-re-exec launcher (__sandbox_exec),
+    // establish a restricted token here and run the real command, exiting with its exit code -- never continue
+    // initializing Tauri. A no-op on non-Windows platforms.
     runtime::windows_sandbox::run_sandbox_launcher_if_requested();
 
     let automation_store = Arc::new(
         services::automation::AutomationStore::open()
-            .expect("failed to initialize LiveAgent automation store"),
+            .expect("failed to initialize ReactorPro automation store"),
     );
     let automation_scheduler = Arc::new(services::automation::AutomationScheduler::new(
         Arc::clone(&automation_store),
     ));
     let memory_store = Arc::new(
-        services::memory::MemoryStore::open().expect("failed to initialize LiveAgent memory store"),
+        services::memory::MemoryStore::open().expect("failed to initialize ReactorPro memory store"),
     );
     let provider_usage_service =
         Arc::new(services::provider_usage::ProviderUsageService::default());
@@ -762,19 +754,19 @@ pub fn run() {
     let close_window_behavior = Arc::new(commands::app::CloseWindowBehaviorState::new(
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
     ));
-    let stt_manager = Arc::new(services::stt::SttManager::default());
     let browser_manager = Arc::new(services::browser::BrowserManager::default());
-    // 扩展桥接：接受 LiveAgent 浏览器扩展的反向连接，Browser 工具优先驱动
-    // 用户日常浏览器（复用登录态）；未连接时回退独立 profile 启动。
+    // Extension bridge: accepts the reverse connection from the ReactorPro browser extension; the Browser tool
+    // prefers driving the user's everyday browser (reusing login state); when not connected it falls back to
+    // launching a separate profile.
     browser_manager.start_extension_bridge();
 
     let builder = tauri::Builder::default();
-    // dev 构建与已安装正式版共享 identifier；若 dev 也注册单实例，
-    // `tauri dev` 会把启动转发给正在运行的正式版然后自我退出。
+    // Dev builds share an identifier with the installed release; if dev also registered a single instance,
+    // `tauri dev` would forward startup to the running release and then exit itself.
     #[cfg(not(debug_assertions))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
         if let Err(error) = show_main_window(app) {
-            eprintln!("failed to focus existing LiveAgent instance: {error}");
+            eprintln!("failed to focus existing ReactorPro instance: {error}");
         }
     }));
 
@@ -814,7 +806,6 @@ pub fn run() {
         .manage(Arc::clone(&automation_store))
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
-        .manage(stt_manager)
         .manage(Arc::clone(&browser_manager))
         .on_page_load(|webview, payload| {
             if webview.label() != MAIN_WINDOW_LABEL
@@ -852,16 +843,16 @@ pub fn run() {
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");
                 }
-                // 浏览器扩展同步到 ~/.liveagent/extension：Chrome 加载解压
-                // 扩展记录绝对路径，必须给一个不随应用更新变化的目录。
+                // Sync the browser extension to ~/.liveagent/extension: Chrome records an absolute path when
+                // loading an unpacked extension, so it must be a directory that does not change across app updates.
                 if let Err(error) = commands::browser::sync_bundled_browser_extension(app.handle())
                 {
                     eprintln!("failed to sync browser extension: {error}");
                 }
                 terminal_registry.attach_app_handle(app.handle().clone());
                 sftp_registry.attach_app_handle(app.handle().clone());
-                // 配置自动同步的后台任务：只消费脏信号并做防抖上传，
-                // 未开启自动同步时它会在每次唤醒后静默跳过。
+                // Background task for config auto-sync: it only consumes dirty signals and performs debounced
+                // uploads; when auto-sync is disabled it silently skips after each wake-up.
                 services::webdav_auto_sync::start(app.handle().clone());
                 let gateway_controller = Arc::new(services::gateway::GatewayController::new(
                     app.handle().clone(),
@@ -916,7 +907,7 @@ pub fn run() {
                     if commands::app::is_close_window_exit(&close_window_behavior) {
                         request_app_exit(window.app_handle(), &allow_exit, &terminal_registry);
                     } else if let Err(error) = window.hide() {
-                        eprintln!("failed to hide LiveAgent window on close: {error}");
+                        eprintln!("failed to hide ReactorPro window on close: {error}");
                     }
                 }
             }
@@ -938,7 +929,7 @@ pub fn run() {
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen { .. } => {
             if let Err(error) = show_main_window(_app) {
-                eprintln!("failed to show LiveAgent window from dock reopen: {error}");
+                eprintln!("failed to show ReactorPro window from dock reopen: {error}");
             }
         }
         tauri::RunEvent::ExitRequested { api, .. } => {
@@ -947,7 +938,7 @@ pub fn run() {
                 if running_count > 0 {
                     if let Err(error) = show_main_window(_app) {
                         eprintln!(
-                            "failed to show LiveAgent window before terminal exit confirm: {error}"
+                            "failed to show ReactorPro window before terminal exit confirm: {error}"
                         );
                     }
                     if let Err(error) = _app.emit(

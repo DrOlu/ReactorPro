@@ -7,7 +7,6 @@ import {
   type ProviderId,
   type ReasoningLevel,
   type SelectedModel,
-  type SttProviderId,
 } from "@liveagent/app/lib/settings";
 import { CommandSafetyModeSelector } from "@liveagent/ui/components/chat/CommandSafetyModeSelector";
 import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
@@ -37,7 +36,6 @@ import {
   Lightbulb,
   Loader2,
   Maximize2,
-  Mic,
   Minimize2,
   Paperclip,
   Play,
@@ -82,7 +80,6 @@ import {
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import type { SttTransport } from "@liveagent/ui/lib/stt/types";
 import type { WorkspaceActivityClient } from "@liveagent/ui/lib/workspace-activity/types";
 import {
   type MutableRefObject,
@@ -104,7 +101,6 @@ import {
   type UploadedImagePreviewLoader,
 } from "../../lib/chat/uploadedImagePreview";
 import type { PendingUploadedFile } from "../../lib/chat/uploadTypes";
-import { useComposerStt } from "./useComposerStt";
 
 function useComposerUploadedImagePreview(
   file: PendingUploadedFile,
@@ -219,14 +215,16 @@ const COMPOSER_EXPAND_ANIMATION_MS = 280;
 const COMPOSER_EXPAND_EASING = "cubic-bezier(0.32, 0.72, 0.22, 1)";
 const CONVERSATION_DROP_NOTICE_MS = 800;
 
-// 宿主未注入澄清执行器时的占位：clarifyEnabled=false 已把入口全部藏起，
-// 该函数永远不会被真正调用；仅用于满足 useClarifySession 的非空签名。
+// Placeholder for when the host has not injected a clarify executor: clarifyEnabled=false already
+// hides all entry points, so this function is never actually called; it only satisfies
+// useClarifySession's non-null signature.
 const unavailableClarifyTurn: RunClarifyTurn = () =>
   Promise.reject(new Error("runClarifyTurn is not provided"));
 
-/** 可澄清文本 = 草稿中存在非空白纯文本段。提及/附件 token 与大段粘贴不算：
- * 澄清的输入是用户写的提示词文本，只有 chip/附件时按钮应禁用而非点击空转。
- * 只在事件处理器里调用（读 DOM），渲染路径零调用。 */
+/** Clarifiable text = a non-blank plain-text segment exists in the draft. Mention/attachment tokens
+ * and large pastes do not count: clarify's input is prompt text the user wrote, so with only
+ * chips/attachments the button should be disabled rather than idling on click.
+ * Called only inside event handlers (reads the DOM); zero calls on the render path. */
 function draftHasClarifiableText(composer: MentionComposerHandle | null): boolean {
   return (
     composer
@@ -236,7 +234,7 @@ function draftHasClarifiableText(composer: MentionComposerHandle | null): boolea
   );
 }
 
-/** 用量环实时读数订阅源（getContextUsageTokens 必须对同一底层状态返回稳定值）。 */
+/** Live reading subscription source for the usage ring (getContextUsageTokens must return a stable value for the same underlying state). */
 export type ContextUsageTokensSource = {
   subscribe: (listener: () => void) => () => void;
   getContextUsageTokens: () => number | undefined;
@@ -244,8 +242,8 @@ export type ContextUsageTokensSource = {
 
 const noopSubscribe = () => () => {};
 
-// 环的实时读数在独立小组件里订阅：流式期间每帧的读数变化只重渲染这枚
-// SVG 环，不触发 ChatComposerBar/整页回流。
+// The ring's live reading is subscribed in a separate small component: per-frame reading changes
+// during streaming re-render only this SVG ring, without triggering a ChatComposerBar/full-page reflow.
 function ComposerContextUsageRing(props: {
   source?: ContextUsageTokensSource;
   totalTokens?: number;
@@ -266,8 +264,9 @@ function ComposerContextUsageRing(props: {
       contextWindow={contextWindow}
       disabled={disabled}
       onConfirm={onConfirm}
-      // 环在 "ring" / "both" 展示模式下渲染（见 contextDisplayMode），必须 0% 起
-      // 常显——"ring" 模式它是唯一占用读数，不再挂低占用隐藏门槛。
+      // The ring renders in the "ring" / "both" display modes (see contextDisplayMode) and must be
+      // always visible starting from 0% -- in "ring" mode it is the only occupancy reading, so the
+      // low-occupancy hide threshold no longer applies.
     />
   );
 }
@@ -286,16 +285,10 @@ export type ChatComposerBarProps = {
   isSending: boolean;
   isUploadingFiles: boolean;
   isInputDisabled: boolean;
-  sttProvider?: SttProviderId | null;
-  sttProviderConfigured?: boolean;
-  sttTransport?: SttTransport;
-  /** 当前会话身份；切换会话时取消进行中的语音识别。 */
-  sttSessionKey?: string;
-  /** STT 失败（麦克风不可用、连接超时等）上报给宿主以 toast 形式提示。 */
-  onSttError?: (message: string) => void;
   /**
-   * 只读视图（如轨迹页）挂起输入区：整体 display:none 但保持挂载，
-   * 半打的草稿与队列状态在切回聊天页时原样恢复。
+   * A read-only view (such as the trajectory page) suspends the composer: display:none overall but
+   * still mounted, so half-finished drafts and queue state are restored as-is when switching back to
+   * the chat page.
    */
   hidden?: boolean;
   inputPlaceholder: string;
@@ -305,7 +298,7 @@ export type ChatComposerBarProps = {
   mentionableConversations?: MentionComposerConversation[];
   /** Searches all persisted conversations beyond the sidebar's loaded page. */
   searchMentionableConversations?: (query: string) => Promise<MentionComposerConversation[]>;
-  /** @ 弹层的应用候选（computer use 目标）；由宿主门控，缺省不显示。 */
+  /** App candidates for the @ popover (computer use targets); gated by the host, hidden by default. */
   mentionApps?: MentionComposerApp[];
   executionMode: ExecutionMode;
   hasModels: boolean;
@@ -313,7 +306,7 @@ export type ChatComposerBarProps = {
   modelOptions: SharedModelOption<ProviderId>[];
   selectedValue?: string;
   chatRuntimeControls: ChatRuntimeControls;
-  /** 命令执行方式(ask/auto/sandbox/sandboxOffline);缺省不渲染选择器。 */
+  /** Command execution mode (ask/auto/sandbox/sandboxOffline); the selector is not rendered by default. */
   commandSafetyMode?: CommandSafetyMode;
   onCommandSafetyModeChange?: (mode: CommandSafetyMode) => void;
   reasoningOptions: ReasoningLevel[];
@@ -321,21 +314,22 @@ export type ChatComposerBarProps = {
   gitClient?: GitClient | null;
   gitWriteEnabled?: boolean;
   gitDisabledMessage?: string;
-  /** 当前会话上下文占用 token；与 contextWindow 齐备时显示用量环。 */
+  /** Current conversation context occupancy tokens; the usage ring shows when both this and contextWindow are present. */
   contextUsageTokens?: number;
   /**
-   * 可选的用量环实时订阅源：流式期间读数每帧都在变，经此订阅只重渲染环
-   * 本身而不回流整页（GUI 用；WebUI 传静态 contextUsageTokens 即可）。
-   * 提供时优先于 contextUsageTokens。
+   * Optional live subscription source for the usage ring: the reading changes every frame during
+   * streaming, so subscribing here re-renders only the ring itself without reflowing the whole page
+   * (used by the GUI; the WebUI can pass a static contextUsageTokens). Takes precedence over
+   * contextUsageTokens when provided.
    */
   contextUsageTokensSource?: ContextUsageTokensSource;
   contextWindow?: number;
-  /** 用量环确认后触发手动压缩；缺省时环为纯展示。 */
+  /** Triggers manual compaction after ring confirmation; without it the ring is display-only. */
   onManualCompactConfirm?: (() => void) | (() => Promise<unknown>);
-  /** 压缩进行中/请求在途时禁点用量环。 */
+  /** Disables clicking the usage ring while compaction is in progress / a request is in flight. */
   manualCompactBlocked?: boolean;
   workspaceActivityClient?: WorkspaceActivityClient | null;
-  /** 创建 worktree 成功后，把后端返回的路径与仓库身份加入侧边栏。 */
+  /** After a worktree is created successfully, adds the backend-returned path and repository identity to the sidebar. */
   onOpenWorktree?: (worktree: { path: string; repositoryPath: string; branch: string }) => void;
   onWorktreeRemoved?: (worktree: { path: string; repositoryPath: string; branch: string }) => void;
   onSend: () => void;
@@ -360,40 +354,44 @@ export type ChatComposerBarProps = {
   onMoveQueuedTurnUp: (id: string) => void;
   onEditQueuedTurn: (id: string) => void;
   onRemoveQueuedTurn: (id: string) => void;
-  /** 提示词澄清执行器：注入后在工具行渲染「澄清」按钮（GUI 已接；Web 见计划 2）。 */
+  /** Prompt clarify executor: once injected, a "Clarify" button renders in the tool row (wired up in the GUI; see plan 2 for Web). */
   runClarifyTurn?: RunClarifyTurn;
-  /** 澄清系统提示词附带的轻量工作区信息。 */
+  /** Lightweight workspace info attached to the clarify system prompt. */
   clarifyContext?: ClarifyContext;
   onHeightChange?: (height: number) => void;
   /**
-   * 预留线之上被队列面板、任务进度药丸额外占据的高度（见
-   * composerOverlayMetrics）。它们不计入 onHeightChange，但浮在输入区上方的
-   * 控件（回到底部按钮）要再让出这段距离才不会被盖住。仅 desktop 上报。
+   * The height above the reservation line additionally occupied by the queue panel and task progress
+   * pill (see composerOverlayMetrics). They are not counted in onHeightChange, but controls floating
+   * above the composer (the back-to-bottom button) must yield this distance to avoid being covered.
+   * Reported by desktop only.
    */
   onFloatingOverhangChange?: (height: number) => void;
   /**
-   * 卡片列中心相对输入区层中心的水平偏移（向右为正）。卡片列与正文同为居中，
-   * 正常为 0；分屏等场景下仍按实测值平移，使居中锚定在输入区上方的控件与
-   * 卡片、药丸对齐。仅 desktop 上报。
+   * The horizontal offset of the card column's center relative to the composer layer's center
+   * (positive to the right). The card column and the body are both centered, so normally 0; in
+   * split-screen and similar scenarios it still shifts by the measured value, so controls centered
+   * above the composer align with the cards and pills. Reported by desktop only.
    */
   onCenterOffsetChange?: (offsetPx: number) => void;
-  /** 当前会话任务进度（存在时渲染在审批栏和队列面板之上）。 */
+  /** Current conversation task progress (rendered above the approval bar and queue panel when present). */
   taskProgressBar?: ReactNode;
-  /** 待审批时替换输入卡片的集中审批面板。 */
+  /** Centralized approval panel that replaces the input card while awaiting approval. */
   approvalBar?: ReactNode;
-  /** 文件拖入命中输入框时显示的局部反馈层。 */
+  /** Local feedback layer shown when dragged files land on the input box. */
   fileDropOverlay?: ReactNode;
   /**
-   * 卡片正下方的会话统计状态栏插槽（docs/design/composer-context-stats-bar.md）。
-   * 卡片与胶囊已为它压缩过高度预算，宿主未接线时不占位。
+   * Conversation stats status-bar slot directly below the card (docs/design/composer-context-stats-bar.md).
+   * The card and pill already compress their height budget for it; it takes no space when the host
+   * has not wired it up.
    */
   statsBar?: ReactNode;
   /**
-   * 上下文占用的三档展示样式（settings.customSettings.composerContextDisplay，
-   * docs/design/composer-context-stats-bar.md §4.7）。取舍在本组件内统一裁决：
-   * "statsBar"（缺省）渲染 statsBar 插槽、不渲染用量环；"both" 状态栏与常显
-   * 用量环同时渲染；"ring" 渲染常显用量环（0% 起，环是唯一读数）、statsBar
-   * 插槽即使传入也不挂载。
+   * Three display styles for context occupancy (settings.customSettings.composerContextDisplay,
+   * docs/design/composer-context-stats-bar.md §4.7). The trade-off is decided uniformly in this
+   * component: "statsBar" (default) renders the statsBar slot and no usage ring; "both" renders the
+   * status bar and the always-visible usage ring together; "ring" renders the always-visible usage
+   * ring (from 0%, the ring being the only reading) and does not mount the statsBar slot even if
+   * provided.
    */
   contextDisplayMode?: ComposerContextDisplayMode;
 };
@@ -406,11 +404,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     isSending,
     isUploadingFiles,
     isInputDisabled,
-    sttProvider = null,
-    sttProviderConfigured,
-    sttTransport,
-    sttSessionKey,
-    onSttError,
     hidden = false,
     inputPlaceholder,
     workdir,
@@ -472,10 +465,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   } = props;
   const { t } = useLocale();
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
-  // 可澄清文本存在性：与 composerIsEmpty 分开跟踪——空态只看编辑器整体
-  // （chip 文本也算非空），而澄清需要纯文本段。仅在事件里读草稿：
-  // 编辑器 input（用户敲键/插删 chip）、空态翻转（程序化改稿兜底）与
-  // 澄清按钮点击三处更新，渲染路径不读 DOM。
+  // Clarifiable-text presence: tracked separately from composerIsEmpty -- emptiness looks only at the
+  // editor as a whole (chip text counts as non-empty), whereas clarify needs a plain-text segment.
+  // The draft is read only inside events: updated at three points -- editor input (user typing /
+  // inserting or deleting chips), emptiness flipping (a fallback for programmatic edits), and the
+  // clarify button click; the render path does not read the DOM.
   const [composerHasClarifiableText, setComposerHasClarifiableText] = useState(false);
   const handleComposerEmptyChange = useCallback(
     (isEmpty: boolean) => {
@@ -487,16 +481,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const handleComposerInput = useCallback(() => {
     setComposerHasClarifiableText(draftHasClarifiableText(composerRef.current));
   }, [composerRef]);
-  const stt = useComposerStt({
-    composerRef,
-    provider: sttProvider,
-    providerConfigured: sttProviderConfigured,
-    transport: sttTransport,
-    disabled: isInputDisabled,
-    sessionKey: sttSessionKey,
-    hidden,
-    onError: onSttError,
-  });
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [composerHasOverflow, setComposerHasOverflow] = useState(false);
   const isComposerExpandedRef = useRef(false);
@@ -511,7 +495,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   } | null>(null);
   const attachmentListRef = useRef<HTMLDivElement | null>(null);
   const previousPendingUploadCountRef = useRef(0);
-  /** 切换瞬间记录的卡片旧高度，供 FLIP 动画用；消费后立即置空。 */
+  /** The card's old height recorded at the instant of toggling, used by the FLIP animation; cleared immediately after consumption. */
   const expandFromHeightRef = useRef<number | null>(null);
   const expandAnimationRef = useRef<Animation | null>(null);
   const scheduleHeightMeasureRef = useRef<(() => void) | null>(null);
@@ -519,8 +503,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
   const composerLayerRef = useRef<HTMLDivElement | null>(null);
   const composerColumnRef = useRef<HTMLDivElement | null>(null);
   const queuePanelRef = useRef<HTMLDivElement | null>(null);
-  // 走 state 而非 ref：容器随 taskProgressBar 插槽挂载/卸载，测量 effect 要
-  // 跟着重新观察它。
+  // Uses state rather than a ref: the container mounts/unmounts with the taskProgressBar slot, so the
+  // measurement effect must re-observe it.
   const [taskProgressBarElement, setTaskProgressBarElement] = useState<HTMLDivElement | null>(null);
   const queueListRef = useRef<HTMLUListElement | null>(null);
   const queueScrollbarTrackRef = useRef<HTMLDivElement | null>(null);
@@ -538,15 +522,15 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     DEFAULT_QUEUE_SCROLLBAR_STATE,
   );
   const isAgentMode = isAgentExecutionMode(executionMode);
-  const uploadDisabled =
-    isInputDisabled || stt.active || isUploadingFiles || !isAgentMode || !workdir;
-  const controlsDisabled = isInputDisabled || stt.active;
+  const uploadDisabled = isInputDisabled || isUploadingFiles || !isAgentMode || !workdir;
+  const controlsDisabled = isInputDisabled;
   const canDropConversationReference = isAgentMode && !controlsDisabled && !hidden;
-  // "+"菜单不只有上传:plan 开关不依赖 workdir/上传状态,菜单触发键只按
-  // 最宽松的可用项禁用,各菜单项再单独按自身前置条件禁用。
+  // The "+" menu is not only about uploads: the plan toggle does not depend on workdir/upload state,
+  // so the menu trigger is disabled only by the loosest availability, and each menu item is disabled
+  // separately by its own prerequisites.
   const composerAddMenuDisabled = isAgentMode ? controlsDisabled : uploadDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
-  const sendDisabled = isInputDisabled || stt.active || isUploadingFiles || !hasSendableDraft;
+  const sendDisabled = isInputDisabled || isUploadingFiles || !hasSendableDraft;
   const canQueueDraftWhileSending = isSending && !sendDisabled;
   const primaryActionTitle = canQueueDraftWhileSending
     ? t("chat.queue.addToQueue")
@@ -560,8 +544,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       : !workdir
         ? t("chat.upload.requireWorkdir")
         : t("chat.upload.button");
-  // 菜单触发键的提示:菜单可用而上传不可用时用泛化"添加"文案,上传专属限制
-  // (需要工作目录等)只出现在上传菜单项自身的禁用态上。
+  // Hint for the menu trigger: when the menu is available but upload is not, use the generic "Add"
+  // copy; upload-specific restrictions (needing a workdir, etc.) appear only in the disabled state of
+  // the upload menu items themselves.
   const addMenuTooltip =
     !composerAddMenuDisabled && uploadDisabled ? t("chat.upload.addSection") : uploadTooltip;
   const toggleQueueTooltip = queueCollapsed ? t("chat.queue.expand") : t("chat.queue.collapse");
@@ -839,9 +824,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     if (attachmentList) attachmentList.scrollLeft = attachmentList.scrollWidth;
   }, [pendingUploadedFiles.length]);
 
-  // ref 与 state 同步更新：高度上报的 RO 回调可能先于 effect 执行，
-  // 必须在布局变化前就能读到最新展开态。切换前记录卡片当前高度，
-  // 布局翻转后由 FLIP effect 从旧高度平滑过渡到新高度。
+  // The ref and state are updated together: the RO callback for height reporting may run before the
+  // effect, so the latest expanded state must be readable before the layout changes. The card's
+  // current height is recorded before toggling, and after the layout flips the FLIP effect smoothly
+  // transitions from the old height to the new one.
   const setComposerExpanded = useCallback((next: boolean) => {
     if (next === isComposerExpandedRef.current) return;
     expandFromHeightRef.current = glassCardRef.current?.getBoundingClientRect().height ?? null;
@@ -849,10 +835,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     setIsComposerExpanded(next);
   }, []);
 
-  // FLIP：布局已按目标态落定，把卡片高度用 min/max 双钳制钉在动画值上，
-  // 从旧高度平滑过渡到新高度。不能直接动 height——展开态卡片是 flex-1
-  // (basis 0)，height 会被 flex 忽略；min/max 约束则两种布局都尊重。
-  // biome-ignore lint/correctness/useExhaustiveDependencies(isComposerExpanded): 函数体不读它，但它正是"布局已翻转"的触发信号。
+  // FLIP: the layout has settled at the target state; pin the card height to the animated value with
+  // a min/max double clamp, smoothly transitioning from the old height to the new one. You cannot
+  // animate `height` directly -- in the expanded state the card is flex-1 (basis 0), so flex ignores
+  // `height`; min/max constraints are respected by both layouts.
+  // biome-ignore lint/correctness/useExhaustiveDependencies(isComposerExpanded): the function body does not read it, but it is exactly the "layout has flipped" trigger signal.
   useLayoutEffect(() => {
     const card = glassCardRef.current;
     const fromHeight = expandFromHeightRef.current;
@@ -876,7 +863,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       if (expandAnimationRef.current === animation) {
         expandAnimationRef.current = null;
       }
-      // 还原方向的高度上报在动画期间被冻结，落定后补测一次。
+      // Height reporting in the restore direction is frozen during the animation, so measure once more after it settles.
       scheduleHeightMeasureRef.current?.();
       scheduleComposerOverflowMeasureRef.current?.();
     };
@@ -891,17 +878,18 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     composerRef.current?.focus();
   }, [composerRef, setComposerExpanded]);
 
-  // 澄清会话：面板即开即用，关闭即丢弃（设计文档：不持久化）。
+  // Clarify session: the panel is usable as soon as it opens and discarded on close (design doc: not persisted).
   const [clarifyOpen, setClarifyOpen] = useState(false);
   const applyClarifyFinal = useCallback(
     (finalText: string) => {
       const composer = composerRef.current;
       if (!composer) return;
-      // 只替换文本段：附件/提及 chips 原样保留（设计文档「终稿落框」）。
-      // setDraft 按 segments 重建 DOM，stale 派生字段会被忽略。
+      // Only the text segment is replaced: attachment/mention chips are preserved as-is (design doc
+      // "final draft into the box"). setDraft rebuilds the DOM from segments, so stale derived fields
+      // are ignored.
       const draft = composer.getDraft();
       const preserved = draft.segments.filter((segment) => segment.type !== "text");
-      // 终稿可能为空：此时不插入空文本段，只保留原附件/提及。
+      // The final draft may be empty: in that case do not insert an empty text segment, only keep the original attachments/mentions.
       composer.setDraft({
         ...draft,
         segments:
@@ -920,7 +908,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     { onFinal: applyClarifyFinal },
   );
   const clarifyEnabled = Boolean(runClarifyTurn) && hasModels;
-  // composerHasClarifiableText 在空态翻转时已被同步置 false，无需再叠 composerIsEmpty。
+  // composerHasClarifiableText is already set to false synchronously when emptiness flips, so there is no need to also combine composerIsEmpty.
   const clarifyButtonDisabled = !clarifyEnabled || !composerHasClarifiableText;
   const handleClarifyToggle = useCallback(() => {
     if (!clarifyEnabled) return;
@@ -932,8 +920,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     const composer = composerRef.current;
     const draftText = composer?.getDraft().textWithoutLargePastes.trim() || "";
     if (!draftText) {
-      // 谓词失准的兜底（程序化改稿不发 input 事件）：点击时才发现无可澄清
-      // 文本就把按钮翻成禁用并露出禁用 title，不静默吞掉这次点击。
+      // Fallback for an inaccurate predicate (programmatic edits do not fire input events): if no
+      // clarifiable text is found at click time, flip the button to disabled and expose its disabled
+      // title, rather than silently swallowing the click.
       setComposerHasClarifiableText(false);
       return;
     }
@@ -941,16 +930,17 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     clarifySession.start(draftText);
   }, [clarifyEnabled, clarifyOpen, composerRef, clarifySession.start, clarifySession.close]);
 
-  // 切会话时丢弃进行中的澄清（组件按 conversationId 重挂载，保险起见也显式关）。
-  // biome-ignore lint/correctness/useExhaustiveDependencies(conversationId): conversationId 是触发信号：effect 体不读它，但会话切换正是靠它重跑以丢弃进行中的澄清。
+  // Discard an in-progress clarification when switching conversations (the component remounts by
+  // conversationId, but close it explicitly to be safe).
+  // biome-ignore lint/correctness/useExhaustiveDependencies(conversationId): conversationId is the trigger signal: the effect body does not read it, but the conversation switch relies on it to re-run and discard the in-progress clarification.
   useEffect(() => {
     clarifySession.close();
     setClarifyOpen(false);
   }, [conversationId, clarifySession.close]);
 
-  /** 发送（含排队）后退出全高编辑态，让路给回复内容。 */
+  /** Exits the full-height editing state after sending (including queueing), making way for the reply content. */
   const handleComposerSend = useCallback(() => {
-    // 澄清进行中禁发：避免把半成品草稿发出去（设计文档「交互」）。
+    // Sending is disabled while clarifying: avoid sending a half-finished draft (design doc "interaction").
     if (clarifyOpen) return;
     setComposerExpanded(false);
     onSend();
@@ -963,8 +953,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     let animationFrame: number | null = null;
     const measureOverflow = () => {
       animationFrame = null;
-      // 展开态的编辑区拥有更大的视口，不能用它覆盖常规态的溢出结果；
-      // 否则放大后按钮会立刻消失，用户将无法还原。
+      // The expanded editor area has a larger viewport, and must not overwrite the normal-state
+      // overflow result; otherwise the button would vanish immediately after expanding and the user
+      // would be unable to restore it.
       if (isComposerExpandedRef.current || expandAnimationRef.current) return;
       const nextHasOverflow = editor.scrollHeight - editor.clientHeight > 1;
       setComposerHasOverflow((current) =>
@@ -1167,9 +1158,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
       const resizeObserver =
         typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleMeasure);
       resizeObserver?.observe(composerLayer);
-      // 卡片列宽度跟随正文宽度设置，可在 composerLayer 尺寸不变时独立变化。
+      // The card column width follows the body width setting and can change independently while the composerLayer size stays the same.
       if (composerColumnRef.current) resizeObserver?.observe(composerColumnRef.current);
-      // 药丸容器绝对定位在卡片列之外，出现/消失不会改变 composerLayer 的尺寸。
+      // The pill container is absolutely positioned outside the card column, so appearing/disappearing does not change the composerLayer size.
       if (taskProgressBarElement) resizeObserver?.observe(taskProgressBarElement);
       window.addEventListener("resize", scheduleMeasure);
 
@@ -1190,8 +1181,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     if (!(chatFrame instanceof HTMLElement)) return;
 
     const updateComposerOverlayHeight = () => {
-      // 展开态占满聊天区，保留最近一次常规高度，避免底部预留跟着跳动；
-      // 展开/还原动画期间高度是中间值，同样不上报，动画结束后补测。
+      // The expanded state fills the chat area; keep the most recent normal height so the bottom
+      // reservation does not jump. During the expand/restore animation the height is an intermediate
+      // value, so it is also not reported; measure once more after the animation ends.
       if (isComposerExpandedRef.current || expandAnimationRef.current) return;
       const composerLayerHeight = composerLayer.getBoundingClientRect().height;
       const queueHeight = queuePanelRef.current?.getBoundingClientRect().height ?? 0;
@@ -1240,9 +1232,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         hidden && "hidden",
       )}
     >
-      {/* 层底 16px 悬浮留白（desktop pb-4 / web --gateway-chat-composer-bottom）
-          的兜底实底条：读数裙边只盖到读数行底边，滚动中的正文会从这条缝里
-          露出来。两端共用，不做 surface 分支。 */}
+      {/* Fallback opaque strip for the layer's bottom 16px floating padding (desktop pb-4 / web
+          --gateway-chat-composer-bottom): the reading skirt only covers down to the bottom edge of
+          the reading row, and scrolling body content would peek through this gap. Shared by both
+          ends, with no surface branch. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 bottom-0 bg-background"
@@ -1259,7 +1252,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           surface === "desktop"
             ? "pointer-events-auto relative w-[calc(100%-2.25rem)] max-w-[calc(var(--chat-transcript-content-width,768px)-4.75rem)]"
             : "gateway-chat-column pointer-events-auto relative",
-          // justify-end：展开动画途中卡片被钳在中间高度时保持贴底，向上生长。
+          // justify-end: while the expand animation pins the card at an intermediate height, stay flush to the bottom and grow upward.
           isComposerExpanded && "flex min-h-0 flex-col justify-end",
         )}
       >
@@ -1412,8 +1405,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         ) : null}
 
         {approvalBar}
-        {/* 澄清面板浮在输入卡片正上方（原先是卡片内嵌段）：与队列面板同级，
-            直接顶在卡片上缘。审批面板接管输入区时同样让位。 */}
+        {/* The clarify panel floats directly above the input card (previously an inline card
+            section): at the same level as the queue panel, sitting right on the card's top edge. It
+            likewise yields when the approval panel takes over the input area. */}
         {clarifyOpen && runClarifyTurn && approvalBar == null ? (
           <ClarifyPanel
             state={clarifySession.state}
@@ -1427,7 +1421,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             }}
           />
         ) : null}
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape 捕获仅在展开态生效，焦点始终在内部 textbox 上，包装层不参与 Tab 序。 */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape capture is active only in the expanded state, focus stays on the inner textbox, and the wrapper does not participate in the Tab order. */}
         <div
           hidden={approvalBar != null}
           ref={glassCardRef}
@@ -1445,7 +1439,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           onKeyDown={
             isComposerExpanded
               ? (event) => {
-                  // mention 弹层消费 Escape 时会 preventDefault，此处让路。
+                  // The mention popover calls preventDefault when it consumes Escape, so yield here.
                   if (event.key === "Escape" && !event.defaultPrevented) {
                     setComposerExpanded(false);
                   }
@@ -1453,10 +1447,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               : undefined
           }
           className={cn(
-            // 过渡只针对 focus-within 的配色/阴影；不能用 transition-all——
-            // 展开态切换 flex-grow 时会被一并动画，导致卡片先跳顶再长满的闪动。
-            // 常驻 flex-col：FLIP 动画把卡片钳在中间高度时，flex-1 的编辑器
-            // 区吸收多余空间，工具栏才能始终贴住卡片底边。
+            // The transition covers only focus-within color/shadow; transition-all cannot be used --
+            // toggling flex-grow in the expanded state would be animated too, causing the card to jump
+            // to the top and then fill out in a flicker. Always flex-col: when the FLIP animation pins
+            // the card at an intermediate height, the flex-1 editor area absorbs the extra space, so
+            // the toolbar can stay flush with the card's bottom edge throughout.
             "composer-glass-card @container relative flex flex-col overflow-hidden rounded-4xl border border-border/65 bg-muted shadow-[0_18px_44px_-34px_color-mix(in_oklch,var(--foreground)_42%,transparent)] transition-[border-color,box-shadow] focus-within:border-border focus-within:shadow-[0_20px_48px_-34px_color-mix(in_oklch,var(--foreground)_48%,transparent)]",
             surface === "desktop" && "z-10",
             isComposerExpanded && "min-h-0 flex-1",
@@ -1536,14 +1531,18 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               </button>
             ) : null}
 
-            {/* 常驻 flex-1：动画把卡片钳在中间高度时由本区吸收伸缩，工具栏才能
-              全程贴住卡片底边。min-h-0 只在展开态加——折叠态靠自动最小高度
-              (= 编辑器钳制高) 撑起卡片的固有高度，加了会塌缩。
+            {/* Always flex-1: when the animation pins the card at an intermediate height, this area
+              absorbs the flexing, so the toolbar stays flush with the card's bottom edge throughout.
+              min-h-0 is added only in the expanded state -- the collapsed state relies on the automatic
+              minimum height (= the editor's clamped height) to support the card's intrinsic height, and
+              adding it would collapse it.
 
-              pr-12 为右上角展开按钮让位。让位必须做在本容器上，**不能只给编辑器加
-              pr-8**——padding 不改变滚动条位置（滚动条恒贴 border box 右缘），
-              只挡文字不挡滚动条，溢出时那条 6px 轨会直接压在展开图标上。
-              收窄编辑器 border box 才能把滚动条一并推到按钮左侧。 */}
+              pr-12 makes room for the expand button in the top-right. The allowance must be made on
+              this container, **not by giving the editor pr-8 alone** -- padding does not change the
+              scrollbar position (the scrollbar is always flush with the border box's right edge), so it
+              would block text but not the scrollbar, and when overflowing that 6px track would sit
+              directly on the expand icon. Narrowing the editor's border box is what pushes the
+              scrollbar left of the button. */}
             <div
               className={cn(
                 "relative flex flex-1 pl-4 pr-12",
@@ -1561,7 +1560,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 onPasteFiles={onPasteFiles}
                 loadHistoryPrompts={loadHistoryPrompts}
                 placeholder={inputPlaceholder}
-                disabled={isInputDisabled || stt.active}
+                disabled={isInputDisabled}
                 workdir={workdir}
                 enabledSkills={enabledSkills}
                 conversationMentionsEnabled={isAgentExecutionMode(executionMode)}
@@ -1576,9 +1575,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 currentConversationId={conversationId}
                 mentionApps={mentionApps}
                 className={cn(
-                  // 右让位由外层容器 pr-12 统一承担（见上），此处不再补 pr——
-                  // 编辑器自身的右内距只会把文字推开、留下滚动条压在控制列上。
-                  // min-h 覆盖编辑器默认 70px，为卡片下方的会话统计栏留出高度预算。
+                  // The right allowance is handled uniformly by the outer container's pr-12 (see above),
+                  // so no pr is added here -- the editor's own right padding would only push text aside
+                  // and leave the scrollbar pressing on the control column. min-h overrides the editor's
+                  // default 70px, reserving height budget for the conversation stats bar below the card.
                   "min-h-[60px] px-0 py-0",
                   isComposerExpanded &&
                     (surface === "desktop" ? "h-full max-h-none" : "h-full! max-h-none!"),
@@ -1645,9 +1645,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       <span className="font-medium leading-5">{t("chat.upload.folder")}</span>
                     </DropdownMenuItem>
                     {isAgentMode ? (
-                      // 计划模式开关行:整行即开关,右侧迷你 switch 呈现状态。
-                      // closeOnClick=false 让切换就地生效——开关动画可见,菜单
-                      // 不弹跳;行为说明降为 hover 提示,不再挤占行内小字。
+                      // Plan mode toggle row: the whole row is the toggle, with a mini switch on the
+                      // right showing state. closeOnClick=false lets the toggle take effect in place -- the
+                      // switch animation is visible and the menu does not bounce; the behavior note is
+                      // demoted to a hover tooltip and no longer crowds the small inline text.
                       <DropdownMenuItem
                         closeOnClick={false}
                         role="menuitemcheckbox"
@@ -1671,8 +1672,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                         <span className="min-w-0 flex-1 truncate font-medium leading-5">
                           {t("chat.runtime.planModeTitle")}
                         </span>
-                        {/* 视觉开关(aria 由行上的 menuitemcheckbox 承担):与计划
-                          pill 同用 sky 色系,状态一眼可辨。 */}
+                        {/* Visual switch (aria is handled by the row's menuitemcheckbox): uses the same
+                          sky color scheme as the plan pill, so the state is instantly readable. */}
                         <span
                           aria-hidden
                           className={cn(
@@ -1694,7 +1695,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* 计划模式开启指示(Codex 风格 pill):一眼可见,点击即关。 */}
+                {/* Plan-mode-on indicator (Codex-style pill): instantly visible, click to turn off. */}
                 {isAgentMode && chatRuntimeControls.planModeEnabled ? (
                   <button
                     type="button"
@@ -1725,35 +1726,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                       )}
                     >
                       <WandSparkles className="h-4 w-4" />
-                    </button>
-                  </RuntimeControlTooltip>
-                ) : null}
-
-                {stt.available ? (
-                  <RuntimeControlTooltip label={stt.active ? "停止语音输入" : "开始语音输入"}>
-                    <button
-                      type="button"
-                      disabled={isInputDisabled}
-                      onClick={stt.toggle}
-                      aria-label={stt.active ? "停止语音输入" : "开始语音输入"}
-                      aria-pressed={stt.active}
-                      className={cn(
-                        "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
-                        "disabled:pointer-events-none disabled:opacity-40",
-                        stt.active
-                          ? "bg-red-500/10 text-red-600"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {stt.state === "requesting-permission" ||
-                      stt.state === "buffering" ||
-                      stt.state === "stopping" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : stt.active ? (
-                        <Square className="h-3.5 w-3.5 fill-current" />
-                      ) : (
-                        <Mic className="h-4 w-4" />
-                      )}
                     </button>
                   </RuntimeControlTooltip>
                 ) : null}
@@ -1793,8 +1765,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                         : undefined
                   }
                   className={cn(
-                    // 点击区保持 32px；背景经 p-0.5 + bg-clip-content 只涂 28px 内圆，
-                    // 与用量环外径、展开按钮悬停圆等大，避免实心圆盘显大。
+                    // The click area stays 32px; via p-0.5 + bg-clip-content the background paints only a
+                    // 28px inner circle, the same size as the usage ring's outer diameter and the expand
+                    // button's hover circle, so the solid disc does not look oversized.
                     "h-8 w-8 shrink-0 rounded-full border-0 bg-clip-content p-0.5 shadow-none transition-all [&_svg]:stroke-[2.25]",
                     canQueueDraftWhileSending
                       ? "hover:brightness-105 active:scale-95"
@@ -1865,8 +1838,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           </div>
           {fileDropOverlay}
         </div>
-        {/* 会话统计状态栏插槽：贴卡片下缘，与卡片同宽；审批面板可见时让位；
-            只在 "ring" 展示模式下不挂载——"statsBar" 与 "both" 都渲染（§4.7）。 */}
+        {/* Conversation stats status-bar slot: flush with the card's bottom edge and the same width
+            as the card; yields when the approval panel is visible; not mounted only in "ring" display
+            mode -- both "statsBar" and "both" render it (§4.7). */}
         {statsBar && approvalBar == null && contextDisplayMode !== "ring" ? statsBar : null}
       </div>
     </div>

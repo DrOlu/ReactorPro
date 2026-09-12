@@ -9,7 +9,7 @@
  * inside multi-line drafts; any edit must reset the session because cursor
  * and stash are only meaningful while the recalled text is untouched.
  *
- * GUI 与 WebUI 共同复用此状态机。
+ * Both GUI and WebUI reuse this state machine.
  */
 
 export type PromptHistoryStash<TPaste> = {

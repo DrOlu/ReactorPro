@@ -1,5 +1,5 @@
 /**
- * 轨迹工具栏：投影切换、整表折叠、实时搜索。
+ * Trajectory toolbar: projection switching, whole-table collapse, live search.
  */
 
 import { useLocale } from "../../i18n/index";
@@ -7,9 +7,9 @@ import { cn } from "../../lib/shared/utils";
 import { Search } from "../IconSet";
 
 export function TrajectoryToolbar(props: {
-  /** 是否按真实耗时排布；账本无时间时强制为 false。 */
+  /** Whether to lay out by real elapsed time; forced to false when the ledger has no time. */
   actualDuration: boolean;
-  /** 账本是否带时间；false 时 Duration 不可用。 */
+  /** Whether the ledger carries time; when false, Duration is unavailable. */
   hasTiming: boolean;
   onActualDurationChange: (next: boolean) => void;
   allTurnsCollapsed: boolean;

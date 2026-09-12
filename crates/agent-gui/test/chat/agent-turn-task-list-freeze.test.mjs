@@ -4,12 +4,13 @@ import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// taskList 的权威 JSON 拼在 systemPrompt 里，而 systemPrompt 排在全部消息之前，
-// 缓存前缀按字节匹配 —— run 内每轮重读 meta.taskList，等于一次 TaskUpdate 就把
-// system 块连同其后的全部历史一起打穿。快照因此按“压缩纪元”冻结。这组用例盯住：
-//   ① run 内任务状态推进不改变 systemPrompt 字节（且快照并未被丢掉）
-//   ② runId 不匹配时依然不注入（沿用工具层口径，语义不得改变）
-//   ③ 压缩之后快照刷新为当前状态（那一刻前缀本来就要重建，重新冻结是免费的）
+// The authoritative taskList JSON is concatenated into systemPrompt, and systemPrompt precedes all messages, while
+// the cache prefix matches byte by byte -- re-reading meta.taskList every round within a run means a single
+// TaskUpdate punches through the system block and all history after it. The snapshot is therefore frozen per
+// "compaction epoch". These cases watch for:
+//   1. task state progress within a run does not change systemPrompt bytes (and the snapshot is not silently dropped)
+//   2. it is still not injected when runId does not match (following the tool layer's rule, semantics must not change)
+//   3. after compaction the snapshot refreshes to the current state (the prefix is rebuilt at that moment anyway, so re-freezing is free)
 
 const agentRunnerPath = fileURLToPath(
   new URL("../../src/lib/chat/runner/agentRunner.ts", import.meta.url),
@@ -27,7 +28,7 @@ const fileToolStatePath = fileURLToPath(
   new URL("../../src/lib/tools/fileToolState.ts", import.meta.url),
 );
 
-// formatTaskListRuntimeContext 保持真实实现:冻结的是它的输出字节,mock 掉就测不到东西了。
+// formatTaskListRuntimeContext stays as the real implementation: what is frozen is its output bytes, so mocking it would test nothing.
 let runAssistantWithToolsScenario = async () => {
   throw new Error("scenario was not installed");
 };
@@ -55,8 +56,8 @@ const loader = createTsModuleLoader({
       async resolveRuntimePlatform() {
         return "win32";
       },
-      // buildToolsSuffix（turn runner 起始的用量环 fixed 校准）会走到这三个
-      // 纯函数；整模块替换的桩必须补齐，否则 turn 一进门就抛错。
+      // buildToolsSuffix (the usage-ring fixed calibration at turn runner start) reaches these three
+      // pure functions; a whole-module replacement stub must fill them in, or the turn throws on entry.
       normalizeRuntimePlatform(value) {
         return value === "windows" || value === "macos" || value === "linux" ? value : undefined;
       },
@@ -163,8 +164,8 @@ function createHookLifecycle() {
 }
 
 /**
- * 采集每一次真正喂给模型/压缩决策的 systemPrompt。三个采集点覆盖了
- * withAgentRuntimeContext 的全部产物：发送前预算、每轮请求、run 内压缩预算。
+ * Capture every systemPrompt actually fed to the model / used for compaction decisions. The three capture points
+ * cover all of withAgentRuntimeContext's outputs: pre-send budget, per-round request, and in-run compaction budget.
  */
 function createHarness({ initialTaskList, compactDuringRun } = {}) {
   let current = conversationState.createConversationStateFromContext({
@@ -183,9 +184,9 @@ function createHarness({ initialTaskList, compactDuringRun } = {}) {
 
   return {
     systemPrompts,
-    // onBeforeNextTurn 交回的续跑上下文，压缩发生时才非空。
+    // The continuation context returned by onBeforeNextTurn; non-null only when compaction happens.
     overrides: [],
-    // 模拟 TaskUpdate 落库：taskStateStore.commitState 最终走 applyConversationState。
+    // Simulates TaskUpdate being persisted: taskStateStore.commitState ultimately goes through applyConversationState.
     commitTaskList(taskList) {
       current = conversationState.setTaskListState(current, taskList);
     },
@@ -265,7 +266,7 @@ function createHarness({ initialTaskList, compactDuringRun } = {}) {
   };
 }
 
-/** 三轮工具循环：每轮结束前推进一次任务状态，模拟模型持续调用 TaskUpdate。 */
+/** Three tool rounds: advance the task state once before each round ends, simulating the model repeatedly calling TaskUpdate. */
 function threeToolRounds(harness, nextTaskListByRound) {
   return async (params) => {
     for (const round of [1, 2]) {
@@ -306,9 +307,9 @@ function runWithScenario(scenario, params) {
 }
 
 // ---------------------------------------------------------------------------
-// ① run 内的任务状态推进不得改变 systemPrompt 字节
+// 1. Task state progress within a run must not change systemPrompt bytes
 
-test("run 内连续多轮 TaskUpdate 不改变 systemPrompt 字节", async () => {
+test("consecutive TaskUpdate rounds within a run do not change systemPrompt bytes", async () => {
   const harness = createHarness({ initialTaskList: PENDING_TASKS });
   await runWithScenario(
     threeToolRounds(harness, { 1: ADVANCED_TASKS, 2: taskListState(RUN_ID, []) }),
@@ -316,28 +317,28 @@ test("run 内连续多轮 TaskUpdate 不改变 systemPrompt 字节", async () =>
   );
 
   const captured = harness.systemPrompts;
-  assert.ok(captured.length >= 3, `期望至少 3 次采集，实际 ${captured.length}`);
+  assert.ok(captured.length >= 3, `expected at least 3 captures, got ${captured.length}`);
   const unique = new Set(captured.map((entry) => entry.systemPrompt));
   assert.equal(
     unique.size,
     1,
-    `systemPrompt 在 run 内发生了漂移：${JSON.stringify(captured, null, 2)}`,
+    `systemPrompt drifted within the run: ${JSON.stringify(captured, null, 2)}`,
   );
 
-  // 冻结的是 run 起始那份快照，且必须原样保留在 system 段里 —— 不是被静默丢掉。
+  // What is frozen is the snapshot from the start of the run, and it must be preserved verbatim in the system section -- not silently dropped.
   const frozen = [...unique][0];
   assert.equal(
     frozen,
     `${BASE_SYSTEM_PROMPT}\n\n${formatTaskListRuntimeContext(PENDING_TASKS)}`,
   );
   assert.match(frozen, /<task_list>/);
-  assert.ok(!frozen.includes("Cover it with tests"), "run 内新建的任务不应挤进 system 段");
+  assert.ok(!frozen.includes("Cover it with tests"), "tasks created within the run must not squeeze into the system section");
 });
 
 // ---------------------------------------------------------------------------
-// ② runId 判据必须原样保留：冻结只是把判据从“每轮执行”挪到“冻结时执行”
+// 2. The runId predicate must be preserved as-is: freezing only moves the predicate from "executed every round" to "executed at freeze time"
 
-test("taskList 属于上一个 Run 时不注入", async () => {
+test("taskList belonging to a previous Run is not injected", async () => {
   const harness = createHarness({
     initialTaskList: taskListState("run-stale", [task("1", "Stale task", "pending")]),
   });
@@ -345,11 +346,11 @@ test("taskList 属于上一个 Run 时不注入", async () => {
 
   assert.ok(harness.systemPrompts.length >= 3);
   for (const entry of harness.systemPrompts) {
-    assert.equal(entry.systemPrompt, BASE_SYSTEM_PROMPT, `${entry.label} 注入了非本 Run 的任务状态`);
+    assert.equal(entry.systemPrompt, BASE_SYSTEM_PROMPT, `${entry.label} injected task state from another Run`);
   }
 });
 
-test("没有任务状态时 systemPrompt 不带任务段", async () => {
+test("systemPrompt carries no task section when there is no task state", async () => {
   const harness = createHarness();
   await runWithScenario(threeToolRounds(harness, {}), harness.params);
 
@@ -360,9 +361,9 @@ test("没有任务状态时 systemPrompt 不带任务段", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// ③ 压缩边界重新冻结：历史被截断后，这份快照是模型唯一的权威任务状态来源
+// 3. Re-freeze at the compaction boundary: once history is truncated, this snapshot is the model's only authoritative source of task state
 
-test("run 内压缩之后快照刷新为当前任务状态", async () => {
+test("the snapshot refreshes to the current task state after in-run compaction", async () => {
   let compactionsLeft = 1;
   const harness = createHarness({
     initialTaskList: PENDING_TASKS,
@@ -377,16 +378,16 @@ test("run 内压缩之后快照刷新为当前任务状态", async () => {
 
   await runWithScenario(threeToolRounds(harness, { 1: ADVANCED_TASKS }), harness.params);
 
-  // 第 1 轮触发压缩，续跑上下文必须带上刷新后的快照。
+  // Compaction is triggered on round 1; the continuation context must carry the refreshed snapshot.
   const continuation = harness.overrides[0];
-  assert.ok(continuation?.context, "压缩返回上下文时必须交回续跑上下文");
+  assert.ok(continuation?.context, "a continuation context must be returned when compaction returns a context");
   assert.equal(
     continuation.context.systemPrompt,
     `${BASE_SYSTEM_PROMPT}\n\n${formatTaskListRuntimeContext(ADVANCED_TASKS)}`,
   );
   assert.match(continuation.context.systemPrompt, /Cover it with tests/);
 
-  // 压缩之前采集到的仍是旧快照：重新冻结只发生在压缩边界，不是每轮。
+  // What was captured before compaction is still the old snapshot: re-freezing happens only at the compaction boundary, not every round.
   const beforeCompaction = harness.systemPrompts.filter((entry) => entry.label !== "during-run");
   assert.equal(
     beforeCompaction[0].systemPrompt,
@@ -394,7 +395,7 @@ test("run 内压缩之后快照刷新为当前任务状态", async () => {
   );
 });
 
-test("主 Agent turn 将每种命令安全模式传给工具 registry", async () => {
+test("the main Agent turn passes each command safety mode to the tool registry", async () => {
   const cases = [
     ["sandbox", { enabled: true, allowNetwork: true }],
     ["sandboxOffline", { enabled: true, allowNetwork: false }],

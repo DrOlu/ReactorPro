@@ -88,7 +88,7 @@ pub async fn settings_list_cherry_studio_providers() -> Result<CherryProvidersRe
         cherry_scan_candidates(&cherry_user_data_candidates(), false)
     })
     .await
-    .map_err(|error| format!("settings_list_cherry_studio_providers join 失败：{error}"))?
+    .map_err(|error| format!("settings_list_cherry_studio_providers join failed: {error}"))?
 }
 
 #[tauri::command]
@@ -98,13 +98,13 @@ pub async fn settings_list_cherry_studio_providers_from_path(
     tauri::async_runtime::spawn_blocking(move || {
         let selected = PathBuf::from(data_path.trim());
         if selected.as_os_str().is_empty() {
-            return Err("未选择 Cherry Studio 数据目录".to_string());
+            return Err("No Cherry Studio data directory selected".to_string());
         }
         cherry_scan_candidates(&cherry_manual_data_candidates(&selected), true)
     })
     .await
     .map_err(|error| {
-        format!("settings_list_cherry_studio_providers_from_path join 失败：{error}")
+        format!("settings_list_cherry_studio_providers_from_path join failed: {error}")
     })?
 }
 
@@ -121,7 +121,7 @@ fn cherry_scan_candidates(
         }
         match cherry_read_v2(&sqlite_path, data_path) {
             Ok(scan) => return Ok(cherry_scan_response(scan)),
-            Err(error) => read_errors.push(format!("{}：{error}", data_path.display())),
+            Err(error) => read_errors.push(format!("{}: {error}", data_path.display())),
         }
     }
 
@@ -132,33 +132,33 @@ fn cherry_scan_candidates(
         }
         match cherry_read_v1(&leveldb_path, data_path) {
             Ok(scan) => return Ok(cherry_scan_response(scan)),
-            Err(error) => read_errors.push(format!("{}：{error}", data_path.display())),
+            Err(error) => read_errors.push(format!("{}: {error}", data_path.display())),
         }
     }
 
     if require_data {
         if !read_errors.is_empty() {
             return Err(format!(
-                "选择的目录不是有效的 Cherry Studio 数据目录：{}",
-                read_errors.join("；")
+                "The selected directory is not a valid Cherry Studio data directory: {}",
+                read_errors.join("; ")
             ));
         }
         return Err(format!(
-            "选择的目录中未发现 Cherry Studio 数据，请检查以下位置：{}",
+            "No Cherry Studio data found in the selected directory; check the following locations: {}",
             candidates
                 .iter()
                 .map(|path| path.display().to_string())
                 .collect::<Vec<_>>()
-                .join("、")
+                .join(", ")
         ));
     }
 
     if !read_errors.is_empty() {
-        return Err(read_errors.join("；"));
+        return Err(read_errors.join("; "));
     }
     Ok(CherryProvidersResponse {
         status: "success".to_string(),
-        message: "未发现 Cherry Studio 供应商数据".to_string(),
+        message: "No Cherry Studio provider data found".to_string(),
         version: String::new(),
         data_path: candidates
             .first()
@@ -200,7 +200,7 @@ fn cherry_scan_response(scan: CherryImportScan) -> CherryProvidersResponse {
     CherryProvidersResponse {
         status: "success".to_string(),
         message: format!(
-            "Cherry Studio {}：发现 {} 个供应商，{} 个可同步配置",
+            "Cherry Studio {}: found {} providers, {} with syncable configuration",
             scan.version, scan.total_provider_count, ready_count
         ),
         version: scan.version,
@@ -297,28 +297,28 @@ fn cherry_read_v1(
 ) -> Result<CherryImportScan, String> {
     let key = b"persist:cherry-studio";
     let records = leveldb_core::read_dir(leveldb_path)
-        .map_err(|error| format!("读取 Cherry Studio LevelDB 失败：{error}"))?;
+        .map_err(|error| format!("Failed to read Cherry Studio LevelDB: {error}"))?;
     let latest = records
         .iter()
         .filter(|record| record.key.windows(key.len()).any(|window| window == key))
         .max_by_key(|record| record.seq)
-        .ok_or_else(|| "Cherry Studio LevelDB 中没有 persist:cherry-studio".to_string())?;
+        .ok_or_else(|| "persist:cherry-studio not found in Cherry Studio LevelDB".to_string())?;
     if latest.deleted {
-        return Err("Cherry Studio 供应商数据已被删除".to_string());
+        return Err("Cherry Studio provider data has been deleted".to_string());
     }
     let persisted_text = cherry_decode_chromium_string(&latest.value)?;
     let persisted = serde_json::from_str::<Value>(&persisted_text)
-        .map_err(|error| format!("解析 Cherry Studio Redux 根数据失败：{error}"))?;
+        .map_err(|error| format!("Failed to parse Cherry Studio Redux root data: {error}"))?;
     let llm = match persisted.get("llm") {
         Some(Value::String(text)) => serde_json::from_str::<Value>(text)
-            .map_err(|error| format!("解析 Cherry Studio llm 数据失败：{error}"))?,
+            .map_err(|error| format!("Failed to parse Cherry Studio llm data: {error}"))?,
         Some(value) => value.clone(),
-        None => return Err("Cherry Studio Redux 数据缺少 llm".to_string()),
+        None => return Err("Cherry Studio Redux data is missing llm".to_string()),
     };
     let source_providers = llm
         .get("providers")
         .and_then(Value::as_array)
-        .ok_or_else(|| "Cherry Studio llm.providers 格式无效".to_string())?;
+        .ok_or_else(|| "Invalid Cherry Studio llm.providers format".to_string())?;
     let version = cherry_read_version(data_path).unwrap_or_else(|| "1.x".to_string());
     let enabled_provider_count = source_providers
         .iter()
@@ -347,17 +347,17 @@ fn cherry_decode_chromium_string(bytes: &[u8]) -> Result<String, String> {
         Some(0) => {
             let payload = &bytes[1..];
             if !payload.len().is_multiple_of(2) {
-                return Err("Cherry Studio Local Storage UTF-16 数据长度无效".to_string());
+                return Err("Invalid Cherry Studio Local Storage UTF-16 data length".to_string());
             }
             let utf16 = payload
                 .chunks_exact(2)
                 .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
                 .collect::<Vec<_>>();
             String::from_utf16(&utf16)
-                .map_err(|error| format!("解码 Cherry Studio Local Storage 失败：{error}"))
+                .map_err(|error| format!("Failed to decode Cherry Studio Local Storage: {error}"))
         }
         Some(1) => Ok(bytes[1..].iter().map(|byte| char::from(*byte)).collect()),
-        _ => Err("未知的 Cherry Studio Local Storage 字符串编码".to_string()),
+        _ => Err("Unknown Cherry Studio Local Storage string encoding".to_string()),
     }
 }
 
@@ -425,9 +425,9 @@ fn cherry_append_v1_provider(
         .and_then(Value::as_object)
         .is_some_and(|headers| !headers.is_empty())
     {
-        "Cherry Studio 的自定义请求头不会同步".to_string()
+        "Cherry Studio custom request headers are not synced".to_string()
     } else if api_keys.len() > 1 {
-        format!("检测到 {} 个 API Key，将使用第一个", api_keys.len())
+        format!("Detected {} API Keys; the first will be used", api_keys.len())
     } else {
         String::new()
     };
@@ -435,13 +435,13 @@ fn cherry_append_v1_provider(
     for group in groups {
         let models_only_unsupported = !source_models.is_empty() && group.models.is_empty();
         let reason = if auth_type == "oauth" {
-            "OAuth 登录凭据不支持迁移".to_string()
+            "OAuth login credentials cannot be migrated".to_string()
         } else if api_key.is_empty() {
-            "未配置可迁移的 API Key".to_string()
+            "No migratable API Key configured".to_string()
         } else if group.base_url.is_empty() {
-            "未配置 Base URL".to_string()
+            "No Base URL configured".to_string()
         } else if models_only_unsupported {
-            "仅包含 LiveAgent 不支持的非聊天模型".to_string()
+            "Contains only non-chat models unsupported by ReactorPro".to_string()
         } else {
             String::new()
         };
@@ -469,9 +469,9 @@ fn cherry_read_v2(
     data_path: &std::path::Path,
 ) -> Result<CherryImportScan, String> {
     let conn = Connection::open_with_flags(sqlite_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|error| format!("打开 Cherry Studio SQLite 失败：{error}"))?;
+        .map_err(|error| format!("Failed to open Cherry Studio SQLite: {error}"))?;
     conn.busy_timeout(Duration::from_secs(3))
-        .map_err(|error| format!("设置 Cherry Studio SQLite 超时失败：{error}"))?;
+        .map_err(|error| format!("Failed to set Cherry Studio SQLite timeout: {error}"))?;
     let mut stmt = conn
         .prepare(
             "SELECT provider_id, name, endpoint_configs, default_chat_endpoint,
@@ -479,7 +479,7 @@ fn cherry_read_v2(
              FROM user_provider
              ORDER BY order_key ASC, provider_id ASC",
         )
-        .map_err(|error| format!("读取 Cherry Studio user_provider 失败：{error}"))?;
+        .map_err(|error| format!("Failed to read Cherry Studio user_provider: {error}"))?;
     let rows = stmt
         .query_map([], |row| {
             Ok((
@@ -493,11 +493,11 @@ fn cherry_read_v2(
                 row.get::<_, bool>(7)?,
             ))
         })
-        .map_err(|error| format!("查询 Cherry Studio user_provider 失败：{error}"))?;
+        .map_err(|error| format!("Failed to query Cherry Studio user_provider: {error}"))?;
     let mut source_rows = Vec::new();
     for row in rows {
         source_rows
-            .push(row.map_err(|error| format!("读取 Cherry Studio provider 行失败：{error}"))?);
+            .push(row.map_err(|error| format!("Failed to read Cherry Studio provider row: {error}"))?);
     }
     let total_provider_count = source_rows.len();
     let enabled_provider_count = source_rows.iter().filter(|row| row.7).count();
@@ -531,7 +531,7 @@ fn cherry_read_v2(
                  WHERE provider_id = ?1
                  ORDER BY order_key ASC, model_id ASC",
             )
-            .map_err(|error| format!("读取 Cherry Studio user_model 失败：{error}"))?;
+            .map_err(|error| format!("Failed to read Cherry Studio user_model: {error}"))?;
         let model_rows = model_stmt
             .query_map([&source_id], |row| {
                 Ok((
@@ -543,13 +543,13 @@ fn cherry_read_v2(
                     row.get::<_, bool>(5)?,
                 ))
             })
-            .map_err(|error| format!("查询 Cherry Studio user_model 失败：{error}"))?;
+            .map_err(|error| format!("Failed to query Cherry Studio user_model: {error}"))?;
         let mut groups = Vec::<CherryImportGroup>::new();
         let mut source_model_count = 0usize;
         let mut excluded_model_count = 0usize;
         for row in model_rows {
             let (model_id, endpoints_text, capabilities_text, output_text, model_enabled, hidden) =
-                row.map_err(|error| format!("读取 Cherry Studio model 行失败：{error}"))?;
+                row.map_err(|error| format!("Failed to read Cherry Studio model row: {error}"))?;
             if !model_enabled || hidden {
                 continue;
             }
@@ -601,9 +601,9 @@ fn cherry_read_v2(
             .and_then(Value::as_object)
             .is_some_and(|headers| !headers.is_empty())
         {
-            "Cherry Studio 的自定义请求头不会同步".to_string()
+            "Cherry Studio custom request headers are not synced".to_string()
         } else if api_keys.len() > 1 {
-            format!("检测到 {} 个启用 API Key，将使用第一个", api_keys.len())
+            format!("Detected {} enabled API Keys; the first will be used", api_keys.len())
         } else {
             String::new()
         };
@@ -611,13 +611,13 @@ fn cherry_read_v2(
         for group in groups {
             let models_only_unsupported = source_model_count > 0 && group.models.is_empty();
             let reason = if auth_type != "api-key" {
-                format!("{auth_type} 登录凭据不支持迁移")
+                format!("{auth_type} login credentials cannot be migrated")
             } else if api_key.is_empty() {
-                "未配置启用的 API Key".to_string()
+                "No enabled API Key configured".to_string()
             } else if group.base_url.is_empty() {
-                "未配置当前协议的 Base URL".to_string()
+                "No Base URL configured for the current protocol".to_string()
             } else if models_only_unsupported {
-                "仅包含 LiveAgent 不支持的非聊天模型".to_string()
+                "Contains only non-chat models unsupported by ReactorPro".to_string()
             } else {
                 String::new()
             };

@@ -1,6 +1,7 @@
-// proto 消息 → JSON map 塑形，供 HTTP JSON 端点（public share）使用。
-// protojson 会把 int64/uint64 编成字符串、int32 编成 float64；这里按描述符
-// 递归矫正为原生数值，保持对外 JSON 形状与历史线格式一致（公开分享页合同）。
+// Shapes proto messages into JSON maps for the HTTP JSON endpoint (public share).
+// protojson encodes int64/uint64 as strings and int32 as float64; here we recursively
+// correct them to native numbers per the descriptor, keeping the external JSON shape
+// consistent with the historical wire format (the public share page contract).
 package server
 
 import (

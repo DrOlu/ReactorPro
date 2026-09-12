@@ -1,12 +1,13 @@
-// WebUI 端计划审批桥:计划卡片位于 transcript 深处,提交动作由 GatewayApp 注册
-// (经 gateway chat_queue.plan_decision 送达桌面端计划挂起表)。模块级单例避免
-// 跨多层组件做 props 透传,模式同 askUserQuestionBridge / toolApprovalBridge。
+// WebUI-side plan-approval bridge: the plan card lives deep inside the transcript, and
+// the submit action is registered by GatewayApp (delivered to the desktop plan-suspension
+// table via gateway chat_queue.plan_decision). A module-level singleton avoids threading
+// props through many component layers, same pattern as askUserQuestionBridge / toolApprovalBridge.
 import type { PlanDecisionAnswer } from "@liveagent/ui/lib/chat/planMode";
 
 export type PlanDecisionSubmitOutcome = {
   ok: boolean;
   message?: string;
-  /** 桌面端结构化错误码直通(not_found = 计划已决定/被覆盖)。 */
+  /** Desktop structured error code passed through (not_found = plan already decided/superseded). */
   errorCode?: string;
 };
 
@@ -21,11 +22,14 @@ export function registerPlanDecisionHandler(next: PlanDecisionHandler | null) {
   handler = next;
 }
 
-// 本地决定态 overlay:参数标记(__exitPlanModePending/Approved)只随桌面端补发
-// 的事件/快照更新,而计划提交即终止 run——审批发生在 run 结束后,没有后续事件
-// 翻转标记,持久化投影里的卡片会永远保持可点。overlay 记录"本端已知的落定
-// 事实"(批准成功/退回成功/桌面回报已失效),与标记合并后驱动卡片落定。
-// 不落盘:刷新后 overlay 清空,点击陈旧按钮会再次得到 not_found 并重新落定。
+// Local decided-state overlay: the argument markers (__exitPlanModePending/Approved) only
+// update with events/snapshots later sent by the desktop, and submitting a plan terminates
+// the run — approval happens after the run ends, so there are no subsequent events to flip
+// the markers and the card in the persisted projection stays clickable forever. The overlay
+// records "the local side's known settled facts" (approval succeeded/rejection succeeded/
+// desktop reported stale), merged with the markers to drive the card to settled.
+// Not persisted: after a refresh the overlay is cleared, and clicking a stale button again
+// yields not_found and re-settles.
 const decidedOverlay = new Map<string, "approved" | "settled">();
 const listeners = new Set<() => void>();
 let overlayVersion = 0;
@@ -64,7 +68,8 @@ export async function submitPlanDecision(
   if (outcome.ok) {
     markDecided(toolCallId, answer.decision === "approve" ? "approved" : "settled");
   } else if (outcome.errorCode === "not_found") {
-    // 计划已在别处决定或被新提交覆盖:卡片应落定,而非留着一个永远报错的按钮。
+    // The plan was decided elsewhere or superseded by a new submission: the card should
+    // settle rather than keep a button that always errors.
     markDecided(toolCallId, "settled");
   }
   return outcome;

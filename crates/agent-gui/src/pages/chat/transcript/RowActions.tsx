@@ -58,7 +58,7 @@ export function AssistantRowFooter(props: AssistantRowFooterProps) {
       usageEntries={usageEntries}
       usageContextWindow={usageContextWindow}
       retryDisabled={isSending || !retryMessageRef}
-      retryTitle={retryMessageRef ? t("chat.retry") : "旧历史缺少稳定消息标识，无法重试"}
+      retryTitle={retryMessageRef ? t("chat.retry") : "Legacy history lacks a stable message identifier, cannot retry"}
       onRetry={() => {
         if (!retryTarget || !retryMessageRef) return;
         onResendFromEdit(
@@ -102,7 +102,7 @@ export function UserRowFooter(props: UserRowFooterProps) {
         markCopied();
       }}
       editDisabled={isSending || !hasStableRef}
-      editTitle={hasStableRef ? t("chat.edit") : "旧历史缺少稳定消息标识，无法编辑重发"}
+      editTitle={hasStableRef ? t("chat.edit") : "Legacy history lacks a stable message identifier, cannot edit and resend"}
       onEdit={() => {
         if (hasStableRef) onStartEdit(itemKey);
       }}

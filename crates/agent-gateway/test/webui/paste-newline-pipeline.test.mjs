@@ -79,7 +79,7 @@ const cases = [
   ["Markdown quote", "> quote\n> continued"],
   ["Markdown code block", "```ts\nconst value = 1;\n```"],
   ["Markdown table", "| a | b |\n| - | - |\n| 1 | 2 |"],
-  ["Unicode and emoji", "你好🙂\n\nκαλημέρα"],
+  ["Unicode and emoji", "Hello🙂\n\nκαλημέρα"],
   ["long text", `${"x".repeat(20_000)}\n\n${"y".repeat(20_000)}`],
 ];
 

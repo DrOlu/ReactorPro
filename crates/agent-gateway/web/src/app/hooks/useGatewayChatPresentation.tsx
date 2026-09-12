@@ -309,7 +309,7 @@ export function useGatewayChatPresentation({
     : composerCompactionBlocked
       ? translate("chat.compactingContextWait", settings.locale)
       : historyDetailLoading
-        ? "正在加载会话历史，请稍候..."
+        ? "Loading conversation history, please wait..."
         : enabledComposerSkills.length > 0
           ? translate("chat.inputHintWithSkills", settings.locale)
           : translate("chat.inputHint", settings.locale);

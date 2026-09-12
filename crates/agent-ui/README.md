@@ -1,47 +1,47 @@
 # `@liveagent/ui`
 
-`agent-ui` 是 GUI 与 WebUI 共用的应用 UI 源码，不是只存放基础组件的组件库。
+`agent-ui` is the application UI source shared by the GUI and WebUI, not a component library holding only base components.
 
-## 目录职责
+## Directory responsibilities
 
-- `src/application/`：共享应用视图和页面路由框架。
-- `src/pages/`：设置、Skills、MCP 等完整公共页面。
-- `src/components/`：聊天侧栏、输入框、项目工具、编辑器等公共 UI。
-- `src/contracts/`：定义共享 UI 的扩展注册表等公共契约。
-- `src/i18n/`：定义两端共同使用的翻译片段与本地化上下文。
+- `src/application/`: shared application views and the page routing framework.
+- `src/pages/`: complete shared pages such as settings, Skills, and MCP.
+- `src/components/`: shared UI such as the chat sidebar, composer, project tools, and editor.
+- `src/contracts/`: shared contracts such as the extension registry for the shared UI.
+- `src/i18n/`: translation fragments and localization context used by both ends.
 
-GUI 与 WebUI 应用只负责：
+The GUI and WebUI applications are only responsible for:
 
-- 启动和挂载 React 应用；
-- 准备业务状态、协议数据和回调；
-- 在各自 `src/agent-ui-adapters/` 中实现共享 UI 需要的能力；
-- 注册仅该应用拥有的页面或功能。
+- starting and mounting the React app;
+- preparing business state, protocol data, and callbacks;
+- implementing the capabilities the shared UI needs in their own `src/agent-ui-adapters/`;
+- registering pages or features owned only by that application.
 
-`ApplicationView` 直接创建 Skills Hub、MCP Hub 和聊天顶部栏。GUI/WebUI 不能再次导入并组装这些公共页面，只向它提供设置、模型状态、事件回调，以及协议相关的聊天内容控制器。这样公共应用结构的修改只发生在 `agent-ui`，不会在两个入口各维护一份 JSX。
+`ApplicationView` directly creates the Skills Hub, MCP Hub, and chat top bar. GUI/WebUI must not import and assemble these shared pages again; they only provide it with settings, model state, event callbacks, and protocol-related chat content controllers. This way changes to the shared application structure happen only in `agent-ui`, and JSX is not maintained separately at the two entry points.
 
 ## `@liveagent/app`
 
-`@liveagent/app` 不是 npm 包，因此不会出现在 `package.json` 的依赖列表中。它是构建期别名：
+`@liveagent/app` is not an npm package, so it does not appear in `package.json`'s dependency list. It is a build-time alias:
 
-- GUI 将它映射到 `crates/agent-gui/src`；
-- WebUI 将它映射到 `crates/agent-gateway/web/src`。
+- GUI maps it to `crates/agent-gui/src`;
+- WebUI maps it to `crates/agent-gateway/web/src`.
 
-共享 UI 通过这个别名读取当前应用的业务类型和通用实现。GUI 构建时指向 GUI，WebUI 构建时指向 WebUI。
+The shared UI reads the current application's business types and general implementations through this alias. GUI builds point to GUI, WebUI builds point to WebUI.
 
 ## `@liveagent/adapters`
 
-`@liveagent/adapters` 专门指向当前应用的 `src/agent-ui-adapters/`，用于目录选择、剪贴板、标题栏和 SSH 客户端等差异实现。公共 UI 不直接导入 Tauri 或 Gateway 的具体实现。
+`@liveagent/adapters` points specifically to the current application's `src/agent-ui-adapters/`, for differentiated implementations such as directory selection, clipboard, title bar, and SSH client. The shared UI does not directly import concrete Tauri or Gateway implementations.
 
-## 独有功能
+## Application-specific features
 
-应用独有功能放在对应应用目录，并通过扩展注册表或适配器接入共享页面。例如：
+Application-specific features live in the corresponding application directory and are wired into shared pages through the extension registry or adapters. For example:
 
-- GUI：全局快捷键、关于页、桌面标题栏、原生剪贴板；
-- WebUI：设备管理、浏览器文件能力、网关连接状态。
+- GUI: global shortcuts, About page, desktop title bar, native clipboard;
+- WebUI: device management, browser file capabilities, gateway connection status.
 
-供应商设置、聊天侧栏、聊天顶部栏、空会话页、工具参数、待办列表、助手状态、上下文检查点、重试详情、上下文用量、联网搜索组和 Diff 视图等公共 UI 同样只在 `agent-ui` 保留一份；GUI 的 CC Switch/Cherry Studio 导入由
-`src/agent-ui-adapters/providerSettings.tsx` 注入，WebUI 使用同名空适配器。聊天侧栏的桌面标题栏、
-应用更新按钮和系统文件管理器入口由 GUI 的 `src/agent-ui-adapters/sidebarChrome.tsx` 注入。
-助手头像资源由两端的 `src/agent-ui-adapters/assistantAvatar.ts` 提供，共享组件不感知 Tauri 资源路径或 Web 公共目录。
+Shared UI such as provider settings, chat sidebar, chat top bar, empty-conversation page, tool arguments, todo list, assistant status, context checkpoints, retry details, context usage, web search group, and Diff view is likewise kept in a single copy in `agent-ui`; the GUI's CC Switch/Cherry Studio import is
+injected by `src/agent-ui-adapters/providerSettings.tsx`, and the WebUI uses a same-named empty adapter. The chat sidebar's desktop title bar,
+app update button, and system file manager entry are injected by the GUI's `src/agent-ui-adapters/sidebarChrome.tsx`.
+Assistant avatar assets are provided by `src/agent-ui-adapters/assistantAvatar.ts` on both ends, and shared components are unaware of Tauri asset paths or the web public directory.
 
-不要在应用目录复制一份完整公共页面再做少量修改；应把差异收敛为 `agent-ui-adapters/*` 或独有功能组件。
+Do not copy a complete shared page into an application directory and then make small modifications; differences should be narrowed into `agent-ui-adapters/*` or application-specific feature components.

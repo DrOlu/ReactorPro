@@ -1,4 +1,5 @@
-//! 后台安装任务：任务注册表、进度快照与 install_start 工作线程。
+//! Background install jobs: job registry, progress snapshots, and the
+//! install_start worker thread.
 
 use serde_json::Value;
 use std::collections::HashMap;

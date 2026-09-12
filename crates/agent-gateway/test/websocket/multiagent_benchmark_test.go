@@ -88,9 +88,10 @@ func dialAndAuthenticateBenchmarkAgent(
 	return conn, nil
 }
 
-// Benchmark1000AgentWebSocketHandshakes 测量 1000 个已签发独立凭证的 Agent
-// 同时完成 HTTP Upgrade、WebSocket+Protobuf hello、SQLite 鉴权和会话登记的整批耗时。
-// Worker 创建、凭证签发和测试服务器初始化不计入计时。
+// Benchmark1000AgentWebSocketHandshakes measures the batch elapsed time for 1000 Agents, each
+// issued an independent credential, to concurrently complete HTTP Upgrade, WebSocket+Protobuf hello,
+// SQLite authentication, and session registration.
+// Worker creation, credential issuance, and test server initialization are not counted in the timing.
 func Benchmark1000AgentWebSocketHandshakes(b *testing.B) {
 	tempDir := b.TempDir()
 	b.ReportAllocs()

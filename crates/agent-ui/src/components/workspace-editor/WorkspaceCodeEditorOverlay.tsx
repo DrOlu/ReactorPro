@@ -628,7 +628,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     });
   }, []);
 
-  // 选区扩展到整行后作为代码引用（仅路径+行号）交给输入框；空选区退化为光标所在行。
+  // After the selection is expanded to whole lines it is handed to the input as a code reference (path + line numbers only); an empty selection degrades to the cursor's line.
   const insertSelectionAsCodeMention = useCallback(() => {
     setContextMenu(null);
     const editor = editorRef.current;
@@ -1019,7 +1019,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       </div>
 
       {contextMenu ? (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick 仅拦截冒泡防止 window "click" 关闭菜单；键盘经 Escape 与 menuitem 按钮操作。
+        // biome-ignore lint/a11y/useKeyWithClickEvents: onClick intercepts bubbling only to stop the window "click" from closing the menu; the keyboard is handled via Escape and menuitem buttons.
         <div
           className="editor-context-menu absolute z-50 w-[220px] overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-sm text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
           style={{ left: contextMenu.x, top: contextMenu.y }}

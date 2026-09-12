@@ -5,19 +5,21 @@ export type ComposerOverlayRect = VerticalRect;
 export type ComposerOverlayHorizontalRect = HorizontalRect;
 
 export type ComposerOverlayMetrics = {
-  /** 输入区常规占位高度（已扣除队列面板），驱动正文底部预留。 */
+  /** The composer's normal occupied height (queue panel already deducted), driving the body's bottom reservation. */
   heightPx: number;
   /**
-   * 预留线之上、被浮动元素额外占据的高度：队列面板从 heightPx 中扣除、
-   * 任务进度药丸绝对定位在卡片列之外，两者都不推高底部预留，却会盖住同样
-   * 浮在输入区上方的控件（如回到底部按钮）。这类控件要在 heightPx 之上再让出
-   * 这段距离。
+   * The height above the reservation line additionally occupied by floating elements: the queue
+   * panel is deducted from heightPx, and the task progress pill is absolutely positioned outside the
+   * card column; neither increases the bottom reservation, yet both can cover controls that also
+   * float above the composer (such as the back-to-bottom button). Such controls must additionally
+   * yield this distance above heightPx.
    */
   floatingOverhangPx: number;
   /**
-   * 卡片列中心相对输入区层中心的水平偏移（向右为正）。卡片列与正文同为居中，
-   * 正常为 0；偏移非零时，居中锚定在输入区上方的控件要跟着平移才能与卡片、
-   * 药丸对齐。
+   * The horizontal offset of the card column's center relative to the composer layer's center
+   * (positive to the right). The card column and the body are both centered, so normally 0; when the
+   * offset is non-zero, controls centered above the composer must shift along with it to align with
+   * the cards and pills.
    */
   centerOffsetPx: number;
 };
@@ -25,9 +27,9 @@ export type ComposerOverlayMetrics = {
 export function measureComposerOverlay(input: {
   layer: VerticalRect & HorizontalRect;
   queueHeight: number;
-  /** 任务进度药丸容器；未渲染药丸时高度为 0。 */
+  /** Task progress pill container; height is 0 when no pill is rendered. */
   floating: VerticalRect | null | undefined;
-  /** 卡片列（队列面板、输入卡片、药丸的共同水平参照）。 */
+  /** The card column (the common horizontal reference for the queue panel, input card, and pill). */
   column: HorizontalRect | null | undefined;
 }): ComposerOverlayMetrics {
   const { layer, queueHeight, floating, column } = input;

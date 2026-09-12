@@ -60,7 +60,7 @@ fn load_stale_chat_history_fts_segments(
     );
     let mut stmt = conn
         .prepare(&sql)
-        .map_err(|e| format!("准备历史 FTS 回填查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare history FTS backfill query: {e}"))?;
     let rows = stmt
         .query_map(params![filter.since, filter.until, limit as i64], |row| {
             Ok(ChatHistoryFtsSegmentRecord {
@@ -83,11 +83,11 @@ fn load_stale_chat_history_fts_segments(
                 },
             })
         })
-        .map_err(|e| format!("查询历史 FTS 回填数据失败：{e}"))?;
+        .map_err(|e| format!("Failed to query history FTS backfill data: {e}"))?;
 
     let mut out = Vec::new();
     for row in rows {
-        out.push(row.map_err(|e| format!("读取历史 FTS 回填行失败：{e}"))?);
+        out.push(row.map_err(|e| format!("Failed to read history FTS backfill row: {e}"))?);
     }
     Ok(out)
 }

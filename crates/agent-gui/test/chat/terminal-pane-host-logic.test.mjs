@@ -3,13 +3,17 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// TerminalPaneHost 的纯逻辑层:恢复 Pane 显式授权、陈旧绑定清理、
-// ensure 的挂载竞态去重、restartFromLaunchSpec 的收尾顺序。
-// 宿主本身需要 DOM 才能挂载,这里分两层覆盖:
-//   1) 模型层——真实 runtime 模块(授权集 + 绑定表 + ensure)的组合语义;
-//   2) 源码断言——宿主确实按这些语义接线(判定表达式/早退/调用顺序)。
-// 已在 terminal-pane-runtime.test.mjs 覆盖的 ensure 基础路径(单次创建、
-// 并发共享一次 create、失败后可重试、SSH 提示错误)不在此重复。
+// Pure logic layer of TerminalPaneHost: restoring Pane explicit authorization,
+// stale binding cleanup, ensure's mount-race dedupe, and
+// restartFromLaunchSpec's teardown order.
+// The host itself needs a DOM to mount, so coverage is split into two layers:
+//   1) model layer -- the combined semantics of the real runtime modules
+//      (authorization set + binding table + ensure);
+//   2) source assertions -- that the host really wires up according to those
+//      semantics (guard expressions / early returns / call order).
+// The ensure basic paths already covered by terminal-pane-runtime.test.mjs
+// (single creation, concurrent sharing of one create, retry after failure,
+// SSH prompt error) are not repeated here.
 
 const loader = createTsModuleLoader();
 const {
@@ -23,8 +27,9 @@ const { createTerminalPaneBindingStore } = loader.loadModule(
   "src/pages/chat/workbench/terminalPaneBindingStore.ts",
 );
 
-// 宿主实现已共享给 WebUI:源码断言指向 @liveagent/ui 中的实现;
-// 桌面文件只是注入 Tauri client 与窗口级单例的薄包装。
+// The host implementation is now shared with the WebUI: source assertions point
+// at the implementation in @liveagent/ui; the desktop file is just a thin wrapper
+// that injects the Tauri client and the window-level singleton.
 const hostSource = readFileSync(
   new URL(
     "../../../agent-ui/src/components/workbench/TerminalPaneHost.tsx",
@@ -74,7 +79,7 @@ function countingClient() {
 }
 
 // ---------------------------------------------------------------------------
-// 模型层:恢复授权
+// Model layer: restore authorization
 // ---------------------------------------------------------------------------
 
 test("a restored surface without a binding stays unauthorized", () => {
@@ -85,7 +90,7 @@ test("a restored surface without a binding stays unauthorized", () => {
 });
 
 test("a webview reload that keeps its binding mounts live", () => {
-  // sessionStorage 存活 + Rust 终端注册表存活:绑定命中,无需授权即可直接重挂。
+  // sessionStorage alive + Rust terminal registry alive: the binding hits, so it can remount directly without authorization.
   const bindings = createTerminalPaneBindingStore({ storage: null });
   bindings.set("surface-a", "session-1");
   assert.equal(bindings.get("surface-a"), "session-1");
@@ -106,11 +111,11 @@ test("an explicitly authorized surface can ensure a replacement PTY", async () =
 });
 
 // ---------------------------------------------------------------------------
-// 模型层:ensure 的去重边界
+// Model layer: ensure's dedupe boundary
 // ---------------------------------------------------------------------------
 
 test("the module-level in-flight table dedupes the host's own double mount", async () => {
-  // 宿主不注入 inflight,走模块级共享表;StrictMode 双挂载在这条路径上也只建一次。
+  // The host does not inject inflight, so it uses the module-level shared table; a StrictMode double mount also creates only once on this path.
   const bindings = createTerminalPaneBindingStore({ storage: null });
   const client = countingClient();
   const surface = localSurface(`surface-shared-${Date.now().toString(36)}`);
@@ -138,8 +143,10 @@ test("dedupe is keyed by surfaceId: sibling panes each get their own session", a
 });
 
 test("in-flight dedupe only guards the mount race; the binding guards idempotence", async () => {
-  // 结算后槽位释放,再次 ensure 会真的再建一个 PTY。宿主因此不能靠 ensure 幂等,
-  // 而是先看绑定(有绑定就解析既有会话,不进 ensure 分支)。
+  // The slot is released after settling, so calling ensure again really does
+  // create another PTY. The host therefore cannot rely on ensure being
+  // idempotent; it checks the binding first (if bound, resolve the existing
+  // session and do not enter the ensure branch).
   const bindings = createTerminalPaneBindingStore({ storage: null });
   const client = countingClient();
   const inflight = new Map();
@@ -152,10 +159,10 @@ test("in-flight dedupe only guards the mount race; the binding guards idempotenc
 });
 
 // ---------------------------------------------------------------------------
-// 源码断言:宿主按上述语义接线
+// Source assertions: the host wires up according to the semantics above
 // ---------------------------------------------------------------------------
 
-/** 从标记处截到该 hook/callback 的依赖数组收尾 `]);`,不锚定行号。 */
+/** Slice from the marker to the closing `]);` of that hook/callback's dependency array, not anchored to line numbers. */
 function blockFrom(source, marker) {
   const start = source.indexOf(marker);
   assert.notEqual(start, -1, `marker not found in TerminalPaneHost: ${marker}`);
@@ -210,7 +217,7 @@ test("a bound-but-missing restored session drops the stale binding before going 
     ensureEffect,
     /bindings\.delete\(surface\.surfaceId\);\s*setCreatedSession\(null\);\s*return;/,
   );
-  // 先触发 binding store 更新,下一轮 effect 才进入 ensure,避免同轮双建。
+  // Trigger the binding store update first so the next effect round enters ensure, avoiding a double create in the same round.
   assert.ok(
     ensureEffect.indexOf("bindings.delete(surface.surfaceId)") <
       ensureEffect.indexOf("ensureTerminalPaneSession(surface, {"),
@@ -248,12 +255,12 @@ test("restartFromLaunchSpec closes the stale session and drops the binding", () 
     ],
     "restartFromLaunchSpec",
   );
-  // 重启自身不调 ensure:清干净状态后由 ensure effect 重跑接手。
+  // Restart itself does not call ensure: after clearing the state cleanly, the ensure effect re-runs and takes over.
   assert.equal(restart.includes("ensureTerminalPaneSession"), false);
 });
 
 test("only a leased session renders a live viewport", () => {
-  // 只有持有租约的会话才会被交给视口渲染。
+  // Only a session holding a lease is handed to the viewport for rendering.
   assert.match(hostSource, /const leased = session !== null && leasedSessionId === session\.id;/);
   assert.match(hostSource, /if \(errorState\) \{[\s\S]{0,240}else if \(leased && session\) \{[\s\S]{0,80}renderSession = session;/);
 });

@@ -243,7 +243,7 @@ function truncateMiddle(value: string, maxLength = 34) {
 function basename(path: string) {
   const normalized = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
   if (!normalized) {
-    return "未命名项目";
+    return "Untitled project";
   }
   return normalized.split("/").filter(Boolean).pop() ?? normalized;
 }
@@ -263,7 +263,7 @@ function buildRunningConversations(history: HistoryList | null) {
     const conversation = byId.get(id);
     return {
       id,
-      title: getConversationTitle(conversation, `会话 ${truncateMiddle(id, 12)}`),
+      title: getConversationTitle(conversation, `Session ${truncateMiddle(id, 12)}`),
       cwd: runtime?.cwd?.trim() || conversation?.cwd?.trim() || "",
       updatedAt: normalizeEpochMs(runtime?.updated_at || conversation?.updated_at),
       messageCount: conversation?.message_count ?? 0,
@@ -416,7 +416,7 @@ function useDashboardAuth() {
         }
         clearToken();
         stripDashboardTokenFromUrl();
-        setAuthError(asErrorMessage(error, "Access Token 验证失败。"));
+        setAuthError(asErrorMessage(error, "Access Token verification failed."));
       })
       .finally(() => {
         if (!cancelled) {
@@ -438,7 +438,7 @@ function useDashboardAuth() {
         setLoginToken(verifiedToken);
       })
       .catch((error) => {
-        setAuthError(asErrorMessage(error, "Access Token 验证失败。"));
+        setAuthError(asErrorMessage(error, "Access Token verification failed."));
       })
       .finally(() => setAuthSubmitting(false));
   };
@@ -596,32 +596,32 @@ export function StatusDashboardPage() {
         setStatus(statusResult.value);
         setStatusError(null);
       } else {
-        errors.push(asErrorMessage(statusResult.error, "状态读取失败"));
+        errors.push(asErrorMessage(statusResult.error, "Failed to read status"));
       }
       if (historyResult.ok) {
         setHistory(historyResult.value);
       } else {
-        errors.push(asErrorMessage(historyResult.error, "历史读取失败"));
+        errors.push(asErrorMessage(historyResult.error, "Failed to read history"));
       }
       if (workdirsResult.ok) {
         setWorkdirs(workdirsResult.value.workdirs);
       } else {
-        errors.push(asErrorMessage(workdirsResult.error, "项目活动读取失败"));
+        errors.push(asErrorMessage(workdirsResult.error, "Failed to read project activity"));
       }
       if (terminalsResult.ok) {
         setTerminals(terminalsResult.value);
       } else {
-        errors.push(asErrorMessage(terminalsResult.error, "终端读取失败"));
+        errors.push(asErrorMessage(terminalsResult.error, "Failed to read terminals"));
       }
       if (providersResult.ok) {
         setProviders(providersResult.value);
       } else {
-        errors.push(asErrorMessage(providersResult.error, "模型源读取失败"));
+        errors.push(asErrorMessage(providersResult.error, "Failed to read providers"));
       }
       if (settingsResult.ok) {
         setSettingsSnapshot(settingsResult.value);
       } else {
-        errors.push(asErrorMessage(settingsResult.error, "设置读取失败"));
+        errors.push(asErrorMessage(settingsResult.error, "Failed to read settings"));
       }
       setSnapshot({
         loading: false,
@@ -721,8 +721,8 @@ export function StatusDashboardPage() {
   const activeWorkspaceHint = activeWorkspaceProject?.path
     ? truncateMiddle(activeWorkspaceProject.path, 48)
     : settingsSnapshot
-      ? "未配置工作区"
-      : "等待 settings.get";
+      ? "No workspace configured"
+      : "Waiting for settings.get";
   const loadedConversationRows = history?.conversations.length ?? 0;
   const maxWorkdirCount = Math.max(1, ...workdirs.map((item) => item.conversationCount || 0));
   const activeSubsystemCount =
@@ -993,8 +993,8 @@ export function StatusDashboardPage() {
               <Sparkles size={19} strokeWidth={2.4} />
             </div>
             <div>
-              <p>LiveAgent Nexus</p>
-              <h1>实时遥测指挥舱</h1>
+              <p>ReactorPro Nexus</p>
+              <h1>Live Telemetry Command Deck</h1>
             </div>
           </div>
           <div className="status-board-command-center">
@@ -1025,7 +1025,7 @@ export function StatusDashboardPage() {
               )}
               Sync
             </Button>
-            <a className="status-board-link-button" href="./" title="回到 Gateway 控制台">
+            <a className="status-board-link-button" href="./" title="Back to Gateway console">
               Console
               <ExternalLink size={14} />
             </a>
@@ -1054,7 +1054,7 @@ export function StatusDashboardPage() {
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Core Reactor</p>
-                  <h3>运行中枢</h3>
+                  <h3>Runtime Hub</h3>
                 </div>
                 <Shield size={18} />
               </div>
@@ -1078,10 +1078,10 @@ export function StatusDashboardPage() {
                 <div className="status-board-reactor-copy">
                   <span>Runtime: {runtimeState}</span>
                   <strong>
-                    {status?.agent_id ? truncateMiddle(status.agent_id, 24) : "等待 Agent 接入"}
+                    {status?.agent_id ? truncateMiddle(status.agent_id, 24) : "Waiting for Agent to connect"}
                   </strong>
                   <em>
-                    我在监听 Gateway 心跳：
+                    Watching the Gateway heartbeat:
                     {status?.last_heartbeat
                       ? `${formatDuration(heartbeatAgeMs)} ago`
                       : "no heartbeat"}
@@ -1095,7 +1095,7 @@ export function StatusDashboardPage() {
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Gateway Fabric</p>
-                  <h3>能力矩阵</h3>
+                  <h3>Capability Matrix</h3>
                 </div>
                 <Server size={18} />
               </div>
@@ -1130,7 +1130,7 @@ export function StatusDashboardPage() {
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Live Telemetry</p>
-                  <h3>系统数据雷达</h3>
+                  <h3>System Data Radar</h3>
                 </div>
                 <span>{eventsPerMinute.toFixed(1)} events/min</span>
               </div>
@@ -1193,14 +1193,14 @@ export function StatusDashboardPage() {
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Event Stream</p>
-                  <h3>实时事件流</h3>
+                  <h3>Live Event Stream</h3>
                 </div>
                 <MessageSquareText size={18} />
               </div>
               <div className="status-board-event-list">
                 {recentEvents.length === 0 ? (
                   <EmptyState>
-                    我还没收到实时事件；当 token、thinking 或 tool_call 抵达时，这里会亮起来。
+                    No live events received yet; this lights up as soon as a token, thinking, or tool_call event arrives.
                   </EmptyState>
                 ) : (
                   recentEvents.slice(0, 6).map((event) => (
@@ -1235,14 +1235,14 @@ export function StatusDashboardPage() {
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Model Route</p>
-                  <h3>模型与任务</h3>
+                  <h3>Models and Tasks</h3>
                 </div>
                 <Radio size={18} />
               </div>
               <FactList items={modelFacts} />
               <div className="status-board-running-list">
                 {runningConversations.length === 0 ? (
-                  <EmptyState>暂无运行中会话。</EmptyState>
+                  <EmptyState>No running sessions.</EmptyState>
                 ) : (
                   runningConversations.slice(0, 4).map((item) => (
                     <article key={item.id} className="status-board-running-item">
@@ -1250,7 +1250,7 @@ export function StatusDashboardPage() {
                       <div>
                         <strong>{truncateMiddle(item.title, 34)}</strong>
                         <span>
-                          {item.cwd ? basename(item.cwd) : "默认空间"} · {item.messageCount}{" "}
+                          {item.cwd ? basename(item.cwd) : "Default space"} · {item.messageCount}{" "}
                           messages · {formatDuration(now - item.updatedAt)} ago
                         </span>
                       </div>
@@ -1264,7 +1264,7 @@ export function StatusDashboardPage() {
               <div className="status-board-section-head">
                 <div>
                   <p className="status-board-label">Workspace Heat</p>
-                  <h3>项目热力图</h3>
+                  <h3>Project Heatmap</h3>
                 </div>
                 <HardDrive size={18} />
               </div>
@@ -1275,7 +1275,7 @@ export function StatusDashboardPage() {
               </div>
               <div className="status-board-workdir-list">
                 {workdirs.length === 0 ? (
-                  <EmptyState>暂无项目维度历史。</EmptyState>
+                  <EmptyState>No project-level history yet.</EmptyState>
                 ) : (
                   workdirs.slice(0, 6).map((item) => (
                     <article key={item.path} className="status-board-workdir">

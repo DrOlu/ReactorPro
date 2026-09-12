@@ -137,8 +137,9 @@ test("Desktop and Web render the same shared canvas, pane chrome, and drag ghost
 test("archived and missing workspaces block panes and never rebind the dock", () => {
   assert.match(chatPageSource, /workbench\.projectArchived/);
   assert.match(chatPageSource, /workbench\.projectMissing/);
-  // archived/missing 判定收敛在 resolveWorkbenchPaneProject 内(模型测试见
-  // workbench-pane-project-context.test.mjs);ChatPage 只经解析器激活。
+  // archived/missing detection is centralized inside resolveWorkbenchPaneProject
+  // (see workbench-pane-project-context.test.mjs for model tests); ChatPage only
+  // activates panes through the resolver.
   assert.match(chatPageSource, /resolveWorkbenchPaneProject\(projectPathKey, \{/);
 });
 

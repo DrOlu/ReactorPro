@@ -1,12 +1,13 @@
 /**
- * 轨迹视图外壳。
+ * Trajectory view shell.
  *
- * 数据来源有三条，在这里汇合：
- * - 已落盘事件（宿主拉取）
- * - 实时事件（当前回合进行中，宿主推送）
- * - 正文与子代理运行（从已加载的消息与宿主预取）
+ * Three data sources converge here:
+ * - Persisted events (pulled by the host)
+ * - Live events (pushed by the host while the current turn is in progress)
+ * - Body text and subagent runs (from loaded messages and host prefetch)
  *
- * 没有事件时回落到从消息推导的降级账本——结构完整、时间为空，甘特图锁在 sequence。
+ * With no events it falls back to a degraded ledger derived from messages — structurally complete,
+ * with empty timing, and the Gantt chart locked to sequence.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -54,7 +55,7 @@ const EMPTY_TURNS: ReadonlySet<number> = new Set();
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 const EMPTY_EVENTS: readonly TrajectoryEvent[] = [];
 const EMPTY_RUNS: readonly TrajectorySubagentRun[] = [];
-/** 子代理批次加载失败后的最大自动重试次数（每次失败 1.5s 退避）。 */
+/** Maximum automatic retries after a subagent batch load failure (1.5s backoff per failure). */
 const SUBAGENT_LOAD_MAX_ATTEMPTS = 3;
 const SUBAGENT_LOAD_RETRY_DELAY_MS = 1500;
 
@@ -65,17 +66,19 @@ export function TrajectoryView(props: {
   workdir?: string;
   hasMoreMessages?: boolean;
   loadEarlierMessages?: () => void | Promise<void>;
-  /** 当前回合的实时事件；与已落盘事件合并后由账本层去重。 */
+  /** Live events for the current turn; merged with persisted events and deduped by the ledger layer. */
   liveEvents?: readonly TrajectoryEvent[];
   /**
-   * live 事件为空时的中断收敛语义。
-   * - `authoritative`（桌面）：空集同样是权威证据 —— 本进程重启后不持有任何实时
-   *   尾巴，持久化里仍 running 的条目一律收敛为 aborted。
-   * - `observed`（WebUI，默认）：仅在已观察到实时事件时才收敛未被覆盖的运行条目，
-   *   避免页面刚重载、尚未收到实时流时误判仍在运行的回合。
+   * Interruption-convergence semantics when live events are empty.
+   * - `authoritative` (desktop): an empty set is equally authoritative evidence — after this
+   *   process restarts it holds no live tail, so any entry still running in persistence converges
+   *   to aborted.
+   * - `observed` (WebUI, default): only when live events have been observed do uncovered running
+   *   entries converge, so a turn still running is not misjudged right after the page reloads
+   *   before the live stream arrives.
    */
   liveOwnership?: "authoritative" | "observed";
-  /** edit-resend 等本地权威变更后的递增版本；变化时替换读取尾部窗口。 */
+  /** Incrementing version after local authoritative changes such as edit-resend; on change the read tail window is replaced. */
   authoritativeRevision?: number;
 }) {
   const { t } = useLocale();
@@ -86,7 +89,7 @@ export function TrajectoryView(props: {
   const [loadingMore, setLoadingMore] = useState(false);
   const [subagentRuns, setSubagentRuns] = useState<readonly TrajectorySubagentRun[]>(EMPTY_RUNS);
   const [subagentReloadToken, setSubagentReloadToken] = useState(0);
-  // 子代理批次加载失败后的有界自动重试：每个 runId 最多 3 次，1.5s 退避。
+  // Bounded automatic retry after a subagent batch load failure: at most 3 times per runId, with 1.5s backoff.
   const [subagentRetryTick, setSubagentRetryTick] = useState(0);
 
   const [collapsedTurns, setCollapsedTurns] = useState<ReadonlySet<number>>(EMPTY_TURNS);
@@ -153,8 +156,8 @@ export function TrajectoryView(props: {
   const reconcileAuthoritativeWindow = useCallback(() => {
     const generation = ++loadGeneration.current;
     // Keep the last known-good view painted while the authoritative tail is refreshed.
-    // 整体替换（而非合并）：edit-resend / 断线期间的 rebase 可能删掉了旧轮次，
-    // 合并会让已被裁剪的事件复活。
+    // Whole replacement (not merge): an edit-resend / rebase during disconnection may have
+    // deleted old turns, and merging would resurrect already-pruned events.
     void host
       .loadWindow(conversationId)
       .then((payload) => {
@@ -195,8 +198,9 @@ export function TrajectoryView(props: {
   }, [host, reconcileAuthoritativeWindow]);
 
   const liveEvents = props.liveEvents ?? EMPTY_EVENTS;
-  // 与后端 `has_more_before = returned > 0 && oldest > 0` 同义：最老已读边界之前还有段。
-  // 由 oldestSegmentIndex 推导而不是独立 state，保证「向前分页 + 尾部合并」两边不会各说各话。
+  // Equivalent to the backend's `has_more_before = returned > 0 && oldest > 0`: there are segments
+  // before the oldest read boundary. Derived from oldestSegmentIndex rather than a separate state,
+  // so "paging backward + tail merging" do not tell different stories.
   const hasMoreBefore = oldestSegmentIndex !== null && oldestSegmentIndex > 0;
   const latestTerminalEventKey = useMemo(() => {
     for (let index = liveEvents.length - 1; index >= 0; index -= 1) {
@@ -219,14 +223,16 @@ export function TrajectoryView(props: {
         .loadWindow(conversationId)
         .then((payload) => {
           if (generation !== loadGeneration.current) return;
-          // 同进程的终态对账按事件身份合并：尾部窗口只补新事件，不整体替换 ——
-          // 用户已向前分页出的更早事件窗口不能因为一次回合结束被静默重置。
+          // In-process terminal reconciliation merges by event identity: the tail window only adds
+          // new events and does not replace everything — an earlier event window the user already
+          // paged back to must not be silently reset by one turn ending.
           const fresh = parseTrajectoryEvents(payload.eventsJson);
           setPersisted((current) =>
             fresh.length === 0 ? current : mergeTrajectoryEventWindows(current, fresh),
           );
           setTruncated((current) => current || payload.truncated);
-          // 合并后最老边界取较小值，保证「加载更早」从真正的最老已读段继续。
+          // After merging, the oldest boundary takes the smaller value, so "load earlier" resumes
+          // from the true oldest read segment.
           setOldestSegmentIndex((current) =>
             current === null
               ? payload.oldestSegmentIndex
@@ -246,8 +252,9 @@ export function TrajectoryView(props: {
   const ledger = useMemo(() => {
     const events = liveEvents.length === 0 ? persisted : [...persisted, ...liveEvents];
     if (events.length > 0) {
-      // 中断收敛：崩溃/强退后遗留的 running 条目按 aborted 收敛。authoritative 模式下
-      // 空集也参与判定（本进程重启即证明不持有实时尾巴）；observed 模式保留旧行为。
+      // Interruption convergence: running entries left over after a crash/force-quit converge to
+      // aborted. In authoritative mode an empty set also participates in the decision (this
+      // process restarting proves it holds no live tail); observed mode keeps the old behavior.
       const liveIdentities =
         props.liveOwnership === "authoritative" || liveEvents.length > 0
           ? trajectoryLiveEventIdentities(liveEvents)
@@ -257,7 +264,8 @@ export function TrajectoryView(props: {
         props.messages,
       );
     }
-    // 轨迹功能上线前的会话没有事件；降级路径给出结构，但绝不伪造耗时。
+    // Conversations from before the trajectory feature shipped have no events; the degraded path
+    // provides structure but never fabricates timing.
     return deriveLedgerFromMessages(props.messages);
   }, [persisted, liveEvents, props.liveOwnership, props.messages]);
 
@@ -311,9 +319,9 @@ export function TrajectoryView(props: {
       })
       .catch((error) => {
         if (epoch !== subagentLoadEpoch.current) return;
-        // 失败后从「已请求」集合移除，并做有界自动重试：ref 变化不会触发 effect
-        // 重跑，这里显式 bump 一个 tick；重试耗尽的 runId 等待下一次 ledger
-        // 变化自然重试。
+        // After a failure, remove from the "requested" set and do a bounded automatic retry: a ref
+        // change does not re-run the effect, so explicitly bump a tick here; runIds that exhausted
+        // their retries wait for the next ledger change to retry naturally.
         for (const runId of missing) {
           requestedSubagentRunIds.current.delete(runId);
         }
@@ -495,7 +503,7 @@ export function TrajectoryView(props: {
         onRecordSelect={selectRecordAtIndex}
       />
 
-      {/* 窄容器（小窗口/移动端）下左右分栏互相挤压，改为上下排布。 */}
+      {/* In narrow containers (small windows/mobile) the left/right split squeezes each other, so switch to a top/bottom layout. */}
       <div
         ref={contentRef}
         className="relative flex min-h-0 flex-1 overflow-hidden @max-[640px]:flex-col"

@@ -1,6 +1,7 @@
 package websocket_test
 
-// v2 多 Agent 寻址集成测试：定向直通、歧义错误、agent_list 目录、广播打标隔离。
+// v2 multi-Agent addressing integration tests: targeted passthrough, ambiguity errors,
+// agent_list directory, and broadcast tagging isolation.
 
 import (
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// newV2MultiAgentTest 建两个假 Agent 会话 + 已握手的浏览器连接。
+// newV2MultiAgentTest sets up two fake Agent sessions plus a handshaken browser connection.
 func newV2MultiAgentTest(t *testing.T) (*session.Manager, *session.AgentSession, *session.AgentSession, *websocket.Conn, func()) {
 	t.Helper()
 
@@ -32,7 +33,8 @@ func newV2MultiAgentTest(t *testing.T) (*session.Manager, *session.AgentSession,
 	return sm, agentA, agentB, conn, cleanup
 }
 
-// answerAgentRequests 消费假 Agent 出站队列并按固定应答回填（history_workdirs 臂）。
+// answerAgentRequests consumes the fake Agent outbound queue and fills in fixed replies
+// (the history_workdirs arm).
 func answerAgentRequests(sm *session.Manager, sess *session.AgentSession, marker string) {
 	for outbound := range sess.Outbound() {
 		outbound.Ack(nil)
@@ -58,7 +60,7 @@ func TestV2AgentRequestRoutesToTargetAgent(t *testing.T) {
 	go answerAgentRequests(sm, agentA, "/from-agent-a")
 	go answerAgentRequests(sm, agentB, "/from-agent-b")
 
-	// 指定 agent-b：响应必须来自 B 且帧回填 agent_id=b。
+	// Specify agent-b: the response must come from B and the frame must fill in agent_id=b.
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "route-b",
 		AgentId:   "agent-b",
@@ -80,7 +82,7 @@ func TestV2AgentRequestRoutesToTargetAgent(t *testing.T) {
 		t.Fatalf("response agent_id = %q, want agent-b", frame.GetAgentId())
 	}
 
-	// 指定 agent-a：同一连接可交替定向。
+	// Specify agent-a: the same connection can alternate targeting.
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "route-a",
 		AgentId:   "agent-a",
@@ -127,7 +129,7 @@ func TestV2AgentListReturnsDirectory(t *testing.T) {
 	sm, _, agentB, conn, cleanup := newV2MultiAgentTest(t)
 	defer cleanup()
 
-	// B 断线：目录仍应包含离线条目。
+	// B disconnects: the directory should still include the offline entry.
 	sm.ClearSession(agentB)
 
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
@@ -245,7 +247,8 @@ func TestV2BroadcastFramesCarrySourceAgentID(t *testing.T) {
 		},
 	})
 
-	// 两条广播帧各自携带来源 agent_id（顺序不定，按 conversation 对账）。
+	// The two broadcast frames each carry their source agent_id (order is unspecified;
+	// reconcile by conversation).
 	seen := map[string]string{}
 	deadline := time.Now().Add(2 * time.Second)
 	for len(seen) < 2 && time.Now().Before(deadline) {

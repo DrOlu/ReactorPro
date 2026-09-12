@@ -4,7 +4,7 @@ import test from "node:test";
 
 const pageSources = [
   {
-    label: "共享 Skills Hub",
+    label: "Shared Skills Hub",
     source: ["SkillsHubPage.tsx", "SkillsStoreView.tsx"]
       .map((file) =>
         readFileSync(

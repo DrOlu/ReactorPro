@@ -8,8 +8,9 @@ import { type ReactNode, useCallback } from "react";
 import type { WorkspaceProject } from "../../../lib/settings";
 import { listWorkspaceRootGrants } from "../../../lib/workspaceRootGrants";
 
-// 桌面端传输层:检查点数据只存在于桌面本机,直接走 Tauri invoke。
-// WebUI 的对应实现在 GatewayAppView(经网关 checkpoint 直通臂中继到同一批命令)。
+// Desktop transport layer: checkpoint data exists only on the desktop machine, so go directly
+// through Tauri invoke. The WebUI counterpart lives in GatewayAppView (relayed to the same set of
+// commands through the gateway checkpoint passthrough arm).
 const desktopCheckpointRewindClient: CheckpointRewindClient = {
   list: (conversationId) => invoke("checkpoint_list", { conversation_id: conversationId }),
   preview: ({ conversationId, turnSeq, authorizedRoots }) =>
@@ -30,22 +31,24 @@ const desktopCheckpointRewindClient: CheckpointRewindClient = {
 export function DesktopCheckpointRewindProvider(props: {
   children: ReactNode;
   conversationId: string;
-  /** 当前会话的工作区根：授权集合的基准项。 */
+  /** Workspace root of the current conversation: the baseline entry of the authorization set. */
   workspaceRoot?: string;
-  /** 当前激活项目：用于取额外授权根（workspace root grants）。 */
+  /** Currently active project: used to obtain additional authorization roots (workspace root grants). */
   project?: Pick<WorkspaceProject, "id" | "path"> | null;
   disabled?: boolean;
-  /** 回退完成后回调(通知/转录记录由宿主页面处理)。 */
+  /** Callback after the rewind completes (notifications/transcript records are handled by the host page). */
   onRewound?: (info: CheckpointRewoundInfo) => void;
 }) {
   const { children, conversationId, workspaceRoot, project, disabled, onRewound } = props;
 
-  // 回退授权的唯一来源：当前会话工作区根 + 仍处于 active 且可写的额外授权根。
-  // 后端只认这个集合里的 root，记录里存的绝对路径本身不构成授权。
+  // The only source of rewind authorization: the current conversation workspace root plus
+  // additional authorization roots that are still active and writable. The backend only recognizes
+  // roots in this set; an absolute path stored in a record does not by itself constitute authorization.
   //
-  // access 必须一并过滤：回退是写操作（覆盖/删除），只读根不该被写。普通
-  // 文件工具把 access 一路带到 pathUtils 的 canMutate 门禁上拦，而这里只往
-  // 后端传路径、access 当场就丢了，所以这道门只能在这一步补上。
+  // access must be filtered as well: rewind is a write operation (overwrite/delete), and read-only
+  // roots must not be written. Ordinary file tools carry access all the way to pathUtils'
+  // canMutate gate, but here only the path is passed to the backend and access is lost immediately,
+  // so this gate can only be supplied at this step.
   const resolveAuthorizedRoots = useCallback(async () => {
     const roots: string[] = [];
     const push = (raw?: string | null) => {
@@ -60,7 +63,7 @@ export function DesktopCheckpointRewindProvider(props: {
           if (grant.state === "active" && grant.access === "write") push(grant.canonicalPath);
         }
       } catch {
-        // 取不到额外授权根时只保留工作区根：宁可少回退，不可越权写入。
+        // When additional authorization roots cannot be fetched, keep only the workspace root: better to rewind less than to write without authorization.
       }
     }
     return roots;

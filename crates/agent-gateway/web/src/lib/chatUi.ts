@@ -373,9 +373,11 @@ export function buildAssistantMeta(params: {
   const usage =
     params.usage && typeof params.usage === "object" ? (params.usage as Usage) : undefined;
 
-  // 增量构建：只 set 已定义的字段，绝不物化出 own-property undefined 键。后者在
-  // `{ ...target.meta, ...meta }` 合并时会用 undefined 覆盖此前事件送达的
-  // usage/stopReason 等字段，导致用量环倒扫失去锚点输入（issue #359 缺陷 #2）。
+  // Incremental build: only set fields that are defined; never materialize
+  // own-property undefined keys. Such keys would, when merged via
+  // `{ ...target.meta, ...meta }`, overwrite fields delivered by earlier events
+  // such as usage/stopReason with undefined, causing the usage ring's reverse
+  // scan to lose its anchor input (issue #359 defect #2).
   const meta: AssistantMeta = {};
   const provider = readString(params.provider) || undefined;
   if (provider !== undefined) meta.provider = provider;
@@ -652,7 +654,7 @@ export function buildToolResultEntry(
     kind: "tool_result",
     round,
     toolResult,
-    summary: toolResult.toolName ? `${toolResult.toolName} 执行结果` : "工具执行结果",
+    summary: toolResult.toolName ? `${toolResult.toolName} result` : "Tool result",
     text: getToolResultText(message.content),
   };
 }
@@ -687,12 +689,12 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
     parsed = JSON.parse(raw);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
-    const text = `历史消息解析失败：${message}`;
+    const text = `Failed to parse history messages: ${message}`;
     return [{ id: `history-error:${hashText(text)}`, kind: "error", text }];
   }
 
   if (!Array.isArray(parsed)) {
-    const text = "历史消息载荷不是数组，无法渲染。";
+    const text = "The history message payload is not an array and cannot be rendered.";
     return [{ id: `history-error:${hashText(text)}`, kind: "error", text }];
   }
 
@@ -756,13 +758,18 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
       const round = currentRound;
       const messageTimestamp = readMessageTimestamp(message.timestamp);
       const blocks = normalizeAssistantBlocks(message.content);
-      // 重建 meta 不带 contextRelevant 是有意为之（issue #359 缺陷 #8）：桌面端只对
-      // render-only 轮次（记忆抽取等）标 contextRelevant:false，而这类轮次仅经
-      // appendRenderOnlyMessagesToConversation 进入 UI transcript.items 供展示，
-      // 从不写入持久化的 segment.messages（见 chatHistory.ts writeConversationRuntime）。
-      // 因此历史 JSON 里根本不存在 render-only 轮次，也就没有可辨识标记可供重建；
-      // 用量环倒扫（deriveContextUsageTokens）不会误锚定在抽取请求的小 usage 上。
-      // 若将来 render-only 轮次开始入历史 JSON，须在此按其标记重建 meta.contextRelevant。
+      // Rebuilding meta without contextRelevant is intentional (issue #359
+      // defect #8): the desktop side marks contextRelevant:false only for
+      // render-only rounds (memory extraction, etc.), and such rounds enter the
+      // UI transcript.items for display solely via
+      // appendRenderOnlyMessagesToConversation, never being written to the
+      // persisted segment.messages (see chatHistory.ts
+      // writeConversationRuntime). Therefore render-only rounds simply do not
+      // exist in the history JSON, and there is no identifiable marker to
+      // rebuild from; the usage ring's reverse scan (deriveContextUsageTokens)
+      // will not mistakenly anchor on the small usage of an extraction request.
+      // If render-only rounds ever start entering the history JSON, their marker
+      // must be used here to rebuild meta.contextRelevant.
       const meta = buildAssistantMeta({
         provider: message.provider,
         model: message.model,
@@ -918,8 +925,8 @@ export function formatConversationTitle(
 ) {
   const title = conversation?.title?.trim();
   if (title) return title;
-  if (fallbackId?.trim()) return `会话 ${fallbackId.slice(0, 8)}`;
-  return "新对话";
+  if (fallbackId?.trim()) return `Conversation ${fallbackId.slice(0, 8)}`;
+  return "New conversation";
 }
 
 export function resolveConversationBrowserTitle(params: {
@@ -930,7 +937,7 @@ export function resolveConversationBrowserTitle(params: {
   newConversationTitle: string;
 }) {
   const conversationId = params.conversationId?.trim() ?? "";
-  const newConversationTitle = params.newConversationTitle.trim() || "LiveAgent";
+  const newConversationTitle = params.newConversationTitle.trim() || "ReactorPro";
   if (!conversationId || params.isLocalDraftConversation) {
     return newConversationTitle;
   }
@@ -947,7 +954,7 @@ export function buildOptimisticConversationTitle(message: string) {
     .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
     .find((paragraph) => paragraph !== "");
   if (!firstParagraph) {
-    return "新对话";
+    return "New conversation";
   }
   return Array.from(firstParagraph).slice(0, 10).join("");
 }

@@ -158,8 +158,8 @@ test("buildTurnRows emits the user bubble before any assistant content, tagged w
 });
 
 test("stream token metadata preserves raw usage and render-only markers", () => {
-  // meta 只携带原始事实：用量环锚点由倒扫从 usage + stopReason 现算，
-  // 事件不再携带任何派生 token 字段。
+  // meta carries only raw facts: the usage-ring anchor is computed on demand by a reverse
+  // scan from usage + stopReason, and events no longer carry any derived token fields.
   let turn = createTurn({ key: "run:usage", runId: "run-usage" });
   turn = applyEventToTurn(turn, {
     type: "token",
@@ -314,8 +314,9 @@ test("dedupeRowKeys suffixes collisions deterministically without touching uniqu
 });
 
 test("dedupeRowKeys drops colliding checkpoint rows instead of renaming them", () => {
-  // 检查点 id 是内容身份（checkpoint-<summaryId>）：history 区与手动压缩 turn
-  // 各持一份时是同一张逻辑卡片，改名保留会渲染出重复检查点。
+  // The checkpoint id is a content identity (checkpoint-<summaryId>): when the history section
+  // and a manual-compaction turn each hold a copy, they are the same logical card, and keeping
+  // it under a renamed key would render a duplicate checkpoint.
   const checkpoint = (origin) => ({
     key: "checkpoint-sum-1",
     origin,
@@ -348,7 +349,7 @@ test("parseHistoryMessagesJson yields identical ids across reparses", () => {
     {
       role: "user",
       id: "m1",
-      content: "问题",
+      content: "question",
       liveAgentHistoryRef: {
         segmentIndex: 0,
         messageIndex: 0,
@@ -361,13 +362,13 @@ test("parseHistoryMessagesJson yields identical ids across reparses", () => {
     {
       role: "assistant",
       content: [
-        { type: "thinking", thinking: "思考" },
-        { type: "text", text: "回答" },
+        { type: "thinking", thinking: "thinking" },
+        { type: "text", text: "answer" },
       ],
       provider: "deepseek",
     },
-    { role: "user", content: "继续" },
-    { role: "user", content: "继续" },
+    { role: "user", content: "continue" },
+    { role: "user", content: "continue" },
   ]);
   const first = parseHistoryMessagesJson(raw);
   const second = parseHistoryMessagesJson(raw);
@@ -378,7 +379,7 @@ test("parseHistoryMessagesJson yields identical ids across reparses", () => {
   );
   assert.equal(first[0].id, "hu:m1", "ref-anchored user id");
   assert.ok(first[1].id.startsWith("ht:hu:m1>"), "turn-anchored block id");
-  const dupIds = first.filter((entry) => entry.kind === "user" && entry.text === "继续");
+  const dupIds = first.filter((entry) => entry.kind === "user" && entry.text === "continue");
   assert.equal(new Set(dupIds.map((entry) => entry.id)).size, 2, "identical prompts get distinct ids");
 });
 
@@ -413,7 +414,7 @@ test("persisted assistant messages carry raw usage; legacy stamps are dead data"
         api: "openai-responses",
         stopReason: "stop",
         usage: { input: 9_500, output: 500, totalTokens: 10_000 },
-        // 旧口径印章：读取侧已无任何消费方，锚点从 usage 现算。
+        // Legacy-format stamp: the read side has no remaining consumers, and the anchor is computed from usage on demand.
         liveAgentContextUsage: { totalTokens: 150_000, fixedTokens: 25_000 },
         timestamp: 1,
       },
@@ -429,12 +430,12 @@ test("persisted assistant messages carry raw usage; legacy stamps are dead data"
 
 test("thinking-first persisted replies emit a meta carrier that rows suppress", () => {
   const raw = JSON.stringify([
-    { role: "user", id: "m1", content: "查询" },
+    { role: "user", id: "m1", content: "query" },
     {
       role: "assistant",
       content: [
-        { type: "thinking", thinking: "推理" },
-        { type: "text", text: "结论" },
+        { type: "thinking", thinking: "reasoning" },
+        { type: "text", text: "conclusion" },
       ],
       provider: "deepseek",
       model: "deepseek-v4",

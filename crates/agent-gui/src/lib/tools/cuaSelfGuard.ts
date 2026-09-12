@@ -1,80 +1,99 @@
 import { invoke } from "@tauri-apps/api/core";
 
 /**
- * 把 LiveAgent 自己从 cua-driver 的视野与可操作范围里摘掉。
+ * Removes ReactorPro itself from cua-driver's view and range of operation.
  *
- * 为什么需要：cua-driver 看到的是整个桌面，其中包括 LiveAgent 自己的窗
- * 口。让模型操作宿主界面是危险的自指——它能点掉自己的审批弹窗（等于绕过
- * 审批）、改自己的权限策略、或者直接把自己关了。上游没有「排除某个 app」
- * 的机制（capability manifest 是工具/资源白名单，且在代理模式下归
- * CuaDriver.app 的守护进程管），所以这道闸只能开在宿主侧。
+ * Why it is needed: cua-driver sees the entire desktop, including ReactorPro's own windows.
+ * Letting the model operate the host UI is a dangerous self-reference — it could dismiss its
+ * own approval dialog (effectively bypassing approval), change its own permission policy, or
+ * simply shut itself down. Upstream has no "exclude an app" mechanism (the capability manifest
+ * is a tool/resource allowlist, and under proxy mode it is managed by the CuaDriver.app daemon),
+ * so this gate can only be opened on the host side.
  *
- * 四条路径都要拦：
- * - **按 pid / window_id 寻址**：递归扫描整个入参。上游现约把目标包在
- *   `target` 对象里（`{"target":{"kind":"window","pid":…,"window_id":…}}`），
- *   只看顶层字段等于没拦——早期只认扁平参数的实现可以被官方写法直接绕过。
- * - **按屏幕坐标寻址**：坐标无法反查归属，改为和宿主窗口的实际矩形比对。
- *   模型完全可以从整屏截图上量出「允许」按钮的位置，再以
- *   `{"target":{"kind":"desktop"},"x":…,"y":…}` 发出来。窗口矩形每次调用
- *   前重新取（见 `loadSelfWindowRects`），窗口移动后判断依然成立。
- * - **无目标的键盘输入**：`press_key` / `hotkey` / `type_text` 在 desktop
- *   作用域下不要求 pid / window_id / 坐标，输入投递给**前台应用**——上面
- *   两道闸都管不到。`{"scope":"desktop","key":"return"}` 在宿主处于前台时
- *   等于按掉审批弹窗，`{"keys":["cmd","q"]}` 等于关掉应用。所以这类调用要
- *   查一次当前前台应用：前台是宿主就拒绝；**查不到也拒绝**（fail-closed，
- *   带 pid / window_id 的显式目标不受影响，能力不算丢失）。
- * - **出参**：`list_windows` / `list_apps` / `get_accessibility_tree` 的
- *   结果里剔除宿主记录。不剔的话模型下一步就会拿着这些 id 来敲门，白白
- *   撞上入参拦截。官方 MCP 的文本块常带 `✅ …` 之类的摘要前缀，所以不能
- *   要求整段是纯 JSON，得先把 JSON 片段从文本里切出来。
+ * All four paths must be blocked:
+ * - **Addressing by pid / window_id**: recursively scan the whole argument payload. Upstream
+ *   currently wraps the target in a `target` object
+ *   (`{"target":{"kind":"window","pid":…,"window_id":…}}`), so checking only top-level fields
+ *   is as good as no check — an implementation that only recognized flat arguments could be
+ *   bypassed outright by the official form.
+ * - **Addressing by screen coordinates**: coordinates cannot be traced back to an owner, so
+ *   compare them against the host windows' actual rectangles instead. The model can perfectly
+ *   well measure the position of an "Allow" button from a full-screen screenshot and send it
+ *   as `{"target":{"kind":"desktop"},"x":…,"y":…}`. The window rectangles are re-fetched before
+ *   every call (see `loadSelfWindowRects`), so the check still holds after a window moves.
+ * - **Targetless keyboard input**: `press_key` / `hotkey` / `type_text` do not require
+ *   pid / window_id / coordinates under the desktop scope and deliver input to the
+ *   **frontmost application** — neither gate above covers them. `{"scope":"desktop","key":"return"}`
+ *   while the host is frontmost is equivalent to dismissing the approval dialog, and
+ *   `{"keys":["cmd","q"]}` is equivalent to quitting the app. So such calls must query the
+ *   current frontmost application once: reject if the frontmost is the host; **reject when it
+ *   cannot be determined too** (fail-closed, explicit targets with pid / window_id are
+ *   unaffected, so no capability is lost).
+ * - **Output**: strip host records from the results of `list_windows` / `list_apps` /
+ *   `get_accessibility_tree`. Otherwise the model's next step would be knocking with those ids,
+ *   needlessly running into the input interception. Official MCP text blocks often carry a
+ *   summary prefix like `✅ …`, so we cannot require the whole block to be pure JSON — the JSON
+ *   fragment must first be sliced out of the text.
  *
- * window_id 与 pid 的对应关系只有 cua-driver 知道，所以宿主的 window_id
- * 是在出参过滤时顺手学到的（见 `learnedSelfWindowIds`）。在第一次窗口枚
- * 举之前，模型手里本来也不会有 window_id，拦不住也无从利用。
+ * Only cua-driver knows the mapping between window_id and pid, so the host's window_id is
+ * learned incidentally during output filtering (see `learnedSelfWindowIds`). Before the first
+ * window enumeration the model would not have any window_id anyway, so not being able to block
+ * it also offers nothing to exploit.
  *
- * 残留面（明知且接受）：整屏截图里仍然能**看到**宿主窗口——图片没法像
- * JSON 那样做结构化剔除。但看到不等于能操作：坐标操作被矩形比对拦掉，
- * 无目标的键盘输入被前台检查拦掉，所以这是信息可见性问题，不是审批绕过。
+ * Residual surface (known and accepted): the host window can still be **seen** in full-screen
+ * screenshots — an image cannot be structurally stripped the way JSON can. But seeing is not
+ * operating: coordinate operations are blocked by rectangle comparison, and targetless keyboard
+ * input is blocked by the frontmost check, so this is an information-visibility issue, not an
+ * approval bypass.
  *
- * 已知极限：前台检查与驱动实际投递之间存在极短的 TOCTOU 窗口（检查通过
- * 后、按键落地前，焦点恰好切到宿主）。宿主侧守卫无法原子化这两步；检查
- * 已经做在发出调用的那一刻，这是能做到的最紧位置。
+ * Known limit: there is a very short TOCTOU window between the frontmost check and the driver's
+ * actual delivery (the check passes, then focus happens to switch to the host before the key
+ * lands). A host-side guard cannot make those two steps atomic; the check is done at the moment
+ * the call is issued, which is as tight as possible.
  *
- * `cuaAllowSelfTargeting` 置 true 可整体关掉这道闸——用 LiveAgent 自动化
- * 测试 LiveAgent 时需要。默认关闭。
+ * Setting `cuaAllowSelfTargeting` to true disables this gate entirely — needed when using
+ * ReactorPro to automate-test ReactorPro. Off by default.
  */
 
 const SELF_TARGET_REFUSAL =
-  "该目标是 LiveAgent 自身的窗口，已被拒绝：让模型操作宿主界面可以绕过工具审批、" +
-  "改写权限设置或直接关闭应用。请改为操作其他应用。（如确需自动化 LiveAgent 本身，" +
-  "在「设置 → CUA」中打开「允许操作 LiveAgent 自身」。）";
+  "This target is a ReactorPro window and has been rejected: letting the model operate the host UI " +
+  "could bypass tool approval, rewrite permission settings, or shut the app down directly. " +
+  "Please operate on a different application instead. (If you really need to automate ReactorPro " +
+  "itself, enable \"Allow operating ReactorPro itself\" in \"Settings → CUA\".)";
 
 const SELF_REGION_REFUSAL =
-  "该坐标落在 LiveAgent 自身的窗口范围内，已被拒绝：以桌面为目标按屏幕坐标操作宿主界面，" +
-  "同样可以点掉审批弹窗或改写权限设置。请改为操作其他应用的窗口。（如确需自动化 LiveAgent " +
-  "本身，在「设置 → CUA」中打开「允许操作 LiveAgent 自身」。）";
+  "These coordinates fall inside a ReactorPro window and have been rejected: operating the host " +
+  "UI by screen coordinates with the desktop as the target could likewise dismiss the approval " +
+  "dialog or rewrite permission settings. Please operate on another application's window instead. " +
+  "(If you really need to automate ReactorPro itself, enable \"Allow operating ReactorPro itself\" " +
+  "in \"Settings → CUA\".)";
 
 const SELF_FOREGROUND_REFUSAL =
-  "LiveAgent 当前是前台应用，这次无明确目标的桌面键盘输入会直接落在宿主界面上" +
-  "（可以按掉审批弹窗、用快捷键关闭应用），已被拒绝。请先聚焦目标应用（例如先点击它的窗口），" +
-  "或改用带 pid / window_id 的显式窗口目标。（如确需自动化 LiveAgent 本身，" +
-  "在「设置 → CUA」中打开「允许操作 LiveAgent 自身」。）";
+  "ReactorPro is currently the frontmost application, so this desktop keyboard input with no " +
+  "explicit target would land directly on the host UI (it could dismiss the approval dialog or " +
+  "quit the app with a shortcut), and has been rejected. Please focus the target application " +
+  "first (for example, click its window), or switch to an explicit window target with " +
+  "pid / window_id. (If you really need to automate ReactorPro itself, enable \"Allow operating " +
+  "ReactorPro itself\" in \"Settings → CUA\".)";
 
 const SELF_FOREGROUND_UNKNOWN_REFUSAL =
-  "无法确认当前前台应用，已拒绝这次无明确目标的桌面键盘输入：确认不了它不会落在 LiveAgent " +
-  "自己身上。请改用带 pid / window_id 的显式窗口目标，或稍后重试。";
+  "The current frontmost application cannot be confirmed, so this desktop keyboard input with " +
+  "no explicit target has been rejected: we cannot confirm it will not land on ReactorPro itself. " +
+  "Please switch to an explicit window target with pid / window_id, or retry later.";
 
 type SelfIdentity = { pid: number };
 
-/** 宿主窗口在屏幕坐标系里的矩形，单位与 cua-driver 的桌面坐标一致。 */
+/** The host window's rectangle in screen coordinates, in the same units as cua-driver desktop coordinates. */
 export type SelfWindowRect = { x: number; y: number; width: number; height: number };
 
 /**
- * 宿主 pid 的缓存。
+ * Cache for the host pid.
  *
- * **只缓存成功的结果。** 曾经是 `promise ??= invoke(...).catch(() => null)`
- * ——那会把一次瞬时 IPC 失败缓存成永久的 null，此后每一轮对话的守卫都直接
- * 返回 null（整道闸门关闭），用户看不到任何迹象。安全侧的缓存不该记住失败。
+ * **Only successful results are cached.** It used to be
+ * `promise ??= invoke(...).catch(() => null)` — which cached a transient IPC failure as a
+ * permanent null, after which every conversation turn's guard returned null directly (the
+ * whole gate shut), with no indication to the user. A cache on the security side must not
+ * remember failures.
  */
 let selfPidPromise: Promise<number | null> | null = null;
 
@@ -91,11 +110,12 @@ async function loadSelfPid(): Promise<number | null> {
 }
 
 /**
- * 窗口矩形的短期缓存。
+ * Short-lived cache for window rectangles.
  *
- * 不能像 pid 那样一次取定——窗口会被拖动、缩放。但一次工具调用里可能反复
- * 问到，且 GUI 操作本身就在秒级，几百毫秒内的复用不会让判断失真，同时避免
- * 每次调用都过一趟 IPC。
+ * They cannot be fetched once like the pid — windows get dragged and resized. But they may
+ * be asked for repeatedly within a single tool call, and GUI operations themselves are on the
+ * order of seconds, so reuse within a few hundred milliseconds does not distort the decision
+ * while avoiding an IPC round trip on every call.
  */
 const SELF_RECTS_TTL_MS = 400;
 
@@ -111,9 +131,10 @@ async function loadSelfWindowRects(): Promise<SelfWindowRect[]> {
 }
 
 /**
- * 当前前台应用的 pid。**不缓存**：焦点变化以百毫秒计，键盘调用本身不高频，
- * 每次判定过一趟 IPC 换来的是判断永远基于当下事实。取不到返回 null，
- * 调用方按 fail-closed 处理。
+ * The pid of the current frontmost application. **Not cached**: focus changes on the order of
+ * hundreds of milliseconds and keyboard calls are not high-frequency, so an IPC round trip per
+ * decision buys a judgment always grounded in the present facts. Returns null when unavailable,
+ * and the caller handles it fail-closed.
  */
 async function loadFrontmostPid(): Promise<number | null> {
   try {
@@ -123,36 +144,38 @@ async function loadFrontmostPid(): Promise<number | null> {
   }
 }
 
-/** 出参过滤时学到的宿主 window_id。进程级缓存，无需持久化。 */
+/** Host window_id learned during output filtering. Process-level cache, no persistence needed. */
 const learnedSelfWindowIds = new Set<number>();
 
 /**
- * 递归深度上限。入参是 MCP 的 JSON 参数，正常形态最多两三层；给足余量之后
- * 仍然封顶，免得畸形（或刻意构造的）深层结构把扫描拖垮。
+ * Recursion depth limit. The arguments are MCP JSON parameters, normally at most two or three
+ * levels deep; even with ample margin it is capped, so a malformed (or deliberately constructed)
+ * deep structure cannot drag the scan down.
  *
- * 超出上限时**当作命中**处理（见 `refuseSelfTargetedCall`）。扫不完就放行
- * 等于给出一条现成的绕过方式：把目标埋到第 13 层即可。宁可拒绝一个畸形到
- * 不像真实调用的请求。
+ * Exceeding the limit is treated as a **hit** (see `refuseSelfTargetedCall`). Allowing a scan
+ * that cannot complete would be handing out a ready-made bypass: just bury the target at level 13.
+ * Better to reject a request too malformed to look like a real call.
  */
 const MAX_SCAN_DEPTH = 12;
 
-/** 拒绝一个深到扫不完的入参时给模型的说明。 */
+/** Explanation given to the model when rejecting an argument too deep to finish scanning. */
 const SELF_SCAN_DEPTH_REFUSAL =
-  "调用参数的嵌套层级超出了安全检查的上限，已被拒绝：无法确认它是否以 LiveAgent 自身为目标。" +
-  "请用扁平一些的参数重试。";
+  "The call arguments' nesting depth exceeds the security-check limit and has been rejected: " +
+  "we cannot confirm whether it targets ReactorPro itself. Please retry with flatter arguments.";
 
-/** 各家写法里表示进程 id 的字段名。 */
+/** Field names used by various conventions to denote a process id. */
 const PID_KEYS = ["pid", "process_id", "processId", "owner_pid", "ownerPid"] as const;
 
-/** 各家写法里表示窗口 id 的字段名。 */
+/** Field names used by various conventions to denote a window id. */
 const WINDOW_ID_KEYS = ["window_id", "windowId"] as const;
 
 /**
- * `target.kind` 里表示「某个窗口 / 应用 / 元素」的取值。
+ * The `target.kind` values that denote "some window / app / element".
  *
- * 只枚举这一侧、把其余（`desktop` / `screen` / `display` / 压根没有 target）
- * 都按屏幕绝对坐标处理，是刻意的 fail-closed：上游新增一种桌面级 target
- * 时不会因为没登记而漏拦。
+ * Enumerating only this side and treating everything else (`desktop` / `screen` / `display` /
+ * no target at all) as screen-absolute coordinates is a deliberate fail-closed choice: when
+ * upstream adds a new desktop-level target, it will not slip through merely because it was not
+ * registered.
  */
 const SCOPED_TARGET_KINDS = new Set(["window", "app", "application", "element"]);
 
@@ -169,11 +192,12 @@ function readNumber(value: unknown): number | null {
 type ScanResult = "hit" | "truncated" | "clear";
 
 /**
- * 深度遍历，对每个对象节点调用 `visit`。
+ * Depth-first traversal, calling `visit` on each object node.
  *
- * 返回 `hit`（visit 命中）、`truncated`（没命中，但有分支深到扫不完）或
- * `clear`（完整扫完且没命中）。三态而非布尔，是因为调用方要区分「确认安全」
- * 和「没能确认」——安全判定里这两者不能都当放行。
+ * Returns `hit` (visit matched), `truncated` (no match, but a branch is too deep to finish
+ * scanning), or `clear` (fully scanned with no match). Three states rather than a boolean
+ * because the caller must distinguish "confirmed safe" from "could not confirm" — in a
+ * security decision those two must not both be treated as allow.
  */
 function scanRecords(
   node: unknown,
@@ -207,10 +231,12 @@ function scanChildren(
 }
 
 /**
- * 入参检查：按 pid / window_id 寻址的自指调用。返回拒绝理由，或 null 放行。
+ * Argument check: self-targeted calls addressed by pid / window_id. Returns the rejection
+ * reason, or null to allow.
  *
- * 整棵参数树都要扫，不只是顶层：上游把目标包在 `target` 对象里，只看顶层
- * `pid` / `window_id` 会让官方写法原样通过。扫不完（超出深度上限）同样拒绝。
+ * The whole argument tree must be scanned, not just the top level: upstream wraps the target
+ * in a `target` object, so looking only at top-level `pid` / `window_id` would let the official
+ * form pass through unchanged. An incomplete scan (exceeding the depth limit) is likewise rejected.
  */
 export function refuseSelfTargetedCall(
   args: Record<string, unknown> | undefined,
@@ -234,12 +260,13 @@ export function refuseSelfTargetedCall(
 }
 
 /**
- * 这次调用是否以「整个桌面」为目标、并带了屏幕坐标。
+ * Whether this call targets the "whole desktop" and carries screen coordinates.
  *
- * 显式指向某个窗口 / 元素时返回 false：那种坐标是相对该窗口的，而窗口本身
- * 是不是宿主已经由 `refuseSelfTargetedCall` 判过了，这里再按屏幕坐标比对
- * 只会误伤。没有任何 target 字段的扁平写法按桌面处理——早期 API 的坐标就是
- * 屏幕绝对坐标。
+ * Returns false when it explicitly points at a window / element: those coordinates are
+ * relative to that window, and whether the window itself is the host has already been decided
+ * by `refuseSelfTargetedCall`, so comparing screen coordinates again here would only cause
+ * false positives. A flat form with no target field is treated as desktop — coordinates in the
+ * early API were screen-absolute.
  */
 export function usesDesktopScreenCoordinates(args: Record<string, unknown> | undefined): boolean {
   if (!args) return false;
@@ -258,7 +285,7 @@ export function usesDesktopScreenCoordinates(args: Record<string, unknown> | und
   return collectScreenPoints(args).length > 0;
 }
 
-/** 收集参数里所有形如 `{x, y}` 的点。 */
+/** Collect all points of the form `{x, y}` in the arguments. */
 function collectScreenPoints(args: Record<string, unknown>): Array<{ x: number; y: number }> {
   const points: Array<{ x: number; y: number }> = [];
   scanRecords(args, (record) => {
@@ -280,10 +307,11 @@ function pointInRect(point: { x: number; y: number }, rect: SelfWindowRect): boo
 }
 
 /**
- * 入参检查：以桌面为目标、坐标落在宿主窗口矩形内的调用。
+ * Argument check: calls targeting the desktop whose coordinates fall inside a host window rectangle.
  *
- * 只在 `usesDesktopScreenCoordinates` 为真时才有意义；矩形列表为空（拿不到、
- * 或宿主窗口全部不可见）时一律放行——宁可不拦，也不误伤正常目标。
+ * Only meaningful when `usesDesktopScreenCoordinates` is true; when the rectangle list is empty
+ * (unavailable, or all host windows invisible) it always allows — better not to block than to
+ * harm legitimate targets.
  */
 export function refuseSelfRegionCall(
   args: Record<string, unknown> | undefined,
@@ -296,27 +324,30 @@ export function refuseSelfRegionCall(
 }
 
 /**
- * 投递语义是「发给键盘焦点」的工具：desktop 作用域下不带 pid / window_id /
- * 坐标也能生效，v0.22.0 契约里 `press_key` 只要求 `key`、`hotkey` 只要求
- * `keys`、`type_text` 只要求 `text`。
+ * Tools whose delivery semantics are "send to the keyboard focus": under the desktop scope they
+ * take effect without pid / window_id / coordinates. In the v0.22.0 contract `press_key` requires
+ * only `key`, `hotkey` only `keys`, and `type_text` only `text`.
  */
 const FOCUS_DELIVERY_TOOLS = new Set(["type_text", "press_key", "hotkey"]);
 
 /**
- * 这次调用是否是「无明确进程身份的键盘输入」——即投递目标由**当前焦点**
- * 决定、而不是由参数决定的那类。
+ * Whether this call is "keyboard input with no explicit process identity" — i.e. the kind whose
+ * delivery target is determined by the **current focus** rather than by the arguments.
  *
- * 两个条件：
- * - 是键盘 / 文本注入调用。除了按工具名认（上游现约的三个），还按参数形态
- *   兜底：带字符串 `key` 或字符串数组 `keys` 的调用一律算——上游改名或新增
- *   `hold_key` 之类的工具时不至于漏网。`text` 字段刻意**不**参与形态兜底：
- *   `clipboard_write` / 查找类工具也带 text，投递语义与焦点无关，误伤它们
- *   只会让守卫显得不可预测；`type_text` 本身已由工具名覆盖。
- * - 参数里**没有任何** pid / window_id。按契约，带了身份的调用（包括
- *   desktop scope + pid 的后台投递写法）投递给那个窗口，不跟焦点走；宿主
- *   自己的身份在此之前已被 `refuseSelfTargetedCall` 拒掉，所以走到这里的
- *   身份必然指向别的应用。刻意不看 `target.kind`：`kind: "window"` 但不带
- *   身份的调用本来就寻址不到任何窗口，按焦点投递处理是 fail-closed。
+ * Two conditions:
+ * - It is a keyboard / text injection call. Besides recognizing it by tool name (the three
+ *   upstream currently has), fall back on argument shape: any call carrying a string `key` or a
+ *   string array `keys` counts — so upstream renaming or adding a tool like `hold_key` does not
+ *   slip through. The `text` field deliberately does **not** participate in the shape fallback:
+ *   `clipboard_write` / lookup tools also carry text, their delivery semantics are unrelated to
+ *   focus, and hitting them would only make the guard look unpredictable; `type_text` is already
+ *   covered by its tool name.
+ * - The arguments contain **no** pid / window_id at all. By contract, calls carrying an identity
+ *   (including the desktop scope + pid background-delivery form) deliver to that window and do
+ *   not follow focus; the host's own identity has already been rejected by
+ *   `refuseSelfTargetedCall` before this point, so any identity reaching here must point to
+ *   another application. We deliberately ignore `target.kind`: a call with `kind: "window"` but
+ *   no identity cannot address any window anyway, so treating it as focus delivery is fail-closed.
  */
 export function isDesktopKeyboardCall(
   toolName: string,
@@ -342,12 +373,14 @@ export function isDesktopKeyboardCall(
 }
 
 /**
- * 入参检查：无明确目标的键盘输入，在宿主处于前台（或前台不可知）时拒绝。
+ * Argument check: keyboard input with no explicit target, rejected when the host is frontmost
+ * (or the frontmost is unknown).
  *
- * `frontmostPid` 为 null（查询失败 / 平台不支持）时**同样拒绝**：这里不能
- * 学窗口矩形那样「取不到就放行」——键盘输入不存在「误伤矩形下方真实目标」
- * 的二义性，而放行的代价是模型可以对宿主敲任意按键。拒绝话术会引导模型
- * 改用带 pid / window_id 的显式目标，能力不算丢失。
+ * It **also rejects** when `frontmostPid` is null (query failed / platform unsupported): we must
+ * not follow the window-rectangle approach of "allow when unavailable" — keyboard input has no
+ * ambiguity about "hitting the real target below the rectangle", and the cost of allowing it is
+ * that the model can type arbitrary keys at the host. The rejection message guides the model to
+ * switch to an explicit target with pid / window_id, so no capability is lost.
  */
 export function refuseDesktopKeyboardCall(
   toolName: string,
@@ -361,11 +394,13 @@ export function refuseDesktopKeyboardCall(
 }
 
 /**
- * 从 `from` 起找出下一段结构完整的 JSON，返回它在原文中的区间。
+ * Find the next structurally complete JSON segment starting from `from`, returning its range in
+ * the original text.
  *
- * 官方 MCP 的文本块通常是「一行 `✅ Windows listed` 摘要 + 一段 JSON」，
- * 要求整段 trim 后以 `{` / `[` 开头会让这类结果整个漏过过滤。扫描时要认
- * 字符串字面量与转义，否则 payload 里带花括号的字符串会把配对算错。
+ * An official MCP text block is usually "a one-line `✅ Windows listed` summary + a JSON segment",
+ * so requiring the whole block after trim to start with `{` / `[` would let such results slip past
+ * filtering entirely. The scan must recognize string literals and escapes, or a string containing
+ * braces inside the payload would miscount the pairing.
  */
 function findJsonSpan(text: string, from = 0): { start: number; end: number } | null {
   for (let i = from; i < text.length; i++) {
@@ -395,24 +430,26 @@ function findJsonSpan(text: string, from = 0): { start: number; end: number } | 
         if (depth === 0) return { start: i, end: j + 1 };
       }
     }
-    // 从这个位置起始的括号没有配平；再往后找也只会落进同一段未闭合文本。
+    // The bracket starting at this position is unbalanced; searching further would only land in
+    // the same unclosed text.
     return null;
   }
   return null;
 }
 
 /**
- * 从一条结果文本里剔除宿主记录，并顺手记下宿主的 window_id。
+ * Strip host records from a result text, incidentally recording the host's window_id.
  *
- * 文本里没有可解析的 JSON（截图说明、纯文本报告）时原样返回：这类载荷里
- * 没有可供寻址的记录，剔无可剔。JSON 片段前后的摘要文字原样保留——那是给
- * 模型看的上下文，改写它没有必要。
+ * Returns it unchanged when the text contains no parseable JSON (screenshot captions, plain-text
+ * reports): such payloads have no addressable records to strip. The summary text before and after
+ * the JSON segment is preserved as-is — it is context for the model, and rewriting it is unnecessary.
  */
 export function stripSelfFromJsonText(text: string, selfPid: number | null): string {
   if (selfPid === null) return text;
 
-  // 文本里可能不止一段 JSON（多次调用的合并结果、摘要 + 明细）。只处理第一段
-  // 会让后面那些原样进模型，所以逐段扫到底。
+  // There may be more than one JSON segment in the text (merged results of multiple calls,
+  // summary + details). Handling only the first would let the later ones reach the model as-is,
+  // so scan all the way to the end, segment by segment.
   let out = "";
   let cursor = 0;
   let changedAny = false;
@@ -425,14 +462,15 @@ export function stripSelfFromJsonText(text: string, selfPid: number | null): str
     cursor = span.end;
   }
 
-  // 没有命中就返回原文，不重新拼接——避免无谓地改写模型看到的原文格式。
+  // If nothing matched, return the original text without re-joining — avoid needlessly rewriting
+  // the original format the model sees.
   if (!changedAny) return text;
   return out + text.slice(cursor);
 }
 
 /**
- * 剔除一段 JSON 文本里的宿主记录。有改动返回新的序列化结果，没改动或解析
- * 失败返回 null（调用方据此保留原文）。
+ * Strip host records from one JSON text segment. Returns the new serialized result when changed,
+ * or null when unchanged or parsing fails (the caller then keeps the original text).
  */
 function stripSelfFromJsonValue(raw: string, selfPid: number): string | null {
   let parsed: unknown;
@@ -470,7 +508,7 @@ function stripSelfFromJsonValue(raw: string, selfPid: number): string | null {
   return changed ? JSON.stringify(result) : null;
 }
 
-/** 供测试重置进程级缓存。 */
+/** Reset the process-level caches (for tests). */
 export function resetCuaSelfGuardCaches() {
   selfPidPromise = null;
   selfRectsCache = null;
@@ -478,15 +516,15 @@ export function resetCuaSelfGuardCaches() {
 }
 
 export type CuaSelfGuard = {
-  /** 调用前检查；返回拒绝理由或 null。`toolName` 是 MCP 侧的原始工具名。 */
+  /** Pre-call check; returns the rejection reason or null. `toolName` is the raw MCP-side tool name. */
   refuse: (toolName: string, args: Record<string, unknown> | undefined) => Promise<string | null>;
-  /** 结果文本过滤。 */
+  /** Result-text filtering. */
   strip: (text: string) => string;
 };
 
 /**
- * 取得当前生效的守卫。`allowSelfTargeting` 为 true，或宿主身份查不到
- * （非桌面端）时返回 null——调用方据此完全跳过这层。
+ * Obtain the currently effective guard. Returns null when `allowSelfTargeting` is true, or when
+ * the host identity cannot be found (non-desktop) — the caller then skips this layer entirely.
  */
 export async function resolveCuaSelfGuard(
   allowSelfTargeting: boolean,
@@ -498,8 +536,9 @@ export async function resolveCuaSelfGuard(
     refuse: async (toolName, args) => {
       const targeted = refuseSelfTargetedCall(args, selfPid);
       if (targeted) return targeted;
-      // 无明确目标的键盘输入跟着焦点走，前台是宿主（或不可知）就拒绝。
-      // 前台查询要过一趟 IPC，只在这次调用真的属于该类时才去取。
+      // Keyboard input with no explicit target follows focus, so reject when the frontmost is
+      // the host (or unknown). The frontmost query costs an IPC round trip, so only fetch it
+      // when this call really belongs to that class.
       if (isDesktopKeyboardCall(toolName, args)) {
         const keyboard = refuseDesktopKeyboardCall(
           toolName,
@@ -509,7 +548,7 @@ export async function resolveCuaSelfGuard(
         );
         if (keyboard) return keyboard;
       }
-      // 窗口矩形同理，只在这次调用真的带了桌面坐标时才去取。
+      // Same for window rectangles: only fetch them when this call actually carries desktop coordinates.
       if (!usesDesktopScreenCoordinates(args)) return null;
       return refuseSelfRegionCall(args, await loadSelfWindowRects());
     },

@@ -1,7 +1,9 @@
-// v2 统一线协议（WebSocket+Protobuf）：/ws/v2（浏览器）、/ws/v2/agent（桌面端）、
-// /ws/v2/terminal（终端数据面）三链路的帧壳。一条 WS 二进制消息承载一条帧，文本帧即协议错误；
-// 首帧必须为 hello，鉴权失败以 close code 4401 关闭。业务载荷复用 gateway.proto 的 v2 消息（三端唯一事实源），
-// 本文件仅定义帧壳与网关本地载荷。
+// v2 unified wire protocol (WebSocket+Protobuf): the frame shell for the three links
+// /ws/v2 (browser), /ws/v2/agent (desktop), and /ws/v2/terminal (terminal data plane).
+// One WS binary message carries one frame; a text frame is a protocol error. The first
+// frame must be hello; an authentication failure closes with close code 4401. Business
+// payloads reuse the v2 messages of gateway.proto (the single source of truth for all
+// three ends); this file defines only the frame shell and gateway-local payloads.
 syntax = "proto3";
 
 package liveagent.gateway.v2;
@@ -11,28 +13,29 @@ import "proto/v2/gateway.proto";
 option go_package = "github.com/liveagent/agent-gateway/internal/proto/v2;gatewayv2";
 
 // ---------------------------------------------------------------------------
-// 握手
+// Handshake
 // ---------------------------------------------------------------------------
 
-// ClientRole 区分 /ws/v2/terminal 上连接的所属端（该链路两端共用一条路径，靠 hello.role 区分）。
+// ClientRole distinguishes which end a connection on /ws/v2/terminal belongs to
+// (both ends of that link share a single path and are distinguished by hello.role).
 enum ClientRole {
   CLIENT_ROLE_UNSPECIFIED = 0;
   CLIENT_ROLE_BROWSER = 1;
   CLIENT_ROLE_AGENT = 2;
 }
 
-// ClientHello 是所有 v2 连接的第一帧。
+// ClientHello is the first frame of every v2 connection.
 message ClientHello {
-  // 协议版本，当前恒为 2；未知版本被服务端拒绝。
+  // Protocol version, currently always 2; unknown versions are rejected by the server.
   uint32 protocol_version = 1;
   ClientRole role = 2;
-  // 网关访问令牌，服务端做常量时间比较。
+  // Gateway access token; the server performs a constant-time comparison.
   string token = 3;
-  // CLIENT_ROLE_AGENT 必须以 agent_id 声明自身身份；浏览器角色在
-  // /ws/v2/terminal 上也必须以 agent_id 显式绑定数据面目标。
+  // CLIENT_ROLE_AGENT must declare its identity via agent_id; the browser role must
+  // also explicitly bind the data-plane target via agent_id on /ws/v2/terminal.
   string agent_id = 4;
   string agent_version = 5;
-  // 客户端标识（如 "webui" / "desktop"），仅用于观测与日志。
+  // Client identifier (e.g. "webui" / "desktop"), used only for observability and logging.
   string client_name = 6;
   string client_version = 7;
   // Optional feature identifiers supported by this client. Reliable desktop
@@ -40,22 +43,24 @@ message ClientHello {
   repeated string capabilities = 8;
 }
 
-// ServerHello 是服务端对 ClientHello 的应答；ok=false 时随即关闭连接。
+// ServerHello is the server's reply to ClientHello; when ok=false the connection is closed immediately.
 message ServerHello {
   bool ok = 1;
   string message = 2;
-  // 仅 agent 角色返回。
+  // Returned only for the agent role.
   string session_id = 3;
-  // 服务端 Unix 秒时间戳，供客户端校准。
+  // Server Unix-seconds timestamp, for client clock calibration.
   int64 server_time = 4;
-  // 服务端心跳周期与消息大小上限，客户端应据此配置本地看门狗与分片。
+  // Server heartbeat period and maximum message size; the client should configure its
+  // local watchdog and fragmentation accordingly.
   uint32 heartbeat_period_seconds = 5;
   uint64 max_message_bytes = 6;
   // Feature identifiers supported by the gateway.
   repeated string capabilities = 7;
 }
 
-// PingFrame / PongFrame 是应用层心跳：WS 控制帧 ping 探测网络栈，本帧探测页面 JS/事件循环存活。
+// PingFrame / PongFrame are application-layer heartbeats: WS control-frame ping probes
+// the network stack, while these frames probe page JS/event-loop liveness.
 message PingFrame {
   int64 timestamp = 1;
 }
@@ -64,92 +69,30 @@ message PongFrame {
   int64 timestamp = 1;
 }
 
-// AckResult 是本地操作的通用确认应答。
+// AckResult is the generic acknowledgement for local operations.
 message AckResult {
   bool ok = 1;
 }
 
 // ---------------------------------------------------------------------------
-// 独立语音识别链路（/ws/v2/stt）
+// Browser link (/ws/v2)
 // ---------------------------------------------------------------------------
 
-message SttClientHello {
-  uint32 protocol_version = 1;
-  string token = 2;
-}
-
-message SttStart {
-  string session_id = 1;
-  string provider = 2;
-}
-
-message SttAudio {
-  string session_id = 1;
-  uint32 sequence = 2;
-  bytes pcm = 3;
-}
-
-message SttSessionControl {
-  string session_id = 1;
-}
-
-message SttClientFrame {
-  oneof payload {
-    SttClientHello hello = 1;
-    SttStart start = 2;
-    SttAudio audio = 3;
-    SttSessionControl stop = 4;
-    SttSessionControl cancel = 5;
-  }
-}
-
-message SttServerHello {
-  bool ok = 1;
-  string message = 2;
-}
-
-message SttTextEvent {
-  string session_id = 1;
-  string text = 2;
-}
-
-message SttError {
-  string session_id = 1;
-  string code = 2;
-  string message = 3;
-}
-
-message SttClosed {
-  string session_id = 1;
-}
-
-message SttServerFrame {
-  oneof payload {
-    SttServerHello hello = 1;
-    SttTextEvent ready = 2;
-    SttTextEvent partial = 3;
-    SttTextEvent final = 4;
-    SttError error = 5;
-    SttClosed closed = 6;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 浏览器链路（/ws/v2）
-// ---------------------------------------------------------------------------
-
-// WebClientFrame 为浏览器 → 网关方向的帧。除 agent_request 直通臂外，其余臂均为
-// 网关本地操作（由网关自身状态应答，不经桌面端往返）。
+// WebClientFrame is a browser -> gateway frame. Except for the agent_request pass-through
+// arm, all other arms are gateway-local operations (answered from the gateway's own state,
+// without a round trip to the desktop).
 message WebClientFrame {
-  // 请求关联 id，客户端生成、响应帧回携；广播事件与心跳帧为空。
+  // Request correlation id, generated by the client and echoed back on the response
+  // frame; empty for broadcast events and heartbeat frames.
   string request_id = 1;
-  // 目标 Agent id。agent_request / status_get / chat_command / chat_prepare /
-  // workspace_* 必填；hello / pong / agent_list 与全局会话查询臂忽略本字段。
+  // Target Agent id. Required for agent_request / status_get / chat_command / chat_prepare /
+  // workspace_*; ignored by hello / pong / agent_list and the global conversation query arms.
   string agent_id = 13;
 
   oneof payload {
     ClientHello hello = 2;
-    // 直通请求：网关校验白名单与限额后转发桌面端（request_id 按连接命名空间化防冲突）。
+    // Pass-through request: after validating the allowlist and quotas, the gateway
+    // forwards it to the desktop (request_id is namespaced per connection to prevent collisions).
     GatewayEnvelope agent_request = 3;
     StatusGetRequest status_get = 4;
     ChatCommandRequest chat_command = 5;
@@ -160,28 +103,28 @@ message WebClientFrame {
     WorkspaceSubscribeRequest workspace_subscribe = 10;
     WorkspaceUnsubscribeRequest workspace_unsubscribe = 11;
     PongFrame pong = 12;
-    // Agent 目录查询：全部已登记 Agent（含离线）的状态列表。
+    // Agent directory query: status list of all registered Agents (including offline ones).
     AgentListRequest agent_list = 14;
   }
 }
 
-// WebServerFrame 为网关 → 浏览器方向的帧。
+// WebServerFrame is a gateway -> browser frame.
 message WebServerFrame {
-  // 关联响应回填请求 id；服务端主动推送（广播/心跳）时为空。
+  // Correlated responses fill in the request id; empty for server-initiated pushes (broadcast/heartbeat).
   string request_id = 1;
-  // 来源/目标 Agent id：目标型响应回填请求声明的目标，Agent 事件广播标注来源；
-  // hello / ping / ack / agent_list 与全局聚合帧为空。客户端按此字段过滤
-  // 非活跃 Agent 的事件。
+  // Source/target Agent id: target-type responses echo the target declared by the request,
+  // and Agent event broadcasts mark the source; empty for hello / ping / ack / agent_list
+  // and global aggregate frames. Clients filter events for inactive Agents by this field.
   string agent_id = 16;
 
   oneof payload {
     ServerHello hello = 2;
-    // 直通响应：桌面端返回的业务信封（含 error=99 错误臂）。
+    // Pass-through response: the business envelope returned by the desktop (including the error=99 error arm).
     AgentEnvelope agent_response = 3;
-    // 网关本地错误（鉴权、校验、离线等）。
+    // Gateway-local error (authentication, validation, offline, etc.).
     ErrorResponse local_error = 4;
     PingFrame ping = 5;
-    // status_get / chat_prepare 的响应与 status 广播共用一个状态归一化器。
+    // The responses for status_get / chat_prepare and the status broadcast share one status normalizer.
     StatusEvent status = 6;
     ChatSubscribeResult chat_subscribed = 7;
     ChatCommandAccepted chat_accepted = 8;
@@ -194,7 +137,8 @@ message WebServerFrame {
     ChatCancelResult chat_cancelled = 15;
     AgentListResult agent_list = 17;
 
-    // 广播事件：session 层吐出的业务消息零塑形直转。
+    // Broadcast events: business messages emitted by the session layer are forwarded
+    // directly with zero reshaping.
     HistorySyncEvent history_event = 20;
     SettingsSyncEvent settings_event = 21;
     TerminalEvent terminal_event = 22;
@@ -206,20 +150,20 @@ message WebServerFrame {
   }
 }
 
-// AgentListRequest 查询 Agent 目录；响应为 AgentListResult。
+// AgentListRequest queries the Agent directory; the response is AgentListResult.
 message AgentListRequest {}
 
-// AgentListResult 返回全部已登记 Agent 的状态（含离线项，供目录渲染），
-// 复用 StatusEvent 归一化器，按 agent_id 排序。
+// AgentListResult returns the status of all registered Agents (including offline entries,
+// for directory rendering), reusing the StatusEvent normalizer and sorted by agent_id.
 message AgentListResult {
   repeated StatusEvent agents = 1;
 }
 
 // ---------------------------------------------------------------------------
-// 桌面端链路（/ws/v2/agent）
+// Desktop link (/ws/v2/agent)
 // ---------------------------------------------------------------------------
 
-// AgentClientFrame 为桌面端 → 网关方向的帧。
+// AgentClientFrame is a desktop -> gateway frame.
 message AgentClientFrame {
   oneof payload {
     ClientHello hello = 1;
@@ -227,7 +171,7 @@ message AgentClientFrame {
   }
 }
 
-// AgentServerFrame 为网关 → 桌面端方向的帧。
+// AgentServerFrame is a gateway -> desktop frame.
 message AgentServerFrame {
   oneof payload {
     ServerHello hello = 1;
@@ -236,10 +180,10 @@ message AgentServerFrame {
 }
 
 // ---------------------------------------------------------------------------
-// 终端链路（/ws/v2/terminal，两端共用）
+// Terminal link (/ws/v2/terminal, shared by both ends)
 // ---------------------------------------------------------------------------
 
-// TerminalClientFrame 为客户端（浏览器或桌面端）→ 网关方向的帧。
+// TerminalClientFrame is a client (browser or desktop) -> gateway frame.
 message TerminalClientFrame {
   oneof payload {
     ClientHello hello = 1;
@@ -247,7 +191,7 @@ message TerminalClientFrame {
   }
 }
 
-// TerminalServerFrame 为网关 → 客户端方向的帧。
+// TerminalServerFrame is a gateway -> client frame.
 message TerminalServerFrame {
   oneof payload {
     ServerHello hello = 1;
@@ -256,13 +200,13 @@ message TerminalServerFrame {
 }
 
 // ---------------------------------------------------------------------------
-// 网关本地载荷（由网关直接处理并以 protobuf 建模）
+// Gateway-local payloads (handled directly by the gateway and modeled in protobuf)
 // ---------------------------------------------------------------------------
 
-// StatusGetRequest 请求网关侧运行状态快照（操作类型："status.get"）。
+// StatusGetRequest requests a gateway-side runtime status snapshot (operation type: "status.get").
 message StatusGetRequest {}
 
-// StatusEvent 镜像 session.Status 的 JSON 形状（字段一一对应）。
+// StatusEvent mirrors the JSON shape of session.Status (fields correspond one-to-one).
 message StatusEvent {
   bool online = 1;
   bool agent_ready = 2;
@@ -277,52 +221,57 @@ message StatusEvent {
   string runtime_worker_id = 11;
   bool runtime_visible = 12;
   uint32 runtime_active_run_count = 13;
-  // 仅 agent_list 目录响应填充；实时状态响应与广播保持为空，避免状态热路径访问数据库。
+  // Populated only by the agent_list directory response; live status responses and
+  // broadcasts leave it empty to avoid accessing the database on the hot status path.
   string name = 14;
 }
 
-// ChatPrepareRequest 唤醒/探活桌面端 chat 运行时（操作类型："chat.prepare"）；响应为 StatusEvent。
+// ChatPrepareRequest wakes/probes the desktop chat runtime (operation type: "chat.prepare");
+// the response is StatusEvent.
 message ChatPrepareRequest {
   string reason = 1;
 }
 
-// ChatSubscribeRequest 订阅会话事件流（操作类型："chat.subscribe"）；外层 WebClientFrame.agent_id 必须非空，
-// 会话按 (agent_id, conversation_id) 隔离。after_seq + stream_epoch
-// 支持断线重放：epoch 不匹配或序号超界时服务端置 reset 并从头回放。
+// ChatSubscribeRequest subscribes to a conversation event stream (operation type:
+// "chat.subscribe"); the outer WebClientFrame.agent_id must be non-empty, and conversations
+// are isolated by (agent_id, conversation_id). after_seq + stream_epoch support reconnection
+// replay: when the epoch does not match or the sequence number is out of range, the server
+// sets reset and replays from the beginning.
 message ChatSubscribeRequest {
   string conversation_id = 1;
   int64 after_seq = 2;
   string stream_epoch = 3;
 }
 
-// ChatRunActivity 镜像 session.RunActivity 的 JSON 形状。
+// ChatRunActivity mirrors the JSON shape of session.RunActivity.
 message ChatRunActivity {
   string run_id = 1;
   string state = 2;
   int64 started_seq = 3;
-  // Unix 毫秒时间戳。
+  // Unix millisecond timestamp.
   int64 updated_at_ms = 4;
   string tool_status = 5;
   bool tool_status_is_compaction = 6;
   string client_request_id = 7;
-  // 以下字段仅在 chat_activities 列表中填充（agent_id 标注运行所在 Agent）。
+  // The following fields are populated only in the chat_activities list
+  // (agent_id marks the Agent the run belongs to).
   string conversation_id = 8;
   string workdir = 9;
   string agent_id = 10;
 }
 
-// ChatRunSnapshot 镜像 session.RunSnapshot 的 JSON 形状。
+// ChatRunSnapshot mirrors the JSON shape of session.RunSnapshot.
 message ChatRunSnapshot {
   string run_id = 1;
   int64 revision = 2;
-  // 桌面端渲染快照，内容为动态 JSON（按字符串携带，不建模）。
+  // Snapshot rendered by the desktop; the content is dynamic JSON (carried as a string, not modeled).
   string entries_json = 3;
   string tool_status = 4;
   bool tool_status_is_compaction = 5;
   int64 as_of_seq = 6;
 }
 
-// ChatSubscribeResult 是 chat_subscribe 的响应。
+// ChatSubscribeResult is the response to chat_subscribe.
 message ChatSubscribeResult {
   string conversation_id = 1;
   string stream_epoch = 2;
@@ -330,32 +279,37 @@ message ChatSubscribeResult {
   bool reset = 4;
   ChatRunActivity activity = 5;
   ChatRunSnapshot snapshot = 6;
-  // 回放的事件序列。载荷由 chatwire 塑形为深度动态 JSON，按字节携带、不额外 proto 化
-  // （重建模会分叉 chatwire 且对压缩后的二进制帧无实际收益）。
+  // Replayed event sequence. The payload is shaped by chatwire into deeply dynamic JSON
+  // and carried as bytes without additional proto modeling (re-modeling would fork
+  // chatwire and yield no real benefit for compressed binary frames).
   repeated bytes events_json = 7;
 }
 
-// ChatUnsubscribeRequest 取消订阅（操作类型："chat.unsubscribe"）；响应 AckResult。
+// ChatUnsubscribeRequest cancels a subscription (operation type: "chat.unsubscribe");
+// the response is AckResult.
 message ChatUnsubscribeRequest {
   string conversation_id = 1;
 }
 
-// ChatActivitiesRequest 查询运行中会话（操作类型："chat.activities"）；仅由网关状态应答，桌面端离线时亦可用。
+// ChatActivitiesRequest queries running conversations (operation type: "chat.activities");
+// answered solely from gateway state, so it also works when the desktop is offline.
 message ChatActivitiesRequest {}
 
 message ChatActivitiesResult {
   repeated ChatRunActivity running_conversations = 1;
 }
 
-// ChatStreamEvent 是订阅后推送的单条会话事件。
+// ChatStreamEvent is a single conversation event pushed after subscription.
 message ChatStreamEvent {
   string conversation_id = 1;
-  // 事件序号（与 payload_json 内的 seq 一致，便于不解析载荷即可去重）。
+  // Event sequence number (identical to the seq inside payload_json, allowing deduplication
+  // without parsing the payload).
   int64 seq = 2;
   bytes payload_json = 3;
 }
 
-// ChatCommandAccepted 是 chat_command 提交被接受的响应（chat_command 的接受应答）。
+// ChatCommandAccepted is the response indicating a chat_command submission was accepted
+// (the acceptance acknowledgement for chat_command).
 message ChatCommandAccepted {
   string run_id = 1;
   string conversation_id = 2;
@@ -363,7 +317,8 @@ message ChatCommandAccepted {
   bool deduped = 4;
 }
 
-// ChatCommandUpdate 推送命令的前置阶段结果（bound / queued_in_gui / failed），镜像 session.ChatCommandUpdate。
+// ChatCommandUpdate pushes the pre-stage result of a command (bound / queued_in_gui / failed),
+// mirroring session.ChatCommandUpdate.
 message ChatCommandUpdate {
   string run_id = 1;
   string client_request_id = 2;
@@ -373,19 +328,21 @@ message ChatCommandUpdate {
   string message = 6;
 }
 
-// ChatSubscriptionReset 通知客户端某会话流已被限流丢弃，需重新订阅（after_seq 断点续传）。
+// ChatSubscriptionReset notifies the client that a conversation stream was dropped due to
+// throttling and must be re-subscribed (after_seq resumes from the breakpoint).
 message ChatSubscriptionReset {
   string conversation_id = 1;
 }
 
-// ChatCancelResult 是 chat.cancel 的响应。
+// ChatCancelResult is the response to chat.cancel.
 message ChatCancelResult {
   bool ok = 1;
   string run_id = 2;
   string conversation_id = 3;
 }
 
-// ChatActivityEvent 广播会话活动状态变化，镜像 session.ConversationActivityEvent。
+// ChatActivityEvent broadcasts conversation activity state changes,
+// mirroring session.ConversationActivityEvent.
 message ChatActivityEvent {
   string conversation_id = 1;
   string run_id = 2;
@@ -396,12 +353,14 @@ message ChatActivityEvent {
   int64 updated_at_ms = 7;
 }
 
-// WorkspaceSubscribeRequest 订阅工作区活动（操作类型："workspace.subscribe"）；响应 AckResult，事件经 workspace_activity 臂广播。
+// WorkspaceSubscribeRequest subscribes to workspace activity (operation type:
+// "workspace.subscribe"); the response is AckResult, and events are broadcast via the
+// workspace_activity arm.
 message WorkspaceSubscribeRequest {
   string workdir = 1;
 }
 
-// WorkspaceUnsubscribeRequest 取消订阅；响应 AckResult。
+// WorkspaceUnsubscribeRequest cancels the subscription; the response is AckResult.
 message WorkspaceUnsubscribeRequest {
   string workdir = 1;
 }

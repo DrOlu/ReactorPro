@@ -1,4 +1,4 @@
-//! Skill 校验：目录结构与元数据约束。
+//! Skill validation: directory structure and metadata constraints.
 
 use std::fs;
 use std::io::{BufRead, BufReader};

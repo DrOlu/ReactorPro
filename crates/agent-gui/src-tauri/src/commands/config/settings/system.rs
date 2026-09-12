@@ -1,17 +1,17 @@
 fn load_system(conn: &Connection) -> Result<Option<Value>, String> {
     let mut stmt = conn
         .prepare(SYSTEM_SETTINGS_SELECT_SQL)
-        .map_err(|e| format!("准备读取 {SYSTEM_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare reading {SYSTEM_SETTINGS_TABLE}: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
-        .map_err(|e| format!("读取 {SYSTEM_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("Failed to read {SYSTEM_SETTINGS_TABLE}: {e}"))?;
 
     let mut system = Map::new();
     for row in rows {
         let (setting_key, payload_json) =
-            row.map_err(|e| format!("读取 {SYSTEM_SETTINGS_TABLE} 行失败：{e}"))?;
+            row.map_err(|e| format!("Failed to read {SYSTEM_SETTINGS_TABLE} row: {e}"))?;
         system.insert(
             setting_key,
             parse_json(&payload_json, SYSTEM_SETTINGS_TABLE)?,
@@ -484,8 +484,8 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         SYSTEM_COMMAND_SAFETY_MODE_KEY.to_string(),
         normalize_command_safety_mode_value(system.get(SYSTEM_COMMAND_SAFETY_MODE_KEY)),
     );
-    // 缺省 false：安全侧的开关，任何非 true 的值（缺失、null、字符串）
-    // 都收敛成「不允许自指」。
+    // Defaults to false: a safety-side switch; any value that is not true (missing, null, string)
+    // collapses to "self-targeting not allowed".
     system.insert(
         SYSTEM_CUA_ALLOW_SELF_TARGETING_KEY.to_string(),
         Value::Bool(
@@ -503,12 +503,13 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
     Value::Object(system)
 }
 
-/// 浏览器接入模式的合法取值,与前端 BROWSER_AUTOMATION_MODES 一致。
+/// Valid values for browser access mode, consistent with the frontend BROWSER_AUTOMATION_MODES.
 const BROWSER_AUTOMATION_MODES: [&str; 3] = ["auto", "userProfile", "isolated"];
 
-/// "auto" | "userProfile" | "isolated";缺失/空串/未知值一律回 "auto"。
-/// 该设置是行为选择而非安全约束(登录态使用与否由 group:browser 审批把关),
-/// 未知值无需 fail-closed,与前端 normalizeBrowserAutomationMode 同语义。
+/// "auto" | "userProfile" | "isolated"; missing/empty/unknown values always fall back to "auto".
+/// This setting is a behavioral choice rather than a safety constraint (whether to use the
+/// logged-in state is gated by the group:browser approval), so unknown values need no fail-closed
+/// handling, with the same semantics as the frontend normalizeBrowserAutomationMode.
 fn normalize_browser_automation_mode_value(raw: Option<&Value>) -> Value {
     let text = raw
         .and_then(Value::as_str)
@@ -521,29 +522,33 @@ fn normalize_browser_automation_mode_value(raw: Option<&Value>) -> Value {
     }
 }
 
-/// 命令安全模式的合法取值,与前端 COMMAND_SAFETY_MODES 一致。
+/// Valid values for command safety mode, consistent with the frontend COMMAND_SAFETY_MODES.
 const COMMAND_SAFETY_MODES: [&str; 4] = ["ask", "auto", "sandbox", "sandboxOffline"];
-/// 键缺失(全新配置/旧快照)时的默认值。
+/// Default value when the key is missing (fresh configuration / old snapshot).
 const COMMAND_SAFETY_MODE_DEFAULT: &str = "auto";
-/// 存在但无法识别时收敛到的最严格值(逐次人工放行)。
+/// Strictest value to converge to when present but unrecognized (manual approval each time).
 const COMMAND_SAFETY_MODE_FAIL_CLOSED: &str = "ask";
 
 /// "ask" | "auto" | "sandbox" | "sandboxOffline"。
 ///
-/// - 键缺失 / null / 空串:沿用默认 "auto"(全新配置与旧快照的正常形态)。
-/// - **存在但无法识别:收敛到最严格的 "ask"**(P2#6)。该设置全部意义在于约束,而
-///   `save_system` 会先删除全部 system key 再按白名单重插,故此处的默认值不只是读取
-///   期兜底,而是会被破坏性地持久化。未来新增的模式值、回退到旧版本、手改配置的
-///   笔误若静默降级成最宽松的非 ask 值,等于悄悄放宽用户的约束选择;与 sandbox.rs
-///   自述的 fail-closed 原则一致,一律向严格侧收敛并留下告警。
+/// - Key missing / null / empty string: use the default "auto" (the normal shape for a fresh
+///   configuration and old snapshots).
+/// - **Present but unrecognized: converge to the strictest "ask"** (P2#6). This setting exists
+///   entirely to constrain, and `save_system` deletes all system keys before reinserting them
+///   from the whitelist, so the default here is not merely a read-time fallback -- it gets
+///   persisted destructively. If a newly added mode value, a rollback to an older version, or a
+///   typo from hand-editing the configuration silently degraded to the most permissive non-ask
+///   value, that would quietly loosen the user's chosen constraint; consistent with the
+///   fail-closed principle stated in sandbox.rs, always converge toward the strict side and
+///   leave a warning.
 ///
-/// 与前端 normalizeCommandSafetyMode 保持同一套语义。
+/// Keeps the same semantics as the frontend normalizeCommandSafetyMode.
 fn normalize_command_safety_mode_value(raw: Option<&Value>) -> Value {
     let Some(value) = raw.filter(|value| !value.is_null()) else {
         return Value::String(COMMAND_SAFETY_MODE_DEFAULT.to_string());
     };
     let Some(text) = value.as_str().map(str::trim) else {
-        // 非字符串(类型损坏)同样是"存在但无法识别"。
+        // A non-string (type corruption) likewise counts as "present but unrecognized".
         eprintln!(
             "[settings] non-string commandSafetyMode {value}; failing closed to \
 \"{COMMAND_SAFETY_MODE_FAIL_CLOSED}\""
@@ -563,11 +568,13 @@ fn normalize_command_safety_mode_value(raw: Option<&Value>) -> Value {
     Value::String(COMMAND_SAFETY_MODE_FAIL_CLOSED.to_string())
 }
 
-/// 沙箱下限的唯一权威来源(P2#3):后端自行回查持久化的 commandSafetyMode,不采信
-/// 调用方(渲染进程 / 网关 / Cron 调度器)声明的布尔。与 `load_runtime_ssh_host`
-/// 同一范式——服务端重新解析持久化配置,而不是信任请求参数。
+/// The single authoritative source for the sandbox lower bound (P2#3): the backend looks up the
+/// persisted commandSafetyMode itself and does not trust a boolean declared by the caller (renderer
+/// process / gateway / Cron scheduler). Same paradigm as `load_runtime_ssh_host` -- the server
+/// re-parses the persisted configuration rather than trusting request parameters.
 ///
-/// 读取失败时返回 Err:调用方据此 fail-closed(报错),绝不静默降级成无沙箱执行。
+/// Returns Err when reading fails: the caller then fails closed (errors out), and never silently
+/// degrades to execution without a sandbox.
 pub(crate) fn load_runtime_command_safety_mode() -> Result<String, String> {
     let conn = open_db()?;
     let system = load_system(&conn)?;
@@ -580,9 +587,11 @@ pub(crate) fn load_runtime_command_safety_mode() -> Result<String, String> {
     }
 }
 
-/// Browser 工具运行期的浏览器接入模式。与 `load_runtime_command_safety_mode`
-/// 同范式:后端回查持久化设置,不信任调用方参数;WebUI/网关调用自动同语义。
-/// 读取失败回缺省 "auto"(该设置非安全约束,无需 fail-closed 阻断)。
+/// The browser access mode for the Browser tool at runtime. Same paradigm as
+/// `load_runtime_command_safety_mode`: the backend looks up the persisted setting itself and does
+/// not trust caller parameters; WebUI/gateway calls automatically share the semantics.
+/// Falls back to the default "auto" when reading fails (this setting is not a safety constraint, so
+/// no fail-closed blocking is needed).
 pub(crate) fn load_runtime_browser_automation_mode() -> String {
     let mode = open_db()
         .and_then(|conn| load_system(&conn))
@@ -629,9 +638,9 @@ fn save_system_with_default_workdir(
     let updated_at = now_ms();
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启 {SYSTEM_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin {SYSTEM_SETTINGS_TABLE} transaction: {e}"))?;
     tx.execute(SYSTEM_SETTINGS_DELETE_SQL, [])
-        .map_err(|e| format!("清空 {SYSTEM_SETTINGS_TABLE} 失败：{e}"))?;
+        .map_err(|e| format!("Failed to clear {SYSTEM_SETTINGS_TABLE}: {e}"))?;
 
     for key in [
         SYSTEM_EXECUTION_MODE_KEY,
@@ -667,16 +676,16 @@ fn save_system_with_default_workdir(
                 updated_at
             ],
         )
-        .map_err(|e| format!("写入 {SYSTEM_SETTINGS_TABLE}.{key} 失败：{e}"))?;
+        .map_err(|e| format!("Failed to write {SYSTEM_SETTINGS_TABLE}.{key}: {e}"))?;
     }
 
     tx.commit()
-        .map_err(|e| format!("提交 {SYSTEM_SETTINGS_TABLE} 事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit {SYSTEM_SETTINGS_TABLE} transaction: {e}"))?;
     crate::services::webdav_auto_sync::mark_dirty();
     Ok(())
 }
 
-/// 把 DB 中的 systemProxy 配置刷进全局代理状态（shell env 注入与 reqwest 出网共用）。
+/// Flush the systemProxy configuration from the DB into the global proxy state (shared by shell env injection and reqwest egress).
 fn refresh_system_proxy_state(conn: &Connection) -> Result<(), String> {
     let system = load_system(conn)?;
     crate::services::system_proxy::set_config(
@@ -687,7 +696,7 @@ fn refresh_system_proxy_state(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-/// 启动时初始化系统代理状态；失败不阻断启动（调用方仅记录日志）。
+/// Initialize the system proxy state at startup; failure does not block startup (the caller only logs it).
 pub fn initialize_system_proxy_from_db() -> Result<(), String> {
     let conn = open_db()?;
     refresh_system_proxy_state(&conn)

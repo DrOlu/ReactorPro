@@ -27,9 +27,9 @@ export const PROJECT_MEMORY_WRITE_EVIDENCE_GATE = [
   "  - a successful mutating MCP tool call targeting a file inside the workspace (e.g. design/file editors that write to workspace paths).",
   "- Read-only activity does NOT satisfy the gate, no matter how workspace-specific the discussion sounds. Non-qualifying: Read/Glob/Grep, search, planning, Q&A, reasoning, file inspection, summarizing, listing files, running test/lint/typecheck/git-status WITHOUT producing or modifying workspace files, or MemoryManager calls themselves.",
   '- When no qualifying mutation occurred this turn, do NOT classify the candidate as scope="project". Re-route instead: portable preference → type="feedback" scope="global"; identity/role → type="user" scope="global"; external pointer → type="reference" scope="global"; otherwise SKIP.',
-  '- Override exception: the latest USER message contains an explicit project-pin instruction (e.g. "记住本项目...", "在这个项目里以后...", "for this repo always...", "remember for this workspace") AND names a fact that is genuinely workspace-specific (not a portable preference). The explicit pin alone satisfies the gate; record it as source_quote and set reasoning="explicit user pin for this project".',
+  '- Override exception: the latest USER message contains an explicit project-pin instruction (e.g. "remember this project...", "for this project from now on...", "for this repo always...", "remember for this workspace") AND names a fact that is genuinely workspace-specific (not a portable preference). The explicit pin alone satisfies the gate; record it as source_quote and set reasoning="explicit user pin for this project".',
   '- action="delete" on an existing scope="project" entry is exempt when the user explicitly asks to forget it.',
-  '- For any write/update on scope="project", the reasoning field MUST cite the qualifying evidence in one short clause (e.g. "edited src/foo.ts this turn" or "explicit user pin: \\"记住本项目用 pnpm\\""). A project-scope plan item without such evidence in reasoning is invalid and must be rewritten as global or SKIP.',
+  '- For any write/update on scope="project", the reasoning field MUST cite the qualifying evidence in one short clause (e.g. "edited src/foo.ts this turn" or "explicit user pin: \\"remember to use pnpm for this project\\""). A project-scope plan item without such evidence in reasoning is invalid and must be rewritten as global or SKIP.',
 ].join("\n");
 
 export const MEMORY_SKIP_LIST_ITEMS = [
@@ -75,10 +75,10 @@ export const MEMORY_CONFIDENCE_RUBRIC = [
   "- medium: the user stated a stable fact about themselves, this project, or a reusable preference without a signal word, and the quote is unambiguous.",
   "- low: the fact is inferred from behavior or ambiguous; prefer skipping unless it is rare and high-value.",
   "- If you cannot provide a verbatim source_quote, downgrade one level; if that drops below low, skip.",
-  "- Signal words (Chinese): 我叫, 请记住, 以后, 默认, 一直, 永远, 千万别, 必须, 一定, 从今往后, 我需要你, 我希望你, 帮我记, 我习惯, 一向.",
+  "- Signal words (direct phrasing): I go by, please remember, from now on, by default, always, forever, never ever, must, definitely, from this point forward, I need you to, I hope you, note this for me, I'm used to, I've always.",
   "- Signal words (English): always, never, from now on, please remember, by default, prefer, must, I need you to, I want you to, I require, I'm used to.",
-  "- NOT signal words (treat as medium ceiling): 我喜欢, 我用, 通常, 有时, 我觉得, 一般, 大概, I like, I sometimes, I tend to, often, usually, somewhat.",
-  "- Negative cues (force at most low): 也许, 可能, 不确定, 试试看, maybe, perhaps, not sure, let me try, just for now.",
+  "- NOT signal words (treat as medium ceiling): I like, I use, usually, sometimes, I think, in general, roughly, I sometimes, I tend to, often, somewhat.",
+  "- Negative cues (force at most low): maybe, perhaps, not sure, let me try, just for now.",
 ].join("\n");
 
 export const MEMORY_WRITE_EVIDENCE_POLICY = [
@@ -87,7 +87,7 @@ export const MEMORY_WRITE_EVIDENCE_POLICY = [
   "- source_quote: a verbatim user quote, max 80 characters",
   "- reasoning: one short sentence explaining why this is durable",
   "- supersedes / conflicts_with / override_reject when replacing, conflicting with, or overriding previous memory.",
-  "LiveAgent stores these fields as a structured evidence block alongside the memory body.",
+  "ReactorPro stores these fields as a structured evidence block alongside the memory body.",
 ].join("\n");
 
-export const MEMORY_CONFIDENCE_CONTRACT_LINE = `confidence=high requires source_quote of >=${CONFIDENCE_CONTRACT.highMinQuoteChars} characters. LiveAgent auto-downgrades high→medium when the quote is shorter, and medium→low when the quote is empty; the stored evidence records auto_downgraded: true so your self-rating remains auditable.`;
+export const MEMORY_CONFIDENCE_CONTRACT_LINE = `confidence=high requires source_quote of >=${CONFIDENCE_CONTRACT.highMinQuoteChars} characters. ReactorPro auto-downgrades high→medium when the quote is shorter, and medium→low when the quote is empty; the stored evidence records auto_downgraded: true so your self-rating remains auditable.`;

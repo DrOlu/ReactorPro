@@ -5,9 +5,10 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const catalog = loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts");
 
-// 与 scripts/generate-model-catalog.mjs 的 SECTIONS 同值（键、序、质量门）：
-// 上游被截断时刷新会硬错，这里锁住已入库快照的完整性。前四家是应用供应商
-// 类型的原生目录；其余为国内厂商分区，只经跨供应商回查消费。
+// Same values as the SECTIONS in scripts/generate-model-catalog.mjs (keys, order, quality gate):
+// a truncated upstream makes refresh hard-fail, so this locks the integrity of the already
+// checked-in snapshot. The first four are the native directories for app provider types; the rest
+// are domestic-vendor sections consumed only via cross-provider lookup.
 const MIN_MODELS_PER_PROVIDER = {
   anthropic: 8,
   google: 15,
@@ -25,7 +26,7 @@ const MIN_MODELS_PER_PROVIDER = {
 };
 const PROVIDERS = Object.keys(MIN_MODELS_PER_PROVIDER);
 
-// 与生成脚本 INPUT_MODALITIES 同值：inputModalities 的合法值全集兼规范顺序。
+// Same values as the generator script's INPUT_MODALITIES: the full legal value set and canonical order for inputModalities.
 const INPUT_MODALITIES = ["text", "image", "audio", "video", "pdf"];
 
 test("generated catalog upholds the data invariants", () => {
@@ -34,8 +35,9 @@ test("generated catalog upholds the data invariants", () => {
     PROVIDERS,
     "catalog sections must match the generator's SECTIONS (keys and order)",
   );
-  // 跨供应商回查（findCatalogModelAcrossProviders）与索引的小写别名依赖
-  // id 全目录按小写唯一，否则同名模型在不同分区下会产生歧义命中。
+  // Cross-provider lookup (findCatalogModelAcrossProviders) and the index's lowercase aliases rely
+  // on ids being lowercase-unique across the whole catalog, otherwise same-named models in
+  // different sections cause ambiguous hits.
   const allIds = PROVIDERS.flatMap((providerId) =>
     catalog.MODEL_CATALOG[providerId].map((entry) => entry.id.toLowerCase()),
   );
@@ -53,18 +55,19 @@ test("generated catalog upholds the data invariants", () => {
       const label = `${providerId}/${entry.id}`;
       assert.ok(Number.isInteger(entry.contextWindow) && entry.contextWindow > 0, label);
       assert.ok(Number.isInteger(entry.maxOutputToken) && entry.maxOutputToken > 0, label);
-      // 生成期已应用统一语义规则：输出永远小于窗口，且运行时规则视其为不动点。
+      // A uniform semantic rule is applied at generation time: output is always less than the window, and the runtime rule treats it as a fixed point.
       assert.ok(entry.maxOutputToken < entry.contextWindow, `${label}: output must be < context`);
       const limits = { contextWindow: entry.contextWindow, maxOutputToken: entry.maxOutputToken };
       assert.deepEqual(catalog.normalizeModelLimits(limits), limits, label);
-      // 计费功能已移除：目录条目只承载限额、输入模态与思考能力。
+      // Billing was removed: a catalog entry carries only limits, input modalities, and thinking capability.
       const expectedKeys = ["contextWindow", "id", "maxOutputToken"];
       if (entry.inputModalities) expectedKeys.push("inputModalities");
       if (entry.thinking) expectedKeys.push("thinking");
       assert.deepEqual(Object.keys(entry).sort(), expectedKeys.sort(), label);
       if (entry.inputModalities) {
         assert.ok(entry.inputModalities.length > 0, `${label}: input modalities must be non-empty`);
-        // 同一断言覆盖三个不变量：值都在合法全集内、无重复、按规范顺序排列。
+        // One assertion covers three invariants: every value is in the legal set, there are no
+        // duplicates, and they are in canonical order.
         assert.deepEqual(
           entry.inputModalities,
           INPUT_MODALITIES.filter((modality) => entry.inputModalities.includes(modality)),
@@ -79,8 +82,9 @@ test("generated catalog upholds the data invariants", () => {
 });
 
 test("openai catalog prefers Codex metadata and keeps models.dev supplements", () => {
-  // Codex models.json 的 context_window 是输入侧预算（272K），生成期换算成
-  // 与目录其余分区一致的总窗口语义：272K + 128K（models.dev 输出补充）= 400K。
+  // Codex models.json's context_window is an input-side budget (272K); generation time converts
+  // it to the total-window semantic used by the catalog's other sections: 272K + 128K (models.dev
+  // output supplement) = 400K.
   for (const modelId of [
     "gpt-5.2",
     "gpt-5.4",
@@ -119,7 +123,7 @@ test("formal DeepSeek catalog only exposes models documented for Responses", () 
 });
 
 test("normalizeModelLimits repairs degenerate pairs uniformly and leaves valid pairs alone", () => {
-  // 退化（输出吃满窗口）：钳到 min(32K, ⌊窗口/4⌋)。
+  // Degenerate (output consumes the whole window): clamp to min(32K, ⌊window/4⌋).
   assert.deepEqual(
     catalog.normalizeModelLimits({ contextWindow: 500_000, maxOutputToken: 500_000 }),
     { contextWindow: 500_000, maxOutputToken: 32_000 },
@@ -132,12 +136,12 @@ test("normalizeModelLimits repairs degenerate pairs uniformly and leaves valid p
     catalog.normalizeModelLimits({ contextWindow: 100_000, maxOutputToken: 200_000 }),
     { contextWindow: 100_000, maxOutputToken: 25_000 },
   );
-  // 合法值原样透传（含大输出模型，不做无条件钳制）。
+  // Valid values pass through unchanged (including large-output models; no unconditional clamping).
   assert.deepEqual(
     catalog.normalizeModelLimits({ contextWindow: 200_000, maxOutputToken: 128_000 }),
     { contextWindow: 200_000, maxOutputToken: 128_000 },
   );
-  // 非正窗口不做修复（由上层兜底逻辑处理）。
+  // A non-positive window is not repaired (handled by the upper-layer fallback logic).
   assert.deepEqual(
     catalog.normalizeModelLimits({ contextWindow: 0, maxOutputToken: 0 }),
     { contextWindow: 0, maxOutputToken: 0 },
@@ -157,7 +161,7 @@ test("normalizeModelIdCandidates yields the decorated-id chain in order without 
 
 test("findCatalogModel resolves exact and decorated ids across providers", () => {
   assert.equal(catalog.findCatalogModel("xai", "grok-4.5")?.id, "grok-4.5");
-  // 候选链对全部供应商生效：大小写、[1m]、日期后缀、@版本。
+  // The candidate chain applies to every provider: casing, [1m], date suffix, @version.
   assert.equal(catalog.findCatalogModel("xai", "GROK-4.5")?.id, "grok-4.5");
   assert.equal(catalog.findCatalogModel("claude_code", "claude-sonnet-4-6[1m]")?.id, "claude-sonnet-4-6");
   assert.equal(catalog.findCatalogModel("claude_code", "claude-sonnet-4-6@v1")?.id, "claude-sonnet-4-6");
@@ -168,9 +172,10 @@ test("findCatalogModel resolves exact and decorated ids across providers", () =>
 });
 
 test("cross-provider lookup resolves models configured under a foreign provider", () => {
-  // 中转聚合场景：别家模型挂在本供应商类型下时按 id 全目录回查。
+  // Relay aggregation scenario: when another vendor's model is mounted under this provider type,
+  // look it up by id across the whole catalog.
   assert.equal(catalog.findCatalogModelAcrossProviders("grok-4.5")?.id, "grok-4.5");
-  // 候选链（大小写、@版本、[1m]、日期后缀）对跨供应商回查同样生效。
+  // The candidate chain (casing, @version, [1m], date suffix) applies to cross-provider lookup too.
   assert.equal(catalog.findCatalogModelAcrossProviders("GROK-4.5@prod")?.id, "grok-4.5");
   assert.equal(catalog.findCatalogModelAcrossProviders("model-not-in-catalog"), undefined);
   assert.equal(catalog.findCatalogModelAcrossProviders(""), undefined);
@@ -180,18 +185,19 @@ test("cross-provider lookup resolves models configured under a foreign provider"
     maxOutputToken: 32_000,
   });
   assert.equal(catalog.resolveModelLimitsAcrossProviders("model-not-in-catalog"), undefined);
-  // 国内厂商分区（无对应应用供应商类型）经跨供应商回查可命中。
+  // Domestic-vendor sections (with no corresponding app provider type) are hit via cross-provider lookup.
   assert.equal(catalog.findCatalogModelAcrossProviders("deepseek-v4-pro")?.id, "deepseek-v4-pro");
   assert.equal(catalog.findCatalogModelAcrossProviders("glm-4.6")?.id, "glm-4.6");
   assert.equal(catalog.findCatalogModelAcrossProviders("qwen-max")?.id, "qwen-max");
   assert.equal(catalog.findCatalogModelAcrossProviders("kimi-k2.5")?.id, "kimi-k2.5");
-  // 混合大小写目录 id（MiniMax/LongCat）：小写配置经索引别名命中，返回原始 id。
+  // Mixed-case catalog ids (MiniMax/LongCat): a lowercase config hits via the index alias and
+  // returns the original id.
   assert.equal(catalog.findCatalogModelAcrossProviders("minimax-m2.5")?.id, "MiniMax-M2.5");
   assert.equal(catalog.findCatalogModelAcrossProviders("longcat-2.0")?.id, "LongCat-2.0");
 });
 
 test("resolveModelInputModalities resolves scoped, decorated, and cross-provider ids", () => {
-  // 供应商作用域命中（含候选链装饰形态）。
+  // Provider-scoped hit (including decorated candidate forms).
   assert.deepEqual(catalog.resolveModelInputModalities("claude_code", "claude-sonnet-4-6"), [
     "text",
     "image",
@@ -202,11 +208,12 @@ test("resolveModelInputModalities resolves scoped, decorated, and cross-provider
     "image",
     "pdf",
   ]);
-  // Codex 主源合并路径也带模态（models.json 的 input_modalities）。
+  // The Codex main-source merge path also carries modalities (models.json's input_modalities).
   assert.deepEqual(catalog.resolveModelInputModalities("codex", "gpt-5.6-sol"), ["text", "image"]);
-  // 纯文本模型如实返回 ["text"]，与"目录未命中"（undefined）可区分。
+  // A text-only model truthfully returns ["text"], distinguishable from a "catalog miss" (undefined).
   assert.deepEqual(catalog.resolveModelInputModalities("deepseek", "deepseek-v4-pro"), ["text"]);
-  // 供应商作用域未命中时跨供应商回查（国内厂商分区只经此路径消费）。
+  // On a provider-scoped miss it falls back to cross-provider lookup (domestic-vendor sections
+  // are consumed only through this path).
   assert.deepEqual(catalog.resolveModelInputModalities("codex", "glm-4.6"), ["text"]);
   assert.deepEqual(catalog.resolveModelInputModalities("codex", "qwen3-omni-flash"), [
     "text",
@@ -218,14 +225,15 @@ test("resolveModelInputModalities resolves scoped, decorated, and cross-provider
   assert.equal(catalog.resolveModelInputModalities("codex", undefined), undefined);
 });
 
-// repairStaleCrossProviderLimits（指纹匹配式的坏默认值修复）已被"方案乙"的
-// limitsSource 来源标记取代：settings/index.ts 的 normalizeProviderModelConfig
-// 按存量的 catalog/fallback/provider/user 来源判断是否重解析，不再靠数值指纹
-// 猜测。对应的来源感知测试见 crates/agent-gui/test/settings/normalization.test.mjs
-// 里的 "limitsSource" 相关用例。
+// repairStaleCrossProviderLimits (fingerprint-matching repair of bad defaults) has been replaced
+// by the "plan B" limitsSource origin tag: settings/index.ts's normalizeProviderModelConfig decides
+// whether to re-resolve based on the stored catalog/fallback/provider/user origin rather than
+// guessing from numeric fingerprints. The corresponding origin-aware tests are the "limitsSource"
+// cases in crates/agent-gui/test/settings/normalization.test.mjs.
 
 test("resolveModelLimits returns repaired catalog limits and undefined on miss", () => {
-  // grok-4.5 是本次重构的起因：上游记 500K/500K，快照里已修复为 500K/32K。
+  // grok-4.5 is what triggered this refactor: upstream recorded 500K/500K, and the snapshot has
+  // been repaired to 500K/32K.
   assert.deepEqual(catalog.resolveModelLimits("xai", "grok-4.5"), {
     contextWindow: 500_000,
     maxOutputToken: 32_000,
@@ -238,7 +246,7 @@ test("provider fallback limits use total-window semantics and return copies", ()
     contextWindow: 200_000,
     maxOutputToken: 32_000,
   });
-  // codex/xai 兜底为总窗口语义：258K 输入预算 + 142K 输出 = 400K。
+  // codex/xai fall back to total-window semantics: 258K input budget + 142K output = 400K.
   assert.deepEqual(catalog.getProviderFallbackLimits("codex"), {
     contextWindow: 400_000,
     maxOutputToken: 142_000,

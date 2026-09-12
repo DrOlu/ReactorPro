@@ -13,9 +13,9 @@ export const CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS = 1_500;
 export const CHAT_RUNTIME_KEEP_WARM_INTERVAL_MS = 10_000;
 export const CHAT_RUNTIME_PREPARING_STATUS = "Preparing request...";
 
-export const DEFAULT_BROWSER_TITLE = "LiveAgent Gateway";
-export const NEW_CONVERSATION_BROWSER_TITLE = "LiveAgent";
-export const SHARED_HISTORY_BROWSER_TITLE = "分享会话";
+export const DEFAULT_BROWSER_TITLE = "ReactorPro Gateway";
+export const NEW_CONVERSATION_BROWSER_TITLE = "ReactorPro";
+export const SHARED_HISTORY_BROWSER_TITLE = "Shared Session";
 export const SKILLS_HUB_BROWSER_TITLE = "Skills Hub";
 export const MCP_HUB_BROWSER_TITLE = "MCP Hub";
 

@@ -1,11 +1,12 @@
-// WebDAV 同步设置的纯逻辑：表单态推导与同步状态事件归约。
+// Pure logic for WebDAV sync settings: form state derivation and sync status event reduction.
 //
-// 与 `BackupSyncSection.tsx` 分开，是为了让这些判断能脱离 React 直接被测到 ——
-// 它们决定「按钮能不能点」「错误横幅要不要挂着」，都是出了错用户才会发现的地方。
+// It is kept separate from `BackupSyncSection.tsx` so these decisions can be tested directly
+// without React - they determine "whether the button is clickable" and "whether the error banner
+// stays up", which are exactly the places users only notice when something goes wrong.
 
 import type { BackupSyncConfigView, BackupSyncStatusEvent } from "../../lib/backup";
 
-/** 表单态。密码单独用 `passwordTouched` 标记，避免把占位符当真密码提交。 */
+/** Form state. The password is tracked separately via `passwordTouched` to avoid submitting the placeholder as a real password. */
 export type SyncForm = {
   url: string;
   username: string;
@@ -18,7 +19,7 @@ export type SyncForm = {
 
 export type PresetId = "jianguoyun" | "nextcloud" | "synology" | "custom";
 
-/** 预设仅填充 URL 模板，其余字段仍需用户自填。 */
+/** Presets only fill in the URL template; the remaining fields still need to be entered by the user. */
 export const SYNC_PRESETS: { id: Exclude<PresetId, "custom">; url: string }[] = [
   { id: "jianguoyun", url: "https://dav.jianguoyun.com/dav/" },
   { id: "nextcloud", url: "https://server/remote.php/dav/files/USER/" },
@@ -26,10 +27,11 @@ export const SYNC_PRESETS: { id: Exclude<PresetId, "custom">; url: string }[] = 
 ];
 
 /**
- * 由已保存的 URL 反推预设，让重新进入设置页时下拉框不会永远停在「自定义」。
+ * Infer the preset from the saved URL, so the dropdown does not stay stuck on "Custom" when
+ * re-entering the settings page.
  *
- * 坚果云按 host 判断（而非 `includes`），否则 `dav.jianguoyun.com.evil.test`
- * 也会被认成坚果云。
+ * Jianguoyun is determined by host (not `includes`); otherwise `dav.jianguoyun.com.evil.test`
+ * would also be recognized as Jianguoyun.
  */
 export function detectPreset(url: string): PresetId {
   const trimmed = url.trim();
@@ -65,7 +67,7 @@ export function formFromView(view: BackupSyncConfigView): SyncForm {
   return {
     url: view.url,
     username: view.username,
-    // 后端从不回传密码，表单里始终以空串起步，靠 placeholder 告知「已保存」。
+    // The backend never returns the password, so the form always starts from an empty string and relies on the placeholder to signal "saved".
     password: "",
     passwordTouched: false,
     remoteDir: view.remoteDir,
@@ -74,7 +76,7 @@ export function formFromView(view: BackupSyncConfigView): SyncForm {
   };
 }
 
-/** 表单是否有未保存改动。上传/下载走的是库里的配置，脏表单必须先保存。 */
+/** Whether the form has unsaved changes. Upload/download use the stored config, so a dirty form must be saved first. */
 export function isDirty(form: SyncForm, view: BackupSyncConfigView | null): boolean {
   if (!view) return true;
   return (
@@ -88,26 +90,28 @@ export function isDirty(form: SyncForm, view: BackupSyncConfigView | null): bool
 }
 
 /**
- * 凭据是否齐到可以发起一次连接测试。
+ * Whether the credentials are complete enough to initiate a connection test.
  *
- * 保存后会自动测一次连接，但用户完全可能只填了地址就先存一版。那种情况下
- * 测试必然以「请先填写用户名」失败，把一次正常的保存渲染成红色错误。
+ * Saving automatically runs a connection test, but the user may well save a version with only
+ * the address filled in. In that case the test necessarily fails with "please enter a
+ * username", rendering a normal save as a red error.
  */
 export function canTestSyncConnection(view: BackupSyncConfigView): boolean {
   return Boolean(view.url && view.username && view.hasPassword);
 }
 
-/** 事件是否代表一次成功的后台自动同步。 */
+/** Whether the event represents a successful background auto-sync. */
 export function isAutoSyncSuccess(payload: BackupSyncStatusEvent): boolean {
   return !payload.lastError && payload.lastSyncAt !== null;
 }
 
 /**
- * 把后台自动同步的结果事件并入视图。
+ * Merge a background auto-sync result event into the view.
  *
- * 后端已经把结果落了库，这里同步更新内存视图只是为了让常驻横幅立刻反映最新
- * 状态 —— 否则要等下次重新进入设置页才看得到。无事可做时原样返回 `prev`，
- * 让 React 跳过这次重渲染。
+ * The backend has already persisted the result; updating the in-memory view here just makes the
+ * persistent banner reflect the latest state immediately - otherwise it would only be visible the
+ * next time the settings page is opened. When there is nothing to do, return `prev` unchanged so
+ * React skips this re-render.
  */
 export function applySyncStatusEvent(
   prev: BackupSyncConfigView | null,
@@ -116,7 +120,7 @@ export function applySyncStatusEvent(
   if (!prev) return prev;
   if (payload.lastError) return { ...prev, lastError: payload.lastError };
   if (payload.lastSyncAt !== null) {
-    // 成功即清错误：这条链路现在是通的，旧横幅已经过期。
+    // Success clears the error: the path is working now, and the old banner is stale.
     return { ...prev, lastSyncAt: payload.lastSyncAt, lastError: null };
   }
   return prev;

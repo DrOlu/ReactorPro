@@ -9,7 +9,7 @@ const { isGitWorktreeBranchNotFullyMergedError } = createTsModuleLoader().loadMo
 test("recognizes an unmerged branch failure after worktree removal", () => {
   assert.equal(
     isGitWorktreeBranchNotFullyMergedError(
-      "Worktree 已移除，但分支删除失败：error: The branch 'feature' is not fully merged.",
+      "Worktree removed, but branch deletion failed: error: The branch 'feature' is not fully merged.",
     ),
     true,
   );

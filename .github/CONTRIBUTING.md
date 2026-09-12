@@ -1,4 +1,4 @@
-# Contributing to LiveAgent
+# Contributing to ReactorPro
 
 This guide covers the contribution process only. Technical details live in the project docs and stay authoritative there — this file should rarely need updates.
 
@@ -32,7 +32,7 @@ Open an issue first (feature request / bug report), wait for it to be confirmed,
 | Screenshots / preview | UI changes must include screenshots or a recording; backend / CLI changes should include request-response examples or logs as text |
 | No merge conflicts | Resolve conflicts with the target branch on your own branch before requesting review |
 
-Trivial fixes (typos, comments) may state an exemption reason in the PR description, at the maintainers' discretion. Do **not** report security vulnerabilities in public issues — use [Security Advisories](https://github.com/Stack-Cairn/LiveAgent/security/advisories/new) instead.
+Trivial fixes (typos, comments) may state an exemption reason in the PR description, at the maintainers' discretion. Do **not** report security vulnerabilities in public issues — use [Security Advisories](https://github.com/DrOlu/ReactorPro/security/advisories/new) instead.
 
 ## License
 

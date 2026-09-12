@@ -41,21 +41,24 @@ type ContextBuildOptions = {
   includeUploadedFilesMetadata?: boolean;
 };
 
-// 所有副作用经由注入的 sinks：ChatPage 提供完整实现，子代理提供轻量子集。
-// 全部可选——缺省即 no-op，controller 自身保持纯净可测。
+// All side effects go through injected sinks: ChatPage provides the full implementation, while
+// subagents provide a lightweight subset. All are optional — absent means no-op, keeping the
+// controller itself pure and testable.
 export type CompactionSinks = {
   applyState?: (state: ConversationViewState) => void;
-  // 运行中换底：apply + 清空 live transcript（压缩/prune 结果落地后旧流式内容已过期）。
+  // Mid-run re-base: apply + clear the live transcript (after compaction/prune results land,
+  // the old streaming content is stale).
   applyStateMidRun?: (state: ConversationViewState) => void;
   publishStatus?: (status: CompactionStatus) => void;
   setBridgeToolStatus?: (status: string | null, isCompaction?: boolean) => void;
   queueCheckpoint?: (state: ConversationViewState, contextUsageTokens: number) => void;
-  // false/null 表示持久化失败（压缩中止回滚）。成功可返回"盖好 revision 的持
-  // 久化状态"——finalizeCheckpoint 会落地这一份而非入参状态：checkpoint 状态
-  // 出自 appendMessagesToConversation，revision 恒为 null，若照原样 apply，
-  // 运行时缓存会失去 replace/分页所需的 CAS 令牌（压缩后 edit-resend 报
-  // "历史会话缺少 revision"即源于此）。返回 true/undefined 则沿用入参状态
-  //（子代理的 fire-and-forget persist 走这条）。
+  // false/null means persistence failed (compaction aborts and rolls back). On success it may
+  // return the "stamped persisted state with a rebuilt revision" — finalizeCheckpoint applies
+  // this one rather than the input state: the checkpoint state comes from
+  // appendMessagesToConversation and its revision is always null, so applying it verbatim would
+  // make the runtime cache lose the CAS token needed for replace/pagination (this is exactly why
+  // edit-resend after compaction reports "history conversation is missing a revision"). Returning
+  // true/undefined keeps the input state (the subagent's fire-and-forget persist takes this path).
   persist?: (
     state: ConversationViewState,
   ) => Promise<ConversationViewState | boolean | null | undefined>;
@@ -64,19 +67,21 @@ export type CompactionSinks = {
     uploadedFiles: PendingUploadedFile[],
   ) => void;
   persistRollback?: (state: ConversationViewState) => Promise<unknown>;
-  // 压缩成功落地后的通知(finalizeCheckpoint 统一触发,三条压缩路径共用)。
-  // 用于失效那些按消息 id 挂在 user 消息上的注入状态:载体消息被压缩移出
-  // active segment 后,继续增量会静默丢变化,必须整体重冻结。
+  // Notification after a successful compaction lands (triggered uniformly by finalizeCheckpoint,
+  // shared by all three compaction paths). Used to invalidate injected state attached to user
+  // messages by message id: once the carrier message is compacted out of the active segment,
+  // continuing to increment would silently drop changes, so the whole thing must be re-frozen.
   onCompacted?: () => void;
 };
 
 export type CompactionPreSendBinding = {
-  // 待 checkpoint 的基线状态（不含本轮待发送的用户消息）。
+  // Baseline state to checkpoint (excluding this turn's pending user message).
   baseState: ConversationViewState;
   pendingUserText: string;
   composerText?: string;
   uploadedFiles?: PendingUploadedFile[];
-  // 压缩/prune 后如何得到要 apply 的最终状态（如重新附加待发送的用户消息）。
+  // How to derive the final state to apply after compaction/prune (e.g. re-attach the pending
+  // user message).
   composeAppliedState: (state: ConversationViewState) => ConversationViewState;
 };
 
@@ -105,10 +110,12 @@ export type CompactionTurnBinding = {
 export type CompactionDuringRunResult = {
   context: Context | null;
   shouldDisableProtection: boolean;
-  // 本次调用的显式结果通道。statusPhase 是控制器生命周期字段（跨操作残留、
-  // 决策拒绝时不 publish），任何调用方都不得用它反推单次调用的结果。
+  // The explicit result channel for this call. statusPhase is a controller lifecycle field
+  // (it carries over across operations and is not published when a decision is declined), so no
+  // caller may infer the result of a single call from it.
   outcome: "compacted" | "skipped" | "failed";
-  // skipped 时携带决策拒绝原因；无 binding 的空跑没有决策、不带 reason。
+  // Carries the decision-rejection reason when skipped; a no-op run without a binding makes no
+  // decision and has no reason.
   reason?: CompactionDecisionReason;
 };
 
@@ -123,13 +130,15 @@ export type ManualContextUsageSnapshot = {
 };
 
 /**
- * 压缩生命周期的旁观者，供轨迹埋点订阅。
+ * An observer of the compaction lifecycle, for trajectory instrumentation to subscribe to.
  *
- * 挂在控制器上而不是各调用点：压缩有 pre-send / mid-stream / post-tool / manual
- * 四个触发路径，逐个调用点埋会漏，也会随新增触发方式失配。控制器内部只有
- * `publishRunning` 一个开始点和 `settleCompleted`/`settleFailed`/`settleAborted` 三个终点。
+ * Attached to the controller rather than to each call site: compaction has four trigger paths
+ * (pre-send / mid-stream / post-tool / manual), and instrumenting each call site would miss some
+ * and break as new trigger modes are added. Inside the controller there is only one start point,
+ * `publishRunning`, and three end points: `settleCompleted`/`settleFailed`/`settleAborted`.
  *
- * 刻意不引用轨迹类型：控制器不该知道消费者是谁。
+ * Deliberately does not reference trajectory types: the controller should not know who the
+ * consumer is.
  */
 export type CompactionObserver = {
   onStart: (info: { trigger: CompactionTrigger; tokensBefore?: number }) => void;
@@ -178,18 +187,22 @@ type RollbackSnapshot = {
 };
 
 /**
- * 每会话压缩状态机。跨轮持有压力阶梯与 token 账本；每轮 bindTurn 注入
- * 运行时/sinks/取消链。单飞由 inFlight 保证；回滚快照是实例字段，所有
- * 终态都经 settle*() 收敛（状态发布与 bridge 状态清理成对，不再散落）。
+ * Per-conversation compaction state machine. It holds the pressure ladder and token ledger
+ * across turns; each turn's bindTurn injects the runtime/sinks/cancellation chain. Single-flight
+ * is guaranteed by inFlight; the rollback snapshot is an instance field, and all terminal states
+ * converge through settle*() (status publication and bridge-status cleanup are paired and no
+ * longer scattered).
  */
 export class CompactionController {
   private pressure = createCompactionPressure();
   private readonly ledger = new TokenLedger();
   /**
-   * provider 边界才拼进 systemPrompt 的追加段估算（agent 模式的工具执行规则
-   * toolsSuffix 实测 ~4k）。turn runner 每轮在压缩决策前注入；跨 bind 保留，
-   * 空闲手动压缩的检查点估值同样受益。所有 rebase/估值统一透传，保证检查点
-   * 权威值与发送时账本读数同口径——两者不一致正是压缩后环倒退/猛增的根源。
+   * Estimate of the appended segment that the provider boundary only stitches into systemPrompt
+   * (the agent-mode tool execution rules toolsSuffix measured ~4k). The turn runner injects it
+   * before each turn's compaction decision; it persists across binds, and idle manual compaction's
+   * checkpoint estimate benefits too. All rebase/estimates pass it through uniformly so the
+   * checkpoint authority value and the ledger reading at send time use the same basis — an
+   * inconsistency between the two is exactly what causes the ring to regress/jump after compaction.
    */
   private fixedOverheadTokens = 0;
   private binding: CompactionTurnBinding | null = null;
@@ -198,49 +211,52 @@ export class CompactionController {
   private statusPhase: CompactionStatus["phase"] = "idle";
   private turnMeta = { activeMessageCount: 0, userMessageCount: 0, lastSummaryAt: 0 };
   private observer: CompactionObserver | null = null;
-  /** 本次压缩开始时的上下文 token，供结束事件补齐前后对比。 */
+  /** Context tokens at the start of this compaction, used to fill in the before/after comparison in the end event. */
   private observedTokensBefore: number | undefined;
-  /** checkpoint 落地后的上下文 token；只有成功路径才有值。 */
+  /** Context tokens after the checkpoint lands; only the success path has a value. */
   private observedTokensAfter: number | undefined;
-  /** 已发出 onStart、尚未闭合的压缩触发类型。 */
+  /** The compaction trigger type for which onStart has been emitted but not yet closed. */
   private observedTrigger: CompactionTrigger | undefined;
-  /** 区分同 trigger 的前后两次异步压缩，拒绝旧 summarizer 的晚到结果。 */
+  /** Distinguishes two asynchronous compactions with the same trigger, rejecting a stale summarizer's late result. */
   private observedOperationId: number | undefined;
   private nextObservedOperationId = 0;
 
   /**
-   * 订阅压缩生命周期。
+   * Subscribes to the compaction lifecycle.
    *
-   * @param observer - 旁观者；传 null 取消订阅。
+   * @param observer - the observer; pass null to unsubscribe.
    */
   setObserver(observer: CompactionObserver | null) {
     this.observer = observer;
   }
 
-  /** 注入 provider 边界追加段的估算；非法值按 0 清除（模式切换后不残留）。 */
+  /** Injects the provider-boundary appended-segment estimate; invalid values clear to 0 (no residue after a mode switch). */
   noteFixedOverheadTokens(tokens: number) {
     this.fixedOverheadTokens =
       typeof tokens === "number" && Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0;
   }
 
   /**
-   * 当前注入的边界追加段估算（0 = 本会话尚无轮次注入过）。空闲手动压缩据此
-   * 判断是否需要按持久化工具集补一份回退估算：turn runner 的现值出自真实
-   * 请求参数，质量更高，绝不覆盖。
+   * The currently injected boundary appended-segment estimate (0 = no turn has injected it in
+   * this conversation). Idle manual compaction uses this to decide whether to supply a fallback
+   * estimate based on the persisted tool set: the turn runner's current value comes from real
+   * request parameters, is higher quality, and is never overwritten.
    */
   get contextFixedOverheadTokens(): number {
     return this.fixedOverheadTokens;
   }
 
   /**
-   * 活跃 segment 检查点的权威上下文快照（stats.contextTokensAfter）。检查点
-   * 上下文没有消息，该值本质是「新前缀的 fixed」（system+摘要+tools+边界追加
-   * 段，可能含校准）——压缩后的无锚点窗口里，两端空闲环显示的正是它。后续
-   * rebase 以它为 fixed 下界：现算估算的任何输入漂移（激活工具子集收窄、
-   * memory 段重冻结、重启后控制器丢失 overhead、模式切换）都不得让发送后的
-   * 运行中读数低于空闲读数，否则环先倒退、首个真实 usage 到达再跳涨。从
-   * state 现读而非控制器字段，跨重启依然生效；真实 usage 锚点存在时 fixed
-   * 不参与读数，下界自动退场。
+   * Authority context snapshot of the active segment checkpoint (stats.contextTokensAfter). The
+   * checkpoint context has no messages, so this value is essentially the "fixed of the new prefix"
+   * (system + summary + tools + boundary appended segment, possibly including calibration) — it is
+   * exactly what both idle rings show in the anchorless window after compaction. Later rebases use
+   * it as the fixed lower bound: any input drift in freshly computed estimates (narrowed active
+   * tool subset, re-frozen memory segment, overhead lost by the controller after restart, mode
+   * switch) must not let the post-send running reading fall below the idle reading, otherwise the
+   * ring regresses first and then jumps once the first real usage arrives. Read from state rather
+   * than a controller field, so it still works across restarts; when a real usage anchor exists,
+   * fixed does not participate in the reading and the lower bound retires automatically.
    */
   private checkpointFixedFloor(state: ConversationViewState): number | undefined {
     return positiveTokenCount(
@@ -248,7 +264,8 @@ export class CompactionController {
     );
   }
 
-  // 统一的账本重建入口：检查点下界与调用方校准值取较大者，边界追加段一律透传。
+  // Unified ledger-rebuild entry point: take the larger of the checkpoint lower bound and the
+  // caller's calibration value, and always pass the boundary appended segment through.
   private rebaseLedger(
     ledger: TokenLedger,
     context: Context,
@@ -297,16 +314,19 @@ export class CompactionController {
     if (persisted === false || persisted === null) {
       throw new Error("compaction checkpoint persistence failed");
     }
-    // 持久化钩子返回的盖章状态（带重建的 revision）优先；布尔/undefined 回落入参。
+    // The stamped state returned by the persistence hook (with a rebuilt revision) takes
+    // priority; boolean/undefined falls back to the input.
     return typeof persisted === "object" ? persisted : state;
   }
 
-  // 压缩成功后的统一收尾（pre-send 与 during-run 共用同一顺序不变量）：
-  // checkpoint 上下文估值 → 写回 summary stats → 持久化屏障 → 回滚快照失效 →
-  // apply 落地 → completed 终态 → checkpoint 入队。tools 必须与真实请求同参，
-  // 否则 contextTokensAfter 系统性少算工具重量；fixedTokens 是动态开销校准的
-  // 下界（rebase 内部与新上下文的估算取 max——checkpoint 的 systemPrompt 已含
-  // 新摘要，整段替换会把摘要丢出估值，环在下一次发送时猛增或倒退）。
+  // Unified wrap-up after a successful compaction (pre-send and during-run share the same
+  // ordering invariant): checkpoint context estimate → write back summary stats → persistence
+  // barrier → invalidate rollback snapshot → apply → completed terminal state → enqueue
+  // checkpoint. tools must use the same arguments as the real request, otherwise
+  // contextTokensAfter systematically undercounts tool weight; fixedTokens is the lower bound of
+  // the dynamic-overhead calibration (rebase internally takes max with the new context estimate —
+  // the checkpoint's systemPrompt already contains the new summary, so replacing the whole thing
+  // would drop the summary from the estimate and make the ring jump or regress on the next send).
   private async finalizeCheckpoint(params: {
     binding: CompactionTurnBinding;
     trigger: CompactionTrigger;
@@ -316,7 +336,8 @@ export class CompactionController {
     buildOptions: ContextBuildOptions;
     fixedTokens?: number;
     operationId: number;
-    // 在 persist 屏障之后、completed 终态之前同步执行的状态落地钩子。
+    // State-landing hook executed synchronously after the persist barrier and before the
+    // completed terminal state.
     apply: (checkpointState: ConversationViewState) => void;
   }): Promise<{ checkpointState: ConversationViewState; checkpointTokens: number }> {
     this.assertObservedOperation(params.operationId);
@@ -337,12 +358,12 @@ export class CompactionController {
     this.assertObservedOperation(params.operationId);
     this.rollbackSnapshot = null;
     params.apply(checkpointState);
-    // settleCompleted 读它，所以必须在其之前落定。
+    // settleCompleted reads it, so it must be set before that call.
     this.observedTokensAfter = checkpointTokens;
     this.settleCompleted(params.trigger, params.newSegmentIndex, params.operationId);
     params.binding.sinks.queueCheckpoint?.(checkpointState, checkpointTokens);
-    // 放在最后:checkpoint 上下文估值仍需按压缩前的注入状态计算,通知只影响
-    // 下一轮 planTurn 的走向。
+    // Placed last: the checkpoint context estimate must still be computed from the pre-compaction
+    // injected state, and the notification only affects the direction of the next planTurn.
     params.binding.sinks.onCompacted?.();
     return { checkpointState, checkpointTokens };
   }
@@ -366,7 +387,7 @@ export class CompactionController {
     return totalTokens > 0 ? totalTokens : undefined;
   }
 
-  /** 账本当前的 system+tools 固定开销估算；供空闲倒扫在无锚点时补齐同口径。 */
+  /** The ledger's current system+tools fixed-overhead estimate; used by the idle back-scan to fill in the same basis when there is no anchor. */
   get contextFixedTokens(): number | undefined {
     const { fixedTokens } = this.ledger.snapshot();
     return fixedTokens > 0 ? fixedTokens : undefined;
@@ -379,8 +400,9 @@ export class CompactionController {
       : undefined;
   }
 
-  // O(1)：账本读数 + 流式增量估算 + 纯决策，无状态构建、无序列化。
-  // pendingTokenUnits 由调用方按流式 delta 用 estimateTextTokenUnits 累加。
+  // O(1): ledger reading + streaming-increment estimate + pure decision, no state construction
+  // or serialization. pendingTokenUnits is accumulated by the caller from streaming deltas using
+  // estimateTextTokenUnits.
   shouldProtectMidStream(pendingTokenUnits: number): boolean {
     if (!this.binding || this.inFlight) return false;
     return this.decide("protection", this.ledger.totalWithPendingTokens(pendingTokenUnits))
@@ -457,7 +479,8 @@ export class CompactionController {
         complete: binding.complete,
       });
 
-      // apply 在 finalizeCheckpoint 内同步执行，appliedState 在其返回前必已赋值。
+      // apply runs synchronously inside finalizeCheckpoint, so appliedState is definitely
+      // assigned before it returns.
       let appliedState!: ConversationViewState;
       await this.finalizeCheckpoint({
         binding,
@@ -469,9 +492,10 @@ export class CompactionController {
         operationId,
         apply: (checkpointState) => {
           appliedState = presend.composeAppliedState(checkpointState);
-          // compose 走 appendMessagesToConversation 会把刚盖上的 revision 清掉。
-          // 追加只发生在内存，DB 仍停在 checkpoint 持久化那一刻，CAS 令牌依旧
-          // 指向当前库版本，补回；下一次成功 persist 会重新盖章。
+          // compose going through appendMessagesToConversation clears the revision just stamped.
+          // The append only happens in memory and the DB still sits at the moment the checkpoint
+          // was persisted, so the CAS token still points at the current DB version; restore it,
+          // and the next successful persist will re-stamp.
           const revision = checkpointState.transcript.revision;
           if (revision && !appliedState.transcript.revision) {
             appliedState = {
@@ -501,7 +525,7 @@ export class CompactionController {
         binding.sinks.setBridgeToolStatus?.(buildPruneFallbackStatus(fallback.prunedMessageCount));
         return true;
       }
-      console.warn("发送前上下文压缩失败，继续使用原始上下文", error);
+      console.warn("pre-send context compaction failed; continuing with the original context", error);
       this.settleFailed(
         "pre-send",
         error instanceof Error ? error.message : String(error),
@@ -522,7 +546,7 @@ export class CompactionController {
     tools?: Context["tools"];
     includeAbortedMessages?: boolean;
     includeUploadedFilesMetadata?: boolean;
-    // manual 触发透传给决策：跳过阈值/冷却，硬守卫不受影响。
+    // The manual trigger passes through to the decision: it skips threshold/cooldown, while hard guards are unaffected.
     bypassThresholdAndCooldown?: boolean;
     manualContextUsage?: ManualContextUsageSnapshot;
   }): Promise<CompactionDuringRunResult> {
@@ -530,7 +554,7 @@ export class CompactionController {
     if (!binding) {
       return { context: null, shouldDisableProtection: false, outcome: "skipped" };
     }
-    // 覆盖"mid-stream abort 后、summarizer 启动前"用户恰好点停止的间隙。
+    // Covers the gap where the user hits stop exactly "after a mid-stream abort and before the summarizer starts".
     if (binding.cancellation.userStop.signal.aborted) {
       throw createCompactionAbortError();
     }
@@ -555,9 +579,10 @@ export class CompactionController {
 
     let workingState = params.state;
     let pruned: PruneConversationResult | null = null;
-    // manual（空闲触发）不做前置 prune：prune 是运行中泄压手段，空闲路径没有
-    // 后续 persist 兜底，落地未持久化的剪枝状态会造成内存/磁盘分叉；同时保证
-    // 执行路径与探针（同样不 prune）对同一状态做决策，消除两者分歧。
+    // manual (idle trigger) does no pre-prune: prune is a mid-run pressure-release measure, and
+    // the idle path has no later persist to fall back on, so landing an unpersisted pruned state
+    // would fork memory from disk. It also ensures the execution path and the probe (which also
+    // does not prune) make their decision on the same state, eliminating divergence between them.
     if (params.trigger !== "manual" && shouldPruneBeforeCompaction(this.pressure, now)) {
       const attempt = pruneConversationState(workingState, resolvePruneOptions(this.pressure));
       if (attempt.applied) {
@@ -571,10 +596,11 @@ export class CompactionController {
         ? params.budgetContext
         : binding.buildPreparedContext(workingState, params.tools, buildOptions);
     const manualFixedTokens = params.manualContextUsage?.fixedTokens;
-    // rebase 内部校验 fixedTokens（非法/undefined 回退估算），无需在调用点分叉。
+    // rebase validates fixedTokens internally (invalid/undefined falls back to the estimate), so
+    // there is no need to branch at the call site.
     this.rebaseLedger(this.ledger, budgetContext, workingState, manualFixedTokens);
     this.updateTurnMeta(workingState);
-    // manual 是空闲时的从容压缩，走 optimization 口径；运行中触发保持 protection。
+    // manual is unhurried compaction while idle and uses the optimization basis; mid-run triggers keep protection.
     const intent: CompactionIntent = params.trigger === "manual" ? "optimization" : "protection";
     const totalTokens =
       positiveTokenCount(params.manualContextUsage?.totalTokens) ?? this.ledger.total();
@@ -667,8 +693,9 @@ export class CompactionController {
         throw error;
       }
       this.rollbackSnapshot = null;
-      // manual 面向空闲会话：没有后续轮次消费 fallback context，prune 结果也
-      // 不会被持久化（一旦 apply 即内存与磁盘分叉），失败时必须原样保留会话。
+      // manual targets an idle conversation: no later turn consumes the fallback context, and the
+      // prune result is not persisted either (applying it would fork memory from disk), so on
+      // failure the conversation must be preserved as-is.
       if (params.trigger !== "manual") {
         const fallback =
           pruned ?? pruneConversationState(workingState, resolvePruneOptions(this.pressure));
@@ -687,7 +714,7 @@ export class CompactionController {
       }
       this.settleFailed(
         params.trigger,
-        (error instanceof Error ? error.message : String(error)) || "压缩失败",
+        (error instanceof Error ? error.message : String(error)) || "compaction failed",
         operationId,
       );
       return params.trigger === "mid-stream"
@@ -705,19 +732,21 @@ export class CompactionController {
   }
 
   /**
-   * 用户手动触发的压缩（用量环 → 确认）。仅限空闲：已有轮次绑定或压缩在飞
-   * 返回 "busy"。临时绑定一轮复用 compactDuringRun 主流程；决策跳过自动阈值
-   * 与冷却，但仍强制执行共享的 50% 手动门槛以及 disabled / no-active-messages
-   * 等硬守卫（守卫不过返回 "skipped"）。
+   * User-triggered manual compaction (usage ring → confirm). Idle only: if a turn is already
+   * bound or a compaction is in flight, returns "busy". It temporarily binds a turn to reuse the
+   * compactDuringRun main flow; the decision skips the automatic threshold and cooldown but still
+   * enforces the shared 50% manual threshold and hard guards such as disabled / no-active-messages
+   * (if a guard does not pass it returns "skipped").
    */
   async compactManually(
     binding: Omit<CompactionTurnBinding, "presend">,
     state: ConversationViewState,
     contextUsage?: ManualContextUsageSnapshot,
     options?: {
-      // 与真实请求同参的工具集：checkpoint 估值缺了工具重量会系统性偏低。
+      // Tool set with the same arguments as the real request: without tool weight, the checkpoint estimate is systematically low.
       tools?: Context["tools"];
-      // 探针通过、真正开始压缩前同步调用恰好一次（skip / busy 不触发）。
+      // Called synchronously exactly once after the probe passes and before compaction actually
+      // begins (not triggered on skip / busy).
       onProceed?: () => void;
     },
   ): Promise<ManualCompactionOutcome> {
@@ -726,8 +755,9 @@ export class CompactionController {
     try {
       const probe = this.probeManualDecision(binding, state, contextUsage, options?.tools);
       if (!probe.shouldCompact) {
-        // in-flight 已被入口 busy 检查排除（bindTurn 刚复位 inFlight），探针
-        // 拒绝只剩 disabled / no-active-messages / below-manual-threshold 等硬守卫。
+        // in-flight has already been ruled out by the entry busy check (bindTurn just reset
+        // inFlight), so a probe rejection can only be a hard guard such as disabled /
+        // no-active-messages / below-manual-threshold.
         return { status: "skipped", reason: probe.reason };
       }
       options?.onProceed?.();
@@ -737,19 +767,21 @@ export class CompactionController {
         tools: options?.tools,
         manualContextUsage: contextUsage,
       });
-      // 只信本次调用的显式 outcome：statusPhase 可能残留上一次压缩的终态，
-      // 而内层二次裁决 skip 时不 publish 任何状态。
+      // Trust only this call's explicit outcome: statusPhase may hold the previous compaction's
+      // terminal state, and the inner second decision publishes no status when it skips.
       switch (result.outcome) {
         case "compacted":
           return { status: "compacted" };
         case "skipped":
-          // binding 恒存在，内层 skip 必带决策 reason；回退仅为类型完备。
+          // The binding always exists, so an inner skip always carries a decision reason; the
+          // fallback is only for type completeness.
           return { status: "skipped", reason: result.reason ?? "disabled" };
         default:
           return { status: "failed" };
       }
     } catch {
-      // 中止或意外异常：走统一善后（回滚快照 / running 态复位 idle）。
+      // Abort or unexpected exception: run the unified cleanup (roll back the snapshot / reset the
+      // running state to idle).
       await this.handleTurnAbort();
       return binding.cancellation.userStop.signal.aborted
         ? { status: "failed", aborted: true }
@@ -759,9 +791,10 @@ export class CompactionController {
     }
   }
 
-  // 手动压缩的前置探针：跑一次与执行路径同口径的决策，把手动 50% 门槛及
-  // disabled 等硬守卫挡在 publishRunning 之前。读数用局部临时账本计算——
-  // 共享账本是用量环的读数真源，被拒的探测不得在其上留下任何残留。
+  // Pre-probe for manual compaction: run a decision using the same basis as the execution path,
+  // blocking the manual 50% threshold and hard guards such as disabled before publishRunning.
+  // Readings are computed with a local temporary ledger — the shared ledger is the source of truth
+  // for the usage ring, and a rejected probe must leave no residue on it.
   private probeManualDecision(
     binding: Omit<CompactionTurnBinding, "presend">,
     state: ConversationViewState,
@@ -775,7 +808,8 @@ export class CompactionController {
       state,
       contextUsage?.fixedTokens,
     );
-    // turnMeta 是按 state 的幂等派生（decide 的硬守卫需要），更新无残留风险。
+    // turnMeta is an idempotent derivation from state (needed by decide's hard guards), so
+    // updating it carries no residue risk.
     this.updateTurnMeta(state);
     return this.decideManual(
       positiveTokenCount(contextUsage?.totalTokens) ?? probeLedger.total(),
@@ -792,7 +826,8 @@ export class CompactionController {
     return { ...decision, shouldCompact: false, reason: "below-manual-threshold" };
   }
 
-  // 用户中止后的统一善后：有快照则回滚（恢复状态/输入框/可选持久化）并返回 true。
+  // Unified cleanup after a user abort: if a snapshot exists, roll back (restore state/composer/
+  // optional persistence) and return true.
   async handleTurnAbort(): Promise<boolean> {
     const binding = this.binding;
     const snapshot = this.rollbackSnapshot;
@@ -857,8 +892,9 @@ export class CompactionController {
     threshold: number,
     fixedTokens?: number,
   ) {
-    // stateAfter 已带上刚写回的 contextTokensAfter：压缩后的账本读数从检查点
-    // 权威值起步，而不是重新现算一份可能更低的估算。
+    // stateAfter already carries the just-written-back contextTokensAfter: the post-compaction
+    // ledger reading starts from the checkpoint authority value rather than recomputing a possibly
+    // lower estimate.
     this.rebaseLedger(this.ledger, contextAfter, stateAfter, fixedTokens);
     this.updateTurnMeta(stateAfter);
     this.pressure = notePressureAfterCompaction(this.pressure, {
@@ -983,7 +1019,7 @@ export class CompactionController {
     this.observedTokensAfter = undefined;
   }
 
-  /** 旁观者是诊断通道，它抛错绝不能把压缩这条主路径带崩。 */
+  /** The observer is a diagnostic channel; its throwing must never crash the main compaction path. */
   private notifyObserver(run: () => void) {
     try {
       run();

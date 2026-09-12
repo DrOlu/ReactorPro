@@ -1,7 +1,8 @@
 // crates/agent-ui/src/components/chat/clarify/ClarifyPanel.tsx
-// 结构化澄清面板：模型每轮给出一批可点选的问题（单选/多选 + 「其他」自由
-// 输入），用户点选后整轮提交；也可随时携带已选部分「直接生成提示词」。
-// 已提交的轮次折叠为只读摘要，终稿轮以流式文本预览。
+// Structured clarification panel: each round the model presents a batch of clickable questions
+// (single/multi select + a free-form "Other" input), and the user submits the whole round after
+// selecting; the user can also "generate the prompt directly" with the selected parts at any time.
+// Submitted rounds collapse into read-only summaries, and the final round is previewed as streaming text.
 import {
   Check,
   CheckCircle2,
@@ -23,13 +24,13 @@ type ClarifyPanelProps = {
   state: ClarifySessionState;
   busy: boolean;
   onSubmitAnswers: (answers: ClarifyAnswer[]) => void;
-  /** 就按已有回答直接生成终稿；携带当前轮已选的部分回答。 */
+  /** Generate the final draft directly from the existing answers; carries the partial answers selected in the current round. */
   onGenerateNow: (answers: ClarifyAnswer[]) => void;
   onRetry: () => void;
   onClose: () => void;
 };
 
-/** 待作答轮里单题的草稿选择。 */
+/** Draft selection for a single question in the pending round. */
 type DraftAnswer = {
   labels: string[];
   custom: boolean;
@@ -38,7 +39,7 @@ type DraftAnswer = {
 
 const EMPTY_DRAFT: DraftAnswer = { labels: [], custom: false, customText: "" };
 
-/** 开放问题（模型未给选项）没有可点选行，自由输入即唯一回答方式。 */
+/** An open question (the model gave no options) has no selectable rows, so free-form input is the only way to answer. */
 function draftFor(question: ClarifyQuestion, answers: Record<string, DraftAnswer>): DraftAnswer {
   const existing = answers[question.id];
   if (existing) return existing;
@@ -58,7 +59,7 @@ function RecommendedTag({ label }: { label: string }) {
   );
 }
 
-/** 选中指示圈：单选圆形、多选圆角方形，与原生控件视觉习惯对齐。 */
+/** Selection indicator: circular for single select, rounded square for multi select, aligned with the visual conventions of native controls. */
 function SelectionIndicator({ selected, multiple }: { selected: boolean; multiple?: boolean }) {
   return (
     <span
@@ -75,7 +76,7 @@ function SelectionIndicator({ selected, multiple }: { selected: boolean; multipl
   );
 }
 
-/** 选项行公共外观：选中高亮、悬停描边、推荐项琥珀底色、只读降透明。 */
+/** Shared appearance of option rows: highlight when selected, outline on hover, amber background for recommended items, reduced opacity when read-only. */
 function choiceRowClassName(selected: boolean, interactive: boolean, recommended = false): string {
   return cn(
     "group/option flex w-full items-start gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
@@ -102,7 +103,7 @@ type ChoiceRowProps = {
   children: ReactNode;
 };
 
-/** 模型给出的选项行。role/aria-checked 用字面量分支书写，a11y 规则才能静态校验。 */
+/** An option row provided by the model. role/aria-checked are written as literal branches so a11y rules can be statically checked. */
 function OptionChoiceButton({
   multiple,
   selected,
@@ -119,21 +120,21 @@ function OptionChoiceButton({
   };
   if (multiple) {
     return (
-      // biome-ignore lint/a11y/useSemanticElements: 选项行含推荐角标/描述富内容，按 ARIA checkbox 模式保持单一可聚焦按钮。
+      // biome-ignore lint/a11y/useSemanticElements: option rows contain a recommended badge/rich description, so keep a single focusable button per the ARIA checkbox pattern.
       <button role="checkbox" aria-checked={selected} {...shared}>
         {children}
       </button>
     );
   }
   return (
-    // biome-ignore lint/a11y/useSemanticElements: 选项行含推荐角标/描述富内容，按 ARIA radio 模式保持单一可聚焦按钮。
+    // biome-ignore lint/a11y/useSemanticElements: option rows contain a recommended badge/rich description, so keep a single focusable button per the ARIA radio pattern.
     <button role="radio" aria-checked={selected} {...shared}>
       {children}
     </button>
   );
 }
 
-/** 「其他（自行输入）」行：内嵌输入框，button 不能嵌套 input，故用 div role。 */
+/** The "Other (enter your own)" row: it embeds an input, and a button cannot nest an input, so a div with a role is used. */
 function CustomChoiceRow({ multiple, selected, interactive, onSelect, children }: ChoiceRowProps) {
   const tabIndex = interactive ? 0 : -1;
   const shared = {
@@ -151,21 +152,21 @@ function CustomChoiceRow({ multiple, selected, interactive, onSelect, children }
   };
   if (multiple) {
     return (
-      // biome-ignore lint/a11y/useSemanticElements: 行内嵌自由输入框，原生 checkbox/button 会产生非法嵌套交互元素。
+      // biome-ignore lint/a11y/useSemanticElements: the row embeds a free-form input, and a native checkbox/button would create illegally nested interactive elements.
       <div role="checkbox" aria-checked={selected} tabIndex={tabIndex} {...shared}>
         {children}
       </div>
     );
   }
   return (
-    // biome-ignore lint/a11y/useSemanticElements: 行内嵌自由输入框，原生 radio/button 会产生非法嵌套交互元素。
+    // biome-ignore lint/a11y/useSemanticElements: the row embeds a free-form input, and a native radio/button would create illegally nested interactive elements.
     <div role="radio" aria-checked={selected} tabIndex={tabIndex} {...shared}>
       {children}
     </div>
   );
 }
 
-/** 一道问题的选项容器：多选用 fieldset 的隐式 group 语义，单选补 radiogroup。 */
+/** Option container for one question: multi select uses fieldset's implicit group semantics, and single select adds a radiogroup. */
 function ChoiceGroup({
   multiple,
   label,
@@ -184,7 +185,7 @@ function ChoiceGroup({
     );
   }
   return (
-    // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML 允许 fieldset 担任 radiogroup；子项 role="radio" 需要 radiogroup 上下文。
+    // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA in HTML allows fieldset to serve as a radiogroup; child role="radio" items need a radiogroup context.
     <fieldset role="radiogroup" aria-label={label} className={className}>
       {children}
     </fieldset>
@@ -192,9 +193,9 @@ function ChoiceGroup({
 }
 
 /**
- * 已提交轮次的只读摘要卡片：轮次头（绿勾 + 轮次号）+ 逐题「Q 徽标 + 问题」，
- * 回答以 chips 呈现——点选项是主色胶囊、自由输入是虚线 sky 胶囊（笔形图标），
- * 未回答显示斜体占位。
+ * Read-only summary card for a submitted round: a round header (green check + round number) plus
+ * per-question "Q badge + question", with answers shown as chips - selected options are primary-colored
+ * pills, free-form input is a dashed sky pill (pencil icon), and unanswered items show an italic placeholder.
  */
 function SettledRoundSummary({
   round,
@@ -260,7 +261,7 @@ function SettledRoundSummary({
   );
 }
 
-/** 浮在输入卡片正上方的澄清面板：草稿引用 + 轮次问答 + 底部操作栏。 */
+/** The clarification panel floating directly above the input card: draft quote + round Q&A + bottom action bar. */
 export function ClarifyPanel(props: ClarifyPanelProps) {
   const { state, busy, onSubmitAnswers, onGenerateNow, onRetry, onClose } = props;
   const { t } = useLocale();
@@ -272,15 +273,15 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
   const pendingRound =
     state.status === "awaitingInput" && lastRound && lastRound.answers === null ? lastRound : null;
 
-  // 待作答轮的草稿选择 + 当前激活的 tab，按轮次序号建档；轮次推进时在渲染期
-  // 一并重置（React 官方「adjusting state during render」派生状态模式，
-  // 避免 useEffect 造成一帧陈旧草稿闪现）。
+  // The pending round's draft selections + the currently active tab are keyed by round index and
+  // reset during render when the round advances (React's official "adjusting state during render"
+  // derived-state pattern, avoiding a one-frame flash of a stale draft from useEffect).
   const [draftState, setDraftState] = useState<{
     round: number;
     answers: Record<string, DraftAnswer>;
     activeIndex: number;
   }>({ round: -1, answers: {}, activeIndex: 0 });
-  // 切题方向（首次渲染为 null 不播动画）；keyed 内容区据此选滑入方向。
+  // Question-switch direction (null on first render, so no animation plays); the keyed content area uses it to pick the slide-in direction.
   const [switchDirection, setSwitchDirection] = useState<"forward" | "backward" | null>(null);
   if (pendingRound && draftState.round !== pendingIndex) {
     setDraftState({ round: pendingIndex, answers: {}, activeIndex: 0 });
@@ -291,7 +292,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
   const safeActiveIndex = Math.min(draftState.activeIndex, Math.max(0, questionCount - 1));
   const activeQuestion = pendingRound?.questions[safeActiveIndex] ?? null;
 
-  // 带方向切题：内容区按 question.id 重挂载并向对应方向滑入。
+  // Directional question switch: the content area remounts by question.id and slides in that direction.
   const goToQuestion = (index: number) => {
     if (index === safeActiveIndex || index < 0 || index >= questionCount) return;
     setSwitchDirection(index > safeActiveIndex ? "forward" : "backward");
@@ -324,7 +325,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
       });
       return;
     }
-    // 单选：落定本题后自动跳到下一道未作答的题，减少手动切 tab。
+    // Single select: after settling this question, automatically jump to the next unanswered one to reduce manual tab switching.
     const nextAnswers: Record<string, DraftAnswer> = {
       ...draftAnswers,
       [question.id]: {
@@ -390,9 +391,10 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
     onGenerateNow(buildAnswers());
   };
 
-  // 流式增量必须在绘制前钉底，否则最新行会闪一帧裁切。max-h 钳制后滚动
-  // 容器自身不再长高，ResizeObserver 盯内部内容盒（换行/页脚挤占）。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 轮次/流式/状态是钉底触发信号，effect 体只写 scrollTop。
+  // Streaming deltas must be pinned to the bottom before paint, otherwise the newest line flashes
+  // one cropped frame. After the max-h clamp the scroll container stops growing, and a
+  // ResizeObserver watches the inner content box (line wraps/footer encroachment).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rounds/streaming/status are the pin-to-bottom trigger signals, and the effect body only writes scrollTop.
   useLayoutEffect(() => {
     pinClarifyListIfFollowing(listRef.current, followRef.current);
   }, [state.rounds, state.streamingText, state.status, state.error, busy]);
@@ -414,11 +416,11 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
     .replace("{total}", String(totalCount));
 
   return (
-    // 独立浮层：宽度与队列面板对齐（左右各收 0.75rem），与输入卡片留出
-    // 1.5rem 间隙——卡片上缘是 rounded-3xl 圆角，贴合式（border-b-0 +
-    // mb-[-1px]）只适合队列那种直角底边。shrink-0 兜展开态——外层列是
-    // flex-col justify-end，卡片 flex-1 吸收伸缩，面板高度只受 max-h-[50vh]
-    // 钳制，不参与压缩。
+    // Standalone floating layer: its width aligns with the queue panel (inset 0.75rem on each
+    // side) and leaves a 1.5rem gap from the input card - the card's top edge uses rounded-3xl, so
+    // the flush style (border-b-0 + mb-[-1px]) only suits a square-bottomed edge like the queue's.
+    // shrink-0 covers the expanded state - the outer column is flex-col justify-end, the card
+    // flex-1 absorbs the flexing, and the panel height is only clamped by max-h-[50vh], not compressed.
     <div
       data-clarify-panel=""
       className="relative z-30 mx-auto mb-1.5 flex max-h-[50vh] min-h-0 w-[calc(100%-1.5rem)] max-w-[720px] shrink-0 flex-col overflow-hidden rounded-2xl border border-black/[0.055] bg-white/80 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.24),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_8px_24px_-18px_rgba(0,0,0,0.72),inset_0_1px_0_rgba(255,255,255,0.08)]"
@@ -464,7 +466,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
           {state.rounds.map((round, roundIndex) =>
             round.answers !== null ? (
               <SettledRoundSummary
-                // biome-ignore lint/suspicious/noArrayIndexKey: 轮次列表只追加不重排，索引 key 稳定唯一。
+                // biome-ignore lint/suspicious/noArrayIndexKey: the round list is append-only and never reordered, so the index key is stably unique.
                 key={roundIndex}
                 round={round}
                 roundLabel={t("chat.clarify.roundLabel").replace("{round}", String(roundIndex + 1))}
@@ -480,7 +482,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                 const customVisible = draft.custom;
                 return (
                   <div className="flex flex-col gap-2 pt-0.5">
-                    {/* 一次只展示一道题：多题时顶部 tabs 切换，已作答题带对勾。 */}
+                    {/* Only one question is shown at a time: with multiple questions the top tabs switch, and answered ones carry a checkmark. */}
                     {questionCount > 1 ? (
                       <div className="flex items-center gap-1 overflow-x-auto border-b border-black/[0.05] pb-1.5 dark:border-white/[0.06]">
                         {pendingRound.questions.map((question, index) => {
@@ -506,7 +508,7 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                       </div>
                     ) : null}
 
-                    {/* key 触发重挂载，切题时按方向播放轻量滑入动画。 */}
+                    {/* The key triggers a remount, playing a lightweight slide-in animation in the chosen direction on question switch. */}
                     <div
                       key={activeQuestion.id}
                       className={cn(
@@ -562,10 +564,11 @@ export function ClarifyPanel(props: ClarifyPanelProps) {
                           );
                         })}
 
-                        {/* UI 合成的「其他（自行输入）」行：固定在选项底部，不属于模型
-                            options；选中即展开输入框。开放问题（无选项）直接渲染
-                            输入框，不再套一层「其他」行。选项行是 button 而 input
-                            不能嵌套其中，故此行用 div role。 */}
+                        {/* The UI-synthesized "Other (enter your own)" row: pinned to the bottom of the
+                            options and not part of the model's options; selecting it expands the input.
+                            An open question (no options) renders the input directly without an extra
+                            "Other" row. Option rows are buttons and an input cannot be nested inside,
+                            so this row uses a div with a role. */}
                         {hasOptions ? (
                           <CustomChoiceRow
                             multiple={Boolean(activeQuestion.allowMultiple)}

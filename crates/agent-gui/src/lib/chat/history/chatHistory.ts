@@ -145,7 +145,7 @@ export type ConversationPersistenceCursor = {
 export function buildConversationStateFromWindow(
   record: ChatHistoryWindowRecord,
 ): ConversationViewState {
-  if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
+  if (!record.activeSegment) throw new Error("History window is missing an active segment");
   return normalizeConversationState({
     meta: record.meta,
     segments: [record.activeSegment],
@@ -211,7 +211,7 @@ function normalizeStoredSummaryMessage(parsed: unknown): StoredSummaryMessage {
     !parsed.summaryMeta ||
     typeof parsed.summaryMeta !== "object"
   ) {
-    throw new Error("历史摘要数据格式无效");
+    throw new Error("Invalid history summary data format");
   }
   return parsed as StoredSummaryMessage;
 }
@@ -226,7 +226,7 @@ function parseStoredChatContextMeta(
 ): StoredChatContextMeta {
   const parsed = JSON.parse(raw) as Partial<StoredChatContextMeta> | null;
   if (!parsed || typeof parsed !== "object") {
-    throw new Error("历史上下文元数据格式无效");
+    throw new Error("Invalid history context metadata format");
   }
 
   const systemPrompt = normalizeConversationSystemPrompt(
@@ -249,8 +249,8 @@ function parseStoredTaskListState(value: unknown) {
   try {
     return parseTaskListState(value);
   } catch (error) {
-    // 任务清单是辅助运行态:损坏数据只丢弃清单本身,绝不能让整个会话窗口打不开。
-    console.warn("忽略无法解析的历史任务清单状态", error);
+    // The task list is auxiliary runtime state: corrupt data only discards the list itself and must never make the entire conversation window fail to open.
+    console.warn("Ignoring unparseable history task list state", error);
     return undefined;
   }
 }
@@ -293,7 +293,7 @@ export async function getChatHistoryWindow(params: {
   });
   const parsed = await parseChatHistoryWindowRecord(record, params.fallbackSystemPrompt);
   if (params.includeActiveSegment && !parsed.activeSegment) {
-    throw new Error("历史窗口缺少活跃分段");
+    throw new Error("History window is missing an active segment");
   }
   return parsed;
 }
@@ -379,7 +379,7 @@ export async function replaceChatHistoryFromMessage(params: {
       expectedRevision: params.expectedRevision,
     });
     const parsed = await parseChatHistoryWindowRecord(record, params.fallbackSystemPrompt);
-    if (!parsed.activeSegment) throw new Error("历史替换结果缺少活跃分段");
+    if (!parsed.activeSegment) throw new Error("History replacement result is missing an active segment");
     return parsed;
   });
 }
@@ -539,13 +539,14 @@ export async function setChatHistoryShare(
 export async function deleteChatHistory(id: string) {
   return withConversationWriteLock(id, async () => {
     await invoke<void>("chat_history_delete", { id });
-    // 检查点数据(索引 + blobs)以会话为单位存放，没有独立的 GC。会话都删了
-    // 还留着，单个会话最多能压着 512MB blob 永不回收。尽力而为：清理失败不能
-    // 反过来让删除会话报错。
+    // Checkpoint data (index + blobs) is stored per conversation and has no independent GC. If a
+    // conversation is deleted while its data remains, a single conversation can hold up to 512MB
+    // of blobs that are never reclaimed. Best effort: a cleanup failure must not in turn make
+    // deleting the conversation fail.
     try {
       await invoke<void>("checkpoint_clear", { conversation_id: id });
     } catch {
-      // 忽略：残留的检查点目录不影响任何功能，只是占盘。
+      // Ignore: a leftover checkpoint directory affects no functionality, it only occupies disk.
     }
   });
 }
@@ -620,12 +621,12 @@ async function writeConversationRuntime(
 ) {
   const activeSegment = getActiveSegment(state);
   if (!activeSegment) {
-    throw new Error("无法持久化缺少活跃分段的会话");
+    throw new Error("Cannot persist a conversation missing an active segment");
   }
 
   if (!cursor) {
     if (state.segments[0]?.segmentIndex !== 0) {
-      throw new Error("已存在的历史会话缺少持久化游标");
+      throw new Error("Existing history conversation is missing a persistence cursor");
     }
     const summary = await upsertChatHistoryRaw({
       ...conversation,
@@ -640,13 +641,13 @@ async function writeConversationRuntime(
 
   if (activeSegment.segmentIndex < cursor.activeSegmentIndex) {
     throw new Error(
-      `不支持的历史分段回退：${cursor.activeSegmentIndex} -> ${activeSegment.segmentIndex}`,
+      `Unsupported history segment rollback: ${cursor.activeSegmentIndex} -> ${activeSegment.segmentIndex}`,
     );
   }
 
   if (activeSegment.segmentIndex === cursor.activeSegmentIndex) {
     if (activeSegment.segmentId !== cursor.activeSegmentId) {
-      throw new Error("活跃历史分段身份与持久化游标不一致");
+      throw new Error("Active history segment identity does not match the persistence cursor");
     }
     const summary = await upsertChatHistoryActiveSegmentRaw({
       conversation,
@@ -661,7 +662,7 @@ async function writeConversationRuntime(
 
   // Catch up one segment at a time when the in-memory active segment jumped
   // ahead of the durable cursor (e.g. multiple compactions between persists).
-  // Previously this threw "不支持的历史分段跳变" and left the DB on the
+  // Previously this threw "unsupported history segment jump" and left the DB on the
   // user-only snapshot after a long agent turn.
   let workingCursor: ConversationPersistenceCursor = { ...cursor };
   let summary: ChatHistorySummary | null = null;
@@ -670,13 +671,13 @@ async function writeConversationRuntime(
     const previousSegment = findSegmentByIndex(state, workingCursor.activeSegmentIndex);
     const nextSegment = findSegmentByIndex(state, workingCursor.activeSegmentIndex + 1);
     if (!previousSegment) {
-      throw new Error("追加历史分段时缺少待封存的上一活跃分段");
+      throw new Error("Missing the previous active segment to seal while appending a history segment");
     }
     if (!nextSegment) {
-      throw new Error(`追加历史分段时缺少目标分段：${workingCursor.activeSegmentIndex + 1}`);
+      throw new Error(`Missing target segment while appending a history segment: ${workingCursor.activeSegmentIndex + 1}`);
     }
     if (previousSegment.segmentId !== workingCursor.activeSegmentId) {
-      throw new Error("待封存历史分段身份与持久化游标不一致");
+      throw new Error("History segment identity to seal does not match the persistence cursor");
     }
 
     summary = await appendChatHistorySegmentRaw({
@@ -694,11 +695,11 @@ async function writeConversationRuntime(
   }
 
   if (activeSegment.segmentId !== workingCursor.activeSegmentId) {
-    throw new Error("活跃历史分段身份与持久化游标不一致");
+    throw new Error("Active history segment identity does not match the persistence cursor");
   }
   if (!summary) {
     throw new Error(
-      `不支持的历史分段跳变：${cursor.activeSegmentIndex} -> ${activeSegment.segmentIndex}`,
+      `Unsupported history segment jump: ${cursor.activeSegmentIndex} -> ${activeSegment.segmentIndex}`,
     );
   }
   return summary;

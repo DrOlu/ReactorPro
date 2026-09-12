@@ -1,11 +1,12 @@
-//! 系统代理单一真源：设置保存/启动初始化时写入，shell env 注入与
-//! 各 reqwest 出网点（本地反代、图片反代、更新检查、技能下载、
-//! MCP http/sse transport、Hook / Cron HTTP、网络自检、Image.url 读取）按需读取。
-//! reqwest 侧与 shell env 共用 NO_PROXY_DEFAULT：环回地址永不走代理。
-//! 凭据绝不进入日志与错误信息（只输出 host:port）。
-//! 例外：GitHub 更新链路在应用代理未启用时不做 no_proxy() 收口，而是回退
-//! reqwest 默认代理探测（OS 代理环境变量/系统代理设置），见
-//! `client_builder_with_os_proxy_fallback()`。
+//! Single source of truth for the system proxy: written when settings are saved / at startup
+//! initialization, and read on demand by shell env injection and the various reqwest egress
+//! points (local reverse proxy, image reverse proxy, update checks, skill downloads,
+//! MCP http/sse transport, Hook / Cron HTTP, network self-check, Image.url reads).
+//! The reqwest side and shell env share NO_PROXY_DEFAULT: loopback addresses never go through a proxy.
+//! Credentials never enter logs or error messages (only host:port is output).
+//! Exception: when the app proxy is not enabled, the GitHub update path does not apply the
+//! no_proxy() closure but falls back to reqwest's default proxy detection (OS proxy env
+//! vars/system proxy settings), see `client_builder_with_os_proxy_fallback()`.
 
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde_json::Value;
@@ -131,7 +132,7 @@ fn parse_proxy_mode(raw: Option<&Value>) -> ProxyMode {
     };
     let mut config = match serde_json::from_value::<SystemProxyConfig>(raw.clone()) {
         Ok(config) => config,
-        Err(_) => return ProxyMode::Invalid("应用代理配置格式无效".to_string()),
+        Err(_) => return ProxyMode::Invalid("invalid app proxy config format".to_string()),
     };
     if !config.enabled {
         return ProxyMode::Disabled;
@@ -144,7 +145,7 @@ fn parse_proxy_mode(raw: Option<&Value>) -> ProxyMode {
     ) || config.port == 0
         || !host_is_valid(&config.host)
     {
-        return ProxyMode::Invalid("应用代理已启用，但地址、端口或类型无效".to_string());
+        return ProxyMode::Invalid("app proxy is enabled but the address, port, or type is invalid".to_string());
     }
     match build_proxy(&config) {
         Ok(_) => ProxyMode::Enabled(config),
@@ -158,8 +159,9 @@ pub fn set_config(raw: Option<&Value>) {
         .snapshot
         .write()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    // 设置保存每次都会刷新代理状态；只有配置真实变化才 bump revision，
-    // 否则按 revision 重建的消费方（client 缓存、MCP 运行时）会被无关保存误伤。
+    // Every settings save refreshes the proxy state; revision is bumped only when the config
+    // actually changes, otherwise consumers that rebuild on revision (client cache, MCP runtime)
+    // would be needlessly disturbed by unrelated saves.
     if snapshot.mode == mode {
         return;
     }
@@ -172,9 +174,11 @@ pub fn set_config(raw: Option<&Value>) {
         .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
 }
 
-/// 当前代理配置的变更计数。长驻连接（如 MCP client）在建立时记录，
-/// 复用前与当前值比较即可感知代理配置变更并重建。
-/// 直接在读锁下拷贝 u64，不克隆整个快照（本函数在 MCP 命令路径上高频调用）。
+/// Change counter for the current proxy config. Long-lived connections (e.g. an MCP client)
+/// record it when established and compare against the current value before reuse to detect a
+/// proxy config change and rebuild.
+/// Copies the u64 directly under the read lock instead of cloning the whole snapshot (this
+/// function is called frequently on the MCP command path).
 pub fn revision() -> u64 {
     state()
         .snapshot
@@ -221,10 +225,10 @@ pub fn shell_proxy_envs() -> Result<Vec<(String, String)>, String> {
 
 fn build_proxy(config: &SystemProxyConfig) -> Result<reqwest::Proxy, String> {
     reqwest::Proxy::all(config.proxy_url())
-        // 环回地址豁免须与 shell env 注入的 NO_PROXY 一致，
-        // 否则本地上游（如 127.0.0.1 的 MCP server）会被错误送进代理。
+        // The loopback exemption must match the NO_PROXY injected into the shell env, otherwise
+        // local upstreams (e.g. an MCP server on 127.0.0.1) would be wrongly sent through the proxy.
         .map(|proxy| proxy.no_proxy(reqwest::NoProxy::from_string(NO_PROXY_DEFAULT)))
-        .map_err(|_| format!("应用代理地址无效：{}", config.display_target()))
+        .map_err(|_| format!("invalid app proxy address: {}", config.display_target()))
 }
 
 fn async_client_builder_for_mode(mode: &ProxyMode) -> Result<reqwest::ClientBuilder, String> {
@@ -263,7 +267,7 @@ pub fn cached_client() -> Result<reqwest::Client, String> {
     }
     let client = async_client_builder_for_mode(&snapshot.mode)?
         .build()
-        .map_err(|_| "创建应用代理 HTTP 客户端失败".to_string())?;
+        .map_err(|_| "failed to create the app proxy HTTP client".to_string())?;
     let current_revision = current_snapshot().revision;
     if current_revision == snapshot.revision {
         *state()
@@ -279,17 +283,19 @@ pub fn cached_client() -> Result<reqwest::Client, String> {
 
 fn os_proxy_fallback_builder_for_mode(mode: &ProxyMode) -> Result<reqwest::ClientBuilder, String> {
     match mode {
-        // 不调 no_proxy()：保留 reqwest 默认代理探测（OS 代理环境变量与
-        // macOS/Windows 系统代理设置，system-proxy 默认特性），无系统代理即直连。
+        // Do not call no_proxy(): keep reqwest's default proxy detection (OS proxy env vars and
+        // macOS/Windows system proxy settings, the system-proxy default feature); with no system
+        // proxy it connects directly.
         ProxyMode::Disabled => Ok(reqwest::Client::builder()),
         mode => async_client_builder_for_mode(mode),
     }
 }
 
-/// GitHub 更新链路专用：应用代理启用时与其他出网点一致走应用代理（配置无效
-/// 同样 fail fast）；未启用时回退 OS 系统代理探测而不是强制直连，尽可能保证
-/// GitHub 更新地址可达。其余出网点仍用 `cached_client()`/
-/// `blocking_client_builder()` 的显式 no_proxy 语义。
+/// For the GitHub update path only: when the app proxy is enabled it goes through the app proxy
+/// like other egress points (an invalid config likewise fails fast); when disabled it falls back
+/// to OS system proxy detection rather than forcing a direct connection, keeping the GitHub update
+/// address reachable where possible. All other egress points still use the explicit no_proxy
+/// semantics of `cached_client()`/`blocking_client_builder()`.
 pub fn client_builder_with_os_proxy_fallback() -> Result<reqwest::ClientBuilder, String> {
     os_proxy_fallback_builder_for_mode(&current_snapshot().mode)
 }
@@ -298,8 +304,9 @@ pub fn blocking_client_builder() -> Result<reqwest::blocking::ClientBuilder, Str
     blocking_client_builder_for_mode(&current_snapshot().mode)
 }
 
-/// 供自建 TCP 隧道（如 SSH 传输）复用应用代理：`Ok(None)` 表示未启用（直连），
-/// `Err` 表示已启用但配置无效（调用方 fail fast），`Ok(Some)` 返回配置副本。
+/// Lets custom TCP tunnels (e.g. SSH transport) reuse the app proxy: `Ok(None)` means disabled
+/// (direct connection), `Err` means enabled but with an invalid config (the caller fails fast),
+/// and `Ok(Some)` returns a copy of the config.
 pub fn current_config() -> Result<Option<SystemProxyConfig>, String> {
     match current_snapshot().mode {
         ProxyMode::Disabled => Ok(None),
@@ -308,8 +315,8 @@ pub fn current_config() -> Result<Option<SystemProxyConfig>, String> {
     }
 }
 
-/// 异步版 `blocking_client_builder()`：显式 no_proxy 语义,供需要自定义
-/// 超时/重定向等选项、无法直接复用 `cached_client()` 的出网点使用。
+/// Async version of `blocking_client_builder()`: explicit no_proxy semantics, for egress points
+/// that need custom options such as timeouts/redirects and cannot directly reuse `cached_client()`.
 pub fn async_client_builder() -> Result<reqwest::ClientBuilder, String> {
     async_client_builder_for_mode(&current_snapshot().mode)
 }
@@ -327,7 +334,7 @@ pub fn current_proxy_url() -> Result<Option<reqwest::Url>, String> {
         ProxyMode::Invalid(error) => Err(error),
         ProxyMode::Enabled(config) => reqwest::Url::parse(&config.proxy_url())
             .map(Some)
-            .map_err(|_| format!("应用代理地址无效：{}", config.display_target())),
+            .map_err(|_| format!("invalid app proxy address: {}", config.display_target())),
     }
 }
 
@@ -398,7 +405,8 @@ mod tests {
             assert!(matches!(mode, ProxyMode::Invalid(_)));
             assert!(async_client_builder_for_mode(&mode).is_err());
             assert!(blocking_client_builder_for_mode(&mode).is_err());
-            // 更新链路的回退 builder 同样不许把 Invalid 静默降级为直连/系统代理。
+            // The update path's fallback builder must likewise not silently downgrade Invalid to a
+            // direct connection/system proxy.
             assert!(os_proxy_fallback_builder_for_mode(&mode).is_err());
             assert!(shell_proxy_envs_for_mode(&mode).is_err());
         }
@@ -419,8 +427,9 @@ mod tests {
         let config = json!({
             "enabled": true, "type": "http", "host": "proxy.local", "port": 8080
         });
-        // set_config 以 ProxyMode 相等与否决定是否 bump revision：
-        // 同配置重复保存必须判等，任一字段变化必须判不等。
+        // set_config decides whether to bump revision based on ProxyMode equality:
+        // saving the same config repeatedly must compare equal, and a change in any field must
+        // compare unequal.
         assert_eq!(
             parse_proxy_mode(Some(&config)),
             parse_proxy_mode(Some(&config))

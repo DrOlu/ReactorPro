@@ -25,7 +25,7 @@ test("resolves Monaco language metadata instead of a hand-maintained extension s
   assert.equal(resolveMonacoLanguageForPath("containers/Dockerfile", registrations), "dockerfile");
 });
 
-test("keeps LiveAgent aliases that Monaco does not declare", () => {
+test("keeps ReactorPro aliases that Monaco does not declare", () => {
   assert.equal(resolveMonacoLanguageForPath("settings.jsonc", registrations), "json");
   assert.equal(resolveMonacoLanguageForPath("styles/theme.sass", registrations), "scss");
   assert.equal(resolveMonacoLanguageForPath("Cargo.lock", registrations), "toml");

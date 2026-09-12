@@ -23,7 +23,7 @@ fn load_message_count_before_segment(
         params![conversation_id, segment_index],
         |row| row.get(0),
     )
-    .map_err(|e| format!("统计 edit-resend 前置历史消息失败：{e}"))
+    .map_err(|e| format!("Failed to count edit-resend preceding history messages: {e}"))
 }
 
 pub(crate) fn chat_history_replace_from_message_sync(
@@ -36,10 +36,10 @@ pub(crate) fn chat_history_replace_from_message_sync(
 ) -> Result<ChatHistoryWindowRecord, String> {
     let chat_id = id.trim();
     if chat_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("History conversation id must not be empty".to_string());
     }
     if max_messages <= 0 {
-        return Err("历史窗口 maxMessages 必须大于 0".to_string());
+        return Err("History window maxMessages must be greater than 0".to_string());
     }
     if expected_revision.trim().is_empty() {
         return Err("expected_revision must not be empty".to_string());
@@ -53,7 +53,7 @@ pub(crate) fn chat_history_replace_from_message_sync(
 
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启 edit-resend 替换事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin edit-resend replacement transaction: {e}"))?;
     let record = get_record_by_id(&tx, chat_id)?;
     let current_revision = build_history_revision(
         &record.id,
@@ -96,7 +96,7 @@ pub(crate) fn chat_history_replace_from_message_sync(
         segment_id: source_segment.segment_id.clone(),
         summary_json: source_segment.summary_json.clone(),
         messages_json: serde_json::to_string(&target_messages)
-            .map_err(|e| format!("序列化 edit-resend 替换分段失败：{e}"))?,
+            .map_err(|e| format!("Failed to serialize edit-resend replacement segment: {e}"))?,
         message_count: i64::try_from(target_messages.len()).unwrap_or(i64::MAX),
         start_message_id: target_messages
             .first()
@@ -126,7 +126,7 @@ pub(crate) fn chat_history_replace_from_message_sync(
         "DELETE FROM chatHistorySegment WHERE conversation_id = ?1 AND segment_index > ?2",
         params![chat_id, active_segment_index],
     )
-    .map_err(|e| format!("删除 edit-resend 后续历史分段失败：{e}"))?;
+    .map_err(|e| format!("Failed to delete edit-resend subsequent history segments: {e}"))?;
     upsert_chat_history_header(&tx, &conversation_input)?;
     upsert_single_segment(&tx, chat_id, &target_segment)?;
     truncate_conversation_trajectory_prefix(
@@ -143,7 +143,7 @@ pub(crate) fn chat_history_replace_from_message_sync(
         build_chat_history_window_record(&tx, &updated_record, max_messages, None, None, true)?;
 
     tx.commit()
-        .map_err(|e| format!("提交 edit-resend 替换事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit edit-resend replacement transaction: {e}"))?;
     Ok(result)
 }
 
@@ -166,7 +166,7 @@ pub(crate) async fn chat_history_replace_from_message_inner(
         )
     })
     .await
-    .map_err(|e| format!("chat_history_replace_from_message join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_replace_from_message join failed: {e}"))?
 }
 
 #[tauri::command]

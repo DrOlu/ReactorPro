@@ -105,9 +105,9 @@ function completedLabel(locale: "zh-CN" | "en-US", searchCount: number, sourceCo
     return `Searched ${searchCount} ${searchCount === 1 ? "time" : "times"}${sourceCount > 0 ? ` · ${sourceCount} sources` : ""}`;
   }
   if (searchCount === 0) {
-    return sourceCount > 0 ? `联网搜索完成 · ${sourceCount} 个来源` : "联网搜索完成";
+    return sourceCount > 0 ? `Web search complete · ${sourceCount} source(s)` : "Web search complete";
   }
-  return `已搜索 ${searchCount} 次${sourceCount > 0 ? ` · ${sourceCount} 个来源` : ""}`;
+  return `Searched ${searchCount} time(s)${sourceCount > 0 ? ` · ${sourceCount} source(s)` : ""}`;
 }
 
 export function HostedSearchGroupView({
@@ -132,11 +132,11 @@ export function HostedSearchGroupView({
   const label = active
     ? locale === "en-US"
       ? "Searching the web"
-      : "正在联网搜索"
+      : "Searching the web"
     : status === "failed"
       ? locale === "en-US"
         ? "Web search failed"
-        : "联网搜索失败"
+        : "Web search failed"
       : completedLabel(locale, items.length, sources.length);
 
   return (
@@ -176,7 +176,7 @@ export function HostedSearchGroupView({
           {() => (
             <div className="mt-1 border-l border-border/55 py-1 pl-3">
               <section
-                aria-label={locale === "en-US" ? "Web search activity" : "联网搜索过程"}
+                aria-label={locale === "en-US" ? "Web search activity" : "Web search progress"}
                 className="max-h-64 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
               >
                 <div className="flex flex-col gap-1">
@@ -214,7 +214,7 @@ export function HostedSearchGroupView({
                     <p className="px-1.5 py-1 text-xs leading-5 text-destructive">
                       {locale === "en-US"
                         ? `${failedCount} ${failedCount === 1 ? "search" : "searches"} failed`
-                        : `${failedCount} 次搜索失败`}
+                        : `${failedCount} search failure(s)`}
                     </p>
                   ) : null}
 
@@ -226,7 +226,7 @@ export function HostedSearchGroupView({
                     >
                       {locale === "en-US"
                         ? `Show ${hiddenSourceCount} more sources`
-                        : `查看其余 ${hiddenSourceCount} 个来源`}
+                        : `View ${hiddenSourceCount} more source(s)`}
                     </button>
                   ) : null}
                 </div>

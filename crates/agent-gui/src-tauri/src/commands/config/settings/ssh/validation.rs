@@ -5,7 +5,7 @@ fn validate_ssh_auth_type(value: Option<&Value>, label: &str) -> Result<String, 
         .unwrap_or("password");
     match auth_type {
         "password" | "privateKey" | "keyboardInteractive" => Ok(auth_type.to_string()),
-        other => Err(format!("{label}.authType 不支持：{other}")),
+        other => Err(format!("{label}.authType is not supported: {other}")),
     }
 }
 
@@ -13,20 +13,20 @@ fn validate_ssh_port(value: Option<&Value>, label: &str) -> Result<i64, String> 
     let port = match value {
         Some(Value::Number(number)) => number
             .as_i64()
-            .ok_or_else(|| format!("{label}.port 必须是 1-65535 的整数"))?,
+            .ok_or_else(|| format!("{label}.port must be an integer between 1 and 65535"))?,
         Some(Value::String(text)) if text.trim().is_empty() => 22,
         Some(Value::String(text)) => text
             .trim()
             .parse::<i64>()
-            .map_err(|_| format!("{label}.port 必须是 1-65535 的整数"))?,
+            .map_err(|_| format!("{label}.port must be an integer between 1 and 65535"))?,
         Some(Value::Null) | None => 22,
-        Some(_) => return Err(format!("{label}.port 必须是 1-65535 的整数")),
+        Some(_) => return Err(format!("{label}.port must be an integer between 1 and 65535")),
     };
 
     if (1..=65535).contains(&port) {
         Ok(port)
     } else {
-        Err(format!("{label}.port 必须是 1-65535 的整数"))
+        Err(format!("{label}.port must be an integer between 1 and 65535"))
     }
 }
 
@@ -34,20 +34,20 @@ fn validate_ssh_proxy_port(value: Option<&Value>, label: &str) -> Result<i64, St
     let port = match value {
         Some(Value::Number(number)) => number
             .as_i64()
-            .ok_or_else(|| format!("{label}.port 必须是 0 或 1-65535 的整数"))?,
+            .ok_or_else(|| format!("{label}.port must be 0 or an integer between 1 and 65535"))?,
         Some(Value::String(text)) if text.trim().is_empty() => 0,
         Some(Value::String(text)) => text
             .trim()
             .parse::<i64>()
-            .map_err(|_| format!("{label}.port 必须是 0 或 1-65535 的整数"))?,
+            .map_err(|_| format!("{label}.port must be 0 or an integer between 1 and 65535"))?,
         Some(Value::Null) | None => 0,
-        Some(_) => return Err(format!("{label}.port 必须是 0 或 1-65535 的整数")),
+        Some(_) => return Err(format!("{label}.port must be 0 or an integer between 1 and 65535")),
     };
 
     if port == 0 || (1..=65535).contains(&port) {
         Ok(port)
     } else {
-        Err(format!("{label}.port 必须是 0 或 1-65535 的整数"))
+        Err(format!("{label}.port must be 0 or an integer between 1 and 65535"))
     }
 }
 
@@ -56,7 +56,7 @@ fn validate_ssh_proxy_type(value: Option<&Value>, label: &str) -> Result<String,
         Some(Value::String(text)) if text.trim() == "http" => "http",
         Some(Value::String(text)) if text.trim().is_empty() || text.trim() == "socks5" => "socks5",
         Some(Value::Null) | None => "socks5",
-        _ => return Err(format!("{label}.type 必须是 socks5 或 http")),
+        _ => return Err(format!("{label}.type must be socks5 or http")),
     };
     Ok(proxy_type.to_string())
 }
@@ -78,7 +78,7 @@ fn validate_and_normalize_ssh_proxy(
             payload.insert("useSystemProxy".to_string(), Value::Bool(false));
             return Ok(payload);
         }
-        Some(_) => return Err(format!("{label}.proxy 必须是对象")),
+        Some(_) => return Err(format!("{label}.proxy must be an object")),
     };
     let proxy_label = format!("{label}.proxy");
     let proxy_type = validate_ssh_proxy_type(proxy.get("type"), &proxy_label)?;

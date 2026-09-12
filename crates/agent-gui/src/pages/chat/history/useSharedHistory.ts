@@ -73,8 +73,9 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
     const runtimeGatewayUrl = sharedManagerGatewayUrl.trim();
     return statusGatewayUrl || runtimeGatewayUrl || remoteSettings.gatewayUrl;
   }, [remoteRuntimeStatus.gatewayUrl, remoteSettings.gatewayUrl, sharedManagerGatewayUrl]);
-  // 网关基址(gatewayUrl)不含端口，公开访问端口一直存在 remote.gatewayPort；
-  // 分享链接必须带上它，否则非 80/443 部署复制出的链接打不开。
+  // The gateway base URL (gatewayUrl) does not include the port, and the public access port
+  // always lives in remote.gatewayPort; the share link must carry it, otherwise links copied from
+  // non-80/443 deployments will not open.
   const sharedManagerShareOriginPort = remoteSettings.gatewayPort;
   const canShareHistory =
     remoteRuntimeStatus.online === true &&
@@ -160,7 +161,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
     try {
       return await request;
     } catch (error) {
-      setErrorMessage(asErrorMessage(error, "读取已分享历史列表失败"));
+      setErrorMessage(asErrorMessage(error, "Failed to load the shared history list"));
       return sharedHistoryItemsRef.current;
     } finally {
       if (sharedHistoryListRequestRef.current === request) {
@@ -213,7 +214,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
           markSharedConversation(id, status.enabled === true, conversation);
         })
         .catch((error) => {
-          setSharedManagerError(id, asErrorMessage(error, "读取分享状态失败"));
+          setSharedManagerError(id, asErrorMessage(error, "Failed to load share status"));
         })
         .finally(() => {
           updateSharedManagerIdSet(setSharedManagerLoadingIds, id, false);
@@ -255,7 +256,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
       refreshSharedManagerGatewayUrl();
 
       if (!canShareHistory) {
-        setShareError("Remote 尚未配置并连接成功，暂时不能分享会话。");
+        setShareError("Remote is not configured and connected yet; conversations cannot be shared for now.");
         return;
       }
 
@@ -268,7 +269,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
           markSharedConversation(id, status.enabled === true, conversation);
         })
         .catch((error) => {
-          setShareError(asErrorMessage(error, "读取分享状态失败"));
+          setShareError(asErrorMessage(error, "Failed to load share status"));
         })
         .finally(() => {
           setShareLoading(false);
@@ -299,7 +300,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
         return;
       }
       if (enabled && !canShareHistory) {
-        setShareError("Remote 尚未配置并连接成功，暂时不能开启分享。");
+        setShareError("Remote is not configured and connected yet; sharing cannot be enabled for now.");
         return;
       }
 
@@ -320,7 +321,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
           );
         })
         .catch((error) => {
-          setShareError(asErrorMessage(error, enabled ? "开启分享失败" : "关闭分享失败"));
+          setShareError(asErrorMessage(error, enabled ? "Failed to enable sharing" : "Failed to disable sharing"));
         })
         .finally(() => {
           setShareUpdating(false);
@@ -353,7 +354,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
           markSharedConversation(id, status.enabled === true, shareConversation);
         })
         .catch((error) => {
-          setShareError(asErrorMessage(error, "更新分享脱敏设置失败"));
+          setShareError(asErrorMessage(error, "Failed to update the share redaction settings"));
         })
         .finally(() => {
           setShareUpdating(false);
@@ -397,7 +398,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
           markSharedConversation(id, status.enabled === true, conversation);
         })
         .catch((error) => {
-          setSharedManagerError(id, asErrorMessage(error, "关闭分享失败"));
+          setSharedManagerError(id, asErrorMessage(error, "Failed to disable sharing"));
         })
         .finally(() => {
           updateSharedManagerIdSet(setSharedManagerUpdatingIds, id, false);
@@ -424,7 +425,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
           }
         })
         .catch((error) => {
-          setSharedManagerError(id, asErrorMessage(error, "更新分享脱敏设置失败"));
+          setSharedManagerError(id, asErrorMessage(error, "Failed to update the share redaction settings"));
         })
         .finally(() => {
           updateSharedManagerIdSet(setSharedManagerUpdatingIds, id, false);

@@ -13,6 +13,6 @@ test("WebUI header fallbacks follow the selected locale", () => {
   assert.match(configurationSource, /translate\("chat\.selectModel", settings\.locale\)/);
   assert.match(appSource, /translate\("common\.currentUser", settings\.locale\)/);
   assert.match(userMenuSource, /t\("common\.logout"\)/);
-  assert.doesNotMatch(configurationSource, /return "选择模型"/);
-  assert.doesNotMatch(userMenuSource, />\s*退出登录\s*</);
+  assert.doesNotMatch(configurationSource, /return "Select model"/);
+  assert.doesNotMatch(userMenuSource, />\s*Log out\s*</);
 });

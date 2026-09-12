@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -17,10 +16,9 @@ import (
 	"github.com/liveagent/agent-gateway/internal/observability"
 	"github.com/liveagent/agent-gateway/internal/server"
 	"github.com/liveagent/agent-gateway/internal/session"
-	"github.com/liveagent/agent-gateway/internal/stt"
 )
 
-// fatal 记录错误并以非零码退出（slog 没有 Fatal 级别，集中在此处理）。
+// fatal logs the error and exits with a non-zero code (slog has no Fatal level, so it is handled centrally here).
 func fatal(msg string, args ...any) {
 	slog.Error(msg, args...)
 	os.Exit(1)
@@ -31,8 +29,9 @@ func main() {
 	cfg := config.Load()
 	sm := session.NewManager()
 
-	// 统一连接池：库由 internal/db 打开并集中管理，各持久化子系统在共享池上
-	// 初始化自己的表；main 持有生命周期（退出时统一关闭）。
+	// Shared connection pool: the database is opened and centrally managed by internal/db,
+	// and each persistence subsystem initializes its own tables on the shared pool; main
+	// owns the lifecycle (closing it once on exit).
 	database, err := db.Open(cfg.AgentDB)
 	if err != nil {
 		fatal("open gateway db failed", "path", cfg.AgentDB, "err", err)
@@ -45,26 +44,16 @@ func main() {
 	}
 	slog.Info("agent registry db ready", "path", cfg.AgentDB)
 	slog.Info("agent authentication accepts gateway token or per-agent token")
-	sttStore, err := stt.NewStore(database)
-	if err != nil {
-		fatal("init STT settings store failed", "err", err)
-	}
-	sm.SetSTTSettingsSyncHandler(func(ctx context.Context, raw json.RawMessage) (any, error) {
-		var settings stt.Settings
-		if err := json.Unmarshal(raw, &settings); err != nil {
-			return nil, err
-		}
-		return sttStore.SyncFromDesktop(ctx, settings)
-	})
-	sttManager := stt.NewManager(sttStore)
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.NewHTTPServer(cfg, sm, tokens, sttManager),
+		Handler:           server.NewHTTPServer(cfg, sm, tokens),
 		ReadHeaderTimeout: 10 * time.Second,
-		// 空闲 keep-alive 连接必须回收，否则 REST/静态资源访问方挂住连接会把 fd
-		// 慢性耗尽到 ulimit。刻意不设全局 Read/WriteTimeout：流式上传与隧道长响应
-		// 需要；WS 连接已被 hijack、自管理超时，不受影响。
+		// Idle keep-alive connections must be reclaimed, otherwise REST/static-asset
+		// clients that hold connections open will slowly exhaust fds up to ulimit.
+		// Deliberately no global Read/WriteTimeout: streaming uploads and long tunnel
+		// responses need it; WS connections are hijacked and manage their own timeouts,
+		// so they are unaffected.
 		IdleTimeout: 120 * time.Second,
 	}
 

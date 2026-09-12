@@ -941,9 +941,9 @@ export function normalizeComposerClipboardSegment(
     return rawSkill ? normalizeClipboardSkill(rawSkill, enabledSkills) : null;
   }
   if (type === "appMention") {
-    // 与 commit/gitFile 同一信任边界：chip 本身没有任何特权动作（不打开
-    // URL、不执行命令），最坏情况等价于粘贴一段普通文本，所以不需要像
-    // skill 那样过白名单——只要求 name 非空。
+    // Same trust boundary as commit/gitFile: the chip itself performs no privileged action
+    // (it does not open a URL or execute a command), and at worst is equivalent to pasting
+    // ordinary text, so it does not need an allowlist like skill -- only a non-empty name.
     const rawApp = clipboardRecord(segment.app);
     if (!rawApp) return null;
     const name = clipboardString(rawApp, "name").trim();
@@ -1170,10 +1170,11 @@ export function createConversationMentionIcon() {
 }
 
 /**
- * 应用 chip 的图标：优先从注册表取真实 logo（<img>），查不到回退通用
- * 占位 SVG。图标只作为子元素存在——序列化读的是 chip 属性，data URL
- * 因此不进草稿/剪贴板 JSON；chip 重建（setDraft、粘贴恢复）时按身份
- * 重查注册表，图标自然复原。
+ * App chip icon: prefer the real logo from the registry (<img>), falling back to a generic
+ * placeholder SVG when not found. The icon exists only as a child element -- serialization
+ * reads the chip's attributes, so the data URL does not enter the draft/clipboard JSON; when
+ * the chip is rebuilt (setDraft, paste restore) the registry is looked up again by identity,
+ * and the icon is naturally restored.
  */
 export function createAppMentionIcon(app?: MentionComposerAppMention) {
   const iconDataUrl = app ? getAppMentionIconDataUrl(app) : undefined;
@@ -1188,7 +1189,7 @@ export function createAppMentionIcon(app?: MentionComposerAppMention) {
   icon.draggable = false;
   icon.style.flexShrink = "0";
   icon.style.alignSelf = "center";
-  // 圆角走标准 token（Shared UI Boundaries 禁用任意值圆角，内联样式同理）。
+  // Rounded corners use the standard token (Shared UI Boundaries forbids arbitrary-value radii, inline styles included).
   icon.classList.add("rounded-xs");
   return icon;
 }
@@ -1771,13 +1772,14 @@ export function createComposerSegmentNode(
 export type SanitizeConversationMentionOptions = {
   currentConversationId?: string;
   /**
-   * 文本模式等关闭会话引用时，所有会话段都降级为 token 文本。
-   * 缺省视为开启，与 MentionComposer 的默认 prop 一致。
+   * When conversation mentions are disabled (e.g. text mode), all conversation segments are
+   * downgraded to token text. Defaults to enabled, matching MentionComposer's default prop.
    */
   conversationMentionsEnabled?: boolean;
   /**
-   * setDraft 会先清空编辑器再重建，此时不应把即将被替换的旧 chip 计入配额。
-   * 缺省 true：粘贴路径要叠加编辑器里已有的 chip。
+   * setDraft clears the editor and rebuilds it, during which the old chips about to be replaced
+   * must not count toward the quota. Defaults to true: the paste path must add to the chips
+   * already in the editor.
    */
   includeExistingChips?: boolean;
 };
@@ -1809,9 +1811,10 @@ function conversationMentionIsRejected(
   );
 }
 
-/** 粘贴 / setDraft 与 @ 菜单/拖拽共享同一组会话引用约束（去重、上限、自引用、
- *  以及会话引用开关）。违反约束的会话段不能静默丢弃——降级为序列化 token
- *  文本，内容一字不丢，同时不再具备结构化引用身份。 */
+/** Paste / setDraft and the @ menu/drag share the same set of conversation-mention constraints
+ *  (dedup, cap, self-reference, and the conversation-mention switch). A conversation segment
+ *  violating the constraints must not be silently dropped -- it is downgraded to serialized token
+ *  text, losing not a single character while no longer carrying a structured mention identity. */
 export function sanitizeConversationMentionSegments(
   root: HTMLElement,
   segments: MentionComposerDraftSegment[],
@@ -1840,8 +1843,8 @@ function downgradeConversationMentionChip(chip: HTMLElement) {
   chip.replaceWith(document.createTextNode(text));
 }
 
-/** execCommand("paste") 等原生插入不会经过 segment 管道；事后按同一套约束
- *  把违规 chip 降级为 token 文本。 */
+/** Native insertions such as execCommand("paste") do not pass through the segment pipeline;
+ *  afterward, offending chips are downgraded to token text under the same set of constraints. */
 export function enforceConversationMentionConstraintsInEditor(
   root: HTMLElement,
   options: SanitizeConversationMentionOptions = {},

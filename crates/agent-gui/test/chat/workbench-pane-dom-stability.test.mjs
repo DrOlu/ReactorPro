@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
-// 核心验收「Pane 移动/缩放不重挂 DOM」的 DOM 级验证
-// (docs/design/session-workbench-pane-architecture.md §30.2)。
-// 此前仅有源码正则保护(PaneSurfaceLayer 按 paneId 排序 + key);本测试用
-// jsdom + 真实 react-dom 渲染 PaneSurfaceLayer,以 Object.is 比对节点实例:
-// MOVE/RESIZE 后存活 Pane 的内容 DOM 不得重挂(草稿/滚动/流才能存活),
-// CLOSE 只移除被关 Pane。
+// DOM-level verification of the core acceptance criterion "moving/resizing a pane does not remount its DOM"
+// (docs/design/session-workbench-pane-architecture.md §30.2).
+// Previously only source regexes protected this (PaneSurfaceLayer sorts by paneId + key); this test uses
+// jsdom + real react-dom to render PaneSurfaceLayer and compares node instances with Object.is:
+// the content DOM of surviving panes must not remount after MOVE/RESIZE (so drafts/scroll/streams survive),
+// and CLOSE only removes the closed pane.
 
 const env = await createDomTestEnv();
 const { React, act, createRoot } = env;
@@ -32,7 +32,7 @@ function conversationPane(paneId, conversationId) {
   };
 }
 
-/** 两 Pane 左右分屏的起始布局。 */
+/** Starting layout with two panes split left/right. */
 function twoPaneLayout() {
   return {
     schemaVersion: 1,
@@ -104,7 +104,7 @@ test("MOVE_PANE updates rects in place without remounting surviving pane DOM", (
   assert.ok(contentA && contentB, "both panes render content");
   const widthBeforeA = frameA.style.width;
 
-  // A 移到 B 的下边缘:水平分屏变为 B 上 / A 下的垂直分屏。
+  // Move A to B's bottom edge: the horizontal split becomes a vertical split with B on top / A below.
   layout = dispatch(layout, {
     type: "MOVE_PANE",
     paneId: "pane-a",
@@ -122,7 +122,7 @@ test("MOVE_PANE updates rects in place without remounting surviving pane DOM", (
   );
   assert.ok(Object.is(frameNode(container, "pane-a"), frameA), "pane-a frame not remounted");
   assert.ok(Object.is(frameNode(container, "pane-b"), frameB), "pane-b frame not remounted");
-  // 几何确实变了(横向半宽 → 纵向全宽),说明比对不是"什么都没发生"。
+  // The geometry really changed (horizontal half-width -> vertical full-width), showing the comparison is not "nothing happened".
   assert.notEqual(frameA.style.width, widthBeforeA, "pane-a rect updated in place");
 
   act(() => root.unmount());

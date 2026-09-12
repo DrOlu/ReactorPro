@@ -17,8 +17,10 @@ type SegmentedSliderProps<T extends string> = {
 };
 
 /**
- * 等宽分段的状态滑块：滑动指示块按选中档位平移，语义上是单选组。
- * 底层是同名原生 radio，Tab 进出分组、方向键换档由浏览器原生承担。
+ * An equal-width segmented state slider: the sliding thumb translates to the
+ * selected level and the semantics are those of a radio group. The underlying
+ * input is a same-named native radio, so tabbing into and out of the group and
+ * changing levels with the arrow keys are handled natively by the browser.
  */
 export function SegmentedSlider<T extends string>(props: SegmentedSliderProps<T>) {
   const { value, options, onValueChange, disabled = false, className } = props;
@@ -41,7 +43,8 @@ export function SegmentedSlider<T extends string>(props: SegmentedSliderProps<T>
       )}
       style={{ gridTemplateColumns: `repeat(${segmentCount}, minmax(0, 1fr))` }}
     >
-      {/* 滑动指示块：恒为一档宽，translateX 以自身宽度为单位滑到选中档。 */}
+      {/* Sliding thumb: always one segment wide; translateX slides it to the
+          selected level in units of its own width. */}
       <span
         aria-hidden
         data-slot="segmented-slider-thumb"

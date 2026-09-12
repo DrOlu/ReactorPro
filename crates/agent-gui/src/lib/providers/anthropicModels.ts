@@ -16,22 +16,28 @@ export {
   shouldSendAnthropicLongContextHeader,
 } from "@liveagent/ui/lib/models/anthropicContext";
 // ---------------------------------------------------------------------------
-// Anthropic 1M 长上下文窗口策略（请求行为，单一真源）
+// Anthropic 1M long-context window policy (request behavior, single source of truth)
 // ---------------------------------------------------------------------------
-// 官方 2026-03-13 起 1M 上下文在 adaptive 世代（Opus/Sonnet 4.6+、Claude 5）GA，
-// 无需 beta 头；2026-04-30 起旧世代（Sonnet 4/4.5）的 `context-1m-2025-08-07`
-// beta 退役——头仍被接受但无效，超过 200K 的请求必 400。目录（models.dev 快照）
-// 仍给 claude-sonnet-4-5 标 1M，这里以"是否 adaptive 世代"（id 启发式，与目录
-// 世代集合等价）钳出线上真实的有效窗口，供 settings 默认值与请求侧 beta 头
-// 判定共用，预算与信号永不漂移。限额/单价数据本身来自 lib/models/modelCatalog；
-// 本文件对 pi-ai 目录的回查（findBuiltinAnthropicModel）只服务 compat 等请求
-// 路径元数据。
+// As of 2026-03-13, 1M context is GA for the adaptive generation
+// (Opus/Sonnet 4.6+, Claude 5) and needs no beta header; as of 2026-04-30 the
+// `context-1m-2025-08-07` beta for the older generation (Sonnet 4/4.5) is
+// retired -- the header is still accepted but has no effect, and requests over
+// 200K will always 400. The catalog (models.dev snapshot) still lists
+// claude-sonnet-4-5 as 1M, so here we clamp to the real effective window online
+// using "is it the adaptive generation" (an id heuristic equivalent to the
+// catalog's generation set), shared by settings defaults and the request-side
+// beta-header decision so budget and signal never drift. The limit/price data
+// itself comes from lib/models/modelCatalog; this file's pi-ai catalog lookup
+// (findBuiltinAnthropicModel) only serves request-path metadata such as
+// compat.
 export { normalizeModelIdCandidates as normalizeAnthropicModelIdCandidates } from "@liveagent/ui/lib/models/modelCatalog";
 export { isAnthropicAdaptiveModelId } from "@liveagent/ui/lib/models/modelThinking";
 
-// 中转/网关常给官方 Anthropic 模型 id 加装饰，逐字匹配会漏检 pi-ai 目录；
-// 漏检后模型丢失 compat.forceAdaptiveThinking 等请求路径元数据，思考档位失效。
-// 候选链与 lib/models/modelCatalog 的目录回查共用同一实现。
+// Relays/gateways often decorate official Anthropic model ids; a literal match
+// would miss the pi-ai catalog, and a miss makes the model lose request-path
+// metadata such as compat.forceAdaptiveThinking, breaking the thinking tier.
+// The candidate chain shares the same implementation as the catalog lookup in
+// lib/models/modelCatalog.
 export function findBuiltinAnthropicModel(
   modelId: string,
 ): Model<"anthropic-messages"> | undefined {
@@ -49,8 +55,9 @@ export function getAnthropicCompat(
   return model.compat;
 }
 
-// 世代启发式的唯一实现在镜像模块 lib/models/modelThinking（web 端同源）；
-// 此处 re-export 供限额/1M 路径的既有消费者使用。
+// The single implementation of the generation heuristic lives in the mirror
+// module lib/models/modelThinking (same source on the web side); it is
+// re-exported here for existing consumers on the limits/1M path.
 export { anthropicModelSupportsXHigh };
 
 export function resolveAnthropicWireModelId(modelId: string, baseUrl: string | undefined): string {
@@ -60,5 +67,6 @@ export function resolveAnthropicWireModelId(modelId: string, baseUrl: string | u
   return modelId;
 }
 
-// adaptive 世代即 1M GA 世代；旧世代目录里的 1M 是退役前的历史数值，按 200K
-// 报有效窗口。
+// The adaptive generation is the 1M GA generation; the 1M listed in the older
+// generation's catalog is a historical value from before retirement, so report
+// an effective window of 200K.

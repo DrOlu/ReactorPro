@@ -397,10 +397,10 @@ test("display args cap pathological strings, including nested ones, with an expl
   });
 
   assert.ok(display.content.startsWith("x".repeat(20_000)));
-  assert.ok(display.content.endsWith("（已截断，len=120000）"));
+  assert.ok(display.content.endsWith("...(truncated, len=120000)"));
   assert.ok(display.content.length < 121_000);
   assert.ok(display.options.inner.startsWith("y".repeat(20_000)));
-  assert.ok(display.options.inner.endsWith("（已截断，len=30000）"));
+  assert.ok(display.options.inner.endsWith("...(truncated, len=30000)"));
 });
 
 test("display args enforce a cumulative budget across medium-sized fields", () => {
@@ -416,7 +416,7 @@ test("display args enforce a cumulative budget across medium-sized fields", () =
   const text = uiMessages.safeStringify(display);
 
   assert.ok(text.length < 60_000);
-  assert.match(text, /展示已截断/);
+  assert.match(text, /display truncated/);
 });
 
 test("expanded MCP arguments render complete long and nested values as wrapped scrollable JSON", () => {

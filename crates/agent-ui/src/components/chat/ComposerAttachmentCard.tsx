@@ -76,7 +76,8 @@ export function ComposerAttachmentCard(props: {
     imageSrc && imageLoadState?.src === imageSrc && imageLoadState.status === "loaded",
   );
 
-  // 图片附件：纯缩略图方块，点击放大预览，文件名放悬浮提示，角标删除。
+  // Image attachment: a pure thumbnail tile; click to enlarge for preview, the filename goes in
+  // a hover tooltip, and the corner badge deletes it.
   if (imageSrc || isImageLoading) {
     return (
       <div

@@ -1,121 +1,121 @@
-# Memory 系统
+# Memory System
 
-## 总体模型
+## Overall Model
 
-LiveAgent 的记忆系统由 Rust `MemoryStore` 作为本地真相源；前端 TypeScript 记忆域分布在共享包与桌面运行时中，提供 Settings 管理、Chat prompt 注入、`MemoryManager` 工具、回合后静默提取与离线组织器。Gateway/WebUI 不拥有独立记忆库，只把 WebUI 的 memory 请求转发到桌面端。
+ReactorPro's memory system uses the Rust `MemoryStore` as the local source of truth; the frontend TypeScript memory domain is spread across shared packages and the desktop runtime, providing Settings management, Chat prompt injection, the `MemoryManager` tool, post-turn silent extraction, and the offline organizer. Gateway/WebUI does not own an independent memory store; it only forwards WebUI memory requests to the desktop side.
 
-| 层 | 路径 | 职责 |
+| Layer | Path | Responsibility |
 |---|---|---|
-| Rust Store | `src-tauri/src/services/memory/` | Markdown 文件读写、SQLite FTS 索引、搜索、quota、daily、organize run、audit；`mutations/evidence.rs` 是置信度契约与 evidence frontmatter 的唯一实现点。 |
-| Tauri commands | `src-tauri/src/commands/integration/memory.rs` | `memory_list/read/search/write/update/delete/accept/apply_batch/quota_summary/organize_*` 等入口。 |
-| 唯一真源 schema | `crates/agent-ui/src/lib/memory/schema.ts` | scope/type/confidence/action 枚举、计划/决策形状、`CONFIDENCE_CONTRACT` 常量。 |
-| 配置常量 | `crates/agent-ui/src/lib/memory/config.ts` | 记忆域全部魔数（节流、窗口、簇大小、配额阶梯阈值等）。 |
-| 前端 API | `crates/agent-ui/src/lib/memory/api.ts` | memory commands 的 TypeScript 封装；具体传输由宿主适配。 |
-| Prompts | `src/lib/memory/prompts/{shared,injection,extraction,organizer,managerTool}.ts` | 按受众拆分：注入索引、提取指令、组织器提示、工具描述；策略文案单一来源。 |
-| 提取引擎 | `src/lib/chat/memory/extractionEngine.ts` | 回合后隐藏 LLM 轮：紧凑上下文 → `SubmitMemoryPlan` 工具提交 → 单次 `memory_apply_batch`。 |
-| 提取控制器 | `src/lib/chat/memory/extractionController.ts` | 会话级生命周期：同步原子认领、独立 AbortController、coalesce 队列、dispose 清理。 |
-| Tool | `src/lib/tools/memoryTools.ts` | 对模型暴露 `MemoryManager`（ro/rw）；evidence 以结构化字段直传 Rust。 |
-| 组织器 | `src/lib/memory/organizer/{pipeline,runRecord,quota,service}.ts` + `src/components/memory/useMemoryOrganizer.ts` | 纯函数流水线 + 类型化 v4 run 记录 + 配额阶梯 + 平凡 TS 调度服务（React 仅挂载）。 |
-| Settings UI | `crates/agent-ui/src/pages/settings/memory/` + 各端 `platform.tsx` | 记忆管理、organizer 设置/历史/手动应用、配额横幅。 |
+| Rust Store | `src-tauri/src/services/memory/` | Markdown file read/write, SQLite FTS index, search, quota, daily, organize run, audit; `mutations/evidence.rs` is the single implementation point for the confidence contract and evidence frontmatter. |
+| Tauri commands | `src-tauri/src/commands/integration/memory.rs` | Entry points such as `memory_list/read/search/write/update/delete/accept/apply_batch/quota_summary/organize_*`. |
+| Single source-of-truth schema | `crates/agent-ui/src/lib/memory/schema.ts` | scope/type/confidence/action enums, plan/decision shapes, `CONFIDENCE_CONTRACT` constants. |
+| Config constants | `crates/agent-ui/src/lib/memory/config.ts` | All magic numbers for the memory domain (throttling, windows, cluster size, quota ladder thresholds, etc.). |
+| Frontend API | `crates/agent-ui/src/lib/memory/api.ts` | TypeScript wrapper for memory commands; the concrete transport is adapted by the host. |
+| Prompts | `src/lib/memory/prompts/{shared,injection,extraction,organizer,managerTool}.ts` | Split by audience: injection index, extraction instructions, organizer prompt, tool description; single source for policy wording. |
+| Extraction engine | `src/lib/chat/memory/extractionEngine.ts` | Post-turn hidden LLM turn: compact context → `SubmitMemoryPlan` tool submission → single `memory_apply_batch`. |
+| Extraction controller | `src/lib/chat/memory/extractionController.ts` | Session-level lifecycle: synchronous atomic claim, independent AbortController, coalesce queue, dispose cleanup. |
+| Tool | `src/lib/tools/memoryTools.ts` | Exposes `MemoryManager` (ro/rw) to the model; evidence is passed directly to Rust as structured fields. |
+| Organizer | `src/lib/memory/organizer/{pipeline,runRecord,quota,service}.ts` + `src/components/memory/useMemoryOrganizer.ts` | Pure-function pipeline + typed v4 run records + quota ladder + plain TS scheduling service (React only mounts it). |
+| Settings UI | `crates/agent-ui/src/pages/settings/memory/` + each platform's `platform.tsx` | Memory management, organizer settings/history/manual apply, quota banner. |
 
-## 存储结构
+## Storage Structure
 
-| 数据 | 位置 | 说明 |
+| Data | Location | Notes |
 |---|---|---|
-| Markdown 事实源 | `~/.liveagent/memory/...` | 记忆正文和 frontmatter 的 canonical source。 |
-| SQLite index | `~/.liveagent/memory/memory-index.sqlite3` | `memory_meta`、`memory_fts`、`memory_fts_tri`、`memory_audit_log`、`memory_organize_runs`（schema v4，v3→v4 增量迁移保留历史）。 |
-| Settings | `settings_save_memory` 持久化 | summary model、organizer schedule/scope/mode 等。 |
-| Organize run 记录 | `memory_organize_runs` | v4 列含 `phase/final_count/compression_ratio/token_usage_total/quota_headroom_at_start`；`report` 字段存类型化 v4 报告（只经 `runRecord.ts` 解析）。 |
+| Markdown source of truth | `~/.liveagent/memory/...` | Canonical source for memory content and frontmatter. |
+| SQLite index | `~/.liveagent/memory/memory-index.sqlite3` | `memory_meta`, `memory_fts`, `memory_fts_tri`, `memory_audit_log`, `memory_organize_runs` (schema v4, v3→v4 incremental migration preserves history). |
+| Settings | Persisted by `settings_save_memory` | summary model, organizer schedule/scope/mode, etc. |
+| Organize run records | `memory_organize_runs` | v4 columns include `phase/final_count/compression_ratio/token_usage_total/quota_headroom_at_start`; the `report` field stores a typed v4 report (parsed only via `runRecord.ts`). |
 
-## Scope 与类型
+## Scope and Types
 
-| 维度 | 值 | 说明 |
+| Dimension | Value | Notes |
 |---|---|---|
-| scope | `global` | 跨项目用户偏好、身份事实、长期反馈。 |
-| scope | `project` | 与当前 workdir 绑定的项目记忆；写入受项目域闸门约束。 |
-| type | `user` | 用户身份、偏好、习惯。 |
-| type | `feedback` | 用户对 Agent 行为的长期反馈。 |
-| type | `project` | 项目知识、架构约定、工作流。 |
-| type | `reference` | 可引用资料。 |
-| type | `daily` | Journal/日记型记忆，scope 固定为 global，按日期 append；不可作为写入类型暴露。 |
+| scope | `global` | Cross-project user preferences, identity facts, long-term feedback. |
+| scope | `project` | Project memory bound to the current workdir; writes are constrained by the project-domain gate. |
+| type | `user` | User identity, preferences, habits. |
+| type | `feedback` | Long-term user feedback on Agent behavior. |
+| type | `project` | Project knowledge, architecture conventions, workflows. |
+| type | `reference` | Referenceable material. |
+| type | `daily` | Journal/diary-type memory, scope fixed to global, appended by date; cannot be exposed as a writable type. |
 
-## Evidence 与置信度契约
+## Evidence and Confidence Contract
 
-写入/更新的证据（confidence、source_quote、reasoning、aliases、supersedes、conflicts_with、override_reject）由 TS 以**结构化字段**传给 Rust（`MemoryEvidenceArgs`）；Rust `mutations/evidence.rs` 负责渲染 canonical frontmatter 并执行契约：
+Evidence for writes/updates (confidence, source_quote, reasoning, aliases, supersedes, conflicts_with, override_reject) is passed from TS to Rust as **structured fields** (`MemoryEvidenceArgs`); Rust's `mutations/evidence.rs` renders the canonical frontmatter and enforces the contract:
 
-- `high` 需要 ≥5 字符的逐字引用，否则降为 `medium`；`medium` 需要非空引用，否则降为 `low`；降级记录 `auto_downgraded: true`。
-- Mutation 响应回传 `appliedConfidence/autoDowngraded`，`MemoryManager` 工具结果附降级提示。
-- 全系统只有 Rust 一处写 frontmatter、一处读回（索引 reconcile），TS 不做任何序列化。
+- `high` requires a verbatim quote of ≥5 characters, otherwise it is downgraded to `medium`; `medium` requires a non-empty quote, otherwise it is downgraded to `low`; downgrades record `auto_downgraded: true`.
+- Mutation responses return `appliedConfidence/autoDowngraded`, and the `MemoryManager` tool result includes a downgrade hint.
+- Across the whole system, only Rust writes frontmatter in one place and reads it back in one place (index reconcile); TS performs no serialization at all.
 
-## Quota 语义与阶梯
+## Quota Semantics and Ladder
 
-| 项 | 说明 |
+| Item | Notes |
 |---|---|
-| ordinary memory | 非 daily 的 global/project 记忆；每 scope 上限 500。 |
-| `memory_quota_summary` | 按 scope 返回 used/limit/headroom/archived/unreviewed/最老未审核天数。 |
-| 配额阶梯 | `organizer/quota.ts` 按最紧 scope 的 headroom 分级：normal(>100)/notice(≤100)/degraded(≤50)/critical(≤20)/exhausted(≤5)；非 normal 时设置抽屉显示横幅，组织器提示词注入压缩目标（不做静默自动归档）。 |
-| daily | 不计入 ordinary quota。 |
+| ordinary memory | Non-daily global/project memory; capped at 500 per scope. |
+| `memory_quota_summary` | Returns used/limit/headroom/archived/unreviewed/oldest unreviewed days per scope. |
+| Quota ladder | `organizer/quota.ts` grades by the headroom of the tightest scope: normal(>100)/notice(≤100)/degraded(≤50)/critical(≤20)/exhausted(≤5); when not normal, the settings drawer shows a banner and the organizer prompt injects a compression target (no silent auto-archiving). |
+| daily | Not counted against the ordinary quota. |
 
-## 召回路径
+## Recall Paths
 
-| 路径 | 说明 |
+| Path | Notes |
 |---|---|
-| Overview 注入 | Chat 每轮调用 `memory_index_overview`，`prompts/injection.ts` 渲染紧凑 Memory Index（30/桶、16KB 帽）加入 system prompt。 |
-| MemoryManager | 模型可显式 `list/read/search` 召回更多条目，必要时 mutation。 |
-| Search | SQLite FTS5/BM25 与 trigram 辅助中文/短词检索，结果再按 scope、review、daily 衰减等排序。 |
-| Project shadow | 当前项目记忆可在 overview 中覆盖同 slug/同语义 global 记忆。 |
+| Overview injection | Chat calls `memory_index_overview` every turn, and `prompts/injection.ts` renders a compact Memory Index (30/bucket, 16KB cap) into the system prompt. |
+| MemoryManager | The model can explicitly `list/read/search` to recall more entries, and mutate when necessary. |
+| Search | SQLite FTS5/BM25 plus trigram assist Chinese/short-word retrieval; results are then ranked by scope, review, daily decay, etc. |
+| Project shadow | Current project memory can override global memory with the same slug/same semantics in the overview. |
 
-## Unreviewed 与审核
+## Unreviewed and Review
 
-| 状态 | 语义 |
+| State | Semantics |
 |---|---|
-| reviewed | 普通高可信记忆，可直接进入召回排序。 |
-| unreviewed | 未审核但可用的工作记忆，overview 以 `*:h/m/l/?` 标注置信度。 |
-| recent rejections | 提取校验层拒绝重写近期被用户拒绝的 slug，除非计划项携带 `override_reject`。 |
-| accept | `MemoryManager`、Settings 或提取计划的 accept 项可把 unreviewed 转成 reviewed。 |
+| reviewed | Ordinary high-confidence memory that can enter recall ranking directly. |
+| unreviewed | Unreviewed but usable working memory; the overview annotates confidence as `*:h/m/l/?`. |
+| recent rejections | The extraction validation layer rejects rewriting slugs recently rejected by the user, unless the plan item carries `override_reject`. |
+| accept | `MemoryManager`, Settings, or an accept item in an extraction plan can turn unreviewed into reviewed. |
 
-## 回合后提取（SubmitMemoryPlan 协议）
+## Post-Turn Extraction (SubmitMemoryPlan Protocol)
 
-| 阶段 | 说明 |
+| Phase | Notes |
 |---|---|
-| 触发 | 两个 turn runner 在回合末调用 `memoryExtraction.requestExtraction`；agent-dev 模式等待并展示，其余模式后台运行。 |
-| 控制器 | 门控（空消息/过短/问候/致谢/30s 间隔/同消息去重）与认领在首个 await 前同步完成；每 run 自有 AbortController，与聊天请求信号解耦——新用户轮不会掐断在飞提取；运行中新请求进 coalesce 队列；会话删除时 `dispose` 清理。 |
-| 上下文 | 自包含紧凑输入：末 4 用户轮逐字窗口（2000 字/条、12000 字/窗）+ `<workspace-mutations-this-turn>` 确定性变更摘要（项目域闸门证据）+ candidates(30)/rejections(7d)/already-written 块。不复用聊天 system prompt。 |
-| 输出协议 | 模型经一次 `SubmitMemoryPlan` 工具调用提交计划（write/update/accept/delete/append_daily）。identify→match→plan 仅作提示词内推理指引。首轮未提交时以只挂该工具的追加轮重试；仍缺则记为 noop，永不丢轮。 |
-| 校验 | `planTool.ts` 逐条校验（缺字段/域闸/被拒 slug/重复/超长），坏条目带码拒绝、其余照常应用。 |
-| 应用 | 单次 `memory_apply_batch`（upsert/update/delete/accept + dailyAppend），与组织器、手动应用共用同一持久化路径；`op=update` 支持证据仅更新。 |
-| 状态展示 | 状态行经 i18n（`chat.memoryExtraction.done/noop/partial`）渲染，不再有硬编码中文哨兵。 |
+| Trigger | Both turn runners call `memoryExtraction.requestExtraction` at the end of the turn; agent-dev mode waits and displays, while other modes run in the background. |
+| Controller | Gating (empty message/too short/greeting/thanks/30s interval/same-message dedup) and claiming complete synchronously before the first await; each run has its own AbortController, decoupled from the chat request signal—a new user turn will not cut off an in-flight extraction; new requests during a run enter the coalesce queue; `dispose` cleans up on session deletion. |
+| Context | Self-contained compact input: last 4 user turns verbatim window (2000 chars/turn, 12000 chars/window) + `<workspace-mutations-this-turn>` deterministic change summary (project-domain gate evidence) + candidates(30)/rejections(7d)/already-written blocks. Does not reuse the chat system prompt. |
+| Output protocol | The model submits a plan via a single `SubmitMemoryPlan` tool call (write/update/accept/delete/append_daily). identify→match→plan serves only as in-prompt reasoning guidance. If nothing is submitted on the first turn, retry with an appended turn exposing only that tool; if still missing, record as noop—never drop a turn. |
+| Validation | `planTool.ts` validates item by item (missing fields/domain gate/rejected slug/duplicate/overlong); bad entries are rejected with a code and the rest are applied as usual. |
+| Apply | A single `memory_apply_batch` (upsert/update/delete/accept + dailyAppend), sharing the same persistence path as the organizer and manual apply; `op=update` supports evidence-only updates. |
+| Status display | Status lines are rendered via i18n (`chat.memoryExtraction.done/noop/partial`), no longer hard-coded Chinese sentinels. |
 
-## 组织器（scan → cluster → plan → gate → apply）
+## Organizer (scan → cluster → plan → gate → apply)
 
-| 阶段 | 说明 |
+| Phase | Notes |
 |---|---|
-| 调度 | `organizer/service.ts` 一次性 `setTimeout` 从 `organizerNextRunAt` 唤醒；禁用或 frequency=none 时不 arm 任何定时器；Run Now 经 `pokeMemoryOrganizer()`（window 事件总线已删除）。 |
-| scan | `memory_quota_summary` + 全量 list/read；记录 `quota_headroom_at_start`。 |
-| cluster | >8 条时 LLM 主题聚类（`SubmitMemoryTopicClusters`），失败回退结构聚类（scope:hash:type × 8）。 |
-| plan | 每簇 `SubmitMemoryOrganizePlan` 工具提交（keep/merge_into/delete/mark_review/rewrite_hint），带全局清单与配额压缩目标；簇级失败隔离。 |
-| gate | `pipeline.ts` 独立重算 risk（cross_scope→high、低置信→high、reviewed→≥medium 等），按 trigger×mode×risk×confidence 决定自动应用或排队；拒绝分桶记录。 |
-| apply | scheduled 自动应用低风险；manual 存入 v4 报告待面板复核（`memory_apply_batch` 按 groupId 保证合并先写后删）。 |
-| 记录 | 每相位更新 run 行；完成时写 `final_count/compression_ratio/token_usage_total` 与类型化 `report`（v4）；旧版报告在面板降级为只读摘要。 |
+| Scheduling | `organizer/service.ts` wakes via a one-shot `setTimeout` from `organizerNextRunAt`; when disabled or frequency=none no timer is armed; Run Now goes through `pokeMemoryOrganizer()` (the window event bus has been removed). |
+| scan | `memory_quota_summary` + full list/read; records `quota_headroom_at_start`. |
+| cluster | LLM topic clustering when >8 entries (`SubmitMemoryTopicClusters`), falling back to structural clustering on failure (scope:hash:type × 8). |
+| plan | Each cluster submits via the `SubmitMemoryOrganizePlan` tool (keep/merge_into/delete/mark_review/rewrite_hint), with a global manifest and quota compression target; cluster-level failures are isolated. |
+| gate | `pipeline.ts` independently recomputes risk (cross_scope→high, low confidence→high, reviewed→≥medium, etc.), deciding auto-apply or queueing by trigger×mode×risk×confidence; rejections are recorded in buckets. |
+| apply | scheduled auto-applies low risk; manual stores a v4 report pending panel review (`memory_apply_batch` guarantees merge writes before deletes by groupId). |
+| Records | Each phase updates the run row; on completion it writes `final_count/compression_ratio/token_usage_total` and a typed `report` (v4); older-version reports degrade to read-only summaries in the panel. |
 
-## Gateway/WebUI 边界
+## Gateway/WebUI Boundary
 
-| 场景 | 实现 |
+| Scenario | Implementation |
 |---|---|
-| 共享纪律 | schema、config、API、organizer 纯逻辑与 Settings 组件位于 `crates/agent-ui`；本地 organizer 唤醒能力只进各端 `agent-ui-adapters/memoryOrganizer.ts`。 |
-| WebUI MemoryPanel | 通过 `memory.manage` 转发到桌面端；desktop 桥的 `handle_memory_manage_sync` 为显式 match（新增命令需加臂）。 |
-| WebUI organizer | Run Now 创建 pending run（`pokeMemoryOrganizer` 恒 false → QueuedRemote 提示），实际执行依赖桌面端认领。 |
-| 提取/组织执行 | 仅桌面端（`prompts/*`、`extraction/*`、`organizer/{pipeline,service}`、`memoryTools` 不进入 WebUI 宿主）。 |
-| Project scope | WebUI 请求必须带 workdir，Gateway bridge 透传到 Rust，避免 project memory 失真。 |
+| Shared discipline | schema, config, API, organizer pure logic, and Settings components live in `crates/agent-ui`; the local organizer wake capability only goes into each platform's `agent-ui-adapters/memoryOrganizer.ts`. |
+| WebUI MemoryPanel | Forwards to the desktop side via `memory.manage`; the desktop bridge's `handle_memory_manage_sync` is an explicit match (new commands require adding an arm). |
+| WebUI organizer | Run Now creates a pending run (`pokeMemoryOrganizer` is always false → QueuedRemote hint); actual execution depends on desktop-side claiming. |
+| Extraction/organize execution | Desktop-only (`prompts/*`, `extraction/*`, `organizer/{pipeline,service}`, `memoryTools` do not enter the WebUI host). |
+| Project scope | WebUI requests must carry a workdir, and the Gateway bridge passes it through to Rust, avoiding project memory distortion. |
 
-## 常见排障入口
+## Common Troubleshooting Entry Points
 
-| 问题 | 优先检查 |
+| Problem | Check First |
 |---|---|
-| 记忆没有写入 | 控制器 skip 原因（console.debug）、`SubmitMemoryPlan` 是否提交、`planTool` 拒绝码、`memory_apply_batch` warnings、MemoryStore audit log。 |
-| 提取被跳过 | `extractionSkipReason` 门控（过短/问候/节流/同消息）、coalesce 队列。 |
-| 搜不到记忆 | `memory-index.sqlite3` 是否 reconcile、FTS 行是否存在、scope/workdir 是否正确。 |
-| WebUI project memory 错位 | `memory.manage` payload 是否带 workdir，Gateway bridge 是否透传。 |
-| quota 显示不对 | `memory_quota_summary`、`deriveQuotaLadder` 阈值、面板横幅。 |
-| organizer 0 合并 | run 记录 `report.rejectionBuckets` 分桶、mode 注入、`shouldQueueDecision` 矩阵。 |
-| daily 标题异常 | `daily_slug_local_date`、`daily_title_for_meta`、Settings Journal 渲染。 |
+| Memory not written | Controller skip reason (console.debug), whether `SubmitMemoryPlan` submitted, `planTool` rejection code, `memory_apply_batch` warnings, MemoryStore audit log. |
+| Extraction skipped | `extractionSkipReason` gating (too short/greeting/throttled/same message), coalesce queue. |
+| Memory not searchable | Whether `memory-index.sqlite3` was reconciled, whether FTS rows exist, whether scope/workdir are correct. |
+| WebUI project memory misplaced | Whether the `memory.manage` payload carries a workdir, whether the Gateway bridge passes it through. |
+| Quota display incorrect | `memory_quota_summary`, `deriveQuotaLadder` thresholds, panel banner. |
+| organizer 0 merges | Run record `report.rejectionBuckets` buckets, mode injection, `shouldQueueDecision` matrix. |
+| daily title abnormal | `daily_slug_local_date`, `daily_title_for_meta`, Settings Journal rendering. |

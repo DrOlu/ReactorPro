@@ -73,7 +73,7 @@ pub struct ShellSessionResponse {
     pub platform: String,
     pub profile: String,
     pub shell_family: String,
-    /// 生效的沙箱机制;None 表示未启用沙箱。
+    /// The effective sandbox mechanism; None means sandboxing is not enabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sandbox: Option<String>,
     pub timeout_ms: Option<u64>,
@@ -350,9 +350,10 @@ impl ShellSession {
                 take -= 1;
             }
             if take == 0 {
-                // 剩余配额容不下下一个完整字符：必须就地停止分页。继续扫描
-                // 后续 chunk 会把 cursor 推过本 chunk 未读的尾部，造成乱序输
-                // 出且这些字节永远无法被再次读取。
+                // The remaining quota cannot fit the next complete character: paging must stop
+                // here. Continuing to scan later chunks would push the cursor past this chunk's
+                // unread tail, producing out-of-order output and making those bytes permanently
+                // unreadable.
                 break;
             }
             let fragment = &chunk.text[relative_start..relative_start + take];
@@ -433,9 +434,10 @@ impl ShellSessionManager {
         }
         let actual_cwd = resolve_shell_cwd(&workdir, cwd.as_deref())?;
         let effective_timeout_ms = normalize_explicit_timeout(timeout_ms, max_timeout_ms);
-        // 沙箱写围栏始终锚定 workdir(工作区根),即使 cwd 指向工作区子目录。
-        // 与一次性 shell_run 使用同一 canonicalize/构造逻辑,避免两个执行入口
-        // 的围栏语义漂移。
+        // The sandbox write fence always anchors to workdir (the workspace root), even when cwd
+        // points to a subdirectory of the workspace. It uses the same canonicalize/construction
+        // logic as the one-shot shell_run to avoid fence-semantics drift between the two execution
+        // entry points.
         let sandbox_spec = match sandbox_options {
             Some(options) => Some(SandboxSpec::from_options(
                 canonical_workdir(&workdir)?,
@@ -494,9 +496,9 @@ impl ShellSessionManager {
                 .unwrap_or(DEFAULT_START_YIELD_MS)
                 .clamp(MIN_START_YIELD_MS, MAX_START_YIELD_MS),
         );
-        // 初始读取显式从 0 开始：初始等待窗口内若环形缓冲已淘汰头部输出，
-        // 响应必须置 output_truncated（cursor=None 只会“从现存缓冲起点读”，
-        // 掩盖丢失）。
+        // The initial read explicitly starts at 0: if the ring buffer has already evicted the head
+        // output within the initial wait window, the response must set output_truncated (cursor=None
+        // would only "read from the start of the existing buffer", masking the loss).
         Ok(session.wait(Some(0), yield_time))
     }
 
@@ -676,7 +678,7 @@ fn spawn_stream_reader<R: Read + Send + 'static>(
                     if let Some(session) = session.upgrade() {
                         session.append_output(
                             ShellOutputStream::Stderr,
-                            format!("LiveAgent failed to read shell output: {error}\n"),
+                            format!("ReactorPro failed to read shell output: {error}\n"),
                         );
                     }
                     break;
@@ -754,7 +756,7 @@ fn spawn_process_monitor(
                     let _ = terminate_child_process_tree(&mut child, config.termination_grace);
                     session.append_output(
                         ShellOutputStream::Stderr,
-                        format!("LiveAgent failed to inspect shell process: {error}\n"),
+                        format!("ReactorPro failed to inspect shell process: {error}\n"),
                     );
                     break (ShellSessionStatus::Failed, Some(-1));
                 }
@@ -935,7 +937,7 @@ mod tests {
             &config,
         );
         session.append_output(ShellOutputStream::Stdout, "12345".to_string());
-        session.append_output(ShellOutputStream::Stderr, "中文AB".to_string());
+        session.append_output(ShellOutputStream::Stderr, "€✓AB".to_string());
 
         let first = session.wait(Some(0), Duration::ZERO);
         assert!(first.output_truncated);
@@ -977,9 +979,9 @@ mod tests {
 
     #[test]
     fn pagination_never_skips_a_chunk_tail_that_cannot_fit() {
-        // 回归：response 配额在多字节字符前耗尽时必须就地停止分页；曾经的
-        // continue 会跳到后续 chunk 继续取数，导致乱序输出且 cursor 越过
-        // 未读字节（该数据从此不可再读）。
+        // Regression: when the response quota runs out before a multibyte character, paging must
+        // stop in place; the old continue would jump to later chunks to keep reading, producing
+        // out-of-order output and advancing the cursor past unread bytes (which could then never be read again).
         let config = ShellSessionConfig {
             response_capacity_bytes: 3,
             ..ShellSessionConfig::default()
@@ -998,7 +1000,7 @@ mod tests {
             &config,
         );
         session.append_output(ShellOutputStream::Stdout, "a".to_string());
-        session.append_output(ShellOutputStream::Stdout, "中".to_string());
+        session.append_output(ShellOutputStream::Stdout, "€".to_string());
         session.append_output(ShellOutputStream::Stdout, "xyz".to_string());
         session.finish(ShellSessionStatus::Completed, Some(0));
 
@@ -1012,7 +1014,7 @@ mod tests {
                 break;
             }
         }
-        assert_eq!(collected, "a中xyz");
+        assert_eq!(collected, "a€xyz");
     }
 
     #[test]

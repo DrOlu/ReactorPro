@@ -47,7 +47,7 @@ test("conversation title job disables thinking, caching, and native web search",
       "conversation-1",
       {
         id: "conversation-1",
-        title: "新会话",
+        title: "New Conversation",
         updatedAt: 1,
         isPending: true,
       },
@@ -95,7 +95,7 @@ test("conversation title job disables thinking, caching, and native web search",
 
   historyItemsById.set("conversation-1", {
     id: "conversation-1",
-    title: "新会话",
+    title: "New Conversation",
     updatedAt: 1,
     isPending: true,
   });
@@ -105,8 +105,8 @@ test("conversation title job disables thinking, caching, and native web search",
     runtime,
     signal: new AbortController().signal,
     conversationId: "conversation-1",
-    titleSourceText: "请帮我做一个很快的设置抽屉。",
-    content: "请帮我做一个很快的设置抽屉。",
+    titleSourceText: "Please build a fast settings drawer.",
+    content: "Please build a fast settings drawer.",
     locale: "zh-CN",
     sidebarStore,
     titleJobRef,
@@ -115,6 +115,6 @@ test("conversation title job disables thinking, caching, and native web search",
     },
   });
 
-  assert.match(capturedParams.context.systemPrompt, /简体中文/);
-  assert.match(capturedParams.context.messages[0].content, /简体中文标题/);
+  assert.match(capturedParams.context.systemPrompt, /Simplified Chinese/);
+  assert.match(capturedParams.context.messages[0].content, /Simplified Chinese title/);
 });

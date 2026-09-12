@@ -292,7 +292,7 @@ export function createFsTools(params: {
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
   additionalRoots?: readonly AdditionalProjectRoot[];
-  /** 会话检查点上下文;缺省时 Write/Edit/Delete 不做前像捕获(如 Cron 场景)。 */
+  /** Conversation checkpoint context; when absent, Write/Edit/Delete do not capture pre-images (e.g. Cron scenarios). */
   checkpoint?: { conversationId: string; turnId: string };
 }): BuiltinToolBundle {
   const { workdir, fileState } = params;
@@ -591,7 +591,7 @@ export function createFsTools(params: {
   const toolDelete: Tool = {
     name: "Delete",
     description:
-      "The structured, tracked way to intentionally delete a file/directory in the workspace, a writable root:// project directory, or an enabled writable Skill. Directories are removed recursively; use one Delete call per target. Always use this instead of Bash, ManagedProcess, shell scripts, or deletion-oriented CLIs such as rm/rmdir/unlink/find -delete/git rm/git clean/PowerShell Remove-Item/cmd del, erase, or rd. Delete results feed LiveAgent's Edited Files and file-ledger tracking.",
+      "The structured, tracked way to intentionally delete a file/directory in the workspace, a writable root:// project directory, or an enabled writable Skill. Directories are removed recursively; use one Delete call per target. Always use this instead of Bash, ManagedProcess, shell scripts, or deletion-oriented CLIs such as rm/rmdir/unlink/find -delete/git rm/git clean/PowerShell Remove-Item/cmd del, erase, or rd. Delete results feed ReactorPro's Edited Files and file-ledger tracking.",
     parameters: strictToolParameters({
       path: Type.String({
         description:

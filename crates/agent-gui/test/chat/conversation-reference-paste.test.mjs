@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
-// 粘贴路径必须与 @ 菜单/拖拽共享同一组会话引用约束（去重、上限 3、自引用）。
-// 违反约束的段不能静默丢弃，而是降级为序列化 token 文本保留粘贴内容。
+// The paste path must share the same conversation-reference constraints as the @ menu/drag (dedup, limit 3, self-reference).
+// Segments violating the constraints must not be silently dropped; instead they degrade to serialized token text, preserving the pasted content.
 
 const env = await createDomTestEnv();
 const internals = env.loadModule("@liveagent/ui/components/chat/MentionComposerInternals.tsx");
@@ -79,7 +79,7 @@ test("pasted self-reference collapses to text when the current conversation id i
   });
   assert.deepEqual(withId, [downgradedText(selfReference), other]);
 
-  // 宿主未提供当前会话 ID 时保持宽松（发送边界仍会归一化过滤）。
+  // Stay lenient when the host does not provide the current conversation ID (the send boundary still normalizes and filters).
   const withoutId = sanitizeConversationMentionSegments(editor, [selfReference, other]);
   assert.deepEqual(withoutId, [selfReference, other]);
 });
@@ -111,7 +111,7 @@ test("a pasted token flood ends up with at most the cap as structured chips", ()
     chips.map((segment) => segment.conversation.id),
     ["conv-1", "conv-2", "conv-3"],
   );
-  // 重复的 conv-1 与超限的 conv-4 都降级为文本，粘贴内容一字不丢。
+  // The duplicate conv-1 and the out-of-range conv-4 both degrade to text, losing not a single character of the pasted content.
   assert.equal(downgraded.length, 2);
 });
 

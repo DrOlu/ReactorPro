@@ -1,46 +1,40 @@
-# 项目工具 Pane 化设计（审查 / 内网穿透 / SSH / 后台任务）
+# Project Tool Pane Design (Review / Tunneling / SSH / Background Tasks)
 
-> 状态：已实现（2026-09-02）。本文档描述把 Right Dock 中剩余四个项目工具拆为独立
-> Workbench 容器（Pane）的设计与落地方式；桌面端与 Web 端共用同一实现。
-> 前置阅读：[session-workbench-pane-architecture.md](session-workbench-pane-architecture.md)
-> §15（Terminal Surface）与 §16（File Tree Surface 与 Right Dock 边界）。
+> Status: implemented (2026-09-02). This document describes the design and implementation of splitting the four remaining project tools in the Right Dock into independent Workbench containers (Panes); the desktop and Web sides share the same implementation.
+> Prerequisite reading: [session-workbench-pane-architecture.md](session-workbench-pane-architecture.md)
+> §15 (Terminal Surface) and §16 (File Tree Surface and the Right Dock Boundary).
 
-## 1. 背景与目标
+## 1. Background and Goals
 
-Right Dock 的「开始使用」面板列出六个工具。在本轮之前：
+The Right Dock's "Get Started" panel lists six tools. Before this round:
 
-| 工具 | 之前的形态 |
+| Tool | Previous form |
 |---|---|
-| 新建终端 | 已是独立 Pane（`localTerminal` / `sshTerminal` Surface，可拖拽拼接） |
-| 新建文件树 | 已是独立 Pane（`fileTree` Surface，项目级单例 + 租约） |
-| 新建审查 | 仅 Right Dock tab |
-| 新建内网穿透 | 仅 Right Dock tab |
-| 新建 SSH 连接 | 仅 Right Dock tab |
-| 后台任务 | 仅 Right Dock 派生 tab |
+| New Terminal | Already an independent Pane (`localTerminal` / `sshTerminal` Surface, draggable and composable) |
+| New File Tree | Already an independent Pane (`fileTree` Surface, project-level singleton + lease) |
+| New Review | Right Dock tab only |
+| New Tunneling | Right Dock tab only |
+| New SSH Connection | Right Dock tab only |
+| Background Tasks | Right Dock-derived tab only |
 
-目标：
+Goals:
 
-1. 审查、内网穿透、SSH 连接、后台任务都能脱离 Right Dock，成为可拖拽、可拼接、可
-   移动/关闭的 Workbench Pane，与终端 / 文件树享有同一套布局引擎（split、divider、
-   最小尺寸、键盘命令、布局恢复）。
-2. Right Dock 与 Pane 之间保持「同一工具只出现在一个宿主」的租约语义，避免重复的
-   数据请求、订阅与状态竞争。
-3. 桌面端（`agent-gui`）与 Web 端（`agent-gateway/web`）行为一致，实现放在共享层
-   `@liveagent/ui`，两端只做注入。
-4. 不复制任何工具面板的业务实现：`GitReviewPanel`、`LocalTunnelPanel`、
-   `SshTunnelPanel`、`BackgroundTasksPanel` 原样复用。
+1. Review, tunneling, SSH connection, and background tasks can all leave the Right Dock and become draggable, composable, movable/closable Workbench Panes, sharing the same layout engine as the terminal / file tree (split, divider, minimum size, keyboard commands, layout restore).
+2. The Right Dock and Panes maintain the lease semantics of "one tool appears in only one host", avoiding duplicate data requests, subscriptions, and state races.
+3. The desktop side (`agent-gui`) and the Web side (`agent-gateway/web`) behave consistently, with the implementation placed in the shared layer `@liveagent/ui`, and both ends only doing injection.
+4. Do not duplicate any tool panel's business implementation: `GitReviewPanel`, `LocalTunnelPanel`, `SshTunnelPanel`, and `BackgroundTasksPanel` are reused as-is.
 
-非目标：
+Non-goals:
 
-- 不改变工具面板内部的交互与数据流。
-- 不改变终端 Pane 的租约/绑定机制。
-- 不引入跨窗口/跨设备的布局同步。
+- Do not change the interactions and data flow inside the tool panels.
+- Do not change the terminal Pane's lease/binding mechanism.
+- Do not introduce cross-window/cross-device layout synchronization.
 
-## 2. 领域模型
+## 2. Domain Model
 
 ### 2.1 Surface Spec
 
-`crates/agent-ui/src/lib/workbench/types.ts` 新增「项目工具 Surface」族：
+`crates/agent-ui/src/lib/workbench/types.ts` adds a "project tool Surface" family:
 
 ```ts
 export const PROJECT_TOOL_SURFACE_KINDS = [
@@ -52,182 +46,147 @@ export type ProjectToolWorkbenchSurface = {
 }[ProjectToolSurfaceKind];
 ```
 
-- 采用分布式映射类型，`switch (surface.kind)` 可逐 kind 收窄。
-- 原 `FileTreeWorkbenchSurface` 保留为 `Extract<…, { kind: "fileTree" }>` 的别名。
-- 所有项目工具 Surface 都携带 `ProjectRef`：聚焦 Pane 时 Right Dock 跟随该项目
-  （`surfaceProjectRef` 语义不变）；布局只存 `{ kind, project }`，不存任何运行时
-  数据。
+- A distributed mapped type is used, so `switch (surface.kind)` can narrow kind by kind.
+- The original `FileTreeWorkbenchSurface` is kept as an alias of `Extract<…, { kind: "fileTree" }>`.
+- All project tool Surfaces carry a `ProjectRef`: when a Pane is focused, the Right Dock follows that project (the `surfaceProjectRef` semantics are unchanged); the layout stores only `{ kind, project }` and no runtime data.
 
-### 2.2 身份（唯一性）
+### 2.2 Identity (Uniqueness)
 
-`projectToolSurfaceIdentityKey(kind, projectPathKey)`：
+`projectToolSurfaceIdentityKey(kind, projectPathKey)`:
 
-| kind | 身份键 | 作用域 |
+| kind | Identity key | Scope |
 |---|---|---|
-| fileTree / gitReview / tunnel / sshTunnel | `${kind}:${projectPathKey}` | 项目级单例 |
-| backgroundTasks | `backgroundTasks:` | 窗口级单例 |
+| fileTree / gitReview / tunnel / sshTunnel | `${kind}:${projectPathKey}` | Project-level singleton |
+| backgroundTasks | `backgroundTasks:` | Window-level singleton |
 
-后台任务镜像的是桌面端全局 ManagedProcess 注册表，与项目无关；第二个项目再开一个
-只会显示完全相同的列表，因此裁决为整窗口单例（任一项目的 dock 都视为已租用）。
-其余四个工具按项目分桶，两个项目各开一个审查 Pane 是合法布局。
+Background tasks mirror the desktop's global ManagedProcess registry and are unrelated to the project; opening a second one for a second project would only show an identical list, so the decision is a whole-window singleton (any project's dock is considered to have leased it). The other four tools are bucketed by project, and opening one review Pane per project is a valid layout.
 
-`surfaceIdentityKey` / `findPaneIdBySurfaceKey` / reducer 的 `duplicate-surface`
-拒绝 / `collectWorkbenchLayoutIssues` 不变量全部沿用同一身份键。
+`surfaceIdentityKey` / `findPaneIdBySurfaceKey` / the reducer's `duplicate-surface` rejection / the `collectWorkbenchLayoutIssues` invariant all still use the same identity key.
 
-### 2.3 最小尺寸
+### 2.3 Minimum Size
 
-`geometry.ts` 为每个 kind 定义硬最小尺寸（CSS px），参与 split 可行性判定、
-divider clamp 与拖拽落点拒绝：
+`geometry.ts` defines a hard minimum size (CSS px) for each kind, participating in split feasibility checks, divider clamping, and drop-target rejection:
 
-| kind | minWidth × minHeight | 依据 |
+| kind | minWidth × minHeight | Rationale |
 |---|---|---|
-| gitReview | 320 × 220 | 工具栏 + 变更列表可读；列表/diff 分栏由面板内部在 ≥500px 时自行启用 |
-| tunnel | 280 × 200 | 一行表单控件 + 若干行链接 |
-| sshTunnel | 280 × 200 | 同上 |
-| backgroundTasks | 260 × 180 | 进程行列表 |
-| fileTree | 240 × 180 | 既有 |
+| gitReview | 320 × 220 | Toolbar + changed-file list readable; the list/diff split column is enabled internally by the panel itself at ≥500px |
+| tunnel | 280 × 200 | One row of form controls + several rows of links |
+| sshTunnel | 280 × 200 | Same as above |
+| backgroundTasks | 260 × 180 | Process row list |
+| fileTree | 240 × 180 | Existing |
 
-### 2.4 拖拽载荷
+### 2.4 Drag Payload
 
-`dragMachine.ts` 用统一载荷替代原 `fileTree` 载荷：
+`dragMachine.ts` replaces the original `fileTree` payload with a unified payload:
 
 ```ts
 | { kind: "projectTool"; tool: ProjectToolSurfaceKind; project: ProjectRef; title: string }
 ```
 
-- 自有 Pane 判定（`ownPaneIdForPayload`）按身份键查找：拖到自己 Pane 中心解析为
-  focus，而不是 split。
-- 落点可行性按 `surfaceMinSize({ kind: tool, project })` 取该工具的最小尺寸。
+- Own-Pane detection (`ownPaneIdForPayload`) looks up by identity key: dropping onto one's own Pane center resolves to focus rather than split.
+- Drop feasibility takes that tool's minimum size via `surfaceMinSize({ kind: tool, project })`.
 
-## 3. 事务与租约（共享纯函数）
+## 3. Transactions and Leases (Shared Pure Functions)
 
-`crates/agent-ui/src/lib/workbench/projectToolDropCommit.ts`，桌面端与 Web 端
-共用，替代此前两端各自内联的文件树 drop 逻辑：
+`crates/agent-ui/src/lib/workbench/projectToolDropCommit.ts`, shared by the desktop and Web sides, replacing the file-tree drop logic previously inlined on both ends:
 
-| 函数 | 语义 |
+| Function | Semantics |
 |---|---|
-| `commitProjectToolDrop(payload, target, deps)` | 已有 Pane：落在自己中心 → 聚焦；其它落点 → 移动；空画布 → 忽略。无 Pane → 在落点打开。 |
-| `openProjectToolInSplit(tool, project, deps)` | 菜单/键盘入口：已有 Pane → 聚焦；否则 `resolveAutoDockTarget()` 自动停靠，无空间 → `onNoSpace()`。 |
-| `leasedProjectToolKinds(layout, projectPathKey, kinds)` | 布局中已被 Pane 持有的工具集合，供 Right Dock 隐藏 tab/内容/入口。 |
+| `commitProjectToolDrop(payload, target, deps)` | Existing Pane: dropping on its own center → focus; other drop targets → move; empty canvas → ignore. No Pane → open at the drop target. |
+| `openProjectToolInSplit(tool, project, deps)` | Menu/keyboard entry: existing Pane → focus; otherwise `resolveAutoDockTarget()` auto-docks, and when there is no space → `onNoSpace()`. |
+| `leasedProjectToolKinds(layout, projectPathKey, kinds)` | The set of tools already held by Panes in the layout, used by the Right Dock to hide tabs/content/entries. |
 
-`useWindowWorkbench.openFileTreeSurface` 泛化为 `openProjectToolSurface`。
+`useWindowWorkbench.openFileTreeSurface` is generalized to `openProjectToolSurface`.
 
-租约语义与文件树一致（§16）：Pane 存在期间 Right Dock 不挂该工具的 tab、内容与
-新建入口（`RightDockPanel.leasedTools`）。
+The lease semantics match the file tree (§16): while a Pane exists, the Right Dock does not mount that tool's tab, content, or new-entry (`RightDockPanel.leasedTools`).
 
-**关闭 Pane = 关闭工具**：Pane 的 × / `Meta+Alt+W` 在布局确认移除后，同步收掉 dock
-里的该工具（`lib/projectTools/releaseProjectToolFromDock.ts`：工具 tab 删除
-`tools[kind]` 与 tabOrder 项、清空指向它的 activeTabId；后台任务按其自身关闭手势
-隐藏并快照当前进程 id）。释放租约后 dock 不会再把 tab 弹回来；从未进过 dock 的工具
-是空操作。关闭不修改项目、隧道、SSH 会话或后台进程；再次从「开始使用」打开会以默认
-UI 状态重建。
+**Closing a Pane = closing the tool**: after the layout confirms removal, the Pane's × / `Meta+Alt+W` also removes that tool from the dock (`lib/projectTools/releaseProjectToolFromDock.ts`: the tool tab deletes `tools[kind]` and the tabOrder entry, and clears the activeTabId pointing at it; background tasks are hidden by their own close gesture and the current process id is snapshotted). After the lease is released, the dock will not pop the tab back; for a tool that never entered the dock, this is a no-op. Closing does not modify the project, tunnel, SSH session, or background process; reopening from "Get Started" rebuilds it with the default UI state.
 
-## 4. Pane 宿主与运行环境
+## 4. Pane Host and Runtime Environment
 
 ### 4.1 `ProjectToolPaneHost`
 
-`crates/agent-ui/src/components/workbench/ProjectToolPaneHost.tsx`：
+`crates/agent-ui/src/components/workbench/ProjectToolPaneHost.tsx`:
 
 ```text
 ProjectToolPaneHost({ paneId, surface, environment })
-├── 按 surface.project 解析 WorkspaceProject（缺失 → UnsupportedPaneSurface "<kind>:missing"）
-├── 组装 RightDockToolContextValue 并 Provider 注入
-└── 按 kind 渲染：
-    ├── fileTree        → FileTreePaneSurface（props 注入，自带多根拉取）
-    ├── gitReview       → GitReviewPanel（读 context）
+├── Resolve WorkspaceProject from surface.project (missing → UnsupportedPaneSurface "<kind>:missing")
+├── Assemble RightDockToolContextValue and inject via Provider
+└── Render by kind:
+    ├── fileTree        → FileTreePaneSurface (props injection, with its own multi-root fetching)
+    ├── gitReview       → GitReviewPanel (reads context)
     ├── tunnel          → LocalTunnelPanel
     ├── sshTunnel       → SshTunnelPanel
-    └── backgroundTasks → BackgroundTasksPanel（宿主负责 ensureManagedProcessInit）
+    └── backgroundTasks → BackgroundTasksPanel (the host is responsible for ensureManagedProcessInit)
 ```
 
-设计裁决：GitReview 在 5 个文件里读 `RightDockToolContext`（数据层、状态视图、
-工具栏、提交器、历史），把它改成 props 注入需要重写数据层；Pane 宿主改为「提供同一
-个 context」，面板零改动，且 dock 与 Pane 渲染语义天然一致。
+Design decision: GitReview reads `RightDockToolContext` in 5 files (data layer, state view, toolbar, committer, history), and converting it to props injection would require rewriting the data layer; instead the Pane host "provides the same context", leaving the panel unchanged, and the dock and Pane rendering semantics are naturally consistent.
 
-Pane 内工具永远 `active`（没有 tab 遮挡），字体缩放沿用 dock 的
-`fontScale.rightDock`（`zone-font-scale`）。
+Tools inside a Pane are always `active` (no tab occlusion), and font scaling follows the dock's `fontScale.rightDock` (`zone-font-scale`).
 
 ### 4.2 `ProjectToolPaneEnvironment`
 
-页面构造一次（`useMemo`），与传给 `RightDockPanel` 的是同一批 client / 回调，差别
-只在「按 Pane 自己的 projectPathKey 取状态」：
+Constructed once per page (`useMemo`), with the same batch of clients / callbacks as those passed to `RightDockPanel`; the only difference is "fetching state by the Pane's own projectPathKey":
 
-| 字段 | 说明 |
+| Field | Description |
 |---|---|
 | `clients` | terminal / git / textGeneration / tunnel / workspaceActivity |
-| `capabilities` | git 写权限、隧道开关与 publicBaseUrl、禁用提示 |
-| `fileTree.getState(key)` / `onStateChange(key, patch)` | 按项目分桶的文件树 UI 状态 |
-| `fileTree.onOpenFile(request)` / `onInsertFileMention` / `onRevealInFileTree(key, path)` | 打开编辑器/预览、@ 引用、审查 → 文件树定位 |
-| `git` | 提交/文件 mention、code-review 技能、`focusRequest` |
-| `ssh.getAssociatedHostIds(key)` / `onAssociatedHostIdsChange(key, ids)` | 按项目关联主机 |
-| `ssh.sessions` + `onSessionSnapshot` / `onSessionClosed` / `onSessionsReconcile` | 与页面级会话列表桥接（`sessionStore.ts` 新增纯函数 `mergeTerminalSession` / `removeTerminalSession` / `reconcileSshTerminalSessions`） |
-| `activeProjectPathKey` | Composer mention 插入与 git focusRequest 只对 Right Dock 当前项目生效 |
+| `capabilities` | git write permission, tunnel toggle and publicBaseUrl, disabled hints |
+| `fileTree.getState(key)` / `onStateChange(key, patch)` | Project-bucketed file tree UI state |
+| `fileTree.onOpenFile(request)` / `onInsertFileMention` / `onRevealInFileTree(key, path)` | Open editor/preview, @ mention, review → file tree locate |
+| `git` | commit/file mention, code-review skill, `focusRequest` |
+| `ssh.getAssociatedHostIds(key)` / `onAssociatedHostIdsChange(key, ids)` | Project-associated hosts |
+| `ssh.sessions` + `onSessionSnapshot` / `onSessionClosed` / `onSessionsReconcile` | Bridge with the page-level session list (`sessionStore.ts` adds the pure functions `mergeTerminalSession` / `removeTerminalSession` / `reconcileSshTerminalSessions`) |
+| `activeProjectPathKey` | Composer mention insertion and git focusRequest only take effect for the Right Dock's current project |
 
-## 5. 交互入口
+## 5. Interaction Entries
 
-| 入口 | 行为 |
+| Entry | Behavior |
 |---|---|
-| 「开始使用」六个卡片 | 点击：在 dock 内打开（不变）。按下并拖动（鼠标/笔，非触摸）：拖出到画布，落点直接打开该工具 Pane（`onToolDragStart`）。 |
-| Right Dock 工具 tab（含后台任务） | 拖出到画布；右键/长按菜单「在分屏中打开」（`onOpenToolInWorkbench`）。 |
-| 新建（+）菜单 | 已租用的工具不再列出。 |
-| Pane 顶部 chrome | 拖动把手移动 / 拼接、× 关闭（同时关闭 dock 里的该工具）；键盘 `Meta/Ctrl+Alt+方向/W/=` 沿用。 |
-| 拖拽幽灵 / 落点预览 | 标题取 `projectToolSurfaceTitleKey(kind)` 对应文案。 |
-| 无障碍 | 区域标签 `workbench.paneRegionTool`（“工具面板：{title}”）。 |
+| The six "Get Started" cards | Click: open inside the dock (unchanged). Press and drag (mouse/pen, not touch): drag out to the canvas, and dropping directly opens that tool's Pane (`onToolDragStart`). |
+| Right Dock tool tab (including background tasks) | Drag out to the canvas; right-click/long-press menu "Open in split view" (`onOpenToolInWorkbench`). |
+| New (+) menu | Already-leased tools are no longer listed. |
+| Pane top chrome | Drag the handle to move / compose, × to close (also closing that tool in the dock); the keyboard `Meta/Ctrl+Alt+direction/W/=` is unchanged. |
+| Drag ghost / drop preview | The title uses the copy corresponding to `projectToolSurfaceTitleKey(kind)`. |
+| Accessibility | Region label `workbench.paneRegionTool` ("Tool panel: {title}"). |
 
-## 6. 宿主接线
+## 6. Host Wiring
 
-### 桌面端 `crates/agent-gui/src/pages/ChatPage.tsx`
+### Desktop `crates/agent-gui/src/pages/ChatPage.tsx`
 
-- drop 提交：`payload.kind === "projectTool"` → `commitProjectToolDrop`。
-- `handleToolWorkbenchDragIntent(kind, event)` / `handleOpenToolInWorkbenchSplit(kind)`
-  替代文件树专用处理器；`dockToolProjectRef()` 提供 Right Dock 当前项目的 ProjectRef。
-- `renderPaneContent`：`isProjectToolSurface(surface)` → `<ProjectToolPaneHost>`。
+- Drop commit: `payload.kind === "projectTool"` → `commitProjectToolDrop`.
+- `handleToolWorkbenchDragIntent(kind, event)` / `handleOpenToolInWorkbenchSplit(kind)` replace the file-tree-specific handlers; `dockToolProjectRef()` provides the ProjectRef of the Right Dock's current project.
+- `renderPaneContent`: `isProjectToolSurface(surface)` → `<ProjectToolPaneHost>`.
 - `leasedDockTools = leasedProjectToolKinds(layout, terminalProjectPathKey, PROJECT_TOOL_SURFACE_KINDS)`
-  传给 `RightDockPanel.leasedTools`。
+  is passed to `RightDockPanel.leasedTools`.
 
-### Web 端 `crates/agent-gateway/web/src/app/`
+### Web `crates/agent-gateway/web/src/app/`
 
-- `workbench/useGatewayWorkbench.ts`：同一份 drop / open-in-split 事务；控制器暴露
-  `handleToolDragIntent` / `handleOpenToolInSplit`；新增 `projectToolTitle(tool)` 参数
-  供幽灵标题本地化，`onProjectToolPaneClosed(tool, key)` 由 GatewayApp 接到
-  `releaseProjectToolFromDock`。
-- `GatewayAppView.tsx`：`projectToolPaneEnvironment`（终端 client 未连接时为 null，
-  工具 Pane 与终端 Pane 同样不渲染）、`leasedDockTools`、`ProjectToolPaneHost`。
-- 会话桥接：`useProjectToolsRuntime.updateProjectTerminalSessions(updater)` 按 React
-  当前值函数式合并（与 dock 侧 `sessionsRef.current` 同口径），避免 SSH 面板的
-  snapshot / reconcile 在一次重渲染之间连续到达时互相覆盖。
+- `workbench/useGatewayWorkbench.ts`: the same drop / open-in-split transactions; the controller exposes `handleToolDragIntent` / `handleOpenToolInSplit`; a new `projectToolTitle(tool)` parameter is added for localizing the ghost title, and `onProjectToolPaneClosed(tool, key)` is wired by GatewayApp to `releaseProjectToolFromDock`.
+- `GatewayAppView.tsx`: `projectToolPaneEnvironment` (null when the terminal client is not connected, in which case tool Panes are not rendered just like terminal Panes), `leasedDockTools`, `ProjectToolPaneHost`.
+- Session bridging: `useProjectToolsRuntime.updateProjectTerminalSessions(updater)` merges functionally against React's current value (the same convention as the dock side's `sessionsRef.current`), preventing the SSH panel's snapshot / reconcile from overwriting each other when they arrive back-to-back between a single re-render.
 
-## 7. 持久化与恢复
+## 7. Persistence and Restore
 
-布局仍走 `layoutStorage.ts`（localStorage，`isWorkbenchLayoutValid` 校验）。新 kind
-只存 `{ kind, project }`：
+The layout still goes through `layoutStorage.ts` (localStorage, validated by `isWorkbenchLayoutValid`). New kinds store only `{ kind, project }`:
 
-- 恢复后项目仍存在 → 正常渲染；项目缺失/归档 → `UnsupportedPaneSurface`
-  占位（`<kind>:missing`），可移动/关闭，不自动改绑。
-- 旧版本读到新 kind：`collectWorkbenchLayoutIssues` 会因未知 kind 判定无效并回退空
-  布局（与既有 forward-compat 策略一致）。
+- If the project still exists after restore → render normally; if the project is missing/archived → an `UnsupportedPaneSurface` placeholder (`<kind>:missing`) that can be moved/closed and is not automatically rebound.
+- Old versions reading a new kind: `collectWorkbenchLayoutIssues` deems it invalid due to the unknown kind and falls back to an empty layout (consistent with the existing forward-compat strategy).
 
-## 8. 测试
+## 8. Tests
 
-| 文件 | 覆盖 |
+| File | Coverage |
 |---|---|
-| `crates/agent-gui/test/chat/workbench-project-tool-surfaces.test.mjs` | 身份键与作用域、最小尺寸、reducer 唯一性（同项目拒绝 / 跨项目并存 / 后台任务窗口单例）、不变量、`commitProjectToolDrop` 四种落点、`openProjectToolInSplit`、拖拽落点解析（自有 Pane → focus、最小尺寸拒绝）、dock 租约隐藏、两端源码合同 |
-| `crates/agent-gateway/test/webui/session-workbench-web-project-tools.test.mjs` | Web 控制器/视图接线合同、共享事务在 Web 布局上的 open/move |
-| 既有 `workbench-dock-focus` / `right-dock-model` / `workbench-drag-performance` | 已按 `leasedTools` / `projectTool` 载荷更新 |
+| `crates/agent-gui/test/chat/workbench-project-tool-surfaces.test.mjs` | Identity keys and scopes, minimum sizes, reducer uniqueness (same-project rejection / cross-project coexistence / background-task window singleton), invariants, the four `commitProjectToolDrop` drop targets, `openProjectToolInSplit`, drag drop-target resolution (own Pane → focus, minimum-size rejection), dock lease hiding, both-end source contract |
+| `crates/agent-gateway/test/webui/session-workbench-web-project-tools.test.mjs` | Web controller/view wiring contract, open/move of the shared transactions on the Web layout |
+| Existing `workbench-dock-focus` / `right-dock-model` / `workbench-drag-performance` | Updated for the `leasedTools` / `projectTool` payloads |
 
-`pnpm test:gui` 与 `pnpm test:webui` 全部通过；三端 `tsc`、改动路径 Biome、
-`check:ui-boundaries` 与 `vite build` 通过。
+`pnpm test:gui` and `pnpm test:webui` all pass; the three-end `tsc`, Biome on changed paths, `check:ui-boundaries`, and `vite build` pass.
 
-## 9. 已知边界与后续
+## 9. Known Boundaries and Follow-ups
 
-- **Git focusRequest 路由**：会话卡片「查看 diff」仍写 dock 的 `tools.gitReview`
-  并发出 focusRequest；若审查已在 Pane 中，dock 隐藏该 tab、Pane 消费请求，但不会
-  自动聚焦该 Pane。可在后续把 `handleChangedFileOpenDiff` 接到「已租用 → focusPane」。
-- **SSH 交互终端**：SSH 连接 Pane 是连接管理入口；「进入 Bash / SFTP」仍打开 workspace
-  overlay 或拖成 `sshTerminal` Pane，与 §15/§16 的互斥规则不变。
-- **后台任务作用域**：整窗口单例是产品裁决；若未来注册表按项目分桶，改
-  `projectToolSurfaceIdentityKey` 一处即可。
-- **无项目上下文**：Tunnel 与后台任务自身可以在无项目的 Right Dock 中运行，但
-  Workbench 布局中的所有项目工具 Surface 都需要稳定 `ProjectRef`，因此未选择工作区时
-  不提供拖出或「在分屏中打开」入口；选择工作区后入口恢复。
-- **实机矩阵**：本轮为模型/合同测试 + 构建验证，未做三平台实机拖拽验证。
+- **Git focusRequest routing**: the session card's "View diff" still writes the dock's `tools.gitReview` and emits a focusRequest; if the review is already in a Pane, the dock hides that tab and the Pane consumes the request, but it will not automatically focus that Pane. A follow-up could wire `handleChangedFileOpenDiff` to "leased → focusPane".
+- **SSH interactive terminal**: the SSH connection Pane is the connection management entry; "Enter Bash / SFTP" still opens the workspace overlay or drags out an `sshTerminal` Pane, with the mutual-exclusion rules of §15/§16 unchanged.
+- **Background task scope**: the whole-window singleton is a product decision; if the registry is ever bucketed by project, changing `projectToolSurfaceIdentityKey` in one place suffices.
+- **No project context**: Tunnel and background tasks can themselves run in the Right Dock without a project, but all project tool Surfaces in the Workbench layout require a stable `ProjectRef`, so when no workspace is selected, drag-out and "Open in split view" entries are not provided; the entries return after a workspace is selected.
+- **Real-device matrix**: this round is model/contract tests + build verification; no three-platform real-device drag verification was done.

@@ -50,7 +50,7 @@ test("legacy local storage treats a null locale as an invalid saved preference",
       });
       const storage = loader.loadModule("src/lib/settings/storage.ts");
 
-      assert.equal((await storage.loadPersistedSettings()).locale, "zh-CN");
+      assert.equal((await storage.loadPersistedSettings()).locale, "en-US");
     });
   });
 });

@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a defect in LiveAgent. Reports missing key details may be asked to supplement before triage.
+description: Report a defect in ReactorPro. Reports missing key details may be asked to supplement before triage.
 title: "[Bug] "
 labels:
   - bug
@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not report security vulnerabilities here — submit them privately via [Security Advisories](https://github.com/Stack-Cairn/LiveAgent/security/advisories/new).
+        Do not report security vulnerabilities here — submit them privately via [Security Advisories](https://github.com/DrOlu/ReactorPro/security/advisories/new).
   - type: dropdown
     id: area
     attributes:

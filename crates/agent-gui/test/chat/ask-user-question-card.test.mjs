@@ -29,8 +29,8 @@ function createHookHarness(initialState = {}) {
     [4, initialState.customTexts ?? {}],
     [5, initialState.submitting ?? false],
   ]);
-  // useAnswerCountdown 的 remainingMs（挂载后由 interval tick 驱动）；
-  // 测试用它模拟“采信的截止时间随后归零”。
+  // useAnswerCountdown's remainingMs (driven by interval ticks after mount);
+  // the test uses it to simulate "the adopted deadline subsequently going to zero".
   if (initialState.remainingMs !== undefined) {
     stateOverrides.set(8, initialState.remainingMs);
   }
@@ -113,9 +113,10 @@ function createCardHarness(initialState = {}) {
   };
 }
 
-// 卡片改用共享基础组件后，真实实现走 React.forwardRef，而本文件的 React 桩
-// 没有该 API，故一并桩掉。注意 loader 的 JSX 变换不调用组件，直接把组件引用
-// 放进 node.type，因此查询只能按引用比较，不能按名字字符串。
+// After the card switched to shared base components, the real implementation uses React.forwardRef,
+// but this file's React stub lacks that API, so it is stubbed as well. Note that the loader's JSX
+// transform does not call components; it puts the component reference directly into node.type, so
+// queries can only compare by reference, not by name string.
 const BadgeStub = (props) => ({ type: "Badge", props });
 const ButtonStub = (props) => ({ type: "Button", props });
 const InputStub = (props) => ({ type: "Input", props });
@@ -132,8 +133,8 @@ function findAll(node, predicate, matches = []) {
 }
 
 function findSubmitButton(tree) {
-  // 底部按钮已改用共享 Button 组件；标签是 children 数组的最后一项
-  // （前面还有图标节点），因此不能再按 children 全等匹配。
+  // The bottom buttons now use the shared Button component; the label is the last item of the children
+  // array (icon nodes come before it), so matching on children equality is no longer possible.
   return findAll(tree, (node) => {
     if (node.type !== ButtonStub) return false;
     const children = [node.props?.children].flat(Infinity);
@@ -171,8 +172,8 @@ test("card surface avoids an outer shadow that the collapse viewport would clip"
   )[0];
 
   assert.ok(surface);
-  // 卡片改用设计 token（描边 + 淡底），不再有毛玻璃与 inset 高光；
-  // 关键约束不变：不能有会被折叠视口裁掉的外阴影。
+  // The card now uses design tokens (stroke + faint background) and no longer has frosted glass or inset
+  // highlights; the key constraint is unchanged: there must be no outer shadow that the collapsed viewport would clip.
   assert.doesNotMatch(surface.props.className, /shadow-\[/);
   assert.doesNotMatch(surface.props.className, /backdrop-blur/);
 });
@@ -187,7 +188,7 @@ test("expired countdown disables options, custom input, and submit before tool_r
   const card = createCardHarness({
     customSelected: { choice: true },
     customTexts: { choice: "My answer" },
-    // 采信的截止时间（挂载时仍在窗口内）随 interval tick 归零。
+    // The adopted deadline (still within the window at mount) goes to zero with the interval ticks.
     remainingMs: 0,
   });
   const tree = card.render({
@@ -212,7 +213,7 @@ test("expired countdown disables options, custom input, and submit before tool_r
     (node) =>
       node.type === "button" && node.props?.role === "radio" && node.props["aria-label"],
   )[0];
-  // 自定义项现在与上方选项共用同一套禁用语义（disabled）。
+  // The custom option now shares the same disabled semantics as the options above it.
   assert.equal(customOption.props.disabled, true);
 
   const customInput = findAll(tree, (node) => node.type === InputStub)[0];
@@ -236,13 +237,14 @@ test("expired countdown disables options, custom input, and submit before tool_r
   assert.equal(submitCalls, 0);
 });
 
-// 截止时间由桌面时钟盖章、倒计时读本机时钟：偏移超界时必须回退挂载近似，
-// 不能把仍在挂起的提问卡一挂载就锁死（过期提交由桌面挂起表权威拒绝）。
+// The deadline is stamped by the desktop clock while the countdown reads the local clock: when the
+// offset is out of bounds it must fall back to the mount approximation, and must not lock a still-pending
+// question card the moment it mounts (expired submissions are authoritatively rejected by the desktop pending table).
 test("a deadline already past at mount is distrusted and the pending card stays answerable", async () => {
   const submitted = [];
   const card = createCardHarness({ draftSelections: { choice: "Second" } });
   const tree = card.render({
-    // 本机时钟快于桌面盖章时钟：卡片挂载时截止时间看似早已过去。
+    // The local clock is ahead of the desktop stamp clock: at mount the deadline appears to have long passed.
     deadlineAt: Date.now() - 5 * 60 * 1000,
     onSubmit: async (answers) => {
       submitted.push(answers);
@@ -275,7 +277,7 @@ test("a deadline already past at mount is distrusted and the pending card stays 
 test("a deadline beyond the full answer window is distrusted and clamps the countdown", () => {
   const card = createCardHarness();
   const tree = card.render({
-    // 本机时钟慢于桌面盖章时钟：截止时间看似远超完整应答窗口。
+    // The local clock is behind the desktop stamp clock: the deadline appears far beyond the full answer window.
     deadlineAt: Date.now() + ASK_USER_QUESTION_TIMEOUT_MS + 5 * 60 * 1000,
     onSubmit: async () => ({ ok: true }),
   });
@@ -286,7 +288,7 @@ test("a deadline beyond the full answer window is distrusted and clamps the coun
       node.type === "button" && node.props?.role === "radio" && !node.props["aria-label"],
   );
   assert.equal(optionButtons.every((button) => button.props.disabled === false), true);
-  // 倒计时按挂载近似显示完整窗口，而不是把偏移量当剩余时间。
+  // The countdown displays the full window using the mount approximation rather than treating the offset as remaining time.
   assert.match(treeText(tree), /(?:3:00|2:59) chat\.askUser\.timeoutHint/);
 });
 
@@ -322,7 +324,7 @@ test("a complete answer before the deadline submits the selected non-first optio
   ]);
 });
 
-test("multi-question selection stays put until 继续 and preserves a mixed custom payload", async () => {
+test("multi-question selection stays put until Continue and preserves a mixed custom payload", async () => {
   const multiQuestions = [
     {
       id: "q1",
@@ -369,7 +371,7 @@ test("multi-question selection stays put until 继续 and preserves a mixed cust
   const optionRadios = (node) =>
     node.type === "button" && node.props?.role === "radio" && !node.props["aria-label"];
 
-  // 选中不再自动跳题：选完仍停在本题，翻页只由「继续」驱动。
+  // Selection no longer auto-advances: after choosing, you stay on the current question, and paging is driven only by "Continue".
   findAll(tree, optionRadios)[1].props.onClick();
   tree = card.render(props);
   assert.match(treeText(tree), /Question one/);
@@ -387,7 +389,7 @@ test("multi-question selection stays put until 继续 and preserves a mixed cust
   tree = card.render(props);
   assert.match(treeText(tree), /Question three/);
 
-  // 自定义回答的输入框常驻，输入本身即代表选中该项（无需先点单选圆）。
+  // The custom-answer input is always present, and typing itself represents selecting that option (no need to click the radio first).
   const customInput = findAll(tree, (node) => node.type === InputStub)[0];
   assert.ok(customInput);
   customInput.props.onChange({ currentTarget: { value: "Typed third answer" } });

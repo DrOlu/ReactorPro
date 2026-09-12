@@ -48,7 +48,7 @@ test("snapshot buckets messages into direct inbox, shared decisions, open questi
     }),
   ]);
 
-  assert.match(snapshot, /## LiveAgent Message Bus/);
+  assert.match(snapshot, /## ReactorPro Message Bus/);
   assert.match(snapshot, /Current agent: `agent-a`/);
   const inboxIndex = snapshot.indexOf("### Direct Inbox for agent-a");
   const decisionsIndex = snapshot.indexOf("### Shared Decisions");
@@ -205,16 +205,16 @@ test("identity section carries only stable fields and truncates long values", ()
   // 160-char cap on role, whitespace collapsed, ellipsis appended.
   assert.ok(/role=[^\n]*\.\.\./.test(section));
   assert.match(section, /call Agent again with an `agents` entry per existing id/);
-  // 易变字段一律不得出现在 systemPrompt 段里。
+  // Volatile fields must never appear in the systemPrompt section.
   assert.doesNotMatch(section, /status=/);
   assert.doesNotMatch(section, /last_task=/);
   assert.doesNotMatch(section, /last_summary=/);
-  // mode 随每次 Agent 调用变化（lastMode），属于易变字段，同样不得进稳定段。
+  // mode changes on every Agent call (lastMode); it is a volatile field and likewise must not enter the stable section.
   assert.doesNotMatch(section, /mode=/);
 });
 
 test("identity section bytes survive listIdentities() reordering", () => {
-  // listIdentities() 按 updatedAt 倒序返回，任一身份被更新都会改变顺序。
+  // listIdentities() returns in descending updatedAt order, so updating any identity changes the order.
   const ordered = [
     makeIdentity("agent-a", { updatedAt: 30 }),
     makeIdentity("agent-b", { updatedAt: 20 }),
@@ -226,14 +226,14 @@ test("identity section bytes survive listIdentities() reordering", () => {
   const baseline = roster.buildRosterIdentitySection({ identities: ordered });
   assert.equal(roster.buildRosterIdentitySection({ identities: reordered }), baseline);
   assert.equal(roster.buildRosterIdentitySection({ identities: reversed }), baseline);
-  // 归一化后恒为 agentId 升序。
+  // After normalization it is always in ascending agentId order.
   assert.ok(baseline.indexOf("id=agent-a") < baseline.indexOf("id=agent-b"));
   assert.ok(baseline.indexOf("id=agent-b") < baseline.indexOf("id=agent-c"));
 });
 
 test("run-status advancing leaves the identity section byte-identical", () => {
-  // run 推进会 bump 对应身份的 updatedAt，listIdentities() 随之把它排到最前，
-  // 于是稳定段拿到的入参顺序也变了——字节仍必须一致。
+  // Advancing a run bumps the corresponding identity's updatedAt, so listIdentities() moves it to
+  // the front, changing the argument order the stable section receives -- the bytes must still match.
   const agentA = makeIdentity("agent-a", { updatedAt: 10 });
   const agentB = makeIdentity("agent-b", { updatedAt: 20 });
   const identitiesBefore = [agentB, agentA];
@@ -259,9 +259,9 @@ test("run-status advancing leaves the identity section byte-identical", () => {
     latestRunsByAgent: after,
   });
   assert.match(statusBefore, /Latest run state of the delegated agents/);
-  // mode 从身份段移到易变段，随每条 run 状态一起投递。
+  // mode moved from the identity section to the volatile section, delivered alongside each run state.
   assert.match(statusBefore, /- id=agent-a status=running mode=readonly last_task=task for agent-a/);
-  // 没有历史 run 的身份不出现在易变段里。
+  // Identities with no run history do not appear in the volatile section.
   assert.doesNotMatch(statusBefore, /id=agent-b/);
   assert.notEqual(statusAfter, statusBefore);
   assert.match(statusAfter, /- id=agent-a status=completed .*last_summary=found three issues/);
@@ -294,8 +294,9 @@ test("run-status section truncates long values and stays empty without runs", ()
 });
 
 test("both sections truncate on the same set so no agent is listed in only one", () => {
-  // 数组顺序与 agentId 顺序相反：任一段若按“到手顺序”截断，选出的 12 个会是
-  // agent-14..agent-03，与归一化后的 agent-00..agent-11 完全错位。
+  // The array order is the reverse of the agentId order: if either section truncated by "arrival
+  // order", the 12 selected would be agent-14..agent-03, completely misaligned with the normalized
+  // agent-00..agent-11.
   const identities = Array.from({ length: 15 }, (_, index) =>
     makeIdentity(`agent-${String(14 - index).padStart(2, "0")}`, { updatedAt: 100 + index }),
   );
@@ -320,7 +321,7 @@ test("both sections truncate on the same set so no agent is listed in only one",
   assert.equal(identityIds[0], "agent-00");
   assert.equal(identityIds[11], "agent-11");
   assert.deepEqual(idsOf(statusSection), identityIds);
-  // 溢出计数只归稳定段（它是身份列表的一部分），且不重复出现在易变段里。
+  // The overflow count belongs only to the stable section (it is part of the identity list) and must not appear again in the volatile section.
   assert.match(identitySection, /- \.\.\. 3 more omitted/);
   assert.doesNotMatch(statusSection, /more omitted/);
 });
@@ -336,8 +337,9 @@ test("unchanged run state renders identical bytes so the turn attaches nothing",
       [runs[1].agentId, runs[1]],
     ]),
   });
-  // 同一状态，但身份顺序与 Map 插入顺序都不同——渲染结果必须字节相同，
-  // 否则调用方的「内容没变就不投递」判据失效，每轮都会挂一个新块。
+  // Same state, but both the identity order and the Map insertion order differ -- the rendered
+  // result must be byte-identical, otherwise the caller's "do not deliver if content is unchanged"
+  // criterion breaks and a new block is attached every turn.
   const current = roster.buildRosterRunStatusSection({
     identities: [identities[1], identities[0]],
     latestRunsByAgent: new Map([
@@ -347,7 +349,7 @@ test("unchanged run state renders identical bytes so the turn attaches nothing",
   });
   assert.equal(current, previous);
 
-  // 调用方的投递判据：与上次投递内容相同 → 本轮不产生任何额外内容。
+  // The caller's delivery criterion: identical to the last delivered content -> no extra content is produced this turn.
   const delta = current === previous ? "" : current;
   const messages = [
     { role: "user", content: "hi", timestamp: 1 },

@@ -1,163 +1,163 @@
-# 工作记录 — 粘贴换行序列化与用户消息渲染
+# Worklog — Paste Newline Serialization and User Message Rendering
 
-> 用途：承接本任务跨对话上下文。每次恢复先读「恢复指令」，再在指定 worktree 中核对 `git status` 与当前 HEAD。
+> Purpose: carry this task's context across conversations. On every resume, read "Resume Instructions" first, then verify `git status` and the current HEAD in the designated worktree.
 
-## 恢复指令（覆盖式，永远只反映此刻）
+## Resume Instructions (overwrite-only, always reflects only this moment)
 
-- **总目标**：在桌面 GUI 与 Gateway WebUI 中保持粘贴、编辑、发送、历史/重连恢复和用户消息气泡渲染的逻辑换行数量与位置一致，同时不改变其他消息类型的 Markdown 语义。
-- **当前任务**：上游 Draft PR #353 已在当前主工作区无冲突 rebase 到执行时最新 `upstream/main@00a2c6fc`；自动验证和同 HEAD Tauri 人工验收均已通过，正在折叠本轮 worklog、更新 fork 分支、转 Ready 并收敛新一轮 CI/Governance。
-- **上一个完成的动作**：用户完成粘贴、首尾/空白换行、undo/redo、重复发送、取消和 reload/history 恢复验收，并对当前 rebase 产品 HEAD 明确回复“通过”。
-- **下一步第一个动作**：只暂存本 worklog，创建 fixup 并 autosquash 到既有 `docs(chat): record paste newline handoff` 提交；复核最终三提交范围后，以显式 lease 更新唯一指定的 fork PR 分支。
-- **当前假设/约束/待确认**：只允许在 `D:\Documents\Projects\Web\LiveAgent` 当前工作区工作；保护既有 `Cargo.toml` 内容以及未跟踪的 `.codegraph/`、`output/`，不得 stash/reset/恢复/删除；人工验收门禁已解除，但仍只允许推送 `origin/codex/fix-paste-newline-serialization`，launcher 永不跟踪或提交。
+- **Overall goal**: Keep the number and position of logical newlines consistent across paste, editing, sending, history/reconnect recovery, and user message bubble rendering in both the desktop GUI and the Gateway WebUI, without changing the Markdown semantics of other message types.
+- **Current task**: Upstream Draft PR #353 has been rebased without conflicts in the current main workspace onto the then-latest `upstream/main@00a2c6fc`; automated verification and manual same-HEAD Tauri acceptance have both passed. This round is folding the worklog, updating the fork branch, converting to Ready, and converging the new round of CI/Governance.
+- **Last completed action**: The user completed acceptance for paste, leading/trailing/blank newlines, undo/redo, repeated send, cancel, and reload/history recovery, and explicitly replied "passed" for the current rebased product HEAD.
+- **Next first action**: Stage only this worklog, create a fixup, and autosquash it into the existing `docs(chat): record paste newline handoff` commit; after re-checking the final three-commit range, update the single designated fork PR branch with an explicit lease.
+- **Current assumptions/constraints/to confirm**: Work is only allowed in the current workspace at `D:\Documents\Projects\Web\ReactorPro`; protect the existing `Cargo.toml` content and the untracked `.codegraph/` and `output/`, which must not be stashed/reset/restored/deleted; the manual acceptance gate has been lifted, but pushing is still only allowed to `origin/codex/fix-paste-newline-serialization`, and the launcher is never tracked or committed.
 
-## 未提交改动 & 验证边界
+## Uncommitted Changes & Verification Boundary
 
-- **最近 checkpoint commit**：人工验收使用的产品 HEAD 为 `bb060885f569cdb2c6240a60e413e442e90330c1`；即将进行的 docs-only autosquash 只更新本 worklog，不改变已验收产品树。远端 PR head 在 push 前仍为 `bcbd4a5ce0b6015583dda036e034ae01807f5120`。
-- **未提交的改动**：仅本轮恢复状态与变基记录的 worklog 更新；`.codegraph/`、`output/` 和本地 launcher 均保持未跟踪/忽略状态。
-- **已验证**：受保护 `Cargo.toml` 保持 Git clean 且过滤后 blob 与原 PR/最新 main 一致，launcher 仍只由 `.git/info/exclude` 忽略；最新远端基线；rebase 拓扑；原/新提交 range-diff；23 文件集合与统计；三个主线重叠文件的最终语义；双端 build；GUI 定向 19/19、WebUI 定向 5/5、WebUI 全量 498/498；GUI 全量 1404/1409，5 项失败在最新 main 快照精确复现为同一 2+2+1；完整 lint 当前/基线 GUI errors 421/424、WebUI 290/292 且 warning/info 相同，双端定向 lint 与 LF Git blob check exit 0；Mirror Check 116 files；`git diff --check`；真实 Chromium 双端 pipeline、视觉行、undo/redo、reload replay 与交叉 replay；独立只读审查。
-- **未验证**：worklog 状态折叠提交、force-with-lease push、Ready 转换及新一轮 required CI/Governance 终态。
+- **Latest checkpoint commit**: The product HEAD used for manual acceptance is `bb060885f569cdb2c6240a60e413e442e90330c1`; the upcoming docs-only autosquash only updates this worklog and does not change the accepted product tree. The remote PR head, before pushing, is still `bcbd4a5ce0b6015583dda036e034ae01807f5120`.
+- **Uncommitted changes**: Only this round's resume state and rebase record worklog updates; `.codegraph/`, `output/`, and the local launcher all remain untracked/ignored.
+- **Verified**: The protected `Cargo.toml` stays Git clean, and after filtering its blob matches the original PR/latest main; the launcher is still ignored only by `.git/info/exclude`; latest remote baseline; rebase topology; original/new commit range-diff; 23-file set and statistics; final semantics of the three mainline-overlapping files; builds on both sides; GUI focused 19/19, WebUI focused 5/5, WebUI full 498/498; GUI full 1404/1409, with the 5 failures reproduced exactly as the same 2+2+1 on the latest main snapshot; full lint current/baseline GUI errors 421/424, WebUI 290/292 with identical warning/info, focused lint on both sides and LF Git blob check exit 0; Mirror Check 116 files; `git diff --check`; real Chromium pipeline on both sides, visual lines, undo/redo, reload replay, and cross replay; independent read-only review.
+- **Not verified**: The worklog state-folding commit, the force-with-lease push, the Ready transition, and the final state of the new round of required CI/Governance.
 
-## 复现与数据链路证据
+## Reproduction and Data-Link Evidence
 
-- Chromium 基线探针使用真实 `DataTransfer` + `ClipboardEvent("paste")`，同时提供 `text/plain` 与 `text/html`；产品行为只读取 plain。
-- `alpha\n\nbeta`：clipboard 2 个逻辑换行；paste DOM 为 `alpha<div><br></div><div>beta</div>`；composer/outbound/history/bubble 均为 `alpha\n\n\nbeta`（3 个换行）；`white-space: pre-wrap` 下内容高度 96px，而保真文本应为 72px。
-- `alpha\n\n\nbeta`：clipboard 3 个换行，composer/outbound/history/bubble 变为 5 个，高度 144px。
-- `\nalpha\n`：composer 先放大为 4 个换行，发送 `.trim()` 后首尾换行全部消失。
-- ` \n\n `：composer 从 2 个换行放大为 3 个，发送 trim 后为空并拒绝发送；草稿结构本身也已错误。
-- Markdown/Unicode 探针同样只在原有空行位置放大；JSON history/replay 本身原样保留传入字符串，没有新增换行。
-- 修复后 GUI/WebUI 生产模块浏览器 fixture 均记录：clipboard、composer、outbound、history、bubble 的 newline count 完全一致；`alpha\n\nbeta` 为 2/2/2/2/2，bubble `white-space=pre-wrap`、内容高度 70.6875px、3 个视觉行（两行文字 + 一个空行）。
-- Chromium 视觉探针确认 `pre-wrap`、`break-spaces`、`pre-line` 都保留 `alpha\n` 的 DOM 文本，却不会为末尾 LF 分配第二个行盒；空 span 无效，文本零宽空格虽有效但会污染 `textContent`。局部 `aria-hidden` 空 span 的 CSS `::before` 零宽字符可生成末尾行盒，同时保持 bubble DOM 文本精确等于消息内容。
-- 修复后覆盖实际 `ClipboardEvent`、同时含 `text/html`、手工 Shift+Enter、undo/redo、reload/reconnect、GUI→WebUI、WebUI→GUI；`<tag>&` 被安全编码为 DOM `&lt;tag&gt;&amp;`，逻辑文本往返不变；40,002 字符长文本各阶段长度和 2 个换行一致。
+- The Chromium baseline probe used a real `DataTransfer` + `ClipboardEvent("paste")`, providing both `text/plain` and `text/html`; product behavior reads only plain.
+- `alpha\n\nbeta`: clipboard has 2 logical newlines; the paste DOM is `alpha<div><br></div><div>beta</div>`; composer/outbound/history/bubble are all `alpha\n\n\nbeta` (3 newlines); under `white-space: pre-wrap` the content height is 96px, whereas the faithful text should be 72px.
+- `alpha\n\n\nbeta`: clipboard has 3 newlines; composer/outbound/history/bubble become 5, with a height of 144px.
+- `\nalpha\n`: composer first expands to 4 newlines; after sending `.trim()` all leading/trailing newlines disappear.
+- ` \n\n `: composer expands from 2 newlines to 3; after send trim it is empty and sending is rejected; the draft structure itself is already wrong.
+- The Markdown/Unicode probes likewise expanded only at existing blank-line positions; JSON history/replay itself preserves the incoming string as-is, adding no new newlines.
+- After the fix, the browser fixtures for the GUI/WebUI production modules both record: the newline count for clipboard, composer, outbound, history, and bubble is fully consistent; `alpha\n\nbeta` is 2/2/2/2/2, with bubble `white-space=pre-wrap`, content height 70.6875px, and 3 visual lines (two lines of text plus one blank line).
+- The Chromium visual probe confirmed that `pre-wrap`, `break-spaces`, and `pre-line` all preserve the DOM text of `alpha\n` yet do not allocate a second line box for the trailing LF; an empty span does not work, and a text zero-width space works but pollutes `textContent`. A CSS `::before` zero-width character on a locally `aria-hidden` empty span can generate the trailing line box while keeping the bubble DOM text exactly equal to the message content.
+- After the fix, coverage includes the actual `ClipboardEvent`, simultaneous `text/html`, manual Shift+Enter, undo/redo, reload/reconnect, GUI→WebUI, and WebUI→GUI; `<tag>&` is safely encoded to the DOM `&lt;tag&gt;&amp;`, with the logical text unchanged round-trip; a 40,002-character long text has consistent length and 2 newlines at every stage.
 
-## 根因
+## Root Cause
 
-- 已确认主根因：浏览器对 multiline `execCommand("insertText")` 生成空 `DIV > BR`；`collectDraftSegments` 对该空块既添加 DIV/P 块边界换行，又把内部 BR 计为换行，因此每个空行多插入一个 `\n`。
-- 已确认第二根因：GUI `useSendChatTurn.ts`、WebUI `GatewayApp.tsx` 与双端 `buildUserMessageContentWithUploads` 对完整用户文本调用 `.trim()`，会删除合法首尾逻辑换行并造成双端/阶段语义不清。
-- 已确认第三个独立浏览器渲染边界：即使 raw text 精确保留末尾 LF，CSS `white-space` 也不会自动生成最后一个空行行盒；这是仅影响末尾换行的视觉折叠，不是 transport 或 serializer 数据丢失。
-- 已排除：transport、optimistic transcript、JSON history/replay 没有换行 replace/trim；用户气泡不走 Markdown，而是 raw text + `white-space: pre-wrap`，所以普通空行放大的主因是上游已损坏的换行。段落 margin 不是本问题根因。
+- Confirmed primary root cause: for multiline `execCommand("insertText")` the browser generates an empty `DIV > BR`; `collectDraftSegments` both adds a DIV/P block-boundary newline for that empty block and counts the inner BR as a newline, so each blank line inserts one extra `\n`.
+- Confirmed second root cause: GUI `useSendChatTurn.ts`, WebUI `GatewayApp.tsx`, and `buildUserMessageContentWithUploads` on both sides call `.trim()` on the full user text, deleting legitimate leading/trailing logical newlines and causing unclear semantics across sides/stages.
+- Confirmed a third, independent browser rendering boundary: even when raw text exactly preserves a trailing LF, CSS `white-space` does not automatically generate the final blank-line box; this is a visual collapse affecting only the trailing newline, not data loss in the transport or serializer.
+- Ruled out: transport, optimistic transcript, and JSON history/replay do not have newline replace/trim; user bubbles do not go through Markdown but use raw text + `white-space: pre-wrap`, so the main cause of ordinary blank-line amplification is the already-corrupted upstream newlines. Paragraph margin is not the root cause of this issue.
 
-## 设计不变量
+## Design Invariants
 
-- CRLF 与 CR 可以在一个明确边界规范为 LF，但不得增加、删除或移动逻辑换行。
-- 输入、发送和渲染不得分别执行可叠加的换行扩增转换。
-- 手工输入与粘贴得到相同逻辑文本时，payload 与渲染必须相同。
-- 用户消息的纯文本换行/块间距策略必须局部生效；assistant、thinking、tool、AskUserQuestion、任务工具和 system 的 Markdown 语义保持不变。
-- GUI、Gateway WebUI 与桌面共用 React 路径保持相同数据和视觉不变量。
-- 保留消息 identity、顺序、虚拟化、滚动跟随、composer 布局和任务进度指示器。
-- 不用 `trim()`、全局空白折叠、固定高度、隐藏溢出或 O(n²)/同步全量 DOM 遍历掩盖问题。
-- `normalizeLogicalLineEndings` 是唯一换行语义模型：仅把 CRLF/CR 变为 LF，线性时间、幂等、不 trim；输入、草稿、发送和旧 history 显示调用同一模型，不再各自发明转换。
-- multiline plaintext paste 使用经过 `&<>` 转义的单次 `execCommand("insertHTML")`，literal LF 在 `white-space: pre-wrap` 下显示并进入同一 undo stack；不支持时回退 `insertText`，而 block-aware serializer 可正确读取其 DIV/P/BR DOM。
-- serializer 将块级节点视为逻辑行单元，空 `DIV/P > BR` 中的 BR 只作为占位，不再与块边界重复计数；mention/chip 与换行交错有双端行为测试。
-- 仅当用户消息规范化文本以 LF 结尾时，追加不参与可访问文本和 `textContent` 的 `chat-user-trailing-newline-anchor`；其 `::before` 只负责生成浏览器遗漏的末尾行盒，不改变 assistant/tool Markdown、payload 或历史内容。
+- CRLF and CR may be normalized to LF at one clearly defined boundary, but logical newlines must not be added, removed, or moved.
+- Input, send, and rendering must not each perform stackable newline-amplification transforms.
+- When manual input and paste yield the same logical text, the payload and rendering must be identical.
+- The plain-text newline/block-spacing policy for user messages must apply locally; the Markdown semantics of assistant, thinking, tool, AskUserQuestion, task tools, and system remain unchanged.
+- The GUI, Gateway WebUI, and desktop must share the same React path and maintain identical data and visual invariants.
+- Preserve message identity, order, virtualization, scroll following, composer layout, and the task progress indicator.
+- Do not mask the problem with `trim()`, global whitespace collapsing, fixed heights, hidden overflow, or O(n²)/synchronous full-DOM traversals.
+- `normalizeLogicalLineEndings` is the single newline semantics model: it only converts CRLF/CR to LF, is linear-time, idempotent, and does not trim; input, draft, send, and legacy history display all call the same model instead of each inventing its own transform.
+- Multiline plaintext paste uses a single `execCommand("insertHTML")` escaped via `&<>`, with literal LF displayed under `white-space: pre-wrap` and entering the same undo stack; it falls back to `insertText` when unsupported, and the block-aware serializer can correctly read its DIV/P/BR DOM.
+- The serializer treats block-level nodes as logical line units; the BR inside an empty `DIV/P > BR` is only a placeholder and is no longer double-counted with the block boundary; mention/chip and newline interleaving have behavior tests on both sides.
+- Only when the normalized user message text ends with LF, append a `chat-user-trailing-newline-anchor` that does not participate in accessible text or `textContent`; its `::before` is only responsible for generating the trailing line box the browser omits, without changing assistant/tool Markdown, payload, or history content.
 
-## 验证结果与基线失败
+## Verification Results and Baseline Failures
 
-- 修复前真实浏览器：LF/CRLF/CR、单/多空行、首尾换行、纯空白、Markdown、Unicode/emoji 均已执行；空行放大和 trim 丢失稳定出现。
-- 修复前 GUI 定向：`node crates/agent-gui/test/chat/paste-newline-pipeline.test.mjs`，2/2 失败；核心差异 `actual 'alpha\n\n\nbeta'` vs `expected 'alpha\n\nbeta'`。
-- 修复前 WebUI 定向：`node crates/agent-gateway/test/webui/paste-newline-pipeline.test.mjs`，2/2 失败；差异与 GUI 一致。
-- 首次定向运行因新 worktree 缺 `node_modules` 未到断言；随后分别执行 frozen-lockfile install，未修改依赖声明或 lockfile。
-- 修复后新增 pipeline：GUI/WebUI 合计 10/10；最终 pipeline + GUI 用户消息 SSR 定向合计 24/24；覆盖 LF/CRLF/CR、无/单/多空行、首尾换行、纯空白、Markdown 段落/列表/引用/代码块/表格、Unicode/emoji、长文本、HTML-like plaintext、mention chip 和末尾视觉行锚点。
-- WebUI 全量：498/498。
-- GUI 全量：1421 tests，1416 pass，5 fail。5 个失败均在 `upstream/main@7de95a20...` 的 Windows checkout 基线逐项复现：2 个 `mention-composer-selection`、2 个 `mention-refetch` 因测试只识别 LF 函数结尾，1 个 provider usage preset 因 Rust/TS byte-for-byte 基线差异。
-- GUI/WebUI build/typecheck：均通过。
-- 全量 lint：当前 GUI `checked=429 errors=425 warnings=358 infos=9`，基线 `checked=428 errors=428 warnings=358 infos=9`；当前 WebUI `checked=297 errors=293 warnings=310 infos=10`，基线 `checked=296 errors=296 warnings=310 infos=10`。本任务新增文件无诊断，并修复了 6 个新增 import-order 诊断；剩余全为基线。
-- 定向 `biome lint`：双端本任务 src 文件 exit 0；Mirror Check 120 files passed；`git diff --check` passed。
-- 真实浏览器命令：两个 Vite fixture 分别绑定 127.0.0.1:1431/1432，使用 `npx --package @playwright/cli playwright-cli ... verify-paste-newline-pipeline.playwright.js`；全部断言通过，含 `alpha\n` 两个视觉行与 `\nalpha\n` 三个视觉行，控制台 0 error/0 warning，服务随后按 PID 关闭。
-- 独立审查：无高/中确定性问题；补充的 `<>&`、mention/newline 与 fallback DOM 覆盖均已加入。
+- Pre-fix real browser: LF/CRLF/CR, single/multiple blank lines, leading/trailing newlines, pure whitespace, Markdown, Unicode/emoji were all exercised; blank-line amplification and trim loss appeared consistently.
+- Pre-fix GUI focused: `node crates/agent-gui/test/chat/paste-newline-pipeline.test.mjs`, 2/2 failed; core difference `actual 'alpha\n\n\nbeta'` vs `expected 'alpha\n\nbeta'`.
+- Pre-fix WebUI focused: `node crates/agent-gateway/test/webui/paste-newline-pipeline.test.mjs`, 2/2 failed; the difference matches the GUI.
+- The first focused run did not reach the assertions because the new worktree lacked `node_modules`; a frozen-lockfile install was then performed separately, without modifying dependency declarations or the lockfile.
+- Post-fix new pipelines: GUI/WebUI combined 10/10; final pipeline + GUI user message SSR focused combined 24/24; covering LF/CRLF/CR, no/single/multiple blank lines, leading/trailing newlines, pure whitespace, Markdown paragraphs/lists/quotes/code blocks/tables, Unicode/emoji, long text, HTML-like plaintext, mention chips, and the trailing visual line anchor.
+- WebUI full: 498/498.
+- GUI full: 1421 tests, 1416 pass, 5 fail. All 5 failures reproduce item by item on the Windows checkout baseline of `upstream/main@7de95a20...`: 2 `mention-composer-selection`, 2 `mention-refetch` because the tests only recognize an LF function ending, and 1 provider usage preset due to a Rust/TS byte-for-byte baseline difference.
+- GUI/WebUI build/typecheck: both passed.
+- Full lint: current GUI `checked=429 errors=425 warnings=358 infos=9`, baseline `checked=428 errors=428 warnings=358 infos=9`; current WebUI `checked=297 errors=293 warnings=310 infos=10`, baseline `checked=296 errors=296 warnings=310 infos=10`. New files in this task have no diagnostics, and 6 new import-order diagnostics were fixed; the remainder are all baseline.
+- Focused `biome lint`: exit 0 for this task's src files on both sides; Mirror Check 120 files passed; `git diff --check` passed.
+- Real browser commands: the two Vite fixtures bound to 127.0.0.1:1431/1432 respectively, using `npx --package @playwright/cli playwright-cli ... verify-paste-newline-pipeline.playwright.js`; all assertions passed, including `alpha\n` at two visual lines and `\nalpha\n` at three visual lines, with 0 console errors/0 warnings, and the services were shut down by PID afterward.
+- Independent review: no high/medium-confidence issues; the added `<>&`, mention/newline, and fallback DOM coverage were all included.
 
-## 开放 PR 重叠
+## Open PR Overlap
 
-- #158、#276 直接修改双端 `MentionComposer.tsx`，与本任务存在真实文件冲突风险；未 cherry-pick、未建立依赖、未改写其提交。
-- #350、#345、#281、#184 与 transcript/ChatPage/重连区域相邻或部分文件重叠，但本任务没有触碰其 assistant/virtualizer/row-model/Go ingress 实现。
-- 其余开放 PR 未发现用户换行 serializer/user bubble 的直接重叠；本任务保持 `Depends-On: none` 假设，创建 PR 前需重新核对。
+- #158 and #276 directly modify `MentionComposer.tsx` on both sides and pose a real file-conflict risk with this task; they were not cherry-picked, no dependency was established, and their commits were not rewritten.
+- #350, #345, #281, and #184 are adjacent to or partially overlap the transcript/ChatPage/reconnect area, but this task did not touch their assistant/virtualizer/row-model/Go ingress implementations.
+- The remaining open PRs show no direct overlap with the user newline serializer/user bubble; this task keeps the `Depends-On: none` assumption, which must be re-checked before creating the PR.
 
-## 恢复说明
+## Resume Notes
 
-- 服务启动前必须检查 1420 端口及 `liveagent.exe`/Vite PID；不得复用或终止其他 worktree 的进程。
-- Tauri 与 Gateway/WebUI 必须从本 worktree 的同一 HEAD 启动并核验路径。
-- 用户明确回复“通过”之前，不得提交或修改远端状态。
+- Before starting services, the port 1420 and the `liveagent.exe`/Vite PIDs must be checked; processes of other worktrees must not be reused or terminated.
+- Tauri and Gateway/WebUI must be started from the same HEAD of this worktree and their paths verified.
+- Until the user explicitly replies "passed", do not commit or modify remote state.
 
-## 同 HEAD 运行时验收环境
+## Same-HEAD Runtime Acceptance Environment
 
-- 启动前 1420 为空；已有 2026-07-31 的 `pnpm ... tauri dev -> pnpm install` 残留树无监听端口，未终止、未复用。旧滚动任务的 Gateway/WebUI 位于 18080/15173，未触碰。
-- Tauri：本任务 Vite PID 80608 监听 `127.0.0.1:1420`，命令行脚本路径位于本 worktree；`liveagent.exe` PID 30896 的可执行路径为本 worktree `target/debug/liveagent.exe`。首次同源码 Rust build 747/747，约 5m05s，窗口响应正常。
-- Gateway：PID 68092 监听 `127.0.0.1:15052`；显式 token `paste-newline-acceptance-7de95a20`，独立 DB 位于 worktree ignored runtime 目录；日志确认 HTTP listening。
-- Gateway WebUI：Vite PID 42216 监听 `127.0.0.1:15174`，命令行中的 Vite 源路径位于本 worktree；`npm_config_proxy_api=http://127.0.0.1:15052`。Vite HTML 返回 200 且包含 `/@vite/client`；Gateway 根路径返回 200 并引用本 worktree build 生成的 hashed assets。
-- Playwright headed 浏览器以 token 成功进入 WebUI；当前唯一 console error 为 4 次 `No Agent is available`，与 Gateway 独立 DB 尚无桌面 Agent 完全一致，不是换行实现错误。浏览器证据已移到 ignored `target/paste-newline-artifacts/runtime/playwright-webui-initial/`。
-- `PrintWindow` 离屏截图成功捕获当前 Tauri 窗口，证明窗口来自同 worktree 且响应正常；有效文件为 ignored `target/paste-newline-artifacts/runtime/screenshots/tauri-printwindow.png`。一次被其他置顶窗口遮挡的无效屏幕拷贝已隔离到 `screenshots/invalid/`，不得作为验收证据。
-- Tauri 构建曾因只更新 `src-tauri/Cargo.toml` 的文件时间戳而让 `git status` 短暂显示 `M`；working-tree blob 与 `HEAD` blob 均为 `ab3fee0279334f9ab3f48cb783be464b61813af6`，文本 diff 为空，刷新索引后该状态消失。没有修改或恢复该文件内容，主工作区同名受保护文件始终未触碰。
-- 桌面 GUI 本身即 Gateway Agent；设置页启用 Remote/Gateway，地址 `http://127.0.0.1`、端口 `15052`、token 如上后连接 `ws://127.0.0.1:15052/ws/v2/agent`，无需另起 agent 进程。Agent ID 由本地设置自动生成并持久化；为避免静默覆盖用户现有远程设置，等待用户在 UI 中确认并填写。
-- 只读调查 Tauri 自带 MCP Bridge：raw WebSocket `list_windows` 可确认主窗口 `http://localhost:1420/`，但 Windows `execute_js` 回调被当前 capability 拒绝（日志：`mcp-bridge.script_result not allowed`）并稳定超时；因此停止自动 DOM/点击路径，不修改 capability 或应用源码。桥接脚本仅曾导航到设置页，截图确认已有持久化 Remote token/Agent ID/自动重连配置，未读取密码字段、未填写、未保存或覆盖。
-- 调查期间用户窗口退出，1420/9223 随之停止；Gateway/WebUI 15052/15174 始终正常。重新预检端口后从同一 wrapper/HEAD 构建 747/747 并启动新 `liveagent.exe` PID 71616、Vite PID 30376，路径仍为本 worktree。后续人工验收不再使用 Bridge 注入。
-- 重启后 Tauri PID 71616 到 Gateway PID 68092 建立两条 `127.0.0.1` established 连接；Gateway 日志记录真实 `chat.submit` 已送达 Agent，随后因窗口退出以 `terminal_cancelled` 收敛。Playwright 再登录 WebUI 时 Agent 状态为 `在线`，可读取桌面工作空间与历史，代理链路不再是阻塞；快照存于 ignored `target/paste-newline-artifacts/runtime/playwright-agent-connected/`，包含用户既有会话内容，不得作为 PR 公共截图。
+- Before startup, 1420 was empty; the leftover tree from a 2026-07-31 `pnpm ... tauri dev -> pnpm install` had no listening port and was neither terminated nor reused. The Gateway/WebUI of the old rolling task were at 18080/15173 and were not touched.
+- Tauri: this task's Vite PID 80608 listened on `127.0.0.1:1420`, with the command-line script path in this worktree; `liveagent.exe` PID 30896's executable path was this worktree's `target/debug/liveagent.exe`. The first same-source Rust build was 747/747 in about 5m05s, and the window responded normally.
+- Gateway: PID 68092 listened on `127.0.0.1:15052`; explicit token `paste-newline-acceptance-7de95a20`, with an independent DB in the worktree's ignored runtime directory; logs confirm HTTP listening.
+- Gateway WebUI: Vite PID 42216 listened on `127.0.0.1:15174`, with the Vite source path in the command line inside this worktree; `npm_config_proxy_api=http://127.0.0.1:15052`. The Vite HTML returned 200 and contained `/@vite/client`; the Gateway root path returned 200 and referenced the hashed assets generated by this worktree's build.
+- The Playwright headed browser successfully entered the WebUI with the token; the only current console error was 4 occurrences of `No Agent is available`, fully consistent with the Gateway's independent DB having no desktop Agent yet, and not a newline implementation error. Browser evidence was moved to ignored `target/paste-newline-artifacts/runtime/playwright-webui-initial/`.
+- A `PrintWindow` offscreen screenshot successfully captured the current Tauri window, proving the window came from the same worktree and responded normally; the valid file is ignored `target/paste-newline-artifacts/runtime/screenshots/tauri-printwindow.png`. One invalid screen copy occluded by another topmost window was quarantined to `screenshots/invalid/` and must not be used as acceptance evidence.
+- The Tauri build once briefly made `git status` show `M` because only the file timestamp of `src-tauri/Cargo.toml` was updated; both the working-tree blob and the `HEAD` blob were `ab3fee0279334f9ab3f48cb783be464b61813af6`, the text diff was empty, and the state disappeared after refreshing the index. The file content was not modified or restored, and the protected same-named file in the main workspace was never touched.
+- The desktop GUI is itself a Gateway Agent; after enabling Remote/Gateway in the settings page with address `http://127.0.0.1`, port `15052`, and the token above, it connects to `ws://127.0.0.1:15052/ws/v2/agent`, with no separate agent process needed. The Agent ID is auto-generated and persisted by local settings; to avoid silently overwriting the user's existing remote settings, it waits for the user to confirm and fill it in in the UI.
+- Read-only investigation of Tauri's built-in MCP Bridge: raw WebSocket `list_windows` could confirm the main window `http://localhost:1420/`, but the Windows `execute_js` callback was rejected by the current capability (log: `mcp-bridge.script_result not allowed`) and timed out consistently; so the automated DOM/click path was stopped, without modifying capabilities or application source. The bridge script only ever navigated to the settings page; the screenshot confirmed existing persisted Remote token/Agent ID/auto-reconnect configuration, and password fields were not read, filled, saved, or overwritten.
+- During the investigation the user's window exited, and 1420/9223 stopped with it; Gateway/WebUI 15052/15174 remained normal throughout. After re-checking ports, the same wrapper/HEAD was built 747/747 and new `liveagent.exe` PID 71616 and Vite PID 30376 were started, still with paths in this worktree. Subsequent manual acceptance no longer used Bridge injection.
+- After restart, Tauri PID 71616 established two `127.0.0.1` established connections to Gateway PID 68092; the Gateway log recorded that a real `chat.submit` reached the Agent, which then converged via `terminal_cancelled` after the window exited. When Playwright logged into the WebUI again, the Agent status was `online`, and the desktop workspace and history could be read, so the proxy link was no longer a blocker; the snapshot is stored in ignored `target/paste-newline-artifacts/runtime/playwright-agent-connected/` and contains the user's existing session content, so it must not be used as a public PR screenshot.
 
-## 人工验收与公开截图
+## Manual Acceptance and Public Screenshots
 
-- 2026-08-01：用户按验收矩阵完成测试并明确回复“通过”；因此提交/远端门禁解除。
-- 用户回复后立即尝试捕获 Tauri 当前窗口，但窗口仍停在既有任务会话，没有显示换行样例；该文件 `acceptance-tauri-final.png` 不作为 PR 证据，也不对既有会话做自动切换或发送。
-- 公开证据改由已通过的实际生产模块 fixture 生成，不修改产品源码、不触发模型调用：
-  - GUI：`target/paste-newline-artifacts/runtime/screenshots/acceptance-gui-pipeline-2026-08-01T01-30-28-742Z.png`
-  - Gateway WebUI：`target/paste-newline-artifacts/runtime/screenshots/acceptance-webui-pipeline-2026-08-01T01-31-45-337Z.png`
-- 两张截图逐张人工检查：均显示 `alpha\n\nbeta` 在 Clipboard、Composer、Outbound、History、Bubble DOM 五阶段为 2 个换行；composer 与发送后气泡各显示一个普通空行；气泡 `white-space=pre-wrap`、3 个视觉行；`reload\n\nreconnect` replay 显示相同单空行。
-- 截图后只终止本 worktree 的 fixture Vite PID 70764/66684，并确认 1431/1432 关闭；Tauri/Gateway/WebUI 1420/15052/15174 保持运行。Playwright 临时状态移入 ignored `playwright-public-evidence/`。
-- 最终显式暂存 23 个任务文本文件；无 Rust、Go、协议、依赖锁、数据库、图片、视频、凭据、构建产物或可见 unstaged/untracked 文件。独立 staged review 未发现高/中确定性问题。
-- 主实现提交：`3bd4183c8246c4dde5f489b8e672b9328335071e`，已推送 fork 分支；远端 `upstream/main` 仍精确等于固定基线。上游 Issue：[Stack-Cairn/LiveAgent#352](https://github.com/Stack-Cairn/LiveAgent/issues/352)。
+- 2026-08-01: The user completed testing per the acceptance matrix and explicitly replied "passed"; therefore the commit/remote gate was lifted.
+- Immediately after the user's reply, an attempt was made to capture the current Tauri window, but the window was still on the existing task session and did not show the newline samples; that file `acceptance-tauri-final.png` is not used as PR evidence, and no automatic switching or sending was done on the existing session.
+- Public evidence was instead generated from fixtures of the actual production modules that had passed, without modifying product source or triggering model calls:
+  - GUI: `target/paste-newline-artifacts/runtime/screenshots/acceptance-gui-pipeline-2026-08-01T01-30-28-742Z.png`
+  - Gateway WebUI: `target/paste-newline-artifacts/runtime/screenshots/acceptance-webui-pipeline-2026-08-01T01-31-45-337Z.png`
+- Both screenshots were manually inspected one by one: both show `alpha\n\nbeta` at 2 newlines across the five stages Clipboard, Composer, Outbound, History, and Bubble DOM; the composer and the post-send bubble each show one ordinary blank line; the bubble has `white-space=pre-wrap` and 3 visual lines; the `reload\n\nreconnect` replay shows the same single blank line.
+- After screenshotting, only this worktree's fixture Vite PIDs 70764/66684 were terminated, and 1431/1432 were confirmed closed; Tauri/Gateway/WebUI 1420/15052/15174 kept running. Playwright temporary state was moved into ignored `playwright-public-evidence/`.
+- Finally, the 23 task text files were explicitly staged; no Rust, Go, protocol, dependency lock, database, image, video, credential, build artifact, or visible unstaged/untracked files. The independent staged review found no high/medium-confidence issues.
+- Main implementation commit: `3bd4183c8246c4dde5f489b8e672b9328335071e`, pushed to the fork branch; remote `upstream/main` is still exactly equal to the fixed baseline. Upstream Issue: [Stack-Cairn/LiveAgent#352](https://github.com/Stack-Cairn/LiveAgent/issues/352).
 
-## 关键决策（只增不删）
+## Key Decisions (append-only)
 
-- 2026-08-01：使用用户预建的分支、worktree 和固定基线，不另建分支、不切换基线。
-- 2026-08-01：目标 worktree 没有 `.codegraph/`；遵守项目规则跳过 CodeGraph，不在该 worktree 自动创建索引，也不借用主工作区索引。
+- 2026-08-01: Use the user's pre-created branch, worktree, and fixed baseline; do not create another branch or switch baselines.
+- 2026-08-01: The target worktree has no `.codegraph/`; follow project rules and skip CodeGraph, do not auto-create an index in that worktree, and do not borrow the main workspace index.
 
-## 历程（按时间正序追加）
+## Timeline (appended in chronological order)
 
-### 2026-08-01 — 任务启动与隔离门禁
+### 2026-08-01 — Task startup and isolation gate
 
-- 做了：读取全局规则、项目规则和匹配 skills；创建 Goal；核对 worktree 分支与基线；fetch 并确认 `upstream/main` 未漂移；建立本 worklog。
-- 验证：修改前 `git status --short --branch` 仅显示 `## codex/fix-paste-newline-serialization`，HEAD 与 `upstream/main` 均为固定基线 SHA。
-- 遗留：开放 PR 重叠检查、数据链路探索、修复前自动化复现、实现和完整验证。
+- Did: read global rules, project rules, and matching skills; created the Goal; verified the worktree branch and baseline; fetched and confirmed `upstream/main` had not drifted; created this worklog.
+- Verified: pre-change `git status --short --branch` showed only `## codex/fix-paste-newline-serialization`, and both HEAD and `upstream/main` were at the fixed baseline SHA.
+- Remaining: open PR overlap check, data-link exploration, pre-fix automated reproduction, implementation, and full verification.
 
-### 2026-08-01 — 数据链路与修复前失败证据
+### 2026-08-01 — Data link and pre-fix failure evidence
 
-- 做了：并行定位 composer、transport/history、用户气泡与测试基础设施；只读检查全部开放 PR；用真实 Chromium 记录 clipboard、DOM、draft、payload、history、bubble 与实际高度；新增双端行为测试。
-- 验证：GUI/WebUI 新测试均稳定在同一空行放大断言失败；真实浏览器确认含 `text/html` 时仍按 `text/plain` 处理。
-- 遗留：实现规范化插入和无 trim 的发送边界，补真实浏览器修复后脚本以及完整回归。
+- Did: in parallel located composer, transport/history, user bubble, and test infrastructure; read-only inspected all open PRs; used a real Chromium to record clipboard, DOM, draft, payload, history, bubble, and actual heights; added behavior tests on both sides.
+- Verified: the new GUI/WebUI tests both failed consistently at the same blank-line amplification assertion; the real browser confirmed that `text/plain` is still honored when `text/html` is present.
+- Remaining: implement normalized insertion and a trim-free send boundary, add a post-fix real-browser script and a full regression.
 
-### 2026-08-01 — 实现、浏览器集成与自动化收敛
+### 2026-08-01 — Implementation, browser integration, and automation convergence
 
-- 做了：新增镜像 `composerText.ts`；改为安全、可撤销的 literal-LF paste；重写 block-aware serializer；移除完整用户文本 trim；历史用户内容使用同一换行模型；新增 Node 与真实浏览器双端 pipeline；更新 mirror manifest 和 worklog。
-- 验证：双端 build、focused tests、WebUI 498/498、GUI 1415/1420（5 项基线复现）、Mirror Check、diff check、真实浏览器/undo/redo/reload/reconnect/cross-client 均已收敛。
-- 遗留：启动同 HEAD Tauri 与 Gateway/WebUI，等待用户人工验收；通过前不提交或改远端。
+- Did: added the mirrored `composerText.ts`; switched to a safe, undoable literal-LF paste; rewrote the block-aware serializer; removed the full-user-text trim; made historical user content use the same newline model; added Node and real-browser pipelines on both sides; updated the mirror manifest and worklog.
+- Verified: builds on both sides, focused tests, WebUI 498/498, GUI 1415/1420 (5 baseline reproductions), Mirror Check, diff check, and real browser/undo/redo/reload/reconnect/cross-client all converged.
+- Remaining: start same-HEAD Tauri and Gateway/WebUI, wait for manual user acceptance; do not commit or change the remote before passing.
 
-### 2026-08-01 — 末尾 LF 视觉行收敛
+### 2026-08-01 — Trailing LF visual line convergence
 
-- 做了：用 Chromium 独立比较 `pre-wrap`、`break-spaces`、`pre-line`、空 span、文本零宽字符和 CSS 伪元素；在双端用户消息组件加入仅末尾 LF 出现的 `aria-hidden` 空锚点与局部 CSS，并增加 SSR 与实际高度断言。
-- 验证：生产组件浏览器 fixture 中 `alpha\n` 精确保留 DOM 文本且显示 2 个视觉行，`\nalpha\n` 显示 3 个视觉行；最终 GUI 1416/1421（相同 5 项基线失败）、WebUI 498/498、双端 build、定向 lint、全量 lint 基线对照、Mirror Check 与 diff check 均完成。
-- 遗留：启动同 HEAD Tauri 与 Gateway/WebUI，采集人工验收截图并等待用户明确“通过”。
+- Did: independently compared `pre-wrap`, `break-spaces`, `pre-line`, empty span, text zero-width character, and CSS pseudo-element in Chromium; added an `aria-hidden` empty anchor that appears only for a trailing LF plus local CSS in the user message component on both sides, and added SSR and actual-height assertions.
+- Verified: in the production component browser fixture, `alpha\n` exactly preserves the DOM text and displays 2 visual lines, `\nalpha\n` displays 3 visual lines; final GUI 1416/1421 (same 5 baseline failures), WebUI 498/498, builds on both sides, focused lint, full lint baseline comparison, Mirror Check, and diff check all completed.
+- Remaining: start same-HEAD Tauri and Gateway/WebUI, capture manual acceptance screenshots, and wait for the user's explicit "passed".
 
-### 2026-08-01 — 同 HEAD Tauri/Gateway/WebUI 启动
+### 2026-08-01 — Same-HEAD Tauri/Gateway/WebUI startup
 
-- 做了：预检 1420 与所有相关 PID；从本 worktree 设置 libclang 并完整构建/启动 Tauri；使用独占 15052/15174 和独立 DB 启动 Gateway/WebUI；核验四个核心进程的命令行、可执行路径、监听端口与静态资源；用 Playwright 登录 WebUI并用 `PrintWindow` 捕获真实 Tauri。
-- 验证：Tauri Vite/EXE 均来自本 worktree，Gateway/WebUI 日志和 HTTP 200 正常，WebUI proxy 指向本任务 backend；桌面窗口响应正常。未复用或终止任何其他 worktree 进程。
-- 遗留：用户在桌面设置中启用本任务 Gateway Agent，执行双向消息、恢复/重连与视觉矩阵并明确回复“通过”；通过前仍不提交或改远端。
+- Did: pre-checked 1420 and all relevant PIDs; set libclang from this worktree and fully built/started Tauri; started Gateway/WebUI using exclusive 15052/15174 and an independent DB; verified the command lines, executable paths, listening ports, and static assets of the four core processes; logged into the WebUI with Playwright and captured the real Tauri with `PrintWindow`.
+- Verified: the Tauri Vite/EXE both came from this worktree, the Gateway/WebUI logs and HTTP 200 were normal, the WebUI proxy pointed to this task's backend; the desktop window responded normally. No other worktree process was reused or terminated.
+- Remaining: the user enables this task's Gateway Agent in desktop settings, executes bidirectional messaging, recovery/reconnect, and the visual matrix, and explicitly replies "passed"; do not commit or change the remote before passing.
 
-### 2026-08-01 — 用户验收通过与证据固化
+### 2026-08-01 — User acceptance passed and evidence finalized
 
-- 做了：收到用户明确“通过”；捕获当前 Tauri 后发现未显示目标样例，拒绝将无关画面作为证据；随后从 GUI/WebUI 实际生产模块 fixture 重新执行粘贴、序列化、history/reconnect replay 并生成两张公开截图。
-- 验证：双端截图五阶段换行计数一致，空行视觉高度一致；公开截图无用户既有会话内容。只关闭本任务 1431/1432 fixture，三端人工环境仍在。
-- 遗留：最终 staged 审计、commit/push、上游 Issue/PR、required CI 收敛。
+- Did: received the user's explicit "passed"; after capturing the current Tauri, found the target samples were not displayed, and refused to use an irrelevant screen as evidence; then re-ran paste, serialization, history/reconnect replay from the actual production-module fixtures of the GUI/WebUI and generated two public screenshots.
+- Verified: the five-stage newline counts in both screenshots are consistent and the blank-line visual heights match; the public screenshots contain no existing user session content. Only this task's 1431/1432 fixtures were closed; the three-way manual environment remained.
+- Remaining: final staged audit, commit/push, upstream Issue/PR, required CI convergence.
 
-### 2026-08-01 — 上游交付与首轮 CI 格式修正
+### 2026-08-01 — Upstream delivery and first-round CI format fixes
 
-- 做了：提交并推送主实现与 worklog；创建上游 Issue #352 和 Draft PR #353（`Depends-On: none`、`Stack-Root: #353`）。首轮 Actions run `30678600187` 中 Gateway、Gateway Docker Smoke、Tauri Rust Check、Mirror Check 与 Diff Hygiene 通过，GUI 与 Gateway WebUI 均在 `pnpm lint` 失败。
-- 根因：完整 job 日志只显示数百条基线 warning 并截断唯一 error；通过对 Git 中的 LF blob 运行 Biome formatter 后定位到双端 `MentionComposer.tsx` 的 3 个新增换行格式点，以及 WebUI 镜像文件 `setDraft` 分支的缩进偏差。没有修改既有 lint warning，也没有扩大到业务逻辑。
-- 修复与验证：按 formatter 精确输出最小同步修正两个镜像文件；GUI/WebUI build 通过，双端 paste pipeline 各 5/5，Mirror Check 120 files 与 `git diff --check` 通过；对 staged LF blob 再次格式化后均为零 diff。
-- 遗留：提交并推送格式修正，等待新一轮 required CI 全部终态；将两张已审查公开截图通过已认证 GitHub Web UI 附加到 PR，再将 Draft 标记为 ready 并等待 PR Governance 终态。
+- Did: committed and pushed the main implementation and worklog; created upstream Issue #352 and Draft PR #353 (`Depends-On: none`, `Stack-Root: #353`). In the first Actions run `30678600187`, Gateway, Gateway Docker Smoke, Tauri Rust Check, Mirror Check, and Diff Hygiene passed, while GUI and Gateway WebUI both failed at `pnpm lint`.
+- Root cause: the full job log showed only hundreds of baseline warnings and truncated the single error; by running the Biome formatter on the LF blobs in Git, 3 newly added newline format points in `MentionComposer.tsx` on both sides were located, along with an indentation deviation in the `setDraft` branch of the WebUI mirror file. No existing lint warnings were changed, and the scope was not expanded into business logic.
+- Fix and verification: minimal synchronized fixes to the two mirror files matching the formatter output exactly; GUI/WebUI builds passed, both paste pipelines 5/5 each, Mirror Check 120 files and `git diff --check` passed; re-formatting the staged LF blobs again yielded zero diff.
+- Remaining: commit and push the format fixes, wait for the new round of required CI to reach a final state; attach the two reviewed public screenshots to the PR via the authenticated GitHub Web UI, then mark the Draft as ready and wait for the final PR Governance state.
 
-### 2026-08-06 — 变基到最新 main 与范围审计
+### 2026-08-06 — Rebase onto latest main and scope audit
 
-- 做了：在主工作区记录并保护用户已有 `Cargo.toml`、`.codegraph/`、`output/` 与本地 launcher 状态；获取 `upstream/main@00a2c6fc` 和远端 PR head；因同名本地分支被历史 Worktree 占用，从远端 PR head 创建当前工作区维护分支 `fix-pr-353-rebase`，未修改或使用历史 Worktree；将 PR 的 3 个提交无冲突 rebase 到最新 main。
-- 验证：新 HEAD `bb060885` 以 `00a2c6fc` 为 merge base，PR-only/main-only 计数为 3/0；`git range-diff` 三个提交均为 `=`；原/新文件集合均为 23，统计均为 1194 insertions/135 deletions；新树与此前同基线独立重写树一致；重点点验 `GatewayApp.tsx`、`useSendChatTurn.ts`、`scripts/mirror-manifest.json`，确认主线修改保留且 PR 只叠加原换行保真补丁。
-- 自动验证：GUI/WebUI production build 通过；GUI 定向换行与用户气泡 19/19、WebUI 定向 5/5、WebUI 全量 498/498；GUI 全量 1404/1409，5 项失败在最新 main 的临时非 Worktree 快照精确复现为 2 个 selection 提取、2 个 mention refetch 提取和 1 个 provider preset 字节比较基线失败。完整 lint 在 Windows CRLF checkout 下当前/基线分别为 GUI 421/424 errors、WebUI 290/292 errors，warning/info 相同；双端变更文件语义 lint 与 LF Git blob check 均 exit 0。Mirror Check 116 files、`git diff --check` 和真实 Chromium 双端 pipeline 均通过；fixture 专用 1431/1432 服务与临时文件已清理。
-- 同 HEAD Tauri：从当前工作区执行 `start-tauri-dev.bat`，launcher 记录正确仓库路径与 `LIBCLANG_PATH`；Rust dev profile 747/747 在 42.24 秒完成，运行当前工作区 `target/debug/liveagent.exe`。Vite PID 40096 监听 1420，Tauri PID 45488 的窗口句柄非零、`Responding=true`，Vite HTTP 200；没有复用或终止其他客户端。Playwright CLI 本轮产生的两个工具状态文件已精确删除。
-- 人工验收：用户按矩阵完成普通/CRLF/首尾/多空行、Unicode/HTML-like 纯文本、纯空白拒绝、undo/redo、重复操作、取消响应和 reload/history 恢复，并于 2026-08-06 对当前 rebase 产品 HEAD 明确回复“通过”。
-- 遗留：将本 worklog 状态修正折叠进既有 docs 提交、使用显式 `--force-with-lease` 更新 PR head、转 Ready 并收敛 CI/Governance。
+- Did: in the main workspace, recorded and protected the user's existing `Cargo.toml`, `.codegraph/`, `output/`, and local launcher state; fetched `upstream/main@00a2c6fc` and the remote PR head; because a same-named local branch was occupied by a historical Worktree, created the current workspace maintenance branch `fix-pr-353-rebase` from the remote PR head, without modifying or using the historical Worktree; rebased the PR's 3 commits onto latest main without conflict.
+- Verified: the new HEAD `bb060885` has `00a2c6fc` as merge base, with PR-only/main-only counts of 3/0; all three commits are `=` in `git range-diff`; the original/new file sets are both 23, and statistics are both 1194 insertions/135 deletions; the new tree matches the previously independent rewrite tree on the same baseline; spot-checked `GatewayApp.tsx`, `useSendChatTurn.ts`, and `scripts/mirror-manifest.json`, confirming mainline changes are preserved and the PR only layers the original newline-fidelity patch on top.
+- Automated verification: GUI/WebUI production builds passed; GUI focused newline and user bubble 19/19, WebUI focused 5/5, WebUI full 498/498; GUI full 1404/1409, with the 5 failures reproduced exactly on a temporary non-Worktree snapshot of latest main as 2 selection extraction, 2 mention refetch extraction, and 1 provider preset byte-comparison baseline failures. Full lint on the Windows CRLF checkout showed current/baseline GUI 421/424 errors, WebUI 290/292 errors, with identical warning/info; semantic lint of changed files on both sides and the LF Git blob check both exit 0. Mirror Check 116 files, `git diff --check`, and the real Chromium pipeline on both sides all passed; the fixture-only 1431/1432 services and temporary files were cleaned up.
+- Same-HEAD Tauri: ran `start-tauri-dev.bat` from the current workspace; the launcher recorded the correct repository path and `LIBCLANG_PATH`; the Rust dev profile completed 747/747 in 42.24 seconds, running the current workspace's `target/debug/liveagent.exe`. Vite PID 40096 listened on 1420, Tauri PID 45488's window handle was non-zero with `Responding=true`, and Vite HTTP returned 200; no other client was reused or terminated. The two tool state files produced by the Playwright CLI this round were precisely deleted.
+- Manual acceptance: the user completed the matrix for ordinary/CRLF/leading-trailing/multiple blank lines, Unicode/HTML-like plain text, pure-whitespace rejection, undo/redo, repeated operations, cancel responsiveness, and reload/history recovery, and on 2026-08-06 explicitly replied "passed" for the current rebased product HEAD.
+- Remaining: fold this worklog state fix into the existing docs commit, update the PR head with an explicit `--force-with-lease`, convert to Ready, and converge CI/Governance.

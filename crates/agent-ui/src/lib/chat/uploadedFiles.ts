@@ -166,15 +166,20 @@ export function splitUserAttachmentsForDisplay(files: PendingUploadedFile[], tex
 }
 
 /**
- * 附件指令的两行固定头。provider 原生内联适配器（nativeResponsesAttachments）
- * 按整段精确匹配把它替换成"部分附件已内联"的版本；DeepSeek 大段粘贴内联
- * （deepSeekAttachments）按整段精确匹配在所有附件行都被移除后删掉它。
- * 改文案必须保持这两处仍能命中，所以只在这里定义一次。
+ * The two-line fixed header of the attachment instruction. The provider-native
+ * inline adapter (nativeResponsesAttachments) replaces it by exact whole-block
+ * match with a "some attachments were inlined" version; DeepSeek large-paste
+ * inlining (deepSeekAttachments) removes it by exact whole-block match once all
+ * attachment lines have been removed. The wording must keep both of those
+ * matching, so it is defined only here.
  *
- * 第二行顺带告诉模型 Read 是分窗口返回的：Read 每次只给一段（文本默认 200
- * 行、PDF 默认 5 页、notebook 默认 20 cell），并在结果里报告总量；这里提前
- * 提醒它翻到底，避免模型只读了第一窗就开始总结。这段提示单独导出，供
- * nativeResponsesAttachments 拼"部分附件已内联"版本的指令头时复用。
+ * The second line also tells the model that Read returns a bounded window: each
+ * Read call returns only a segment (text defaults to 200 lines, PDF to 5 pages,
+ * notebook to 20 cells) and reports the total in the result; this warns it in
+ * advance to page to the end, so the model does not summarize after reading only
+ * the first window. This hint is exported separately for
+ * nativeResponsesAttachments to reuse when assembling the header of the "some
+ * attachments were inlined" version.
  */
 export const UPLOADED_FILES_READ_PAGING_HINT =
   "Read returns a bounded window per call and reports the total size, so keep paging (start_line/limit, page_start/page_limit, or cell_start/cell_limit) until you have read each file completely:";
@@ -184,7 +189,7 @@ export const UPLOADED_FILES_INSTRUCTION_HEADER_LINES = [
   `Use Read with these exact paths before analyzing or modifying them. ${UPLOADED_FILES_READ_PAGING_HINT}`,
 ] as const;
 
-/** 改文案前落库的历史消息仍带这版头；匹配时两版都认。 */
+/** Historical messages persisted before the wording change still carry this version of the header; matching accepts both. */
 const LEGACY_UPLOADED_FILES_INSTRUCTION_HEADER_LINES = [
   "The user attached the files below to this message.",
   "Use Read with these exact paths before analyzing or modifying them:",
@@ -195,13 +200,14 @@ const UPLOADED_FILES_INSTRUCTION_HEADER_VARIANTS: readonly (readonly string[])[]
   LEGACY_UPLOADED_FILES_INSTRUCTION_HEADER_LINES,
 ];
 
-/** 当前与历史两版附件指令头的整段文本，供按字符串替换的调用方使用。 */
+/** Whole-block text of both the current and legacy attachment instruction headers, for callers that replace by string. */
 export const UPLOADED_FILES_INSTRUCTION_HEADER_TEXTS: readonly string[] =
   UPLOADED_FILES_INSTRUCTION_HEADER_VARIANTS.map((lines) => lines.join("\n"));
 
 /**
- * 在按行拆开的消息里定位附件指令头（当前或历史格式）。返回头的起始下标
- * 与行数；找不到返回 null。
+ * Locate the attachment instruction header (current or legacy format) in the
+ * line-split message. Returns the header's start index and line count, or null if
+ * not found.
  */
 export function locateUploadedFilesInstructionHeader(lines: readonly string[]) {
   for (let index = 0; index < lines.length; index += 1) {
@@ -215,9 +221,11 @@ export function locateUploadedFilesInstructionHeader(lines: readonly string[]) {
 }
 
 /**
- * 单个附件在指令里的一行。格式是跨模块契约：deepSeekAttachments 按整行精确
- * 匹配删除已内联的粘贴行，nativeResponsesAttachments 给原生内联的附件加标注。
- * 带上体积让模型对"一窗读不完"有预期。
+ * One line for a single attachment in the instruction. The format is a
+ * cross-module contract: deepSeekAttachments removes already-inlined paste lines
+ * by exact whole-line match, and nativeResponsesAttachments annotates
+ * natively-inlined attachments. The size is included so the model expects that
+ * "one window is not enough".
  */
 export function formatUploadedFileInstructionLine(file: PendingUploadedFile) {
   const absolutePath = typeof file.absolutePath === "string" ? file.absolutePath.trim() : "";
@@ -230,8 +238,10 @@ export function formatUploadedFileInstructionLine(file: PendingUploadedFile) {
 }
 
 /**
- * 判断指令里的某一行是否就是该附件。除当前格式外也接受不带体积的旧格式
- * `- <absolutePath> (<kind>)`，让已落库的历史会话继续能被精确匹配。
+ * Decide whether a given instruction line is exactly this attachment. Besides the
+ * current format it also accepts the legacy size-less format
+ * `- <absolutePath> (<kind>)`, so already-persisted historical conversations keep
+ * matching exactly.
  */
 export function matchesUploadedFileInstructionLine(line: string, file: PendingUploadedFile) {
   const current = formatUploadedFileInstructionLine(file);
@@ -242,8 +252,10 @@ export function matchesUploadedFileInstructionLine(line: string, file: PendingUp
 }
 
 export function buildUploadedFilesInstruction(files: PendingUploadedFile[]) {
-  // 模型读取路径只认导入时返回的绝对路径（工作区内原地引用、工作区外落
-  // 暂存区）。旧版本仅持久化相对路径的附件不再列出——新方案下无法定位。
+  // The model's read path only accepts the absolute path returned at import time
+  // (in-place reference inside the workspace, or the staging area outside it).
+  // Attachments from older versions that persisted only a relative path are no
+  // longer listed -- they cannot be located under the new scheme.
   const lines = files.map(formatUploadedFileInstructionLine).filter((line) => line.length > 0);
   if (lines.length === 0) return "";
   return [...UPLOADED_FILES_INSTRUCTION_HEADER_LINES, ...lines].join("\n");

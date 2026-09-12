@@ -4,19 +4,21 @@ export type TurnCancellationScope = {
 };
 
 export type TurnCancellation = {
-  // 整轮的用户停止意图。会话的 abort controller 只注册它一次、永不换代，
-  // 停止请求不会再落进"abort 后、新 controller 注册前"的窗口。
+  // The whole-turn user stop intent. The conversation registers it on the abort controller once,
+  // never replacing it, so a stop request can no longer fall into the window "after abort, before
+  // a new controller is registered".
   userStop: AbortController;
   deriveScope: () => TurnCancellationScope;
 };
 
 /**
- * 两级取消：userStop 是轮次级信号；每个 LLM 请求（主请求、压缩摘要、标题任务）
- * 各自 deriveScope() 拿子 controller。局部 abort（如 mid-stream 压缩打断主请求）
- * 只影响自己的 scope；userStop 触发时链式传导到所有存活 scope。
- * 不用 AbortSignal.any：避免对 Tauri webview WebKit 版本的假设。
+ * Two-level cancellation: userStop is the turn-level signal; each LLM request (main request,
+ * compaction summary, title task) calls deriveScope() to get its own child controller. A local
+ * abort (e.g. mid-stream compaction interrupting the main request) affects only its own scope;
+ * when userStop fires it propagates in a chain to all live scopes.
+ * AbortSignal.any is not used: avoid assumptions about the Tauri webview WebKit version.
  */
-// 把外部给定的 AbortSignal（如子代理的运行信号）桥接成 userStop。
+// Bridges an externally provided AbortSignal (e.g. a subagent's run signal) into userStop.
 export function createTurnCancellationFromSignal(signal?: AbortSignal): TurnCancellation {
   const cancellation = createTurnCancellation();
   if (signal) {
@@ -48,7 +50,7 @@ export function createTurnCancellation(): TurnCancellation {
     const release = () => {
       userStop.signal.removeEventListener("abort", onUserStop);
     };
-    // scope 自身结束后释放监听，长轮次不积累监听器。
+    // Release the listener once the scope itself ends, so long turns do not accumulate listeners.
     controller.signal.addEventListener("abort", release, { once: true });
     return { controller, release };
   }

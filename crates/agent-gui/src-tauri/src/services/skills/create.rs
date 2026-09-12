@@ -1,4 +1,4 @@
-//! 创建 Skill：SKILL.md 模板渲染与 create payload 编排。
+//! Create Skill: SKILL.md template rendering and create payload orchestration.
 
 use serde_json::Value;
 use std::fs;

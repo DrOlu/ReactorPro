@@ -57,7 +57,7 @@ function RedactionPicker(props: {
   return (
     <div
       role="radiogroup"
-      aria-label="工具调用脱敏"
+      aria-label="Tool call redaction"
       className={cn(
         "inline-flex shrink-0 items-center rounded-full border border-border/60 bg-muted/40 p-0.5",
         disabled && "pointer-events-none opacity-60",
@@ -81,7 +81,7 @@ function RedactionPicker(props: {
           disabled={disabled}
           onChange={() => onChange(true)}
         />
-        开启
+        On
       </label>
       <label
         className={cn(
@@ -101,7 +101,7 @@ function RedactionPicker(props: {
           disabled={disabled}
           onChange={() => onChange(false)}
         />
-        关闭
+        Off
       </label>
     </div>
   );
@@ -114,8 +114,8 @@ function ShareSwitch(props: { checked: boolean; disabled: boolean; onToggle: () 
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-label={checked ? "关闭分享" : "开启分享"}
-      title={checked ? "关闭分享" : "开启分享"}
+      aria-label={checked ? "Disable sharing" : "Enable sharing"}
+      title={checked ? "Disable sharing" : "Enable sharing"}
       disabled={disabled}
       onClick={onToggle}
       className={cn(
@@ -190,14 +190,14 @@ export function HistoryShareModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg p-0" closeLabel="关闭" showCloseButton>
+      <DialogContent className="max-w-lg p-0" closeLabel="Close" showCloseButton>
         <DialogHeader className="flex-row items-start gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
               <Share2 className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-sm leading-normal">分享会话</DialogTitle>
+              <DialogTitle className="text-sm leading-normal">Share conversation</DialogTitle>
               <DialogDescription
                 className="mt-1 truncate text-xs text-muted-foreground"
                 title={conversation.title}
@@ -212,9 +212,10 @@ export function HistoryShareModal({
           <div className="rounded-2xl border border-border/60 bg-muted/25 px-4 py-3">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-sm font-medium text-foreground">公开只读链接</div>
+                <div className="text-sm font-medium text-foreground">Public read-only link</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                  开启后，拥有链接的用户只能查看该会话内容，无法发送消息或执行其他操作。
+                  Once enabled, anyone with the link can only view this conversation's content;
+                  they cannot send messages or perform other actions.
                 </div>
               </div>
               <ShareSwitch
@@ -246,9 +247,10 @@ export function HistoryShareModal({
                   {redactToolContent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium text-foreground">工具调用脱敏</span>
+                  <span className="text-sm font-medium text-foreground">Tool call redaction</span>
                   <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                    仅展示工具卡片，隐藏参数、命令、返回内容与图片，且分享页中不可展开。
+                    Show only the tool cards, hiding arguments, commands, return content, and
+                    images; they cannot be expanded on the share page.
                   </p>
                 </div>
               </div>
@@ -266,7 +268,7 @@ export function HistoryShareModal({
           {isLoading ? (
             <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              正在读取分享状态...
+              Reading share status...
             </div>
           ) : null}
 
@@ -278,7 +280,7 @@ export function HistoryShareModal({
 
           {isEnabled && token ? (
             <div className="space-y-2">
-              <div className="text-xs font-medium text-muted-foreground">分享链接</div>
+              <div className="text-xs font-medium text-muted-foreground">Share link</div>
               <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background px-3 py-2 shadow-sm">
                 <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
                 {shareUrl ? (
@@ -294,10 +296,10 @@ export function HistoryShareModal({
                 ) : (
                   <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                     {shareOriginLoading
-                      ? "正在读取 Gateway 地址..."
+                      ? "Reading Gateway address..."
                       : publicOrigin
                         ? token
-                        : "Gateway 地址暂时不可用"}
+                        : "Gateway address temporarily unavailable"}
                   </span>
                 )}
                 <button
@@ -310,8 +312,8 @@ export function HistoryShareModal({
                       ? "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                       : "cursor-not-allowed text-muted-foreground/40",
                   )}
-                  title="复制链接"
-                  aria-label="复制链接"
+                  title="Copy link"
+                  aria-label="Copy link"
                 >
                   {copied ? (
                     <Check className="h-4 w-4 text-emerald-500" />
@@ -330,20 +332,21 @@ export function HistoryShareModal({
                       ? "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                       : "pointer-events-none text-muted-foreground/40",
                   )}
-                  title="打开链接"
+                  title="Open link"
                 >
                   <ExternalLink className="h-4 w-4" />
                 </a>
               </div>
               {!shareOriginLoading && !publicOrigin ? (
                 <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
-                  当前 Gateway 地址无法用于生成公开链接，请确认 Remote 连接状态后再复制。
+                  The current Gateway address cannot be used to generate a public link; check the
+                  Remote connection status before copying.
                 </div>
               ) : null}
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border/70 px-3 py-3 text-sm text-muted-foreground">
-              开启分享后会在这里生成公开访问链接。
+              Once sharing is enabled, a public access link is generated here.
             </div>
           )}
         </DialogBody>

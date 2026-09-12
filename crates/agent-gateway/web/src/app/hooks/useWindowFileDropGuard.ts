@@ -5,9 +5,11 @@ function dragEventHasFiles(event: globalThis.DragEvent) {
 }
 
 /**
- * 浏览器对未处理的文件拖放的默认行为是在当前标签页直接打开该文件，等于
- * 丢掉整个应用状态。已声明的拖放区（聊天面板、侧栏工作空间区）会先于
- * window 处理并 preventDefault，这里只兜底其余所有落点。
+ * The browser's default behavior for an unhandled file drop is to open the
+ * file directly in the current tab, which is equivalent to losing the entire
+ * app state. Declared drop zones (the chat panel, the sidebar workspace area)
+ * handle the event and preventDefault before window does; this only catches
+ * every other drop target.
  */
 export function useWindowFileDropGuard() {
   useEffect(() => {

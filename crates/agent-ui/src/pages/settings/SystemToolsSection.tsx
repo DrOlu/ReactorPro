@@ -1,10 +1,12 @@
-// 系统工具设置:展示 Agent 模式下自动注册的内置工具,并为每个工具设置审批策略
-//(allow 直接执行 / ask 执行前询问 / deny 直接拒绝)。纯设置读写
-//(settings.system.toolPolicies),经 settings sync 自然同步到 WebUI;裁决在桌面端
-// resolveToolPolicy。两端直接复用本设置区块。
+// System tool settings: show the built-in tools auto-registered in Agent mode and set an approval
+// policy for each tool (allow = execute directly / ask = ask before executing / deny = refuse
+// outright). Pure settings read/write (settings.system.toolPolicies), synced naturally to WebUI by
+// settings sync; adjudication happens on the desktop in resolveToolPolicy. Both clients reuse this
+// settings section directly.
 //
-// 说明:MCP 工具按 server、插件工具按工具的策略已就地内联到各自 Hub 卡片旁
-//(需运行时数据),不在本节;本节聚焦内置工具,补上内置工具此前不可管控的缺口。
+// Note: per-server MCP tool policies and per-tool plugin policies are inlined next to their
+// respective Hub cards (they need runtime data) and are not in this section; this section focuses
+// on built-in tools, closing the gap that built-in tools previously could not be governed.
 
 import {
   BROWSER_AUTOMATION_MODES,
@@ -30,9 +32,10 @@ type BrowserExtensionInstallInfo = {
 };
 
 /**
- * Browser 工具的浏览器模式选择 + 扩展安装引导。
- * 扩展状态查询是桌面端命令;WebUI shim 未实现时 invoke 抛错,吞掉并把
- * info 置 null——模式选择仍可用(设置经 sync 到桌面端生效),引导区隐藏。
+ * Browser mode selection + extension install guidance for the Browser tool.
+ * The extension status query is a desktop command; when the WebUI shim does not implement it,
+ * invoke throws, which is swallowed and info is set to null — mode selection still works (the
+ * setting takes effect on the desktop via sync), and the guidance area is hidden.
  */
 function BrowserModeRow(props: {
   mode: BrowserAutomationMode;
@@ -56,9 +59,10 @@ function BrowserModeRow(props: {
       } catch {
         if (disposed) return;
         setInfo(null);
-        return; // WebUI / 命令不可用:不再轮询。
+        return; // WebUI / command unavailable: stop polling.
       }
-      // 引导场景下用户装完扩展应立即看到状态翻绿,5s 轮询足够灵敏且无压力。
+      // In the guidance scenario the user should see the status turn green immediately after
+      // installing the extension; a 5s poll is responsive enough and low-cost.
       timer = setTimeout(poll, 5_000);
     };
     void poll();
@@ -76,7 +80,7 @@ function BrowserModeRow(props: {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span className="text-xs text-muted-foreground">{t("settings.browserMode.label")}</span>
         <fieldset
-          // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: 同 ToolPolicyToggle——互斥单选语义需要向读屏表达。
+          // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: same as ToolPolicyToggle — the mutually exclusive radio semantic must be expressed to screen readers.
           role="radiogroup"
           aria-label={t("settings.browserMode.label")}
           className="inline-flex min-w-0 shrink-0 items-center rounded-lg border border-border/60 bg-muted/40 p-0.5"
@@ -84,7 +88,7 @@ function BrowserModeRow(props: {
           {BROWSER_AUTOMATION_MODES.map((option) => {
             const active = mode === option;
             return (
-              // biome-ignore lint/a11y/useSemanticElements: 同 ToolPolicyToggle——分段控件保留 button 样式。
+              // biome-ignore lint/a11y/useSemanticElements: same as ToolPolicyToggle — the segmented control keeps button styling.
               <button
                 key={option}
                 type="button"
@@ -163,9 +167,10 @@ export function SystemToolsSection(props: SettingsSectionProps) {
     [],
   );
 
-  // 只读工具无副作用,恒定放行(与 resolveToolPolicy 的缺省一致),不提供切换。
-  // 非只读工具的缺省取目录里的 defaultPolicy(如 Browser 缺省 ask),缺省
-  // 显示与运行时裁决才不会背离。
+  // Read-only tools have no side effects and are always allowed (consistent with resolveToolPolicy's
+  // default); no toggle is offered. A non-read-only tool's default comes from the catalog's
+  // defaultPolicy (e.g. Browser defaults to ask), so the default display and the runtime
+  // adjudication do not diverge.
   function effectivePolicy(entry: BuiltinToolCatalogEntry): ToolPolicy {
     if (entry.isReadOnly) return "allow";
     return policies[entry.toolName] ?? entry.defaultPolicy ?? "allow";
@@ -174,9 +179,10 @@ export function SystemToolsSection(props: SettingsSectionProps) {
   function setPolicy(entry: BuiltinToolCatalogEntry, next: ToolPolicy) {
     setSettings((prev) => {
       const current = { ...(prev.system.toolPolicies ?? {}) };
-      // 选中该工具自身的缺省值时显式写入无意义 → 删除该键保持配置精简;
-      // 选中非缺省值(含把缺省 ask 的 Browser 改成 allow)则必须显式写入,
-      // 否则 resolveToolPolicy 会回落到缺省分支,用户的选择被静默还原。
+      // Explicitly writing the tool's own default value is meaningless → delete the key to keep the
+      // config lean; selecting a non-default value (including changing Browser's ask default to
+      // allow) must be written explicitly, otherwise resolveToolPolicy falls back to the default
+      // branch and the user's choice is silently reverted.
       const fallback: ToolPolicy = entry.defaultPolicy ?? "allow";
       if (next === fallback) {
         delete current[entry.toolName];

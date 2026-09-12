@@ -1,8 +1,8 @@
-//! CDP（Chrome DevTools Protocol）WebSocket 客户端：请求按自增 id 配对响应，
-//! 事件按 method 广播给一次性等待者。仅走 127.0.0.1，无 TLS。两种接入：
-//! 主动拨号调试端口（launcher 模式），或包裹扩展桥接服务 accept 到的连接
-//! （extension 模式，见 bridge.rs——远端是浏览器扩展用 chrome.debugger 中继）。
-//! 结构仿 services/stt 的会话模式：读循环独立 task，命令走 mpsc。
+//! CDP (Chrome DevTools Protocol) WebSocket client: requests are matched to responses by an auto-incrementing id,
+//! and events are broadcast to one-shot waiters by method. Only 127.0.0.1 is used, with no TLS. Two ways to connect:
+//! actively dial the debugging port (launcher mode), or wrap a connection accepted by the extension bridge service
+//! (extension mode, see bridge.rs -- the remote end is a browser extension relaying via chrome.debugger).
+//! Session mode: the read loop is a separate task, and commands go over mpsc.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,9 +15,9 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
-/// 一次性事件等待者：`(method, 期望的 sessionId, 结果通道)`。
+/// One-shot event waiter: `(method, expected sessionId, result channel)`.
 type EventWaiter = (String, Option<String>, oneshot::Sender<Value>);
-/// 请求 id → 响应通道。
+/// Request id -> response channel.
 type PendingMap = HashMap<u64, oneshot::Sender<Result<Value, String>>>;
 
 pub(crate) struct CdpConnection {
@@ -29,16 +29,16 @@ pub(crate) struct CdpConnection {
 }
 
 impl CdpConnection {
-    /// 连接 browser-level WebSocket（ws://127.0.0.1:<port>/devtools/browser/...）。
+    /// Connect to a browser-level WebSocket (ws://127.0.0.1:<port>/devtools/browser/...).
     pub(crate) async fn connect(ws_url: &str) -> Result<Arc<Self>, String> {
         let (stream, _) = connect_async(ws_url)
             .await
-            .map_err(|e| format!("连接 CDP WebSocket 失败：{e}"))?;
+            .map_err(|e| format!("failed to connect CDP WebSocket: {e}"))?;
         Ok(Self::from_stream(stream))
     }
 
-    /// 包裹一条已建立的 WebSocket（拨号或 accept 均可），启动读写循环。
-    /// 扩展桥接模式下由 bridge.rs 把 accept 到的连接交进来。
+    /// Wraps an already-established WebSocket (whether dialed or accepted) and starts the read/write loop.
+    /// In extension bridge mode, bridge.rs hands over the accepted connection here.
     pub(crate) fn from_stream<S, E>(stream: S) -> Arc<Self>
     where
         S: Stream<Item = Result<Message, E>> + Sink<Message> + Send + 'static,
@@ -85,7 +85,7 @@ impl CdpConnection {
         }
         if let Ok(mut pending) = self.pending.lock() {
             for (_, sender) in pending.drain() {
-                let _ = sender.send(Err("CDP 连接已关闭".to_string()));
+                let _ = sender.send(Err("CDP connection closed".to_string()));
             }
         }
         if let Ok(mut waiters) = self.event_waiters.lock() {
@@ -113,7 +113,7 @@ impl CdpConnection {
                         .get("message")
                         .and_then(Value::as_str)
                         .unwrap_or("unknown CDP error");
-                    Err(format!("CDP 错误：{message}"))
+                    Err(format!("CDP error: {message}"))
                 } else {
                     Ok(value.get("result").cloned().unwrap_or(Value::Null))
                 };
@@ -128,8 +128,8 @@ impl CdpConnection {
                 .map(str::to_string);
             let params = value.get("params").cloned().unwrap_or(Value::Null);
             if let Ok(mut waiters) = self.event_waiters.lock() {
-                // 先清掉接收端已放弃（超时/提前返回）的等待者：既防 Vec 泄漏，
-                // 也避免这些僵尸条目被后续同名事件"命中"。
+                // First clear waiters the receiver has abandoned (timed out / returned early): this both prevents Vec leaks
+                // and keeps these zombie entries from being "hit" by later events of the same name.
                 waiters.retain(|(_, _, sender)| !sender.is_closed());
                 let mut index = 0;
                 while index < waiters.len() {
@@ -150,7 +150,7 @@ impl CdpConnection {
         }
     }
 
-    /// 发送 CDP 命令并等待响应。`session_id` 为 None 时是 browser-level 命令。
+    /// Sends a CDP command and waits for the response. When `session_id` is None it is a browser-level command.
     pub(crate) async fn call(
         &self,
         session_id: Option<&str>,
@@ -159,7 +159,7 @@ impl CdpConnection {
         timeout: Duration,
     ) -> Result<Value, String> {
         if self.is_closed() {
-            return Err("CDP 连接已关闭".to_string());
+            return Err("CDP connection closed".to_string());
         }
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let mut payload = json!({ "id": id, "method": method, "params": params });
@@ -169,25 +169,25 @@ impl CdpConnection {
         let (tx, rx) = oneshot::channel();
         self.pending
             .lock()
-            .map_err(|_| "CDP pending 锁中毒".to_string())?
+            .map_err(|_| "CDP pending lock poisoned".to_string())?
             .insert(id, tx);
         self.outbound
             .send(Message::Text(payload.to_string().into()))
-            .map_err(|_| "CDP 发送通道已关闭".to_string())?;
+            .map_err(|_| "CDP send channel closed".to_string())?;
 
         match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(outcome)) => outcome,
-            Ok(Err(_)) => Err("CDP 响应通道被丢弃".to_string()),
+            Ok(Err(_)) => Err("CDP response channel dropped".to_string()),
             Err(_) => {
                 if let Ok(mut pending) = self.pending.lock() {
                     pending.remove(&id);
                 }
-                Err(format!("CDP 命令超时（{method}）"))
+                Err(format!("CDP command timed out ({method})"))
             }
         }
     }
 
-    /// 注册一次性事件等待者；返回的 receiver 在事件到达时收到 params。
+    /// Registers a one-shot event waiter; the returned receiver gets params when the event arrives.
     pub(crate) fn wait_event(
         &self,
         method: &str,

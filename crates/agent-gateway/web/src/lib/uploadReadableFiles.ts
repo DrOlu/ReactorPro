@@ -21,7 +21,7 @@ const READABLE_FILE_KINDS = new Set([
 export async function readFetchError(response: Response, fallback: string) {
   const fallbackWithStatus = `${fallback}（HTTP ${response.status}）`;
   if (response.status === 413) {
-    return "文件过大，服务器拒绝接收（HTTP 413）。请压缩文件后重试，或调大反向代理的请求体大小限制。";
+    return "The file is too large and the server refused it (HTTP 413). Compress the file and retry, or increase the reverse proxy's request body size limit.";
   }
   const raw = (await response.text().catch(() => "")).trim();
   if (!raw) {
@@ -92,7 +92,7 @@ export async function importReadableFiles(
     throw new Error("agent_id is required");
   }
   if (!normalizedWorkdir) {
-    throw new Error("项目目录未选择，无法导入文件。");
+    throw new Error("Project directory not selected, cannot import files.");
   }
   if (files.length === 0) {
     return { files: [], skipped: [] };
@@ -116,7 +116,7 @@ export async function importReadableFiles(
   });
 
   if (!response.ok) {
-    throw new Error(await readFetchError(response, "导入文件失败"));
+    throw new Error(await readFetchError(response, "Failed to import file"));
   }
 
   const payload = (await response.json()) as {

@@ -16,7 +16,7 @@ export type SubagentWorktreeIpc = {
   apply: (input: {
     parentWorkdir: string;
     worktreeRoot: string;
-    /** 父对话检查点上下文;后端在改写父工作区前对 apply 路径捕获前像。 */
+    /** Parent conversation checkpoint context; before rewriting the parent workspace the backend captures a pre-image of the apply path. */
     checkpoint?: { conversationId: string; turnId: string };
   }) => Promise<SubagentWorktreeApplyResult>;
   cleanup: (input: {

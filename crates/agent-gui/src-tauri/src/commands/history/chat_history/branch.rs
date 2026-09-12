@@ -1,16 +1,17 @@
-// 分支会话：从源会话按锚点（用户消息）截取前缀——含该轮完整的助手回复——
-// 复制为一条全新会话。所有写入都在同一个 SQLite 事务内完成。
+// Branch session: take a prefix from the source session by anchor (user message)---including
+// that turn's complete assistant reply---and copy it into a brand-new session. All writes happen
+// within the same SQLite transaction.
 
 /// Must match BRANCH_CONVERSATION_DEFAULT_TITLE in agent-gui src/lib/chat/page/chatPageHelpers.ts.
-pub(crate) const BRANCH_DEFAULT_TITLE: &str = "新分支";
+pub(crate) const BRANCH_DEFAULT_TITLE: &str = "New Branch";
 
 fn parse_branch_segment_messages(segment: &ChatHistorySegmentRecord) -> Result<Vec<Value>, String> {
     let parsed = serde_json::from_str::<Value>(&segment.messages_json)
-        .map_err(|e| format!("解析历史分段 {} 失败：{e}", segment.segment_id))?;
+        .map_err(|e| format!("Failed to parse history segment {}: {e}", segment.segment_id))?;
     parsed
         .as_array()
         .cloned()
-        .ok_or_else(|| format!("历史分段 {} 的消息不是数组", segment.segment_id))
+        .ok_or_else(|| format!("Messages of history segment {} are not an array", segment.segment_id))
 }
 
 fn branch_message_role_is_user(message: &Value) -> bool {
@@ -22,9 +23,9 @@ fn branch_message_role_is_user(message: &Value) -> bool {
         == Some("user")
 }
 
-/// 镜像前端 normalizeSegment（conversationState.ts）：裁剪后重算
-/// message_count/start/end/updated_at，保留 segment_id、summary_json、created_at。
-/// start/end 的 stable id 与前端 getMessageStableId 同构（history_message_stable_id）。
+/// Mirrors the frontend normalizeSegment (conversationState.ts): after trimming, recompute
+/// message_count/start/end/updated_at while preserving segment_id, summary_json, created_at.
+/// The stable ids of start/end are isomorphic to the frontend getMessageStableId (history_message_stable_id).
 fn build_branch_sliced_segment(
     record: &ChatHistorySegmentRecord,
     kept_messages: &[Value],
@@ -42,7 +43,7 @@ fn build_branch_sliced_segment(
         .map(read_message_timestamp)
         .unwrap_or(record.updated_at);
     let messages_json =
-        serde_json::to_string(kept_messages).map_err(|e| format!("序列化分支分段消息失败：{e}"))?;
+        serde_json::to_string(kept_messages).map_err(|e| format!("Failed to serialize branch segment messages: {e}"))?;
 
     Ok(ChatHistorySegmentInput {
         segment_index: new_segment_index,
@@ -57,21 +58,23 @@ fn build_branch_sliced_segment(
     })
 }
 
-/// 从锚点用户消息开始向前扫描下一条 role=="user" 的消息作为独占切点，
-/// 返回复制到新会话的分段列表（已按 0..n-1 重编号）与消息总数。
+/// Starting from the anchor user message, scan forward for the next message with role=="user"
+/// as the exclusive cut point, returning the list of segments copied to the new session
+/// (renumbered as 0..n-1) and the total message count.
 pub(crate) fn build_branch_segments(
     segments: &[ChatHistorySegmentRecord],
     anchor: &ChatHistoryMessageRef,
 ) -> Result<(Vec<ChatHistorySegmentInput>, i64), String> {
     let location = locate_history_message_ref(segments, anchor)
-        .map_err(|error| format!("未找到匹配的分支锚点消息：{error}"))?;
+        .map_err(|error| format!("No matching branch anchor message found: {error}"))?;
     let anchor_segment_pos = location.segment_position;
     let anchor_messages = location.messages;
     let anchor_position = location.message_index;
 
-    // 独占切点：锚点之后（跨分段）的第一条 user 消息；没有则整会话复制。
-    // 顺带记录切点前是否存在非 user 消息：桌面 done 先于落盘（persist-lag），
-    // 助手回复还没写进历史时不允许分支，否则会静默复制出缺少该回复的前缀。
+    // Exclusive cut point: the first user message after the anchor (across segments); if none, the
+    // whole session is copied. Also records whether a non-user message exists before the cut point:
+    // desktop done precedes persistence (persist-lag), so branching is disallowed while the assistant
+    // reply has not yet been written to history, otherwise it would silently copy a prefix missing that reply.
     let mut cut: Option<(usize, usize)> = None;
     let mut saw_reply_after_anchor = false;
     'scan: for (segment_pos, segment) in segments.iter().enumerate().skip(anchor_segment_pos) {
@@ -96,13 +99,13 @@ pub(crate) fn build_branch_segments(
         }
     }
     if !saw_reply_after_anchor {
-        return Err("分支目标回复尚未写入历史，请稍后重试".to_string());
+        return Err("The branch target reply has not been written to history yet; please try again later".to_string());
     }
 
     let mut kept: Vec<ChatHistorySegmentInput> = Vec::new();
     match cut {
         Some((cut_segment_pos, cut_message_index)) if cut_segment_pos == anchor_segment_pos => {
-            // 切点仍在锚点段内：锚点段裁剪，后续分段全部丢弃。
+            // The cut point is still within the anchor segment: trim the anchor segment and discard all subsequent segments.
             for segment in &segments[..anchor_segment_pos] {
                 kept.push(record_to_segment_input(segment));
             }
@@ -114,8 +117,8 @@ pub(crate) fn build_branch_segments(
             )?);
         }
         Some((cut_segment_pos, cut_message_index)) => {
-            // 切点在后续分段：之前的分段整段复制；切点段按 [..j] 裁剪，
-            // j == 0 时整段（含 summary）丢弃；再往后的分段全部丢弃。
+            // The cut point is in a later segment: copy earlier segments whole; trim the cut-point segment to [..j],
+            // when j == 0 the whole segment (including summary) is discarded; segments after that are all discarded.
             for segment in &segments[..cut_segment_pos] {
                 kept.push(record_to_segment_input(segment));
             }
@@ -146,8 +149,8 @@ pub(crate) fn build_branch_segments(
     Ok((kept, total_message_count))
 }
 
-/// context_meta_json 是前端 StoredChatContextMeta 的序列化：只覆写三个计数
-/// 字段，其余键保持原样；无法解析时原样保留。
+/// context_meta_json is the serialization of the frontend StoredChatContextMeta: overwrite only the
+/// three count fields and leave other keys untouched; if it cannot be parsed, keep it as-is.
 pub(crate) fn chat_history_branch_sync(
     conn: &mut Connection,
     source_id: &str,
@@ -155,18 +158,18 @@ pub(crate) fn chat_history_branch_sync(
 ) -> Result<ChatHistorySummary, String> {
     let source_id = source_id.trim();
     if source_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("History conversation id must not be empty".to_string());
     }
     validate_user_history_message_ref(anchor)?;
 
     let tx = conn
         .transaction()
-        .map_err(|e| format!("开启分支会话事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin branch session transaction: {e}"))?;
 
     let source = get_record_by_id(&tx, source_id)?;
     let source_segments = load_segments(&tx, &source.id)?;
     if source_segments.is_empty() {
-        return Err("历史对话缺少分段数据".to_string());
+        return Err("History conversation is missing segment data".to_string());
     }
 
     let (segments, total_message_count) = build_branch_segments(&source_segments, anchor)?;
@@ -214,7 +217,7 @@ pub(crate) fn chat_history_branch_sync(
     verify_chat_history_consistency(&tx, &new_id)?;
 
     tx.commit()
-        .map_err(|e| format!("提交分支会话事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit branch session transaction: {e}"))?;
 
     get_summary_by_id(conn, &new_id)
 }
@@ -228,7 +231,7 @@ pub(crate) async fn chat_history_branch_inner(
         chat_history_branch_sync(&mut conn, &id, &anchor)
     })
     .await
-    .map_err(|e| format!("chat_history_branch join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_branch join failed: {e}"))?
 }
 
 #[tauri::command]

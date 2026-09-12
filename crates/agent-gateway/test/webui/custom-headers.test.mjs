@@ -12,11 +12,11 @@ function errorHasCode(code) {
 test("parses JSON objects and arrays", () => {
   assert.deepEqual(
     customHeaders.parseCustomHeadersImport(
-      '{"X-Title":"LiveAgent","X-Environment":"production"}',
+      '{"X-Title":"ReactorPro","X-Environment":"production"}',
     ),
     {
       headers: [
-        { key: "X-Title", value: "LiveAgent" },
+        { key: "X-Title", value: "ReactorPro" },
         { key: "X-Environment", value: "production" },
       ],
       issues: [],
@@ -25,10 +25,10 @@ test("parses JSON objects and arrays", () => {
 
   assert.deepEqual(
     customHeaders.parseCustomHeadersImport(
-      '[{"key":"X-Title","value":"LiveAgent"}]',
+      '[{"key":"X-Title","value":"ReactorPro"}]',
     ),
     {
-      headers: [{ key: "X-Title", value: "LiveAgent" }],
+      headers: [{ key: "X-Title", value: "ReactorPro" }],
       issues: [],
     },
   );

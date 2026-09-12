@@ -242,11 +242,12 @@ export function streamDeepSeekResponses(
 
   void (async () => {
     try {
-      // DeepSeek 的 Responses wire 现在接受图片（官方《图像理解》指南：input_image
-      // 可出现在 user / developer 消息以及 function_call_output 的 output 中），所以
-      // 这里不再有无条件的图片硬抛——那正是 #730 之前"一张图砖掉整个会话"的成因。
-      // 图片能力一律听 model.input：纯文本模型（Pro，或被用户覆盖成 ["text"] 的中转）
-      // 仍把工具结果图片降级为说明文字。
+      // DeepSeek's Responses wire now accepts images (per the official "Image Understanding"
+      // guide: input_image can appear in user / developer messages as well as in the output of
+      // function_call_output), so there is no longer an unconditional hard throw on images here --
+      // that was the cause of "one image bricks the whole conversation" before #730. Image
+      // capability always follows model.input: text-only models (Pro, or a relay overridden by the
+      // user to ["text"]) still downgrade tool-result images to explanatory text.
       const imageAwareContext = omitToolResultImagesForTextOnlyModel(context, model);
       const preparedContext = await inlineDeepSeekLargePastes(imageAwareContext, options.workdir);
       const responseCapture: DeepSeekResponseCapture = { outputByIndex: new Map() };

@@ -21,14 +21,14 @@ for (const { label, loader } of implementations) {
   const cardIdentity = loader.loadModule("@liveagent/ui/lib/skills/skillCardIdentity.ts");
   const cardMetadata = loader.loadModule("@liveagent/ui/lib/skills/skillCardMetadata.ts");
 
-  test(`${label} extracts Chinese trigger hints, including full-width punctuation`, () => {
+  test(`${label} extracts trigger hints, including full-width punctuation`, () => {
     assert.equal(
-      triggerHint.getSkillTriggerHint('中文规范。触发："帮我 review"、"写文档"。其余说明。'),
-      '"帮我 review"、"写文档"',
+      triggerHint.getSkillTriggerHint('English guidance。Trigger："review my code"、"write docs"。Other notes。'),
+      '"review my code"、"write docs"',
     );
     assert.equal(
-      triggerHint.getSkillTriggerHint('说明——触发 ：「代码审查」、 “整理文档” ；后续说明'),
-      '「代码审查」、 “整理文档”',
+      triggerHint.getSkillTriggerHint('Notes——Trigger ：「code review」、 “write docs” ；later notes'),
+      '「code review」、 “write docs”',
     );
   });
 
@@ -52,7 +52,7 @@ for (const { label, loader } of implementations) {
   test(`${label} omits missing trigger hints and truncates unusually long ones`, () => {
     assert.equal(triggerHint.getSkillTriggerHint("A concise skill description without a cue."), null);
     const hint = triggerHint.getSkillTriggerHint(
-      `触发：${"a".repeat(triggerHint.MAX_SKILL_TRIGGER_HINT_LENGTH + 12)}`,
+      `Trigger：${"a".repeat(triggerHint.MAX_SKILL_TRIGGER_HINT_LENGTH + 12)}`,
     );
     assert.equal(Array.from(hint).length, triggerHint.MAX_SKILL_TRIGGER_HINT_LENGTH);
     assert.equal(hint.endsWith("…"), true);
@@ -61,10 +61,10 @@ for (const { label, loader } of implementations) {
   test(`${label} caps local card descriptions without splitting Unicode characters`, () => {
     const limit = cardMetadata.LOCAL_SKILL_CARD_DESCRIPTION_MAX_CHARACTERS;
     assert.equal(cardMetadata.truncateLocalSkillCardDescription("  concise description  "), "concise description");
-    assert.equal(cardMetadata.truncateLocalSkillCardDescription("技".repeat(limit)), "技".repeat(limit));
+    assert.equal(cardMetadata.truncateLocalSkillCardDescription("é".repeat(limit)), "é".repeat(limit));
 
     const truncated = cardMetadata.truncateLocalSkillCardDescription(
-      `${"技".repeat(limit - 2)}😀tail`,
+      `${"é".repeat(limit - 2)}😀tail`,
     );
     assert.equal(Array.from(truncated).length, limit);
     assert.equal(truncated.endsWith("…"), true);

@@ -51,10 +51,10 @@ export function applyTerminalEventToSessions(
     return sortTerminalSessions(next);
   }
 
-  // 只有 created 才把未知会话加入列表。其他 kind(exit/resized/renamed/
-  // reconnecting…)对未知 id 一律忽略:close 与 PTY reader 线程存在竞态,
-  // 迟到的 exit 可能在 closed 之后送达,若照单追加会把刚关闭的会话复活成
-  // 幽灵(dock 冒出 attach 必败的 tab)。
+  // Only created adds an unknown session to the list. Other kinds (exit/resized/renamed/
+  // reconnecting...) always ignore unknown ids: there is a race between close and the PTY reader
+  // thread, so a late exit may arrive after closed; appending it blindly would resurrect a
+  // just-closed session as a ghost (a tab appearing in the dock whose attach is doomed to fail).
   if (event.kind === "created") {
     return sortTerminalSessions([...current, session]);
   }

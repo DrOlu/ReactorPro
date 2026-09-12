@@ -295,15 +295,19 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
   }
 
   const systemProxy = settings.system.systemProxy;
-  // host/port/username/password 走"本地草稿 + blur 提交"：失焦才写入 settings，
-  // 避免逐字符触发同步；且 WebUI 设置 state 持久前会脱敏密码，草稿避免输入即被清空。
+  // host/port/username/password use "local draft + blur commit": they are written to
+  // settings only on blur, avoiding a sync on every keystroke; also, the WebUI masks
+  // the password before persisting settings state, so the draft keeps input from being
+  // cleared as it is typed.
   const [proxyHostDraft, setProxyHostDraft] = useState<string | null>(null);
   const [proxyPortDraft, setProxyPortDraft] = useState<string | null>(null);
   const [proxyUsernameDraft, setProxyUsernameDraft] = useState<string | null>(null);
   const [proxyPasswordDraft, setProxyPasswordDraft] = useState<string | null>(null);
-  // 护栏 A：host + port 有效才算配置可用（端口在启用时必填有效）。
-  // 用"草稿优先"的生效值计算：blur 提交前开关若仍禁用，点击开关触发的 blur
-  // 会先把按钮变回可用，但落在禁用按钮上的这次 click 已被浏览器吞掉，需点两次。
+  // Guardrail A: the config is usable only when host + port are valid (the port is
+  // required and valid when enabled). Compute using the "draft-first" effective values:
+  // if the toggle is still disabled before the blur commit, the blur triggered by
+  // clicking the toggle would first make the button usable, but that click landing on
+  // the disabled button has already been swallowed by the browser, requiring a second click.
   const effectiveProxyHost = (proxyHostDraft ?? systemProxy.host).trim();
   const effectiveProxyPort =
     proxyPortDraft !== null ? Number.parseInt(proxyPortDraft, 10) : systemProxy.port;
@@ -313,7 +317,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
     effectiveProxyPort >= 1 &&
     effectiveProxyPort <= 65535;
   const systemProxyInvalid = systemProxy.enabled && !proxyConfigValid;
-  // 配置无效且当前未启用时禁止开启开关（护栏 A）；已启用时始终允许关闭。
+  // Disallow enabling the toggle when the config is invalid and currently disabled (Guardrail A); disabling is always allowed when already enabled.
   const proxyToggleDisabled = !systemProxy.enabled && !proxyConfigValid;
   const [proxyDetailsOpen, setProxyDetailsOpen] = useState(false);
 
@@ -421,7 +425,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
               >
                 <SettingsSelectTrigger>
                   <SelectValue>
-                    {settings.locale === "zh-CN" ? "🇨🇳  简体中文" : "🇺🇸  English"}
+                    {settings.locale === "zh-CN" ? "🇨🇳  Simplified Chinese" : "🇺🇸  English"}
                   </SelectValue>
                 </SettingsSelectTrigger>
                 <SettingsSelectContent>

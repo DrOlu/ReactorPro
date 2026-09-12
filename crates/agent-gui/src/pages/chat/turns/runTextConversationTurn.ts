@@ -218,15 +218,19 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
   // the status channel has no other owner between switch and first delta.
   let failoverStatusVisible = false;
 
-  // 本次运行中出现过托管搜索的轮次：其 usage 是服务端多次内部调用的聚合值，
-  // 不能作为上下文锚点（搜索收尾异步替换消息对象，内容检测在提交时刻不可靠）。
+  // Rounds in this run that had hosted search: their usage is an aggregate of
+  // several server-side internal calls and cannot serve as a context anchor
+  // (search finalization asynchronously replaces the message object, so content
+  // detection at commit time is unreliable).
   const hostedSearchRounds = new Set<number>();
 
   function commitAssistantRoundMeta(assistant: AssistantMessage, round: number) {
     const suppressUsageAnchors = hostedSearchRounds.has(round);
     compaction.observeContextMessages([assistant], { suppressUsageAnchors });
-    // 与 agent 模式同一约定：用量环锚点不随事件携带，两端倒扫都从 meta 的
-    // usage + stopReason 现算（共享层 assistantAnchorTokens），meta 只发原始事实。
+    // Same convention as agent mode: the usage-ring anchor is not carried with
+    // the event; both sides' back-scan computes it on the spot from meta's
+    // usage + stopReason (shared-layer assistantAnchorTokens), and meta emits
+    // only raw facts.
     gatewayBridgeEvents.queueToken("", {
       round,
       provider: assistant.provider,
@@ -327,9 +331,11 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     trajectory.stepStart(textRound, headerId);
   }
 
-  // 文本模式同样在 provider 边界追加 system 后缀（textOnlyRuntime 的规则段），
-  // 且必须每轮重注：控制器按会话常驻，切回文本模式后若残留 agent 模式的
-  // toolsSuffix 估算（~4k），账本与检查点估值会系统性虚高。
+  // Text mode likewise appends a system suffix at the provider boundary (the
+  // textOnlyRuntime rules segment), and it must be re-injected every turn: the
+  // controller persists per conversation, and if an agent-mode toolsSuffix
+  // estimate (~4k) lingers after switching back to text mode, the ledger and
+  // checkpoint estimates would be systematically inflated.
   compaction.noteFixedOverheadTokens(estimateTextTokens(buildTextOnlySystemSuffix()));
 
   await compaction.maybeCompactPreSend({
@@ -398,7 +404,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
                   });
                   failoverStatusVisible = true;
                   updateGatewayBridgeToolStatus(
-                    `第 ${textRound} 轮：${fromLabel} 不可用，正在切换到 ${toLabel}...`,
+                    `Round ${textRound}: ${fromLabel} is unavailable, switching to ${toLabel}...`,
                   );
                 },
               }
@@ -463,8 +469,10 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
               round: textRound,
               conversation_id: conversationId,
             });
-            // 思考只能挂在 live round 上，草稿通道没有思考块；切过去前先把已有草稿
-            // 正文喂进这一轮，否则渲染层改用 live round 后那段文字会消失。
+            // Thinking can only be attached to a live round; the draft channel
+            // has no thinking blocks. Before switching over, feed any existing
+            // draft text into this round, or that text would disappear once the
+            // render layer switches to the live round.
             const shouldSeedExistingText =
               !textModeUsesLiveRounds && streamedAssistantText.length > 0;
             ensureTextLiveRound(textRound);
@@ -496,15 +504,17 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
           onRetryStatus: (attempt, maxAttempts, errorMessage, plannedDelayMs, providerLabel) => {
             trajectory.noteRetry(textRound, {
               attempt,
-              // 回调的 maxAttempts 已是重试预算——withStreamRetry 传入前已减去
-              // 首次尝试（与状态提示 "(n/m)" 的 m 同口径），直接落账。
+              // The callback's maxAttempts is already the retry budget —
+              // withStreamRetry subtracts the first attempt before passing it in
+              // (the same convention as the m in the "(n/m)" status hint), so
+              // record it directly.
               maxRetries: maxAttempts,
               ...(plannedDelayMs === undefined ? {} : { delayMs: plannedDelayMs }),
               ...(errorMessage === "" ? {} : { error: errorMessage }),
-              // 与 agent 模式同口径:failover 下把重试归属到具体候选。
+              // Same convention as agent mode: under failover, attribute the retry to the specific candidate.
               ...(providerLabel === undefined ? {} : { provider: providerLabel }),
             });
-            updateGatewayBridgeToolStatus(`连接已断开，正在重试 (${attempt}/${maxAttempts})...`);
+            updateGatewayBridgeToolStatus(`Connection lost, retrying (${attempt}/${maxAttempts})...`);
             retryAttemptsForAttempt.push({
               attempt,
               maxAttempts,
@@ -650,8 +660,10 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
       sessionId,
       conversationId,
       workdir: conversationCwd,
-      // 抽取子模型看到的必须是用户真正说的话:memory 增量块只服务主模型的缓存,
-      // 混进来会把索引行当成用户发言,既撑破短消息门控又诱发重复写入。
+      // The extraction sub-model must see only what the user actually said:
+      // memory increment blocks serve only the main model's cache, and mixing
+      // them in would treat index lines as user speech, both blowing past the
+      // short-message gate and inducing duplicate writes.
       messages: buildPreparedContext(finalState, undefined, { includeMemoryTurnUpdates: false })
         .messages,
       statusText: memoryExtractionStatusText,

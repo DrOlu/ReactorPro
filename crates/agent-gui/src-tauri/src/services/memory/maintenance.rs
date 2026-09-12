@@ -84,7 +84,7 @@ impl MemoryStore {
                 [],
                 |row| row.get::<_, i64>(0),
             )
-            .map_err(|e| format!("读取记忆状态失败：{e}"))?;
+            .map_err(|e| format!("Failed to read memory state: {e}"))?;
         let (is_in_cloud, cloud_provider) = detect_sync_root(&self.root);
         Ok(MemoryPathsInfo {
             root: self.root.to_string_lossy().to_string(),
@@ -154,13 +154,13 @@ impl MemoryStore {
                 ",
             )
         }
-        .map_err(|e| format!("准备记忆拒绝日志查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare memory rejection log query: {e}"))?;
         let rows = if let Some(hash) = workdir_hash.as_deref() {
             stmt.query_map(params![cutoff_ms, hash, limit as i64], map_row)
         } else {
             stmt.query_map(params![cutoff_ms, limit as i64], map_row)
         }
-        .map_err(|e| format!("读取记忆拒绝日志失败：{e}"))?;
+        .map_err(|e| format!("Failed to read memory rejection log: {e}"))?;
 
         // De-duplicate by slug, keeping the most recent rejection. Audit log
         // may record the same slug being deleted multiple times across a user
@@ -168,7 +168,7 @@ impl MemoryStore {
         let mut seen_entries = std::collections::HashSet::new();
         let mut entries = Vec::new();
         for row in rows {
-            let entry = row.map_err(|e| format!("读取记忆拒绝行失败：{e}"))?;
+            let entry = row.map_err(|e| format!("Failed to read memory rejection row: {e}"))?;
             let key = (
                 entry.scope.clone(),
                 entry.workdir_hash.clone(),
@@ -191,12 +191,12 @@ impl MemoryStore {
             .root
             .join(".quarantine")
             .join(format!("wiped-{}", now_ms()));
-        fs::create_dir_all(&quarantine).map_err(|e| format!("创建记忆备份目录失败：{e}"))?;
+        fs::create_dir_all(&quarantine).map_err(|e| format!("Failed to create memory backup directory: {e}"))?;
         for name in ["global", "projects", DB_FILENAME] {
             let src = self.root.join(name);
             if src.exists() {
                 let dst = quarantine.join(name);
-                fs::rename(&src, &dst).map_err(|e| format!("备份记忆 {name} 失败：{e}"))?;
+                fs::rename(&src, &dst).map_err(|e| format!("Failed to back up memory {name}: {e}"))?;
             }
         }
         ensure_root_dirs(&self.root)?;
@@ -218,7 +218,7 @@ impl MemoryStore {
         conn.execute_batch(
             "DELETE FROM memory_meta; DELETE FROM memory_fts; DELETE FROM memory_fts_tri;",
         )
-        .map_err(|e| format!("清空记忆索引失败：{e}"))?;
+        .map_err(|e| format!("Failed to clear memory index: {e}"))?;
         let files = self.collect_memory_files()?;
         for parsed in files {
             if let Err(error) = index_parsed_file(&mut conn, &parsed, &parsed.path, parsed.archived)
@@ -239,9 +239,9 @@ impl MemoryStore {
             return Ok(());
         }
         let today = Local::now().date_naive();
-        let entries = fs::read_dir(&daily_dir).map_err(|e| format!("读取 daily 目录失败：{e}"))?;
+        let entries = fs::read_dir(&daily_dir).map_err(|e| format!("Failed to read daily directory: {e}"))?;
         for entry in entries {
-            let entry = entry.map_err(|e| format!("读取 daily 文件失败：{e}"))?;
+            let entry = entry.map_err(|e| format!("Failed to read daily file: {e}"))?;
             let path = entry.path();
             if !path.is_file() || path.extension().and_then(|value| value.to_str()) != Some("md") {
                 continue;
@@ -272,7 +272,7 @@ impl MemoryStore {
             }
             let archive_dir = daily_dir.join(".archive").join(format!("{}", date.year()));
             fs::create_dir_all(&archive_dir)
-                .map_err(|e| format!("创建 daily 归档目录失败：{e}"))?;
+                .map_err(|e| format!("Failed to create daily archive directory: {e}"))?;
             let target = archive_dir.join(
                 path.file_name()
                     .ok_or_else(|| "daily file has no file name".to_string())?,
@@ -286,7 +286,7 @@ impl MemoryStore {
             }
             fs::rename(&path, &target).map_err(|e| {
                 format!(
-                    "归档 daily 记忆 {} -> {} 失败：{e}",
+                    "Failed to archive daily memory {} -> {}: {e}",
                     path.display(),
                     target.display()
                 )
@@ -305,9 +305,9 @@ impl MemoryStore {
             return Ok(());
         }
         let cutoff = now_ms() - 7 * 24 * 60 * 60 * 1000;
-        for entry in fs::read_dir(&dir).map_err(|e| format!("读取记忆隔离目录失败：{e}"))?
+        for entry in fs::read_dir(&dir).map_err(|e| format!("Failed to read memory quarantine directory: {e}"))?
         {
-            let entry = entry.map_err(|e| format!("读取记忆隔离目录项失败：{e}"))?;
+            let entry = entry.map_err(|e| format!("Failed to read memory quarantine directory entry: {e}"))?;
             let name = entry.file_name().to_string_lossy().to_string();
             if !name.starts_with("wiped-") {
                 continue;
@@ -329,9 +329,9 @@ impl MemoryStore {
             if !dir.exists() {
                 continue;
             }
-            for entry in fs::read_dir(&dir).map_err(|e| format!("读取记忆整理快照目录失败：{e}"))?
+            for entry in fs::read_dir(&dir).map_err(|e| format!("Failed to read memory maintenance snapshot directory: {e}"))?
             {
-                let entry = entry.map_err(|e| format!("读取记忆整理快照目录项失败：{e}"))?;
+                let entry = entry.map_err(|e| format!("Failed to read memory maintenance snapshot directory entry: {e}"))?;
                 let name = entry.file_name().to_string_lossy().to_string();
                 let ts = name
                     .split('.')
@@ -352,7 +352,7 @@ fn render_scope_index<'a>(
     dir: &Path,
     entries: impl Iterator<Item = &'a MemoryMeta>,
 ) -> Result<(), String> {
-    fs::create_dir_all(dir).map_err(|e| format!("创建 MEMORY.md 目录失败：{e}"))?;
+    fs::create_dir_all(dir).map_err(|e| format!("Failed to create MEMORY.md directory: {e}"))?;
     let mut rows = entries
         .filter(|entry| entry.memory_type != "daily")
         .cloned()
@@ -365,7 +365,7 @@ fn render_scope_index<'a>(
     let mut lines = vec![
         "# MEMORY",
         "",
-        "This file is auto-generated by LiveAgent. Edit individual memory Markdown files instead.",
+        "This file is auto-generated by ReactorPro. Edit individual memory Markdown files instead.",
         "",
     ]
     .into_iter()
@@ -406,7 +406,7 @@ fn fuzzy_candidates(conn: &Connection, slug: &str) -> Result<Vec<Value>, String>
         .prepare(
             "SELECT slug, scope FROM memory_meta WHERE slug LIKE ?1 ORDER BY updated_at DESC LIMIT 3",
         )
-        .map_err(|e| format!("准备记忆候选查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare memory candidate query: {e}"))?;
     let rows = stmt
         .query_map(params![pattern], |row| {
             Ok(json!({
@@ -414,9 +414,9 @@ fn fuzzy_candidates(conn: &Connection, slug: &str) -> Result<Vec<Value>, String>
                 "scope": row.get::<_, String>(1)?
             }))
         })
-        .map_err(|e| format!("查询记忆候选失败：{e}"))?;
+        .map_err(|e| format!("Failed to query memory candidates: {e}"))?;
     rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("读取记忆候选失败：{e}"))
+        .map_err(|e| format!("Failed to read memory candidates: {e}"))
 }
 
 fn detect_sync_root(path: &Path) -> (bool, Option<String>) {

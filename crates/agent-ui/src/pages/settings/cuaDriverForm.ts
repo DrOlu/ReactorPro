@@ -7,14 +7,15 @@ import {
 } from "@liveagent/ui/contracts/mcpServerDefaults";
 
 /**
- * CUA 设置页的纯逻辑：受管条目的查找、策略键推导、超时钳制、探测缓存、
- * 配置漂移判断。
+ * Pure logic for the CUA settings page: managed-entry lookup, policy key derivation, timeout
+ * clamping, probe caching, and configuration drift detection.
  *
- * 与组件分开是因为这些判断全是「出了错用户才会发现」的那类——策略键算错
- * 会让页面显示的审批档位和实际执行的不是同一条，超时钳制漏了会把 "6" 存成
- * 6ms，漂移判断缺失会让界面显示一个根本不会被执行的路径。它们值得单测，
- * 而组件本身（布局、图标、文案）不值得。同 `backupSyncForm.ts` /
- * `aboutDate.ts` 的分工。
+ * It is separated from the component because these decisions are all of the "the user only finds
+ * out once something is wrong" kind -- a miscomputed policy key would make the approval tier shown
+ * on the page differ from the one actually enforced, a missed timeout clamp would store "6" as
+ * 6ms, and a missing drift check would show a path that is never actually executed. They deserve
+ * unit tests, while the component itself (layout, icons, copy) does not. Same division of labor as
+ * `backupSyncForm.ts` / `aboutDate.ts`.
  */
 
 export type CuaProbe = {
@@ -23,7 +24,7 @@ export type CuaProbe = {
   version?: string | null;
   mcpCommand?: string | null;
   mcpArgs?: string[];
-  /** 本平台是否有系统授权门槛。只有 macOS 为 true。 */
+  /** Whether this platform has a system authorization gate. True only on macOS. */
   permissionsRequired?: boolean;
   error?: string | null;
 };
@@ -47,10 +48,10 @@ export type CuaInstallProgress = { stream: string; line: string };
 
 export const CUA_DEFAULT_TIMEOUT_MS = 60_000;
 
-/** 单次调用超时的上限。再长也没有意义——GUI 操作不该跑十分钟。 */
+/** Upper bound on a single call's timeout. Any longer is pointless -- a GUI operation should not run for ten minutes. */
 export const CUA_MAX_TIMEOUT_MS = 600_000;
 
-/** 下限。低于这个值任何一次调用都必然超时，等于把功能关掉。 */
+/** Lower bound. Below this value every call is guaranteed to time out, effectively disabling the feature. */
 export const CUA_MIN_TIMEOUT_MS = 1_000;
 
 export const CUA_INSTALL_PROGRESS_EVENT = "cua_driver_install_progress";
@@ -59,42 +60,44 @@ export const CUA_MAX_LOG_LINES = 200;
 
 export const CUA_UPSTREAM_REPO_URL = "https://github.com/trycua/cua";
 
-/** 找出受管的那条 cua-driver 条目（大小写与空白不敏感）。 */
+/** Finds the managed cua-driver entry (case- and whitespace-insensitive). */
 export function findCuaDriverServer(servers: readonly McpServerConfig[]) {
   return servers.find((server) => isCuaDriverServerId(server.id));
 }
 
-/** 同上，返回下标——写回时要按原位置改。找不到返回 -1。 */
+/** Same as above but returns the index -- writes back at the original position. Returns -1 when not found. */
 export function findCuaDriverServerIndex(servers: readonly McpServerConfig[]) {
   return servers.findIndex((server) => isCuaDriverServerId(server.id));
 }
 
 /**
- * 该条目可能命中的策略键，按查找顺序：原文键优先，规范化键兜底。
+ * The policy keys this entry may match, in lookup order: the raw-text key first, with the
+ * normalized key as a fallback.
  *
- * 与运行时（`resolveToolPolicy`）共用 contracts 里的同一份实现与顺序。
- * 这一页显示的档位必须就是运行时将要执行的那一条——两边各查各的键，
- * 一份 `id: "CUA-DRIVER"` + `"server:cua-driver": "allow"` 的旧配置就会
- * 出现「页面显示 ask、实际执行 allow」。
+ * Shares the same implementation and order from contracts as the runtime (`resolveToolPolicy`). The
+ * tier shown on this page must be exactly the one the runtime will enforce -- if the two looked up
+ * their own keys, an old config with `id: "CUA-DRIVER"` + `"server:cua-driver": "allow"` would
+ * show ask on the page while actually enforcing allow.
  */
 export function cuaPolicyKeyCandidates(entry: McpServerConfig | undefined): string[] {
   return serverPolicyKeyCandidates(entry?.id.trim() || CUA_DRIVER_SERVER_ID);
 }
 
 /**
- * 写入时用的策略键：跟随条目里那份 id 的原文，而不是常量。已有配置可能把
- * id 写成 `CUA-DRIVER`，运行时的候选列表以原文键优先，写到别处会被它盖过。
+ * The policy key used when writing: follows the raw text of the id in the entry, not a constant.
+ * Existing configs may spell the id `CUA-DRIVER`, and the runtime's candidate list prioritizes the
+ * raw-text key, so writing elsewhere would be shadowed by it.
  */
 export function cuaServerPolicyKey(entry: McpServerConfig | undefined): string {
   return cuaPolicyKeyCandidates(entry)[0];
 }
 
-/** 该条目在无显式配置时的生效策略。受管条目恒为 ask。 */
+/** The effective policy for this entry when there is no explicit config. The managed entry is always ask. */
 export function cuaDefaultPolicy(entry: McpServerConfig | undefined): ToolPolicy {
   return effectiveServerPolicyDefault(entry ?? { id: CUA_DRIVER_SERVER_ID });
 }
 
-/** 当前生效的审批策略：显式配置优先（按运行时的同一候选顺序），否则走缺省。 */
+/** The currently effective approval policy: explicit config first (in the runtime's same candidate order), otherwise the default. */
 export function readCuaPolicy(
   policies: Record<string, ToolPolicy> | undefined,
   entry: McpServerConfig | undefined,
@@ -107,13 +110,15 @@ export function readCuaPolicy(
 }
 
 /**
- * 写回审批策略，返回新的 toolPolicies（空表返回 undefined，与其他设置一致）。
+ * Writes back the approval policy and returns the new toolPolicies (an empty table returns
+ * undefined, consistent with other settings).
  *
- * 两条规则：
- * - 只有回到缺省值才删 key。受管条目的缺省是 ask，所以「始终允许」必须显式
- *   落库，删掉反而会退回 ask；
- * - 写入前清掉**全部**候选键。id 写成 `CUA-DRIVER` 时原文键与规范化键会同时
- *   存在，留着重影会让 `resolveToolPolicy` 的回落读到上一次的值。
+ * Two rules:
+ * - Delete the key only when returning to the default. The managed entry's default is ask, so
+ *   "always allow" must be persisted explicitly; deleting it would fall back to ask;
+ * - Clear **all** candidate keys before writing. When the id is spelled `CUA-DRIVER`, the raw-text
+ *   key and the normalized key both exist, and leaving that shadowing behind would make
+ *   `resolveToolPolicy`'s fallback read the previous value.
  */
 export function applyCuaPolicy(
   policies: Record<string, ToolPolicy> | undefined,
@@ -126,27 +131,28 @@ export function applyCuaPolicy(
   return Object.keys(current).length > 0 ? current : undefined;
 }
 
-/** 由探测结果生成受管条目。 */
+/** Builds the managed entry from a probe result. */
 export function buildCuaServerConfig(probe: CuaProbe): McpServerConfig {
   return {
     id: CUA_DRIVER_SERVER_ID,
-    description: "trycua/cua — CUA 驱动（跨平台）",
+    description: "trycua/cua — CUA driver (cross-platform)",
     docsUrl: CUA_UPSTREAM_REPO_URL,
     enabled: true,
     transport: "stdio",
-    // 绝对路径而非裸命令：MCP 子进程继承的是 GUI 进程那份窄 PATH，
-    // 通常不含 ~/.local/bin —— 官方安装脚本的默认落点。
+    // An absolute path rather than a bare command: the MCP subprocess inherits the GUI process's
+    // narrow PATH, which usually does not include ~/.local/bin -- the official installer's default location.
     command: probe.mcpCommand || probe.path || "cua-driver",
-    // 刻意不带 `--direct`：那会让 MCP 进程沿用 LiveAgent 的 TCC 归属，
-    // 等于要求 LiveAgent 自己去拿辅助功能与屏幕录制授权。默认模式经
-    // CuaDriver.app 的守护进程代理，授权归它。
+    // Deliberately without `--direct`: that would make the MCP process inherit ReactorPro's TCC
+    // attribution, effectively requiring ReactorPro to obtain accessibility and screen recording
+    // authorization itself. The default mode proxies through the CuaDriver.app daemon, which owns
+    // the authorization.
     args: probe.mcpArgs?.length ? probe.mcpArgs : ["mcp"],
     url: "",
     timeoutMs: CUA_DEFAULT_TIMEOUT_MS,
   };
 }
 
-/** 把输入框里的草稿钳到合法区间；非法值回落到 `fallback`。 */
+/** Clamps the draft in the input box to the valid range; invalid values fall back to `fallback`. */
 export function clampCuaTimeoutMs(draft: string, fallback: number): number {
   const parsed = Number.parseInt(draft.trim(), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -154,12 +160,13 @@ export function clampCuaTimeoutMs(draft: string, fallback: number): number {
 }
 
 /**
- * 条目里存着的命令与刚探测到的路径是否分叉。
+ * Whether the command stored in the entry has diverged from the path just probed.
  *
- * 存在的理由：界面必须显示**将要执行的东西**，而不是**碰巧存在的东西**。
- * 条目的 command 是建条目那一刻写死的，用户把 cua-driver 重装到别的位置、
- * 或导入了一份 command 指向别处的同名条目之后，两者就不是一回事了——此时
- * 显示探测路径等于让用户以为一切正常，而实际启动的是另一个二进制。
+ * Reason for existing: the UI must show **what will be executed**, not **what happens to exist**.
+ * The entry's command was fixed at the moment the entry was created, so once the user reinstalls
+ * cua-driver elsewhere, or imports a same-named entry whose command points somewhere else, the two
+ * are no longer the same thing -- showing the probed path then would make the user think all is
+ * well while a different binary is actually launched.
  */
 export function cuaCommandDrift(
   entry: McpServerConfig | undefined,
@@ -171,7 +178,7 @@ export function cuaCommandDrift(
   return { configured, probed };
 }
 
-/** 界面上应当显示的命令：有条目就显示条目里的，否则显示探测到的。 */
+/** The command to show in the UI: the entry's own if there is an entry, otherwise the probed one. */
 export function cuaDisplayCommand(
   entry: McpServerConfig | undefined,
   probe: CuaProbe | null,
@@ -179,19 +186,19 @@ export function cuaDisplayCommand(
   return entry?.command?.trim() || probe?.path?.trim() || null;
 }
 
-/** 把条目的 command / args 对齐到最新探测结果，其余字段（超时等）保留。 */
+/** Aligns the entry's command / args with the latest probe result, keeping the other fields (timeout, etc.). */
 export function realignCuaServerConfig(entry: McpServerConfig, probe: CuaProbe): McpServerConfig {
   const fresh = buildCuaServerConfig(probe);
   return { ...entry, command: fresh.command, args: fresh.args };
 }
 
 /**
- * 探测结果的进程内缓存。
+ * In-process cache for probe results.
  *
- * 每次挂载都重新探测意味着每次切到 CUA 页都要 spawn 子进程——在 Windows 上
- * 是控制台闪窗，在 macOS 上则可能唤起 CuaDriver.app 的守护进程。这些事实在
- * 一分钟内不会变，来回切页没有重查的理由。「重新检测」、安装完成、授权完成
- * 三处显式跳过缓存。
+ * Re-probing on every mount would mean spawning a subprocess every time the user switches to the
+ * CUA page -- a flashing console window on Windows, or possibly waking the CuaDriver.app daemon on
+ * macOS. These facts do not change within a minute, so there is no reason to re-check when switching
+ * pages. "Re-detect", install completion, and authorization completion all explicitly bypass the cache.
  */
 export const CUA_PROBE_CACHE_TTL_MS = 60_000;
 
@@ -212,12 +219,12 @@ export function writeCuaProbeCache(
   probeCache = { at: now, probe, permissions };
 }
 
-/** 授权状态刚变过时只更新那一半，不必把探测也作废。 */
+/** When the authorization state just changed, update only that half without invalidating the probe too. */
 export function patchCuaProbeCachePermissions(permissions: CuaPermissions) {
   if (probeCache) probeCache = { ...probeCache, permissions };
 }
 
-/** 供测试重置。 */
+/** For tests to reset. */
 export function resetCuaProbeCache() {
   probeCache = null;
 }

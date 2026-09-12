@@ -50,7 +50,7 @@ fn row_to_share_status(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatHistoryS
 fn ensure_chat_history_exists(conn: &Connection, id: &str) -> Result<String, String> {
     let chat_id = id.trim();
     if chat_id.is_empty() {
-        return Err("历史对话 id 不能为空".to_string());
+        return Err("history conversation id must not be empty".to_string());
     }
 
     conn.query_row(
@@ -59,8 +59,8 @@ fn ensure_chat_history_exists(conn: &Connection, id: &str) -> Result<String, Str
         |row| row.get::<_, String>(0),
     )
     .optional()
-    .map_err(|e| format!("检查历史对话是否存在失败：{e}"))?
-    .ok_or_else(|| "未找到对应的历史对话".to_string())
+    .map_err(|e| format!("failed to check whether the history conversation exists: {e}"))?
+    .ok_or_else(|| "No matching history conversation found".to_string())
 }
 
 fn get_chat_history_share_status_sync(
@@ -79,7 +79,7 @@ fn get_chat_history_share_status_sync(
             row_to_share_status,
         )
         .optional()
-        .map_err(|e| format!("读取历史对话分享状态失败：{e}"))?;
+        .map_err(|e| format!("failed to read history conversation share status: {e}"))?;
 
     Ok(status.unwrap_or_else(|| empty_chat_history_share_status(&chat_id)))
 }
@@ -105,7 +105,7 @@ fn set_chat_history_share_enabled_sync(
                 row_to_share_status,
             )
             .optional()
-            .map_err(|e| format!("读取历史对话分享状态失败：{e}"))?;
+            .map_err(|e| format!("failed to read history conversation share status: {e}"))?;
         let desired_redact_tool_content = redact_tool_content
             .or_else(|| current.as_ref().map(|status| status.redact_tool_content))
             .unwrap_or(false);
@@ -129,7 +129,7 @@ fn set_chat_history_share_enabled_sync(
                         chat_id
                     ],
                 )
-                .map_err(|e| format!("更新历史对话分享脱敏设置失败：{e}"))?;
+                .map_err(|e| format!("failed to update history conversation share redaction setting: {e}"))?;
                 return get_chat_history_share_status_sync(conn, &chat_id);
             }
         }
@@ -165,12 +165,12 @@ fn set_chat_history_share_enabled_sync(
                     break;
                 }
                 Err(error) if is_unique_constraint_error(&error) => continue,
-                Err(error) => return Err(format!("开启历史对话分享失败：{error}")),
+                Err(error) => return Err(format!("failed to enable history conversation sharing: {error}")),
             }
         }
 
         if !wrote_share_token {
-            return Err("开启历史对话分享失败：生成唯一分享路径失败".to_string());
+            return Err("failed to enable history conversation sharing: could not generate a unique share path".to_string());
         }
     } else {
         conn.execute(
@@ -181,7 +181,7 @@ fn set_chat_history_share_enabled_sync(
             ",
             params![now, chat_id],
         )
-        .map_err(|e| format!("关闭历史对话分享失败：{e}"))?;
+        .map_err(|e| format!("failed to disable history conversation sharing: {e}"))?;
         if let Some(redact_tool_content) = redact_tool_content {
             conn.execute(
                 "
@@ -191,7 +191,7 @@ fn set_chat_history_share_enabled_sync(
                 ",
                 params![if redact_tool_content { 1 } else { 0 }, now, chat_id],
             )
-            .map_err(|e| format!("更新历史对话分享脱敏设置失败：{e}"))?;
+            .map_err(|e| format!("failed to update history conversation share redaction setting: {e}"))?;
         }
     }
 
@@ -204,7 +204,7 @@ fn resolve_chat_history_share_sync(
 ) -> Result<ChatHistoryRecord, String> {
     let share_token = token.trim();
     if share_token.is_empty() {
-        return Err("分享 token 不能为空".to_string());
+        return Err("Share token must not be empty".to_string());
     }
 
     let conversation_id = conn
@@ -218,8 +218,8 @@ fn resolve_chat_history_share_sync(
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|e| format!("读取历史对话分享链接失败：{e}"))?
-        .ok_or_else(|| "分享链接不存在或已关闭".to_string())?;
+        .map_err(|e| format!("Failed to read history conversation share link: {e}"))?
+        .ok_or_else(|| "Share link does not exist or has been closed".to_string())?;
 
     let mut record = get_record_by_id(conn, &conversation_id)?;
     record.segments = load_segments(conn, &record.id)?;

@@ -119,7 +119,7 @@ export class GatewayWebSocketTransport {
   protected reconnectNoticeTimer: number | null = null;
   protected reconnectAttempt = 0;
   protected reconnecting = false;
-  // hello 判定鉴权失败（随后 4401 关闭）：置位抑制自动重连，显式新连接尝试会清除。
+  // A hello judged as an authentication failure (followed by a 4401 close): sets a flag that suppresses automatic reconnects; an explicit new connection attempt clears it.
   protected authRejected = false;
   protected lastForegroundWakeupAt = 0;
   // A hidden tab must not paint offline state the user cannot see from
@@ -130,10 +130,10 @@ export class GatewayWebSocketTransport {
     this.noteForegroundWakeup(event);
   };
 
-  // activeAgentId 始终是明确目标；首次连接从 Agent 目录自动选择并持久化。
+  // activeAgentId is always an explicit target; on first connect it is auto-selected from the agent directory and persisted.
   protected activeAgentId = "";
   protected activeAgentSelectionPromise: Promise<string> | null = null;
-  // agents 目录：由打标 status 事件与 agent_list 响应维护，含离线条目。
+  // agents directory: maintained from tagged status events and agent_list responses, including offline entries.
   protected agents = new Map<string, AgentStatus>();
   protected agentsListeners = new Set<(agents: AgentStatus[]) => void>();
   protected pendingAgentEvents = new Map<string, Array<{ type: string; payload: unknown }>>();
@@ -148,7 +148,7 @@ export class GatewayWebSocketTransport {
     return this.activeAgentId;
   }
 
-  // setActiveAgent 只接受明确目标；切换后重连，以目标 Agent 的快照重画状态。
+  // setActiveAgent accepts only an explicit target; after switching it reconnects and repaints state from the target agent's snapshot.
   setActiveAgent(agentId: string): void {
     const next = agentId.trim();
     if (!next) {
@@ -172,7 +172,7 @@ export class GatewayWebSocketTransport {
     }
   }
 
-  // listAgents 拉取 Agent 目录（含离线与仅签发凭证的条目）。
+  // listAgents fetches the agent directory (including offline entries and entries with only an issued credential).
   async listAgents(): Promise<AgentStatus[]> {
     if (!this.activeAgentId) {
       await this.ensureConnected();
@@ -628,7 +628,7 @@ export class GatewayWebSocketTransport {
               online: false,
             }
           : null,
-        "Gateway 正在重新连接...",
+        "Gateway is reconnecting...",
       );
     }, RECONNECT_NOTICE_DELAY_MS);
   }
@@ -655,7 +655,7 @@ export class GatewayWebSocketTransport {
     if (!this.shouldMaintainConnection()) {
       return;
     }
-    // 鉴权已被服务端拒绝：坏 token 的自动重连只会撞上同一个 4401。
+    // Authentication was already rejected by the server: automatically reconnecting with a bad token would only hit the same 4401.
     if (this.authRejected) {
       return;
     }
@@ -866,7 +866,7 @@ export class GatewayWebSocketTransport {
     let agentId = this.activeAgentId;
     if (requestRequiresAgentId(type)) {
       agentId = await this.ensureActiveAgent();
-      // 首次自动选中会主动重连，以便只回放目标 Agent 的快照。
+      // The first automatic selection actively reconnects so that only the target agent's snapshot is replayed.
       await this.ensureConnected();
     }
     return this.sendConnectedRequest<T>(type, payload, options, agentId);
@@ -936,7 +936,7 @@ export class GatewayWebSocketTransport {
     const socketUrl = buildWebSocketUrl();
     let reconnectAfterTimeout = false;
     this.connectPromise = new Promise<void>((resolve, reject) => {
-      // 显式连接尝试清除鉴权失败标记；自动重连循环不会反复敲门坏 token。
+      // An explicit connection attempt clears the auth-failure flag; the automatic reconnect loop will not keep knocking with a bad token.
       this.authRejected = false;
       const socket = new WebSocket(socketUrl, GATEWAY_V2_SUBPROTOCOL);
       socket.binaryType = "arraybuffer";
@@ -1036,7 +1036,7 @@ export class GatewayWebSocketTransport {
               this.handleWorkspaceActivityConnected();
             } else {
               void this.ensureActiveAgent().catch(() => {
-                // 没有可选 Agent 时由具体业务请求展示错误。
+                // When no agent is available, the individual business request surfaces the error.
               });
             }
             if (!settled) {
@@ -1069,7 +1069,7 @@ export class GatewayWebSocketTransport {
     await this.connectPromise;
   }
 
-  // sendFrame 发送一帧已编码的 v2 二进制帧。
+  // sendFrame sends one encoded v2 binary frame.
   protected sendFrame(frame: Uint8Array<ArrayBuffer>) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       throw new Error("Gateway WebSocket is not connected");
@@ -1079,7 +1079,7 @@ export class GatewayWebSocketTransport {
 
   protected handleMessage(raw: unknown) {
     this.markInboundActivity();
-    // v2 链路只承载二进制帧；文本帧仅计入存活。
+    // The v2 link carries binary frames only; text frames count only toward liveness.
     if (!(raw instanceof ArrayBuffer) && !ArrayBuffer.isView(raw)) {
       return;
     }
@@ -1107,7 +1107,7 @@ export class GatewayWebSocketTransport {
       if (decoded.ok) {
         pending.resolve({ ok: true });
       } else {
-        // 服务端将以 4401 关闭：标记鉴权失败并阻断自动重连，交由上层展示鉴权错误。
+        // The server will close with 4401: mark authentication as failed and block automatic reconnects, leaving the auth error to be surfaced by the upper layer.
         this.authRejected = true;
         pending.reject(new Error(decoded.message || "unauthorized"));
       }
@@ -1115,7 +1115,7 @@ export class GatewayWebSocketTransport {
     }
 
     if (decoded.kind === "ping") {
-      // 应用层心跳：回送 protobuf pong。
+      // Application-level heartbeat: send back a protobuf pong.
       try {
         this.sendFrame(encodePongFrame(decoded.timestamp || Date.now()));
       } catch {
@@ -1126,7 +1126,7 @@ export class GatewayWebSocketTransport {
 
     if (decoded.kind === "event") {
       if (decoded.type === "status.event" && decoded.agentId) {
-        // 打标状态帧始终更新目录；业务监听只接收当前明确目标。
+        // Tagged status frames always update the directory; business listeners receive only the current explicit target.
         const nextStatus = decoded.payload as AgentStatus;
         const name = this.agents.get(decoded.agentId)?.name?.trim();
         this.agents.set(decoded.agentId, name ? { ...nextStatus, name } : nextStatus);
@@ -1165,7 +1165,7 @@ export class GatewayWebSocketTransport {
     pending.resolve(decoded.payload);
   }
 
-  // 分发广播事件；payload 已由适配层还原为既有归一化器需要的对象形状。
+  // Dispatches broadcast events; the adapter layer has already restored the payload to the object shape expected by the existing normalizers.
   protected handleEvent(type: string, payload: unknown) {
     if (type === "history.event") {
       const event = payload as GatewayHistoryEvent;

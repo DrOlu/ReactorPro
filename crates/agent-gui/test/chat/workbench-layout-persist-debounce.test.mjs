@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDomTestEnv } from "../helpers/dom-test-env.mjs";
 
-// useWindowWorkbench 布局落盘防抖:拖动分隔条等高频布局变更不得每次都同步写
-// localStorage;合并为尾随一次写入,且卸载(窗口关闭)前 flush 最后状态。
+// useWindowWorkbench layout persistence debounce: high-frequency layout changes such as dragging a divider
+// must not synchronously write to localStorage every time; they are merged into a single trailing write, and the
+// last state is flushed before unmount (window close).
 
 const env = await createDomTestEnv();
 const { React, act, createRoot } = env;

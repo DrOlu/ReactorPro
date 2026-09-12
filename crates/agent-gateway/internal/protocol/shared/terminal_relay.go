@@ -9,15 +9,17 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// 终端转发域逻辑（权限门控、列表合并/过滤、兴趣登记）：沿用既有处理器实现、行为不变，
-// v2 共用以免各自复制一份门控规则。
+// Terminal relay domain logic (permission gating, list merging/filtering,
+// interest registration): reuses the existing handler implementation with
+// unchanged behavior, shared by v2 so each caller does not duplicate the gating
+// rules.
 
-// TerminalFeaturesEnabled 判断任一 Web 终端功能是否开启。
+// TerminalFeaturesEnabled reports whether any web terminal feature is enabled.
 func TerminalFeaturesEnabled(sm session.AgentView) bool {
 	return sm.WebTerminalEnabled() || sm.WebSshTerminalEnabled()
 }
 
-// TerminalSessionAllowed 按会话类型（local/ssh）检查其对 Web 端是否可见。
+// TerminalSessionAllowed checks, by session kind (local/ssh), whether the session is visible to the web side.
 func TerminalSessionAllowed(sm session.AgentView, ts *gatewayv2.TerminalSession) bool {
 	if ts == nil {
 		return false
@@ -28,7 +30,7 @@ func TerminalSessionAllowed(sm session.AgentView, ts *gatewayv2.TerminalSession)
 	return sm.WebTerminalEnabled()
 }
 
-// TerminalSessionKindOf 归一化会话类型（空值按 local 处理）。
+// TerminalSessionKindOf normalizes the session kind (empty is treated as local).
 func TerminalSessionKindOf(ts *gatewayv2.TerminalSession) string {
 	if strings.TrimSpace(ts.GetKind()) == "ssh" {
 		return "ssh"
@@ -36,7 +38,7 @@ func TerminalSessionKindOf(ts *gatewayv2.TerminalSession) string {
 	return "local"
 }
 
-// TerminalEventAllowed 判断终端事件是否允许推送给 Web 端。
+// TerminalEventAllowed reports whether a terminal event may be pushed to the web side.
 func TerminalEventAllowed(sm session.AgentView, event *gatewayv2.TerminalEvent) bool {
 	if event == nil {
 		return false
@@ -44,7 +46,8 @@ func TerminalEventAllowed(sm session.AgentView, event *gatewayv2.TerminalEvent) 
 	if strings.TrimSpace(event.GetKind()) == "ssh_tabs_updated" {
 		return sm.WebSshTerminalEnabled()
 	}
-	// 端口转发事件只随 SSH 权限走：session 缓存缺失时不得回落到本地终端门。
+	// Port-forward events follow SSH permissions only: when the session cache is
+	// missing, they must not fall back to the local-terminal gate.
 	if strings.TrimSpace(event.GetKind()) == "ssh_local_forward" {
 		return sm.WebSshTerminalEnabled()
 	}
@@ -58,7 +61,7 @@ func TerminalEventAllowed(sm session.AgentView, event *gatewayv2.TerminalEvent) 
 	return sm.WebTerminalEnabled()
 }
 
-// TerminalRequestAllowed 按动作与目标会话类型做权限门控。
+// TerminalRequestAllowed gates permissions by action and target session kind.
 func TerminalRequestAllowed(sm session.AgentView, action string, sessionID string) bool {
 	switch action {
 	case "create_ssh", "answer_ssh_prompt", "cancel_ssh_prompt", "ssh_latency",
@@ -78,7 +81,7 @@ func TerminalRequestAllowed(sm session.AgentView, action string, sessionID strin
 	}
 }
 
-// TerminalPermissionError 返回动作被拒时的用户可读错误信息。
+// TerminalPermissionError returns a user-readable error message for a denied action.
 func TerminalPermissionError(action string) string {
 	switch action {
 	case "create_ssh", "answer_ssh_prompt", "cancel_ssh_prompt", "ssh_latency",
@@ -91,7 +94,7 @@ func TerminalPermissionError(action string) string {
 	}
 }
 
-// FinalizeTerminalResponse 统一后处理：list 结果与缓存快照合并、快照回写、按权限过滤并登记项目兴趣。
+// FinalizeTerminalResponse performs unified post-processing: merge list results with the cached snapshot, write the snapshot back, filter by permissions, and register project interest.
 func FinalizeTerminalResponse(
 	sm session.AgentView,
 	tracker *TerminalInterestTracker,
@@ -106,8 +109,9 @@ func FinalizeTerminalResponse(
 	return resp
 }
 
-// MergeTerminalListWithCachedSnapshot 把桌面端 list 响应缺失、网关缓存尚存的会话并入结果
-// （桌面端重连早期列表可能不全）。
+// MergeTerminalListWithCachedSnapshot merges sessions that are missing from the
+// desktop list response but still present in the gateway cache into the result
+// (the list may be incomplete early after a desktop reconnect).
 func MergeTerminalListWithCachedSnapshot(
 	sm session.AgentView,
 	action string,
@@ -151,7 +155,7 @@ func MergeTerminalListWithCachedSnapshot(
 	return clone
 }
 
-// FilterTerminalResponseForPermissions 过滤掉 Web 端无权看到的会话。
+// FilterTerminalResponseForPermissions filters out sessions the web side is not allowed to see.
 func FilterTerminalResponseForPermissions(
 	sm session.AgentView,
 	action string,
@@ -177,7 +181,7 @@ func FilterTerminalResponseForPermissions(
 	return clone
 }
 
-// RememberTerminalInterest 在列表/创建类动作后登记项目兴趣，供终端事件过滤使用。
+// RememberTerminalInterest registers project interest after list/create actions, for use in terminal event filtering.
 func RememberTerminalInterest(
 	tracker *TerminalInterestTracker,
 	action string,

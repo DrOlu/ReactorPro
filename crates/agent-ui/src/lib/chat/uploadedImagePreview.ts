@@ -25,8 +25,8 @@ function normalizeCachePart(value: string | undefined) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-// 预览身份 = workspaceRoot + absolutePath：附件读取只认导入时返回的绝对
-// 路径，旧版本仅持久化相对路径的附件不再提供预览。
+// Preview identity = workspaceRoot + absolutePath: attachment reads only honor the absolute
+// path returned at import time, and attachments persisted by older versions with only a relative path no longer offer a preview.
 export function getUploadedImagePreviewCacheKey(
   workspaceRoot: string | undefined,
   file: Pick<PendingUploadedFile, "absolutePath">,

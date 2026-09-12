@@ -2,7 +2,7 @@ import { SHARED_TRANSLATIONS } from "./sharedTranslations";
 
 export type Locale = "zh-CN" | "en-US";
 
-export const DEFAULT_LOCALE: Locale = "zh-CN";
+export const DEFAULT_LOCALE: Locale = "en-US";
 
 export const SUPPORTED_LOCALES = ["zh-CN", "en-US"] as const satisfies readonly Locale[];
 

@@ -55,7 +55,7 @@ test("one persistent sparkle marks the live turn; textual fillers are gone", () 
     /\{running \? <LiveSparkle paused=\{attentionRequired\} \/> : null\}/,
   );
   assert.match(activityRowSource, /\{row\.live \? <LiveSparkle/);
-  // The latest tool batch no longer fakes a "思考中" phase while idle — a real
+  // The latest tool batch no longer fakes a "Thinking" phase while idle — a real
   // reasoning segment shows its own row and the sparkle covers gaps.
   assert.doesNotMatch(toolTraceSource, /t\("chat\.thinking"\)/);
 });

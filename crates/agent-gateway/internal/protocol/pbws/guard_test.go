@@ -48,7 +48,7 @@ func TestVetAgentRequestAllowsReadOnlyCuaDriverActions(t *testing.T) {
 	}
 }
 
-// 安装与授权是桌面本机动作（联网执行安装脚本 / 弹 macOS TCC 对话框），浏览器不得下发。
+// Installation and authorization are local desktop actions (running an install script over the network / showing a macOS TCC dialog) and must not be dispatched by the browser.
 func TestVetAgentRequestRejectsCuaDriverProvisioning(t *testing.T) {
 	for _, action := range []string{"install", "permissions_grant", ""} {
 		env := &gatewayv2.GatewayEnvelope{

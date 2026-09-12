@@ -1,8 +1,10 @@
 /**
- * 布局 → 最终显示序列。
+ * Layout → final display sequence.
  *
- * 折叠、搜索过滤都在这里落定，组件只负责把结果画出来。放在纯逻辑层是为了能直接
- * 测折叠语义——「折叠一个 turn 之后还剩哪些行」这种规则埋在组件里就没法验证。
+ * Collapsing and search filtering are settled here; components only render the
+ * result. It lives in a pure logic layer so collapse semantics can be tested
+ * directly — a rule like "which rows remain after collapsing a turn" cannot be
+ * verified if buried inside a component.
  */
 
 import type { TrajectoryRecord, TrajectoryTurnModel } from "./types";
@@ -29,7 +31,7 @@ export function trajectoryDisplayItemHeight(item: TrajectoryDisplayItem): number
     : TRAJECTORY_DISPLAY_HEIGHTS.record;
 }
 
-/** 一个 turn 里除首行外还有内容才值得提供折叠。 */
+/** Collapsing is only worth offering when a turn has content beyond its first row. */
 function visibleRecordsOf(turn: TrajectoryTurnModel): TrajectoryRecord[] {
   return turn.groups.flatMap((group) =>
     group.records.filter((record) => record.requestOnly !== true),
@@ -37,10 +39,12 @@ function visibleRecordsOf(turn: TrajectoryTurnModel): TrajectoryRecord[] {
 }
 
 /**
- * 判断某条记录是否因为其上游 assistant 被折叠而应隐藏。
+ * Determines whether a record should be hidden because its upstream assistant
+ * is collapsed.
  *
- * 折叠 Calls 的语义是「收起这一步的工具调用」，所以隐藏范围是紧跟在被折叠
- * assistant 之后、直到下一条 assistant 之前的所有 tool/subtool。
+ * Collapsing Calls means "collapse this step's tool calls", so the hidden range
+ * is every tool/subtool immediately after the collapsed assistant up to the next
+ * assistant.
  */
 function collapsedCallIndexes(
   records: readonly TrajectoryRecord[],
@@ -60,11 +64,11 @@ function collapsedCallIndexes(
 }
 
 /**
- * 计算最终显示序列。
+ * Computes the final display sequence.
  *
- * @param turns - 布局结果。
- * @param options - 折叠状态与搜索命中集合。
- * @returns 扁平显示项；搜索无命中时为空数组。
+ * @param turns - the layout result.
+ * @param options - collapse state and the search-match set.
+ * @returns flat display items; an empty array when the search has no matches.
  */
 export function buildTrajectoryDisplayItems(
   turns: readonly TrajectoryTurnModel[],
@@ -80,7 +84,7 @@ export function buildTrajectoryDisplayItems(
     const records = visibleRecordsOf(turn);
     if (records.length === 0) continue;
 
-    // 搜索时折叠一律让位：命中的行必须可见，否则用户搜到了却看不到。
+    // Collapsing always yields to search: matching rows must be visible, or the user finds a match but cannot see it.
     const searching = options.searchMatchIndexes !== null;
     const matching = searching
       ? records.filter((record) => options.searchMatchIndexes?.has(record.index) === true)
@@ -115,7 +119,7 @@ export function buildTrajectoryDisplayItems(
   return items;
 }
 
-/** 可折叠的 turn 号集合，供「全部折叠」按钮判定状态。 */
+/** The set of collapsible turn numbers, used by the "Collapse all" button to determine its state. */
 export function collapsibleTrajectoryTurns(
   turns: readonly TrajectoryTurnModel[],
 ): readonly number[] {
@@ -124,7 +128,7 @@ export function collapsibleTrajectoryTurns(
   );
 }
 
-/** 名下带工具调用、因而可折叠的 assistant 记录身份。 */
+/** Identities of assistant records that have tool calls under them and are therefore collapsible. */
 export function collapsibleTrajectoryAssistants(
   turns: readonly TrajectoryTurnModel[],
 ): readonly string[] {

@@ -3,7 +3,7 @@ import type { CodexRequestFormat, PromptCacheHintMode, ProviderId } from "../../
 import { isRecord, normalizeSessionId } from "./common";
 import type { StreamOptionsEx } from "./types";
 
-// OpenAI 对 prompt_cache_key 的长度上限（与 pi-ai 的 clamp 规则一致）。
+// OpenAI's length limit for prompt_cache_key (consistent with pi-ai's clamp rule).
 const OPENAI_PROMPT_CACHE_KEY_MAX_CHARS = 64;
 const OPENROUTER_SESSION_ID_MAX_CHARS = 256;
 
@@ -43,9 +43,10 @@ export function resolvePromptCacheHintMode(
   modelApi?: CodexRequestFormat,
 ): Exclude<PromptCacheHintMode, "auto"> {
   if (configuredMode && configuredMode !== "auto") return configuredMode;
-  // Responses 链路对齐 Codex CLI：CLI 对所有端点都发会话级 prompt_cache_key，
-  // 服务 Codex 流量的中转站必然兼容。严格校验的第三方 Responses 端点若报 400,
-  // 逃生通道是供应商级/模型级设 none，而不是把这里翻回保守值（PR#436）。
+  // The Responses pipeline aligns with Codex CLI: the CLI sends a session-level prompt_cache_key to all
+  // endpoints, so relays serving Codex traffic are necessarily compatible. If a strictly validating third-party
+  // Responses endpoint returns 400, the escape hatch is to set none at the provider/model level, not to revert
+  // this to a conservative value (PR#436).
   if (modelApi === "openai-responses") return "openai-key";
   const hostname = parseHostname(baseUrl);
   if (isOfficialOpenAIHostname(hostname)) {
@@ -67,13 +68,14 @@ function isExplicitNoCacheOptions(value: unknown): boolean {
 }
 
 /**
- * `prompt_cache_options: { mode: "explicit" }` 是 GPT-5.6+ 显式关闭隐式前缀缓存
- * 的**唯一**手段（pi-ai 仅在 cacheRetention=none 且模型声明该能力时生成）。剥掉
- * 它等于"用户要求不缓存，wire 上却仍在隐式缓存"，所以 none 模式下要放行。
+ * `prompt_cache_options: { mode: "explicit" }` is the **only** way for GPT-5.6+ to explicitly disable
+ * implicit prefix caching (pi-ai generates it only when cacheRetention=none and the model declares that
+ * capability). Stripping it amounts to "the user asked for no caching, yet the wire still implicitly caches",
+ * so it must be let through in none mode.
  *
- * 仅限官方 host：该字段和 prompt_cache_key 一样是 OpenAI 私有扩展，严格校验的
- * 中转端点会直接 400（#307 那一类）。中转站上宁可退回隐式缓存，也不能为了关缓存
- * 把整个请求打死——那是本文件存在的理由。
+ * Official hosts only: like prompt_cache_key, this field is an OpenAI private extension, and strictly
+ * validating relay endpoints return 400 outright (#307 and the like). On a relay it is better to fall back to
+ * implicit caching than to kill the whole request just to disable caching -- that is the reason this file exists.
  */
 function supportsExplicitNoCache(baseUrl: string, model: Model<Api> | undefined): boolean {
   if (!model || model.api !== "openai-responses") return false;
@@ -86,8 +88,8 @@ function stripOpenAIPromptCacheFields(
   payload: Record<string, unknown>,
   preserveExplicitNoCache: boolean,
 ) {
-  // pi-ai 的 completions buildParams 恒显式写 prompt_cache_key: undefined；
-  // 按值判断，undefined 序列化时本就会被丢弃，不值得为它每请求拷贝 payload。
+  // pi-ai's completions buildParams always explicitly writes prompt_cache_key: undefined;
+  // judging by value, undefined is dropped during serialization anyway, so it is not worth copying the payload per request for it.
   const keysToStrip = OPENAI_PROMPT_CACHE_PAYLOAD_KEYS.filter((key) => {
     if (payload[key] === undefined) return false;
     return !(
@@ -103,11 +105,13 @@ function stripOpenAIPromptCacheFields(
 }
 
 /**
- * 查找请求头里已有的 x-session-id(大小写不敏感)。attach 与 describe 共用这一个
- * 判定:头已存在时 attach 跳过注入 —— 生效的路由键是既有头的值,不是 clamp 后的
- * sessionId。describe 若不走同一判定,就会在这种场景下描述一个不存在的请求。
- * 返回 undefined 表示头不存在;存在但值非字符串(如 null 占位)时返回空串,
- * 与「本应有键但没有值」的空串语义保持一致。
+ * Looks up an existing x-session-id in the request headers (case-insensitive). attach and describe share
+ * this one check: when the header exists, attach skips injection -- the effective routing key is the existing
+ * header's value, not the clamped sessionId. If describe did not use the same check, it would describe a
+ * request that does not exist in that scenario.
+ * Returning undefined means the header is absent; when it exists but its value is not a string (e.g. a null
+ * placeholder) an empty string is returned, consistent with the empty-string semantics of "a key that should
+ * exist but has no value".
  */
 function findExistingSessionHeader(headers: StreamOptionsEx["headers"]): string | undefined {
   if (!headers) return undefined;
@@ -120,20 +124,23 @@ function findExistingSessionHeader(headers: StreamOptionsEx["headers"]): string 
 }
 
 /**
- * 把「本轮实际会应用的缓存参数」描述出来,供前缀归因入账。与 anthropicCache 的
- * describeAnthropicCacheShape 同一契约:刻意复用本模块自己的判定函数
- * (resolvePromptCacheHintMode / normalizeSessionId / clamp),诊断侧不另抄条件。
+ * Describes "the cache parameters actually applied this round" for prefix attribution accounting. Same
+ * contract as anthropicCache's describeAnthropicCacheShape: deliberately reuse this module's own decision
+ * functions (resolvePromptCacheHintMode / normalizeSessionId / clamp) rather than duplicating the conditions on
+ * the diagnostic side.
  *
- * codex 的缓存是隐式前缀匹配,没有断点,可变的旋钮只有两个:
- *   - prompt_cache_key(缓存分片路由):sessionId 变 → 换分片 → 全量 miss。
- *     sessionId 缺失时 attachCodexPromptCacheHint 会**静默**不注入 —— 服务端
- *     退回按机器/组织路由,命中率看起来只是变差,不报任何错。把 cacheKey 记进
- *     归因,这种静默降级才第一次变得可见(cacheKey 从有值变空串)。
- *   - cacheRetention:long 由 pi-ai 映射成 prompt_cache_retention: "24h"。
+ * codex's cache is implicit prefix matching with no breakpoints, and there are only two variable knobs:
+ *   - prompt_cache_key (cache shard routing): sessionId changes -> shard changes -> full miss.
+ *     When sessionId is missing, attachCodexPromptCacheHint **silently** skips injection -- the server falls
+ *     back to machine/organization routing, and the hit rate merely looks worse without reporting any error.
+ *     Recording cacheKey in attribution makes this silent degradation visible for the first time (cacheKey
+ *     goes from a value to an empty string).
+ *   - cacheRetention:long is mapped by pi-ai to prompt_cache_retention: "24h".
  *
- * headers 为可选:openrouter 路径上请求若已带自定义 x-session-id,
- * attachCodexPromptCacheHint 会跳过注入 —— 生效的路由键是既有头的值。describe
- * 此时必须报既有头的值而不是 clamp(sessionId),否则描述的是一个不存在的请求。
+ * headers is optional: if a request on the openrouter path already carries a custom x-session-id,
+ * attachCodexPromptCacheHint skips injection -- the effective routing key is the existing header's value.
+ * describe must then report the existing header's value rather than clamp(sessionId), otherwise it describes a
+ * request that does not exist.
  */
 export function describeCodexCacheShape(
   providerId: ProviderId,
@@ -152,7 +159,7 @@ export function describeCodexCacheShape(
       ? "none"
       : resolvePromptCacheHintMode(configuredMode, baseUrl, modelApi);
   const normalizedSessionId = normalizeSessionId(sessionId);
-  // 与 attach 同源:头存在(哪怕值为空)即不注入,以头值为准。
+  // Same source as attach: when the header exists (even with an empty value) injection is skipped, and the header value wins.
   const existingSessionHeader =
     mode === "openrouter-session" ? findExistingSessionHeader(headers) : undefined;
 
@@ -187,9 +194,9 @@ export function attachCodexPromptCacheHint(
   const previousOnPayload = options.onPayload;
   return {
     ...options,
-    // mode=none 时把 retention 一并压成 none：让 pi-ai 从源头不生成任何缓存
-    // 提示（responses 链路会按 retention 注入 prompt_cache_key），而不是依赖
-    // 事后剥离已知字段兜底。
+    // In mode=none, force retention to none as well: make pi-ai generate no cache hint at the source
+    // (the responses pipeline injects prompt_cache_key based on retention), rather than relying on
+    // stripping known fields afterward as a fallback.
     cacheRetention: effectiveCacheRetention,
     headers:
       mode === "openrouter-session" &&

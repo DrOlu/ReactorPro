@@ -273,5 +273,5 @@ export function formatHookWarningMessage(
   const eventLabel = t(HOOK_EVENT_TRANSLATION_KEYS[warning.event]);
   return locale === "en-US"
     ? `Hook "${warning.hookName}" failed during ${eventLabel}: ${warning.message}`
-    : `Hook「${warning.hookName}」在 ${eventLabel} 执行失败：${warning.message}`;
+    : `Hook "${warning.hookName}" failed during ${eventLabel}: ${warning.message}`;
 }

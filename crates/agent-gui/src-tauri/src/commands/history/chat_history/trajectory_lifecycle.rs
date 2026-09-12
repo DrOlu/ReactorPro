@@ -49,7 +49,7 @@ fn load_stored_trajectory_segments(
              WHERE conversation_id = ?1 AND segment_index < ?2
              ORDER BY segment_index ASC",
         )
-        .map_err(|e| format!("准备轨迹生命周期查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare trajectory lifecycle query: {e}"))?;
     let rows = stmt
         .query_map(params![conversation_id, segment_count], |row| {
             Ok((
@@ -58,13 +58,13 @@ fn load_stored_trajectory_segments(
                 row.get::<_, i64>(2)?,
             ))
         })
-        .map_err(|e| format!("查询轨迹生命周期数据失败：{e}"))?;
+        .map_err(|e| format!("Failed to query trajectory lifecycle data: {e}"))?;
 
     let mut segments = Vec::new();
     for row in rows {
         let (segment_index, raw, persisted_truncated) =
-            row.map_err(|e| format!("读取轨迹生命周期数据失败：{e}"))?;
-        let (events, parse_truncated) = match parse_event_array(&raw, "轨迹生命周期事件") {
+            row.map_err(|e| format!("Failed to read trajectory lifecycle data: {e}"))?;
+        let (events, parse_truncated) = match parse_event_array(&raw, "trajectory lifecycle events") {
             Ok(events) => (events, false),
             Err(_) => (Vec::new(), true),
         };
@@ -117,7 +117,7 @@ fn write_stored_trajectory_segments(
 ) -> Result<(), String> {
     for segment in segments {
         let events_json = serde_json::to_string(&segment.events)
-            .map_err(|e| format!("序列化生命周期轨迹失败：{e}"))?;
+            .map_err(|e| format!("Failed to serialize lifecycle trajectory: {e}"))?;
         conn.execute(
             "UPDATE chatHistorySegment
              SET trajectory_json = ?3, trajectory_truncated = ?4
@@ -129,7 +129,7 @@ fn write_stored_trajectory_segments(
                 i64::from(segment.truncated)
             ],
         )
-        .map_err(|e| format!("写入生命周期轨迹失败：{e}"))?;
+        .map_err(|e| format!("Failed to write lifecycle trajectory: {e}"))?;
     }
     Ok(())
 }
@@ -158,7 +158,7 @@ fn copy_referenced_trajectory_sections(
              ON CONFLICT(conversation_id, section_id) DO NOTHING",
             params![source_id, destination_id, section_id],
         )
-        .map_err(|e| format!("复制分支轨迹分段失败：{e}"))?;
+        .map_err(|e| format!("Failed to copy branch trajectory segments: {e}"))?;
     }
     Ok(())
 }
@@ -173,13 +173,13 @@ fn prune_unreferenced_trajectory_sections(
             "SELECT section_id FROM chatTrajectorySection
              WHERE conversation_id = ?1",
         )
-        .map_err(|e| format!("准备清理轨迹分段查询失败：{e}"))?;
+        .map_err(|e| format!("Failed to prepare stale trajectory segment query: {e}"))?;
     let rows = stmt
         .query_map(params![conversation_id], |row| row.get::<_, String>(0))
-        .map_err(|e| format!("查询待清理轨迹分段失败：{e}"))?;
+        .map_err(|e| format!("Failed to query stale trajectory segments: {e}"))?;
     let mut stale = Vec::new();
     for row in rows {
-        let section_id = row.map_err(|e| format!("读取待清理轨迹分段失败：{e}"))?;
+        let section_id = row.map_err(|e| format!("Failed to read stale trajectory segments: {e}"))?;
         if !referenced.contains(&section_id) {
             stale.push(section_id);
         }
@@ -191,7 +191,7 @@ fn prune_unreferenced_trajectory_sections(
              WHERE conversation_id = ?1 AND section_id = ?2",
             params![conversation_id, section_id],
         )
-        .map_err(|e| format!("清理未引用轨迹分段失败：{e}"))?;
+        .map_err(|e| format!("Failed to clean up unreferenced trajectory segments: {e}"))?;
     }
     Ok(())
 }
@@ -208,7 +208,7 @@ fn count_user_messages_in_segment_inputs(
 ) -> Result<usize, String> {
     let mut total = 0_usize;
     for segment in segments {
-        let messages = parse_event_array(&segment.messages_json, "历史分段消息")?;
+        let messages = parse_event_array(&segment.messages_json, "history segment messages")?;
         total = total.saturating_add(count_user_messages(&messages));
     }
     Ok(total)

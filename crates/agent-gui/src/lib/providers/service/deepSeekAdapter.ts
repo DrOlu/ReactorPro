@@ -3,10 +3,10 @@ import { withStreamRetry } from "../runtime/streamRetry";
 import type { LlmAdapter } from "./types";
 
 /**
- * DeepSeek 原生协议适配器。
+ * DeepSeek native protocol adapter.
  *
- * streamByApi.ts 中 DEEPSEEK_RESPONSES_API 分支的原样搬移（PR-1 行为等价
- * 不变量）：withStreamRetry 包装位置与参数逐字保持。
+ * A verbatim move of the DEEPSEEK_RESPONSES_API branch in streamByApi.ts (PR-1 behavioral-equivalence
+ * invariant): the withStreamRetry wrapping position and arguments are preserved word for word.
  */
 export const deepSeekAdapter: LlmAdapter = {
   apis: [DEEPSEEK_RESPONSES_API] as const,

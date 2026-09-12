@@ -5,9 +5,12 @@ import (
 	"time"
 )
 
-// DispatchLimiter 限制单连接的在途派发数：读循环 TryAcquire 失败即拒绝该请求
-// （绝不阻塞读循环——阻塞会拖死 pong/存活检测），处理 goroutine 结束时 Release。
-// 没有它，慢速直通请求（可阻塞至 requestTimeout）会随请求速率无界累积 goroutine。
+// DispatchLimiter limits the number of in-flight dispatches on a single connection:
+// if the read loop's TryAcquire fails, the request is rejected immediately (never
+// block the read loop -- blocking would stall pong/liveness checks); Release is
+// called when the handling goroutine finishes. Without it, slow pass-through
+// requests (which can block until requestTimeout) would accumulate goroutines
+// without bound as the request rate rises.
 type DispatchLimiter struct {
 	slots chan struct{}
 }
@@ -35,9 +38,12 @@ func (l *DispatchLimiter) Release() {
 	}
 }
 
-// InboundRateLimiter 是单连接入站帧的令牌桶：快帧（本地应答、解析即弃）不受
-// 派发信号量约束，仍可打满 CPU（每帧一次 Unmarshal + 分发），令牌桶补上这一段。
-// 连续违规超过阈值判定为失控客户端，调用方应关闭连接。
+// InboundRateLimiter is a token bucket for inbound frames on a single connection:
+// fast frames (answered locally, parsed and discarded) are not constrained by the
+// dispatch semaphore and can still saturate the CPU (one Unmarshal + dispatch per
+// frame); the token bucket covers that gap. Exceeding the threshold of consecutive
+// violations classifies the client as out of control, and the caller should close
+// the connection.
 type InboundRateLimiter struct {
 	mu         sync.Mutex
 	tokens     float64
@@ -68,7 +74,8 @@ func NewInboundRateLimiter(perSecond, burst float64, maxViolations int) *Inbound
 	}
 }
 
-// Allow 消费一个令牌。第二返回值为 true 表示连续违规已超阈值，连接应被关闭。
+// Allow consumes one token. The second return value being true means the
+// consecutive violation count exceeded the threshold and the connection should be closed.
 func (l *InboundRateLimiter) Allow() (ok bool, exceeded bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

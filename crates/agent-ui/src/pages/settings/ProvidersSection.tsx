@@ -216,7 +216,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
         }
       />
 
-      {/* 开关直接控制配置区的展开/收起：关闭时抽屉只留一行分区头。 */}
+      {/* The switch directly controls the expansion/collapse of the config area: when off, the drawer keeps only a single section header. */}
       <div
         className="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
         style={{ gridTemplateRows: failover.enabled ? "1fr" : "0fr" }}
@@ -392,7 +392,7 @@ function CustomSettingsDrawer(
   const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
   const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
-  // 上下文占用展示三档的动态描述：只解释当前选中档，取代原先罗列三档的长段落。
+  // Dynamic description for the three context-usage display tiers: it explains only the currently selected tier, replacing the original long paragraph listing all three.
   const contextDisplayModeDesc = {
     statsBar: t("settings.composerContextDisplayStatsBarDesc"),
     both: t("settings.composerContextDisplayBothDesc"),
@@ -470,9 +470,10 @@ function CustomSettingsDrawer(
                 ) : null}
               </div>
             </section>
-            {/* 澄清提示词（composer clarify）：总开关直接控制两端输入框魔杖按钮
-                的显隐；展开区选澄清对话用的模型，未选跟随当前对话模型（与
-                commitMessageModel 同一回退契约）。开关-展开模式同 failover。 */}
+            {/* Clarify prompt (composer clarify): the master switch directly controls the show/hide of the
+                wand button in both input boxes; the expanded area selects the model used for clarifying
+                conversations, and if unset it follows the current conversation model (the same fallback
+                contract as commitMessageModel). The switch-expand pattern matches failover. */}
             <section className="py-5">
               <DrawerSectionHeader
                 icon={<WandSparkles className="h-3.5 w-3.5" />}
@@ -514,9 +515,10 @@ function CustomSettingsDrawer(
                 </div>
               </div>
             </section>
-            {/* Composer 上下文占用展示样式（三档滑块，docs/design/composer-context-stats-bar.md §4.7）：
-                从左到右 状态栏 / 都显示 / 用量环，对应 statsBar / both / ring。
-                通用说明收进分区头的提示气泡，滑块下方只保留当前档位的一行动态描述。 */}
+            {/* Composer context-usage display style (three-tier slider, docs/design/composer-context-stats-bar.md §4.7):
+                left to right status bar / both / usage ring, corresponding to statsBar / both / ring.
+                General notes go into the section-header tooltip, and below the slider only a one-line dynamic
+                description of the current tier is kept. */}
             <section className="py-5">
               <DrawerSectionHeader
                 icon={<Activity className="h-3.5 w-3.5" />}
@@ -645,8 +647,9 @@ function ProviderCardRow(props: {
     onDelete,
     onRefreshUsage,
   } = props;
-  // 收起态只展示首个套餐,其余套餐放入可动画折叠容器;配合下方等高骨架,
-  // 卡片在"加载→出数"全程保持两行高度,不产生布局跳动。
+  // The collapsed state shows only the first plan, with the rest in an animated collapsible container;
+  // together with the equal-height skeleton below, the card stays two lines tall throughout "loading ->
+  // loaded" without layout jitter.
   const [firstUsagePlan, ...extraUsagePlans] = usageDisplay.plans;
 
   return (
@@ -682,8 +685,9 @@ function ProviderCardRow(props: {
             className="mt-1 min-w-0 text-xs text-muted-foreground"
             aria-busy={usageDisplay.loading}
           >
-            {/* 主行与元信息行都固定 min-h-4(= text-xs 行高):加载时
-                骨架等高占位,结果到达后原位替换,卡片高度全程稳定。 */}
+            {/* Both the main row and the meta-info row have a fixed min-h-4 (= text-xs line height): a
+                skeleton of equal height holds the place while loading and is replaced in place when results
+                arrive, keeping the card height stable throughout. */}
             <div className="flex min-h-4 min-w-0 items-center">
               {firstUsagePlan ? (
                 <span className="settings-usage-reveal flex min-w-0">
@@ -715,7 +719,7 @@ function ProviderCardRow(props: {
                   {extraUsagePlans.map((plan, index) => (
                     <div
                       key={`${plan.title.kind === "text" ? plan.title.text : plan.title.kind}:${
-                        // biome-ignore lint/suspicious/noArrayIndexKey: 套餐无稳定 id,索引即位置语义
+                        // biome-ignore lint/suspicious/noArrayIndexKey: plans have no stable id, so the index is the positional semantics
                         index
                       }`}
                       className="flex min-h-4 min-w-0 items-center pt-0.5"
@@ -838,7 +842,7 @@ function ProviderList(props: {
     onRefreshUsage,
   } = props;
   const filtered = providers.filter((provider) => provider.type === type);
-  // 30s ticker 驱动"N 分钟前"相对时间;多套餐行的展开态是纯本地 UI 状态。
+  // A 30s ticker drives the "N minutes ago" relative time; the expanded state of multi-plan rows is purely local UI state.
   const usageNow = useUsageNowTicker(
     filtered.some((provider) => provider.usageQuery?.enabled) ||
       Object.keys(usageByProvider).length > 0,
@@ -1014,7 +1018,7 @@ export function ProvidersSection(
   }
 
   const activeTabIndex = Math.max(0, PROVIDER_TABS.indexOf(activeTab));
-  // 每个厂商 Tab 内联展示已配置数量，替代原先列表上方单独的计数行。
+  // Inline display of the configured count within each vendor tab, replacing the former standalone count row above the list.
   const providerCountByType = useMemo(() => {
     const counts = Object.fromEntries(PROVIDER_TABS.map((tab) => [tab, 0])) as Record<
       ProviderId,

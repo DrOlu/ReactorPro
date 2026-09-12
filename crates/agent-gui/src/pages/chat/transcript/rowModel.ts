@@ -142,7 +142,8 @@ export type AssistantWorkTraceRenderUnit = {
   durationMs?: number;
   entries: AssistantTurnLayoutEntry[];
   latestToolGroupKey: string | null;
-  /** 回合已有总结文案（answer 层非空）：落定后工作区块可自动折叠成一行。 */
+  /** The turn already has summary text (the answer layer is non-empty): once
+   * settled, the work block can auto-collapse to a single row. */
   hasAnswer: boolean;
 };
 
@@ -199,8 +200,10 @@ export type TranscriptRowsSnapshot = {
 
 export type LiveTailInput = LiveTranscriptState & {
   isSending: boolean;
-  // 手动压缩空闲态：live store 只置 running、不置 isSending，但仍要显示「正在
-  // 压缩」状态行。该标记只并入 live tail 可见性 gate，不改变其他 isSending 语义。
+  // Manual compaction idle state: the live store sets running but not
+  // isSending, yet the "compacting" status row must still show. This flag is
+  // only merged into the live tail visibility gate and does not change other
+  // isSending semantics.
   isCompactionRunning?: boolean;
 };
 
@@ -793,14 +796,18 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         settlingUnits: null,
       };
     } else if (!liveTailVisible && activeTurn) {
-      // 落定交接：丢弃 activeTurn 的判据是「历史自 historyLenAtStart 起有没有
-      // 新增的、尚未被认领的 assistant 孪生项」——adoptSettledTwin 的返回值正是
-      // 这个判据（认领成功 ⇔ 窗口内有可领养孪生项）。不能改用「live 单元里有没有
-      // 可见 block」：存在零可见 block 却有真实孪生行的 turn——被取消的 run 会
-      // 持久化中止提示 assistant 项；仅输出 Task 工具的 run 其块被
-      // isVisibleGroupedBlock 全部过滤。这类 turn 若被误判丢弃，孪生行永不被领养
-      // → 以全新 key 重挂载（违反零 remount），persist 滞后时更会漏进下一个 run 的
-      // historyLenAtStart 窗口被错位认领。
+      // Settle handoff: the criterion for discarding activeTurn is "does
+      // history have a new, not-yet-claimed assistant twin since
+      // historyLenAtStart" -- adoptSettledTwin's return value is exactly this
+      // criterion (claim success <=> there is an adoptable twin in the window).
+      // Do not switch to "is there a visible block in the live units": turns
+      // exist with zero visible blocks but a real twin row -- a cancelled run
+      // persists an interrupted assistant item; a run that only outputs Task
+      // tools has all its blocks filtered out by isVisibleGroupedBlock. If such
+      // a turn is misjudged and discarded, the twin row is never adopted -> it
+      // remounts under a brand new key (violating zero remount), and with
+      // persist lag it can even leak into the next run's historyLenAtStart
+      // window and be claimed at the wrong position.
       const adopted = adoptSettledTwin(historyItems, activeTurn);
       if (adopted) {
         activeTurn = null;
@@ -811,15 +818,18 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
             (row.unit.kind === "work-trace" && row.unit.entries.length > 0),
         )
       ) {
-        // 产出过内容 ⟹ 真实回复必将持久化：孪生行尚未落库（persist 滞后）时
-        // 登记 pendingSettle，待其落库后按同一 replyKey 认领（零 remount）。
+        // Produced content => the real reply will certainly be persisted: when
+        // the twin row has not landed yet (persist lag), register pendingSettle
+        // and claim it with the same replyKey once it lands (zero remount).
         pendingSettle = {
           replyKey: activeTurn.replyKey,
           historyLenAtStart: activeTurn.historyLenAtStart,
         };
       } else {
-        // 既没产出内容、历史也没有可领养孪生项（空闲手动压缩落定成检查点卡片、
-        // 或产出前即被取消的 run）→ 直接清掉，避免底部留下冻结的 settling 状态行。
+        // No content produced and no adoptable twin in history (idle manual
+        // compaction settling into a checkpoint card, or a run cancelled before
+        // producing anything) -> clear directly, avoiding a frozen settling
+        // status row at the bottom.
         activeTurn = null;
       }
     } else if (!liveTailVisible && pendingSettle) {
@@ -857,12 +867,16 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     let rows = historyRows;
     let liveStartIndex = -1;
     if ((liveTailVisible || pendingSettle) && activeTurn) {
-      // 运行中压缩：前半段回复已经作为历史项落库（assistant → summary），后半段
-      // 仍在流式。把从本 turn 起点开始的尾部历史项（只允许 assistant/summary，
-      // 遇 user 即止）并入 live 回合——前半段的轮次 + 检查点缝合轮 + 实时轮次
-      // 组成一条连续回复，只渲染一个头像 / 一个工作区块。这些历史项在本次
-      // 构建里不再单独出行；落定后由 adoptSettledTwin 以同一 replyKey 认领整条
-      // 缝合回复（首段 assistant 项为 leader），单元 key 逐一对上、零 remount。
+      // Mid-run compaction: the first half of the reply is already persisted
+      // as history items (assistant -> summary) while the second half is still
+      // streaming. Merge the trailing history items from this turn's start
+      // (only assistant/summary allowed, stopping at user) into the live turn
+      // -- the first-half rounds + the checkpoint stitch round + the live round
+      // form one continuous reply rendering a single avatar / single work
+      // block. These history items no longer produce separate rows in this
+      // build; after settling, adoptSettledTwin claims the whole stitched reply
+      // with the same replyKey (the leading assistant item is the leader), with
+      // unit keys matching one by one and zero remount.
       const liveHasContent = live.liveRounds.length > 0 || Boolean(live.draftAssistantText);
       const absorbedLeaderIndex = liveTailVisible
         ? findLiveReplyLeader(historyItems, activeTurn.historyLenAtStart, liveHasContent)

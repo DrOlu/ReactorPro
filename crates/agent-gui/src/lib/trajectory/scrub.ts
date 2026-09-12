@@ -1,19 +1,20 @@
 /**
- * 轨迹事件错误文本的密钥洗涤。
+ * Secret scrubbing for trajectory-event error text.
  *
- * 供应商报错可能回显完整请求 URL（Gemini 的 key 走 query 参数）或鉴权头
- * （Bearer token）。轨迹账本会落盘并跨端下发，任何进入 err 字段的文本都
- * 必须先过这一层。只做模式级替换，不改动正常报错文本。
+ * Vendor errors may echo the full request URL (Gemini's key goes in a query parameter) or an
+ * authorization header (Bearer token). The trajectory ledger is written to disk and delivered
+ * across clients, so any text entering the err field must pass through this layer first. It only
+ * does pattern-level replacement and does not alter normal error text.
  */
 
-/** 取值形似密钥的 query 参数名（含 URL 编码变体场景由参数名匹配兜底）。 */
+/** Query parameter names whose values look like secrets (URL-encoded variants are covered by the parameter-name match). */
 const SENSITIVE_QUERY_PARAM_PATTERN =
   /([?&](?:key|api[-_]?key|apikey|token|access[-_]?token|secret)=)[^&\s"']+/gi;
 
-/** Authorization: Bearer <token> 回显。 */
+/** Echo of Authorization: Bearer <token>. */
 const BEARER_TOKEN_PATTERN = /(bearer\s+)[a-z0-9._~+/-]{8,}=*/gi;
 
-/** 常见密钥前缀（OpenAI/Anthropic sk-、Google AIza）。 */
+/** Common key prefixes (OpenAI/Anthropic sk-, Google AIza). */
 const KNOWN_KEY_SHAPE_PATTERN = /\b(?:sk|AIza)[A-Za-z0-9_-]{16,}\b/g;
 
 export function scrubSecretsFromErrorText(text: string): string {

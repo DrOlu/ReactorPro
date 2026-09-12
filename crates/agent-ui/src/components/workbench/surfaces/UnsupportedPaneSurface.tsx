@@ -5,7 +5,7 @@ export type UnsupportedPaneSurfaceProps = {
   originalKind: string;
 };
 
-/** 前向兼容占位:布局中来自更新版本的未知 Surface,只展示、可移动/关闭。 */
+/** Forward-compatibility placeholder: an unknown Surface in the layout from a newer version is display-only and can be moved/closed. */
 export function UnsupportedPaneSurface(props: UnsupportedPaneSurfaceProps) {
   const { paneId, originalKind } = props;
   const { t } = useLocale();

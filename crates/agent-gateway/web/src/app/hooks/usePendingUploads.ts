@@ -49,12 +49,14 @@ type UsePendingUploadsParams = {
   // Upload feedback goes to the top-right toast stack, never into the
   // transcript area — a failed upload is not conversation output.
   addNotify: (type: NotifyItem["type"], message: string) => void;
-  /** 正文区拖入文件夹时的接管回调（挂载为附属目录）；未提供则忽略文件夹。 */
+  /** Callback that takes over when a folder is dragged into the transcript area (mounted as an attached directory); folders are ignored when not provided. */
   onDropDirectories?: (directories: DroppedDirectory[]) => void;
   /**
-   * 无会话兜底：页面刚打开、还没有任何会话 id 时开始上传，由宿主创建一个
-   * 本地草稿会话并返回其 id（等价于点一次“新对话”），附件挂到该草稿上，
-   * 首条消息发出后随现有的 moveConversationUploads 迁移到真实会话。
+   * No-conversation fallback: when upload starts just after the page opens and no
+   * conversation id exists yet, the host creates a local draft conversation and
+   * returns its id (equivalent to clicking "New chat" once); attachments hang off
+   * that draft and, after the first message is sent, migrate to the real
+   * conversation through the existing moveConversationUploads.
    */
   ensureUploadConversation?: () => string;
   /** Resolve the workspace owned by an explicitly targeted workbench Pane. */
@@ -83,8 +85,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
   const [pendingUploadedFiles, setPendingUploadedFiles] = useState<PendingUploadedFile[]>([]);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
-  // 在途导入归属的会话 id:多 Pane 下"上传中"的禁用/动画只应作用在目标
-  // 会话的 Pane 上,别的 Pane 不因全局互斥被误禁或误显示上传态。
+  // Conversation id that owns the in-flight import: in a multi-pane layout, the
+  // "uploading" disable/animation should only apply to the target conversation's
+  // pane; other panes must not be wrongly disabled or shown an upload state by a
+  // global mutex.
   const [uploadingConversationId, setUploadingConversationId] = useState<string | null>(null);
   const [isFileDropActive, setIsFileDropActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -220,7 +224,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   const handleImportReadableFiles = useCallback(
     async (
       filesToImport: File[],
-      // 多看板的背景 Pane 显式指定目标会话与其工作区;缺省仍导入到当前展示会话。
+      // A multi-pane background Pane explicitly specifies its target conversation and
+      // its workspace; by default the import still goes to the currently displayed conversation.
       target?: { conversationId: string; workdir: string },
     ) => {
       if (filesToImport.length === 0) {
@@ -234,9 +239,11 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         addNotify("warning", translate("chat.upload.onlyInTools", locale));
         return;
       }
-      // 显式 target 的空 workdir 是 resolveConversationUploadWorkdir 的守卫
-      // 结果(背景会话没有自己的工作区),绝不回退到焦点会话的工作区——
-      // 否则文件会上传进别人的 workspace,却作为附件挂在目标会话上。
+      // An empty workdir on an explicit target is the guard result from
+      // resolveConversationUploadWorkdir (a background conversation has no workspace of
+      // its own); never fall back to the focused conversation's workspace --
+      // otherwise the files would be uploaded into someone else's workspace while
+      // being attached to the target conversation.
       const workdir = target
         ? target.workdir.trim()
         : displayedConversationWorkdirRef.current.trim();
@@ -249,13 +256,14 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       if (!targetConversationId && ensureUploadConversation) {
         targetConversationId = ensureUploadConversation().trim();
         if (targetConversationId) {
-          // 重渲染前 displayed id 仍是旧值，手动同步 ref 让本次导入及其
-          // isDisplayedConversation 判定立即指向新草稿。
+          // Before the re-render the displayed id is still the old value; manually
+          // sync the ref so this import and its isDisplayedConversation check point
+          // at the new draft immediately.
           displayedConversationIdRef.current = targetConversationId;
         }
       }
       if (!targetConversationId) {
-        addNotify("warning", "请先选择或创建会话后再上传文件。");
+        addNotify("warning", "Please select or create a conversation before uploading files.");
         return;
       }
 
@@ -276,7 +284,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
           (isDisplayedConversation(targetConversationId) &&
             displayedConversationWorkdirRef.current.trim() !== workdir)
         ) {
-          addNotify("warning", "上传目标已失效，已忽略本次导入的文件");
+          addNotify("warning", "The upload target is no longer valid; the files from this import were ignored");
           return;
         }
         registerLocalUploadedImagePreviews({
@@ -317,9 +325,9 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         }
 
         if (result.files.length === 0 && result.skipped.length > 0) {
-          addNotify("error", `所选文件均无法导入：\n${result.skipped.join("\n")}`);
+          addNotify("error", `None of the selected files could be imported:\n${result.skipped.join("\n")}`);
         } else if (result.skipped.length > 0) {
-          addNotify("warning", `以下文件已跳过：\n${result.skipped.join("\n")}`);
+          addNotify("warning", `The following files were skipped:\n${result.skipped.join("\n")}`);
         }
         if (ignoredForLimit > 0) {
           addNotify(
@@ -331,7 +339,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
           );
         }
       } catch (error) {
-        addNotify("error", asErrorMessage(error, "导入文件失败"));
+        addNotify("error", asErrorMessage(error, "Failed to import files"));
       } finally {
         setUploadingFiles(false);
       }
@@ -395,13 +403,13 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       void readClipboardFiles()
         .then((files) => {
           if (files.length === 0) {
-            addNotify("warning", "无法读取剪贴板中的文件，请尝试拖拽或点击上传。");
+            addNotify("warning", "Could not read files from the clipboard; try dragging them in or clicking to upload.");
             return;
           }
           return handleImportReadableFiles(files, uploadTarget);
         })
         .catch((error) => {
-          addNotify("error", asErrorMessage(error, "读取剪贴板文件失败"));
+          addNotify("error", asErrorMessage(error, "Failed to read clipboard files"));
         });
     };
 
@@ -420,8 +428,9 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     token,
   ]);
 
-  // 上传命中区与桌面端对齐：只有落在标记的输入框对话框内的拖放才算上传，
-  // 对话正文、聊天头部等其他区域忽略。
+  // The upload hit zone matches the desktop side: only drops landing inside the
+  // marked composer dialog count as uploads; other areas such as the conversation
+  // transcript and chat header are ignored.
   const dropLandsInUploadZone = useCallback((event: DragEvent<HTMLDivElement>) => {
     return resolveFileUploadDropZone(event.target) !== null;
   }, []);
@@ -474,7 +483,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       // them before directory traversal or any other asynchronous operation.
       const uploadTarget = resolveEventUploadTarget(event.target);
 
-      // DataTransferItem 只在同步阶段有效，目录判定必须先于任何 await。
+      // DataTransferItem is only valid during the synchronous phase; directory detection must precede any await.
       const entries = snapshotDroppedEntries(event.dataTransfer);
       if (hasDirectoryEntry(entries)) {
         void collectDroppedPayload(entries)

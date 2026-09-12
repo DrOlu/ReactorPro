@@ -27,12 +27,14 @@ import {
 import { isXaiProviderTarget } from "./xaiResponsesPayload";
 
 // ---------------------------------------------------------------------------
-// 思考档位：可用性一律来自 lib/models/modelThinking（生成目录），此处只保留
-// 各家 wire 值改写表；toThinkingLevelMap 保证 wire 表不复活目录裁掉的档，
-// UI 列表与请求期 clamp（pi-ai getSupportedThinkingLevels）由此同源。
+// Thinking levels: availability always comes from lib/models/modelThinking (the
+// generated catalog); only the per-vendor wire value rewrite table is kept here.
+// toThinkingLevelMap ensures the wire table does not resurrect levels the catalog
+// removed, so the UI list and request-time clamp (pi-ai getSupportedThinkingLevels)
+// share the same source.
 // ---------------------------------------------------------------------------
 
-/** Grok / xAI wire 值：官方 effort 无 minimal，向上取 low。 */
+/** Grok / xAI wire values: the official effort has no minimal, so map it upward to low. */
 const XAI_THINKING_WIRE_VALUES: ThinkingLevelMap = {
   minimal: "low",
 };
@@ -72,14 +74,17 @@ function resolveKnownModel(
 }
 
 // ---------------------------------------------------------------------------
-// Anthropic 目录回查与自定义模型思考能力推断
+// Anthropic catalog lookup and custom-model thinking-capability inference
 // ---------------------------------------------------------------------------
 
-// 规范化候选回查目录（见 anthropicModels.ts）；漏检后模型丢失
-// compat.forceAdaptiveThinking，思考配置退化成 4.7+/Fable 世代已删除的
-// budget_tokens（官方端点 400、中转剥字段后档位彻底失效）。命中则继承完整
-// 目录元数据；默认保留用户配置的原始 id，官方/Vertex 等端点的 [1m] 后缀则在
-// wire 层剥离，避免把目录装饰符发送给只接受 canonical id 的服务。
+// Normalized candidates are looked up in the catalog (see anthropicModels.ts); after a
+// missed lookup the model loses compat.forceAdaptiveThinking and the thinking config
+// degrades to budget_tokens, which was removed in the 4.7+/Fable generation (official
+// endpoints return 400, and after a relay strips the field the level becomes entirely
+// ineffective). On a hit it inherits the full catalog metadata; by default the user's
+// configured original id is kept, while the [1m] suffix for official/Vertex endpoints
+// is stripped at the wire layer, avoiding sending catalog decoration to services that
+// only accept canonical ids.
 function resolveKnownAnthropicModel(
   modelId: string,
   baseUrl: string,
@@ -96,10 +101,12 @@ function resolveKnownAnthropicModel(
   } as Model<Api>;
 }
 
-// 目录彻底未命中的三方改名 id（如 claude-4.6-sonnet）退回 id 启发式：能识别为
-// adaptive 家族的补上 compat.forceAdaptiveThinking（wire 语义——thinking.type
-// adaptive + output_config.effort），pi-ai stream() 与本地 thinkingLevels.ts 都以
-// 该字段为准。档位声明不在这里——那由 resolveModelThinking 的同一启发式兜底。
+// For third-party renamed ids that miss the catalog entirely (e.g. claude-4.6-sonnet),
+// fall back to id heuristics: ids recognized as belonging to the adaptive family get
+// compat.forceAdaptiveThinking (wire semantics — thinking.type adaptive +
+// output_config.effort); both pi-ai stream() and the local thinkingLevels.ts treat this
+// field as authoritative. Level declarations are not here — resolveModelThinking's same
+// heuristic covers that.
 function deriveAnthropicCompatForCustomModel(
   modelId: string,
 ): Model<"anthropic-messages">["compat"] | undefined {
@@ -186,13 +193,15 @@ function resolveCodexModelInput(api: CodexApi, modelId: string): Model<Api>["inp
 }
 
 /**
- * DeepSeek 只有 Flash 家族吃图片：官方《图像理解》指南明确 deepseek-flash 支持
- * image_url / input_image / Files API file_id 三种传法，并注明旧模型名
- * deepseek-v4-flash-vision-exp 已下线、其请求同样由最新 Flash 承接。Pro 与更早
- * 的模型不跟着一起放开，避免产生虚假能力声明。
+ * Only the DeepSeek Flash family accepts images: the official "Image Understanding"
+ * guide states that deepseek-flash supports the three forms image_url / input_image /
+ * Files API file_id, and notes that the old model name deepseek-v4-flash-vision-exp
+ * has been retired, with its requests likewise handled by the latest Flash. Pro and
+ * earlier models are not opened up along with it, to avoid false capability claims.
  *
- * 中转端点若实际不吃图，用设置里的 inputModalities 覆盖成 ["text"]：用户覆盖
- * 优先于本推断（见 createModelFromConfig 的 inputOverride）。
+ * If a relay endpoint does not actually accept images, override inputModalities to
+ * ["text"] in settings: the user override takes precedence over this inference (see
+ * inputOverride in createModelFromConfig).
  */
 function resolveDeepSeekModelInput(modelId: string): Model<Api>["input"] {
   const normalizedModelId = modelId.trim().toLowerCase();
@@ -345,18 +354,23 @@ export function createModelFromConfig(
         )
       : configuredContextWindow;
   const maxTokens = modelConfig?.maxOutputToken ?? defaults.maxOutputToken;
-  // 计费功能已整体移除：pi-ai 的 Model.cost 是结构必填字段，统一喂零价，
-  // 流式侧算出的 usage.cost 恒为 0（known 分支同样覆盖，防止目录单价复活计费）。
+  // Billing has been removed entirely: pi-ai's Model.cost is a structurally required
+  // field, so feed zero cost uniformly; the usage.cost computed on the streaming side
+  // is always 0 (the known branch is likewise overridden, preventing catalog unit
+  // prices from resurrecting billing).
   const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-  // 思考能力（reasoning + 档位）唯一来源：生成目录（未命中走其兜底推断）。
-  // pi-ai 目录命中时只取其 thinkingLevelMap 的 wire 改写值，可用性不听它的。
+  // Sole source of thinking capability (reasoning + levels): the generated catalog
+  // (with its fallback inference on a miss). On a pi-ai catalog hit only its
+  // thinkingLevelMap wire rewrite values are used; availability is not taken from it.
   const thinking = resolveModelThinking(providerId, modelId);
-  // 输入模态的用户显式覆盖（如给未被内置白名单识别的多模态模型开启图片
-  // 输入）；缺省走各 provider 的内置推断/已知模型目录。校验逻辑与设置加载
-  // 共用同一个 normalizer，不信任调用方的静态类型。
-  // 只在附件发送确实受 model.input 门控的 provider 分支生效（codex/gemini/
-  // deepseek）；anthropic 附件路径暂不读 model.input，那里不适用用户覆盖，
-  // 避免产生虚假能力声明。
+  // Explicit user override of input modalities (e.g. enabling image input for a
+  // multimodal model not recognized by the built-in allowlist); by default it goes
+  // through each provider's built-in inference/known model catalog. The validation
+  // logic shares the same normalizer as settings loading and does not trust the
+  // caller's static types. It only takes effect in provider branches where attachment
+  // sending is actually gated by model.input (codex/gemini/deepseek); the anthropic
+  // attachment path does not read model.input yet, where the user override does not
+  // apply, avoiding false capability claims.
   const inputOverride = normalizeInputModalities(modelConfig?.inputModalities);
 
   if (providerId === "deepseek") {
@@ -383,7 +397,7 @@ export function createModelFromConfig(
 
   if (providerId === "codex" || providerId === "xai") {
     const { baseUrl: normalizedBaseUrl, preferredApi } = normalizeCodexBaseUrl(baseUrl);
-    // 正式 xai 供应商，或 Codex 直连 api.x.ai：固定 Responses（agentic 搜索等）。
+    // A real xai provider, or Codex directly connected to api.x.ai: fixed to Responses (agentic search, etc.).
     const isXaiTarget = isXaiProviderTarget({
       providerId,
       baseUrl: upstreamBaseUrl?.trim() || baseUrl,

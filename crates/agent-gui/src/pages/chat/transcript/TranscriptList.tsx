@@ -108,8 +108,8 @@ export type TranscriptListProps = {
   workspaceRoot?: string;
   gitClient?: GitClient | null;
   onOpenFileLink?: (link: ChatFileLink) => void;
-  // 楼层导航：跳转句柄挂载点（与 followRef 同一模式），以及「视口顶部
-  // 当前处于哪条用户消息行」变化时的上报回调。
+  // Floor navigation: the mount point for the scroll handle (same pattern as followRef), and the
+  // report callback for when "which user message row the viewport top is currently on" changes.
   navRef?: MutableRefObject<TranscriptNavHandle | null>;
   onAnchorUserRowChange?: (rowKey: string | null) => void;
   onResendFromEdit: (
@@ -161,8 +161,9 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     liveTranscriptStore.getSnapshot,
   );
 
-  // 审批门在工具执行「之前」挂起，转录里看不出运行中的工具；活跃回合据此把
-  // 进度指示冻结成静态（同一份 pending 表也驱动输入框上方的审批栏）。
+  // The approval gate suspends "before" tool execution, so a running tool is not visible in the
+  // transcript; the active turn uses this to freeze the progress indicator to a static state (the
+  // same pending table also drives the approval bar above the composer).
   const subscribeApprovals = useCallback(
     (listener: () => void) => subscribeToolApprovalsForConversation(conversationId, listener),
     [conversationId],
@@ -183,9 +184,9 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     }),
   );
 
-  // 手动压缩空闲态只置 isCompactionRunning、不置 isSending，仍要显示「正在
-  // 压缩」live tail：把它并入可见性 gate（只影响 live tail 是否显示，不改动
-  // 其他 isSending 语义）。
+  // In the idle manual-compaction state only isCompactionRunning is set, not isSending, yet the
+  // "compacting" live tail must still show: fold it into the visibility gate (this only affects
+  // whether the live tail shows and does not change other isSending semantics).
   const { rows, liveStartIndex } = useMemo(
     () => rowModel.build(historyItems, { ...liveState, isSending, isCompactionRunning }),
     [rowModel, historyItems, liveState, isSending, isCompactionRunning],
@@ -342,15 +343,19 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   // measurements after the DOM has already resized, so no later resize event
   // may repopulate them and estimate-based row positions can overlap.
 
-  // 楼层导航跳转句柄：按行 key 定位 index 后 scrollToIndex。沿途行首次真实
-  // 测量会不断修正总高度，连续若干帧重新对准，让滚动收敛在目标行顶部
-  // （对准同一 index 是收敛操作，不会震荡）。收敛期间用户的滚轮/触摸/按键
-  // 立即取消收敛；新跳转替换旧收敛；卸载时一并清理。
-  // 楼层导航当前楼层：以「视口顶缘（+8px 容差）」所落在的用户消息为准——与
-  // 跳转的 align:"start" 落位一致，跳转后高亮的必然是刚点的楼层；视口贴近
-  // 内容底部时直接取最后一层（否则短对话拼满一屏时底部楼层永远无法成为当前
-  // 层）。贴底判定用 scrollHeight（与 scrollTop/clientHeight 同一坐标系，
-  // 含底部输入框保留区），避免与 getTotalSize 的列表局部坐标错位。
+  // Floor-navigation scroll handle: locate the index by row key, then scrollToIndex. Along the way,
+  // first real measurements of rows keep correcting the total height, realigning for several
+  // consecutive frames so the scroll converges at the top of the target row (realigning to the same
+  // index is a converging operation and does not oscillate). During convergence the user's
+  // wheel/touch/keypress immediately cancels it; a new jump replaces the old convergence; unmount
+  // cleans it up too.
+  // Floor-navigation current floor: determined by the user message the "viewport top edge (+8px
+  // tolerance)" falls on -- consistent with the align:"start" position of a jump, so after jumping,
+  // the highlight is necessarily the floor just clicked; when the viewport is near the content
+  // bottom, take the last floor directly (otherwise the bottom floor could never become current when
+  // a short conversation fills one screen). The bottom-proximity check uses scrollHeight (same
+  // coordinate system as scrollTop/clientHeight, including the bottom composer reservation area),
+  // avoiding misalignment with getTotalSize's list-local coordinates.
   useTranscriptNavigation({
     items: rows,
     getItemKey: (row) => row.key,

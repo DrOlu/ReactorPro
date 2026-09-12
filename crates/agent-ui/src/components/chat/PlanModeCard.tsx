@@ -1,7 +1,9 @@
-// ExitPlanMode 的聊天卡片：展示模型提交的实施计划（markdown）。
-// 对话式范式：提交即结束本轮——用户直接输入"同意/开始"即批准，输入其他内容
-// 即修改意见（正常发消息）；卡片只保留一个「批准并开始执行」快捷按钮。
-// 纯展示组件，按钮动作与待决状态由调用方注入；两端复用，端差异留在 ToolCallItem。
+// Chat card for ExitPlanMode: displays the implementation plan submitted by the model (markdown).
+// Conversational paradigm: submission ends the turn -- the user typing "agree/start" directly
+// approves it, and any other input is revision feedback (a normal message); the card keeps only one
+// "Approve and start executing" shortcut button.
+// A pure presentational component; the button action and pending state are injected by the caller;
+// shared by both ends, with end-specific differences kept in ToolCallItem.
 
 import { Check, CheckCircle2, ListChecks, Loader2 } from "@liveagent/ui/components/IconSet";
 import { Markdown } from "@liveagent/ui/components/Markdown";
@@ -19,11 +21,12 @@ export function PlanModeCard({
   readOnly = false,
   onSubmit,
 }: {
-  /** 模型提交的完整计划（markdown）。 */
+  /** The full plan submitted by the model (markdown). */
   plan: string;
-  /** 已获批准（历史/落定态）。 */
+  /** Already approved (historical/settled state). */
   approved?: boolean;
-  /** 该计划仍是会话的待决计划（可批准）；被新提交覆盖后为 false。 */
+  /** This plan is still the conversation's pending plan (approvable); false after being superseded by
+   * a new submission. */
   pending?: boolean;
   readOnly?: boolean;
   onSubmit?: (answer: PlanDecisionAnswer) => Promise<PlanDecisionSubmitOutcome>;
@@ -34,12 +37,14 @@ export function PlanModeCard({
 
   const canApprove = pending && !approved && !readOnly && Boolean(onSubmit);
 
-  // 卡片有三种观感,而不是"已批准/其余"两种:
-  //   approved — 已落定批准;
-  //   pending  — 仍是会话的待决计划(只读视图下同样待决,只是本端不能操作);
-  //   inactive — 既未批准也不再待决。成因可能是被新计划取代、本轮被取消,或
-  //              历史/降级数据丢了标记,本端无从分辨,因此只陈述"不再待决"这个
-  //              确定事实,不臆断原因。
+  // The card has three appearances, not two ("approved/other"):
+  //   approved -- settled as approved;
+  //   pending  -- still the conversation's pending plan (also pending in a read-only view, just not
+  //               operable on this end);
+  //   inactive -- neither approved nor pending. The cause may be replacement by a new plan,
+  //               cancellation of this turn, or a lost marker in historical/degraded data; this end
+  //               cannot tell which, so it states only the certain fact "no longer pending" and does
+  //               not guess at the cause.
   const tone: "approved" | "pending" | "inactive" = approved
     ? "approved"
     : pending
@@ -65,16 +70,19 @@ export function PlanModeCard({
   return (
     <div
       className={cn(
-        // 边框与兄弟工具卡保持一致,状态色只由左侧脊承担一处,避免多点强调互相稀释。
+        // The border stays consistent with sibling tool cards, and the status color is carried in one
+        // place only, by the left spine, avoiding multiple emphasis points diluting each other.
         "tool-expand relative overflow-hidden rounded-xl border border-border/45 bg-background/70 dark:border-white/[0.08] dark:bg-white/[0.03]",
-        // 只有仍可拍板的计划值得从转录里浮起来;已落定的一律回落成安静的历史文档。
+        // Only a plan that can still be decided deserves to stand out from the transcript; anything
+        // settled falls back to a quiet historical document.
         tone === "pending"
           ? "shadow-[0_1px_2px_-1px_rgba(15,23,42,0.07),0_14px_32px_-26px_rgba(2,132,199,0.55)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_32px_-24px_rgba(0,0,0,0.7)]"
           : "dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
       )}
     >
-      {/* 状态脊：整条转录里只有这张卡片在等用户拍板。左侧色条是全卡唯一的强调,
-          既把它与普通工具行区分开,又用颜色承载三种状态。 */}
+      {/* Status spine: this is the only card in the whole transcript waiting for the user to decide.
+          The left color bar is the card's sole emphasis, both distinguishing it from ordinary tool
+          rows and carrying the three states via color. */}
       <span
         aria-hidden="true"
         className={cn(
@@ -102,7 +110,8 @@ export function PlanModeCard({
           {t("chat.planMode.cardTitle")}
         </span>
 
-        {/* 计划很长时按钮会落在视口外,表头状态让人不用滚到底也知道这份计划的处境。 */}
+        {/* When the plan is long the button falls outside the viewport; the header status lets the
+            user know the plan's situation without scrolling to the bottom. */}
         <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-[calc(11px*var(--zone-font-scale,1))] leading-none text-muted-foreground">
           {tone === "approved" ? (
             <>

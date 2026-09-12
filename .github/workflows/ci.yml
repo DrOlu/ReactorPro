@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # buf breaking 需要完整历史以对比 origin/main 的 proto 契约。
+          # buf breaking needs full history to compare against the origin/main proto contract.
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -148,7 +148,7 @@ jobs:
         run: npm install -g pnpm@10.32.1
 
       - name: Install dependencies
-        # GUI frontend tests load shared Gateway WebUI modules (including STT adapters).
+        # GUI frontend tests load shared Gateway WebUI modules.
         # Install that workspace and its transitive dependencies in this isolated job.
         run: pnpm install --frozen-lockfile --filter liveagent... --filter @liveagent/gateway-webui...
 
@@ -185,7 +185,7 @@ jobs:
               - 'crates/agent-gui/src-tauri/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
-              # build.rs 编译 gateway protos 并从 package.json 读取应用版本。
+              # build.rs compiles the gateway protos and reads the app version from package.json.
               - 'crates/agent-gateway/proto/**'
               - 'crates/agent-gui/package.json'
               - '.github/workflows/ci.yml'
@@ -195,10 +195,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: changes
-    # push 到 main 时始终运行以持续更新共享缓存;PR 仅在 Rust 相关路径变更时运行。
+    # Always runs on push to main to keep the shared cache warm; on pull requests it runs only when Rust-related paths change.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') }}
     env:
-      # 行号级 debuginfo:显著降低 codegen 与链接开销,同时保留可读的失败回溯。
+      # Line-table debuginfo: greatly reduces codegen and link overhead while keeping failure backtraces readable.
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - uses: actions/checkout@v6
@@ -208,7 +208,7 @@ jobs:
         with:
           packages: protobuf-compiler libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
           version: 1.0
-          # 缓存恢复时执行安装脚本(如 ldconfig 触发器),保证测试运行期动态链接可用。
+          # Run install scripts (such as the ldconfig trigger) when restoring the cache, so dynamic linking works while tests run.
           execute_install_scripts: true
 
       - name: Install mold linker
@@ -218,8 +218,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          # Cargo workspace 根在仓库根目录(Cargo.lock 与 target/ 均在此),
-          # 指向子目录会导致依赖产物完全不被缓存。
+          # The Cargo workspace root is the repository root (both Cargo.lock and target/ live there);
+          # pointing at a subdirectory would leave dependency artifacts entirely uncached.
           workspaces: .
 
       - name: Build Tauri backend tests
@@ -230,7 +230,7 @@ jobs:
       - name: Test Tauri backend
         env:
           CARGO_TERM_COLOR: always
-        # libtest 支持多个过滤器(取并集),单次调用可让各组测试并行执行。
+        # libtest accepts multiple filters (their union), so one invocation lets each test group run in parallel.
         run: >
           cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml --lib --
           chat_history ssh_local_forward shell_runner integration_commands::mcp

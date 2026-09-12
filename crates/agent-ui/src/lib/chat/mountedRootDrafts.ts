@@ -5,7 +5,8 @@ import type {
 } from "../../contracts/workspaceProjectRoots";
 
 export type MountedRootDraftsResult = {
-  /** 现有授权 + 新增文件夹合并后的完整草稿列表（save 需要全量提交）。 */
+  /** The full merged draft list of existing grants + newly added folders (save
+   * requires a full submission). */
   drafts: WorkspaceProjectRootDraft[];
   addedPaths: string[];
   skippedInsideWorkspace: string[];
@@ -22,9 +23,11 @@ function pathsOverlap(a: string, b: string) {
 }
 
 /**
- * 把拖入上传区的文件夹合并进现有附属目录草稿。工作空间内部的目录本就可
- * 访问，与现有授权重叠的目录会被后端事务性拒绝，两类都预先跳过并分别上
- * 报，保证一次混合拖入不会因个别目录导致整批失败。
+ * Merge folders dropped into the upload area into the existing attached-root
+ * drafts. Directories inside the workspace are already accessible, and
+ * directories overlapping existing grants are transactionally rejected by the
+ * backend; both kinds are skipped up front and reported separately, ensuring a
+ * mixed drop does not fail as a whole because of an individual directory.
  */
 export function buildMountedRootDrafts(params: {
   projectPath: string;

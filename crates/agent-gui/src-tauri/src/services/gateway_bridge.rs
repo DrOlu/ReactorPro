@@ -57,7 +57,7 @@ pub async fn handle_provider_usage(
     service: Arc<ProviderUsageService>,
     request: proto::ProviderUsageRequest,
 ) -> Result<proto::ProviderUsageResponse, String> {
-    // config_json 非空 = 按草稿测试(忽略启用开关、不读写缓存);空 = 常规查询。
+    // Non-empty config_json = test from draft (ignores the enable switch, does not read/write cache); empty = regular query.
     let result = if request.config_json.is_empty() {
         service.query(&request.provider_id, request.refresh).await
     } else {
@@ -266,10 +266,10 @@ pub async fn handle_history_workdirs() -> Result<proto::HistoryWorkdirsResponse,
     })
 }
 
-/// 轨迹按需拉取：事件窗口、Prompt 分段和子代理运行各用独立字段。
+/// Trajectory fetched on demand: event window, prompt segments, and subagent runs each use a separate field.
 ///
-/// 三种只读诊断查询合并在一个信封臂里，因为调用方与生命周期完全一致（都只在
-/// WebUI 打开轨迹页后发生），同时保持 section id 与 subagent run id 的协议语义分离。
+/// The three read-only diagnostic queries are merged into one envelope arm because their caller and lifecycle are identical (they all happen
+/// after the WebUI opens the trajectory page), while keeping the protocol semantics of section id and subagent run id separate.
 pub async fn handle_trajectory_fetch(
     request: proto::TrajectoryFetchRequest,
 ) -> Result<proto::TrajectoryFetchResponse, String> {
@@ -511,8 +511,8 @@ pub async fn handle_provider_models(
 ) -> Result<proto::ProviderModelsResponse, String> {
     let provider_type = request.provider_type.trim().to_string();
     let request_api_key = request.api_key.trim().to_string();
-    // message 字段带存在性：未设置=草稿没带头，沿用落库配置；设置了（哪怕是空
-    // 列表）=草稿的头就是权威值。
+    // The message field carries presence: unset = the draft has no headers, reuse the persisted config; set (even an empty
+    // list) = the draft's headers are authoritative.
     let request_custom_headers = request.custom_headers.as_ref().map(|headers| {
         headers
             .headers
@@ -536,7 +536,7 @@ pub async fn handle_provider_models(
             )
         })
         .await
-        .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
+        .map_err(|error| format!("Failed to read provider API Key task: {error}"))??
     } else {
         ProviderModelsRequestConfig {
             provider_type,
@@ -582,22 +582,22 @@ fn resolve_stored_provider_models_config(
 ) -> Result<ProviderModelsRequestConfig, String> {
     let provider_id = provider_id.trim();
     if provider_id.is_empty() {
-        return Err("请先填写 API Key".to_string());
+        return Err("Please fill in the API Key first".to_string());
     }
     let providers = providers
         .and_then(|value| value.as_array().cloned())
-        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+        .ok_or_else(|| "No saved provider found".to_string())?;
     let provider = providers
         .into_iter()
         .find(|provider| provider.get("id").and_then(Value::as_str) == Some(provider_id))
-        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+        .ok_or_else(|| "No saved provider found".to_string())?;
     let stored_provider_type = provider
         .get("type")
         .and_then(Value::as_str)
         .unwrap_or_default()
         .trim();
     if stored_provider_type != expected_provider_type.trim() {
-        return Err("供应商类型与已保存配置不匹配".to_string());
+        return Err("Provider type does not match the saved config".to_string());
     }
     let api_key = provider
         .get("apiKey")
@@ -605,7 +605,7 @@ fn resolve_stored_provider_models_config(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| "已保存的供应商未配置 API Key".to_string())?;
+        .ok_or_else(|| "The saved provider has no API Key configured".to_string())?;
     let base_url = provider
         .get("baseUrl")
         .and_then(Value::as_str)
@@ -694,9 +694,9 @@ pub async fn handle_file_mention_list(
     })
 }
 
-/// 已安装应用清单（WebUI @ 应用提及）：复用桌面 @ 弹层同一份枚举，
-/// WebUI 拿到的与 GUI 完全一致（含 32px PNG 图标 data URL）。宿主自身
-/// 的剔除也走同一份裁决（macOS 按 bundle id，Windows 按当前 exe）。
+/// Installed-app list (WebUI @ app mention): reuses the same enumeration as the desktop @ popover,
+/// so what the WebUI gets is identical to the GUI (including 32px PNG icon data URLs). Removing the host
+/// itself also uses the same decision logic (by bundle id on macOS, by current exe on Windows).
 pub async fn handle_installed_apps_list(
     host_identifier: String,
 ) -> Result<proto::InstalledAppsListResponse, String> {
@@ -718,13 +718,13 @@ pub async fn handle_installed_apps_list(
     })
 }
 
-/// Computer Use 设置页的只读引导状态（WebUI）。两个 action 与桌面端的
-/// `cua_driver_probe` / `cua_driver_permissions_status` 两条命令一一对应，
-/// 返回的 JSON 就是那两条命令的返回值本身——设置页在两端读到的是同一个对象。
+/// Read-only guidance state for the Computer Use settings page (WebUI). The two actions correspond one-to-one with the desktop's
+/// `cua_driver_probe` / `cua_driver_permissions_status` commands,
+/// and the returned JSON is exactly those commands' return values — the settings page reads the same object on both ends.
 ///
-/// 只接只读 action：安装（联网执行安装脚本）与授权（在宿主屏幕上弹 TCC
-/// 对话框）是桌面本机动作，浏览器那端既确认不了命令全文也点不到弹窗，
-/// 网关侧同样按白名单拒绝，这里再兜一次底。
+/// Only read-only actions are accepted: installation (running an install script over the network) and authorization (popping a TCC
+/// dialog on the host screen) are desktop-local actions; the browser side can neither confirm the full command text nor click the dialog,
+/// and the gateway side likewise rejects them via an allowlist, with one more safety net here.
 pub async fn handle_cua_driver(
     request: proto::CuaDriverRequest,
 ) -> Result<proto::CuaDriverResponse, String> {
@@ -793,7 +793,7 @@ pub async fn handle_workspace_root_grants(
     let grants = match action {
         "list" => {
             if !request.grants.is_empty() {
-                return Err("列出目录授权时不能携带授权草稿".to_string());
+                return Err("Listing directory grants must not carry a grant draft".to_string());
             }
             workspace_root_grants_list(request.project_id, request.project_path).await?
         }
@@ -814,12 +814,12 @@ pub async fn handle_workspace_root_grants(
         }
         "revoke" => {
             if !request.project_path.trim().is_empty() || !request.grants.is_empty() {
-                return Err("撤销目录授权时只能提供项目 id".to_string());
+                return Err("Revoking a directory grant may only provide the project id".to_string());
             }
             workspace_root_grants_revoke(request.project_id).await?;
             Vec::new()
         }
-        _ => return Err(format!("不支持的目录授权操作：{action}")),
+        _ => return Err(format!("Unsupported directory grant operation: {action}")),
     };
 
     Ok(proto::WorkspaceRootGrantsResponse {
@@ -1013,7 +1013,7 @@ pub async fn handle_fs_write_text(
             request.mode,
             expected_mtime_ms,
             expected_content_hash,
-            // WebUI 文件管理器的直接写入,不属于对话轮,不做检查点捕获。
+            // Direct writes by the WebUI file manager are not part of a conversation turn and are not checkpoint-captured.
             None,
         )
     })
@@ -1141,7 +1141,7 @@ pub async fn handle_import_directory(
 ) -> Result<proto::ImportDirectoryResponse, String> {
     let transfer_id = request.transfer_id.clone();
     let operation = proto::ImportDirectoryOperation::try_from(request.operation)
-        .map_err(|_| format!("不支持的目录导入操作：{}", request.operation))?;
+        .map_err(|_| format!("Unsupported directory import operation: {}", request.operation))?;
     let outcome = tauri::async_runtime::spawn_blocking(move || match operation {
         proto::ImportDirectoryOperation::Start => system_import_directory_start_sync(
             request.transfer_id,
@@ -1700,7 +1700,7 @@ fn redact_builtin_tool_content_json(raw: &str) -> Result<String, String> {
                 if is_builtin || is_redacted_id {
                     object.insert(
                         "content".to_string(),
-                        json!([{ "type": "text", "text": "工具调用内容已脱敏" }]),
+                        json!([{ "type": "text", "text": "Tool call content redacted" }]),
                     );
                     object.insert(
                         "details".to_string(),
@@ -1983,7 +1983,7 @@ mod tests {
             "customHeaders": [{ "key": "User-Agent", "value": "stored-cli/1.0" }]
         }]);
 
-        // 草稿没带请求头（proto 的 custom_headers 缺省）→ 沿用落库配置。
+        // The draft has no headers (proto's custom_headers defaulted out) -> reuse the persisted config.
         let inherited = resolve_stored_provider_models_config(
             "provider-a",
             "codex",
@@ -1997,7 +1997,7 @@ mod tests {
             vec![("User-Agent".to_string(), "stored-cli/1.0".to_string())]
         );
 
-        // 草稿把请求头清空了 → 按空集发，绝不回落到落库配置（否则用户删不掉伪装头）。
+        // The draft cleared the headers -> send an empty set and never fall back to the persisted config (otherwise the user cannot delete a spoofed header).
         let cleared = resolve_stored_provider_models_config(
             "provider-a",
             "codex",
@@ -2008,7 +2008,7 @@ mod tests {
         .expect("stored provider config");
         assert!(cleared.custom_headers.is_empty());
 
-        // 草稿显式给了头 → 覆盖落库配置。
+        // The draft explicitly provided headers -> override the persisted config.
         let overridden = resolve_stored_provider_models_config(
             "provider-a",
             "codex",
@@ -2062,7 +2062,7 @@ mod tests {
                 Some(providers),
             )
             .expect_err("provider type mismatch"),
-            "供应商类型与已保存配置不匹配"
+            "Provider type does not match the saved config"
         );
     }
 
@@ -2331,14 +2331,14 @@ mod tests {
         assert_eq!(blocks[0]["arguments"], Value::Null);
         assert_eq!(blocks[0]["redacted"], true);
         assert_eq!(blocks[1]["arguments"]["query"], "keep me");
-        assert_eq!(items[1]["content"][0]["text"], "工具调用内容已脱敏");
+        assert_eq!(items[1]["content"][0]["text"], "Tool call content redacted");
         assert_eq!(items[1]["details"]["kind"], "redacted_tool_content");
         assert_eq!(items[2]["content"][0]["text"], "visible output");
         assert_eq!(items[2]["details"]["data"], "keep me");
         assert_eq!(blocks[2]["name"], "mcp_docs_search");
         assert_eq!(blocks[2]["arguments"], Value::Null);
         assert_eq!(blocks[2]["redacted"], true);
-        assert_eq!(items[3]["content"][0]["text"], "工具调用内容已脱敏");
+        assert_eq!(items[3]["content"][0]["text"], "Tool call content redacted");
         assert_eq!(items[3]["details"]["kind"], "redacted_tool_content");
     }
 

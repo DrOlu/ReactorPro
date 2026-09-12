@@ -82,9 +82,11 @@ pub struct SubagentWorktreeStatusInput {
 pub struct SubagentWorktreeApplyInput {
     pub parent_workdir: String,
     pub worktree_root: String,
-    /// 会话检查点上下文:apply 修改父工作区前对受影响路径捕获父侧前像。
-    /// 缺省(None)不捕获。worktree 子代理自身的临时工作区不参与检查点,
-    /// 只有合并回父工作区这一步才是可回退的真实变更。
+    /// Conversation checkpoint context: before apply modifies the parent
+    /// workspace, capture parent-side pre-images for the affected paths.
+    /// Default (None) captures nothing. The worktree subagent's own temporary
+    /// workspace is not part of checkpoints; only the merge back into the parent
+    /// workspace is a real, revertible change.
     pub checkpoint: Option<super::checkpoint::CheckpointCtx>,
 }
 
@@ -803,17 +805,21 @@ fn apply_worktree_changes_blocking(
         });
     }
 
-    // 在父仓库被任何 apply 路径(git apply / 3way / 文件拷贝兜底)修改之前,
-    // 对受影响路径捕获父工作区前像。捕获记在父仓库根下,rewind 才能恢复
-    // 真实工作区,而不是已被清理的 worktree 临时目录。
+    // Before the parent repo is modified by any apply path (git apply / 3-way /
+    // file-copy fallback), capture parent-workspace pre-images for the affected
+    // paths. Captures are recorded under the parent repo root so rewind can
+    // restore the real workspace rather than an already-cleaned worktree temp dir.
     //
-    // 必须放在 empty_patch 提前返回之后:那条路径下父仓库一个字节都没动,
-    // 提前捕获会给未来的回退留下一批 existed_before=false 的记录,回退时
-    // 反而把父工作区里本来就存在的文件删掉。
-    // 捕获缺口先攒着,不立刻记账:此刻还不知道 apply 会不会真的改动父工作
-    // 区。already_applied / fallback_noop 下父仓库一个字节没动,那时把缺口
-    // 写成 error 记录,会让一个什么都没发生的轮次在 UI 上标 ⚠"回退可能不
-    // 完整"。所以只在确认 apply 生效的分支上落账。
+    // This must come after the empty_patch early return: on that path the parent
+    // repo was not touched at all, and capturing early would leave a batch of
+    // existed_before=false records for future rewinds, which would then delete
+    // files that already existed in the parent workspace.
+    // Capture skips are accumulated first rather than recorded immediately: at
+    // this point it is not yet known whether apply will actually change the
+    // parent workspace. Under already_applied / fallback_noop the parent repo was
+    // not touched at all, and writing the skips as error records then would mark
+    // a round where nothing happened with ⚠"rollback may be incomplete" in the UI.
+    // So record only on branches where apply is confirmed to have taken effect.
     let capture_skips = super::checkpoint::capture_worktree_apply_pre_images(
         checkpoint.as_ref(),
         &parent_repo_root,
@@ -871,8 +877,9 @@ fn apply_worktree_changes_blocking(
                 &apply_paths,
             )
             .inspect_err(|_| {
-                // 兜底中途失败:已拷/已删的路径是真改过的,缺口必须落账,
-                // 否则那一轮会显示成"完整"。
+                // Fallback failed midway: paths already copied/deleted were truly
+                // modified, so the skips must be recorded; otherwise that round
+                // would be shown as "complete".
                 record_skips();
             })
             .map_err(|fallback_error| {
@@ -882,8 +889,9 @@ fn apply_worktree_changes_blocking(
             })?;
             let copied_or_deleted =
                 !fallback.copied_files.is_empty() || !fallback.deleted_files.is_empty();
-            // 只有真改过父工作区才记捕获缺口;already_applied / fallback_noop
-            // 什么都没动,记了就是误报。
+            // Record capture skips only if the parent workspace was truly
+            // modified; already_applied / fallback_noop changed nothing, so
+            // recording would be a false positive.
             if copied_or_deleted {
                 record_skips();
             }
@@ -973,7 +981,7 @@ fn cleanup_worktree_target_blocking(
     };
     if !is_liveagent_subagent_worktree(&worktree_root) {
         item.error = Some(format!(
-            "refusing to cleanup non-LiveAgent subagent worktree: {}",
+            "refusing to cleanup non-ReactorPro subagent worktree: {}",
             display_path(&worktree_root)
         ));
         return item;
@@ -1247,7 +1255,7 @@ mod tests {
             root,
             &["config", "user.email", "liveagent-test@example.com"],
         )?;
-        git(root, &["config", "user.name", "LiveAgent Test"])?;
+        git(root, &["config", "user.name", "ReactorPro Test"])?;
         fs::write(root.join("README.md"), "base\n")
             .map_err(|err| format!("failed to write README: {err}"))?;
         git(root, &["add", "README.md"])?;
@@ -1519,17 +1527,17 @@ mod tests {
         fs::create_dir_all(worktree.join("docs"))
             .map_err(|err| format!("failed to create docs dir: {err}"))?;
         fs::write(
-            worktree.join("docs/可控核聚变的经济可行性分析.md"),
-            "# 可控核聚变的经济可行性分析\n",
+            worktree.join("docs/économic-féasibility-of-controlled-nuclear-fusion.md"),
+            "# Économic Féasibility of Controlled Nuclear Fusion\n",
         )
         .map_err(|err| format!("failed to write unicode file: {err}"))?;
 
         let result = worktree_status_blocking(display_path(&worktree), Some(20_000))?;
         assert!(result.changed);
-        assert!(result.status.contains("docs/可控核聚变的经济可行性分析.md"));
+        assert!(result.status.contains("docs/économic-féasibility-of-controlled-nuclear-fusion.md"));
         assert_eq!(
             result.untracked_files,
-            vec!["docs/可控核聚变的经济可行性分析.md".to_string()]
+            vec!["docs/économic-féasibility-of-controlled-nuclear-fusion.md".to_string()]
         );
 
         let _ = fs::remove_dir_all(root);

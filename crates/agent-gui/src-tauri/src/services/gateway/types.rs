@@ -14,7 +14,7 @@ pub struct GatewayStatusSnapshot {
     pub connected_since: Option<i64>,
     pub last_heartbeat: Option<i64>,
     pub last_error: Option<String>,
-    /// 协议链路；当前连接固定为 "v2"（WebSocket+Protobuf），未连接时为 None。
+    /// Protocol link; a live connection is always "v2" (WebSocket+Protobuf), and None when disconnected.
     pub protocol: Option<String>,
 }
 
@@ -78,8 +78,8 @@ pub struct GatewayChatRequestEvent {
     pub runtime_controls: Option<GatewayChatRuntimeControlsEvent>,
     pub execution_mode: String,
     pub workdir: String,
-    /// 远端 WebUI 直带的命令安全模式(ask/auto/sandbox/sandboxOffline);空串表示
-    /// 未指定,桌面端回落到本地 settings.system.commandSafetyMode。
+    /// Command safety mode carried directly by the remote WebUI (ask/auto/sandbox/sandboxOffline); an empty string means
+    /// unspecified, and the desktop falls back to the local settings.system.commandSafetyMode.
     pub command_safety_mode: String,
     pub uploaded_files: Vec<GatewayUploadedFileEvent>,
     pub referenced_conversations: Vec<GatewayConversationReferenceEvent>,

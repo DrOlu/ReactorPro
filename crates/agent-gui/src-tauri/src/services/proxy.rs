@@ -83,13 +83,13 @@ pub fn proxy_get_server_info(state: tauri::State<'_, Arc<ProxyServerState>>) -> 
 
 pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-        .map_err(|err| format!("绑定本地代理端口失败：{err}"))?;
+        .map_err(|err| format!("failed to bind local proxy port: {err}"))?;
     listener
         .set_nonblocking(true)
-        .map_err(|err| format!("设置本地代理监听为 nonblocking 失败：{err}"))?;
+        .map_err(|err| format!("failed to set local proxy listener to nonblocking: {err}"))?;
     let addr = listener
         .local_addr()
-        .map_err(|err| format!("读取本地代理地址失败：{err}"))?;
+        .map_err(|err| format!("failed to read local proxy address: {err}"))?;
 
     let state = Arc::new(ProxyServerState {
         info: ProxyServerInfo {
@@ -99,7 +99,7 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
         client: reqwest::Client::builder()
             .no_proxy()
             .build()
-            .map_err(|err| format!("创建本地代理 HTTP 客户端失败：{err}"))?,
+            .map_err(|err| format!("failed to create local proxy HTTP client: {err}"))?,
     });
 
     let app = Router::new()
@@ -130,8 +130,9 @@ async fn handle_image_proxy(Query(query): Query<ImageProxyQuery>, headers: Heade
         Err(message) => return error_response(StatusCode::BAD_REQUEST, &message, &headers),
     };
 
-    // 图片外链与商店链路同语义：恒随应用代理出网（未启用=直连，配置异常
-    // 502 fail fast）。<img> 请求无法携带自定义头，因此不走 per-request 开关。
+    // Image external links follow the same semantics as the store path: they always go
+    // out through the app proxy (disabled = direct, broken config = 502 fail fast).
+    // <img> requests cannot carry custom headers, so they do not use the per-request toggle.
     let client = match crate::services::system_proxy::cached_client() {
         Ok(client) => client,
         Err(error) => {
@@ -388,8 +389,9 @@ async fn handle_proxy(
         .get(USE_SYSTEM_PROXY_HEADER)
         .and_then(|value| value.to_str().ok())
         .is_some_and(|value| value == "1");
-    // 系统代理未启用时 cached_client 返回直连 client（勾选但全局关闭 = 直连）；
-    // 代理配置异常则 fail fast，绝不静默降级为直连。
+    // When the system proxy is disabled, cached_client returns a direct client
+    // (checked but globally off = direct); a broken proxy config fails fast and never
+    // silently degrades to a direct connection.
     let client = if use_system_proxy {
         match crate::services::system_proxy::cached_client() {
             Ok(client) => client,
@@ -469,8 +471,9 @@ fn build_target_url(
         .strip_prefix(&prefix)
         .ok_or_else(|| "Invalid proxy path prefix".to_string())?;
     let resolved = if suffix.is_empty() { "/" } else { suffix };
-    // “//” 开头的后缀会被 Url::join 当作 scheme-relative 引用改写目标主机，
-    // 显式拒绝，防止请求被重定向到 upstream origin 之外的主机。
+    // A suffix starting with "//" is treated by Url::join as a scheme-relative reference
+    // and rewrites the target host; reject it explicitly to prevent redirecting requests
+    // to a host outside the upstream origin.
     if resolved.starts_with("//") {
         return Err("Proxy request path must not begin with //".to_string());
     }
@@ -639,11 +642,13 @@ fn should_forward_request_header(name: &HeaderName) -> bool {
         && !lowered.starts_with(PROXY_PREFIX)
 }
 
-/// 覆盖包的拒绝清单**窄于** should_forward_request_header：只拒会破坏请求本身的
-/// 头（host / content-length / hop-by-hop）与本地反代的内部命名空间。
+/// The override-package deny list is **narrower** than should_forward_request_header:
+/// it only rejects headers that would break the request itself (host / content-length /
+/// hop-by-hop) and the local reverse proxy's internal namespace.
 ///
-/// 有意放行 origin / referer / cookie —— 常规拷贝过滤器的职责是剥掉 *WebView 自己
-/// 注入的* Origin/Referer，而不是否决用户在供应商配置里显式写下的同名头。
+/// It deliberately allows origin / referer / cookie through — the job of a normal copy
+/// filter is to strip the *WebView-injected* Origin/Referer, not to veto same-named
+/// headers the user explicitly wrote in the provider config.
 fn is_protected_upstream_override(name: &HeaderName) -> bool {
     let lowered = name.as_str();
     matches!(
@@ -661,8 +666,9 @@ fn is_protected_upstream_override(name: &HeaderName) -> bool {
     ) || lowered.starts_with(PROXY_PREFIX)
 }
 
-/// 解出 x-liveagent-upstream-headers 覆盖包。畸形输入一律 Err（由调用方回 400）：
-/// 静默跳过会把「自定义请求头没生效」变成难查的偶发问题。
+/// Decode the x-liveagent-upstream-headers override package. Malformed input is always
+/// Err (the caller returns 400): silently skipping would turn "custom request headers did
+/// not take effect" into a hard-to-diagnose intermittent problem.
 fn decode_upstream_header_overrides(
     encoded: &str,
 ) -> Result<Vec<(HeaderName, HeaderValue)>, String> {
@@ -713,8 +719,9 @@ fn build_upstream_request_headers(headers: &HeaderMap) -> Result<HeaderMap, Stri
             upstream_headers.append(name, value.clone());
         }
     }
-    // 覆盖包是转发前的最后一步：insert 替换掉 SDK 或 WebView 注入的同名头，
-    // 让「自定义请求头覆盖内置默认头」在任意头名上都成立。
+    // The override package is the last step before forwarding: insert replaces
+    // same-named headers injected by the SDK or WebView, making "custom request headers
+    // override built-in defaults" true for any header name.
     if let Some(encoded) = headers.get(UPSTREAM_HEADERS_HEADER) {
         let encoded = encoded
             .to_str()
@@ -982,8 +989,9 @@ mod tests {
 
     #[test]
     fn upstream_overrides_restore_browser_forbidden_header_names() {
-        // WebView 的 fetch 根本不会发出 Cookie / Referer；常规拷贝过滤器还会主动
-        // 剥掉浏览器注入的 Referer。用户显式配置的同名头必须仍然送达上游。
+        // The WebView's fetch never sends Cookie / Referer at all; the normal copy
+        // filter also actively strips the browser-injected Referer. Same-named headers
+        // the user explicitly configured must still reach the upstream.
         let mut headers = HeaderMap::new();
         headers.insert(
             HeaderName::from_static(REFERER),
@@ -1036,27 +1044,27 @@ mod tests {
         for encoded in ["not-base64!!", "eyJhIjo="] {
             assert!(decode_upstream_header_overrides(encoded).is_err());
         }
-        // 合法 base64 但不是 JSON 对象
+        // Valid base64 but not a JSON object
         assert!(decode_upstream_header_overrides(
             &base64::engine::general_purpose::STANDARD.encode(b"[1,2,3]")
         )
         .is_err());
-        // 非字符串取值
+        // Non-string value
         assert!(decode_upstream_header_overrides(
             &base64::engine::general_purpose::STANDARD.encode(br#"{"X-A":1}"#)
         )
         .is_err());
-        // 头名非法
+        // Invalid header name
         assert!(decode_upstream_header_overrides(
             &base64::engine::general_purpose::STANDARD.encode(br#"{"Bad Header":"v"}"#)
         )
         .is_err());
-        // 取值含 CR/LF（header 注入）
+        // Value contains CR/LF (header injection)
         assert!(decode_upstream_header_overrides(
             &base64::engine::general_purpose::STANDARD.encode(b"{\"X-A\":\"a\\r\\nb\"}")
         )
         .is_err());
-        // 超限
+        // Over limit
         let oversized = "A".repeat(UPSTREAM_HEADERS_MAX_BYTES + 4);
         assert!(decode_upstream_header_overrides(&oversized).is_err());
     }

@@ -1,7 +1,7 @@
 package websocket_test
 
-// v2 直通 git 门控：写操作受桌面端 Remote 设置 enable_web_git 门控，
-// 读操作始终放行。
+// v2 passthrough git gating: write operations are gated by the desktop-side Remote setting enable_web_git,
+// while read operations are always allowed.
 
 import (
 	"strings"

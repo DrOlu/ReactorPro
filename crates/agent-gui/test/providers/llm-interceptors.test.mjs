@@ -3,20 +3,20 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 /**
- * PR-3 payload 拦截器注册化（feat-llm-interceptors）单元测试：
+ * Unit tests for PR-3 payload interceptor registration (feat-llm-interceptors):
  *
- * 1. 默认注册顺序快照——10 个具名拦截器逐一断言，顺序即协议正确性的
- *    一部分，任何重排都必须显式改这里；
- * 2. 自定义拦截器语义——params 可见、options 可变换、执行位置在默认
- *    拦截器之后且在 payload-debug-logging 链尾之前；
- * 3. dispose 移除且幂等、同名重复注册抛错；
- * 4. 行为等价——空注册态下 finalizeProviderStreamOptions 的输出与
- *    直接用旧数组顺序 compose 的结果逐字段一致（配合 golden 两套件
- *    零修改通过构成 PR-3 的等价证据）。
+ * 1. Default registration order snapshot --- assert the 10 named interceptors one by one; the order is
+ *    part of protocol correctness, and any reordering must explicitly change this;
+ * 2. Custom interceptor semantics --- params visible, options transformable, execution position after
+ *    the default interceptors and before the tail of the payload-debug-logging chain;
+ * 3. dispose removes and is idempotent, duplicate registration under the same name throws;
+ * 4. Behavioral equivalence --- with an empty registration state, finalizeProviderStreamOptions output is
+ *    field-for-field identical to composing directly with the old array order (together with the two
+ *    golden suites passing unmodified, this constitutes the equivalence evidence for PR-3).
  */
 
 const loader = createTsModuleLoader();
-// 先加载 payloadPipeline（安装默认拦截器），再取注册表 API。
+// First load payloadPipeline (which installs the default interceptors), then obtain the registry API.
 const {
   finalizeProviderStreamOptions,
   composePayloadMiddlewares,
@@ -49,15 +49,15 @@ function baseParams(overrides = {}) {
   };
 }
 
-test("默认注册顺序快照：10 个具名拦截器逐一一致", () => {
+test("default registration order snapshot: all 10 named interceptors match one by one", () => {
   assert.deepEqual(listPayloadInterceptorNames(), EXPECTED_DEFAULT_ORDER);
 });
 
-test("llm.use 暴露注册入口且与 usePayloadInterceptor 同源", () => {
+test("llm.use exposes the registration entry and is same-source as usePayloadInterceptor", () => {
   assert.equal(llm.use, usePayloadInterceptor);
 });
 
-test("自定义拦截器：params 可见、options 可变换、dispose 后恢复原样", () => {
+test("custom interceptor: params visible, options transformable, restored after dispose", () => {
   const seen = [];
   const dispose = usePayloadInterceptor({
     name: "test-marker",
@@ -77,7 +77,7 @@ test("自定义拦截器：params 可见、options 可变换、dispose 后恢复
   assert.equal(withoutMarker.headers?.["x-test-marker"], undefined);
 });
 
-test("自定义拦截器插入默认之后、payload-debug-logging 链尾之前", () => {
+test("custom interceptor inserted after defaults and before the tail of the payload-debug-logging chain", () => {
   const dispose = usePayloadInterceptor({
     name: "test-order",
     intercept: (options) => options,
@@ -96,7 +96,7 @@ test("自定义拦截器插入默认之后、payload-debug-logging 链尾之前"
   assert.deepEqual(listPayloadInterceptorNames(), EXPECTED_DEFAULT_ORDER);
 });
 
-test("链尾观测不变量：自定义追加的 onPayload 变换仍被 debug logging 看到", async () => {
+test("chain-tail observation invariant: an onPayload transform appended by a custom interceptor is still seen by debug logging", async () => {
   const dispose = usePayloadInterceptor({
     name: "test-payload-mutator",
     intercept: (options) => ({
@@ -120,7 +120,7 @@ test("链尾观测不变量：自定义追加的 onPayload 变换仍被 debug lo
   }
 });
 
-test("dispose 幂等：重复调用不影响其他注册", () => {
+test("dispose is idempotent: repeated calls do not affect other registrations", () => {
   const disposeA = usePayloadInterceptor({ name: "test-a", intercept: (o) => o });
   const disposeB = usePayloadInterceptor({ name: "test-b", intercept: (o) => o });
   disposeA();
@@ -132,7 +132,7 @@ test("dispose 幂等：重复调用不影响其他注册", () => {
   assert.deepEqual(listPayloadInterceptorNames(), EXPECTED_DEFAULT_ORDER);
 });
 
-test("同名重复注册抛错（含与默认拦截器同名）", () => {
+test("duplicate registration under the same name throws (including a name matching a default interceptor)", () => {
   const dispose = usePayloadInterceptor({ name: "test-dup", intercept: (o) => o });
   try {
     assert.throws(
@@ -153,10 +153,10 @@ test("同名重复注册抛错（含与默认拦截器同名）", () => {
   );
 });
 
-test("加载顺序反转：自定义先注册且与默认名撞名时，安装默认链抛错且不留部分状态", () => {
-  // 独立 loader 模拟"插件/测试先 import 服务层并注册自定义拦截器，之后
-  // payloadPipeline 才被加载"的顺序（llmService 不传递性求值 payloadPipeline，
-  // 这一顺序在真实模块图上可达）。
+test("reversed load order: when a custom interceptor registers first and collides with a default name, installing the default chain throws and leaves no partial state", () => {
+  // A standalone loader simulates the order "a plugin/test imports the service layer and registers a
+  // custom interceptor first, and only then is payloadPipeline loaded" (llmService does not transitively
+  // evaluate payloadPipeline; this order is reachable on the real module graph).
   const isolated = createTsModuleLoader();
   const api = isolated.loadModule("src/lib/providers/service/interceptors.ts");
   api.usePayloadInterceptor({
@@ -167,13 +167,13 @@ test("加载顺序反转：自定义先注册且与默认名撞名时，安装�
     () => isolated.loadModule("src/lib/providers/runtime/payloadPipeline.ts"),
     /already taken by a custom interceptor: anthropic-automatic-caching/,
   );
-  // 安装失败必须不留部分注册状态：链上只有先注册的那个自定义拦截器。
+  // A failed install must leave no partial registration state: the chain has only the custom interceptor registered first.
   assert.deepEqual(api.listPayloadInterceptorNames(), ["anthropic-automatic-caching"]);
 });
 
-test("行为等价：空注册态 finalize 输出与旧数组组合逐字段一致", async () => {
-  // 按注册化前的 finalizePayloadMiddlewares 数组原样重建旧组合链
-  // （同一批 attach* 实现、同一顺序），对非平凡参数逐字段对比输出。
+test("behavioral equivalence: with empty registrations, finalize output matches the old array composition field-for-field", async () => {
+  // Rebuild the old composition chain as-is from the pre-registration finalizePayloadMiddlewares array
+  // (same attach* implementations, same order), and compare output field-for-field on non-trivial parameters.
   const { attachAnthropicAutomaticCaching } = loader.loadModule(
     "src/lib/providers/runtime/anthropicCache.ts",
   );
@@ -269,7 +269,7 @@ test("行为等价：空注册态 finalize 输出与旧数组组合逐字段一�
     (options, params) => attachPayloadDebugLogging(options, params.debugLogger, params.extra),
   ]);
 
-  // 覆盖多形态参数：anthropic 缓存路径、codex cache hint 路径、debug 链尾。
+  // Cover multiple parameter shapes: the anthropic cache path, the codex cache hint path, and the debug chain tail.
   const paramMatrix = [
     baseParams(),
     baseParams({ providerId: "claude_code", options: { headers: { "x-a": "1" } } }),
@@ -283,7 +283,7 @@ test("行为等价：空注册态 finalize 输出与旧数组组合逐字段一�
   for (const params of paramMatrix) {
     const viaRegistry = finalizeProviderStreamOptions(params);
     const viaLegacy = legacyChain(params.options, params);
-    // onPayload 是闭包无法 deepEqual；先断言存在性一致，再剥离比较其余字段。
+    // onPayload is a closure and cannot be deepEqual'd; first assert existence parity, then strip it and compare the remaining fields.
     assert.equal(
       typeof viaRegistry.onPayload,
       typeof viaLegacy.onPayload,

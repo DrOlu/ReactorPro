@@ -1,31 +1,37 @@
-// 配置备份快照：采集 / 校验 / 应用。
+// Config backup snapshot: capture / validate / apply.
 //
-// 载体刻意选用「按域聚合的 JSON」而非整库 SQL dump —— 后者会把不可信的 SQL
-// 交给 SQLite 执行（ATTACH DATABASE 可在任意可写路径落文件），且大库导入时
-// 逐行 INSERT 会冻结 UI。本模块搬运 providers / mcp / system / agents /
-// model_failover / stt 六个域的 payload；system 域只带可移植偏好，
-// workdir、工作区路径、系统代理这类设备本地态不进快照（见
-// SYSTEM_PORTABLE_BACKUP_KEYS）。
+// The carrier deliberately uses "JSON aggregated by domain" rather than a whole-database SQL dump
+// -- the latter would hand untrusted SQL to SQLite for execution (ATTACH DATABASE can write a file
+// to any writable path), and line-by-line INSERTs during a large import would freeze the UI. This
+// module moves payloads for the five domains providers / mcp / system / agents / model_failover;
+// the system domain carries only portable preferences, and device-local state such as workdir,
+// workspace paths, and the system proxy does not enter the snapshot (see
+// SYSTEM_PORTABLE_BACKUP_KEYS).
 //
-// 导入侧的另一个坑是 provider id：它是各设备本地随机生成的 UUID，而聊天
-// 会话、默认模型、记忆、定时任务都以 {customProviderId, model} 引用它。
-// 整域覆盖前先按身份把备份 provider 映射回本机 id（见
-// build_provider_id_map），本机引用才不会在导入后整体失配。
+// Another pitfall on the import side is the provider id: it is a locally randomly generated UUID on
+// each device, while chat sessions, the default model, memory, and scheduled tasks all reference it
+// as {customProviderId, model}. Before a whole-domain overwrite, backup providers are mapped back
+// to local ids by identity (see build_provider_id_map), so local references do not all break after
+// import.
 
-/// 载体格式版本。manifest 结构本身变更时递增。
+/// Carrier format version. Incremented when the manifest structure itself changes.
 pub(crate) const BACKUP_PROTOCOL_VERSION: u32 = 1;
-/// 配置域 schema 版本。各域 payload 结构不兼容演进时递增。
+/// Config domain schema version. Incremented when a domain payload structure evolves incompatibly.
 ///
-/// v2：移除 skills 域（只同步启用开关没有意义，技能本体在磁盘上）；
-/// 新增 agents / modelFailover / stt 三域；system 域收窄为可移植偏好。
-/// v1 备份仍可导入：skills 字段被忽略，system 里的设备本地键被过滤。
+/// v2: removed the skills domain (syncing only the enabled toggle is meaningless; the skills
+/// themselves live on disk); added the agents / modelFailover domains; narrowed the system domain to
+/// portable preferences.
+/// v1 backups can still be imported: the skills field is ignored and device-local keys in system
+/// are filtered out.
 pub(crate) const BACKUP_SCHEMA_VERSION: u32 = 2;
 
-/// system 域中随快照流转的可移植偏好。
+/// Portable preferences that travel with the snapshot in the system domain.
 ///
-/// 白名单之外的 system 键（workdir、workspaceProjects 及其衍生键、systemProxy）
-/// 是设备本地态：绝对路径在另一台机器上多半不存在，代理配置是每台机器 /
-/// 每个网络环境各自的。采集时过滤、应用时只覆盖这些键，其余保持本机原值。
+/// system keys outside the whitelist (workdir, workspaceProjects and its derived keys, systemProxy)
+/// are device-local state: absolute paths most likely do not exist on another machine, and the proxy
+/// configuration is specific to each machine / network environment. They are filtered at capture
+/// time, and at apply time only these keys are overwritten while everything else keeps the local
+/// value.
 const SYSTEM_PORTABLE_BACKUP_KEYS: &[&str] = &[
     SYSTEM_EXECUTION_MODE_KEY,
     SYSTEM_TOOL_POLICIES_KEY,
@@ -33,11 +39,11 @@ const SYSTEM_PORTABLE_BACKUP_KEYS: &[&str] = &[
     SYSTEM_BROWSER_AUTOMATION_MODE_KEY,
 ];
 
-/// 导出文件中内联 manifest 的字段名。
+/// Field name of the inline manifest in the export file.
 const BACKUP_MANIFEST_FIELD: &str = "_manifest";
-/// 导入文件大小上限，防止畸形/超大输入耗尽内存。
+/// Import file size limit, to keep malformed/oversized input from exhausting memory.
 const BACKUP_MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
-/// 本地备份保留份数。
+/// Number of local backups to retain.
 const BACKUP_RETENTION: usize = 10;
 const BACKUP_DIRNAME: &str = "backups";
 
@@ -47,14 +53,15 @@ pub struct BackupManifest {
     pub protocol_version: u32,
     pub schema_version: u32,
     pub snapshot_id: String,
-    /// RFC3339 UTC 时间戳。
+    /// RFC3339 UTC timestamp.
     pub created_at: String,
     pub device_name: String,
     pub app_version: String,
-    /// 预留：首版恒为 "none"，后续引入端到端加密时改此字段而不破坏格式。
+    /// Reserved: always "none" in the first version; when end-to-end encryption is introduced later,
+    /// this field changes without breaking the format.
     #[serde(default = "default_backup_encryption")]
     pub encryption: String,
-    /// 各域条目数，仅供 UI 展示摘要，不参与校验。
+    /// Entry counts per domain, used only for the UI summary and not part of validation.
     #[serde(default)]
     pub domains: BackupDomainCounts,
 }
@@ -76,11 +83,10 @@ pub struct BackupDomainCounts {
     pub agents: usize,
     #[serde(default)]
     pub model_failover: usize,
-    #[serde(default)]
-    pub stt: usize,
 }
 
-/// 一份完整的配置快照。字段全部可选：某域为空表示导出侧没有该配置。
+/// A complete config snapshot. All fields are optional: an empty domain means the exporting side had
+/// no such config.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupSnapshot {
@@ -88,21 +94,19 @@ pub struct BackupSnapshot {
     pub providers: Option<Value>,
     #[serde(default)]
     pub mcp: Option<Value>,
-    /// 仅含 SYSTEM_PORTABLE_BACKUP_KEYS 白名单键。
+    /// Contains only the SYSTEM_PORTABLE_BACKUP_KEYS whitelist keys.
     #[serde(default)]
     pub system: Option<Value>,
-    /// 提示词模板数组，形状与 settings_save_agents payload 一致。
+    /// Array of prompt templates, shaped like the settings_save_agents payload.
     #[serde(default)]
     pub agents: Option<Value>,
-    /// 模型故障转移配置对象，按服务商类型分组。
+    /// Model failover config object, grouped by provider type.
     #[serde(default)]
     pub model_failover: Option<Value>,
-    /// STT 配置对象（原文，含密钥 —— 与 providers 域的明文策略一致）。
-    #[serde(default)]
-    pub stt: Option<Value>,
 }
 
-/// 导入预览：解析并校验成功但尚未写库，供确认对话框展示。
+/// Import preview: parsed and validated successfully but not yet written to the database, shown in
+/// the confirmation dialog.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupImportPreview {
@@ -110,18 +114,18 @@ pub struct BackupImportPreview {
     pub manifest: BackupManifest,
 }
 
-/// 导入/下载完成后的结果。
+/// Result after an import/download completes.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupApplyOutcome {
     pub applied: BackupDomainCounts,
-    /// 应用前生成的本地备份文件路径。
+    /// Path of the local backup file generated before applying.
     pub backup_path: Option<String>,
 }
 
 fn backup_dir() -> Result<PathBuf, String> {
     let dir = config_dir()?.join(BACKUP_DIRNAME);
-    fs::create_dir_all(&dir).map_err(|e| format!("创建备份目录失败：{e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("failed to create backup directory: {e}"))?;
     Ok(dir)
 }
 
@@ -141,10 +145,11 @@ fn hostname_label() -> Option<String> {
     None
 }
 
-/// manifest 的 `createdAt`：RFC3339 UTC，固定 `Z` 后缀。
+/// The manifest's `createdAt`: RFC3339 UTC with a fixed `Z` suffix.
 ///
-/// 用 chrono（已是直接依赖）而不是自己算日历，与 `services/memory/schema.rs`
-/// 的既有做法一致。`to_rfc3339()` 会输出 `+00:00`，这里显式指定格式保持 `Z`。
+/// Uses chrono (already a direct dependency) rather than computing the calendar by hand, consistent
+/// with the existing approach in `services/memory/schema.rs`. `to_rfc3339()` would output `+00:00`,
+/// so the format is specified explicitly here to keep `Z`.
 fn rfc3339_now() -> String {
     chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
@@ -165,14 +170,6 @@ fn count_mcp_servers(value: Option<&Value>) -> usize {
         .unwrap_or(0)
 }
 
-fn count_stt_providers(value: Option<&Value>) -> usize {
-    value
-        .and_then(|stt| stt.get("providers"))
-        .and_then(Value::as_object)
-        .map(Map::len)
-        .unwrap_or(0)
-}
-
 pub(crate) fn snapshot_domain_counts(snapshot: &BackupSnapshot) -> BackupDomainCounts {
     BackupDomainCounts {
         providers: count_domain(snapshot.providers.as_ref()),
@@ -180,7 +177,6 @@ pub(crate) fn snapshot_domain_counts(snapshot: &BackupSnapshot) -> BackupDomainC
         system: count_domain(snapshot.system.as_ref()),
         agents: count_domain(snapshot.agents.as_ref()),
         model_failover: count_domain(snapshot.model_failover.as_ref()),
-        stt: count_stt_providers(snapshot.stt.as_ref()),
     }
 }
 
@@ -197,7 +193,7 @@ pub(crate) fn build_backup_manifest(snapshot: &BackupSnapshot) -> BackupManifest
     }
 }
 
-/// 从完整 system 配置中筛出可移植偏好；全部缺失时返回 None。
+/// Filters portable preferences out of the full system config; returns None when all are missing.
 fn portable_system_subset(system: Option<Value>) -> Option<Value> {
     let map = match system {
         Some(Value::Object(map)) => map,
@@ -214,11 +210,12 @@ fn portable_system_subset(system: Option<Value>) -> Option<Value> {
     }
 }
 
-/// 采集当前配置。六个域全部来自 SQLite，不需要前端参与。
+/// Captures the current config. All five domains come from SQLite and require no frontend
+/// involvement.
 ///
-/// 注意：同步配置（WebDAV 地址/凭据）刻意存放在独立表 `backup_sync_settings`
-/// 而不在这些表里 —— 它是设备级的，若随快照流转会让 A 机器的凭据覆盖
-/// B 机器，形成循环。
+/// Note: the sync config (WebDAV address/credentials) is deliberately stored in the separate table
+/// `backup_sync_settings` rather than in these tables -- it is device-level, and letting it travel
+/// with the snapshot would let machine A's credentials overwrite machine B's, creating a loop.
 pub(crate) fn collect_backup_snapshot(conn: &Connection) -> Result<BackupSnapshot, String> {
     Ok(BackupSnapshot {
         providers: load_providers(conn)?,
@@ -226,132 +223,129 @@ pub(crate) fn collect_backup_snapshot(conn: &Connection) -> Result<BackupSnapsho
         system: portable_system_subset(load_system(conn)?),
         agents: load_agents(conn)?,
         model_failover: load_model_failover(conn)?,
-        stt: load_stt_raw(conn)?,
     })
 }
 
-/// 校验 manifest 的版本兼容性。高于当前支持的版本一律拒绝，
-/// 避免把读不懂的数据当成「空配置」写入而静默清库。
+/// Validates the manifest's version compatibility. Any version higher than currently supported is
+/// rejected, to avoid writing unreadable data as an "empty config" and silently wiping the database.
 pub(crate) fn validate_backup_manifest(manifest: &BackupManifest) -> Result<(), String> {
     if manifest.protocol_version > BACKUP_PROTOCOL_VERSION {
         return Err(format!(
-            "备份文件格式版本 {} 高于当前支持的 {BACKUP_PROTOCOL_VERSION}，请升级应用后重试",
+            "backup file format version {} is newer than the supported {BACKUP_PROTOCOL_VERSION}; upgrade the app and retry",
             manifest.protocol_version
         ));
     }
     if manifest.schema_version > BACKUP_SCHEMA_VERSION {
         return Err(format!(
-            "备份文件配置版本 {} 高于当前支持的 {BACKUP_SCHEMA_VERSION}，请升级应用后重试",
+            "backup file config version {} is newer than the supported {BACKUP_SCHEMA_VERSION}; upgrade the app and retry",
             manifest.schema_version
         ));
     }
     if manifest.encryption != "none" {
         return Err(format!(
-            "暂不支持的加密方式：{}",
+            "unsupported encryption method: {}",
             manifest.encryption
         ));
     }
     Ok(())
 }
 
-/// 结构校验：各域必须是预期的 JSON 形状，拒绝畸形输入。
+/// Structural validation: each domain must have the expected JSON shape; malformed input is rejected.
 pub(crate) fn validate_backup_snapshot(snapshot: &BackupSnapshot) -> Result<(), String> {
     if let Some(providers) = &snapshot.providers {
         if !providers.is_array() {
-            return Err("备份内容 providers 必须是数组".to_string());
+            return Err("backup content providers must be an array".to_string());
         }
     }
     if let Some(mcp) = &snapshot.mcp {
         let mcp = mcp
             .as_object()
-            .ok_or_else(|| "备份内容 mcp 必须是对象".to_string())?;
+            .ok_or_else(|| "backup content mcp must be an object".to_string())?;
         if let Some(servers) = mcp.get("servers") {
             if !servers.is_array() {
-                return Err("备份内容 mcp.servers 必须是数组".to_string());
+                return Err("backup content mcp.servers must be an array".to_string());
             }
         }
         if let Some(selected) = mcp.get("selected") {
             if !selected.is_array() {
-                return Err("备份内容 mcp.selected 必须是数组".to_string());
+                return Err("backup content mcp.selected must be an array".to_string());
             }
         }
     }
     if let Some(system) = &snapshot.system {
         if !system.is_object() {
-            return Err("备份内容 system 必须是对象".to_string());
+            return Err("backup content system must be an object".to_string());
         }
     }
     if let Some(agents) = &snapshot.agents {
         if !agents.is_array() {
-            return Err("备份内容 agents 必须是数组".to_string());
+            return Err("backup content agents must be an array".to_string());
         }
     }
     if let Some(model_failover) = &snapshot.model_failover {
         if !model_failover.is_object() {
-            return Err("备份内容 modelFailover 必须是对象".to_string());
-        }
-    }
-    if let Some(stt) = &snapshot.stt {
-        if !stt.is_object() {
-            return Err("备份内容 stt 必须是对象".to_string());
+            return Err("backup content modelFailover must be an object".to_string());
         }
     }
     Ok(())
 }
 
-/// 序列化为导出文件内容：快照 + 内联 manifest，单文件自包含。
+/// Serializes to the export file content: snapshot + inline manifest, self-contained in a single
+/// file.
 pub(crate) fn serialize_backup_document(
     snapshot: &BackupSnapshot,
     manifest: &BackupManifest,
 ) -> Result<String, String> {
     let mut document = match serde_json::to_value(snapshot)
-        .map_err(|e| format!("序列化备份内容失败：{e}"))?
+        .map_err(|e| format!("failed to serialize backup content: {e}"))?
     {
         Value::Object(map) => map,
-        _ => return Err("序列化备份内容失败：预期对象".to_string()),
+        _ => return Err("failed to serialize backup content: expected an object".to_string()),
     };
     document.insert(
         BACKUP_MANIFEST_FIELD.to_string(),
-        serde_json::to_value(manifest).map_err(|e| format!("序列化备份元信息失败：{e}"))?,
+        serde_json::to_value(manifest).map_err(|e| format!("failed to serialize backup metadata: {e}"))?,
     );
     serde_json::to_string_pretty(&Value::Object(document))
-        .map_err(|e| format!("序列化备份文件失败：{e}"))
+        .map_err(|e| format!("failed to serialize backup file: {e}"))
 }
 
-/// 解析导出文件内容，返回 (快照, manifest)。已完成版本与结构校验。
+/// Parses the export file content and returns (snapshot, manifest). Version and structural
+/// validation have already been performed.
 ///
-/// v1 文件中的 skills 字段在反序列化时被 serde 忽略。
+/// The skills field in v1 files is ignored by serde during deserialization.
 pub(crate) fn parse_backup_document(raw: &str) -> Result<(BackupSnapshot, BackupManifest), String> {
     let mut document = expect_object(
-        parse_json(raw, "备份文件")?,
-        "备份文件",
+        parse_json(raw, "backup file")?,
+        "backup file",
     )?;
     let manifest_value = document
         .remove(BACKUP_MANIFEST_FIELD)
-        .ok_or_else(|| "备份文件缺少元信息，可能不是 LiveAgent 导出的配置".to_string())?;
+        .ok_or_else(|| "backup file is missing metadata; it may not be a config exported by ReactorPro".to_string())?;
     let manifest = serde_json::from_value::<BackupManifest>(manifest_value)
-        .map_err(|e| format!("解析备份元信息失败：{e}"))?;
+        .map_err(|e| format!("failed to parse backup metadata: {e}"))?;
     validate_backup_manifest(&manifest)?;
 
     let snapshot = serde_json::from_value::<BackupSnapshot>(Value::Object(document))
-        .map_err(|e| format!("解析备份内容失败：{e}"))?;
+        .map_err(|e| format!("failed to parse backup content: {e}"))?;
     validate_backup_snapshot(&snapshot)?;
     Ok((snapshot, manifest))
 }
 
-/// 读取备份文件，带大小上限（不可信输入）。
+/// Reads a backup file with a size limit (untrusted input).
 pub(crate) fn read_backup_file(path: &Path) -> Result<String, String> {
-    let metadata = fs::metadata(path).map_err(|e| format!("读取备份文件失败：{e}"))?;
+    let metadata = fs::metadata(path).map_err(|e| format!("failed to read backup file: {e}"))?;
     if metadata.len() > BACKUP_MAX_FILE_BYTES {
         return Err(format!(
-            "备份文件过大（{} 字节），上限为 {BACKUP_MAX_FILE_BYTES} 字节",
+            "backup file is too large ({} bytes); the limit is {BACKUP_MAX_FILE_BYTES} bytes",
             metadata.len()
         ));
     }
-    fs::read_to_string(path).map_err(|e| format!("读取备份文件失败：{e}"))
+    fs::read_to_string(path).map_err(|e| format!("failed to read backup file: {e}"))
 }
 
-/// 应用前把当前配置备份到 ~/.liveagent/backups/，保留最近 BACKUP_RETENTION 份。
+/// Before applying, backs up the current config to ~/.liveagent/backups/, keeping the most recent
+/// BACKUP_RETENTION copies.
 pub(crate) fn backup_current_config(conn: &Connection) -> Result<Option<String>, String> {
     let snapshot = collect_backup_snapshot(conn)?;
     let manifest = build_backup_manifest(&snapshot);
@@ -360,13 +354,13 @@ pub(crate) fn backup_current_config(conn: &Connection) -> Result<Option<String>,
     let dir = backup_dir()?;
     let filename = format!("config-{}.json", now_ms());
     let path = dir.join(filename);
-    fs::write(&path, document).map_err(|e| format!("写入备份文件失败：{e}"))?;
+    fs::write(&path, document).map_err(|e| format!("failed to write backup file: {e}"))?;
     prune_backups(&dir)?;
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
 fn prune_backups(dir: &Path) -> Result<(), String> {
-    let entries = fs::read_dir(dir).map_err(|e| format!("读取备份目录失败：{e}"))?;
+    let entries = fs::read_dir(dir).map_err(|e| format!("failed to read backup directory: {e}"))?;
     let mut files: Vec<PathBuf> = entries
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
@@ -381,20 +375,21 @@ fn prune_backups(dir: &Path) -> Result<(), String> {
     if files.len() <= BACKUP_RETENTION {
         return Ok(());
     }
-    // 文件名内嵌毫秒时间戳，字典序即时间序。
+    // The filename embeds a millisecond timestamp, so lexicographic order equals chronological order.
     files.sort();
     for path in files.iter().take(files.len() - BACKUP_RETENTION) {
-        // 清理失败不应阻断主流程。
+        // A cleanup failure must not block the main flow.
         let _ = fs::remove_file(path);
     }
     Ok(())
 }
 
-/// 把快照中的可移植 system 键叠加到本机现有 system 配置上。
+/// Overlays the portable system keys from the snapshot onto the machine's existing system config.
 ///
-/// 不能直接拿快照 system 调 save_system —— 后者按固定白名单 DELETE 整表重建，
-/// 缺失的键会被填成默认值，本机的 workdir / 工作区 / 代理会被默认值顶掉。
-/// 只叠加白名单键还顺带过滤了 v1 备份里混入的设备本地键。
+/// The snapshot's system value cannot be passed directly to save_system -- the latter DELETEs and
+/// rebuilds the whole table against a fixed whitelist, missing keys get filled with defaults, and
+/// the local workdir / workspace / proxy would be clobbered by defaults. Overlaying only the
+/// whitelist keys also incidentally filters out device-local keys mixed into v1 backups.
 fn merge_portable_system(conn: &Connection, snapshot_system: &Value) -> Result<Value, String> {
     let mut merged = match load_system(conn)? {
         Some(Value::Object(map)) => map,
@@ -410,7 +405,8 @@ fn merge_portable_system(conn: &Connection, snapshot_system: &Value) -> Result<V
     Ok(Value::Object(merged))
 }
 
-/// 读取 provider 对象的字符串字段（trim 后）；缺失或非字符串按空串处理。
+/// Reads a string field (after trimming) from a provider object; missing or non-string yields an
+/// empty string.
 fn provider_string_field(provider: &Value, key: &str) -> String {
     provider
         .get(key)
@@ -420,16 +416,17 @@ fn provider_string_field(provider: &Value, key: &str) -> String {
         .to_string()
 }
 
-/// baseUrl 归一化：去首尾空白与尾部斜杠。两台设备手填同一端点时最常见的
-/// 分歧就是结尾多一个 `/`；host 大小写等更激进的归一不做 —— 配对错了会把
-/// 本机引用续到另一个账号上，宁可少配也不错配。
+/// baseUrl normalization: strip leading/trailing whitespace and a trailing slash. The most common
+/// divergence when two devices manually enter the same endpoint is an extra trailing `/`; more
+/// aggressive normalization such as host casing is not done -- a wrong pairing would re-point local
+/// references at another account, so it is better to pair fewer than to mispair.
 fn normalized_provider_base_url(provider: &Value) -> String {
     provider_string_field(provider, "baseUrl")
         .trim_end_matches('/')
         .to_string()
 }
 
-/// provider 身份指纹，用于跨设备识别「同一个服务商配置」。
+/// Provider identity fingerprint, used to recognize the "same provider config" across devices.
 struct ProviderIdentity {
     id: String,
     vendor: String,
@@ -455,9 +452,10 @@ fn provider_identities(providers: &[Value]) -> Vec<ProviderIdentity> {
         .collect()
 }
 
-/// 在未消耗的两侧候选中按 key 配对：某个 key 在两侧各恰好出现一次时才认定
-/// 为同一 provider。出现多个候选（同端点多账号）时无法分辨哪个对哪个，
-/// 跳过不配 —— 退回「保留源 id」的旧行为，引用失效但不会张冠李戴。
+/// Pairs by key among the unconsumed candidates on both sides: a key is only considered the same
+/// provider when it appears exactly once on each side. When multiple candidates exist (multiple
+/// accounts on the same endpoint), there is no way to tell which is which, so it is skipped -- this
+/// reverts to the old "keep the source id" behavior: references break, but nothing gets misattributed.
 fn match_unique_identity<K: std::hash::Hash + Eq>(
     incoming: &[ProviderIdentity],
     incoming_taken: &mut [bool],
@@ -475,7 +473,8 @@ fn match_unique_identity<K: std::hash::Hash + Eq>(
             *incoming_counts.entry(key).or_default() += 1;
         }
     }
-    // key → (未消耗候选数, 最后一个候选下标)；仅当数量为 1 时下标才有意义。
+    // key -> (unconsumed candidate count, last candidate index); the index is only meaningful when
+    // the count is 1.
     let mut local_slots: HashMap<K, (usize, usize)> = HashMap::new();
     for (index, identity) in local.iter().enumerate() {
         if local_taken[index] {
@@ -487,7 +486,8 @@ fn match_unique_identity<K: std::hash::Hash + Eq>(
             slot.1 = index;
         }
     }
-    // 按 incoming 原始顺序应用配对，结果与 HashMap 迭代顺序无关。
+    // Apply pairings in the original incoming order, so the result is independent of HashMap
+    // iteration order.
     for (index, identity) in incoming.iter().enumerate() {
         if incoming_taken[index] {
             continue;
@@ -512,27 +512,32 @@ fn match_unique_identity<K: std::hash::Hash + Eq>(
     }
 }
 
-/// 备份里的 provider id 是源设备随机生成的 UUID；本机聊天会话、默认模型、
-/// 记忆整理、定时任务引用的是本机 UUID。整域覆盖时若原样写入源 id，这些
-/// 引用会整体失配（前端规范化时被静默清空，用户得逐处重选模型）。导入前
-/// 把「同一身份」的备份 provider 改写回本机 id，引用即可无感存续。
+/// The provider id in a backup is a UUID randomly generated on the source device; the local chat
+/// sessions, default model, memory maintenance, and scheduled tasks reference the local UUID. If the
+/// source id is written as-is during a whole-domain overwrite, these references all break (silently
+/// cleared during frontend normalization, forcing the user to reselect models everywhere). Before
+/// import, backup providers of the "same identity" are rewritten back to the local id so references
+/// survive seamlessly.
 ///
-/// 三级配对，逐级放宽且互斥（配对成功即从两侧候选中剔除）：
-/// 1. id 相同 —— 内置槽位（builtin-*）、同源导入派生 id、以及已同步过一次
-///    的设备（上次导入后双方 id 已对齐）；
-/// 2. type + baseUrl + name 全同，两侧唯一；
-/// 3. type + baseUrl 相同，两侧唯一（覆盖仅改过显示名的场景）。
+/// Three pairing levels, progressively looser and mutually exclusive (a successful pairing removes
+/// the candidates from both sides):
+/// 1. identical id -- built-in slots (builtin-*), ids derived from a same-source import, and
+///    devices already synced once (both ids aligned after the previous import);
+/// 2. same type + baseUrl + name, unique on both sides;
+/// 3. same type + baseUrl, unique on both sides (covers the case where only the display name changed).
 ///
-/// 2/3 级要求 type 非空且候选唯一，猜不准时宁可保留源 id。
+/// Levels 2/3 require a non-empty type and a unique candidate; when it cannot be determined
+/// confidently, the source id is kept.
 ///
-/// 返回 源 id → 本机 id，仅含两者不同的条目。
+/// Returns source id -> local id, containing only entries where the two differ.
 fn build_provider_id_map(incoming: &[Value], local: &[Value]) -> HashMap<String, String> {
     let incoming = provider_identities(incoming);
     let local = provider_identities(local);
     let mut incoming_taken = vec![false; incoming.len()];
     let mut local_taken = vec![false; local.len()];
 
-    // 第 1 级：id 直接相同，无需改写，只把两侧候选标记为已消耗。
+    // Level 1: ids are directly identical, so no rewrite is needed; just mark the candidates on
+    // both sides as consumed.
     let local_index_by_id: HashMap<&str, usize> = local
         .iter()
         .enumerate()
@@ -578,9 +583,10 @@ fn build_provider_id_map(incoming: &[Value], local: &[Value]) -> HashMap<String,
     id_map
 }
 
-/// 把 id 映射应用到快照：providers[].id 与 modelFailover.*.queue[] 必须一起
-/// 改写，否则 failover 队列指向不存在的 provider，规范化时会被静默丢弃。
-/// queue 兼容两种历史形状：字符串 id 与旧版 { customProviderId, model } 对象。
+/// Applies the id map to the snapshot: providers[].id and modelFailover.*.queue[] must be rewritten
+/// together, otherwise the failover queue points at a non-existent provider and is silently dropped
+/// during normalization. queue supports two historical shapes: a string id and the older
+/// { customProviderId, model } object.
 fn rewrite_snapshot_provider_ids(snapshot: &mut BackupSnapshot, id_map: &HashMap<String, String>) {
     if id_map.is_empty() {
         return;
@@ -630,8 +636,9 @@ fn rewrite_snapshot_provider_ids(snapshot: &mut BackupSnapshot, id_map: &HashMap
     }
 }
 
-/// 导入前的 id 重映射入口。providers 域缺失时没有源侧身份可配，直接跳过；
-/// 本机没有任何 provider 时也没有引用需要保全，快照原样落库。
+/// Entry point for pre-import id remapping. When the providers domain is missing there is no
+/// source-side identity to pair, so it is skipped; when the machine has no providers at all there
+/// are no references to preserve either, and the snapshot is stored as-is.
 fn remap_snapshot_provider_ids_to_local(
     conn: &Connection,
     snapshot: &mut BackupSnapshot,
@@ -650,13 +657,16 @@ fn remap_snapshot_provider_ids_to_local(
     Ok(())
 }
 
-/// 整域覆盖写入（纯写库，不做备份）。system 域为「可移植键叠加」而非整域
-/// 覆盖；providers 域写入前先做 id 重映射（见 build_provider_id_map）。
+/// Whole-domain overwrite write (pure database write, no backup). The system domain is a "portable
+/// key overlay" rather than a whole-domain overwrite; the providers domain is id-remapped before
+/// writing (see build_provider_id_map).
 ///
-/// 各域复用既有的 `save_*`，它们各自开事务 —— 无法合并成一个跨域事务
-/// （`save_*` 都要求 `&mut Connection`，rusqlite 的 Transaction 无法嵌套）。
-/// 因此中途失败理论上会留下半套配置。防线是调用方：写库前已完成完整校验
-/// （畸形输入一行都不会写），且写库前已生成本地备份可回退。
+/// Each domain reuses the existing `save_*`, which each open their own transaction -- they cannot be
+/// merged into a single cross-domain transaction (`save_*` all require `&mut Connection`, and
+/// rusqlite Transactions cannot nest). A mid-way failure therefore theoretically leaves half the
+/// config applied. The safeguard is the caller: full validation was completed before writing (not a
+/// single line of malformed input is written), and a local backup was generated beforehand so it
+/// can be rolled back.
 pub(crate) fn apply_backup_snapshot_to_db(
     conn: &mut Connection,
     snapshot: &BackupSnapshot,
@@ -679,19 +689,13 @@ pub(crate) fn apply_backup_snapshot_to_db(
     if let Some(model_failover) = snapshot.model_failover.take() {
         save_model_failover(conn, model_failover)?;
     }
-    if let Some(stt) = snapshot.stt.take() {
-        // 源设备可能处于「已清空密钥」等刻意不完整的状态，这份数据当初已被
-        // 源侧 save_stt 接受过，应用侧不应再按「用户正在提交表单」的标准复验。
-        let mut stt_payload = expect_object(stt, "备份内容 stt")?;
-        stt_payload.insert("allowIncomplete".to_string(), Value::Bool(true));
-        save_stt(conn, Value::Object(stt_payload))?;
-    }
     Ok(())
 }
 
-/// 应用一份快照：校验 → 备份当前配置 → 写库。
+/// Applies a snapshot: validate -> back up the current config -> write to the database.
 ///
-/// system 域只叠加可移植键，systemProxy 不会被快照改动，因此无需刷新代理状态。
+/// The system domain only overlays portable keys, so systemProxy is not changed by the snapshot and
+/// there is no need to refresh proxy state.
 pub(crate) fn apply_backup_snapshot(
     conn: &mut Connection,
     snapshot: BackupSnapshot,

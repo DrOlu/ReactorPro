@@ -190,8 +190,8 @@ export function GitInitModal(props: {
   );
 }
 
-// Worktree 创建弹窗：分支名、目录名与可选父目录分别传递，避免把 Git
-// 引用命名规则与文件系统目录规则混为一谈。
+// Worktree creation dialog: the branch name, directory name, and optional parent directory are passed
+// separately, to avoid conflating Git ref naming rules with filesystem directory rules.
 export function WorktreeCreateModal(props: {
   open: boolean;
   repoRoot: string;
@@ -419,7 +419,7 @@ export function WorktreeCreateModal(props: {
             </DialogActions>
           </DialogFooter>
         </form>
-        {/* Web 端目录选择器是嵌套 Dialog；置于父 Popup 内交给 Base UI 管理层级与焦点。 */}
+        {/* The Web-side directory picker is a nested Dialog; placing it inside the parent Popup lets Base UI manage layering and focus. */}
         {directoryPickerElement}
       </DialogContent>
     </Dialog>
@@ -441,7 +441,7 @@ export function BranchActionsModal(props: {
   onBack: () => void;
   onCopyName: () => void;
   onDelete: () => void;
-  // 当前分支被 worktree 检出时，删除入口切换为“删除 Worktree”。
+  // When the current branch is checked out in a worktree, the delete entry switches to "Delete Worktree".
   checkedOutWorktreePath?: string;
   onDeleteWorktree?: () => void;
   onSubmit: () => void;

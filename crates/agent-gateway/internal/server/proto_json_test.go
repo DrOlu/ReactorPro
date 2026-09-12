@@ -6,8 +6,9 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-// 公开分享页 JSON 合同：protojson 会把 int64 编成字符串、int32 编成 float64，
-// coerce 链必须矫正为原生数值（前端时间戳/计数渲染依赖）。
+// Public share page JSON contract: protojson encodes int64 as a string and int32 as a float64,
+// so the coerce chain must correct them back to native numbers (the frontend's timestamp/count
+// rendering depends on this).
 func TestProtoJSONPayloadPreservesFrontendNumberTypes(t *testing.T) {
 	payload := conversationSummaryPayload(&gatewayv2.ConversationSummary{
 		Id:           "conversation-1",

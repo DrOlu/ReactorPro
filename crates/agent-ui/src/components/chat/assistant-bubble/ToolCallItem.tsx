@@ -54,9 +54,11 @@ import {
 } from "./assistantBubbleUtils";
 import { ShellToolDisplay, ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
 
-// 折叠摘要里行内命令的展示上限:远超任何实际窗口一行可容纳的字符数,视觉
-// 省略仍由 CSS truncate 决定;仅防御超长单行命令(如内联脚本)把常驻 DOM
-// 与原生 title 撑爆。完整命令在展开区可查看。
+// Display cap for inline commands in the collapsed summary: far more characters
+// than any real window can fit on one line, since visual ellipsis is still left
+// to CSS truncate; it only guards against an extremely long single-line command
+// (e.g. an inline script) blowing up the resident DOM and the native title. The
+// full command is viewable in the expanded area.
 const INLINE_COMMAND_PREVIEW_MAX_CHARS = 600;
 
 function capInlineCommandPreview(text: string) {
@@ -126,8 +128,9 @@ function ToolCallItem({
   const isRedactedToolContent = redactToolContent && isBuiltinShareToolName(item.toolCall.name);
   const isAskUser = !isRedactedToolContent && item.toolCall.name === ASK_USER_QUESTION_TOOL_NAME;
   const askDetails = isAskUser ? parseAskUserQuestionResultDetails(result?.details) : null;
-  // 参数生成完毕（桌面端仅在 onToolCall 后才发 tool_call 事件）才渲染卡片；
-  // 对历史/降级数据再以 isRunning/result 兜底，绝不展示半截问题。
+  // Render the card only once the arguments are fully generated (the desktop side
+  // emits the tool_call event only after onToolCall); for history/degraded data,
+  // fall back to isRunning/result so a half-formed question is never shown.
   const askSettled = isAskUser && (Boolean(isRunning) || Boolean(result));
   const askQuestions =
     isAskUser && askSettled
@@ -135,10 +138,10 @@ function ToolCallItem({
         ? askDetails.questions
         : sanitizeAskUserQuestionItems(item.toolCall.arguments?.questions)
       : [];
-  // 提问卡运行期强制展开等待作答；应答落定后自动收起。
+  // The question card is forced open while running to await an answer; it collapses automatically once the answer settles.
   const shouldKeepAskOpen = !readOnly && isAskUser && (Boolean(isRunning) || !result);
   const shouldCloseAnsweredAsk = isAskUser && Boolean(result);
-  // 截止时间和提交动作由宿主适配器提供，确保两端都使用各自的权威服务。
+  // The deadline and submit action are provided by the host adapter, ensuring both ends use their own authoritative services.
   const askDeadlineAt =
     isAskUser && isRunning && !result
       ? readAskUserQuestionDeadline(item.toolCall.id, item.toolCall.arguments)
@@ -147,9 +150,11 @@ function ToolCallItem({
     (answers: AskUserQuestionAnswer[]) => submitAskUserQuestionAnswers(item.toolCall.id, answers),
     [item.toolCall.id],
   );
-  // ExitPlanMode 计划卡：分派方式同 AskUserQuestion(按工具名),details 优先、
-  // 流式参数兜底。对话式范式:提交即结束本轮,待决/已批准状态由宿主适配器
-  // 响应式提供(GUI 订阅登记表,WebUI 由参数标记),批准动作亦经适配器。
+  // ExitPlanMode plan card: dispatched like AskUserQuestion (by tool name), with
+  // details preferred and streaming arguments as fallback. Conversational
+  // paradigm: submitting ends this turn; pending/approved state is provided
+  // reactively by the host adapter (GUI subscribes to a registry, WebUI uses an
+  // argument marker), and the approve action also goes through the adapter.
   const isPlanCard = !isRedactedToolContent && item.toolCall.name === EXIT_PLAN_MODE_TOOL_NAME;
   const planDetails = isPlanCard ? parseExitPlanModeResultDetails(result?.details) : null;
   const planMarkdown = isPlanCard
@@ -161,7 +166,7 @@ function ToolCallItem({
     (answer: PlanDecisionAnswer) => submitPlanDecision(item.toolCall.id, answer),
     [item.toolCall.id],
   );
-  // 工具审批由宿主适配器读取。审批发生在工具执行前，不能用 isRunning 作门。
+  // Tool approval is read by the host adapter. Approval happens before tool execution, so isRunning cannot be used as the gate.
   const pendingApproval = usePendingToolApproval(item.toolCall.id, item.toolCall.arguments);
   const isApprovalPending = !readOnly && !isRedactedToolContent && !result && pendingApproval;
   const shouldAutoOpen =
@@ -186,9 +191,11 @@ function ToolCallItem({
       ? item.toolCall.arguments.command.trim()
       : "";
   const firstLine = inlineCommand ? inlineCommand.split("\n")[0] : "";
-  // 折叠行的行内命令:视觉截断交给 CSS(truncate 按实际可用宽度出省略号),
-  // 不再按固定字符数硬切(#444)。DOM 文本与原生 title 各留一个远超可视宽度
-  // 的上限,防止超长单行命令把常驻摘要行与悬浮提示撑到不可用。
+  // Inline command in the collapsed row: visual truncation is left to CSS
+  // (truncate emits the ellipsis at the actual available width), no longer hard-cut
+  // at a fixed character count (#444). The DOM text and native title each get a
+  // cap far beyond the visible width, so an extremely long single-line command
+  // cannot render the resident summary row and tooltip unusable.
   const firstLinePreview = capInlineCommandPreview(firstLine);
   const inlineCommandTitle = inlineCommand ? capInlineCommandPreview(inlineCommand) : "";
   const toolArgsSummary =
@@ -338,8 +345,10 @@ function ToolCallItem({
     </>
   ) : compactChip ? (
     <>
-      {/* 宽度锁在图标列的 12px 上（高度仍留 14px 呼吸感），否则悬停切换用的
-          居中盒会把图标整体右推 1px，和同组里的简单文件操作行错开。 */}
+      {/* The width is locked to the icon column's 12px (height still keeps a 14px
+          breathing room), otherwise the centered box used for the hover swap would
+          push the icon 1px right and misalign it with the simple file-operation row
+          in the same group. */}
       <span className="relative flex h-3.5 w-3 shrink-0 items-center justify-center text-foreground/45">
         <ToolIcon className="h-3 w-3 transition-opacity duration-150 group-hover/tool:opacity-0 group-focus-within/tool:opacity-0" />
         {canExpand ? (
@@ -527,7 +536,8 @@ function ToolCallItem({
             />
           ) : null}
 
-          {/* 提问卡/计划卡自带应答态展示；仅参数校验失败（无 details）时回落默认错误区。 */}
+          {/* The question card/plan card displays its own answer state; fall back to
+              the default error area only when argument validation fails (no details). */}
           {resultContent && compactChip ? (
             <div className="min-w-0 py-1 text-foreground/78 [&_.tool-text-scroll]:max-h-44 [&_.tool-text-scroll]:bg-foreground/[0.025]">
               {resultContent}
@@ -552,8 +562,10 @@ function ToolCallItem({
   );
   const containerClassName = "group/tool min-w-0 max-w-full";
 
-  // 计划卡直出(任务卡风格):不进折叠壳、无摘要行,整卡直接展示——
-  // 卡片自带「实施计划」头部与状态,正文不限高(与消息正文同滚动上下文)。
+  // Plan card renders directly (task-card style): no collapse shell, no summary
+  // row, the whole card shown as-is -- the card has its own "implementation plan"
+  // header and status, and the body is not height-limited (same scroll context as
+  // the message body).
   if (isPlanCard && planSettled && planMarkdown) {
     return (
       <div className={containerClassName}>

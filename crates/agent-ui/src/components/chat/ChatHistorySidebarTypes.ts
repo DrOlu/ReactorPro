@@ -79,8 +79,10 @@ export type ChatHistorySidebarProps = {
   projectsCollapsed?: boolean;
   workspaceFolderDropActive?: boolean;
   /**
-   * Web 端把 DOM 拖放事件接到工作空间分区（桌面端走 Tauri 原生事件与坐标
-   * 命中，不传此项）。四个回调整体可选，由宿主决定拖入行为。
+   * On the web, wire DOM drag-and-drop events to the workspace section (the
+   * desktop uses Tauri native events and coordinate hits and does not pass this
+   * option). All four callbacks are optional as a group; the host decides the
+   * drop behavior.
    */
   workspaceFolderDropHandlers?: WorkspaceFolderDropHandlers;
   recentCollapsed?: boolean;

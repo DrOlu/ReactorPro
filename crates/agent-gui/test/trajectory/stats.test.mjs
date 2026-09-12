@@ -19,10 +19,10 @@ const {
 
 const BASE = 1_700_000_000_000;
 
-/** 手工算好的黄金样例：两轮，第二轮两步带一次工具调用。 */
+/** Hand-computed golden sample: two turns, the second with two steps including one tool call. */
 function goldenEvents() {
   return [
-    // turn 1: 单步，1s 起 TTFT 200ms，结束于 +2000ms，output 100 tok
+    // turn 1: single step, starts at 1s, TTFT 200ms, ends at +2000ms, output 100 tok
     { k: "user", t: 1, at: BASE, tx: "hi" },
     { k: "step_start", t: 1, s: 1, at: BASE + 1_000 },
     { k: "first_token", t: 1, s: 1, at: BASE + 1_200 },
@@ -35,7 +35,7 @@ function goldenEvents() {
       u: { input: 500, output: 100, cacheRead: 1_500, cacheWrite: 200 },
     },
     { k: "turn_end", t: 1, at: BASE + 3_100, st: "complete" },
-    // turn 2 step 1: 带工具调用 (600ms)，TTFT 400ms，step 时长 2000ms，output 60
+    // turn 2 step 1: with a tool call (600ms), TTFT 400ms, step duration 2000ms, output 60
     { k: "user", t: 2, at: BASE + 4_000, tx: "again" },
     { k: "step_start", t: 2, s: 1, at: BASE + 4_100 },
     { k: "first_token", t: 2, s: 1, at: BASE + 4_500 },
@@ -49,7 +49,7 @@ function goldenEvents() {
       st: "complete",
       u: { input: 800, output: 60, cacheRead: 2_000 },
     },
-    // turn 2 step 2: 无 usage，只计步数与时长 (900ms)
+    // turn 2 step 2: no usage, only step count and duration are counted (900ms)
     { k: "step_start", t: 2, s: 2, at: BASE + 6_200 },
     { k: "step_end", t: 2, s: 2, at: BASE + 7_100, st: "complete" },
     { k: "turn_end", t: 2, at: BASE + 7_200, st: "complete" },
@@ -125,8 +125,9 @@ test("multiple running tools anchor on the earliest start", () => {
 });
 
 test("an aborted step without step_end must not keep the stopwatch running", () => {
-  // 崩溃/强退遗留：账本按空 live 身份集把 step 收敛成 aborted，但不会补 endedAt。
-  // 按 endedAt 判定运行段会让已死会话的时长永远随心跳增长。
+  // Left over from a crash/force-quit: the ledger converges the step to aborted based on an empty live identity
+  // set, but does not backfill endedAt. Determining the running segment by endedAt would make a dead session's
+  // duration grow forever with the heartbeat.
   const ledger = buildTrajectoryLedger(
     [
       { k: "user", t: 1, at: BASE, tx: "go" },
@@ -137,13 +138,13 @@ test("an aborted step without step_end must not keep the stopwatch running", () 
   );
 
   assert.equal(ledger.turns[0].steps[0].status, "aborted");
-  assert.equal(ledger.turns[0].steps[0].endedAt, null, "前提：收敛为 aborted 时不补 endedAt");
+  assert.equal(ledger.turns[0].steps[0].endedAt, null, "precondition: converging to aborted does not backfill endedAt");
 
   const stats = aggregateTrajectoryStats(ledger);
-  assert.equal(stats.llmRunningSinceAt, null, "已中断的 step 不得再开心跳");
-  assert.equal(stats.toolRunningSinceAt, null, "已中断的工具调用同理");
+  assert.equal(stats.llmRunningSinceAt, null, "an aborted step must not start a heartbeat again");
+  assert.equal(stats.toolRunningSinceAt, null, "likewise for an aborted tool call");
 
-  // 时间推移不改变读数：秒表确实停了。
+  // Elapsed time does not change the readings: the stopwatch really has stopped.
   const early = resolveStatDurations(stats, BASE + 1_000);
   const late = resolveStatDurations(stats, BASE + 9_999_000);
   assert.deepEqual(late, early);
@@ -153,10 +154,10 @@ test("missing usage, missing first token, and zero spans never yield NaN", () =>
   const stats = aggregateTrajectoryStats(
     buildTrajectoryLedger([
       { k: "user", t: 1, at: BASE, tx: "x" },
-      // 无 usage、无 first_token
+      // no usage, no first_token
       { k: "step_start", t: 1, s: 1, at: BASE + 10 },
       { k: "step_end", t: 1, s: 1, at: BASE + 500, st: "complete" },
-      // 零跨度：startedAt == endedAt，output 有值但窗口为 0，不计入吞吐
+      // zero span: startedAt == endedAt, output has a value but the window is 0, so it is not counted toward throughput
       { k: "step_start", t: 1, s: 2, at: BASE + 600 },
       { k: "step_end", t: 1, s: 2, at: BASE + 600, st: "complete", u: { output: 7 } },
     ]),

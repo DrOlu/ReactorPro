@@ -96,10 +96,13 @@ function RuntimeToggleChip(props: {
 // The visible range thumb is 16px wide, so the custom track is inset by 8px.
 // Keeping the track and thumb on the same geometry avoids browser-specific
 // range alignment drift while preserving native keyboard and pointer behavior.
-// 推理强度：分段按钮。此前是「脑图标 + 带刻度滑块 + 数值胶囊」——同一个值
-// 的三重渲染，其中只有滑块可交互，胶囊却长得和旁边真正的按钮一样，必然被
-// 误点；且滑块要拖动才能改，看不出总共几档。分段按钮一眼看全、一击直达，
-// 也顺带消除了 indexOf 夹取导致的拇指/数值不同步。
+// Reasoning effort: segmented buttons. Previously it was "brain icon + ticked
+// slider + numeric pill" — a triple rendering of the same value, of which only
+// the slider was interactive, yet the pill looked like a real button next to it
+// and was bound to be mis-clicked; and the slider had to be dragged to change,
+// with no indication of how many levels there were. Segmented buttons show all
+// at a glance and reach any level in one click, and they also eliminate the
+// thumb/value desync caused by indexOf clamping.
 function ReasoningEffortSegments(props: {
   choices: ReasoningLevel[];
   value: ReasoningLevel;
@@ -119,8 +122,10 @@ function ReasoningEffortSegments(props: {
     onSelect,
   } = props;
   const trackRef = useRef<HTMLDivElement>(null);
-  // 选中指示器单独成层并用 CSS 过渡移动：若把底色挂在各按钮上，切换只能是
-  // 跳变。位置按真实 DOM 量取，因为各段宽度随标签长短而不同。
+  // The selection indicator is a separate layer animated with a CSS transition:
+  // if the background were attached to each button, switching could only jump.
+  // Its position is measured from the real DOM because segment widths differ with
+  // label length.
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
 
   const activeIndex = choices.indexOf(value);
@@ -135,23 +140,26 @@ function ReasoningEffortSegments(props: {
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
-    // 字体加载、弹层宽度变化都会改变分段尺寸，指示器要跟着重新量。
+    // Font loading and popup width changes alter segment sizes, so the indicator must be re-measured accordingly.
     const observer = new ResizeObserver(measure);
     observer.observe(track);
     return () => observer.disconnect();
   }, [activeIndex]);
 
-  // 命中测试按真实 DOM 矩形做，而不是按 index 均分百分比：各段宽度随标签
-  // 长短而不同（flex 项的 min-width:auto 不会让它们收缩到比文字更窄）。
+  // Hit testing uses real DOM rectangles rather than evenly divided percentages
+  // by index: segment widths differ with label length (a flex item's
+  // min-width:auto does not let them shrink narrower than their text).
   const selectAtClientX = (clientX: number) => {
     const track = trackRef.current;
     if (!track) return;
     const segments = Array.from(track.querySelectorAll<HTMLElement>("[data-effort-segment]"));
     if (segments.length === 0) return;
-    // 取中心点最近的一段，而不是「命中矩形」：容器有 gap-0.5，段与段之间
-    // 存在 2px 缝隙，按命中判定会全部落空；再按左右钳到端点的话，点在任意
-    // 内部缝隙上都会被判成「在轨道右侧」而跳到最高档。按距离取最近段同时
-    // 覆盖了滑出轨道两端的情况。
+    // Take the segment whose center is nearest, not the "hit rectangle": the
+    // container has gap-0.5, leaving 2px gaps between segments where hit
+    // testing would miss entirely; and clamping left/right to the endpoints
+    // would classify a click on any internal gap as "right of the track" and
+    // jump to the highest level. Taking the nearest by distance also covers
+    // dragging past either end of the track.
     let hit = 0;
     let bestDistance = Number.POSITIVE_INFINITY;
     segments.forEach((segment, index) => {
@@ -173,7 +181,7 @@ function ReasoningEffortSegments(props: {
       aria-label={label}
       onPointerDown={(event) => {
         if (disabled || event.button !== 0) return;
-        // 捕获指针：拖动过程中即使滑出轨道也继续收到 move 事件。
+        // Capture the pointer: continue receiving move events while dragging even if it leaves the track.
         event.currentTarget.setPointerCapture(event.pointerId);
         selectAtClientX(event.clientX);
       }}
@@ -211,14 +219,16 @@ function ReasoningEffortSegments(props: {
             role="radio"
             aria-checked={isSelected}
             disabled={disabled}
-            // radiogroup 的漫游焦点：整组只占一个 Tab 停靠点，落在当前选中项上。
+            // radiogroup roving focus: the whole group occupies a single Tab stop, landing on the currently selected item.
             tabIndex={isSelected || (activeIndex < 0 && index === 0) ? 0 : -1}
             title={`${label}: ${formatLevel(level)}`}
             onClick={() => onSelect(level)}
             onKeyDown={(event) => {
-              // radiogroup 约定用方向键改选。原实现是 input[type=range]，
-              // 方向键本就可用；换成分段按钮后必须自己实现，否则 role="radio"
-              // 承诺的交互与实际不符。
+              // radiogroup convention is to change selection with arrow keys. The
+              // original implementation was input[type=range], where arrow keys
+              // already worked; after switching to segmented buttons we must
+              // implement it ourselves, or the interaction promised by
+              // role="radio" would not match reality.
               const step =
                 event.key === "ArrowRight" || event.key === "ArrowDown"
                   ? 1
@@ -289,9 +299,10 @@ export const ComposerModelControls = memo(function ComposerModelControls(
   const [providerSortMode, setProviderSortMode] = useState<ProviderSortMode>(() =>
     readStoredProviderSortMode(),
   );
-  // 图标与提示描述「当前模式」而非切换目标：此前显示目标模式，使 Layers
-  // 图标的含义变成「你现在处于字母序」，与直觉相反；且没有 aria-pressed，
-  // 唯一反馈只有图标替换。
+  // The icon and tooltip describe the "current mode" rather than the switch
+  // target: it previously showed the target mode, which turned the Layers icon's
+  // meaning into "you are now in alphabetical order", contrary to intuition; and
+  // without aria-pressed the only feedback was the icon swapping.
   const sortByName = providerSortMode === "alpha";
   const sortToggleTitle = sortByName
     ? t("chat.sortProvidersByName")
@@ -353,8 +364,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
       : ["off", ...reasoningOptions.filter((level) => level !== "off")]
     : [];
   const selectedEffort: ReasoningLevel = thinkingOn ? selectedReasoning : "off";
-  // 搜索期间所有分组强制展开：此时折叠切换必须一并禁用，否则点击会静默
-  // 改写 expandedGroupId（画面无变化），且 aria-expanded 会与实际不符。
+  // During search all groups are force-expanded: the collapse toggle must then be
+  // disabled too, or clicking would silently rewrite expandedGroupId (no visible
+  // change) and aria-expanded would not match reality.
   const groupToggleLocked = normalizedSearch.length > 0;
   const isGroupExpanded = (id: string) => {
     if (groupToggleLocked) return true;
@@ -416,10 +428,12 @@ export const ComposerModelControls = memo(function ComposerModelControls(
         className="model-selector-dropdown flex max-h-[min(26rem,var(--available-height,26rem))] w-[min(25rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-border/60 bg-popover p-0 text-xs shadow-lg"
       >
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* 头部只留「执行模式」+ 搜索两行。原本还有「选择模型」标题与
-              provider·model 副标题：模型名在触发器、副标题、列表勾选处重复
-              三次，且 11px 的标题比 12px 的模型行还小，标题反而是面板里最小
-              的粗体字。弹层自身的 aria-label 已覆盖无障碍命名。 */}
+          {/* The header keeps only the "execution mode" + search two rows. It
+              previously also had a "select model" title and a provider·model
+              subtitle: the model name was repeated three times (trigger, subtitle,
+              list checkmark), and the 11px title was smaller than the 12px model
+              row, making the title the smallest bold text in the panel. The
+              popup's own aria-label already covers accessible naming. */}
           <div className="shrink-0 px-2 py-2">
             <div className="flex items-center justify-between gap-2 pb-1.5">
               <span className="min-w-0 shrink truncate pl-0.5 text-xs font-semibold text-foreground">
@@ -479,8 +493,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                   placeholder={t("chat.searchModel")}
                   className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
                   onKeyDown={(event) => {
-                    // Escape 必须冒泡给 Popover 关闭，方向键留给列表导航；
-                    // 其余按键才拦下，避免触发编辑器/全局快捷键。
+                    // Escape must bubble up so the Popover closes, and the arrow
+                    // keys are left to list navigation; only other keys are
+                    // stopped, to avoid triggering editor/global shortcuts.
                     if (
                       event.key === "Escape" ||
                       event.key === "ArrowDown" ||
@@ -509,8 +524,10 @@ export const ComposerModelControls = memo(function ComposerModelControls(
               </button>
             </div>
           </div>
-          {/* pt-0：sticky 分组表头贴 top-0，容器顶部若还有内边距，那条带子里的
-              内容会在表头停靠位置之上滚过并露出来。底部留白由 pb 负责。 */}
+          {/* pt-0: the sticky group header sits at top-0, and if the container
+              still had top padding, content in that band would scroll past above
+              the header's parked position and show through. Bottom spacing is
+              handled by pb. */}
           <div className="min-h-20 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-2 pb-1 [scrollbar-gutter:stable]">
             {(() => {
               const filteredGroups = normalizedSearch
@@ -613,8 +630,9 @@ export const ComposerModelControls = memo(function ComposerModelControls(
                               )}
                             >
                               <span className="flex min-w-0 items-center gap-2">
-                                {/* 12px：比分组表头的 14px 小一档，避免子行图标
-                                    压过父行（改前是 16px，层级是倒的）。 */}
+                                {/* 12px: one step below the 14px group header, so
+                                    the child-row icon does not overpower the parent
+                                    row (it was 16px before, an inverted hierarchy). */}
                                 <ProviderBrandIcon
                                   type={option.providerType}
                                   className={cn(

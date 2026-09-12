@@ -1,16 +1,18 @@
 /**
- * 轨迹域的单一类型真源。
+ * Single source of truth for trajectory-domain types.
  *
- * 三种形态严格分开：
- * - `TrajectoryEvent` 是**线格式**：短字段名，走实时通道并落盘，字段只增不改。
- * - `TrajectoryLedger` 是**规范化中间态**：eventLog 收敛后的可读结构，纯内存。
- * - `TrajectoryRecord` 是**视觉记录**：布局产物，UI 只认这个。
+ * The three forms are strictly separated:
+ * - `TrajectoryEvent` is the **wire format**: short field names, goes over the live channel and is
+ *   persisted, fields are append-only.
+ * - `TrajectoryLedger` is the **normalized intermediate form**: the readable structure after
+ *   eventLog converges, purely in memory.
+ * - `TrajectoryRecord` is the **visual record**: the layout product; the UI recognizes only this.
  */
 
-/** 一次操作的终态。`running` 只在实时账本里出现。 */
+/** Terminal state of an operation. `running` appears only in the live ledger. */
 export type TrajectoryStatus = "running" | "complete" | "error" | "aborted";
 
-/** 账本行类别，与泳道归属一一对应。 */
+/** Ledger row kind, corresponding one-to-one with lane membership. */
 export type TrajectoryRecordKind =
   | "system"
   | "user"
@@ -20,7 +22,7 @@ export type TrajectoryRecordKind =
   | "tool"
   | "subtool";
 
-/** 与 `UsagePanelUsage` 对齐，另加推理 token。 */
+/** Aligned with `UsagePanelUsage`, plus reasoning tokens. */
 export type TrajectoryUsage = {
   totalTokens?: number;
   input?: number;
@@ -31,8 +33,8 @@ export type TrajectoryUsage = {
 };
 
 /**
- * 线格式中的固定槽位顺序。只能向末尾追加：前六项已经落盘，重排会把旧事件的
- * toolsSuffix/toolCatalog 错读成别的内容。
+ * Fixed slot order in the wire format. Only append to the end: the first six are already persisted,
+ * and reordering would misread old events' toolsSuffix/toolCatalog as something else.
  */
 export const TRAJECTORY_SECTION_SLOTS = [
   "base",
@@ -46,7 +48,8 @@ export const TRAJECTORY_SECTION_SLOTS = [
 
 export type TrajectorySectionSlot = (typeof TRAJECTORY_SECTION_SLOTS)[number];
 
-/** 模型实际看到的 system prompt 拼接顺序；toolCatalog 是请求参数，不进入正文。 */
+/** The order in which the system prompt is concatenated as the model actually sees it; toolCatalog
+ * is a request parameter and does not enter the body. */
 export const TRAJECTORY_PROMPT_SECTION_SLOTS = [
   "base",
   "agent",
@@ -56,13 +59,13 @@ export const TRAJECTORY_PROMPT_SECTION_SLOTS = [
   "toolsSuffix",
 ] as const satisfies readonly TrajectorySectionSlot[];
 
-/** 各槽位的 sectionId，缺省为 null；旧记录允许短于当前槽位数。 */
+/** sectionId per slot, defaulting to null; old records may be shorter than the current slot count. */
 export type TrajectorySectionRefs = readonly (string | null)[];
 
-/** 请求头相对上一份的变化类别。 */
+/** Category of change of a request header relative to the previous one. */
 export type TrajectoryHeaderChange = "initial" | "system" | "tools" | "system-and-tools" | "none";
 
-/** 一份分段内容，内容寻址。 */
+/** One section of content, content-addressed. */
 export type TrajectorySection = {
   sectionId: string;
   slot: TrajectorySectionSlot;
@@ -70,19 +73,22 @@ export type TrajectorySection = {
 };
 
 // ---------------------------------------------------------------------------
-// 线格式
+// Wire format
 // ---------------------------------------------------------------------------
 
 /**
- * 落盘与实时通道共用的紧凑事件。字段名刻意取短名：一个 50 次工具调用的长回合
- * 约 150 条事件，短名把它压在 ~18 KB，远低于中继窗口的 8 MiB 上限。
+ * Compact events shared by persistence and the live channel. Field names are deliberately short: a
+ * long turn with 50 tool calls is about 150 events, and short names keep it under ~18 KB, far below
+ * the relay window's 8 MiB limit.
  */
 export type TrajectoryEvent =
-  /** 用户消息开启一轮。`mi` 是会话内 messageIndex，用于跨视图定位。 */
+  /** A user message opens a turn. `mi` is the in-conversation messageIndex, used for cross-view
+   * positioning. */
   | { k: "user"; t: number; at: number; mi?: number; id?: string; tx?: string }
-  /** 上下文注入。 */
+  /** Context injection. */
   | { k: "context"; t: number; at: number; src?: string; tx?: string }
-  /** 请求头快照。`sec` 是按线格式槽位排列的 sectionId，`ch` 变化类别，`prev` 上一份 headerId。 */
+  /** Request header snapshot. `sec` is the sectionId arranged by wire-format slot, `ch` the change
+   * category, `prev` the previous headerId. */
   | {
       k: "header";
       /** Header slot layout version. Missing/1 is the legacy six-slot layout. */
@@ -93,11 +99,11 @@ export type TrajectoryEvent =
       ch: TrajectoryHeaderChange;
       prev?: string;
     }
-  /** 一次 provider 请求开始。 */
+  /** A provider request begins. */
   | { k: "step_start"; t: number; s: number; at: number; hid?: string }
-  /** 首个 text/thinking delta，用于推导 TTFT。 */
+  /** The first text/thinking delta, used to derive TTFT. */
   | { k: "first_token"; t: number; s: number; at: number }
-  /** 请求结束。`sr` 是 stopReason。 */
+  /** Request ends. `sr` is the stopReason. */
   | {
       k: "step_end";
       t: number;
@@ -111,7 +117,8 @@ export type TrajectoryEvent =
       sr?: string;
       err?: string;
     }
-  /** 失败后的重试记录。`p` 是候选标签（"Provider · model"），failover 下区分各候选的重试。 */
+  /** Retry record after a failure. `p` is the candidate label ("Provider · model"), distinguishing
+   * each candidate's retries under failover. */
   | {
       k: "retry";
       t: number;
@@ -123,7 +130,8 @@ export type TrajectoryEvent =
       err?: string;
       p?: string;
     }
-  /** 跨供应商切换记录。`n` 是本次请求内的切换序号，`ti` 是目标在候选队列里的下标。 */
+  /** Cross-provider switch record. `n` is the switch sequence number within this request, `ti` the
+   * target's index in the candidate queue. */
   | {
       k: "failover";
       t: number;
@@ -136,8 +144,9 @@ export type TrajectoryEvent =
       err?: string;
     }
   /**
-   * 一次实际尝试的传输装配快照。脱敏不变量：只含头名（`hn`）与路由标记，
-   * 绝不含任何头值或密钥；`o` 是上游 origin（scheme+host）。
+   * Transport assembly snapshot of one actual attempt. Redaction invariant: contains only header
+   * names (`hn`) and routing flags, never any header value or secret; `o` is the upstream origin
+   * (scheme+host).
    */
   | {
       k: "transport";
@@ -150,9 +159,9 @@ export type TrajectoryEvent =
       fu?: boolean;
       hn?: readonly string[];
     }
-  /** 工具开始执行。`a` 是截断后的参数文本。 */
+  /** Tool begins execution. `a` is the truncated argument text. */
   | { k: "tool_start"; t: number; s: number; at: number; id: string; n: string; a?: string }
-  /** 工具结束。`run` 是 Agent 工具派生的子代理 runId。 */
+  /** Tool ends. `run` is the subagent runId derived by the Agent tool. */
   | {
       k: "tool_end";
       at: number;
@@ -164,9 +173,9 @@ export type TrajectoryEvent =
       sum?: string;
       run?: readonly string[];
     }
-  /** 上下文压缩开始。turn 为 null 表示两轮之间的手动压缩。 */
+  /** Context compaction begins. turn null means manual compaction between two turns. */
   | { k: "compaction_start"; t: number | null; at: number }
-  /** 上下文压缩结束，附压缩前后 token。 */
+  /** Context compaction ends, with tokens before and after. */
   | {
       k: "compaction_end";
       t: number | null;
@@ -176,13 +185,13 @@ export type TrajectoryEvent =
       after?: number;
       err?: string;
     }
-  /** 一轮结束。 */
+  /** A turn ends. */
   | { k: "turn_end"; t: number; at: number; st: TrajectoryStatus; err?: string };
 
 export type TrajectoryEventKind = TrajectoryEvent["k"];
 
 // ---------------------------------------------------------------------------
-// 规范化中间态
+// Normalized intermediate form
 // ---------------------------------------------------------------------------
 
 export type LedgerRetry = {
@@ -191,7 +200,8 @@ export type LedgerRetry = {
   maxRetries?: number;
   delayMs?: number;
   error?: string;
-  /** 候选标签（"Provider · model"）；failover 下区分各候选自己的重试。 */
+  /** Candidate label ("Provider · model"); distinguishes each candidate's own retries under
+   * failover. */
   provider?: string;
 };
 
@@ -200,12 +210,13 @@ export type LedgerFailover = {
   at: number;
   fromLabel?: string;
   toLabel?: string;
-  /** 目标在候选队列里的稳定下标（0 = 主选）。 */
+  /** Stable index of the target in the candidate queue (0 = primary). */
   targetIndex?: number;
   error?: string;
 };
 
-/** 一次实际尝试的传输装配快照。只含头名与路由标记，永不含头值。 */
+/** Transport assembly snapshot of one actual attempt. Contains only header names and routing flags,
+ * never header values. */
 export type LedgerTransport = {
   at: number;
   provider?: string;
@@ -292,18 +303,19 @@ export type LedgerHeader = {
 };
 
 /**
- * eventLog 的收敛产物。`hasTiming` 为 false 表示这份账本是从 messages 降级推导
- * 的：结构完整但所有时长为 null，甘特图必须锁在 sequence 投影。
+ * The converged product of eventLog. `hasTiming` false means this ledger was derived by degrading
+ * from messages: structurally complete but all durations are null, so the Gantt chart must be locked
+ * to the sequence projection.
  */
 export type TrajectoryLedger = {
   turns: readonly LedgerTurn[];
   headers: ReadonlyMap<string, LedgerHeader>;
-  /** 两轮之间发生的压缩，不属于任何 turn。 */
+  /** Compactions that occurred between two turns and belong to no turn. */
   standaloneCompactions: readonly LedgerCompaction[];
   hasTiming: boolean;
 };
 
-/** 空账本常量，供未加载态复用同一引用避免重渲染。 */
+/** Empty-ledger constant, reused by the unloaded state as the same reference to avoid re-renders. */
 export const EMPTY_TRAJECTORY_LEDGER: TrajectoryLedger = {
   turns: [],
   headers: new Map(),
@@ -312,10 +324,10 @@ export const EMPTY_TRAJECTORY_LEDGER: TrajectoryLedger = {
 };
 
 // ---------------------------------------------------------------------------
-// 视觉记录
+// Visual record
 // ---------------------------------------------------------------------------
 
-/** 子代理一次运行的摘要，由宿主预取后传入 layout。 */
+/** Summary of one subagent run, prefetched by the host and passed into layout. */
 export type TrajectorySubagentRun = {
   runId: string;
   agentId: string;
@@ -332,14 +344,15 @@ export type TrajectorySubagentRun = {
       callId: string;
       name: string;
       isError: boolean;
-      /** 工具自身的起止（来自子代理消息时间戳）；缺失时布局层回退 step 跨度。 */
+      /** The tool's own start/end (from subagent message timestamps); when missing, the layout layer
+       * falls back to the step span. */
       startedAt?: number | null;
       endedAt?: number | null;
     }[];
   }[];
 };
 
-/** 详情面板用的一段原始内容块，保持模型顺序。 */
+/** One raw content block for the detail panel, preserving model order. */
 export type TrajectorySourceBlock = {
   type: string;
   content: string;
@@ -351,7 +364,7 @@ export type TrajectorySourceBlock = {
   fileSource?: "absolute" | "relative" | "file-url";
 };
 
-/** assistant 专属的时序事实，用于 TTFT / 解码吞吐。 */
+/** Assistant-specific timing facts, used for TTFT / decode throughput. */
 export type TrajectoryAssistantMetrics = {
   timingRecorded: boolean;
   stepStartAt: number | null;
@@ -360,20 +373,21 @@ export type TrajectoryAssistantMetrics = {
   outputTokens: number | null;
 };
 
-/** 一条账本行。`index` 是全局 1-based 序号，渲染与时间轴共用。 */
+/** One ledger row. `index` is the global 1-based sequence number, shared by rendering and the
+ * timeline. */
 export type TrajectoryRecord = {
   index: number;
   recordId: string;
   kind: TrajectoryRecordKind;
-  /** 单行摘要文本；溢出由 CSS 省略。 */
+  /** Single-line summary text; overflow is ellipsized by CSS. */
   text: string;
-  /** 工具结果摘要，与调用同处一行。 */
+  /** Tool result summary, shown on the same line as the call. */
   result?: string;
   turn: number | null;
   step: number | null;
   status: TrajectoryStatus;
   isError: boolean;
-  /** 自身耗时（秒）。null 表示未知——降级账本全为 null。 */
+  /** Own duration in seconds. null means unknown -- a degraded ledger is all null. */
   timeSeconds: number | null;
   startedAt: number | null;
   callId?: string;
@@ -402,18 +416,18 @@ export type TrajectoryRecord = {
   tokensBefore?: number;
   tokensAfter?: number;
   subagentRunId?: string;
-  /** 仅作为请求分隔锚点、不渲染内容的行。 */
+  /** A row that serves only as a request-separator anchor and renders no content. */
   requestOnly?: boolean;
 };
 
-/** turn 内的一组记录（`Message` 或 `Step N`）。 */
+/** A group of records within a turn (`Message` or `Step N`). */
 export type TrajectoryGroupModel = {
   title: string;
   description?: string;
   records: readonly TrajectoryRecord[];
 };
 
-/** 一个 turn，或两轮之间的独立压缩段（turn 为 null）。 */
+/** A turn, or a standalone compaction segment between two turns (turn null). */
 export type TrajectoryTurnModel = {
   turn: number | null;
   groups: readonly TrajectoryGroupModel[];

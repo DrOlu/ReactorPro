@@ -69,8 +69,8 @@ export function formatTime(value: number) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  // 默认 locale 的时间戳（`toLocaleString()` 每次调用都会新建一个
-  // DateTimeFormat，即一次 ICU 初始化）；面板里每行都会调一次。
+  // Default-locale timestamps (`toLocaleString()` constructs a new DateTimeFormat on every call,
+  // i.e. one ICU initialization); every row in the panel calls this once.
   return cachedDateTimeFormat(undefined, "memory-panel-time").format(date);
 }
 
@@ -237,12 +237,12 @@ export function manualApplySummaryText(input: {
   warningCount: number;
 }) {
   if (input.warningCount === 0) {
-    return `手动应用结果：已选择 ${input.selectedCount} 条建议，${input.appliedCount} 条写入成功。`;
+    return `Manual application result: selected ${input.selectedCount} suggestions, ${input.appliedCount} written successfully.`;
   }
   if (input.appliedCount > 0) {
-    return `手动应用结果：已选择 ${input.selectedCount} 条建议，${input.appliedCount} 条写入成功，${input.warningCount} 条失败或跳过。`;
+    return `Manual application result: selected ${input.selectedCount} suggestions, ${input.appliedCount} written successfully, ${input.warningCount} failed or skipped.`;
   }
-  return `手动应用结果：已选择 ${input.selectedCount} 条建议，全部未写入，${input.warningCount} 条失败或跳过。`;
+  return `Manual application result: selected ${input.selectedCount} suggestions, none written, ${input.warningCount} failed or skipped.`;
 }
 
 export type ManualApplyDisplay = {
@@ -293,8 +293,8 @@ export function displayedFinalSummary(run: MemoryOrganizeRun, manualDisplay: Man
     const summary = manualApplySummaryText(manualDisplay);
     const final = run.finalSummary?.trim();
     if (!final) return summary;
-    if (final.includes("手动应用结果")) return final;
-    return `${summary}\n\n模型原始总结：${final}`;
+    if (final.includes("Manual application result")) return final;
+    return `${summary}\n\nModel raw summary: ${final}`;
   }
   return run.finalSummary || run.error || "";
 }

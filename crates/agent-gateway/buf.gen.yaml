@@ -1,5 +1,6 @@
-# buf 代码生成配置（v2 schema）。Go 插件用 mise 固定版本、`module=` 与历史 protoc 一致，
-# 输出 internal/proto/；TS 插件 protoc-gen-es 由 web/node_modules 锁定，输出 web/src/lib/proto/gen/。
+# buf code generation config (v2 schema). The Go plugin uses a mise-pinned version and a
+# `module=` matching historical protoc, outputting to internal/proto/; the TS plugin
+# protoc-gen-es is pinned by web/node_modules, outputting to web/src/lib/proto/gen/.
 version: v2
 plugins:
   - local: protoc-gen-go

@@ -67,9 +67,10 @@ export function useFlipGrid() {
 
   const requestFlip = useCallback(
     (mode: FlipMode, heroKeys: readonly string[], followKeys: readonly string[] = heroKeys) => {
-      // 契约：必须在触发重排的 setState 之前调用。此处同步捕获「变更前」布局，
-      // 主 effect 只在存在 pending 请求的那次渲染里测量「变更后」布局并做 FLIP —
-      // 其余渲染完全不碰 getBoundingClientRect（技能多时曾是主要强制回流来源）。
+      // Contract: must be called before the setState that triggers reflow. This synchronously captures the
+      // "before" layout; the main effect measures the "after" layout and performs the FLIP only in the render
+      // that has a pending request -- all other renders never touch getBoundingClientRect (once a major source
+      // of forced reflow when there were many skills).
       const grid = gridRef.current;
       if (grid) {
         const elements = Array.from(grid.querySelectorAll<HTMLElement>("[data-flip-key]"));
@@ -130,8 +131,8 @@ export function useFlipGrid() {
   }, []);
 
   useLayoutEffect(() => {
-    // 无 pending 请求的渲染不做任何测量/清理：变更前布局已在 requestFlip 时捕获，
-    // 进行中的动画也不因无关重渲被打断。
+    // Renders without a pending request do no measurement/cleanup: the before layout was already captured at
+    // requestFlip time, and in-flight animations are not interrupted by unrelated re-renders.
     const request = pendingRequestRef.current;
     if (!request) return;
     pendingRequestRef.current = null;

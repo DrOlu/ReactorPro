@@ -1,4 +1,5 @@
-// Sidebar 会话列表的纯 reducer：排序、合并、upsert、权威对账与后端事件应用。
+// Pure reducer for the Sidebar conversation list: sorting, merging, upsert, authoritative
+// reconciliation and backend event application.
 
 import type { SidebarBackendEvent, SidebarConversation } from "./types";
 

@@ -170,7 +170,7 @@ fn apply_ssh_host_change(
             .and_then(ssh_host_id)
             .is_some_and(|id| id != host_id)
     {
-        return Err("sshPatch.hostChanges[] id 与主机内容不一致".to_string());
+        return Err("sshPatch.hostChanges[] id does not match the host content".to_string());
     }
 
     let current_index = find_ssh_host_index(hosts, &host_id);
@@ -228,7 +228,7 @@ fn apply_ssh_host_change(
             Ok(None)
         }
         (Some(_), Some(_), None) => Ok(Some(SshPatchConflictCode::SettingsChanged)),
-        (None, None, _) => Err("sshPatch.hostChanges[] before/after 不能同时为空".to_string()),
+        (None, None, _) => Err("sshPatch.hostChanges[] before/after cannot both be empty".to_string()),
     }
 }
 
@@ -239,7 +239,7 @@ fn apply_ssh_secret_updates(
     let updates = match secret_updates {
         Value::Object(map) => map,
         Value::Null => return Ok(None),
-        _ => return Err("sshSecretUpdates 必须是对象".to_string()),
+        _ => return Err("sshSecretUpdates must be an object".to_string()),
     };
     for (host_id, update) in updates {
         let Some(index) = find_ssh_host_index(hosts, host_id.trim()) else {
@@ -266,7 +266,7 @@ fn apply_ssh_secret_updates(
             return Ok(Some(SshPatchConflictCode::SettingsChanged));
         }
         let Some(host) = hosts[index].as_object_mut() else {
-            return Err("ssh host 必须是对象".to_string());
+            return Err("ssh host must be an object".to_string());
         };
         if has_password_update {
             host.insert("password".to_string(), Value::String(password));
@@ -490,7 +490,7 @@ pub(crate) fn apply_ssh_patch_with_conn(
 ) -> Result<SshPatchApplyResponse, String> {
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|e| format!("开启 {SSH_SETTINGS_TABLE} patch 事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to begin {SSH_SETTINGS_TABLE} patch transaction: {e}"))?;
     let current = load_ssh_or_empty(&tx)?;
     let merged = match apply_ssh_patch_to_value(current.clone(), payload)? {
         Ok(merged) => merged,
@@ -504,7 +504,7 @@ pub(crate) fn apply_ssh_patch_with_conn(
     save_ssh_rows(&tx, merged)?;
     let saved = load_ssh_or_empty(&tx)?;
     tx.commit()
-        .map_err(|e| format!("提交 {SSH_SETTINGS_TABLE} patch 事务失败：{e}"))?;
+        .map_err(|e| format!("Failed to commit {SSH_SETTINGS_TABLE} patch transaction: {e}"))?;
     Ok(SshPatchApplyResponse {
         ssh: saved,
         conflict: None,

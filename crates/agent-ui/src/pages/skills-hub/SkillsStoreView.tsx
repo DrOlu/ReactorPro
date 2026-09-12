@@ -171,8 +171,8 @@ export function SkillsStoreView(props: {
     [categorizedItems, storeCategory],
   );
 
-  // 分类是本地过滤：选中分类后结果太少且还有下一页时自动补页，
-  // 避免出现"一屏只剩两张卡"的稀疏页面。
+  // Categories are filtered locally: once a category is selected and results are too few with another page
+  // available, auto-load more to avoid a sparse page with "only two cards left on screen".
   useEffect(() => {
     if (storeCategory === "all" || searching) return;
     if (!cursor || loading || loadingMore) return;

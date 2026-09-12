@@ -1,9 +1,11 @@
 /**
- * 会话统计状态栏的桌面端薄包装：把共享层的取数 hook 接到本地实时事件源与
- * Tauri 轨迹宿主上（docs/design/composer-context-stats-bar.md §4.4）。
+ * Desktop thin wrapper around the conversation stats status bar: wires the
+ * shared-layer data hook to the local live event source and the Tauri
+ * trajectory host (docs/design/composer-context-stats-bar.md §4.4).
  *
- * 取数代码与 ConversationTrajectorySurface 同款；实时事件与落盘窗口的合并、
- * 去重、缓存全在共享层完成，这里只负责注入。
+ * The data code is the same as ConversationTrajectorySurface; merging,
+ * deduplication, and caching of live events with the persisted window all
+ * happen in the shared layer, and this only handles injection.
  */
 
 import { ConversationStatsBar } from "@liveagent/ui/components/chat/ConversationStatsBar";
@@ -17,7 +19,8 @@ import {
   subscribeDesktopLiveTrajectory,
 } from "../../../lib/trajectory/liveTrajectory";
 
-// 宿主无状态（只是 invoke 的包装），模块级复用一份即可。
+// The host is stateless (just a wrapper around invoke), so one module-level
+// instance can be reused.
 const trajectoryHost = createTauriTrajectoryHost();
 
 const noopSubscribe = () => () => {};
@@ -26,10 +29,10 @@ const readNoTokens = () => undefined;
 export function ConversationStatsBarHost(props: {
   conversationId: string;
   enabled?: boolean;
-  /** 提供且占用达标时整条可点击，弹出确认后触发手动压缩；缺省为纯展示。 */
+  /** When provided and usage meets the threshold, the whole bar is clickable and triggers manual compaction after a confirmation; defaults to display-only. */
   onManualCompactConfirm?: (() => void) | (() => Promise<unknown>);
   manualCompactBlocked?: boolean;
-  /** 与 composer 用量环同一订阅源，供状态栏恒显分组读取当前上下文占用。 */
+  /** The same subscription source as the composer usage ring, letting the always-visible status bar group read the current context usage. */
   contextUsageTokensSource?: ContextUsageTokensSource;
   contextWindow?: number;
 }) {
@@ -51,7 +54,9 @@ export function ConversationStatsBarHost(props: {
     conversationId,
     host: trajectoryHost,
     liveEvents,
-    // 桌面端持有权威实时尾巴：空集也是「进程已重启」的证据，遗留 running 收敛为中断。
+    // The desktop holds the authoritative live tail: an empty set is also
+    // evidence that "the process has restarted", so a leftover running state
+    // converges to interrupted.
     liveOwnership: "authoritative",
     authoritativeRevision,
     enabled,

@@ -38,20 +38,20 @@ pub fn max_cron_timeout_seconds(kind: &str) -> u64 {
 pub fn validate_cron_expression(expression: &str) -> Result<(), String> {
     let trimmed = expression.trim();
     if trimmed.is_empty() {
-        return Err("Cron 表达式不能为空".to_string());
+        return Err("Cron expression cannot be empty".to_string());
     }
     if trimmed.split_whitespace().count() != 6 {
-        return Err("Cron 表达式必须是标准六段格式（秒 分 时 日 月 周）".to_string());
+        return Err("Cron expression must be in the standard six-field format (seconds minutes hours day month weekday)".to_string());
     }
     Job::new_async_tz(trimmed, Local, |_job_id, _lock| Box::pin(async move {}))
         .map(|_| ())
-        .map_err(|e| format!("无效 Cron 表达式：{trimmed} ({e})"))
+        .map_err(|e| format!("invalid Cron expression: {trimmed} ({e})"))
 }
 
 fn expect_object(value: Value, label: &str) -> Result<Map<String, Value>, String> {
     match value {
         Value::Object(map) => Ok(map),
-        _ => Err(format!("{label} 必须是对象")),
+        _ => Err(format!("{label} must be an object")),
     }
 }
 
@@ -61,7 +61,7 @@ fn required_string(map: &Map<String, Value>, key: &str, label: &str) -> Result<S
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
-        .ok_or_else(|| format!("{label}.{key} 不能为空"))
+        .ok_or_else(|| format!("{label}.{key} cannot be empty"))
 }
 
 fn optional_string(map: &Map<String, Value>, key: &str) -> String {
@@ -81,7 +81,7 @@ fn bool_with_default(
     match map.get(key) {
         None | Some(Value::Null) => Ok(default),
         Some(Value::Bool(value)) => Ok(*value),
-        Some(_) => Err(format!("{label}.{key} 必须是布尔值")),
+        Some(_) => Err(format!("{label}.{key} must be a boolean")),
     }
 }
 
@@ -94,8 +94,8 @@ fn parse_remaining_executions(
         Some(Value::Number(number)) => number
             .as_u64()
             .map(Some)
-            .ok_or_else(|| format!("{label}.remainingExecutions 必须是非负整数")),
-        Some(_) => Err(format!("{label}.remainingExecutions 必须是非负整数")),
+            .ok_or_else(|| format!("{label}.remainingExecutions must be a non-negative integer")),
+        Some(_) => Err(format!("{label}.remainingExecutions must be a non-negative integer")),
     }
 }
 
@@ -105,16 +105,16 @@ fn parse_timeout_seconds(map: &Map<String, Value>, label: &str, kind: &str) -> R
         Some(Value::Number(number)) => {
             let value = number
                 .as_u64()
-                .ok_or_else(|| format!("{label}.timeoutSeconds 必须是正整数（秒）"))?;
+                .ok_or_else(|| format!("{label}.timeoutSeconds must be a positive integer (seconds)"))?;
             let max = max_cron_timeout_seconds(kind);
             if !(MIN_CRON_TIMEOUT_SECONDS..=max).contains(&value) {
                 return Err(format!(
-                    "{label}.timeoutSeconds 必须在 {MIN_CRON_TIMEOUT_SECONDS}-{max} 秒之间（{kind} 任务）"
+                    "{label}.timeoutSeconds must be between {MIN_CRON_TIMEOUT_SECONDS}-{max} seconds ({kind} task)"
                 ));
             }
             Ok(value)
         }
-        Some(_) => Err(format!("{label}.timeoutSeconds 必须是正整数（秒）")),
+        Some(_) => Err(format!("{label}.timeoutSeconds must be a positive integer (seconds)")),
     }
 }
 
@@ -125,9 +125,9 @@ fn parse_http_requests(
     let requests = map
         .get("requests")
         .and_then(Value::as_array)
-        .ok_or_else(|| format!("{label}.requests 至少需要一个请求"))?;
+        .ok_or_else(|| format!("{label}.requests requires at least one request"))?;
     if requests.is_empty() {
-        return Err(format!("{label}.requests 至少需要一个请求"));
+        return Err(format!("{label}.requests requires at least one request"));
     }
 
     let mut normalized = Vec::with_capacity(requests.len());
@@ -135,7 +135,7 @@ fn parse_http_requests(
         let item_label = format!("{label}.requests[{index}]");
         let request = request_value
             .as_object()
-            .ok_or_else(|| format!("{item_label} 必须是对象"))?;
+            .ok_or_else(|| format!("{item_label} must be an object"))?;
         let id = request
             .get("id")
             .and_then(Value::as_str)
@@ -144,7 +144,7 @@ fn parse_http_requests(
             .map(ToString::to_string)
             .unwrap_or_else(|| Uuid::new_v4().to_string());
         let url = required_string(request, "url", &item_label)?;
-        reqwest::Url::parse(&url).map_err(|_| format!("{item_label}.url 必须是绝对 URL"))?;
+        reqwest::Url::parse(&url).map_err(|_| format!("{item_label}.url must be an absolute URL"))?;
         let method = request
             .get("method")
             .and_then(Value::as_str)
@@ -153,7 +153,7 @@ fn parse_http_requests(
             .unwrap_or("POST")
             .to_ascii_uppercase();
         if !HTTP_METHODS.contains(&method.as_str()) {
-            return Err(format!("{item_label}.method 不支持：{method}"));
+            return Err(format!("{item_label}.method unsupported: {method}"));
         }
         let headers = parse_headers(request.get("headers"), &item_label)?;
         let body = if http_method_can_have_body(&method) {
@@ -187,7 +187,7 @@ fn parse_headers(
     }
     let headers = value
         .as_object()
-        .ok_or_else(|| format!("{label}.headers 必须是对象"))?;
+        .ok_or_else(|| format!("{label}.headers must be an object"))?;
     let mut normalized = BTreeMap::new();
     for (raw_key, raw_value) in headers {
         let key = raw_key.trim();
@@ -211,7 +211,7 @@ fn parse_headers(
 fn parse_selected_model(value: Option<&Value>, label: &str) -> Result<SelectedModelRef, String> {
     let map = value
         .and_then(Value::as_object)
-        .ok_or_else(|| format!("{label}.selectedModel 不能为空"))?;
+        .ok_or_else(|| format!("{label}.selectedModel cannot be empty"))?;
     Ok(SelectedModelRef {
         custom_provider_id: required_string(
             map,
@@ -239,7 +239,7 @@ pub fn validate_cron_task(value: Value, label: &str) -> Result<CronTask, String>
         .unwrap_or("bash")
         .to_string();
     if !CRON_TASK_KINDS.contains(&kind.as_str()) {
-        return Err(format!("{label}.type 不支持：{kind}"));
+        return Err(format!("{label}.type unsupported: {kind}"));
     }
     let timeout_seconds = parse_timeout_seconds(&map, label, &kind)?;
     let enabled =
@@ -277,7 +277,7 @@ pub fn validate_cron_task(value: Value, label: &str) -> Result<CronTask, String>
             let reasoning = optional_string(&map, "reasoning");
             if !reasoning.is_empty() {
                 if !CRON_REASONING_LEVELS.contains(&reasoning.as_str()) {
-                    return Err(format!("{label}.reasoning 不支持：{reasoning}"));
+                    return Err(format!("{label}.reasoning unsupported: {reasoning}"));
                 }
                 task.reasoning = Some(reasoning);
             }
@@ -311,7 +311,7 @@ pub fn validate_hook(value: Value, label: &str) -> Result<HookDef, String> {
         .unwrap_or("agent_start")
         .to_string();
     if !HOOK_EVENTS.contains(&event.as_str()) {
-        return Err(format!("{label}.event 不支持：{event}"));
+        return Err(format!("{label}.event unsupported: {event}"));
     }
     let enabled = bool_with_default(&map, "enabled", label, false)?;
     let kind = map
@@ -321,17 +321,17 @@ pub fn validate_hook(value: Value, label: &str) -> Result<HookDef, String> {
         .unwrap_or("command")
         .to_string();
     if !HOOK_KINDS.contains(&kind.as_str()) {
-        return Err(format!("{label}.type 不支持：{kind}"));
+        return Err(format!("{label}.type unsupported: {kind}"));
     }
     let timeout_ms = match map.get("timeoutMs") {
         None | Some(Value::Null) => None,
         Some(Value::Number(number)) => {
             let value = number
                 .as_u64()
-                .ok_or_else(|| format!("{label}.timeoutMs 必须是正整数"))?;
+                .ok_or_else(|| format!("{label}.timeoutMs must be a positive integer"))?;
             Some(value.clamp(MIN_HOOK_TIMEOUT_MS, MAX_HOOK_TIMEOUT_MS))
         }
-        Some(_) => return Err(format!("{label}.timeoutMs 必须是正整数")),
+        Some(_) => return Err(format!("{label}.timeoutMs must be a positive integer")),
     };
 
     let mut hook = HookDef {
@@ -366,7 +366,7 @@ pub fn merge_patch(
     patch: Value,
     label: &str,
 ) -> Result<Value, String> {
-    let base = serde_json::to_value(stored).map_err(|e| format!("{label} 序列化失败：{e}"))?;
+    let base = serde_json::to_value(stored).map_err(|e| format!("failed to serialize {label}: {e}"))?;
     let mut merged = expect_object(base, label)?;
     let patch = expect_object(patch, &format!("{label}.patch"))?;
     for (key, value) in patch {

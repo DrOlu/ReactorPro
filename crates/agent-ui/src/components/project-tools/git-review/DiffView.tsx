@@ -887,7 +887,7 @@ export function DiffContent(props: {
     }
   }, [selectionContextMenu]);
 
-  const copySelectedTextLabel = locale === "en-US" ? "Copy selected text" : "复制选中文本";
+  const copySelectedTextLabel = locale === "en-US" ? "Copy selected text" : "Copy selected text";
 
   return (
     <fieldset
@@ -954,7 +954,7 @@ export function DiffContent(props: {
           <div
             ref={diffHorizontalScrollbarTrackRef}
             role="scrollbar"
-            aria-label={locale === "en-US" ? "Horizontal diff scrollbar" : "diff 横向滚动条"}
+            aria-label={locale === "en-US" ? "Horizontal diff scrollbar" : "Horizontal diff scrollbar"}
             aria-controls={diffScrollViewportId}
             aria-orientation="horizontal"
             aria-valuemin={0}

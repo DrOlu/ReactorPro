@@ -18,8 +18,8 @@ import {
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { ReactNode } from "react";
 
-// 脚本编写说明里的示例代码(纯代码,locale 无关);语义须与 Rust 沙箱执行
-// 契约一致:声明式单请求 + extractor 接收响应 JSON。
+// Example code in the script authoring help (pure code, locale-independent); its semantics must match the Rust
+// sandbox execution contract: a declarative single request + an extractor that receives the response JSON.
 export const USAGE_QUERY_SCRIPT_HELP_EXAMPLE = `({
   request: {
     url: "{{baseUrl}}/api/usage",
@@ -60,7 +60,7 @@ export function usageRelativeTimeText(t: (key: string) => string, time: UsageRel
   }
 }
 
-// 单个套餐/余额行:失效红、余量 <10% 橙、正常绿(对齐 cc-switch UsageFooter 分级)。
+// A single plan/balance row: invalid red, remaining <10% orange, normal green (aligned with cc-switch UsageFooter tiers).
 export function UsagePlanLine({ plan }: { plan: UsagePlanDisplay }) {
   const { t } = useLocale();
   const title = usagePlanTitleText(t, plan.title);
@@ -129,7 +129,7 @@ export function ProviderBrandIcon({ type }: { type: ProviderId }) {
 }
 
 /**
- * 悬停/聚焦即显的说明气泡：替代抽屉里成段的描述性文字，仅在需要时展开。
+ * A hint bubble shown on hover/focus: replaces paragraphs of descriptive text in the drawer, expanding only when needed.
  */
 export function HintTip(props: { text: string; label?: string }) {
   const { text, label } = props;
@@ -158,7 +158,7 @@ export function HintTip(props: { text: string; label?: string }) {
   );
 }
 
-/** 抽屉字段标签：小号标签 + 可选的说明气泡。 */
+/** Drawer field label: a small label + an optional hint bubble. */
 export function DrawerFieldLabel(props: { label: string; hint?: string }) {
   const { label, hint } = props;
   return (
@@ -170,9 +170,9 @@ export function DrawerFieldLabel(props: { label: string; hint?: string }) {
 }
 
 /**
- * 抽屉分组标题：微型弱化标题 + 向右延伸的发丝线。
- * 与字段标签（DrawerFieldLabel）拉开层级：分组标题更小、更淡、带字距，
- * 视觉上作为"类别分隔"存在，避免与紧随其后的字段标签混为一谈。
+ * Drawer group heading: a tiny, subdued heading + a hairline extending to the right.
+ * It is tiered apart from field labels (DrawerFieldLabel): the group heading is smaller, fainter, and letter-spaced,
+ * existing visually as a "category separator" so it is not confused with the field label right after it.
  */
 export function DrawerGroupLabel(props: { label: string; hint?: string }) {
   const { label, hint } = props;
@@ -187,7 +187,7 @@ export function DrawerGroupLabel(props: { label: string; hint?: string }) {
   );
 }
 
-/** 抽屉分区头：图标块 + 标题 + 说明气泡 + 右侧控件插槽。 */
+/** Drawer section header: icon block + title + hint bubble + a control slot on the right. */
 export function DrawerSectionHeader(props: {
   icon: ReactNode;
   title: string;

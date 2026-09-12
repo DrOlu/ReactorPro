@@ -285,7 +285,8 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
     forwards: [],
     revision: 0,
   });
-  // 新建映射的表单挪进了 SshPortForwardDialog；这里只记住哪个会话开着模态。
+  // The new-mapping form moved into SshPortForwardDialog; here we only remember which conversation
+  // has the modal open.
   const [forwardModalSessionId, setForwardModalSessionId] = useState<string | null>(null);
   const [stoppingForwardIds, setStoppingForwardIds] = useState<ReadonlySet<string>>(new Set());
   const [forwardErrorsBySessionId, setForwardErrorsBySessionId] = useState<Record<string, string>>(
@@ -305,7 +306,8 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
     () => sessions.filter((session) => session.kind === "ssh" && session.ssh),
     [sessions],
   );
-  // 会话被关闭/回收时模态随之消失：挂载与否直接跟着会话是否还在走。
+  // When the conversation is closed/reclaimed the modal disappears with it: mounting directly
+  // follows whether the conversation still exists.
   const forwardModalSession = forwardModalSessionId
     ? (sshSessions.find((session) => session.id === forwardModalSessionId) ?? null)
     : null;

@@ -2,9 +2,9 @@ import type { ProviderId } from "../../settings";
 import { isRecord } from "./common";
 import type { StreamOptionsEx } from "./types";
 
-// xAI Responses 端点严格校验请求体：OpenAI 专属的存储/缓存/系统元数据字段
-// （store、prompt_cache_*、instructions、metadata 等）不被接受。
-// reasoning 保留，但会规范化为 xAI 支持的 effort 档位（无 summary）。
+// The xAI Responses endpoint strictly validates the request body: OpenAI-only storage/cache/
+// system metadata fields (store, prompt_cache_*, instructions, metadata, etc.) are not accepted.
+// reasoning is kept, but normalized to the effort tiers xAI supports (no summary).
 const XAI_UNSUPPORTED_RESPONSES_PAYLOAD_KEYS = [
   "background",
   "instructions",
@@ -18,7 +18,7 @@ const XAI_UNSUPPORTED_RESPONSES_PAYLOAD_KEYS = [
   "text",
 ] as const;
 
-/** UI / OpenAI 风格 effort → xAI 官方 effort（low|medium|high|xhigh|none）。 */
+/** UI / OpenAI-style effort -> official xAI effort (low|medium|high|xhigh|none). */
 export function mapUiEffortToXaiEffort(
   effort: string | undefined,
   modelId?: string,
@@ -62,9 +62,9 @@ export function isXaiProviderTarget(params: { providerId: ProviderId; baseUrl?: 
   return params.providerId === "xai" || isXaiDirectBaseUrl(params.baseUrl);
 }
 
-// grok 的服务端工具（web_search / x_search / code_interpreter）只有显式
-// include 才会回传搜索来源与执行输出；reasoning.encrypted_content 则是
-// store 关闭时跨轮回放推理项的前提，始终请求。
+// grok's server-side tools (web_search / x_search / code_interpreter) return search sources and
+// execution output only with an explicit include; reasoning.encrypted_content, on the other hand,
+// is the prerequisite for replaying reasoning items across turns when store is disabled, so it is always requested.
 function xaiResponsesIncludeValues(tools: unknown): string[] {
   const values = ["reasoning.encrypted_content"];
   if (!Array.isArray(tools)) return values;
@@ -127,7 +127,7 @@ export function attachXaiResponsesPayloadCompat(
     baseUrl?: string;
   },
 ): StreamOptionsEx {
-  // 正式 xai 供应商，或 Codex 直连 api.x.ai 的兼容路径。
+  // Official xai provider, or the compatibility path where Codex connects directly to api.x.ai.
   if (params.providerId !== "xai" && params.providerId !== "codex") {
     return options;
   }

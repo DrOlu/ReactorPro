@@ -3,7 +3,7 @@ import test from "node:test";
 import { createGatewayV2Codec } from "../helpers/gateway-v2.mjs";
 import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
-// FakeWebSocket 以 v2 服务端身份说话：收发全部为二进制 protobuf 帧。
+// FakeWebSocket speaks as a v2 server: everything sent and received is a binary protobuf frame.
 class FakeWebSocket {
   static CONNECTING = 0;
   static OPEN = 1;
@@ -125,7 +125,7 @@ function frames(codec, socket) {
   return socket.sent.map((raw) => codec.decodeClientFrame(raw));
 }
 
-// 查找第一条命中指定直通臂的 agent_request 帧。
+// Find the first agent_request frame hitting the given pass-through arm.
 function findAgentRequest(codec, socket, arm) {
   return frames(codec, socket).find(
     (frame) => frame.case === "agentRequest" && frame.json.agent_request?.[arm] !== undefined,
@@ -163,7 +163,7 @@ async function connectAndAuth(codec, index = 0) {
   return socket;
 }
 
-// history.list 现在并行发出 chat_activities 帧；用网关状态应答它。
+// history.list now emits chat_activities frames in parallel; answer them with the gateway status.
 function answerChatActivities(codec, socket, running = [], answered = new Set()) {
   for (const frame of frames(codec, socket)) {
     if (frame.case !== "chatActivities" || answered.has(frame.requestId)) continue;
@@ -566,7 +566,7 @@ test("GatewayWebSocketClient lists the desktop host's installed apps", async () 
   const socket = await connectAndAuth(codec);
   await waitFor(() => findAgentRequest(codec, socket, "installed_apps_list"), "installed apps frame");
   const request = findAgentRequest(codec, socket, "installed_apps_list");
-  // 请求体无参：空消息臂就是全部载荷。
+  // The request body takes no arguments: the empty message arm is the entire payload.
   assert.deepEqual(request.json.agent_request.installed_apps_list, {});
   socket.receiveBinary(
     codec.encodeServerFrame({
@@ -580,7 +580,7 @@ test("GatewayWebSocketClient lists the desktop host's installed apps", async () 
               path: "/Applications/Safari.app",
               icon_data_url: "data:image/png;base64,QUJD",
             },
-            // Windows 形态：无 bundle id、无图标——身份以 path 兜底。
+            // Windows shape: no bundle id and no icon -- identity falls back to path.
             { name: "Notepad", path: "C:\\Windows\\notepad.exe" },
           ],
         },
@@ -640,7 +640,7 @@ test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
 
   const client = getGatewayWebSocketClient("token");
   const clarifyPromise = client.clarifyPromptTurn({
-    messages: [{ role: "user", content: "帮我做一个网站" }],
+    messages: [{ role: "user", content: "Help me build a website" }],
     providerId: "builtin-gemini",
     model: "gemini-2.0-flash",
     runtimeControls: {
@@ -654,7 +654,7 @@ test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
   await waitFor(() => findAgentRequest(codec, socket, "clarify_turn"), "clarify frame");
   const request = findAgentRequest(codec, socket, "clarify_turn");
   assert.deepEqual(JSON.parse(request.json.agent_request.clarify_turn.messages_json), [
-    { role: "user", content: "帮我做一个网站" },
+    { role: "user", content: "Help me build a website" },
   ]);
   assert.equal(request.json.agent_request.clarify_turn.provider_id, "builtin-gemini");
   assert.equal(request.json.agent_request.clarify_turn.model, "gemini-2.0-flash");
@@ -666,13 +666,13 @@ test("GatewayWebSocketClient sends clarify prompt turn payloads", async () => {
       request_id: request.requestId,
       agent_response: {
         clarify_turn_resp: {
-          final_text: "优化后的提示词",
+          final_text: "Optimized prompt",
         },
       },
     }),
   );
 
-  assert.deepEqual(await clarifyPromise, { final_text: "优化后的提示词" });
+  assert.deepEqual(await clarifyPromise, { final_text: "Optimized prompt" });
   resetGatewayWebSocketClient();
 });
 
@@ -685,7 +685,7 @@ test("GatewayWebSocketClient surfaces clarify turn deltas before the final respo
   const deltas = [];
   const clarifyPromise = client.clarifyPromptTurn(
     {
-      messages: [{ role: "user", content: "帮我做一个网站" }],
+      messages: [{ role: "user", content: "Help me build a website" }],
       providerId: "builtin-gemini",
       model: "gemini-2.0-flash",
     },
@@ -710,11 +710,11 @@ test("GatewayWebSocketClient surfaces clarify turn deltas before the final respo
   socket.receiveBinary(
     codec.encodeServerFrame({
       request_id: request.requestId,
-      agent_response: { clarify_turn_resp: { final_text: "[CLARIFY_QUESTION]\n要做什么？" } },
+      agent_response: { clarify_turn_resp: { final_text: "[CLARIFY_QUESTION]\nWhat would you like to do?" } },
     }),
   );
 
-  assert.deepEqual(await clarifyPromise, { final_text: "[CLARIFY_QUESTION]\n要做什么？" });
+  assert.deepEqual(await clarifyPromise, { final_text: "[CLARIFY_QUESTION]\nWhat would you like to do?" });
   assert.deepEqual(deltas, ["[CLARIFY", "_QUESTION]"]);
   resetGatewayWebSocketClient();
 });
@@ -1154,7 +1154,7 @@ test("GatewayWebSocketClient sends history branch requests with the base message
         history_branch_resp: {
           conversation: {
             id: "conversation-branch",
-            title: "新分支",
+            title: "New branch",
             message_count: 6,
             created_at: 1700000000100,
             updated_at: 1700000000200,
@@ -1165,7 +1165,7 @@ test("GatewayWebSocketClient sends history branch requests with the base message
   );
   const branched = await branchPromise;
   assert.equal(branched.id, "conversation-branch");
-  assert.equal(branched.title, "新分支");
+  assert.equal(branched.title, "New branch");
   assert.equal(branched.message_count, 6);
   assert.equal(branched.created_at, 1700000000100);
   assert.equal(branched.updated_at, 1700000000200);
@@ -1616,8 +1616,8 @@ test("GatewayWebSocketClient conversation subscriptions subscribe after auth, ro
     onEvent: (event) => seen.events.push(event),
   });
 
-  // 鉴权是唯一的连接通知点；对每条 chat_subscribe 帧按调用方游标 + 暂存的
-  // 重放事件应答。
+  // Auth is the only connection notification point; answer each chat_subscribe
+  // frame using the caller's cursor plus the buffered replay events.
   const answeredSubscribes = new Set();
   let replayEvents = [];
   const subscribeCalls = [];
@@ -1658,7 +1658,7 @@ test("GatewayWebSocketClient conversation subscriptions subscribe after auth, ro
     }
   };
 
-  // 鉴权完成 → 持久订阅发出 chat_subscribe。
+  // Auth completes -> the persistent subscription emits chat_subscribe.
   const socket = await connectAndAuth(codec);
   await waitFor(() => findFrame(codec, socket, "chatSubscribe"), "chat_subscribe");
   assert.equal(subscribeCalls.length, 0);
@@ -1668,7 +1668,7 @@ test("GatewayWebSocketClient conversation subscriptions subscribe after auth, ro
   assert.equal(subscribeCalls[0].conversation_id, "conversation-1");
   assert.equal(subscribeCalls[0].after_seq, 0);
 
-  // chat_event 推送按会话 id 路由。
+  // chat_event pushes are routed by conversation id.
   const pushChatEvent = (target, payload) => {
     target.receiveBinary(
       codec.encodeServerFrame({
@@ -1706,7 +1706,7 @@ test("GatewayWebSocketClient conversation subscriptions subscribe after auth, ro
     ["run_started", "token"],
   );
 
-  // 断线保留登记；重连按 resume 游标与 epoch 重新订阅。
+  // Disconnection keeps the registration; reconnect re-subscribes with the resume cursor and epoch.
   const syncsBeforeReconnect = seen.syncs.length;
   replayEvents = [
     { type: "token", conversation_id: "conversation-1", run_id: "run-1", seq: 5, text: "re" },
@@ -1753,7 +1753,7 @@ test("GatewayWebSocketClient conversation subscriptions subscribe after auth, ro
     "replayed events delivered with the resume sync",
   );
 
-  // chat_subscription_reset 触发从游标再同步。
+  // chat_subscription_reset triggers a re-sync from the cursor.
   const subscribesBeforeReset = subscribeCalls.length;
   reconnectSocket.receiveBinary(
     codec.encodeServerFrame({
@@ -1764,7 +1764,7 @@ test("GatewayWebSocketClient conversation subscriptions subscribe after auth, ro
   assert.ok(subscribeCalls.length > subscribesBeforeReset, "reset re-subscribed");
   assert.equal(subscribeCalls[subscribesBeforeReset].after_seq, 6);
 
-  // 清理时在线退订。
+  // Cleanup unsubscribes while online.
   cleanup();
   await waitFor(() => findFrame(codec, reconnectSocket, "chatUnsubscribe"), "chat_unsubscribe");
   resetGatewayWebSocketClient();
@@ -1894,7 +1894,7 @@ test("GatewayWebSocketClient applies pushed status frames and polls slowly as fa
   );
 
   const socket = await connectAndAuth(codec);
-  // subscribeStatus 触发的首轮轮询搭乘新连接。
+  // The first poll triggered by subscribeStatus rides on the new connection.
   await waitFor(() => findFrame(codec, socket, "statusGet"), "initial status_get");
 
   socket.receiveBinary(
@@ -1923,12 +1923,12 @@ test("GatewayWebSocketClient defers offline verdicts while hidden and reconciles
   socket.receiveBinary(codec.encodeServerFrame({ status: { online: true } }));
   assert.equal(statuses.at(-1)?.status?.online, true);
 
-  // 标签页转后台后连接断开（如冻结期间代理掐断链路）。
+  // The connection drops after the tab goes to the background (e.g. a proxy cuts the link during freezing).
   globalThis.document.visibilityState = "hidden";
   const offlineCountBefore = statuses.filter((s) => s.status?.online === false).length;
   socket.close();
 
-  // 15s 重连提示在后台触发：不得涂画离线态。
+  // The 15s reconnect hint fires in the background: it must not paint an offline state.
   timers.fire((timer) => timer.ms === 15_000);
   assert.equal(
     statuses.filter((s) => s.status?.online === false).length,
@@ -1936,7 +1936,7 @@ test("GatewayWebSocketClient defers offline verdicts while hidden and reconciles
     "hidden tab must not paint offline from throttled timers",
   );
 
-  // 回前台：唤醒处理器重连；离线判定推迟到重连 + 状态刷新落定。
+  // Back to the foreground: the wake handler reconnects; the offline verdict is deferred until the reconnect plus status refresh settle.
   globalThis.document.visibilityState = "visible";
   globalThis.document.dispatchEvent({ type: "visibilitychange" });
   timers.fire((timer) => timer.ms === 0); // armed reconnect timer
@@ -1976,11 +1976,11 @@ test("GatewayWebSocketClient paints offline when the post-wake reconnect notice 
 
   globalThis.document.visibilityState = "visible";
   globalThis.document.dispatchEvent({ type: "visibilitychange" });
-  // 重连始终不成功；重新武装的提示在前台超时。
+  // Reconnect never succeeds; the re-armed hint times out in the foreground.
   timers.fire((timer) => timer.ms === 15_000);
   const last = statuses.at(-1);
   assert.equal(last?.status?.online, false, "failed wake reconcile paints offline");
-  assert.equal(last?.error, "Gateway 正在重新连接...");
+  assert.equal(last?.error, "Gateway is reconnecting...");
   resetGatewayWebSocketClient();
 });
 
@@ -2001,8 +2001,8 @@ test("GatewayWebSocketClient refreshes status immediately on wake with a healthy
   socket.receiveBinary(
     codec.encodeServerFrame({ request_id: statusReq.requestId, status: { online: true } }),
   );
-  // 等在途 refreshStatus 落定（finally 在微任务里跑），避免唤醒触发的刷新
-  // 被 in-flight 守卫吞掉。
+  // Wait for the in-flight refreshStatus to settle (its finally runs in a microtask)
+  // so a wake-triggered refresh is not swallowed by the in-flight guard.
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   globalThis.window.dispatchEvent({ type: "focus" });

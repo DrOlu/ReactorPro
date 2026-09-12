@@ -1,11 +1,15 @@
-//! 扫描本机其他 AI 工具（Claude Code / Codex / Claude Desktop / CodeBuddy）已配置的 MCP
-//! Server，并支持解析用户手选的本地配置文件（[`scan_mcp_config_file`]），供
-//! MCP Hub「本地导入」页展示后由用户勾选导入。导入本身是纯前端设置写入
-//! （追加进 `AppSettings.mcp.servers`），这里只负责读取与解析配置。
+//! Scans MCP servers already configured by other AI tools on this machine
+//! (Claude Code / Codex / Claude Desktop / CodeBuddy), and parses a
+//! user-selected local config file ([`scan_mcp_config_file`]) for the MCP Hub
+//! "Local Import" page to display so the user can check and import entries. The
+//! import itself is a pure frontend settings write (appending to
+//! `AppSettings.mcp.servers`); this module only reads and parses configuration.
 //!
-//! 固定路径扫描全容错：单个文件 / 单个条目解析失败只记入 `errors`，绝不让整个
-//! 扫描失败；手选文件（[`scan_mcp_config_file`]）则在整个文件不可用时直接报错。
-//! 凡是值里带 `${VAR}` 展开语法的按原样保留，由用户导入后自行调整。
+//! Fixed-path scanning is fully fault-tolerant: a single file / single entry
+//! parse failure is only recorded in `errors` and never fails the whole scan;
+//! for a manually selected file ([`scan_mcp_config_file`]), an unusable file
+//! errors out directly. Any value containing `${VAR}` expansion syntax is kept
+//! as-is for the user to adjust after import.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -20,10 +24,10 @@ const TRANSPORT_STDIO: &str = "stdio";
 const TRANSPORT_HTTP: &str = "http";
 const TRANSPORT_SSE: &str = "sse";
 
-/// 「从文件导入」的来源标识，前端据此与固定工具扫描区分展示。
+/// Source identifier for "Import from File"; the frontend uses it to display this separately from fixed-tool scans.
 pub(crate) const LOCAL_FILE_MCP_TOOL: &str = "local-file";
 
-/// 手选配置文件的体积上限，防止误选大文件把整份内容读进内存。
+/// Size cap for a manually selected config file, so a mistakenly chosen large file does not read its entire contents into memory.
 const MAX_MCP_CONFIG_FILE_BYTES: u64 = 16 * 1024 * 1024;
 
 pub(crate) fn scan_external_mcp_servers() -> Vec<SystemExternalMcpToolScan> {
@@ -35,15 +39,18 @@ pub(crate) fn scan_external_mcp_servers() -> Vec<SystemExternalMcpToolScan> {
     ]
 }
 
-/// 解析用户手选的本地 MCP 配置文件，供 MCP Hub「本地导入」的「从文件导入」使用。
+/// Parses a user-selected local MCP config file, used by MCP Hub's "Local Import"
+/// "Import from File" feature.
 ///
-/// 按扩展名区分两类格式：
-/// - `.toml`：Codex 风格 `[mcp_servers.*]` 段
-/// - 其余按 JSON：顶层 `mcpServers` 对象（含 `projects.<路径>.mcpServers`），或整个
-///   根对象就是 server map 的裸格式 `{ "<id>": { ... } }`
+/// Two format families are distinguished by extension:
+/// - `.toml`: Codex-style `[mcp_servers.*]` sections
+/// - everything else as JSON: a top-level `mcpServers` object (including
+///   `projects.<path>.mcpServers`), or a bare format where the entire root object
+///   is the server map `{ "<id>": { ... } }`
 ///
-/// 与固定路径扫描的容错策略不同：文件不可读、语法错误或找不到任何 server 定义时
-/// 直接返回 `Err` 让前端明确报错；单条目解析失败仍记入 `errors` 跳过。
+/// Unlike the fault-tolerant fixed-path scan, an unreadable file, a syntax error,
+/// or finding no server definitions at all returns `Err` directly so the frontend
+/// can report it clearly; a single entry failure is still recorded in `errors` and skipped.
 pub(crate) fn scan_mcp_config_file(path: &str) -> Result<SystemExternalMcpToolScan, String> {
     let file = expand_tilde_path(path.trim());
     let metadata = std::fs::metadata(&file)
@@ -76,7 +83,8 @@ pub(crate) fn scan_mcp_config_file(path: &str) -> Result<SystemExternalMcpToolSc
     }
     if servers.is_empty() {
         let mut message = format!("No MCP server definitions found in {display}");
-        // 误选无关 JSON（如大体量 locale 文件）时条目错误可能上千条，只展示前几条。
+        // When an unrelated JSON file (e.g. a large locale file) is picked by mistake,
+        // there may be thousands of entry errors; show only the first few.
         if !errors.is_empty() {
             const MAX_SHOWN_ERRORS: usize = 3;
             let shown = errors
@@ -124,7 +132,7 @@ fn parse_mcp_config_json(
             }
         }
     } else {
-        // 没有 `mcpServers` 包装时按裸 server map 解析。
+        // Without the `mcpServers` wrapper, parse as a bare server map.
         collect_json_server_map(Some(&root), "user", servers, errors);
     }
     Ok(())
@@ -136,8 +144,9 @@ fn parse_mcp_config_toml(
     servers: &mut Vec<SystemExternalMcpServerEntry>,
     errors: &mut Vec<String>,
 ) -> Result<(), String> {
-    // 只取 message() 不用 Display：Display 会把出错的原文行渲染进错误信息，
-    // 误选敏感文件时会把文件内容回显给调用方（含 gateway 远端）。
+    // Use only message(), not Display: Display would render the offending source
+    // line into the error message, echoing file contents back to the caller
+    // (including the remote gateway) when a sensitive file is picked by mistake.
     let root: toml::Value = toml::from_str(strip_utf8_bom(text))
         .map_err(|err| format!("Failed to parse {display}: {}", err.message()))?;
     let Some(map) = root.get("mcp_servers").and_then(toml::Value::as_table) else {
@@ -153,9 +162,9 @@ fn parse_mcp_config_toml(
 }
 
 fn scan_claude_code() -> SystemExternalMcpToolScan {
-    // Claude Code 的 MCP 配置分布在两处：
-    // - ~/.claude.json：顶层 `mcpServers`（用户级）+ `projects.<路径>.mcpServers`（项目本地级）
-    // - ~/.mcp.json：项目共享级配置（在 home 启动会话时生效）
+    // Claude Code's MCP configuration lives in two places:
+    // - ~/.claude.json: top-level `mcpServers` (user scope) + `projects.<path>.mcpServers` (project-local scope)
+    // - ~/.mcp.json: project-shared configuration (takes effect when a session starts in home)
     let mut servers = Vec::new();
     let mut errors = Vec::new();
     let mut scanned_paths = Vec::new();
@@ -226,7 +235,7 @@ fn scan_codex() -> SystemExternalMcpToolScan {
 
 fn scan_claude_desktop() -> SystemExternalMcpToolScan {
     // Windows: %APPDATA%/Claude；macOS: ~/Library/Application Support/Claude；
-    // Linux: ~/.config/Claude。dirs::config_dir 与三者一一对应。
+    // Linux: ~/.config/Claude. dirs::config_dir corresponds one-to-one with all three.
     let mut servers = Vec::new();
     let mut errors = Vec::new();
     let mut scanned_paths = Vec::new();
@@ -267,7 +276,7 @@ fn claude_desktop_config_path() -> Option<PathBuf> {
 }
 
 fn scan_codebuddy() -> SystemExternalMcpToolScan {
-    // CodeBuddy Code 的用户级 MCP 配置：~/.codebuddy/mcp.json，标准 `mcpServers` 对象。
+    // CodeBuddy Code user-level MCP configuration: ~/.codebuddy/mcp.json, a standard `mcpServers` object.
     let mut servers = Vec::new();
     let mut errors = Vec::new();
     let mut scanned_paths = Vec::new();
@@ -300,7 +309,8 @@ fn finish_scan(
     errors: Vec<String>,
 ) -> SystemExternalMcpToolScan {
     let exists = !scanned_paths.is_empty();
-    // 同名条目（多作用域声明同一 server）保留先出现的：用户级先扫，优先级更直观。
+    // For duplicate names (the same server declared in multiple scopes), keep the
+    // first occurrence: user scope is scanned first, making precedence more intuitive.
     let mut seen = std::collections::HashSet::new();
     servers.retain(|server| seen.insert(server.id.to_lowercase()));
     servers.sort_by_key(|a| a.id.to_lowercase());
@@ -323,7 +333,7 @@ fn read_json(path: &std::path::Path) -> Result<Value, String> {
     serde_json::from_str(&text).map_err(|err| format!("Failed to parse {}: {err}", path.display()))
 }
 
-/// 解析 Claude Code / Claude Desktop 风格的 `mcpServers` JSON 对象。
+/// Parses a Claude Code / Claude Desktop style `mcpServers` JSON object.
 pub(crate) fn collect_json_server_map(
     map: Option<&Value>,
     origin: &str,
@@ -360,7 +370,7 @@ fn json_entry_to_server(
         TRANSPORT_HTTP | "streamable-http" | "streamable_http" => TRANSPORT_HTTP,
         TRANSPORT_SSE => TRANSPORT_SSE,
         TRANSPORT_STDIO => TRANSPORT_STDIO,
-        // type 缺省时按字段推断：command → stdio；url → http。
+        // When type is absent, infer from the fields: command -> stdio; url -> http.
         "" if !command.is_empty() => TRANSPORT_STDIO,
         "" if !url.is_empty() => TRANSPORT_HTTP,
         other => {
@@ -393,7 +403,7 @@ fn json_entry_to_server(
     })
 }
 
-/// 解析 Codex `config.toml` 的 `[mcp_servers.*]` 段。
+/// Parses the `[mcp_servers.*]` sections of a Codex `config.toml`.
 pub(crate) fn parse_codex_toml(
     text: &str,
     servers: &mut Vec<SystemExternalMcpServerEntry>,
@@ -670,7 +680,7 @@ url = "https://mcp.example.com"
             .unwrap_err()
             .contains("must be a JSON object"));
 
-        // package.json 之类的普通 JSON：条目全部解析失败 → 整体报错并带上原因。
+        // Ordinary JSON such as package.json: all entries fail to parse -> a whole-file error carrying the reason.
         let unrelated = write_config(&tmp, "package.json", r#"{ "name": "x", "version": "1" }"#);
         let err = scan_mcp_config_file(&unrelated).unwrap_err();
         assert!(err.contains("No MCP server definitions found"));

@@ -22,24 +22,25 @@ export type TerminalPaneHostProps = {
   paneId: string;
   surface: TerminalWorkbenchSurface;
   isFocused: boolean;
-  /** 极窄 Pane:SSH 状态行进入紧凑渲染(由 rect 派生,不写回布局)。 */
+  /** Very narrow Pane: the SSH status line switches to compact rendering (derived from rect, not written back to layout). */
   isCompact?: boolean;
   theme: "light" | "dark";
-  /** 终端运行时:桌面端为 Tauri client,Web 端为网关 client。 */
+  /** Terminal runtime: a Tauri client on desktop, a gateway client on Web. */
   client: TerminalClient;
-  /** 窗口级绑定表(surfaceId→sessionId),宿主间必须共享同一实例。 */
+  /** Window-level binding table (surfaceId→sessionId); hosts must share the same instance. */
   bindings: TerminalPaneBindingStore;
-  /** 窗口级视图租约,保证一个会话的输出流单消费。 */
+  /** Window-level view leases, ensuring a conversation's output stream has a single consumer. */
   lease: TerminalPaneLeaseStore;
   /** Explicit-create/restart authorization; restored surfaces start dormant. */
   autoLaunch: TerminalPaneAutoLaunchRegistry;
-  /** 全窗口会话列表(未按项目过滤):Pane 可承载任意项目的终端。 */
+  /** Window-wide session list (not filtered by project): a Pane can host a terminal from any project. */
   sessions: readonly TerminalSession[];
   sessionsLoaded: boolean;
   /**
-   * 视口报错时上抛 sessionId,由页面按后端权威列表校验:会话确认消失
-   * (幽灵记录)则整表刷新,本 Pane 随之进入 session-closed 停驻态,
-   * 重试按钮变为按 launchSpec 重启,而不是对着死会话无限重连。
+   * When the viewport errors it bubbles up the sessionId, and the page validates it against the
+   * backend's authoritative list: if the conversation is confirmed gone (a ghost record) the
+   * whole list refreshes, this Pane enters the parked session-closed state, and the retry button
+   * becomes a restart by launchSpec instead of infinitely reconnecting to a dead session.
    */
   onSessionGhost?: (sessionId: string) => void;
   /**
@@ -63,11 +64,13 @@ type TerminalPaneErrorState =
 const SSH_LATENCY_POLL_MS = 15_000;
 
 /**
- * 终端 Pane 的页面侧宿主:把布局层的 launchSpec 身份接到运行时——
- * 绑定(surfaceId→sessionId)解析既有会话;显式创建或用户确认恢复后，才按
- * launchSpec 建立新的 PTY/SSH 会话。完整应用重启无法复活旧进程，恢复出的
- * Pane 会先停在 dormant 占位，避免静默启动本地进程或 SSH 连接。渲染前必须
- * 持有该会话的视图租约，保证输出流单消费、输入单写。
+ * The page-side host for terminal Panes: connects the layout layer's launchSpec identity to the
+ * runtime — a binding (surfaceId→sessionId) resolves an existing session; only after explicit
+ * creation or user-confirmed recovery is a new PTY/SSH session established by launchSpec. A
+ * full application restart cannot revive old processes, so a restored Pane first parks in a
+ * dormant placeholder, avoiding silently starting a local process or SSH connection. Before
+ * rendering it must hold that session's view lease, ensuring a single consumer for output and a
+ * single writer for input.
  */
 export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const {
@@ -90,14 +93,15 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const boundSessionId = useSyncExternalStore(bindings.subscribe, () =>
     bindings.get(surface.surfaceId),
   );
-  // create 响应先于 terminal:event 到达时的直接渲染兜底;事件送达后列表版本优先。
+  // Fallback for direct rendering when the create response arrives before terminal:event; once the event arrives the list version takes priority.
   const [createdSession, setCreatedSession] = useState<TerminalSession | null>(null);
   const [errorState, setErrorState] = useState<TerminalPaneErrorState | null>(null);
   const [viewportError, setViewportError] = useState<string | null>(null);
   const [leasedSessionId, setLeasedSessionId] = useState<string | null>(null);
-  // create() 会先写 bindings 再结算 Promise。绑定通知触发的同步重渲染可能
-  // 发生在 terminal:event 进入 sessions 之前；保留这次创建 Promise，下一轮
-  // effect 能继续等待同一结果，而不会把刚写入的绑定误判为恢复期陈旧绑定。
+  // create() writes bindings before settling the Promise. The synchronous re-render triggered
+  // by the binding notification may happen before terminal:event enters sessions; keeping this
+  // creation Promise lets the next effect continue awaiting the same result instead of mistaking
+  // the just-written binding for a stale recovery-period binding.
   const ensureSessionPromiseRef = useRef<Promise<TerminalSession> | null>(null);
   const [launchRequestedSurfaceId, setLaunchRequestedSurfaceId] = useState<string | null>(null);
   const launchAuthorized =
@@ -111,9 +115,9 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     liveSession ?? (createdSession && createdSession.id === boundSessionId ? createdSession : null);
   const sessionId = session?.id ?? null;
 
-  // 本次挂载内出现在会话列表里过的 sessionId:用于区分"重启后的陈旧绑定"
-  // (从未见过,可按 launchSpec 重建)与"运行期被显式关闭"(见过又消失,
-  // 绝不能自动复活一个新 PTY)。
+  // sessionIds that have appeared in the session list during this mount: used to distinguish a
+  // "stale binding after restart" (never seen, can be rebuilt by launchSpec) from "explicitly
+  // closed during runtime" (seen and then gone; must never automatically revive a new PTY).
   const seenLiveSessionIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (liveSession) seenLiveSessionIdRef.current = liveSession.id;
@@ -123,9 +127,10 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     if (liveSession && createdSession) setCreatedSession(null);
   }, [createdSession, liveSession]);
 
-  // 会话"消失"后又回到权威列表(网关切换到另一个桌面实例后再切回、一次
-  // 失败的 list() 被后续事件纠正):停驻的"会话已不存在"占位自行解除,
-  // 不需要用户点"重试"(那会终止并按 launchSpec 新建一个 PTY)。
+  // When a session "disappears" and then returns to the authoritative list (the gateway switches
+  // to another desktop instance and back, or a failed list() is corrected by later events): the
+  // parked "session no longer exists" placeholder clears by itself, without the user clicking
+  // "retry" (which would terminate and create a new PTY by launchSpec).
   useEffect(() => {
     if (liveSession && errorState?.kind === "session-closed") setErrorState(null);
   }, [errorState, liveSession]);
@@ -134,21 +139,25 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     if (session || errorState) return;
     const pendingEnsure = ensureSessionPromiseRef.current;
     if (boundSessionId && !pendingEnsure) {
-      // 只有“已有绑定但列表里暂时找不到会话”需要等待权威 list()：
-      // 在列表就绪前无法区分慢加载与陈旧绑定，不能误删后重建。
+      // Only "a binding exists but the session is temporarily missing from the list" needs to
+      // wait for the authoritative list(): before the list is ready, slow loading cannot be
+      // distinguished from a stale binding, and it must not be wrongly deleted and rebuilt.
       if (!sessionsLoaded) return;
       if (seenLiveSessionIdRef.current === boundSessionId) {
-        // 会话生前在本次挂载中活过:这是 Right Dock 的显式关闭(或
-        // close_project/close_all),不是恢复期残留。停在关闭态等用户
-        // 决定重启或关 Pane;通常页面的 closed 事件联动会先把
-        // Pane 收掉,这里只是事件丢失/竞态下的兜底。
+        // The session existed during this mount: this is an explicit close from the Right Dock
+        // (or close_project/close_all), not a recovery-period leftover. Park in the closed state
+        // and let the user decide whether to restart or close the Pane; usually the page's
+        // closed-event coordination removes the Pane first, so this is only a fallback for lost
+        // events/races.
         setErrorState({ kind: "session-closed" });
         return;
       }
-      // 完整应用重启后后端注册表为空,但部分环境仍可能留下持久化绑定。
-      // 清掉陈旧 sessionId,把 surface 交回下方的启动闸门:本窗口显式创建
-      // 过的(launchAuthorized)自动按 launchSpec 重建;布局恢复出的无授权
-      // surface 停在休眠占位,等用户显式重启,绝不静默拉起进程。
+      // After a full application restart the backend registry is empty, but some environments may
+      // still leave persisted bindings. Clear the stale sessionId and hand the surface back to
+      // the startup gate below: one explicitly created in this window (launchAuthorized) is
+      // rebuilt automatically by launchSpec; an unauthorized surface restored from layout parks
+      // in the dormant placeholder and waits for an explicit user restart, never silently
+      // spawning a process.
       bindings.delete(surface.surfaceId);
       setCreatedSession(null);
       return;
@@ -157,9 +166,10 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
     // Existing live bindings may reattach, but an unbound restored surface
     // remains dormant until restartFromLaunchSpec records explicit consent.
     if (!launchAuthorized && !pendingEnsure) return;
-    // 全新的 surface 没有旧绑定需要对账，直接创建 PTY。create() 写入
-    // binding 后会触发本 effect 重跑；pendingEnsure 让重跑继续订阅同一
-    // Promise，直到 create 响应或 terminal:event 任一方提供可渲染会话。
+    // A brand-new surface has no old binding to reconcile, so create the PTY directly. Writing
+    // the binding in create() triggers this effect to rerun; pendingEnsure keeps the rerun
+    // subscribed to the same Promise until either the create response or terminal:event provides
+    // a renderable session.
     const ensurePromise =
       pendingEnsure ??
       ensureTerminalPaneSession(surface, {
@@ -214,7 +224,8 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
         setLeasedSessionId((current) => (current === sessionId ? null : current));
       };
     } catch (error) {
-      // reducer 的 surface 唯一性已挡住双 Pane;这里只做防御性降级。
+      // The reducer's surface uniqueness already prevents double Panes; this is only a defensive
+      // degradation.
       setErrorState({
         kind: "lease",
         message: error instanceof Error ? error.message : String(error),
@@ -226,14 +237,17 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const handleViewportError = useCallback(
     (errorSessionId: string, message: string | null) => {
       setViewportError(message);
-      // attach 持续失败最常见的根因是幽灵会话(后端已丢、前端列表还在)。
-      // 上抛给页面做权威校验;瞬时错误在校验中会被识别为仍存活而不动列表。
+      // The most common cause of persistent attach failures is a ghost session (lost on the
+      // backend while still in the frontend list). Bubble it up for the page to authoritatively
+      // verify; a transient error will be recognized as still alive during verification and
+      // leave the list untouched.
       if (message) onSessionGhost?.(errorSessionId);
     },
     [onSessionGhost],
   );
 
-  // SSH 重连:错误按提示条展示;"already in progress" 表示自动重连循环已接管。
+  // SSH reconnect: errors are shown as a banner; "already in progress" means the automatic
+  // reconnect loop has taken over.
   const [reconnectPending, setReconnectPending] = useState(false);
   const reconnectSsh = useCallback(() => {
     const targetSessionId = bindings.get(surface.surfaceId);
@@ -250,7 +264,8 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
       .finally(() => setReconnectPending(false));
   }, [bindings, client, reconnectPending, surface.surfaceId]);
 
-  // SSH 延迟:仅聚焦且视口就绪时以固定间隔探测;失败静默置未知("--")。
+  // SSH latency: probed at a fixed interval only when focused and the viewport is ready; on
+  // failure it is silently set to unknown ("--").
   const isSshPane = surface.kind === "sshTerminal";
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const latencyEligible =
@@ -282,7 +297,8 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   const restartFromLaunchSpec = useCallback(() => {
     const staleSessionId = bindings.get(surface.surfaceId);
     if (staleSessionId) {
-      // 退出的会话重启时顺手回收注册表条目;失败不阻塞重建。
+      // When a stale session restarts, reclaim its registry entry along the way; failure does
+      // not block the rebuild.
       void client.close(staleSessionId).catch(() => {});
     }
     autoLaunch.authorize(surface.surfaceId);
@@ -318,7 +334,8 @@ export function TerminalPaneHost(props: TerminalPaneHostProps) {
   } else if (leased && session) {
     renderSession = session;
     if (viewportError) {
-      // 视口自身会退避重试 attach;提示条只反映瞬时错误,重试仅清除提示。
+      // The viewport itself retries attach with backoff; the banner only reflects transient
+      // errors, and retrying merely clears the banner.
       phase = "error";
       errorMessage = viewportError;
       onRetry = () => setViewportError(null);

@@ -74,7 +74,7 @@ test("WebUI protobuf encodes usage request and decodes JSON response", () => {
     refresh: true,
   });
 
-  // 按草稿测试:config_json 随请求透传。
+  // Draft test mode: config_json is passed through with the request.
   const draftRequest = codec.decodeClientFrame(
     adapters.encodeRequestFrame(
       "request-9",

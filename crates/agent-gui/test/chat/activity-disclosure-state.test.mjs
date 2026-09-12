@@ -26,23 +26,23 @@ const env = await createDomTestEnv({
         locale: "zh-CN",
         t: (key) =>
           ({
-            "chat.tool.batch.read": "读取了文件",
-            "chat.tool.batch.command": "运行了命令",
-            "chat.tool.running": "运行中",
-            "chat.tool.waiting": "等待中",
-            "chat.tool.failed": "失败",
-            "chat.tool.success": "完成",
-            "chat.thinking": "思考中",
-            "chat.thinkingActive": "正在思考",
-            "chat.work.activity": "已处理",
-            "chat.work.running": "处理中",
-            "chat.tool.activity.read.running": "正在读取",
-            "chat.tool.activity.command.running": "正在运行",
-            "chat.tool.activity.other.running": "正在执行",
-            "chat.tool.file.read.running": "正在读取",
-            "chat.tool.file.create.running": "正在创建",
-            "chat.tool.file.edit.running": "正在编辑",
-            "chat.tool.file.delete.running": "正在删除",
+            "chat.tool.batch.read": "Read files",
+            "chat.tool.batch.command": "Ran commands",
+            "chat.tool.running": "Running",
+            "chat.tool.waiting": "Waiting",
+            "chat.tool.failed": "Failed",
+            "chat.tool.success": "Done",
+            "chat.thinking": "Thinking",
+            "chat.thinkingActive": "Thinking",
+            "chat.work.activity": "Processed",
+            "chat.work.running": "Processing",
+            "chat.tool.activity.read.running": "Reading",
+            "chat.tool.activity.command.running": "Running",
+            "chat.tool.activity.other.running": "Executing",
+            "chat.tool.file.read.running": "Reading",
+            "chat.tool.file.create.running": "Creating",
+            "chat.tool.file.edit.running": "Editing",
+            "chat.tool.file.delete.running": "Deleting",
           })[key] ?? key,
       }),
     },
@@ -171,7 +171,7 @@ test("an empty running work trace shows the plain processing header, not a butto
     );
   });
 
-  assert.match(container.textContent, /处理中/);
+  assert.match(container.textContent, /Processing/);
   assert.ok(container.querySelector("[data-chat-work-grid]"));
   assert.equal(container.querySelector("button"), null);
   assert.equal(container.querySelector("[data-chat-work-collapsed-tail]"), null);
@@ -215,7 +215,7 @@ test("a work trace parked on a user decision renders a frozen header", () => {
 test("collapsing a running work trace surfaces the active block outside it", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
-  const tail = React.createElement("div", { "data-testid": "active-tail" }, "正在读取 App.tsx");
+  const tail = React.createElement("div", { "data-testid": "active-tail" }, "Reading App.tsx");
 
   const render = (running) => {
     act(() => {
@@ -240,7 +240,7 @@ test("collapsing a running work trace surfaces the active block outside it", () 
   click(button);
   assert.equal(button.getAttribute("aria-expanded"), "false");
   assert.ok(container.querySelector("[data-chat-work-collapsed-tail]"));
-  assert.match(container.textContent, /正在读取 App\.tsx/);
+  assert.match(container.textContent, /Reading App\.tsx/);
 
   // Re-expanding removes the duplicate; the body carries the content again.
   click(button);
@@ -343,7 +343,7 @@ test("mixed tool batch labels are separated by a fullwidth bar", () => {
   });
 
   const label = container.querySelector("button").textContent;
-  assert.equal(label, "读取了文件｜运行了命令");
+  assert.equal(label, "Read files｜Ran commands");
   assert.doesNotMatch(label, /[·•]/);
 
   act(() => root.unmount());
@@ -365,24 +365,24 @@ test("a single-category tool batch renders no separator", () => {
     );
   });
 
-  assert.equal(container.querySelector("button").textContent, "读取了文件");
+  assert.equal(container.querySelector("button").textContent, "Read files");
 
   act(() => root.unmount());
 });
 
-test("latest tool batch shows 运行中 while running and no filler status when idle", () => {
+test("latest tool batch shows Running while running and no filler status when idle", () => {
   const container = document.createElement("div");
   const root = createRoot(container);
 
-  // All tools settled: no fake "思考中" phase — the turn-level sparkle and
+  // All tools settled: no fake "Thinking" phase -- the turn-level sparkle and
   // real reasoning rows carry the live state instead.
   renderToolTrace(root, false, [toolItem], true);
-  assert.doesNotMatch(container.querySelector("button").textContent, /思考中/);
-  assert.doesNotMatch(container.querySelector("button").textContent, /运行中/);
+  assert.doesNotMatch(container.querySelector("button").textContent, /Thinking/);
+  assert.doesNotMatch(container.querySelector("button").textContent, /Running/);
 
   renderToolTrace(root, true, [toolItem], true);
-  assert.match(container.querySelector("button").textContent, /运行中/);
-  assert.doesNotMatch(container.querySelector("button").textContent, /思考中/);
+  assert.match(container.querySelector("button").textContent, /Running/);
+  assert.doesNotMatch(container.querySelector("button").textContent, /Thinking/);
 
   act(() => root.unmount());
 });
@@ -396,8 +396,8 @@ test("a running tool batch names the current operation and caps its expanded hei
 
   renderToolTrace(root, true, [readItem], true);
   const button = container.querySelector("button");
-  assert.match(button.textContent, /正在读取 App\.tsx/);
-  assert.match(button.textContent, /运行中/);
+  assert.match(button.textContent, /Reading App\.tsx/);
+  assert.match(button.textContent, /Running/);
 
   click(button);
   const scrollRegion = container.querySelector("[data-tool-trace-scroll]");

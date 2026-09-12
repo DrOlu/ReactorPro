@@ -16,16 +16,16 @@ const QUESTIONS_JSON = JSON.stringify({
   questions: [
     {
       id: "q1",
-      header: "范围",
-      prompt: "要做什么功能？",
+      header: "Scope",
+      prompt: "What feature should it do?",
       options: [
-        { label: "批量重命名", description: "按规则改文件名" },
-        { label: "格式转换", recommended: true },
+        { label: "Batch rename", description: "Rename files by rule" },
+        { label: "Format conversion", recommended: true },
       ],
     },
     {
-      prompt: "目标平台？",
-      options: [{ label: "Web" }, { label: "移动端" }],
+      prompt: "Target platform?",
+      options: [{ label: "Web" }, { label: "Mobile" }],
       allowMultiple: true,
     },
   ],
@@ -36,18 +36,18 @@ test("questions marker + JSON parses into normalized questions", () => {
   assert.equal(r.kind, "questions");
   assert.equal(r.questions.length, 2);
   assert.equal(r.questions[0].id, "q1");
-  assert.equal(r.questions[0].header, "范围");
+  assert.equal(r.questions[0].header, "Scope");
   assert.equal(r.questions[0].options.length, 2);
   assert.equal(r.questions[0].options[1].recommended, true);
-  // 缺失 id 按序号补齐；allowMultiple 透传。
+  // Missing ids are filled in by sequence number; allowMultiple is passed through.
   assert.equal(r.questions[1].id, "q2");
   assert.equal(r.questions[1].allowMultiple, true);
 });
 
 test("final marker parses", () => {
-  const r = protocol.parseClarifyTurn("[CLARIFY_FINAL]\n优化后的提示词正文");
+  const r = protocol.parseClarifyTurn("[CLARIFY_FINAL]\nOptimized prompt body");
   assert.equal(r.kind, "final");
-  assert.equal(r.text, "优化后的提示词正文");
+  assert.equal(r.text, "Optimized prompt body");
 });
 
 test("fenced JSON without marker still parses as questions", () => {
@@ -57,36 +57,36 @@ test("fenced JSON without marker still parses as questions", () => {
 });
 
 test("invalid JSON falls back to a single open question", () => {
-  const r = protocol.parseClarifyTurn("直接一句没有标记的话");
+  const r = protocol.parseClarifyTurn("Just a plain sentence with no marker");
   assert.equal(r.kind, "questions");
   assert.equal(r.questions.length, 1);
-  assert.equal(r.questions[0].prompt, "直接一句没有标记的话");
+  assert.equal(r.questions[0].prompt, "Just a plain sentence with no marker");
   assert.deepEqual(r.questions[0].options, []);
 });
 
 test("normalization drops blank prompts, dedupes ids/labels and enforces caps", () => {
   const payload = {
     questions: [
-      { id: "a", prompt: "", options: [] }, // 空 prompt 丢弃
+      { id: "a", prompt: "", options: [] }, // empty prompt dropped
       {
         id: "dup",
         prompt: "Q1",
         options: [
           { label: "x" },
-          { label: "x" }, // 重复 label 丢弃
-          { label: "  " }, // 空 label 丢弃
+          { label: "x" }, // duplicate label dropped
+          { label: "  " }, // empty label dropped
           { label: "1" },
           { label: "2" },
           { label: "3" },
           { label: "4" },
-          { label: "5" }, // 超过上限截断
+          { label: "5" }, // truncated past the cap
           { label: "6" },
         ],
       },
-      { id: "dup", prompt: "Q2", options: [] }, // 重复 id 重派
+      { id: "dup", prompt: "Q2", options: [] }, // duplicate id reassigned
       { id: "q3", prompt: "Q3", options: [] },
       { id: "q4", prompt: "Q4", options: [] },
-      { id: "q5", prompt: "Q5", options: [] }, // 超过每轮上限截断
+      { id: "q5", prompt: "Q5", options: [] }, // truncated past the per-round cap
     ],
   };
   const questions = protocol.normalizeClarifyQuestions(payload);
@@ -97,34 +97,34 @@ test("normalization drops blank prompts, dedupes ids/labels and enforces caps", 
 });
 
 test("clarifyStreamPreview hides markers and JSON, streams final text", () => {
-  // 标记碎片与 JSON 都不上屏。
+  // Neither marker fragments nor JSON are shown on screen.
   assert.equal(protocol.clarifyStreamPreview("[CLARIFY_QUE"), "");
   assert.equal(protocol.clarifyStreamPreview("[CLARIFY_QUESTIONS]\n{\"questions\":["), "");
   assert.equal(protocol.clarifyStreamPreview('{"questions":[{"id"'), "");
   assert.equal(protocol.clarifyStreamPreview("```json"), "");
-  // 终稿标记后的文本逐字上屏。
-  assert.equal(protocol.clarifyStreamPreview("[CLARIFY_FINAL]\n终稿开头"), "终稿开头");
-  // 排除标记可能性后的普通文本照常显示（降级开放问题）。
-  assert.equal(protocol.clarifyStreamPreview("这是一段足够长的普通提问文本"), "这是一段足够长的普通提问文本");
+  // Text after the final marker is streamed verbatim.
+  assert.equal(protocol.clarifyStreamPreview("[CLARIFY_FINAL]\nstart of final text"), "start of final text");
+  // Ordinary text, once ruled out as a possible marker, is displayed as usual (a downgraded open question).
+  assert.equal(protocol.clarifyStreamPreview("This is a sufficiently long ordinary question text"), "This is a sufficiently long ordinary question text");
 });
 
 test("buildClarifyAnswersMessage serializes picks, custom text and skips", () => {
   const round = {
     questions: [
-      { id: "q1", prompt: "要做什么？", options: [{ label: "A" }], allowMultiple: true },
-      { id: "q2", prompt: "平台？", options: [{ label: "Web" }] },
-      { id: "q3", prompt: "跳过的问题", options: [] },
+      { id: "q1", prompt: "What do you want to build?", options: [{ label: "A" }], allowMultiple: true },
+      { id: "q2", prompt: "Platform?", options: [{ label: "Web" }] },
+      { id: "q3", prompt: "Skipped question", options: [] },
     ],
     answers: [
-      { questionId: "q1", prompt: "要做什么？", selectedLabels: ["A"], customText: "还要支持撤销" },
-      { questionId: "q2", prompt: "平台？", selectedLabels: ["Web"] },
-      { questionId: "q3", prompt: "跳过的问题", selectedLabels: [] },
+      { questionId: "q1", prompt: "What do you want to build?", selectedLabels: ["A"], customText: "Also needs undo support" },
+      { questionId: "q2", prompt: "Platform?", selectedLabels: ["Web"] },
+      { questionId: "q3", prompt: "Skipped question", selectedLabels: [] },
     ],
   };
   const message = protocol.buildClarifyAnswersMessage(round);
   assert.ok(message.startsWith("[CLARIFY_ANSWERS]"));
-  assert.match(message, /Q1: 要做什么？/);
-  assert.match(message, /A1: A; 还要支持撤销/);
+  assert.match(message, /Q1: What do you want to build\?/);
+  assert.match(message, /A1: A; Also needs undo support/);
   assert.match(message, /A2: Web/);
   assert.match(message, /A3: \(not answered\)/);
 });

@@ -7,7 +7,6 @@ pub struct SettingsLoadResponse {
     pub agents: Option<Value>,
     pub ssh: Option<Value>,
     pub remote: Option<Value>,
-    pub stt: Option<Value>,
     pub memory: Option<Value>,
     pub model_failover: Option<Value>,
     pub default_workdir: String,
@@ -68,7 +67,7 @@ pub(crate) struct RuntimeSshProxyConfig {
     pub username: String,
     pub password: String,
     pub password_configured: bool,
-    /// 直接复用「系统设置 → 应用代理」；开启时忽略上面的手动代理字段。
+    /// Reuses "System Settings → App Proxy" directly; when enabled, the manual proxy fields above are ignored.
     pub use_system_proxy: bool,
 }
 

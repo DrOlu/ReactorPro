@@ -44,7 +44,7 @@ export type SshLocalForwardUpdate =
   | SshLocalForwardEvent
   | SshLocalForwardAction;
 
-/** 两端各自的传输适配层（Tauri IPC / 网关 WS）都实现同一客户端形状。 */
+/** Each side's transport adapter layer (Tauri IPC / gateway WS) implements the same client shape. */
 export type SshLocalForwardClient = {
   list(params?: { sessionId?: string; projectPathKey?: string }): Promise<SshLocalForwardSnapshot>;
   start(params: {

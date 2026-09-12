@@ -1,6 +1,8 @@
-// Package chatcmd 承载网关侧 chat 命令编排（请求体归一化、运行时探活、命令投递与启动看门狗、
-// proto 信封构造），供 v2 协议层复用，
-// 协议层只做载荷编解码，编排逻辑一律收敛于此。
+// Package chatcmd provides gateway-side chat command orchestration (request body
+// normalization, runtime probing, command delivery, and startup watchdog, plus
+// proto envelope construction) for reuse by the v2 protocol layer. The protocol
+// layer only handles payload encoding/decoding; all orchestration logic is
+// centralized here.
 package chatcmd
 
 import (
@@ -17,7 +19,7 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// MessageRef 是 chat.edit_resend 引用的既有消息定位。
+// MessageRef locates an existing message referenced by chat.edit_resend.
 type MessageRef struct {
 	SegmentIndex int    `json:"segment_index"`
 	MessageIndex int    `json:"message_index"`
@@ -28,17 +30,18 @@ type MessageRef struct {
 }
 
 const (
-	// runtimeWakeRequestPrefix 是探活请求 id 的约定前缀；桌面端识别到它会先唤醒 Chat WebView 运行时。
+	// runtimeWakeRequestPrefix is the agreed prefix for probe request ids; when the
+	// desktop app recognizes it, it first wakes the Chat WebView runtime.
 	runtimeWakeRequestPrefix = "chat-runtime-wake-"
 	runtimeProbeReuseWindow  = 2 * time.Second
 )
 
-// NewTraceID 生成 chat 命令链路的追踪 id。
+// NewTraceID generates a trace id for the chat command pipeline.
 func NewTraceID() string {
 	return strings.ReplaceAll(uuid.NewString(), "-", "")
 }
 
-// LogCommandSpan 记录 chat 命令生命周期中的一个阶段（结构化日志）。
+// LogCommandSpan records one stage in the lifecycle of a chat command (structured logging).
 func LogCommandSpan(
 	traceID string,
 	span string,
@@ -57,7 +60,7 @@ func LogCommandSpan(
 	)
 }
 
-// NormalizeRequestBody 归一化并校验 chat 请求体（trim、默认值、必填项）。
+// NormalizeRequestBody normalizes and validates a chat request body (trim, defaults, required fields).
 func NormalizeRequestBody(body *handler.ChatRequestBody) error {
 	body.Message = strings.TrimSpace(body.Message)
 	body.ConversationID = strings.TrimSpace(body.ConversationID)
@@ -95,8 +98,9 @@ func normalizeQueuePolicy(value string) string {
 	}
 }
 
-// DispatchAcceptedCommand 把已接受的命令投递给桌面端并布防启动看门狗；
-// cleanupWatch 在命令落定或判失败后关闭调用方的命令更新观察流。
+// DispatchAcceptedCommand delivers an accepted command to the desktop app and arms
+// the startup watchdog; cleanupWatch closes the caller's command-update watch stream
+// once the command settles or is marked failed.
 func DispatchAcceptedCommand(
 	parent context.Context,
 	cfg *config.Config,
@@ -131,8 +135,9 @@ func DispatchAcceptedCommand(
 	WatchAcceptedCommandStartup(parent, cfg, sm, agentID, start.RunID)
 }
 
-// ProbeRuntime 验证桌面端连接可完成真实往返；探活请求 id 的特殊前缀同时是唤醒
-// Chat WebView 运行时的信号。
+// ProbeRuntime verifies that the desktop connection can complete a real round trip;
+// the special prefix on the probe request id doubles as the signal that wakes the
+// Chat WebView runtime.
 func ProbeRuntime(
 	ctx context.Context,
 	sm *session.Manager,
@@ -171,7 +176,7 @@ func ProbeRuntime(
 	return nil
 }
 
-// ProbeRuntimeForCommand 在近期已有成功探活时直接复用结果。
+// ProbeRuntimeForCommand reuses a recent successful probe result when available.
 func ProbeRuntimeForCommand(ctx context.Context, sm *session.Manager, agentID string) error {
 	if sm != nil && sm.ChatRuntimeProbeFresh(agentID, runtimeProbeReuseWindow) {
 		return nil
@@ -179,7 +184,8 @@ func ProbeRuntimeForCommand(ctx context.Context, sm *session.Manager, agentID st
 	return ProbeRuntime(ctx, sm, agentID)
 }
 
-// WatchAcceptedCommandStartup 对启动窗口内未落定（开始、结束或进入桌面提示队列）的命令判失败。
+// WatchAcceptedCommandStartup marks a command as failed if it does not settle
+// (start, finish, or enter the desktop prompt queue) within the startup window.
 func WatchAcceptedCommandStartup(
 	parent context.Context,
 	cfg *config.Config,
@@ -221,8 +227,8 @@ func waitCommandWatchdog(ctx context.Context, timeout time.Duration) bool {
 	}
 }
 
-// StartTimeout / RenderStartTimeout / PrepareTimeout / DeliveryTimeout 返回各阶段超时
-// （未配置时取保守默认值）。
+// StartTimeout / RenderStartTimeout / PrepareTimeout / DeliveryTimeout return the
+// per-stage timeouts (falling back to conservative defaults when unconfigured).
 func StartTimeout(cfg *config.Config) time.Duration {
 	if cfg != nil && cfg.ChatStartTimeout > 0 {
 		return cfg.ChatStartTimeout
@@ -251,8 +257,9 @@ func DeliveryTimeout(cfg *config.Config) time.Duration {
 	return 5 * time.Second
 }
 
-// BuildAcceptedCommandPayloads 构造命令被接受时立即写入会话流的事件载荷
-// （edit_resend 先补一条 rebase 事件）。
+// BuildAcceptedCommandPayloads builds the event payloads written to the session
+// stream immediately when a command is accepted (edit_resend first prepends a
+// rebase event).
 func BuildAcceptedCommandPayloads(
 	body handler.ChatRequestBody,
 	baseMessageRef *MessageRef,
@@ -310,7 +317,7 @@ func buildCommandEnvelope(
 	}
 }
 
-// BuildCancelCommandPayload 构造 chat.cancel 的 GatewayEnvelope 载荷臂。
+// BuildCancelCommandPayload builds the GatewayEnvelope payload arm for chat.cancel.
 func BuildCancelCommandPayload(conversationID string) *gatewayv2.GatewayEnvelope_ChatCommand {
 	return &gatewayv2.GatewayEnvelope_ChatCommand{
 		ChatCommand: &gatewayv2.ChatCommandRequest{
@@ -338,7 +345,7 @@ func buildProtoRequest(body handler.ChatRequestBody) *gatewayv2.ChatRequest {
 	}
 }
 
-// BuildProtoMessageRef 把 MessageRef 转为 proto 表示（nil 安全）。
+// BuildProtoMessageRef converts a MessageRef to its proto representation (nil-safe).
 func BuildProtoMessageRef(ref *MessageRef) *gatewayv2.ChatMessageRef {
 	if ref == nil {
 		return nil
@@ -353,8 +360,9 @@ func BuildProtoMessageRef(ref *MessageRef) *gatewayv2.ChatMessageRef {
 	}
 }
 
-// RequestBodyFromProto 把 v2 直带的 proto ChatRequest 还原为编排层请求体
-// （buildProtoRequest 的逆向；调用方随后统一走 NormalizeRequestBody）。
+// RequestBodyFromProto reconstructs the orchestration-layer request body from the
+// proto ChatRequest carried directly by v2 (the inverse of buildProtoRequest;
+// callers then uniformly run NormalizeRequestBody).
 func RequestBodyFromProto(req *gatewayv2.ChatRequest) handler.ChatRequestBody {
 	if req == nil {
 		return handler.ChatRequestBody{}
@@ -409,7 +417,8 @@ func RequestBodyFromProto(req *gatewayv2.ChatRequest) handler.ChatRequestBody {
 	return body
 }
 
-// MessageRefFromProto 把 proto 消息引用还原为编排层表示（nil 安全）。
+// MessageRefFromProto reconstructs the orchestration-layer representation from a
+// proto message reference (nil-safe).
 func MessageRefFromProto(ref *gatewayv2.ChatMessageRef) *MessageRef {
 	if ref == nil {
 		return nil
@@ -424,7 +433,7 @@ func MessageRefFromProto(ref *gatewayv2.ChatMessageRef) *MessageRef {
 	}
 }
 
-// ValidateMessageRef 校验并归一化消息引用（原地 trim）。
+// ValidateMessageRef validates and normalizes a message reference (in-place trim).
 func ValidateMessageRef(ref *MessageRef) error {
 	if ref == nil {
 		return nil

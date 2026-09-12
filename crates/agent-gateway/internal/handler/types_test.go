@@ -26,8 +26,10 @@ func TestNormalizeExecutionMode(t *testing.T) {
 func TestNormalizeCommandSafetyMode(t *testing.T) {
 	t.Parallel()
 
-	// 空串/未知值归为空串(表示"远端未指定"),桌面端据此回落本地设置;
-	// 绝不默认成某个具体模式,以免静默下调桌面端已选的更严格模式。
+	// Empty string / unknown values normalize to the empty string (meaning "not
+	// specified by the remote"); the desktop side falls back to local settings on
+	// that basis. Never default to a concrete mode, so we do not silently downgrade
+	// a stricter mode already selected on the desktop.
 	cases := map[string]string{
 		"":               "",
 		"unknown":        "",

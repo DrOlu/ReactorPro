@@ -18,8 +18,9 @@ export type PruneConversationResult = {
 };
 
 /**
- * 非 LLM 降级：从旧到新裁剪工具输出正文（保留最近 N 个用户轮次与一段保护额度），
- * 直到释放到 minimumReleasedTokens。裁剪力度由 policy 的压力阶梯给出。
+ * Non-LLM fallback: trims tool output bodies from oldest to newest (keeping the most recent N user
+ * turns and a protected allowance) until minimumReleasedTokens is released. The trim aggressiveness
+ * is given by the policy's pressure ladder.
  */
 export function pruneConversationState(
   state: ConversationViewState,
@@ -50,8 +51,9 @@ export function pruneConversationState(
     if (userTurnsSeen < protectedRecentUserTurns) continue;
 
     const modelMessage = sanitizeMessageForModelContext(message) as ToolResultMessage;
-    // 释放量与账本同口径：只按模型可见的 content 计（details 不发给模型）。
-    // 计入 details 会高报释放量而提前停手，实际上下文并未降到位。
+    // Released bytes use the same measure as the ledger: count only the model-visible content
+    // (details are not sent to the model). Including details would overstate the released amount and
+    // stop early while the actual context has not dropped enough.
     const estimated = Math.ceil(estimateContentTokenUnits(modelMessage.content));
     if (estimated <= 0) continue;
     traversedToolTokens += estimated;

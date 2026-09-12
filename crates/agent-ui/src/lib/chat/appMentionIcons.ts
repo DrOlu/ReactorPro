@@ -1,14 +1,16 @@
 /**
- * 应用提及图标注册表——弹层/chip/用户气泡共用的进程级真源。
+ * App-mention icon registry --- the process-level source of truth shared by the popover/chip/user bubble.
  *
- * 图标是几 KB 的 PNG data URL，写进 chip DOM 属性或剪贴板 JSON 会把
- * 复制载荷与草稿序列化撑爆，所以序列化只携带应用身份
- * （name/bundleId/path），展示层在渲染时按身份来这里查图。宿主
- * （GUI 的 useMentionApps）拉到应用列表后登记一次；WebUI 从不登记，
- * 一切查询落空并回退占位图标——这正是"应用清单不出桌面宿主"的边界。
+ * Icons are PNG data URLs of a few KB; writing them into chip DOM attributes or clipboard JSON would
+ * blow up the copy payload and draft serialization, so serialization carries only the app identity
+ * (name/bundleId/path), and the display layer looks up the icon here by identity at render time. The host
+ * (GUI's useMentionApps) registers once after fetching the app list; the WebUI never registers, so every
+ * lookup misses and falls back to a placeholder icon --- this is exactly the boundary of "the app list
+ * never leaves the desktop host".
  *
- * 用 useSyncExternalStore 订阅：登记发生在异步枚举完成时，先挂载的
- * 气泡 chip 靠订阅在图标就绪后补上真实 logo，而不是永远停在占位。
+ * Subscribe with useSyncExternalStore: registration happens when async enumeration completes, so a bubble
+ * chip mounted earlier gets the real logo after the icon is ready via the subscription, instead of staying
+ * on the placeholder forever.
  */
 
 import { useSyncExternalStore } from "react";
@@ -26,9 +28,9 @@ const listeners = new Set<() => void>();
 let version = 0;
 
 /**
- * 应用身份键，按稳定性降序：bundle id > 安装路径 > 显示名。图标注册表按
- * 全部键登记/查询；最近使用榜单（appMentionRecency）取首个作规范键——
- * 两处共用这一份优先级裁决。
+ * App identity key, in descending order of stability: bundle id > install path > display name. The icon
+ * registry registers/queries by all keys; the recent-use ranking (appMentionRecency) takes the first as
+ * the canonical key --- both share this single priority adjudication.
  */
 export function identityKeys(identity: AppMentionIconIdentity): string[] {
   const keys: string[] = [];
@@ -41,7 +43,7 @@ export function identityKeys(identity: AppMentionIconIdentity): string[] {
   return keys;
 }
 
-/** 登记一批应用图标。非 data:image/ 前缀的一律丢弃——注册表喂给 <img src>。 */
+/** Register a batch of app icons. Anything without a data:image/ prefix is discarded --- the registry feeds <img src>. */
 export function registerAppMentionIcons(apps: readonly AppMentionIconSource[]) {
   let changed = false;
   for (const app of apps) {
@@ -60,7 +62,7 @@ export function registerAppMentionIcons(apps: readonly AppMentionIconSource[]) {
   }
 }
 
-/** 按身份查图标：bundle id 最稳定优先，其次安装路径，最后显示名。 */
+/** Look up an icon by identity: bundle id is the most stable and takes priority, then install path, and finally display name. */
 export function getAppMentionIconDataUrl(identity: AppMentionIconIdentity): string | undefined {
   for (const key of identityKeys(identity)) {
     const icon = iconsByKey.get(key);
@@ -80,7 +82,7 @@ function getVersion() {
   return version;
 }
 
-/** React 侧订阅：登记到达时已挂载的 chip 重查一次图标。 */
+/** React-side subscription: mounted chips re-query the icon once registration arrives. */
 export function useAppMentionIcon(identity: AppMentionIconIdentity): string | undefined {
   useSyncExternalStore(subscribe, getVersion, getVersion);
   return getAppMentionIconDataUrl(identity);

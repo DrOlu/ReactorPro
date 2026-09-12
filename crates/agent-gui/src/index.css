@@ -17,7 +17,7 @@
   html,
   body,
   #root {
-    /* 桌面 webview：禁掉根滚动链上的浏览器手势导航（触摸板/触屏横扫的历史前进后退）。 */
+    /* Desktop webview: disable browser gesture navigation on the root scroll chain (trackpad/touchscreen swipe for history back/forward). */
     overscroll-behavior: none;
   }
 }

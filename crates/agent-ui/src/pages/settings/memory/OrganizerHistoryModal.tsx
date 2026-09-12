@@ -203,9 +203,9 @@ export function OrganizerHistoryModal(props: {
         updatedCount: batch.updated.length,
         deletedCount: batch.deleted.length,
         reviewSkipped: selectedRun.reviewSkipped + nextReviewItems.length,
-        finalSummary: existingFinalSummary.includes("手动应用结果")
+        finalSummary: existingFinalSummary.includes("Manual application result")
           ? manualSummary
-          : `${manualSummary}${existingFinalSummary ? `\n\n模型原始总结：${existingFinalSummary}` : ""}`,
+          : `${manualSummary}${existingFinalSummary ? `\n\nModel raw summary: ${existingFinalSummary}` : ""}`,
         report: nextReport,
       });
       await reload(selectedRun.runId);
@@ -592,7 +592,7 @@ export function OrganizerHistoryModal(props: {
                     <ul className="space-y-2 text-xs text-muted-foreground">
                       {reviewItems.map((item, index) => (
                         <li
-                          // biome-ignore lint/suspicious/noArrayIndexKey: LLM 生成的条目可能字段全同；列表随历史记录整体重建，索引 key 稳定唯一。
+                          // biome-ignore lint/suspicious/noArrayIndexKey: LLM-generated entries may have all-identical fields; the list is rebuilt wholesale with the history record, so the index key is stably unique.
                           key={`${index}:${item.phase}:${item.slug || ""}`}
                           className="rounded-md border border-border/50 bg-background/70 px-3 py-2"
                         >
@@ -631,7 +631,7 @@ export function OrganizerHistoryModal(props: {
                     <div className="space-y-2">
                       {clusterSummaries.map((summary, index) => (
                         <div
-                          // biome-ignore lint/suspicious/noArrayIndexKey: LLM 生成的摘要文本可能重复；列表随历史记录整体重建，索引 key 稳定唯一。
+                          // biome-ignore lint/suspicious/noArrayIndexKey: LLM-generated summary text may repeat; the list is rebuilt wholesale with the history record, so the index key is stably unique.
                           key={`${index}:${summary.slice(0, 40)}`}
                           className="rounded bg-muted/30 px-3 py-2 text-xs"
                         >

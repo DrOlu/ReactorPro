@@ -6,9 +6,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// StartHeartbeat 启动心跳与空闲驱逐循环（幂等），每周期依次：空闲检查（超过 IdleTimeout
-// 即关连接，唯一驱逐裁决点）；WS 控制帧 ping（浏览器网络进程应答，冻结/节流标签页也能证明存活）；
-// buildPing 构造的应用层 ping（页面 JS 唯一可观测入站活动，尽力而为，掉帧不影响驱逐裁决）。
+// StartHeartbeat starts the heartbeat and idle-eviction loop (idempotent). Each cycle, in
+// order: idle check (closing the connection past IdleTimeout, the sole eviction decision
+// point); WS control-frame ping (answered by the browser network process, proving liveness
+// even for frozen/throttled tabs); and the application-level ping built by buildPing (the
+// only observable inbound activity from page JS, best-effort, dropped frames do not affect
+// the eviction decision).
 func (c *Conn) StartHeartbeat(buildPing func() (Frame, bool)) {
 	c.heartbeatOnce.Do(func() {
 		period := c.cfg.HeartbeatPeriod

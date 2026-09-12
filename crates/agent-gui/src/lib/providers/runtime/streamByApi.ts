@@ -3,19 +3,23 @@ import { ensureDefaultLlmAdapters } from "../service/defaultAdapters";
 import { resolveAdapter } from "../service/registry";
 import type { StreamOptionsEx } from "./types";
 
-// 保证经本模块的任何调用（含被测试按路径 mock 后又还原的场景）注册表已就绪。
+// Ensure the registry is ready for any call through this module (including the
+// case where tests mock it by path and later restore it).
 ensureDefaultLlmAdapters();
 
 /**
- * 协议分发针孔（PR-1 seam 骨架）。
+ * Protocol dispatch pinhole (PR-1 seam skeleton).
  *
- * 原五协议 switch 已搬移到 ../service/：pi-ai 四协议在 service/piAiAdapter.ts，
- * DeepSeek 原生在 service/deepSeekAdapter.ts；本函数只剩注册表路由一行，
- * 保留原签名、语义与 "Unsupported model API: ..." 错误文案。
+ * The original five-protocol switch has moved to ../service/: the four pi-ai
+ * protocols are in service/piAiAdapter.ts, and native DeepSeek is in
+ * service/deepSeekAdapter.ts; this function is now just one line of registry
+ * routing, keeping the original signature, semantics, and the
+ * "Unsupported model API: ..." error text.
  *
- * 统一入口 llm.stream()（service/llmService.ts）也经由本模块出站——传输
- * golden 与 failover 测试按本模块路径 mock 即可截获全部出站流，这一
- * 可观测点是 seam 的公开契约，后续 PR 不得绕开。
+ * The unified entry point llm.stream() (service/llmService.ts) also egresses
+ * through this module -- mocking this module's path in transport golden and
+ * failover tests intercepts every outbound stream, and this observability point
+ * is the seam's public contract that later PRs must not bypass.
  */
 export function streamSimpleByApi(model: Model<Api>, context: Context, options: StreamOptionsEx) {
   ensureDefaultLlmAdapters();

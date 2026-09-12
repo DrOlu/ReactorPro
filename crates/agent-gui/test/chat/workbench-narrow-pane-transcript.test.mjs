@@ -2,16 +2,22 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-// 不变量:窄 Pane 下转录区随 Pane(容器)退化,而不是随视口
-// (docs/design/session-workbench-pane-architecture.md §22)。分屏里 360px 的
-// Pane 在 2560px 的窗口上,楼层导航与宽度手柄必须表现得像一个 360px 的窗口。
+// Invariant: under a narrow Pane the transcript region degrades with the Pane
+// (container), not with the viewport
+// (docs/design/session-workbench-pane-architecture.md §22). In a split view a
+// 360px Pane on a 2560px window must make the floor navigation and width handles
+// behave like a 360px window.
 //
-// 三道闸:
-// 1. 桌面转录根是 @container,Pane 内 overlay 的容器查询有挂靠点;
-// 2. FloorNavRail 展开面板按 cqw 钳宽(而不是 100vw),极窄容器整条隐藏;
-// 3. gateway 的转录 stage 声明 container-type,共享组件在两端语义一致。
-// (TranscriptWidthControls 无需容器查询:它的 maxWidth 本就按转录根实测
-//  宽度计算,areWidthControlsUsable 在窄 Pane 下已经自然隐藏手柄。)
+// Three gates:
+// 1. The desktop transcript root is @container, giving the Pane-internal overlay
+//    container queries an anchor point;
+// 2. FloorNavRail clamps its expanded panel by cqw (not 100vw) and hides the whole
+//    rail in extremely narrow containers;
+// 3. The gateway's transcript stage declares container-type so the shared component
+//    has consistent semantics on both ends.
+// (TranscriptWidthControls needs no container query: its maxWidth is already
+//  computed from the transcript root's measured width, and areWidthControlsUsable
+//  already hides the handles naturally under a narrow Pane.)
 
 function read(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
@@ -41,8 +47,9 @@ test("composer derives its body-aligned width from the live transcript width", (
     /max-w-\[calc\(var\(--chat-transcript-content-width,768px\)-4\.75rem\)\]/,
   );
   assert.match(composerSource, /w-\[calc\(100%-2\.25rem\)\]/);
-  // 头像列退役后输入框不再需要补偿性右移：该位移原本是为了抵消正文被
-  // 28px 头像 + 12px 间隙挤出的不对称，现在正文本身已居中。
+  // With the avatar column retired, the input box no longer needs a compensating
+  // right shift: that shift used to offset the asymmetry from the body being
+  // squeezed by a 28px avatar + 12px gap, and the body is now centered by itself.
   assert.doesNotMatch(composerSource, /translate-x-\[18px\]/);
 });
 
@@ -51,8 +58,10 @@ test("width handles sit on the transcript column, not on the unreduced variable"
   const widthControlsSource = read(
     "../../../agent-ui/src/pages/chat/transcript/TranscriptWidthControls.tsx",
   );
-  // 正文列从变量里扣掉了退役的 40px 头像列；手柄轨道必须扣同样的量，
-  // 否则两侧手柄各悬在正文列外 20px，拖拽读数也比实际列宽大 40。
+  // The body column subtracts the retired 40px avatar rail from the variable; the
+  // handle track must subtract the same amount, or the handles on both sides hang
+  // 20px outside the body column and the drag reading is 40 larger than the actual
+  // column width.
   assert.match(
     transcriptSource,
     /max-w-\[calc\(var\(--chat-transcript-content-width,768px\)-2\.5rem\)\]/,
@@ -72,7 +81,7 @@ test("FloorNavRail clamps its panel to the container, not the viewport", () => {
     false,
     "viewport-based clamp must not return",
   );
-  // 极窄 Pane 整条隐藏,而不是把标记列压在正文上。
+  // Extremely narrow Panes hide the whole rail rather than pressing the marker column onto the body.
   assert.match(source, /@max-\[280px\]:hidden/);
 });
 

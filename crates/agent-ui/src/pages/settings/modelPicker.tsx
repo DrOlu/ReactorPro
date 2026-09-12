@@ -98,11 +98,12 @@ export function ModelPicker({
   const selectedGroupId = selectedOption
     ? (selectedOption.providerId ?? selectedOption.providerName)
     : undefined;
-  // 默认全部折叠，仅当前选中模型所在分组展开；搜索时强制展开所有匹配分组
+  // All collapsed by default, with only the group containing the currently selected
+  // model expanded; while searching, all matching groups are force-expanded
   const isGroupExpanded = (id: string) =>
     normalizedSearch.length > 0 || (expandedGroups[id] ?? id === selectedGroupId);
-  // 基于存储态取反（而非 isGroupExpanded）：搜索强制展开是只读覆盖，
-  // 不应让搜索期间的点击把折叠态写坏
+  // Negate the stored state (rather than isGroupExpanded): the search force-expand is a
+  // read-only overlay, and a click during search should not corrupt the collapsed state
   const toggleGroup = (id: string) =>
     setExpandedGroups((prev) => ({
       ...prev,

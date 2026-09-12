@@ -170,10 +170,13 @@ type InstalledSkillCardProps = {
   onSelectCategory: (category: ClawHubCategorySlug) => void;
 };
 
-// 安装卡片抽成 memo 组件：props 只传标量与稳定引用（布尔代替 Set 成员判断、
-// primaryCategory 代替数组、latest-ref 回调），父组件的无关状态更新（搜索、
-// store 轮询、抽屉开关等）不再重渲整片网格；identity/metadata 等派生计算
-// 也随之只在自身输入变化时重算。技能数量大时这是主要的卡顿来源。
+// The install card is extracted into a memo component: props pass only scalars
+// and stable references (booleans instead of Set membership checks,
+// primaryCategory instead of arrays, latest-ref callbacks), so unrelated parent
+// state updates (search, store polling, drawer toggling, etc.) no longer
+// re-render the whole grid; derived computations such as identity/metadata are
+// likewise recomputed only when their own inputs change. With a large number of
+// skills this is the main source of jank.
 export const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkillCardProps) {
   const {
     skill,

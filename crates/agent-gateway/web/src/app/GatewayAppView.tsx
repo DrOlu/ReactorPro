@@ -70,16 +70,13 @@ import {
   type DragEvent,
   type ReactNode,
   useCallback,
-  useEffect,
   useMemo,
   useRef,
-  useState,
   useSyncExternalStore,
 } from "react";
 import { createGatewayTrajectoryHost } from "@/agent-ui-adapters/trajectory";
 import { GatewayTranscript } from "@/components/GatewayTranscript";
 import { executeClarifyPromptTurn } from "@/lib/chat/clarifyPromptTurn";
-import type { SttProviderId } from "@/lib/settings";
 import {
   getNextTheme,
   getRightDockFileTreeState,
@@ -91,8 +88,6 @@ import {
   updateWorkspaceResourceSettings,
   workspaceProjectPathKey,
 } from "@/lib/settings";
-import { createWebSttSettingsService } from "@/lib/stt/webSttSettingsService";
-import { webSttTransport } from "@/lib/stt/webSttTransport";
 import {
   liveTrajectoryAuthoritativeRevision,
   liveTrajectoryEvents,
@@ -396,19 +391,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
   } = viewModel;
-  const [sttProviderOverride, setSttProviderOverride] = useState<SttProviderId | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Saved provider changes invalidate the temporary card selection.
-  useEffect(() => {
-    setSttProviderOverride(null);
-  }, [settings.stt.provider]);
-  const sttSettingsService = useMemo(
-    () =>
-      createWebSttSettingsService(async (sttSecretUpdate) => {
-        if (!api) throw new Error("桌面 Agent 未连接，无法同步 STT 配置");
-        await api.updateSettings({ sttSecretUpdate });
-      }),
-    [api],
-  );
 
   const {
     activeConversationView,
@@ -420,14 +402,17 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     () => createGatewayTrajectoryHost(api, handleOpenChatFileLink),
     [api, handleOpenChatFileLink],
   );
-  // 正文只在切到轨迹页时才需要；转换本身很轻，跟随转录行 memo 即可。
+  // The body is only needed when switching to the trajectory page; the
+  // conversion itself is cheap, so following the transcript rows memo is fine.
   const trajectoryMessages = useMemo(() => toTrajectoryMessages(transcriptRows), [transcriptRows]);
   const hasConversationReply =
     displayedConversationId !== "" &&
     !isLocalDraftConversationId(displayedConversationId) &&
     trajectoryMessages.some((message) => message.role === "assistant");
   const renderedConversationView = hasConversationReply ? activeConversationView : "conversation";
-  // 实时骨架来自 ChatEvent 流；账本层按事件身份去重，所以与落盘那份合并安全。
+  // The live skeleton comes from the ChatEvent stream; the ledger layer
+  // deduplicates by event identity, so merging it with the persisted copy is
+  // safe.
   const liveTrajectory = useSyncExternalStore(subscribeLiveTrajectory, () =>
     liveTrajectoryEvents(displayedConversationId),
   );
@@ -439,8 +424,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
       setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
     [setSettings],
   );
-  // 语音输入失败（麦克风不可用等）以 toast 提示，不占用输入框区域。
-  const handleSttError = useCallback((message: string) => addNotify("error", message), [addNotify]);
   const resolveCheckpointAuthorizedRoots = useCallback(async () => {
     const roots: string[] = [];
     const push = (value?: string | null) => {
@@ -483,8 +466,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     },
     [addNotify, settings.locale],
   );
-  // 提示词澄清执行器：经 gateway 中继到桌面宿主，用当前会话模型跑一轮纯文本
-  // 补全；模型覆盖/回退/错误拍平在 executeClarifyPromptTurn（两宿主共用）。
+  // Prompt clarification executor: relays through the gateway to the desktop
+  // host and runs one plain-text completion with the current conversation model;
+  // model override/fallback/error flattening lives in executeClarifyPromptTurn
+  // (shared by both hosts).
   const runClarifyTurn = useCallback<RunClarifyTurn>(
     (messages, _signal, onTextDelta) =>
       executeClarifyPromptTurn(
@@ -512,11 +497,13 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     [displayedConversationWorkdir],
   );
 
-  // --- Session Workbench（多看板分屏）----------------------------------------
-  // Pane 标题/无障碍标签取自侧栏权威索引；标题变化需要触发重渲染，所以走
-  // useSidebarSelector 而不是 store.peek。
+  // --- Session Workbench (multi-pane split view) -----------------------------
+  // Pane titles/ARIA labels come from the sidebar's authoritative index; title
+  // changes must trigger a re-render, so use useSidebarSelector rather than
+  // store.peek.
   const sidebarConversationsById = useSidebarSelector(sidebarStore, (snapshot) => snapshot.byId);
-  // 与桌面端 workbenchPaneTitle 同口径:chrome 提示、拖拽幽灵与无障碍标签共用。
+  // Same semantics as the desktop workbenchPaneTitle: shared by chrome hints,
+  // drag ghosts and ARIA labels.
   const workbenchPaneTitle = useCallback(
     (surface: PaneRecord["surface"]): string => {
       switch (surface.kind) {
@@ -546,8 +533,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   const handlePrimaryComposerSend = useCallback(() => {
     const sendConversationId = getDisplayedConversationId();
     if (primarySendInFlightConversationRef.current === sendConversationId) return;
-    // 上传在途只封锁归属会话:背景 Pane 的导入不应吞掉主 Pane 的发送。
-    // 归属未知(null)时保守封锁,与旧全局互斥语义一致。
+    // An in-flight upload blocks only the owning conversation: a background
+    // Pane's import should not swallow the main Pane's send. When ownership is
+    // unknown (null), block conservatively, matching the old global mutex
+    // semantics.
     const uploadBlocksSend =
       isUploadingFiles &&
       (!uploadingConversationId || uploadingConversationId === sendConversationId);
@@ -602,7 +591,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           files = materialized.uploadedFiles;
           referencedConversations = materialized.referencedConversations;
         } catch (error) {
-          addNotify("error", asErrorMessage(error, "大段粘贴内容导入失败"));
+          addNotify("error", asErrorMessage(error, "Failed to import large pasted content"));
           return;
         }
         if (!text && files.length === 0) return;
@@ -662,9 +651,11 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     runQueuedTurnNow,
   ]);
 
-  // 背景会话 Pane 的共享上下文(复刻桌面端 buildBackgroundPaneBinding):所有
-  // 会话级动作按 Pane 自己的 conversationId 显式路由;页面级机制(选模型、
-  // 编辑队列项等)由宿主内部先聚焦本 Pane(focusGuard 口径)。
+  // Shared context for background conversation Panes (mirrors the desktop
+  // buildBackgroundPaneBinding): all conversation-level actions are explicitly
+  // routed by the Pane's own conversationId; page-level mechanisms (model
+  // selection, queue item editing, etc.) focus this Pane first inside the host
+  // (focusGuard semantics).
   const conversationPaneHostContext: GatewayConversationPaneHostContext = {
     api,
     registry: transcriptStoreRegistry,
@@ -688,14 +679,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           ? prev
           : updateSystem(prev, { commandSafetyMode: mode }),
       ),
-    sttProvider: settings.stt.enabled
-      ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
-      : null,
-    sttProviderConfigured:
-      settings.stt.providers[sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"]
-        ?.configured,
-    sttTransport: webSttTransport,
-    onSttError: handleSttError,
     gitClient,
     gitWriteEnabled: settings.remote.enableWebGit,
     gitDisabledMessage,
@@ -722,8 +705,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     trajectoryHost,
   };
 
-  // 文件拖入时按指针命中聚焦会话 Pane,使 overlay 落在焦点输入框(桌面端
-  // workbenchNativeDropHoverRef 同口径;Web 走 HTML5 DnD)。
+  // On file drop, hit-test by pointer to focus the conversation Pane so the
+  // overlay lands on the focused input (same semantics as the desktop
+  // workbenchNativeDropHoverRef; Web uses HTML5 DnD).
   const lastFileDropHoverPaneRef = useRef<string | null>(null);
   const focusWorkbenchPaneUnderPoint = useCallback(
     (clientX: number, clientY: number) => {
@@ -780,7 +764,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
   const primaryConversationSurface: GatewayConversationPrimarySurface = {
     isSending: composerIsSending,
-    // 上传态只归属目标会话:背景 Pane 的导入不在主 Pane 显示"上传中"。
+    // Upload state belongs only to the target conversation: a background
+	// Pane's import does not show "uploading" on the main Pane.
     isUploadingFiles:
       isUploadingFiles &&
       (!uploadingConversationId || uploadingConversationId === displayedConversationId),
@@ -852,9 +837,13 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
           width={settings.customSettings.chatTranscript.width}
           onWidthChange={handleChatTranscriptWidthChange}
           resizeLabel={
-            settings.locale === "en-US" ? "Resize conversation content" : "调整对话正文宽度"
+            settings.locale === "en-US"
+              ? "Resize conversation content"
+              : "Resize conversation content"
           }
-          resetLabel={settings.locale === "en-US" ? "Double-click to reset" : "双击恢复默认宽度"}
+          resetLabel={
+            settings.locale === "en-US" ? "Double-click to reset" : "Double-click to reset"
+          }
           // The history overlay below is a blocking panel layer above the
           // handles; suspend them for exactly as long as it is mounted (#749).
           suspended={conversationOpenState.showOverlay}
@@ -902,13 +891,16 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     },
   };
 
-  // 每个会话 Pane 始终渲染同一宿主(桌面端 RestorableConversationPaneHost
-  // 口径):焦点只换 primary 绑定,绝不把页面舞台注入聚焦 Pane,也不按
-  // conversationId 做 key(会在焦点切换时拆掉宿主)。终端 / unsupported 走
-  // 各自的自包含表面。
-  // 项目工具 Pane 的运行环境:与 RightDockPanel 同一批网关 client/回调,按
-  // Pane 自己的 ProjectRef 解析项目(见 ProjectToolPaneHost)。终端 client 未
-  // 连接时(网关离线)工具 Pane 与终端 Pane 一样不渲染。
+  // Every conversation Pane always renders the same host (same semantics as the
+  // desktop RestorableConversationPaneHost): focus only switches the primary
+  // binding, the page stage is never injected into the focused Pane, and no key
+  // is derived from conversationId (which would tear down the host on focus
+  // change). Terminal / unsupported use their own self-contained surfaces.
+  // Runtime environment for project tool Panes: the same batch of gateway
+  // clients/callbacks as RightDockPanel, resolving projects by the Pane's own
+  // ProjectRef (see ProjectToolPaneHost). When the terminal client is not
+  // connected (gateway offline), tool Panes do not render, just like terminal
+  // Panes.
   const projectToolPaneEnvironment = useMemo<ProjectToolPaneEnvironment | null>(() => {
     if (!terminalClient) return null;
     return {
@@ -966,8 +958,9 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
         onAssociatedHostIdsChange: (projectPathKey, hostIds) =>
           setSettings((prev) => updateSshProjectHostIds(prev, projectPathKey, hostIds)),
         sessions: terminalSessions,
-        // 按 React 当前值函数式合并(与 dock 侧 sessionsRef.current 同口径),
-        // 避免一次重渲染之间连续到达的 snapshot / reconcile 互相覆盖。
+        // Functionally merge with React's current value (same semantics as the
+        // dock-side sessionsRef.current), so snapshots/reconciles arriving in
+        // succession between re-renders do not overwrite each other.
         onSessionSnapshot: (snapshot) =>
           updateProjectTerminalSessions((current) =>
             mergeTerminalSession(current, snapshot.session),
@@ -1019,7 +1012,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceRootRevision,
   ]);
 
-  // 被画板 Pane 租用的项目工具:dock 隐藏对应 tab/内容/入口(与终端租约同口径)。
+  // Project tools leased by a board Pane: the dock hides the corresponding
+  // tab/content/entry (same semantics as terminal leases).
   const leasedDockTools = useMemo(
     () =>
       leasedProjectToolKinds(
@@ -1205,8 +1199,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     );
   };
 
-  // 被画布 Pane 租用的会话从 Right Dock 的终端 tab 中隐藏(终端任一时刻只
-  // 出现在一个宿主里);Pane 关闭(Detach)释放租约后自动回归 dock。
+  // Conversations leased by a canvas Pane are hidden from the Right Dock's
+  // terminal tab (a terminal appears in only one host at a time); once the Pane
+  // is closed (Detach) and the lease released, it returns to the dock
+  // automatically.
   const workbenchLeasedDockSessionIds = useMemo(
     () =>
       workbenchController.leasedDockSessionIds.length > 0
@@ -1215,7 +1211,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     [workbenchController.leasedDockSessionIds],
   );
 
-  // 拖拽幽灵:跟随指针的载荷标题,提交/取消后随 dragState 清空。
+  // Drag ghost: the payload title following the pointer, cleared with dragState
+  // after commit/cancel.
   const workbenchDragGhost =
     sessionWorkbench.enabled && workbenchController.dragState ? (
       <div
@@ -1582,12 +1579,12 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                 resizeLabel={
                                   settings.locale === "en-US"
                                     ? "Resize conversation content"
-                                    : "调整对话正文宽度"
+                                    : "Resize conversation content"
                                 }
                                 resetLabel={
                                   settings.locale === "en-US"
                                     ? "Double-click to reset"
-                                    : "双击恢复默认宽度"
+                                    : "Double-click to reset"
                                 }
                                 suspended={conversationOpenState.showOverlay}
                               />
@@ -1612,8 +1609,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                               type="button"
                               className="gateway-scroll-to-bottom"
                               onClick={transcriptFollow.jumpToBottom}
-                              aria-label="滚动到底部"
-                              title="滚动到底部"
+                              aria-label="Scroll to bottom"
+                              title="Scroll to bottom"
                             >
                               <ChevronDown className="h-4 w-4" />
                             </button>
@@ -1627,26 +1624,13 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             }
                             clarifyContext={clarifyContext}
                             conversationId={displayedConversationId}
-                            // 轨迹页是只读分析视图：挂起输入区（保持挂载，草稿不丢）。
+                            // The trajectory page is a read-only analysis view:
+					// suspend the input area (stay mounted so the draft is not lost).
                             hidden={renderedConversationView === "trajectory"}
                             composerRef={composerRef}
                             isSending={composerIsSending}
                             isUploadingFiles={isUploadingFiles}
                             isInputDisabled={composerInputDisabled}
-                            // 麦克风在开启语音输入后显示；点击设置卡片会立即切换当前供应商。
-                            sttSessionKey={displayedConversationId}
-                            sttProvider={
-                              settings.stt.enabled
-                                ? (sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud")
-                                : null
-                            }
-                            sttProviderConfigured={
-                              settings.stt.providers[
-                                sttProviderOverride ?? settings.stt.provider ?? "tencent_cloud"
-                              ]?.configured
-                            }
-                            sttTransport={webSttTransport}
-                            onSttError={handleSttError}
                             inputPlaceholder={composerPlaceholder}
                             workdir={displayedConversationWorkdir}
                             enabledSkills={enabledComposerSkills}
@@ -1748,7 +1732,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                   } catch (error) {
                                     addNotify(
                                       "error",
-                                      asErrorMessage(error, "大段粘贴内容导入失败"),
+                                      asErrorMessage(error, "Failed to import large pasted content"),
                                     );
                                     return;
                                   }
@@ -1826,12 +1810,16 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             approvalBar={approvalBar}
                             statsBar={
                               <ConversationStatsBarHost
-                                // 前缀防与同级 taskProgressBar 的 key（裸会话 id）碰撞：React 对
-                                // 同键兄弟的 keyed diff 会让旧 fiber 逃过删除，DOM 残留逐次累积。
+                                // The prefix prevents a key collision with the
+                                // sibling taskProgressBar (bare conversation id):
+                                // React's keyed diff for same-key siblings lets
+                                // the old fiber escape deletion, accumulating DOM
+                                // leftovers over time.
                                 key={`stats-${displayedConversationId}`}
                                 conversationId={displayedConversationId}
                                 host={trajectoryHost}
-                                // 轨迹视图下输入区隐藏，状态栏无需拉取。
+                                // Under the trajectory view the input area is
+								// hidden, so the status bar need not fetch.
                                 enabled={renderedConversationView !== "trajectory"}
                                 contextUsageTokensSource={contextUsageTokensSource}
                                 contextWindow={currentModelContextWindow}
@@ -2024,8 +2012,6 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                 initialSection={settingsSection}
                 initialProviderId={settingsProviderId}
                 hiddenSections={["remote"]}
-                sttSettingsService={sttSettingsService}
-                onSttProviderChange={setSttProviderOverride}
                 onAgentDirectoryChanged={async () => {
                   if (!api) return;
                   await api.listAgents();

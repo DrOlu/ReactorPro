@@ -5,9 +5,9 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// session 层 Go seam 类型到 v2 proto 消息的映射。
+// Mapping from session-layer Go seam types to v2 proto messages.
 
-// statusEvent 映射 session.Status。
+// statusEvent maps session.Status.
 func statusEvent(status session.Status) *gatewayv2.StatusEvent {
 	return &gatewayv2.StatusEvent{
 		Online:                status.Online,
@@ -26,7 +26,7 @@ func statusEvent(status session.Status) *gatewayv2.StatusEvent {
 	}
 }
 
-// chatActivityEvent 映射 session.ConversationActivityEvent。
+// chatActivityEvent maps session.ConversationActivityEvent.
 func chatActivityEvent(event session.ConversationActivityEvent) *gatewayv2.ChatActivityEvent {
 	return &gatewayv2.ChatActivityEvent{
 		ConversationId:  event.ConversationID,
@@ -39,7 +39,7 @@ func chatActivityEvent(event session.ConversationActivityEvent) *gatewayv2.ChatA
 	}
 }
 
-// chatRunActivity 映射 session.RunActivity，并保留空值字段语义。
+// chatRunActivity maps session.RunActivity and preserves the semantics of null fields.
 func chatRunActivity(activity *session.RunActivity) *gatewayv2.ChatRunActivity {
 	if activity == nil {
 		return nil
@@ -55,7 +55,8 @@ func chatRunActivity(activity *session.RunActivity) *gatewayv2.ChatRunActivity {
 	}
 }
 
-// chatRunActivityListItem 映射运行中会话列表项（含会话与工作目录）。
+// chatRunActivityListItem maps a running-conversation list item (including the
+// conversation and working directory).
 func chatRunActivityListItem(activity session.RunActivity) *gatewayv2.ChatRunActivity {
 	item := chatRunActivity(&activity)
 	item.ConversationId = activity.ConversationID
@@ -63,7 +64,7 @@ func chatRunActivityListItem(activity session.RunActivity) *gatewayv2.ChatRunAct
 	return item
 }
 
-// chatRunSnapshot 映射 session.RunSnapshot。
+// chatRunSnapshot maps session.RunSnapshot.
 func chatRunSnapshot(snapshot *session.RunSnapshot) *gatewayv2.ChatRunSnapshot {
 	if snapshot == nil {
 		return nil
@@ -78,7 +79,7 @@ func chatRunSnapshot(snapshot *session.RunSnapshot) *gatewayv2.ChatRunSnapshot {
 	}
 }
 
-// chatCommandUpdate 映射 session.ChatCommandUpdate。
+// chatCommandUpdate maps session.ChatCommandUpdate.
 func chatCommandUpdate(update session.ChatCommandUpdate) *gatewayv2.ChatCommandUpdate {
 	return &gatewayv2.ChatCommandUpdate{
 		RunId:           update.RunID,

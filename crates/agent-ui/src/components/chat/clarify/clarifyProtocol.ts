@@ -1,7 +1,8 @@
 // crates/agent-ui/src/components/chat/clarify/clarifyProtocol.ts
-// 结构化澄清协议：模型每轮要么以 [CLARIFY_QUESTIONS] + 严格 JSON 提出一批
-// 可点选的问题（1-N 道，数量由模型按需决定），要么以 [CLARIFY_FINAL] + 纯文本
-// 直接给出终稿提示词。用户的点选/自由输入以 [CLARIFY_ANSWERS] 文本块回传。
+// Structured clarification protocol: each round the model either asks a batch of
+// selectable questions (1-N, chosen as needed by the model) with [CLARIFY_QUESTIONS] +
+// strict JSON, or gives the final prompt directly with [CLARIFY_FINAL] + plain text.
+// The user's picks/free-form input come back as a [CLARIFY_ANSWERS] text block.
 import type {
   ClarifyContext,
   ClarifyMessage,
@@ -14,18 +15,18 @@ export const CLARIFY_QUESTIONS_MARKER = "[CLARIFY_QUESTIONS]";
 export const CLARIFY_FINAL_MARKER = "[CLARIFY_FINAL]";
 export const CLARIFY_ANSWERS_MARKER = "[CLARIFY_ANSWERS]";
 
-/** 超过硬上限后前端强制注入终稿指令，防止 LLM 无限追问（设计文档「错误处理」）。 */
+/** After the hard cap is exceeded the frontend injects the final-prompt instruction, preventing the LLM from asking indefinitely (design doc "Error handling"). */
 export const CLARIFY_MAX_ROUNDS = 3;
-/** 单轮问题数上限：解析时超量截断，与系统提示词中的约束一致。 */
+/** Max questions per round: excess is truncated on parse, consistent with the constraint in the system prompt. */
 export const CLARIFY_MAX_QUESTIONS_PER_ROUND = 4;
-/** 单题选项数上限：超量截断（UI 恒补「其他」行，选项过多反而降低可读性）。 */
+/** Max options per question: excess is truncated (the UI always adds an "Other" row, and too many options actually reduce readability). */
 export const CLARIFY_MAX_OPTIONS_PER_QUESTION = 6;
 
 export type ParsedClarifyTurn =
   | { kind: "questions"; questions: ClarifyQuestion[] }
   | { kind: "final"; text: string };
 
-/** 剥掉模型偶发无视指令包上的 markdown 围栏，再截取首尾花括号间的 JSON。 */
+/** Strips a markdown fence the model occasionally wraps around the payload despite instructions, then extracts the JSON between the first and last braces. */
 function extractJsonPayload(text: string): unknown {
   let body = text.trim();
   const fence = body.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
@@ -49,7 +50,7 @@ function normalizeOptions(value: unknown): ClarifyOption[] {
     if (typeof entry !== "object" || entry === null) continue;
     const record = entry as Record<string, unknown>;
     const label = typeof record.label === "string" ? record.label.trim() : "";
-    // label 是应答载荷与 UI 选中键：空值或重复都会让点选歧义，直接丢弃。
+    // label is the answer payload and the UI selection key: empty or duplicate values make picks ambiguous, so drop them.
     if (!label || seenLabels.has(label)) continue;
     seenLabels.add(label);
     const description =
@@ -66,9 +67,10 @@ function normalizeOptions(value: unknown): ClarifyOption[] {
 }
 
 /**
- * 校验并归一化模型给出的问题列表：prompt 为空的条目丢弃、id 缺失/重复时
- * 按序号重派、问题与选项超量截断。整体无一道有效问题时返回 null（由
- * parseClarifyTurn 走开放问题兜底）。
+ * Validates and normalizes the question list produced by the model: entries with an
+ * empty prompt are dropped, missing/duplicate ids are reassigned by index, and excess
+ * questions/options are truncated. Returns null when there is not a single valid
+ * question (parseClarifyTurn then falls back to an open question).
  */
 export function normalizeClarifyQuestions(value: unknown): ClarifyQuestion[] | null {
   if (typeof value !== "object" || value === null) return null;
@@ -83,7 +85,7 @@ export function normalizeClarifyQuestions(value: unknown): ClarifyQuestion[] | n
     const prompt = typeof record.prompt === "string" ? record.prompt.trim() : "";
     if (!prompt) continue;
     const rawId = typeof record.id === "string" ? record.id.trim() : "";
-    // id 是答案与问题的对应键：重复 id 会让答案串题，重派为序号 id。
+    // id is the key mapping answers to questions: a duplicate id would cross-wire answers, so reassign an index-based id.
     const id = rawId && !seenIds.has(rawId) ? rawId : `q${questions.length + 1}`;
     seenIds.add(id);
     const header =
@@ -100,9 +102,10 @@ export function normalizeClarifyQuestions(value: unknown): ClarifyQuestion[] | n
 }
 
 /**
- * 完整回复解析。终稿以标记识别；问题轮标记可缺（模型偶发直接输出 JSON），
- * 按 JSON 载荷识别；两者都不像时把整段文本当一道开放问题兜底——UI 只渲染
- * 「其他」输入框，交互不断流。
+ * Full reply parsing. The final prompt is recognized by its marker; a question round's
+ * marker may be absent (the model occasionally outputs raw JSON), so it is recognized by
+ * the JSON payload; when neither matches, the entire text is used as a single open
+ * question fallback -- the UI renders only the "Other" input box, keeping the interaction flowing.
  */
 export function parseClarifyTurn(raw: string): ParsedClarifyTurn {
   const value = (raw ?? "").trim();
@@ -122,9 +125,10 @@ export function parseClarifyTurn(raw: string): ParsedClarifyTurn {
 }
 
 /**
- * 流式显示用：终稿轮剥掉 [CLARIFY_FINAL] 前缀后逐字上屏；问题轮流的是 JSON，
- * 返回空串（面板显示思考态）。前缀尚可能凑成任一标记时一律先隐藏，
- * 避免标记碎片闪现在气泡里。
+ * For streaming display: on a final-prompt round, strip the [CLARIFY_FINAL] prefix and
+ * show the text character by character; a question round streams JSON, so return an
+ * empty string (the panel shows a thinking state). While the prefix could still become
+ * either marker, hide everything, preventing marker fragments from flashing in the bubble.
  */
 export function clarifyStreamPreview(partial: string): string {
   const value = (partial ?? "").trimStart();
@@ -132,7 +136,7 @@ export function clarifyStreamPreview(partial: string): string {
   if (value.startsWith(CLARIFY_FINAL_MARKER)) {
     return value.slice(CLARIFY_FINAL_MARKER.length).replace(/^\s+/, "");
   }
-  // 问题轮：带标记、裸 JSON、markdown 围栏三种形态都不上屏。
+  // Question round: none of the three forms (with marker, bare JSON, markdown fence) is displayed.
   if (
     value.startsWith(CLARIFY_QUESTIONS_MARKER) ||
     value.startsWith("{") ||
@@ -152,8 +156,9 @@ export function clarifyStreamPreview(partial: string): string {
 }
 
 /**
- * 把一轮已落定的问答序列化为回传给模型的用户消息。逐题一组 Q/A 行；
- * 未回答的问题标记 "(not answered)"——系统提示词已向模型解释该记号。
+ * Serializes a completed round of Q&A into the user message sent back to the model.
+ * One Q/A pair per question; unanswered questions are marked "(not answered)" -- the
+ * system prompt already explains this notation to the model.
  */
 export function buildClarifyAnswersMessage(round: ClarifyRound): string {
   const answersById = new Map((round.answers ?? []).map((answer) => [answer.questionId, answer]));
@@ -172,7 +177,7 @@ export function buildClarifyAnswersMessage(round: ClarifyRound): string {
   return lines.join("\n");
 }
 
-/** 从 superpowers brainstorming 技能拆编：按需成批提问、聚焦目的/约束/成功标准。 */
+/** Adapted from the superpowers brainstorming skill: ask in batches as needed, focusing on purpose/constraints/success criteria. */
 export function buildClarifySystemPrompt(context?: ClarifyContext): string {
   const workspace = context?.workdir?.trim();
   const branch = context?.gitBranch?.trim();
@@ -204,10 +209,10 @@ export function buildClarifySystemPrompt(context?: ClarifyContext): string {
   ].join("\n");
 }
 
-/** 「直接生成」/轮数超限时注入的用户指令：绕过剩余提问直接出终稿。 */
-export const CLARIFY_FORCE_FINAL_INSTRUCTION = `请直接输出最终优化后的提示词：回复以 ${CLARIFY_FINAL_MARKER} 开头，不要再提问。`;
+/** User instruction injected on "Generate directly"/when the round cap is exceeded: skip the remaining questions and produce the final prompt. */
+export const CLARIFY_FORCE_FINAL_INSTRUCTION = `Please output the final optimized prompt directly: start your reply with ${CLARIFY_FINAL_MARKER} and ask no further questions.`;
 
-/** 完整 LLM 输入：system 前置 + 会话消息。 */
+/** Full LLM input: system prepended + session messages. */
 export function buildClarifyMessages(
   sessionMessages: ClarifyMessage[],
   context?: ClarifyContext,

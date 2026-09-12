@@ -1,4 +1,4 @@
-//! Skills 根目录解析、路径回显与路径 / 名称清洗。
+//! Skills root directory resolution, path display, and path / name sanitization.
 
 use std::fs;
 use std::path::{Component, Path, PathBuf};

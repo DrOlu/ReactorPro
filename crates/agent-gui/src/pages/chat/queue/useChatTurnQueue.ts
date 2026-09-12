@@ -94,7 +94,8 @@ type UseChatTurnQueueParams = {
   clearCachedComposerDraft: (conversationId?: string) => void;
   displayedConversationWorkdir: string;
   sendActionRef: MutableRefObject<SendChatAction>;
-  /** WebUI compact_now 中继：调 ChatPage 的手动压缩入口（与本地用量环同一代码）。 */
+  /** WebUI compact_now relay: calls ChatPage's manual compaction entry point
+   * (the same code as the local usage ring). */
   manualCompactActionRef: MutableRefObject<
     (request?: ManualCompactionRequest) => Promise<ManualCompactionResult>
   >;
@@ -159,11 +160,14 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
   );
   const queuedChatProcessingConversationIdsRef = useRef(new Set<string>());
   const queuedChatStopVersionsRef = useRef(new Map<string, number>());
-  // 打断并执行的恢复意图：conversationId → 触发打断那一刻的 stop-request 版本号。
-  // stopConversation 会打上 stop-requested 标记，而 drain effect 对该标记一律
-  // "消费后跳过"（普通停止不允许自动放行队列）。登记版本号让 drain effect 能
-  // 识别出"这次停止是打断并执行"，消费标记后继续自动发送；若用户随后又按了
-  // 普通停止，版本号被 bump，登记的意图自动失效，队列保持挂起。
+  // Recovery intent for interrupt-and-run: conversationId -> the stop-request
+  // version at the moment the interrupt was triggered. stopConversation sets a
+  // stop-requested flag, and the drain effect always "consumes and skips" that
+  // flag (a normal stop is not allowed to auto-release the queue). Recording
+  // the version lets the drain effect recognize "this stop is interrupt-and-
+  // run" and keep auto-sending after consuming the flag; if the user then
+  // presses a normal stop, the version is bumped, the recorded intent expires
+  // automatically, and the queue stays suspended.
   const queuedChatInterruptResumeVersionsRef = useRef(new Map<string, number>());
   const queuedChatProcessingStatesRef = useRef(
     new Map<
@@ -380,7 +384,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     const transcriptStore = getConversationLiveTranscriptStore(targetConversationId);
     if (controller) {
       captureAbortSnapshot(transcriptStore);
-      updateToolStatus("正在停止当前任务...", transcriptStore);
+      updateToolStatus("Stopping the current task...", transcriptStore);
       controller.abort();
     }
     const handled = requestActiveConversationStop(targetConversationId, { force });
@@ -481,8 +485,10 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     conversationId: string;
     draft: MentionComposerDraft | null;
     uploadedFiles: PendingUploadedFile[];
-    /** 覆盖入队 turn 的运行时控制;缺省取当前 settings 快照。计划批准的续轮
-     * 用它显式带 planModeEnabled:false——不能依赖 setSettings 后的闭包新鲜度。 */
+    /** Runtime controls overriding the queued turn; defaults to the current
+     * settings snapshot. Continuation turns from plan approval use it to carry
+     * planModeEnabled:false explicitly -- we cannot rely on closure freshness
+     * after setSettings. */
     runtimeControls?: ChatRuntimeControls;
   }) {
     const conversationId = input.conversationId.trim();
@@ -698,9 +704,11 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         queuedChatProcessingConversationIdsRef.current.delete(conversationId);
         const stopRequestVersion = getConversationStopRequestVersion(conversationId);
         consumeConversationStop(conversationId, stopRequestVersion);
-        // 打断并执行：这次停止就是为了立刻放行队首轮次，消费掉 stop 标记后
-        // 继续向下触发处理；版本号不匹配说明打断之后用户又请求过停止，尊重
-        // 最新意图，保持队列挂起。
+        // Interrupt-and-run: this stop exists to release the head turn
+        // immediately; after consuming the stop flag, continue down to trigger
+        // processing. A version mismatch means the user requested another stop
+        // after the interrupt, so respect the latest intent and keep the queue
+        // suspended.
         if (interruptResumeVersion !== stopRequestVersion) {
           continue;
         }
@@ -715,8 +723,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     setQueuedChatTurnsState((current) => promoteQueuedChatTurn(current, queuedTurn.id));
     if (isConversationRunning(queuedTurn.conversationId)) {
       stopConversation(queuedTurn.conversationId);
-      // 登记恢复意图（须在 stopConversation bump 版本号之后取值），运行结束后
-      // drain effect 据此消费 stop 标记并自动发送刚置顶的轮次。
+      // Record the recovery intent (the value must be taken after
+      // stopConversation bumps the version); when the run ends, the drain
+      // effect consumes the stop flag and auto-sends the just-promoted turn.
       queuedChatInterruptResumeVersionsRef.current.set(
         queuedTurn.conversationId,
         getConversationStopRequestVersion(queuedTurn.conversationId),
@@ -855,9 +864,10 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
 
     setQueuedChatTurnsState((current) => appendQueuedChatTurn(current, queuedTurn));
     if (payload.queuePolicy === "interrupt") {
-      // 与本地"打断并执行"共用同一路径：置顶 + 运行中则打断并登记恢复意图；
-      // 空闲则直接触发队列处理（此前空闲时也会打 stop 标记且无人消费，
-      // 导致该轮次永远挂起）。
+      // Shares the same path as the local "interrupt-and-run": promote, and if
+      // running, interrupt and record the recovery intent; if idle, trigger
+      // queue processing directly (previously an idle turn still set a stop
+      // flag that no one consumed, leaving that turn suspended forever).
       runQueuedTurnNow(queuedTurn.id);
     }
     return true;
@@ -956,8 +966,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         return;
       }
 
-      // WebUI 对 AskUserQuestion 卡片的应答：itemId 即 toolCallId，request_json
-      // 携带 {questionId, selectedLabel}[]，直接落到工具挂起表。
+      // WebUI response to the AskUserQuestion card: itemId is the toolCallId
+      // and request_json carries {questionId, selectedLabel}[], landing directly
+      // in the tool pending table.
       if (action === "tool_answer") {
         if (!itemId) {
           fail("tool_answer requires item_id", "invalid_request");
@@ -979,8 +990,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         return;
       }
 
-      // WebUI 对工具审批卡片的决定:itemId 即 toolCallId,request_json 携带
-      // {"decision":"approve"|"deny"|"approve_session"},落到桌面审批挂起表。
+      // WebUI decision on the tool approval card: itemId is the toolCallId and
+      // request_json carries {"decision":"approve"|"deny"|"approve_session"},
+      // landing in the desktop approval pending table.
       if (action === "tool_approval") {
         if (!itemId) {
           fail("tool_approval requires item_id", "invalid_request");
@@ -1010,8 +1022,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         return;
       }
 
-      // WebUI 对计划卡片的决定:itemId 即 toolCallId,request_json 携带
-      // {"decision":"approve"|"reject","feedback"?},落到桌面计划挂起表。
+      // WebUI decision on the plan card: itemId is the toolCallId and
+      // request_json carries {"decision":"approve"|"reject","feedback"?},
+      // landing in the desktop plan pending table.
       if (action === "plan_decision") {
         if (!itemId) {
           fail("plan_decision requires item_id", "invalid_request");
@@ -1026,8 +1039,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         }
         const outcome = answerPlanDecision(itemId, rawAnswer, { conversationId });
         if (!outcome.ok) {
-          // 结构化 code 直通:not_pending 让远端卡片落定为"已决定/已被覆盖"
-          // 而非裸报错;invalid/unavailable 维持错误展示。
+          // Structured code pass-through: not_pending lets the remote card
+          // settle as "already decided / already superseded" rather than a raw
+          // error; invalid/unavailable keep the error display.
           fail(
             outcome.message || "plan not pending",
             outcome.code === "invalid"
@@ -1042,15 +1056,21 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         return;
       }
 
-      // WebUI 用量环触发的手动压缩：按目标 conversationId 装载独立 runtime，
-      // 不要求桌面当前正显示该会话；运行中与单飞校验仍按目标会话隔离。
-      // 回包时序：不再"受理即回包"。手动压缩探针（无副作用）通过、真正开始
-      // 压缩时经 onAccepted 同步回 accepted:true；探针拒绝/前置抛错则据返回值
-      // 同步回 accepted:false + message（WebUI 已在 !accepted 时展示 message）。
-      // 只有真正开始压缩才会后续经 operationId 关联终态事件。Rust relay 30s
-      // 超时 >> 探针耗时（纯 token 计数，无 LLM 调用），安全。本 effect 闭包是
-      // []-dep，校验只读恒新的 ref；细校验由 manualCompactActionRef 指向的最新
-      // 闭包自行复核。
+      // Manual compaction triggered by the WebUI usage ring: load an
+      // independent runtime keyed by the target conversationId; the desktop is
+      // not required to be currently showing that conversation. Running and
+      // single-flight checks are still isolated per target conversation. Reply
+      // timing: no longer "reply as soon as accepted". When the manual
+      // compaction probe (side-effect free) passes and compaction truly starts,
+      // reply accepted:true synchronously via onAccepted; if the probe refuses
+      // or a pre-check throws, reply accepted:false + message synchronously
+      // (WebUI already shows message when !accepted). Only once compaction
+      // truly starts are terminal events later correlated via operationId. The
+      // Rust relay 30s timeout is far greater than the probe time (pure token
+      // counting, no LLM call), so it is safe. This effect closure has an empty
+      // dep array and validation only reads always-fresh refs; finer validation
+      // is re-checked by the latest closure pointed to by
+      // manualCompactActionRef.
       if (action === "compact_now") {
         if (isConversationRunning(conversationId)) {
           fail("conversation is running", "busy");
@@ -1063,8 +1083,10 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           fail("compaction already in progress", "compacting");
           return;
         }
-        // operationId 严格化：缺失或非空字符串解析失败直接拒绝。回退到 requestId
-        // 会产生 WebUI 从未登记的 operationId，终态永不匹配、挂满 5 分钟超时。
+        // Strict operationId: if missing or a non-empty-string parse fails,
+        // reject outright. Falling back to requestId would produce an
+        // operationId the WebUI never registered, so terminal state would never
+        // match and the call would hang for the full 5-minute timeout.
         let operationId = "";
         if (request.requestJson?.trim()) {
           try {
@@ -1096,8 +1118,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
             onAccepted: respondAccepted,
           })
           .then((result) => {
-            // 已受理即真正开始压缩，终态改经 operationId 事件；未受理说明探针
-            // 拒绝，此处据返回值同步回包。
+            // Once accepted, compaction truly starts and terminal state comes
+            // via operationId events; not accepted means the probe refused, so
+            // reply synchronously from the return value here.
             if (responded) return;
             responded = true;
             fail(result.message || "manual compaction declined", codeFor(result.status));
