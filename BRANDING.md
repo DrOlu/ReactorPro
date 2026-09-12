@@ -3,7 +3,7 @@
 ReactorPro is a rebranded distribution of [Stack-Cairn/LiveAgent](https://github.com/Stack-Cairn/LiveAgent),
 maintained by **Hyperspace Technologies** (<agent@reactorpro.ng>).
 
-This document explains how the rebrand is applied and how it survives upstream syncs.
+This document explains how the rebrand is applied and how it is kept in place.
 
 ## What changes
 
@@ -51,39 +51,36 @@ It performs five jobs:
 5. **Enforces the language policy** — the default locale is `en-US`, document `lang`
    attributes are `en`, and the script **fails** if any Chinese text exists in the tree.
 
-## Upstream sync
+## No upstream sync
 
-`.github/workflows/sync-upstream.yml` runs every six hours (and on demand):
+ReactorPro does **not** track `Stack-Cairn/LiveAgent`. The `sync-upstream.yml` workflow that merged
+upstream every six hours was removed on purpose: ReactorPro is a standalone product, the two
+codebases have diverged too far for a mechanical merge to be worth reconciling, and the merge kept
+proposing changes that had to be undone again.
 
-1. Merges `Stack-Cairn/LiveAgent@main` into a `sync/upstream` branch, preferring upstream on conflicts.
-2. Prunes paths listed in `branding/prune.txt` — files ReactorPro intentionally does not ship
-   (the Chinese README, the removed speech-to-text feature).
-3. Runs `scripts/reactorpro-rebrand.mjs`, which restores every branding element and fails the
-   build if Chinese text has reappeared.
-4. Opens (or updates) a pull request against `main` and enables auto-merge.
+What this means:
 
-Because the workflow only ever lands changes through a pull request, upstream changes still run
-the full CI. If an upstream change reintroduces Chinese text, the rebrand step fails and the pull
-request is left open with the offending files listed in the log.
-
-### When upstream reintroduces Chinese
-
-Translate the flagged files to English, run `node scripts/reactorpro-rebrand.mjs --check` until it
-passes, and push to the sync branch. The pull request then completes normally.
+- Nothing merges, prunes, or re-bases upstream into this repository.
+- `scripts/reactorpro-rebrand.mjs` remains the source of truth for branding, but nothing re-applies
+  it automatically any more. Run it after any change that touches visible names. The
+  `gateway-release.yml` release gate runs `--check`, so drift cannot reach a published binary
+  unnoticed.
+- `branding/prune.txt` is no longer read by anything. It is kept as the record of what ReactorPro
+  intentionally does not ship (the Chinese README, the removed speech-to-text feature) in case a
+  file is ever pulled in from upstream by hand.
+- Upstream is now only a reference. If a file is taken from it manually, translate it and run
+  `node scripts/reactorpro-rebrand.mjs --check` until it passes.
 
 ### Adding a new brand-owned file
 
 1. Put the file under `branding/`.
 2. Add a `[source, destination]` entry to `BRAND_COPIES` in `scripts/reactorpro-rebrand.mjs`.
 
-### Removing an upstream file permanently
+## Divergence from upstream
 
-Add its path to `branding/prune.txt`, one per line.
-
-## Known divergence from upstream
-
-Because ReactorPro is English-only, one behavioural fix was needed that is **not** a
-branding change and is therefore not re-applied by the rebrand script:
+ReactorPro is a standalone fork, so these are permanent differences rather than something to
+reconcile. They are recorded here because they are **not** branding changes, and the rebrand script
+does not manage them:
 
 - `crates/agent-ui/src/lib/chat/hostedSearch.ts` — text blocks are concatenated with no
   separator before sentence-boundary resolution. Chinese `。` ends a sentence regardless of
@@ -93,8 +90,8 @@ branding change and is therefore not re-applied by the rebrand script:
   `isAsciiPeriodSentenceTerminator` now also treats a period followed by an uppercase letter
   as a sentence end.
 
-If an upstream sync reverts this, the `chatUi-agent` tests fail — CI blocks the sync pull
-request, so the fix cannot be lost silently. Re-apply it as part of resolving that sync.
+The `chatUi-agent` tests cover this: they fail if the ASCII sentence-boundary handling regresses, so
+the fix cannot be lost silently.
 
 - `.github/workflows/desktop-release.yml` — signing is optional. When
   `APPLE_CERTIFICATE_P12_BASE64` or `TAURI_SIGNING_PRIVATE_KEY` is absent the workflow builds an
@@ -104,14 +101,14 @@ request, so the fix cannot be lost silently. Re-apply it as part of resolving th
   `bundle.createUpdaterArtifacts` for that path. Add the signing secrets to switch to a fully
   signed release with no further changes.
 
-  A sync merge would revert this workflow file. Unlike the sentence-boundary fix there is no test
-  that catches it — re-apply the `Detect signing configuration` gate and the
-  `tauri.unsigned.conf.json` overlays when resolving a sync, or the next unsigned release fails.
+  Unlike the sentence-boundary fix, no test catches a regression here: dropping the gate or the
+  overlay silently produces a release that is neither signed nor updatable, so check both when
+  editing `desktop-release.yml`.
 
 ## ReactorPro-only additions
 
-These do not exist upstream, so a sync merge keeps them; they are listed here so an upstream
-change that overlaps them is noticed.
+These do not exist upstream. They are listed so that anyone importing a file from upstream by hand
+notices the overlap.
 
 - `.github/workflows/gateway-release.yml` — publishes standalone `reactorpro-gateway-<os>-<arch>`
   binaries (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64) plus a
