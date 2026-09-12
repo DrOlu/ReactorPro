@@ -91,7 +91,9 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
             {state.status === "loading" ? (
               <div className="history-share-state">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                <div className="text-sm font-medium text-foreground/85">Loading shared conversation</div>
+                <div className="text-sm font-medium text-foreground/85">
+                  Loading shared conversation
+                </div>
               </div>
             ) : state.status === "error" ? (
               <div className="history-share-state">
@@ -106,7 +108,9 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
             ) : state.entries.length === 0 ? (
               <div className="history-share-state">
                 <MessageSquareText className="h-5 w-5 text-muted-foreground" />
-                <div className="text-sm font-medium text-foreground/85">This conversation has no content to display yet</div>
+                <div className="text-sm font-medium text-foreground/85">
+                  This conversation has no content to display yet
+                </div>
               </div>
             ) : (
               <ScrollArea className="history-share-scroll">

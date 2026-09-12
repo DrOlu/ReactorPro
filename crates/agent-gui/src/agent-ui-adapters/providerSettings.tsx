@@ -282,7 +282,8 @@ function CcsImportModal(props: {
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-sm leading-normal">Import from CC Switch</DialogTitle>
             <DialogDescription className="mt-0.5 text-xs">
-              Import the configuration for the current provider type and fetch the model list in the background
+              Import the configuration for the current provider type and fetch the model list in the
+              background
             </DialogDescription>
           </div>
         </DialogHeader>

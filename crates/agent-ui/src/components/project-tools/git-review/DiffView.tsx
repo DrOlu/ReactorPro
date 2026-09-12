@@ -954,7 +954,9 @@ export function DiffContent(props: {
           <div
             ref={diffHorizontalScrollbarTrackRef}
             role="scrollbar"
-            aria-label={locale === "en-US" ? "Horizontal diff scrollbar" : "Horizontal diff scrollbar"}
+            aria-label={
+              locale === "en-US" ? "Horizontal diff scrollbar" : "Horizontal diff scrollbar"
+            }
             aria-controls={diffScrollViewportId}
             aria-orientation="horizontal"
             aria-valuemin={0}

@@ -179,7 +179,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       // not resurrect cleared attachments: files picked inside the old
       // workspace are not readable from the new one.
       if (!isAgentModeRef.current || (isTargetDisplayed && workdirRef.current !== targetWorkdir)) {
-        addNotify("warning", "The upload target is no longer valid; the files from this import were ignored");
+        addNotify(
+          "warning",
+          "The upload target is no longer valid; the files from this import were ignored",
+        );
         return;
       }
       if (result.files.length === 0 && result.skipped.length === 0) {
@@ -251,7 +254,9 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         return;
       }
       if (!(requestedTarget?.workdir ?? workdir).trim()) {
-        setErrorMessage("Please select or create a project in the project panel before uploading files.");
+        setErrorMessage(
+          "Please select or create a project in the project panel before uploading files.",
+        );
         return;
       }
 

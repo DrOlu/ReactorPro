@@ -53,7 +53,7 @@ export function ConversationStatsBarHost(props: {
     host,
     liveEvents,
     // Observer side: when the page was just reloaded and no live stream has
-// arrived yet, do not misjudge a still-running turn as interrupted.
+    // arrived yet, do not misjudge a still-running turn as interrupted.
     liveOwnership: "observed",
     authoritativeRevision,
     enabled,

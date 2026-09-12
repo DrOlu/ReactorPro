@@ -160,9 +160,11 @@ jobs:
             gh pr edit "${existing}" --title "${title}" --body-file /tmp/pr-body.md
             echo "number=${existing}" >> "$GITHUB_OUTPUT"
           else
+            # governance-exempt: this PR is generated, cannot link an issue, and
+            # touches no UI, so the repository's PR governance must skip it.
             gh pr create --base main --head "${SYNC_BRANCH}" \
               --title "${title}" --body-file /tmp/pr-body.md \
-              --label "upstream-sync" 2>/dev/null \
+              --label "upstream-sync" --label "governance-exempt" 2>/dev/null \
               || gh pr create --base main --head "${SYNC_BRANCH}" \
                    --title "${title}" --body-file /tmp/pr-body.md
             number="$(gh pr list --head "${SYNC_BRANCH}" --state open --json number --jq '.[0].number')"

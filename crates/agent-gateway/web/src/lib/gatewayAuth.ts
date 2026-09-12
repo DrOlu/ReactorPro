@@ -1,5 +1,7 @@
 function readUnauthorizedErrorMessage(errorText: string) {
-  return errorText === "unauthorized" ? "Invalid Access Token, please check and try again." : errorText;
+  return errorText === "unauthorized"
+    ? "Invalid Access Token, please check and try again."
+    : errorText;
 }
 
 async function readFetchError(response: Response, fallback: string) {

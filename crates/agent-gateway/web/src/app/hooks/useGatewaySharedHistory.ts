@@ -155,7 +155,9 @@ export function useGatewaySharedHistory({
         return sharedHistoryItemsRef.current;
       } catch (error) {
         if (sharedHistoryListRequestRef.current === requestState) {
-          setSharedHistoryListError(asErrorMessage(error, "Failed to load the shared history list"));
+          setSharedHistoryListError(
+            asErrorMessage(error, "Failed to load the shared history list"),
+          );
         }
         return sharedHistoryItemsRef.current;
       } finally {
@@ -240,7 +242,12 @@ export function useGatewaySharedHistory({
           markSharedConversation(item.id, nextStatus.enabled === true, item);
         })
         .catch((error) => {
-          setShareError(asErrorMessage(error, enabled ? "Failed to enable sharing" : "Failed to disable sharing"));
+          setShareError(
+            asErrorMessage(
+              error,
+              enabled ? "Failed to enable sharing" : "Failed to disable sharing",
+            ),
+          );
         })
         .finally(() => {
           setShareUpdating(false);
@@ -347,7 +354,10 @@ export function useGatewaySharedHistory({
       const id = item.id.trim();
       if (!id) return;
       if (!api) {
-        setSharedManagerError(id, "Gateway is not connected, unable to update the share redaction settings.");
+        setSharedManagerError(
+          id,
+          "Gateway is not connected, unable to update the share redaction settings.",
+        );
         return;
       }
 
@@ -363,7 +373,10 @@ export function useGatewaySharedHistory({
           }
         })
         .catch((error) => {
-          setSharedManagerError(id, asErrorMessage(error, "Failed to update share redaction settings"));
+          setSharedManagerError(
+            id,
+            asErrorMessage(error, "Failed to update share redaction settings"),
+          );
         })
         .finally(() => {
           updateIdSet(setSharedManagerUpdatingIds, id, false);

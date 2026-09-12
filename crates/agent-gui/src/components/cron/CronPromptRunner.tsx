@@ -72,7 +72,9 @@ async function buildCronSkillsContext(settings: AppSettings, workdir: string) {
   const skillByName = new Map(discovery.skills.map((skill) => [skill.name, skill]));
   const missing = selectedSkillNames.filter((name) => !skillByName.has(name));
   if (missing.length > 0 && resources.mode !== "custom") {
-    throw new Error(`Skills not found: ${missing.join(", ")} (please re-scan the pinned Skills directory first)`);
+    throw new Error(
+      `Skills not found: ${missing.join(", ")} (please re-scan the pinned Skills directory first)`,
+    );
   }
 
   const selectedSkills = selectedSkillNames

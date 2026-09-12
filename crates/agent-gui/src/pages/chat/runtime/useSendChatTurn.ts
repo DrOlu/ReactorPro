@@ -484,7 +484,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         gatewaySelectedModel: gatewayBridgeRequest?.selectedModelOverride,
       });
     } catch (error) {
-      const message = asErrorMessage(error, "The current model configuration is unavailable. Reselect one and retry.");
+      const message = asErrorMessage(
+        error,
+        "The current model configuration is unavailable. Reselect one and retry.",
+      );
       setConversationErrorState(message);
       gatewayBridgeEvents.emitError(message);
       return false;
@@ -596,7 +599,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         text = buildTextFromComposerDraft(composerDraft, imported.fileByPasteId);
         uploadedFiles = mergePendingUploadedFiles(uploadedFiles, imported.files);
       } catch (error) {
-        const message = asErrorMessage(error, "Failed to import the large pasted content as an attachment");
+        const message = asErrorMessage(
+          error,
+          "Failed to import the large pasted content as an attachment",
+        );
         setConversationErrorState(message);
         setErrorMessage(message);
         gatewayBridgeEvents.emitError(message, conversationId);
@@ -1036,7 +1042,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           console.warn("edit-resend subagent cleanup failed", error);
         });
       } catch (error) {
-        const message = asErrorMessage(error, "Failed to replace the edited message; the original history is unchanged.");
+        const message = asErrorMessage(
+          error,
+          "Failed to replace the edited message; the original history is unchanged.",
+        );
         cancellation.userStop.abort();
         setConversationErrorState(message);
         gatewayBridgeEvents.emitError(message, conversationId);

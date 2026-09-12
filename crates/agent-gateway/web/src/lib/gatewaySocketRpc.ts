@@ -123,7 +123,8 @@ import type {
   RunningConversationSummary,
 } from "./gatewayTypes";
 
-const LEGACY_SETTINGS_CHANGED_MESSAGE = "The SSH settings were updated on the other side; the latest state has been refreshed, please submit again.";
+const LEGACY_SETTINGS_CHANGED_MESSAGE =
+  "The SSH settings were updated on the other side; the latest state has been refreshed, please submit again.";
 
 export type GatewaySettingsUpdateErrorCode = "settings_changed";
 

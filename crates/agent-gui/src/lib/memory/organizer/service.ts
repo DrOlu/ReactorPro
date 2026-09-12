@@ -125,10 +125,14 @@ function resolveOrganizerProvider(run: MemoryOrganizeRun, settings: AppSettings)
     throw new Error(`Memory organizer model provider not found: ${customProviderId}`);
   }
   if (!provider.baseUrl.trim()) {
-    throw new Error(`Memory organizer model provider Base URL is empty: ${provider.name || provider.id}`);
+    throw new Error(
+      `Memory organizer model provider Base URL is empty: ${provider.name || provider.id}`,
+    );
   }
   if (!provider.apiKey.trim()) {
-    throw new Error(`Memory organizer model provider API Key is empty: ${provider.name || provider.id}`);
+    throw new Error(
+      `Memory organizer model provider API Key is empty: ${provider.name || provider.id}`,
+    );
   }
   return { provider, model };
 }
@@ -138,7 +142,9 @@ function buildFinalSummary(stats: OrganizerStats) {
     return "No ordinary memories eligible for organization were found; nothing was written.";
   }
   const failureNote =
-    stats.parseFailures > 0 ? `; ${stats.parseFailures} groups submitted no valid plan and were partially skipped` : "";
+    stats.parseFailures > 0
+      ? `; ${stats.parseFailures} groups submitted no valid plan and were partially skipped`
+      : "";
   if (stats.pendingSafeDecisions > 0) {
     return `This organization covered ${stats.inputCount} memories across ${stats.clusterCount} groups and generated ${stats.pendingSafeDecisions} safe suggestions, awaiting your confirmation in history; ${stats.reviewSkipped} risky suggestions were skipped and saved in the history details${failureNote}.`;
   }

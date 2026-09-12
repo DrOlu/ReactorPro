@@ -98,7 +98,9 @@ export function validateImportedPastedTextFiles(
 ) {
   if (importedFiles.length !== pastes.length) {
     const skippedDetails = skipped.length > 0 ? `\n${skipped.join("\n")}` : "";
-    throw new Error(`Some large pasted content could not be imported as attachments.${skippedDetails}`);
+    throw new Error(
+      `Some large pasted content could not be imported as attachments.${skippedDetails}`,
+    );
   }
   return mapImportedPastedTextFiles(pastes, importedFiles);
 }

@@ -1078,7 +1078,9 @@ export function StatusDashboardPage() {
                 <div className="status-board-reactor-copy">
                   <span>Runtime: {runtimeState}</span>
                   <strong>
-                    {status?.agent_id ? truncateMiddle(status.agent_id, 24) : "Waiting for Agent to connect"}
+                    {status?.agent_id
+                      ? truncateMiddle(status.agent_id, 24)
+                      : "Waiting for Agent to connect"}
                   </strong>
                   <em>
                     Watching the Gateway heartbeat:
@@ -1200,7 +1202,8 @@ export function StatusDashboardPage() {
               <div className="status-board-event-list">
                 {recentEvents.length === 0 ? (
                   <EmptyState>
-                    No live events received yet; this lights up as soon as a token, thinking, or tool_call event arrives.
+                    No live events received yet; this lights up as soon as a token, thinking, or
+                    tool_call event arrives.
                   </EmptyState>
                 ) : (
                   recentEvents.slice(0, 6).map((event) => (

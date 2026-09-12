@@ -557,7 +557,9 @@ export function GatewayConversationPaneHost(props: GatewayConversationPaneHostPr
           uploadedFiles = materialized.uploadedFiles;
           referencedConversations = materialized.referencedConversations;
         } catch (error) {
-          context.notifyError(error instanceof Error ? error.message : "Failed to import large pasted content");
+          context.notifyError(
+            error instanceof Error ? error.message : "Failed to import large pasted content",
+          );
           return;
         }
         if (!text && uploadedFiles.length === 0) return;

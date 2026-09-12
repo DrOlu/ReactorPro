@@ -214,8 +214,8 @@ export function HistoryShareModal({
               <div className="min-w-0">
                 <div className="text-sm font-medium text-foreground">Public read-only link</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Once enabled, anyone with the link can only view this conversation's content;
-                  they cannot send messages or perform other actions.
+                  Once enabled, anyone with the link can only view this conversation's content; they
+                  cannot send messages or perform other actions.
                 </div>
               </div>
               <ShareSwitch

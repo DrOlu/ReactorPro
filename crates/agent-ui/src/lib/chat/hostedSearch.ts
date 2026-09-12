@@ -326,10 +326,7 @@ function findHostedSearchTextSplitIndex(text: string, block: HostedSearchBlock) 
       const index = lowerText.indexOf(lowerCandidate, fromIndex);
       if (index < 0) break;
       const sentence = sentenceAround(text, index);
-      const hasSearchAction =
-        /search|searching|searched|lookup|look up/i.test(
-          sentence,
-        );
+      const hasSearchAction = /search|searching|searched|lookup|look up/i.test(sentence);
       const end = sentenceEndAfter(text, index + candidate.length);
       const score = index - (hasSearchAction ? 100_000 : 0) - candidate.length;
       if (!best || score < best.score) {

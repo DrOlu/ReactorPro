@@ -188,7 +188,12 @@ function compactionCheckpoint(turn: number, timestamp: number): AssistantMessage
     provider: "liveagent",
     model: "summary",
     stopReason: "stop",
-    content: [{ type: "text", text: `Compaction checkpoint: covering the first ${turn} turns.\n\n${PROSE_SAMPLE}` }],
+    content: [
+      {
+        type: "text",
+        text: `Compaction checkpoint: covering the first ${turn} turns.\n\n${PROSE_SAMPLE}`,
+      },
+    ],
     usage: {
       input: 0,
       output: 0,
@@ -229,7 +234,9 @@ export async function seedLongConversation(options: SeedLongConversationOptions 
     providerId: "seed",
     model: "seed-model",
     cwd: options.cwd,
-    title: options.title ?? `Seed conversation ${turns} turns (${state.meta.totalMessageCount} messages)`,
+    title:
+      options.title ??
+      `Seed conversation ${turns} turns (${state.meta.totalMessageCount} messages)`,
     createdAt: startedAt,
     updatedAt: Date.now(),
     state,

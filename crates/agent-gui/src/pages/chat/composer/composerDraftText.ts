@@ -22,7 +22,9 @@ export async function importPastedTextsAsFiles(
 ) {
   const normalizedWorkdir = workdir.trim();
   if (!normalizedWorkdir) {
-    throw new Error("Select or create a project in the project bar before sending large pasted content.");
+    throw new Error(
+      "Select or create a project in the project bar before sending large pasted content.",
+    );
   }
   if (pastes.length === 0) {
     return {

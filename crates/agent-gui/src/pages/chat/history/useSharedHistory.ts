@@ -256,7 +256,9 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
       refreshSharedManagerGatewayUrl();
 
       if (!canShareHistory) {
-        setShareError("Remote is not configured and connected yet; conversations cannot be shared for now.");
+        setShareError(
+          "Remote is not configured and connected yet; conversations cannot be shared for now.",
+        );
         return;
       }
 
@@ -300,7 +302,9 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
         return;
       }
       if (enabled && !canShareHistory) {
-        setShareError("Remote is not configured and connected yet; sharing cannot be enabled for now.");
+        setShareError(
+          "Remote is not configured and connected yet; sharing cannot be enabled for now.",
+        );
         return;
       }
 
@@ -321,7 +325,12 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
           );
         })
         .catch((error) => {
-          setShareError(asErrorMessage(error, enabled ? "Failed to enable sharing" : "Failed to disable sharing"));
+          setShareError(
+            asErrorMessage(
+              error,
+              enabled ? "Failed to enable sharing" : "Failed to disable sharing",
+            ),
+          );
         })
         .finally(() => {
           setShareUpdating(false);
@@ -425,7 +434,10 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
           }
         })
         .catch((error) => {
-          setSharedManagerError(id, asErrorMessage(error, "Failed to update the share redaction settings"));
+          setSharedManagerError(
+            id,
+            asErrorMessage(error, "Failed to update the share redaction settings"),
+          );
         })
         .finally(() => {
           updateSharedManagerIdSet(setSharedManagerUpdatingIds, id, false);

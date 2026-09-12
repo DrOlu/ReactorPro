@@ -59,22 +59,22 @@ const SELF_TARGET_REFUSAL =
   "This target is a ReactorPro window and has been rejected: letting the model operate the host UI " +
   "could bypass tool approval, rewrite permission settings, or shut the app down directly. " +
   "Please operate on a different application instead. (If you really need to automate ReactorPro " +
-  "itself, enable \"Allow operating ReactorPro itself\" in \"Settings → CUA\".)";
+  'itself, enable "Allow operating ReactorPro itself" in "Settings → CUA".)';
 
 const SELF_REGION_REFUSAL =
   "These coordinates fall inside a ReactorPro window and have been rejected: operating the host " +
   "UI by screen coordinates with the desktop as the target could likewise dismiss the approval " +
   "dialog or rewrite permission settings. Please operate on another application's window instead. " +
-  "(If you really need to automate ReactorPro itself, enable \"Allow operating ReactorPro itself\" " +
-  "in \"Settings → CUA\".)";
+  '(If you really need to automate ReactorPro itself, enable "Allow operating ReactorPro itself" ' +
+  'in "Settings → CUA".)';
 
 const SELF_FOREGROUND_REFUSAL =
   "ReactorPro is currently the frontmost application, so this desktop keyboard input with no " +
   "explicit target would land directly on the host UI (it could dismiss the approval dialog or " +
   "quit the app with a shortcut), and has been rejected. Please focus the target application " +
   "first (for example, click its window), or switch to an explicit window target with " +
-  "pid / window_id. (If you really need to automate ReactorPro itself, enable \"Allow operating " +
-  "ReactorPro itself\" in \"Settings → CUA\".)";
+  'pid / window_id. (If you really need to automate ReactorPro itself, enable "Allow operating ' +
+  'ReactorPro itself" in "Settings → CUA".)';
 
 const SELF_FOREGROUND_UNKNOWN_REFUSAL =
   "The current frontmost application cannot be confirmed, so this desktop keyboard input with " +

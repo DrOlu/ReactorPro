@@ -525,7 +525,10 @@ export class CompactionController {
         binding.sinks.setBridgeToolStatus?.(buildPruneFallbackStatus(fallback.prunedMessageCount));
         return true;
       }
-      console.warn("pre-send context compaction failed; continuing with the original context", error);
+      console.warn(
+        "pre-send context compaction failed; continuing with the original context",
+        error,
+      );
       this.settleFailed(
         "pre-send",
         error instanceof Error ? error.message : String(error),

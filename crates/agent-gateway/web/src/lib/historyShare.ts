@@ -91,7 +91,10 @@ export async function fetchSharedHistory(token: string): Promise<SharedHistoryDe
   );
 
   if (!response.ok) {
-    let message = response.status === 404 ? "Share link does not exist or has been closed" : "Failed to read shared conversation";
+    let message =
+      response.status === 404
+        ? "Share link does not exist or has been closed"
+        : "Failed to read shared conversation";
     try {
       const payload = (await response.json()) as { error?: unknown };
       if (typeof payload.error === "string" && payload.error.trim()) {

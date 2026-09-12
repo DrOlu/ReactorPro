@@ -457,7 +457,8 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
       expectedRevision,
     });
-    if (!replaced.activeSegment) throw new Error("history replace result is missing an active segment");
+    if (!replaced.activeSegment)
+      throw new Error("history replace result is missing an active segment");
     const state = buildConversationStateFromWindow(replaced);
     const entry = {
       ...current,

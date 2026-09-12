@@ -11,7 +11,8 @@ export const TASK_TRANSLATIONS = {
     "chat.taskProgress.completedCount": "completed",
     "settings.builtinTool.task_create.name": "Create Task",
     "settings.builtinTool.task_create.desc": "Add one task to the current run",
-    "settings.builtinTool.task_create.detail": "Create a durable task with a stable numeric ID; chat sessions only.",
+    "settings.builtinTool.task_create.detail":
+      "Create a durable task with a stable numeric ID; chat sessions only.",
     "settings.builtinTool.task_update.name": "Update Task",
     "settings.builtinTool.task_update.desc": "Update one task by stable ID",
     "settings.builtinTool.task_update.detail":

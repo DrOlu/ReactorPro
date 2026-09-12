@@ -177,7 +177,8 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-base leading-normal">Sync from Cherry Studio</DialogTitle>
             <DialogDescription className="mt-1 text-xs">
-              Only the Base URL and API Key are synced; ReactorPro fetches and activates the models. Switch provider type on the left
+              Only the Base URL and API Key are synced; ReactorPro fetches and activates the models.
+              Switch provider type on the left
             </DialogDescription>
           </div>
           <Button
@@ -375,7 +376,9 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
             showCloseButton
           >
             <DialogHeader>
-              <DialogTitle className="text-sm leading-normal">Cherry Studio data directory</DialogTitle>
+              <DialogTitle className="text-sm leading-normal">
+                Cherry Studio data directory
+              </DialogTitle>
               <DialogDescription className="text-xs">
                 {dataPath
                   ? "Using a manually specified directory"

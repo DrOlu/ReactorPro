@@ -554,7 +554,8 @@ export function isDynamicMcpToolName(name: string) {
 const TOOL_ARG_DISPLAY_MAX_CHARS = 20_000;
 const TOOL_ARG_DISPLAY_MAX_TOTAL_CHARS = 50_000;
 const TOOL_ARG_DISPLAY_MAX_NODES = 2_000;
-const TOOL_ARG_DISPLAY_TRUNCATION_MARKER = "...(display truncated, exceeded the argument display budget)";
+const TOOL_ARG_DISPLAY_TRUNCATION_MARKER =
+  "...(display truncated, exceeded the argument display budget)";
 const DISPLAY_SYNTHETIC_ARG_KEYS = new Set([
   LIVE_TOOL_PREVIEW_META_KEY,
   TOOL_APPROVAL_PENDING_ARG,

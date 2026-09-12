@@ -32,11 +32,14 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryQuotaWarning": "Approaching limit",
   "settings.memoryQuotaNearLimit": "Nearly full",
   "settings.memoryQuotaFull": "Full",
-  "settings.memoryQuotaWarningMessage": "Memory usage has exceeded 80%; consider merging or deleting low-value entries first.",
-  "settings.memoryQuotaNearLimitMessage": "Memory usage has exceeded 95%; new memories will soon be rejected.",
+  "settings.memoryQuotaWarningMessage":
+    "Memory usage has exceeded 80%; consider merging or deleting low-value entries first.",
+  "settings.memoryQuotaNearLimitMessage":
+    "Memory usage has exceeded 95%; new memories will soon be rejected.",
   "settings.memoryQuotaFullMessage":
     "The current scope has reached the 500-entry standard memory limit; new memories will be rejected. Delete or merge old entries first.",
-  "settings.memoryQuotaNotice": "Memory quota notice: {scope} at {used}/{limit}; consider running memory organization.",
+  "settings.memoryQuotaNotice":
+    "Memory quota notice: {scope} at {used}/{limit}; consider running memory organization.",
   "settings.memoryQuotaDegraded":
     "Memory quota is tight: {scope} at {used}/{limit}; run memory organization to compact.",
   "settings.memoryQuotaCritical":
@@ -59,7 +62,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memorySettingsCapacity": "Capacity",
   "settings.memorySettingsReview": "Review",
   "settings.memorySettingsDangerZone": "Danger zone",
-  "settings.memorySettingsWipeDescription": "Wiping moves existing memories to a quarantine directory and rebuilds an empty memory store.",
+  "settings.memorySettingsWipeDescription":
+    "Wiping moves existing memories to a quarantine directory and rebuilds an empty memory store.",
   "settings.memoryDriverModels": "Driver models",
   "settings.memoryOrganizerModel": "Memory organization",
   "settings.memorySummaryModel": "Conversation summary",
@@ -96,7 +100,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryOrganizerNextRun": "Next automatic organization:",
   "settings.memoryOrganizerRunNow": "Organize now",
   "settings.memoryOrganizerNoModel": "Select a model under Memory organization first.",
-  "settings.memoryOrganizerAlreadyRunning": "A memory organization run is already in progress; check the history later.",
+  "settings.memoryOrganizerAlreadyRunning":
+    "A memory organization run is already in progress; check the history later.",
   "settings.memoryOrganizerQueued": "Memory organization queued; it will run in the background.",
   "settings.memoryOrganizerQueuedRemote":
     "Memory organization submitted to the desktop background queue; keep the desktop app running for it to execute.",
@@ -105,7 +110,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "View the model's final summary, statistics, and trimmed protocol from each memory organization run.",
   "settings.memoryOrganizerHistoryAll": "All statuses",
   "settings.memoryOrganizerHistoryEmpty": "No memory organization history yet.",
-  "settings.memoryOrganizerHistoryPending": "Organization in progress; the model's final summary will appear once complete.",
+  "settings.memoryOrganizerHistoryPending":
+    "Organization in progress; the model's final summary will appear once complete.",
   "settings.memoryOrganizerClearHistory": "Clear history",
   "settings.memoryOrganizerClearHistoryConfirmTitle": "Clear memory organization history?",
   "settings.memoryOrganizerClearHistoryConfirmDescription":
@@ -140,8 +146,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "Suggestions the client deems safe are selected by default; memories are only written after you confirm.",
   "settings.memoryOrganizerApplySelected": "Apply selected suggestions",
   "settings.memoryOrganizerApplied": "Selected suggestions applied.",
-  "settings.memoryOrganizerPartiallyApplied": "Selected suggestions partially applied; check the failed items.",
-  "settings.memoryOrganizerApplyFailed": "Selected suggestions could not be written; check the failed items.",
+  "settings.memoryOrganizerPartiallyApplied":
+    "Selected suggestions partially applied; check the failed items.",
+  "settings.memoryOrganizerApplyFailed":
+    "Selected suggestions could not be written; check the failed items.",
   "settings.memoryOrganizerSelectAtLeastOne": "Select at least one suggestion.",
   "settings.memoryOrganizerDecisionDelete": "Delete",
   "settings.memoryOrganizerDecisionUpsert": "Rewrite",
@@ -204,7 +212,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.memoryAppendBlockPlaceholder": "Append project memory block",
   "settings.memoryEmptyBody": "(empty)",
   "settings.memoryWipeConfirmTitle": "Wipe all memories?",
-  "settings.memoryWipeConfirmDescription": "Existing memories will be moved to a quarantine directory and an empty memory store rebuilt.",
+  "settings.memoryWipeConfirmDescription":
+    "Existing memories will be moved to a quarantine directory and an empty memory store rebuilt.",
   "settings.memoryWipeAll": "Wipe all",
   "settings.memorySelectEntry": "Select a memory.",
   "settings.saving": "Saving",
@@ -218,7 +227,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.systemProxyEnable": "Enable app proxy",
   "settings.systemProxyInvalid":
     "The proxy is enabled; enter a valid proxy address and port. Until the configuration is valid, affected requests will fail immediately.",
-  "settings.systemProxyEnableHint": "Enter a valid proxy address and port before enabling the proxy.",
+  "settings.systemProxyEnableHint":
+    "Enter a valid proxy address and port before enabling the proxy.",
   "settings.systemProxyDisabled": "Currently disabled; configure and enable it only when needed.",
   "settings.systemProxySettings": "Proxy settings",
   "settings.systemProxyDone": "Done",
@@ -233,12 +243,14 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerUseSystemProxyDesc":
     "This provider's model requests go out through the app proxy; a direct connection is kept when the app proxy is disabled.",
   "settings.providerStreamRetry": "Streaming retry",
-  "settings.providerStreamRetryDesc": "Number of automatic reconnects when the connection drops before any output.",
+  "settings.providerStreamRetryDesc":
+    "Number of automatic reconnects when the connection drops before any output.",
   "settings.providerStreamRetryDefault": "Default",
   "settings.providerStreamRetryOff": "Off",
   "settings.providerStreamRetryCustom": "Custom",
   "settings.providerStreamRetryMaxRetries": "Retry attempts",
-  "settings.providerStreamRetryMaxRetriesDesc": "Retry attempts after the first request fails, excluding the first request.",
+  "settings.providerStreamRetryMaxRetriesDesc":
+    "Retry attempts after the first request fails, excluding the first request.",
   "settings.light": "Light",
   "settings.lightDesc": "Bright, crisp light interface",
   "settings.dark": "Dark",
@@ -275,7 +287,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.workdirRequired": "Required",
   "settings.workdirPlaceholder": "Select or enter a project folder path...",
   "settings.selectWorkdir": "Choose folder",
-  "settings.workdirWarning": "Agent mode requires selecting a project first, otherwise file tools cannot run.",
+  "settings.workdirWarning":
+    "Agent mode requires selecting a project first, otherwise file tools cannot run.",
   "settings.workdirOpenFailed": "Failed to open the directory picker:",
   "settings.systemTools": "System tools",
   "settings.systemToolsDesc":
@@ -331,9 +344,11 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "Continues waiting on an existing Bash session without starting a new shell process; returns when the command completes, output needs paging, or the wait timeout is reached.",
   "settings.builtinTool.process_stop.name": "Stop command",
   "settings.builtinTool.process_stop.desc": "Stop a running Bash session",
-  "settings.builtinTool.process_stop.detail": "Terminates the entire process tree of a Bash session and returns the final buffered output.",
+  "settings.builtinTool.process_stop.detail":
+    "Terminates the entire process tree of a Bash session and returns the final buffered output.",
   "settings.builtinTool.read_terminal.name": "Read terminal",
-  "settings.builtinTool.read_terminal.desc": "Read the screen contents of the right-side terminal panel",
+  "settings.builtinTool.read_terminal.desc":
+    "Read the screen contents of the right-side terminal panel",
   "settings.builtinTool.read_terminal.detail":
     "Reads what the right-side terminal panel currently displays, helping the model understand command-line state. Read-only; registered only in chat scenarios when a terminal is available.",
   "settings.builtinTool.skills_manager.name": "Skill management",
@@ -341,11 +356,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.skills_manager.detail":
     "Lets the model browse, install, and manage skills (Skills), loading domain knowledge and workflows on demand. Registered only after skills are enabled in settings.",
   "settings.builtinTool.memory_manager.name": "Memory management",
-  "settings.builtinTool.memory_manager.desc": "Read and write long-term memory, retaining information across sessions",
+  "settings.builtinTool.memory_manager.desc":
+    "Read and write long-term memory, retaining information across sessions",
   "settings.builtinTool.memory_manager.detail":
     "Maintains long-term memory across sessions: saves preferences, project conventions, and key conclusions, retrieving them in later conversations. Memory content can be viewed and organized in the Memory panel in settings.",
   "settings.builtinTool.read_conversation.name": "Read past conversations",
-  "settings.builtinTool.read_conversation.desc": "Read past conversations referenced via @ in this turn as needed",
+  "settings.builtinTool.read_conversation.desc":
+    "Read past conversations referenced via @ in this turn as needed",
   "settings.builtinTool.read_conversation.detail":
     "Registered only after the current message explicitly references a past conversation via the @ menu. The model can page through that conversation's persisted summary and messages; tool results filter out historical tool output and treat historical text as untrusted context. Read-only; registered only in chat scenarios.",
   "settings.builtinTool.agent.name": "Subagent",
@@ -357,15 +374,18 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.send_message.detail":
     "Passes messages between the main conversation and subagents to coordinate multi-agent collaboration. Requires the subagent runtime; registered only in chat scenarios.",
   "settings.builtinTool.tool_search.name": "Tool search",
-  "settings.builtinTool.tool_search.desc": "Search and activate deferred-injection MCP tools on demand",
+  "settings.builtinTool.tool_search.desc":
+    "Search and activate deferred-injection MCP tools on demand",
   "settings.builtinTool.tool_search.detail":
     "Automatically enabled when the total parameter schema size of MCP tools exceeds a threshold: tools are still fully registered at the execution layer, but only tools that match a search (or are called directly) enter the model request, greatly reducing context usage in multi-server scenarios. Activation stays effective for the session. Registered only in chat scenarios.",
   "settings.builtinTool.exit_plan_mode.name": "Plan submission",
-  "settings.builtinTool.exit_plan_mode.desc": "Submit an implementation plan and wait for your approval",
+  "settings.builtinTool.exit_plan_mode.desc":
+    "Submit an implementation plan and wait for your approval",
   "settings.builtinTool.exit_plan_mode.detail":
     "In plan mode, the model submits a complete implementation plan as a card after finishing research. Submitting ends the turn and the plan stays pending until you respond: approval starts execution automatically (all tools are restored on the next turn), while any other reply is treated as feedback for the model to refine the plan. Registered only in chat scenarios in plan mode.",
   "settings.builtinTool.ask_user_question.name": "User question",
-  "settings.builtinTool.ask_user_question.desc": "Ask you a question with an option card and wait for a choice",
+  "settings.builtinTool.ask_user_question.desc":
+    "Ask you a question with an option card and wait for a choice",
   "settings.builtinTool.ask_user_question.detail":
     "The model poses multiple-choice questions when it needs your decision (up to 4 questions at a time, each with 2-6 options and a consistent count across questions, with the recommended option first). The card pauses execution to await an answer; if unanswered within 3 minutes it proceeds with the recommended options. Answerable from both the desktop and WebUI; clicking stop skips it. Registered only in chat scenarios.",
   "settings.builtinTool.cron_task_manager.name": "Scheduled tasks",
@@ -384,7 +404,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "Uses your everyday browser (with your logged-in session) when the extension is connected, otherwise falls back to the isolated browser.",
   "settings.browserMode.userProfile.desc":
     "Always operates in your everyday browser (reusing your logged-in session). Requires the ReactorPro browser extension; when not connected, operations error out instead of silently degrading.",
-  "settings.browserMode.isolated.desc": "Always uses a dedicated browser with a separate profile, fully isolated from your logged-in session.",
+  "settings.browserMode.isolated.desc":
+    "Always uses a dedicated browser with a separate profile, fully isolated from your logged-in session.",
   "settings.browserMode.extensionConnected": "Extension connected",
   "settings.browserMode.extensionMissing": "Extension not connected",
   "settings.browserMode.installGuide":
@@ -426,7 +447,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.providerName": "Group name",
   "settings.baseUrl": "Base URL",
   "settings.providerFullUrl": "Full URL",
-  "settings.providerFullUrlHint": "When enabled, this address is used as the final request URL and no API path is appended automatically.",
+  "settings.providerFullUrlHint":
+    "When enabled, this address is used as the final request URL and no API path is appended automatically.",
   "settings.providerModelsUrl": "Model list URL (optional)",
   "settings.providerModelsUrlPlaceholder": "e.g. https://api.example.com/v1/models",
   "settings.providerModelsUrlHint":
@@ -440,7 +462,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.customHeaderName": "Header name",
   "settings.customHeaderValue": "Value",
   "settings.noCustomHeaders": "No custom headers yet",
-  "settings.noCustomHeadersHint": "Click here to add one; common headers are suggested as you type the name.",
+  "settings.noCustomHeadersHint":
+    "Click here to add one; common headers are suggested as you type the name.",
   "settings.customHeaderReservedTitle": "Reserved header, managed by the system",
   "settings.manualAddModel": "Add manually",
   "settings.customHeaderKeyPlaceholder": "Header name",
@@ -458,8 +481,10 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.parseAndImportCustomHeaders": "Parse and import",
   "settings.customHeaderImportError.empty": "Enter JSON or cURL.",
   "settings.customHeaderImportError.invalid-json": "Invalid JSON format.",
-  "settings.customHeaderImportError.unsupported-json": "The top level of the JSON must be an object or array.",
-  "settings.customHeaderImportError.unterminated-quote": "There is an unterminated quote in the cURL.",
+  "settings.customHeaderImportError.unsupported-json":
+    "The top level of the JSON must be an object or array.",
+  "settings.customHeaderImportError.unterminated-quote":
+    "There is an unterminated quote in the cURL.",
   "settings.customHeaderImportError.no-valid": "No valid headers found to import.",
   "settings.customHeaderImportError.failed": "Parsing failed; existing headers were not modified.",
   "settings.customHeaderImportSummary.imported": "Imported",
@@ -491,7 +516,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.reasoning.xhigh": "Very high",
   "settings.reasoning.max": "Max",
   "settings.promptCaching": "Prompt caching",
-  "settings.promptCachingDescClaude": "Marks ephemeral cache breakpoints on requests; long sessions can significantly reduce input costs.",
+  "settings.promptCachingDescClaude":
+    "Marks ephemeral cache breakpoints on requests; long sessions can significantly reduce input costs.",
   "settings.promptCachingDescCodex":
     "Automatically selects compatible cache hints; for unknown endpoints only server-side automatic prefix caching is used by default.",
   "settings.promptCacheHintMode": "Cache hint protocol",
@@ -518,17 +544,20 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "The general balance preset script has been filled in; use it as is or modify as needed. Uses the current provider's API Key by default.",
   "settings.providerUsageTemplate.newapi":
     "The NewAPI preset script has been filled in; use it as is or modify as needed. The query address and credentials can be configured separately.",
-  "settings.providerUsageTemplate.balance": "Automatically uses the provider's API Key to query the account balance.",
+  "settings.providerUsageTemplate.balance":
+    "Automatically uses the provider's API Key to query the account balance.",
   "settings.providerUsageTemplate.codingPlan":
     "Automatically uses the provider's API Key and Base URL to query the Token Plan quota.",
   "settings.providerUsageScript": "Query script",
-  "settings.providerUsageScriptPlaceholder": "JavaScript expression returning { request, extractor }",
+  "settings.providerUsageScriptPlaceholder":
+    "JavaScript expression returning { request, extractor }",
   "settings.providerUsageScriptHelp": "Script authoring guide",
   "settings.providerUsageScriptHelpFormat": "Configuration format:",
   "settings.providerUsageScriptHelpExtractor":
     "extractor return format (all fields optional; returning an array indicates multiple plans):",
   "settings.providerUsageScriptHelpField.planName": "planName: string, plan name",
-  "settings.providerUsageScriptHelpField.total": "total: number, total quota; -1 means unlimited (displayed as ∞)",
+  "settings.providerUsageScriptHelpField.total":
+    "total: number, total quota; -1 means unlimited (displayed as ∞)",
   "settings.providerUsageScriptHelpField.used": "used: number, used quota",
   "settings.providerUsageScriptHelpField.remaining": "remaining: number, remaining quota",
   "settings.providerUsageScriptHelpField.unit": 'unit: string, unit (e.g. "USD", "%")',
@@ -536,7 +565,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "isValid: boolean, whether the plan is valid (shown in red when false)",
   "settings.providerUsageScriptHelpField.invalidMessage":
     "invalidMessage: string, reason for invalidity (shown when isValid is false)",
-  "settings.providerUsageScriptHelpField.extra": "extra: string, additional explanatory text (e.g. reset time)",
+  "settings.providerUsageScriptHelpField.extra":
+    "extra: string, additional explanatory text (e.g. reset time)",
   "settings.providerUsageScriptHelpTips": "Tips",
   "settings.providerUsageScriptHelpTip.variables":
     "{{apiKey}}, {{baseUrl}}, {{accessToken}}, and {{userId}} are substituted automatically during the request phase; these credentials are not readable in the extractor phase",
@@ -604,7 +634,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.noMatchingModels": "No matching models",
   "settings.reorderModel": "Reorder models",
   "settings.reorderProvider": "Reorder providers",
-  "settings.reorderVerticalHint": "Drag to reorder; on mobile, long-press then drag, or focus and use the up/down arrow keys",
+  "settings.reorderVerticalHint":
+    "Drag to reorder; on mobile, long-press then drag, or focus and use the up/down arrow keys",
   "settings.modelReorderDisabledSearch": "Cannot drag to reorder while search filtering is active",
   "settings.reorderNeedsTwoItems": "At least two items are required to reorder",
   "settings.enableAllModels": "Enable all models",
@@ -658,7 +689,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.customSettingsModelsTitle": "Generation models",
   "settings.conversationTitleModel": "Title generation model",
   "settings.conversationTitleModelFollowCurrent": "Use current conversation model",
-  "settings.conversationTitleModelHint": "Model used to generate conversation titles; follows the current conversation model when unset.",
+  "settings.conversationTitleModelHint":
+    "Model used to generate conversation titles; follows the current conversation model when unset.",
   "settings.commitMessageModel": "Commit message generation model",
   "settings.commitMessageModelHint":
     "Model used to generate commit messages during Git review; follows the current conversation model when unset or unavailable.",
@@ -675,14 +707,18 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.composerContextDisplayStatsBar": "Status bar",
   "settings.composerContextDisplayBoth": "Show both",
   "settings.composerContextDisplayRing": "Usage ring",
-  "settings.composerContextDisplayStatsBarDesc": "Shows only the session stats status bar below the card.",
-  "settings.composerContextDisplayBothDesc": "Shows both the status bar and the usage ring at the bottom-right of the input box.",
-  "settings.composerContextDisplayRingDesc": "Shows only the always-visible usage ring at the bottom-right of the input box.",
+  "settings.composerContextDisplayStatsBarDesc":
+    "Shows only the session stats status bar below the card.",
+  "settings.composerContextDisplayBothDesc":
+    "Shows both the status bar and the usage ring at the bottom-right of the input box.",
+  "settings.composerContextDisplayRingDesc":
+    "Shows only the always-visible usage ring at the bottom-right of the input box.",
   "settings.failoverTitle": "Automatic failover",
   "settings.failoverToggleHint":
     "When a {vendor} request fails, switches to the next {vendor} provider in queue order to retry (model unchanged), and stays with that provider on success. Does not fail over across vendors.",
   "settings.failoverQueueTitle": "Failover queue",
-  "settings.failoverQueueHint": "Tried in P1-first order; providers that do not have the current model enabled are skipped.",
+  "settings.failoverQueueHint":
+    "Tried in P1-first order; providers that do not have the current model enabled are skipped.",
   "settings.failoverQueueAdd": "Select providers to add to the queue",
   "settings.failoverQueueSearch": "Search providers...",
   "settings.failoverQueueNoMatch": "No matching providers found",
@@ -690,15 +726,18 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "{count} providers are missing a Base URL or API Key and were excluded from candidates.",
   "settings.failoverQueueUnavailableExisting":
     "{count} providers in the queue are missing a Base URL or API Key and are skipped at runtime.",
-  "settings.failoverQueueEmpty": "The queue is empty; failover takes effect only after you add backup providers.",
+  "settings.failoverQueueEmpty":
+    "The queue is empty; failover takes effect only after you add backup providers.",
   "settings.failoverQueueRemove": "Remove",
   "settings.failoverParamsTitle": "Trigger parameters",
   "settings.failoverMaxSwitches": "Max switches per request",
   "settings.failoverMaxSwitchesShort": "Switch limit",
-  "settings.failoverMaxSwitchesHint": "Maximum number of backup providers to switch to after a request fails (1-10).",
+  "settings.failoverMaxSwitchesHint":
+    "Maximum number of backup providers to switch to after a request fails (1-10).",
   "settings.failoverFailureThreshold": "Failure threshold",
   "settings.failoverFailureThresholdShort": "Failure threshold",
-  "settings.failoverFailureThresholdHint": "Number of consecutive failures before tripping the provider's circuit breaker (3-10 recommended).",
+  "settings.failoverFailureThresholdHint":
+    "Number of consecutive failures before tripping the provider's circuit breaker (3-10 recommended).",
   "settings.failoverCooldownSeconds": "Circuit breaker cooldown (seconds)",
   "settings.failoverCooldownSecondsShort": "Cooldown seconds",
   "settings.failoverCooldownSecondsHint":
@@ -724,7 +763,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.retryError.presetShort.526": "Invalid SSL certificate",
   "settings.retryError.presetShort.527": "Railgun error",
   "settings.retryErrorCustomPatterns": "Custom error keywords",
-  "settings.retryErrorCustomPatternsDesc": "Case-insensitive substrings; the request is retried if the error message contains any keyword.",
+  "settings.retryErrorCustomPatternsDesc":
+    "Case-insensitive substrings; the request is retried if the error message contains any keyword.",
   "settings.retryErrorCustomPatternPlaceholder": "e.g. SSL handshake failed",
   "settings.retryErrorAddPattern": "Add",
   "settings.retryErrorRemovePattern": "Remove",
@@ -733,7 +773,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.agentsGlobalTab": "Global templates",
   "settings.agentsProjectsTab": "Project prompts",
   "settings.agentsGlobalConfigTitle": "Global default prompt",
-  "settings.agentsGlobalConfigHint": "Only one global template can be enabled at a time; enabling a new one automatically disables the current one.",
+  "settings.agentsGlobalConfigHint":
+    "Only one global template can be enabled at a time; enabling a new one automatically disables the current one.",
   "settings.agentsGlobalDefault": "Global default",
   "settings.agentsProjectConfigured": "Configured",
   "settings.agentsProjectUnconfigured": "Not configured",
@@ -749,10 +790,12 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.agentsDescription": "Description",
   "settings.agentsDescriptionPlaceholder": "Briefly describe what this prompt template is for",
   "settings.agentsTemplateDetails": "Template information",
-  "settings.agentsTemplateDetailsHint": "Use a clear name and description for quick identification and reuse.",
+  "settings.agentsTemplateDetailsHint":
+    "Use a clear name and description for quick identification and reuse.",
   "settings.agentsPrompt": "Prompt",
   "settings.agentsPromptPlaceholder": "Enter the full prompt content...",
-  "settings.agentsPromptHint": "Write the context, role, and behavior rules you want the agent to always follow.",
+  "settings.agentsPromptHint":
+    "Write the context, role, and behavior rules you want the agent to always follow.",
   "settings.agentsCharacters": "characters",
   "settings.agentsCount": "templates",
   "settings.agentsActive": "Active",
@@ -761,7 +804,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.agentsStatus": "Status",
   "settings.agentsNoDescription": "No template description yet.",
   "settings.agentsNoTemplates": "No global templates configured yet",
-  "settings.agentsNoTemplatesHint": "Create a template and set it as the global default to reuse common instructions across all projects",
+  "settings.agentsNoTemplatesHint":
+    "Create a template and set it as the global default to reuse common instructions across all projects",
   "settings.agentsShowPrompt": "View Prompt",
   "settings.agentsReady": "Ready to save",
   "settings.agentsRequired": "Name and Prompt are required",
@@ -774,7 +818,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.sshViewList": "List view",
   "settings.sshViewGrid": "Grid view",
   "settings.sshNoHosts": "No SSH hosts configured yet",
-  "settings.sshNoHostsHint": "Add a host, or scan and import from ~/.ssh/config and private key files in your home directory.",
+  "settings.sshNoHostsHint":
+    "Add a host, or scan and import from ~/.ssh/config and private key files in your home directory.",
   "settings.sshName": "Name",
   "settings.sshNamePlaceholder": "e.g. Production bastion",
   "settings.sshHost": "Host",
@@ -788,7 +833,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.sshAuthPrivateKey": "Private key login",
   "settings.sshAuthPrivateKeyHint": "Import a private key file or paste its contents directly",
   "settings.sshAuthKeyboardInteractive": "Keyboard interactive",
-  "settings.sshAuthKeyboardInteractiveHint": "Enter passwords or verification codes as prompted by the server when connecting",
+  "settings.sshAuthKeyboardInteractiveHint":
+    "Enter passwords or verification codes as prompted by the server when connecting",
   "settings.sshPassword": "Password",
   "settings.sshPasswordPlaceholder": "Enter the SSH login password",
   "settings.sshPasswordConfigured": "Password saved",
@@ -803,15 +849,18 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.sshPrivateKeyPassphraseConfigured": "Private key passphrase saved",
   "settings.sshKnownHostReset": "Reset trust record",
   "settings.sshKnownHostResetTitle": "Reset SSH trust record",
-  "settings.sshKnownHostResetDesc": "Clears the saved host key for this host and port; the next connection will require confirming the fingerprint again.",
+  "settings.sshKnownHostResetDesc":
+    "Clears the saved host key for this host and port; the next connection will require confirming the fingerprint again.",
   "settings.sshKnownHostResetConfirm": "Reset",
-  "settings.sshKnownHostResetSuccess": "Trust record cleared; the next connection will reconfirm the host key.",
+  "settings.sshKnownHostResetSuccess":
+    "Trust record cleared; the next connection will reconfirm the host key.",
   "settings.sshKnownHostResetEmpty": "No trust record found to clear.",
   "settings.sshKnownHostResetFailed": "Failed to reset trust record: {error}",
   "settings.sshReconnectPromptTitle": "Apply the new SSH configuration?",
   "settings.sshReconnectPromptDesc":
     "This host has {count} active connections still using the old configuration. Reconnecting now will interrupt running remote programs.",
-  "settings.sshReconnectPromptDetail": "Choosing Keep old connections means the new configuration takes effect on the next connection or automatic reconnect.",
+  "settings.sshReconnectPromptDetail":
+    "Choosing Keep old connections means the new configuration takes effect on the next connection or automatic reconnect.",
   "settings.sshReconnectPromptConfirm": "Reconnect {count} sessions now",
   "settings.sshReconnectPromptKeep": "Keep old connections",
   "settings.sshReconnectKbiTitle": "Configuration saved",
@@ -820,11 +869,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.sshReconnectKbiGotIt": "Got it",
   "settings.sshReconnectResultSuccess": "Reconnected {count} sessions with the new configuration.",
   "settings.sshReconnectResultPartial": "Reconnected {reconnected}/{total} sessions.",
-  "settings.sshReconnectResultKbi": "{count} sessions require interactive authentication; reconnect them in the SSH tunnel panel.",
+  "settings.sshReconnectResultKbi":
+    "{count} sessions require interactive authentication; reconnect them in the SSH tunnel panel.",
   "settings.sshReconnectResultHostKey":
     "{count} sessions need to confirm a new host fingerprint; reset the trust record or create a new connection.",
   "settings.sshReconnectSaveFailed": "Saving settings failed; no reconnect was performed.",
-  "settings.sshDeleteActiveWarning": "Deleting will disconnect this host's {count} active SSH connections. This action cannot be undone.",
+  "settings.sshDeleteActiveWarning":
+    "Deleting will disconnect this host's {count} active SSH connections. This action cannot be undone.",
   "settings.sshAdvancedSettings": "Advanced settings",
   "settings.sshAdvancedProxy": "Proxy",
   "settings.sshProxyUseSystemHint":
@@ -845,7 +896,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.sshProxyPasswordConfigured": "Proxy password saved",
   "settings.sshReady": "Ready to save",
   "settings.sshRequired": "Name and Host are required",
-  "settings.sshImportDesc": "Scan ~/.ssh/config and common private key files in your home directory",
+  "settings.sshImportDesc":
+    "Scan ~/.ssh/config and common private key files in your home directory",
   "settings.sshImportScanning": "Scanning ~/.ssh ...",
   "settings.sshImportFailed": "Scan failed",
   "settings.sshImportFound": "Found {count} Host entries and {keys} readable private key files.",
@@ -865,14 +917,16 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cronTaskDescPlaceholder": "Briefly describe what this task is for",
   "settings.cronExpression": "Cron expression",
   "settings.cronExpressionPlaceholder": "e.g. 0 0 9 * * 1-5",
-  "settings.cronExpressionHint": "Standard six-field expression: seconds minutes hours day-of-month month day-of-week",
+  "settings.cronExpressionHint":
+    "Standard six-field expression: seconds minutes hours day-of-month month day-of-week",
   "settings.cronRemainingExecutions": "Execution runs",
   "settings.cronRemainingExecutionsPlaceholder": "♾️ Unlimited",
   "settings.cronRemainingExecutionsInvalid": "Execution runs must be a non-negative integer.",
   "settings.cronRemainingExecutionsUnlimited": "Unlimited",
   "settings.cronRemainingExecutionsUnit": "runs remaining",
   "settings.cronRemainingExecutionsUnitShort": "runs",
-  "settings.cronRemainingExecutionsEditRequired": "Execution runs have reached zero; edit the task to change the run count first.",
+  "settings.cronRemainingExecutionsEditRequired":
+    "Execution runs have reached zero; edit the task to change the run count first.",
   "settings.cronTimeoutSeconds": "Timeout (seconds)",
   "settings.cronTimeoutSecondsInvalid": "Timeout must be an integer between {min}-{max} (seconds).",
   "settings.cronTimeoutSecondsMaxHint": "The current task type allows at most {max} seconds.",
@@ -893,7 +947,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cronWorkdirCustomPlaceholder": "Enter the absolute path where the task runs",
   "settings.cronWorkdirBrowse": "Browse directory",
   "settings.cronReasoningLabel": "Thinking effort",
-  "settings.cronWorkdirHint": "The task runs in the currently active workspace directory at trigger time.",
+  "settings.cronWorkdirHint":
+    "The task runs in the currently active workspace directory at trigger time.",
   "settings.cronPromptModelRequired": "Select the model Auto Prompt should use.",
   "settings.cronPromptModelEmpty": "Enable at least one model in the provider configuration first.",
   "settings.cronPromptRequired": "Enter the Prompt content to execute.",
@@ -909,13 +964,15 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cronCommandsCount": "script lines",
   "settings.cronCommandRequired": "Script cannot be empty.",
   "settings.cronRequestsCount": "requests",
-  "settings.cronHttpHeadersInvalid": "Headers must be a JSON object; values are converted to strings.",
+  "settings.cronHttpHeadersInvalid":
+    "Headers must be a JSON object; values are converted to strings.",
   "settings.cronHttpBodyInvalid": "The request body must be valid JSON.",
   "settings.cronHttpRequestRequired": "At least one HTTP request must be configured.",
   "settings.cronHttpUrlRequired": "Request URL cannot be empty",
   "settings.cronHttpUrlInvalid": "Invalid request URL format",
   "settings.cronHttpBodyDisabled": "The current request method does not support a request body",
-  "settings.cronPromptUnavailable": "Auto Prompt is not implemented yet; this round supports only Bash and HTTP tasks",
+  "settings.cronPromptUnavailable":
+    "Auto Prompt is not implemented yet; this round supports only Bash and HTTP tasks",
   "settings.cronView": "View",
   "settings.cronEdit": "Edit",
   "settings.cronDelete": "Delete",
@@ -937,7 +994,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cronViewRunNow": "Run once now",
   "settings.cronViewRunningNow": "Task running",
   "settings.cronViewRunNowFailed": "Run now failed",
-  "settings.cronViewRunNowTimeout": "Timed out waiting for this run to finish; check the execution logs and retry",
+  "settings.cronViewRunNowTimeout":
+    "Timed out waiting for this run to finish; check the execution logs and retry",
   "settings.cronViewNoDesc": "No description",
   "settings.cronViewNoConfig": "No configuration content",
   "settings.cronViewHttpMethod": "Request method",
@@ -977,11 +1035,13 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.remoteAuth": "Authentication",
   "settings.remoteToken": "Access token",
   "settings.remoteTokenPlaceholder": "Enter the Token matching the Gateway configuration",
-  "settings.remoteTokenHint": "Must match the --token parameter configured at Gateway startup, used for mutual authentication",
+  "settings.remoteTokenHint":
+    "Must match the --token parameter configured at Gateway startup, used for mutual authentication",
   "settings.remoteAgentId": "Agent ID",
   "settings.remoteAdvanced": "Advanced options",
   "settings.remoteAutoReconnect": "Auto reconnect",
-  "settings.remoteAutoReconnectHint": "Automatically try to reconnect to the Gateway after the connection drops",
+  "settings.remoteAutoReconnectHint":
+    "Automatically try to reconnect to the Gateway after the connection drops",
   "settings.remoteWebTerminal": "Allow WebUI Terminal",
   "settings.remoteWebSshTerminal": "Allow WebUI SSH Terminal",
   "settings.remoteWebGit": "Allow WebUI Git",
@@ -993,7 +1053,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.remoteLastHeartbeat": "Last heartbeat",
   "settings.skillsDesc": "Skill modules AI can call",
   "settings.skillsHubTitle": "Skills Hub",
-  "settings.skillsHubSubtitle": "Browse, install, and manage skill modules available to conversations",
+  "settings.skillsHubSubtitle":
+    "Browse, install, and manage skill modules available to conversations",
   "settings.skillsHubEnabled": "Skills enabled",
   "settings.skillsHubEnabledBadge": "Enabled",
   "settings.skillsHubDisabled": "Skills disabled",
@@ -1005,7 +1066,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.skillsHubImportTab": "Local import",
   "settings.skillsImportDesc":
     "Scans the local Claude Code, Codex, CodeBuddy, and AGENTS skill directories; select and import into ReactorPro.",
-  "settings.skillsImportOverwriteHint": "Skills with the same name are backed up automatically before being overwritten.",
+  "settings.skillsImportOverwriteHint":
+    "Skills with the same name are backed up automatically before being overwritten.",
   "settings.skillsImportScanning": "Scanning",
   "settings.skillsImportRescan": "Rescan",
   "settings.skillsImportNotDetected": "Not detected",
@@ -1016,19 +1078,24 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.skillsImportProgress": "Importing",
   "settings.skillsImportDone": "Import complete",
   "settings.skillsImportFailed": "Some skills failed to import",
-  "settings.skillsImportAlreadyInstalled": "The selected skills are already installed and cannot be imported again",
-  "settings.skillsImportCodebuddyHint": "This directory is the CodeBuddy skill marketplace cache and may contain uninstalled skills.",
+  "settings.skillsImportAlreadyInstalled":
+    "The selected skills are already installed and cannot be imported again",
+  "settings.skillsImportCodebuddyHint":
+    "This directory is the CodeBuddy skill marketplace cache and may contain uninstalled skills.",
   "settings.skillsImportUnparsable": "{count} skills could not be parsed and were hidden",
   "settings.skillsImportScanFailed": "Scan failed",
   "settings.skillsImportSelectAll": "Select all",
   "settings.skillsImportDeselectAll": "Deselect all",
-  "settings.skillsHubScanning": "Reading fixed skill directories and syncing session-available capabilities",
+  "settings.skillsHubScanning":
+    "Reading fixed skill directories and syncing session-available capabilities",
   "settings.skillsHubPreparing": "Preparing skill list",
-  "settings.skillsHubPreparingDesc": "Preparing a large number of skills for display in the background; they will appear all at once when ready",
+  "settings.skillsHubPreparingDesc":
+    "Preparing a large number of skills for display in the background; they will appear all at once when ready",
   "settings.skillsHubDeleteSkill": "Delete skill",
   "settings.skillsHubBulkSelect": "Bulk select",
   "settings.skillsHubBulkDelete": "Delete selected",
-  "settings.skillsHubBulkDeleteConfirm": "{count} skills will be deleted. This action cannot be undone.",
+  "settings.skillsHubBulkDeleteConfirm":
+    "{count} skills will be deleted. This action cannot be undone.",
   "settings.skillsHubBulkDeleteMore": "{names} and {count} more",
   "settings.skillsHubBulkDeleteFailed": "Some skills failed to delete",
   "settings.skillsHubBulkSelectLabel": "Select skills for bulk operations",
@@ -1070,24 +1137,27 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.skillsAlwaysOn": "Built-in",
   "settings.skillsScan": "Scan",
   "settings.skillsScanning": "Scanning",
-  "settings.skillsScanHint": "Re-read the ReactorPro Skills directory and sync the current session's available capabilities",
+  "settings.skillsScanHint":
+    "Re-read the ReactorPro Skills directory and sync the current session's available capabilities",
   "settings.skillsScanComplete": "Scan complete",
   "settings.skillsScanFailed": "Scan failed",
   "settings.skillsScanFound": "Found {count} Skills in total",
   "settings.skillsScanChanged": "Added {added} · Updated {updated} · Removed {removed}",
   "settings.skillsScanNoChanges": "No changes found; the current list is up to date",
-  "settings.skillsDisabledHint": "Skills are disabled; enabling them injects selected skills into the system prompt",
+  "settings.skillsDisabledHint":
+    "Skills are disabled; enabling them injects selected skills into the system prompt",
   "settings.skillsDisabledInChatMode":
     "Skills are not enabled in Chat mode. Scanning, selection, and injection resume after switching to Agent mode.",
   "settings.skillsNotFound": "No skills found",
-  "settings.skillsNotFoundHint": "Add a skill.json, SKILL.md, or README.md file to the app's Skills directory",
+  "settings.skillsNotFoundHint":
+    "Add a skill.json, SKILL.md, or README.md file to the app's Skills directory",
   "settings.skillsRescan": "Rescan",
   "settings.skillsSearch": "Search skills...",
   "settings.skillsInstalledSortLabel": "Sort installed skills",
   "settings.skillsInstalledSortNameAsc": "Name A→Z",
   "settings.skillsInstalledSortNameDesc": "Name Z→A",
   "settings.skillsInstalledSortNewest": "Install date newest→oldest",
-  "settings.skillsNoMatch": "No skills matching \"{filter}\"",
+  "settings.skillsNoMatch": 'No skills matching "{filter}"',
   "settings.skillsStoreSearch": "Search ClawHub skills",
   "settings.skillsBulkSelect": "Bulk select",
   "settings.skillsBulkSelectAll": "Select all",
@@ -1102,7 +1172,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.skillsBulkDisable": "Disable",
   "settings.skillsBulkClickToSelect": "Click a card to select",
   "settings.skillsBulkNotInFilter": "({count} of them not in the current filter)",
-  "settings.skillsBulkAlwaysOnDisabled": "Built-in skills are always enabled and cannot be bulk-selected",
+  "settings.skillsBulkAlwaysOnDisabled":
+    "Built-in skills are always enabled and cannot be bulk-selected",
   "settings.skillsBulkImportAction": "Import",
   "settings.skillsBulkSelectedCount": "{count} selected",
   "settings.skillsStoreCategoryAll": "All",
@@ -1150,7 +1221,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.skillsStorePreviewDownloads": "Downloads",
   "settings.skillsStorePreviewStars": "Stars",
   "settings.skillsStorePreviewInstalls": "Installs",
-  "settings.skillsStorePreviewDetailUnavailable": "ClawHub details are currently unavailable; basic information from the list is shown.",
+  "settings.skillsStorePreviewDetailUnavailable":
+    "ClawHub details are currently unavailable; basic information from the list is shown.",
   "settings.skillsStorePreviewMetadata": "Information",
   "settings.skillsStorePreviewOwner": "Author",
   "settings.skillsStorePreviewVersion": "Version",
@@ -1163,7 +1235,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.skillsStorePreviewModeration": "Moderation",
   "settings.skillsStorePreviewChangelog": "Changelog",
   "settings.hooksTitle": "Hooks",
-  "settings.hooksDesc": "Configure shell scripts or HTTP hooks for lifecycle events in the main conversation flow.",
+  "settings.hooksDesc":
+    "Configure shell scripts or HTTP hooks for lifecycle events in the main conversation flow.",
   "settings.hooksCount": "Hooks",
   "settings.hooksEnabledCount": "enabled",
   "settings.hooksLifecycle": "Lifecycle",
@@ -1178,7 +1251,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.hooksTypeHttp": "http",
   "settings.hooksNoDescription": "No description",
   "settings.hooksEmptyTitle": "No Hooks configured for the current lifecycle",
-  "settings.hooksEmptyDesc": "Click Add Hook in the top-right; shell scripts or HTTP requests execute serially in order.",
+  "settings.hooksEmptyDesc":
+    "Click Add Hook in the top-right; shell scripts or HTTP requests execute serially in order.",
   "settings.hooksScriptLinesCount": "script lines",
   "settings.hooksRequestsCount": "requests",
   "settings.hooksCommandList": "Script",
@@ -1198,9 +1272,11 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.hooksEventTurnStart": "turn_start",
   "settings.hooksEventTurnStartDesc": "Triggered when each model turn begins processing.",
   "settings.hooksEventMessageStart": "message_start",
-  "settings.hooksEventMessageStartDesc": "Triggered when the current turn's message starts streaming.",
+  "settings.hooksEventMessageStartDesc":
+    "Triggered when the current turn's message starts streaming.",
   "settings.hooksEventMessageEnd": "message_end",
-  "settings.hooksEventMessageEndDesc": "Triggered when the current turn's message finishes generating.",
+  "settings.hooksEventMessageEndDesc":
+    "Triggered when the current turn's message finishes generating.",
   "settings.hooksEventToolExecutionStart": "tool_execution_start",
   "settings.hooksEventToolExecutionStartDesc": "Triggered when a tool actually starts executing.",
   "settings.hooksEventToolExecutionEnd": "tool_execution_end",
@@ -1224,7 +1300,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.hooksSelectedEvent": "Current event",
   "settings.navCua": "Computer Use",
   "settings.cuaDriver.title": "Computer Use",
-  "settings.cuaDriver.heroDesc": "Gives AI about 60 local desktop operation capabilities such as simulated clicks, keyboard input, and screen perception.",
+  "settings.cuaDriver.heroDesc":
+    "Gives AI about 60 local desktop operation capabilities such as simulated clicks, keyboard input, and screen perception.",
   "settings.cuaDriver.heroChecking": "Detecting…",
   "settings.cuaDriver.heroNeedsGrant": "System authorization required",
   "settings.cuaDriver.heroReady": "Driver ready",
@@ -1259,7 +1336,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.cuaDriver.disable": "Disable Computer Use",
   "settings.cuaDriver.groupSecurity": "Security & approval",
   "settings.cuaDriver.policyTitle": "Tool approval policy",
-  "settings.cuaDriver.policyDesc": "Determines whether AI calls to system-operation tools require manual approval.",
+  "settings.cuaDriver.policyDesc":
+    "Determines whether AI calls to system-operation tools require manual approval.",
   "settings.cuaDriver.allowSelfTitle": "Allow operating on ReactorPro itself",
   "settings.cuaDriver.allowSelfDesc":
     "Off by default to prevent the AI from accidentally operating this app's windows or closing settings; enable it when automating tests on the app itself.",

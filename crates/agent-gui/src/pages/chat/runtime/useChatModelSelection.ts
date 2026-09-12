@@ -108,7 +108,10 @@ export function useChatModelSelection(params: UseChatModelSelectionParams) {
           .catch((error) => {
             updateConversationRuntimeEntry(conversationId, (prev) => ({
               ...prev,
-              errorMessage: asErrorMessage(error, "Failed to save the conversation model selection."),
+              errorMessage: asErrorMessage(
+                error,
+                "Failed to save the conversation model selection.",
+              ),
             }));
           });
       }

@@ -765,7 +765,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
   const primaryConversationSurface: GatewayConversationPrimarySurface = {
     isSending: composerIsSending,
     // Upload state belongs only to the target conversation: a background
-	// Pane's import does not show "uploading" on the main Pane.
+    // Pane's import does not show "uploading" on the main Pane.
     isUploadingFiles:
       isUploadingFiles &&
       (!uploadingConversationId || uploadingConversationId === displayedConversationId),
@@ -1625,7 +1625,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                             clarifyContext={clarifyContext}
                             conversationId={displayedConversationId}
                             // The trajectory page is a read-only analysis view:
-					// suspend the input area (stay mounted so the draft is not lost).
+                            // suspend the input area (stay mounted so the draft is not lost).
                             hidden={renderedConversationView === "trajectory"}
                             composerRef={composerRef}
                             isSending={composerIsSending}
@@ -1732,7 +1732,10 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                   } catch (error) {
                                     addNotify(
                                       "error",
-                                      asErrorMessage(error, "Failed to import large pasted content"),
+                                      asErrorMessage(
+                                        error,
+                                        "Failed to import large pasted content",
+                                      ),
                                     );
                                     return;
                                   }
@@ -1819,7 +1822,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                                 conversationId={displayedConversationId}
                                 host={trajectoryHost}
                                 // Under the trajectory view the input area is
-								// hidden, so the status bar need not fetch.
+                                // hidden, so the status bar need not fetch.
                                 enabled={renderedConversationView !== "trajectory"}
                                 contextUsageTokensSource={contextUsageTokensSource}
                                 contextWindow={currentModelContextWindow}

@@ -284,7 +284,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
           (isDisplayedConversation(targetConversationId) &&
             displayedConversationWorkdirRef.current.trim() !== workdir)
         ) {
-          addNotify("warning", "The upload target is no longer valid; the files from this import were ignored");
+          addNotify(
+            "warning",
+            "The upload target is no longer valid; the files from this import were ignored",
+          );
           return;
         }
         registerLocalUploadedImagePreviews({
@@ -325,7 +328,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         }
 
         if (result.files.length === 0 && result.skipped.length > 0) {
-          addNotify("error", `None of the selected files could be imported:\n${result.skipped.join("\n")}`);
+          addNotify(
+            "error",
+            `None of the selected files could be imported:\n${result.skipped.join("\n")}`,
+          );
         } else if (result.skipped.length > 0) {
           addNotify("warning", `The following files were skipped:\n${result.skipped.join("\n")}`);
         }
@@ -403,7 +409,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       void readClipboardFiles()
         .then((files) => {
           if (files.length === 0) {
-            addNotify("warning", "Could not read files from the clipboard; try dragging them in or clicking to upload.");
+            addNotify(
+              "warning",
+              "Could not read files from the clipboard; try dragging them in or clicking to upload.",
+            );
             return;
           }
           return handleImportReadableFiles(files, uploadTarget);

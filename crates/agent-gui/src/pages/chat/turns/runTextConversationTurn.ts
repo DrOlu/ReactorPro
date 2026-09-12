@@ -514,7 +514,9 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
               // Same convention as agent mode: under failover, attribute the retry to the specific candidate.
               ...(providerLabel === undefined ? {} : { provider: providerLabel }),
             });
-            updateGatewayBridgeToolStatus(`Connection lost, retrying (${attempt}/${maxAttempts})...`);
+            updateGatewayBridgeToolStatus(
+              `Connection lost, retrying (${attempt}/${maxAttempts})...`,
+            );
             retryAttemptsForAttempt.push({
               attempt,
               maxAttempts,

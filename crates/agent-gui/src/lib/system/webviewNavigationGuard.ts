@@ -178,7 +178,7 @@ export function installWebviewNavigationGuard(
   };
 
   // Forms that forget to preventDefault in onSubmit otherwise do a full-page
-// navigation (equivalent to a refresh) -- cancel as a fallback.
+  // navigation (equivalent to a refresh) -- cancel as a fallback.
   const onSubmit = (event: Event) => {
     if (!event.defaultPrevented) event.preventDefault();
   };

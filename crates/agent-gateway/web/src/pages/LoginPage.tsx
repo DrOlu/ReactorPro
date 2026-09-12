@@ -61,7 +61,8 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
             <h1 className="login-hero-title">ReactorPro Gateway</h1>
           </div>
           <p className="login-hero-desc">
-            Securely connect to remote agent sessions and get the full console experience in your browser.
+            Securely connect to remote agent sessions and get the full console experience in your
+            browser.
           </p>
 
           <div className="login-feat-list login-entrance-d2">
@@ -89,7 +90,9 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
                 </div>
                 <h2 className="login-form-title">Connect Console</h2>
               </div>
-              <p className="login-form-sub">Enter the Gateway server Access Token to authenticate</p>
+              <p className="login-form-sub">
+                Enter the Gateway server Access Token to authenticate
+              </p>
             </div>
 
             <div className={cn("login-input-wrap", isFocused && "login-input-wrap--focus")}>
@@ -131,7 +134,9 @@ export function LoginPage({ token, error, isSubmitting, onTokenChange, onSubmit 
               )}
             </Button>
 
-            <p className="login-form-footer">Once the token is verified it is stored locally for automatic sign-in next time</p>
+            <p className="login-form-footer">
+              Once the token is verified it is stored locally for automatic sign-in next time
+            </p>
           </div>
         </div>
       </div>

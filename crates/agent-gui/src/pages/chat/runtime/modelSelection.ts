@@ -34,7 +34,9 @@ export function resolveEffectiveChatModelSelection(params: {
   const resolveLocalSelection = (): EffectiveChatModelSelection => {
     const activeSelectedModel = resolveActiveModelSelection(settings, conversationSelectedModel);
     if (!activeSelectedModel) {
-      throw new Error("Please select a model at the bottom-left of the input box first (or add one in Settings).");
+      throw new Error(
+        "Please select a model at the bottom-left of the input box first (or add one in Settings).",
+      );
     }
 
     const { customProviderId, model } = activeSelectedModel;
@@ -62,7 +64,9 @@ export function resolveEffectiveChatModelSelection(params: {
   const model = gatewaySelectedModel.model.trim();
   const providerType = normalizeGatewayProviderType(gatewaySelectedModel.providerType);
   if (!customProviderId || !model || !providerType) {
-    throw new Error("The model config carried by the remote request is invalid; please select the model again in the WebUI and retry.");
+    throw new Error(
+      "The model config carried by the remote request is invalid; please select the model again in the WebUI and retry.",
+    );
   }
 
   const provider = settings.customProviders.find((item) => item.id === customProviderId);
@@ -77,7 +81,9 @@ export function resolveEffectiveChatModelSelection(params: {
     );
   }
   if (!provider.activeModels.includes(model)) {
-    throw new Error("The model selected by the remote request is not enabled on the desktop; please sync the desktop settings and select the model again in the WebUI.");
+    throw new Error(
+      "The model selected by the remote request is not enabled on the desktop; please sync the desktop settings and select the model again in the WebUI.",
+    );
   }
 
   return {

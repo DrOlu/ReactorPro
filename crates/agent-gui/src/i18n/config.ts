@@ -17,7 +17,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "app.windowPinnedHint": "Window is pinned above other apps. Click to unpin.",
     "app.settingsLoadFailed": "Failed to load settings. Default settings have been restored.",
     "app.settingsSaveFailed": "Failed to save settings.",
-    "app.settingsReloadFailed": "Failed to reload settings. The previous settings are still displayed.",
+    "app.settingsReloadFailed":
+      "Failed to reload settings. The previous settings are still displayed.",
     "app.gatewaySettingsSyncFailed": "Failed to sync WebUI settings.",
     "window.controls": "Window controls",
     "window.minimize": "Minimize",
@@ -39,14 +40,17 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "appUpdate.restartAnyway": "Restart anyway",
     "chat.memoryExtraction.done": "Memory updated.",
     "chat.memoryExtraction.noop": "No memory updates needed this turn.",
-    "chat.memoryExtraction.partial": "Memory partially updated ({accepted} applied, {rejected} rejected).",
+    "chat.memoryExtraction.partial":
+      "Memory partially updated ({accepted} applied, {rejected} rejected).",
     "chat.workspaceShowAll": "Show all ({count})",
     "chat.workspaceShowLess": "Show less",
     "chat.workspaceOpenSystemFileManagerFailed": "Failed to open the file manager",
     "chat.exitConfirmTitle": "Exit ReactorPro?",
     "chat.exitConfirmSubtitle": "Terminal tasks are still running.",
-    "chat.exitConfirmDescription": "Exiting will close these terminal processes. Cancel to return to the project tools and handle them manually.",
-    "chat.exitConfirmNote": "Projects and conversation history will not be deleted, but running commands will be stopped.",
+    "chat.exitConfirmDescription":
+      "Exiting will close these terminal processes. Cancel to return to the project tools and handle them manually.",
+    "chat.exitConfirmNote":
+      "Projects and conversation history will not be deleted, but running commands will be stopped.",
     "chat.exitConfirmContinue": "Exit anyway",
     "chat.exitConfirmClose": "Close exit confirmation",
     "chat.manualCompactCancelled": "Compaction cancelled",
@@ -56,24 +60,29 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.navAbout": "About",
     "settings.groupOther": "Other",
     "settings.aboutTitle": "About ReactorPro",
-    "settings.aboutDescription": "View the current version, release notes, and desktop update status.",
+    "settings.aboutDescription":
+      "View the current version, release notes, and desktop update status.",
     "settings.aboutCurrentVersion": "Current Version",
     "settings.aboutOpenRelease": "Release",
     "settings.aboutCheckUpdate": "Check",
     "settings.aboutRestartBeforeCheck": "Restart the app first",
-    "settings.aboutRestartBeforeCheckDesc": "The update is installed. Restart the app before checking again.",
+    "settings.aboutRestartBeforeCheckDesc":
+      "The update is installed. Restart the app before checking again.",
     "settings.aboutInstallUpdate": "Install Update",
     "settings.aboutRestartApp": "Restart App",
     "settings.aboutChecking": "Checking for updates",
-    "settings.aboutCheckingDesc": "Reading the GitHub Release manifest and filtering by the selected channel.",
+    "settings.aboutCheckingDesc":
+      "Reading the GitHub Release manifest and filtering by the selected channel.",
     "settings.aboutInstalling": "Installing update",
     "settings.aboutInstallingDesc": "Downloading and verifying the update package.",
     "settings.aboutInstalled": "Update installed",
-    "settings.aboutInstalledDesc": "The update package has been installed. Restart ReactorPro to use it.",
+    "settings.aboutInstalledDesc":
+      "The update package has been installed. Restart ReactorPro to use it.",
     "settings.aboutRestarting": "Restarting app",
     "settings.aboutRestartingDesc": "ReactorPro is quitting and opening again.",
     "settings.aboutUpdateAvailable": "New version available",
-    "settings.aboutUpdateAvailableDesc": "This version passed updater manifest validation and can be installed.",
+    "settings.aboutUpdateAvailableDesc":
+      "This version passed updater manifest validation and can be installed.",
     "settings.aboutUpToDate": "Up to date",
     "settings.aboutUpToDateDesc": "No newer Release is available in the current channel.",
     "settings.aboutManualUpdate": "New version available (manual update)",
@@ -97,14 +106,17 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.aboutNotesTitle": "Notes",
     "settings.aboutNotesBody":
       "Automatic updates use the Tauri updater manifest attached to GitHub Releases and only prompt when the release version is newer than this app.",
-    "settings.aboutSecurityBody": "Update packages are verified with signatures. Packages that fail verification are not installed.",
+    "settings.aboutSecurityBody":
+      "Update packages are verified with signatures. Packages that fail verification are not installed.",
     "settings.systemProxyDesc":
       "Applies to: local command environment (Bash / background tasks / automation scripts), providers with “Use app proxy” checked, Hook / Cron HTTP tasks, chat image loading, update checks and skill downloads.",
     "settings.closeWindowBehavior": "Close Window",
     "settings.closeWindowMinimize": "Minimize to tray",
-    "settings.closeWindowMinimizeDesc": "Keep the app running in the background and restore it from the tray.",
+    "settings.closeWindowMinimizeDesc":
+      "Keep the app running in the background and restore it from the tray.",
     "settings.closeWindowExit": "Quit application",
-    "settings.closeWindowExitDesc": "Quit when the window closes. Running terminals still require confirmation.",
+    "settings.closeWindowExitDesc":
+      "Quit when the window closes. Running terminals still require confirmation.",
     "settings.globalShortcuts": "Keyboard Shortcuts",
     "settings.navShortcuts": "Shortcuts",
     "settings.navBackup": "Backup & Sync",
@@ -117,9 +129,11 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupExportFailed": "Export failed",
     "settings.backupImportDone": "Import complete: ",
     "settings.backupImportFailed": "Import failed",
-    "settings.backupAutoBackupHint": "The current config is auto-backed up before import (last 10 kept).",
+    "settings.backupAutoBackupHint":
+      "The current config is auto-backed up before import (last 10 kept).",
     "settings.backupImportConfirmTitle": "Confirm config import",
-    "settings.backupImportConfirmSubtitle": "Every domain present in the backup file will be replaced wholesale. This cannot be undone.",
+    "settings.backupImportConfirmSubtitle":
+      "Every domain present in the backup file will be replaced wholesale. This cannot be undone.",
     "settings.backupImportConfirmAction": "Overwrite and import",
     "settings.backupCancel": "Cancel",
     "settings.backupSourceDevice": "Source device",
@@ -144,9 +158,11 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncCredentialNote": "Credentials never leave this device",
     "settings.backupSyncLoading": "Loading sync settings…",
     "settings.backupSyncStatusReady": "Cloud sync ready",
-    "settings.backupSyncStatusNeverSynced": "Not synced yet — use Upload to push this machine's config",
+    "settings.backupSyncStatusNeverSynced":
+      "Not synced yet — use Upload to push this machine's config",
     "settings.backupSyncStatusNotConfigured": "Cloud sync not set up",
-    "settings.backupSyncStatusNotConfiguredHint": "Fill in the WebDAV details to sync your config across devices",
+    "settings.backupSyncStatusNotConfiguredHint":
+      "Fill in the WebDAV details to sync your config across devices",
     "settings.backupSyncAutoOn": "Auto sync on",
     "settings.backupSyncAutoOff": "Manual sync",
     "settings.backupSyncPreset": "Provider Preset",
@@ -166,7 +182,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncAutoHint": "Upload after changes; never overwrites this machine",
     "settings.backupSyncAutoDone": "Auto-synced to remote",
     "settings.backupSyncAutoConfirmTitle": "Enable auto sync?",
-    "settings.backupSyncAutoConfirmSubtitle": "Every configuration change will be uploaded to the remote from now on, without further prompts.",
+    "settings.backupSyncAutoConfirmSubtitle":
+      "Every configuration change will be uploaded to the remote from now on, without further prompts.",
     "settings.backupSyncAutoConfirmDesc":
       "Every configuration change will be uploaded to the remote automatically. This may consume significant network traffic — make sure your network and WebDAV service can handle frequent transfers. Auto sync only uploads; it never downloads over this machine's configuration.",
     "settings.backupSyncAutoConfirmAction": "Enable",
@@ -183,12 +200,14 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.backupSyncUploadDone": "Uploaded to remote",
     "settings.backupSyncUploadFailed": "Upload failed",
     "settings.backupSyncUploadConfirmTitle": "Overwrite remote configuration?",
-    "settings.backupSyncUploadConfirmSubtitle": "A backup already exists on the remote and will be replaced by this machine's configuration.",
+    "settings.backupSyncUploadConfirmSubtitle":
+      "A backup already exists on the remote and will be replaced by this machine's configuration.",
     "settings.backupSyncDownload": "Download",
     "settings.backupSyncDownloadDone": "Remote configuration applied: ",
     "settings.backupSyncDownloadFailed": "Download failed",
     "settings.backupSyncDownloadConfirmTitle": "Overwrite this machine with the remote?",
-    "settings.backupSyncDownloadConfirmSubtitle": "The current configuration is backed up locally before it is applied.",
+    "settings.backupSyncDownloadConfirmSubtitle":
+      "The current configuration is backed up locally before it is applied.",
     "settings.backupSyncRemoteEmpty": "No backup on the remote yet",
     "settings.backupSyncDirtyHint": "Unsaved changes — save before testing or syncing.",
     "settings.backupSyncLastAt": "Last sync: ",
@@ -204,16 +223,19 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.shortcutSendSwitchHint": "Click to switch the send shortcut",
     "settings.shortcutClickToRecord": "Click to record",
     "settings.shortcutScopeComposer": "Message editor",
-    "settings.shortcutSendScopeDesc": "Only in the message editor. Shift + Enter always inserts a line break.",
+    "settings.shortcutSendScopeDesc":
+      "Only in the message editor. Shift + Enter always inserts a line break.",
     "settings.shortcutSaveFailed": "Could not save the shortcut. Check local storage availability.",
     "settings.shortcutSummon": "Quick Summon",
-    "settings.shortcutSummonDesc": "Instantly bring up and focus the ReactorPro window from anywhere",
+    "settings.shortcutSummonDesc":
+      "Instantly bring up and focus the ReactorPro window from anywhere",
     "settings.shortcutToggle": "Show / Hide Window",
     "settings.shortcutToggleDesc": "Toggle the main window between foreground and hidden",
     "settings.shortcutNewChat": "New Chat",
     "settings.shortcutNewChatDesc": "Bring up the window and start a fresh conversation right away",
     "settings.shortcutSearchConversations": "Search Conversations",
-    "settings.shortcutSearchConversationsDesc": "Bring up the window and search saved conversation history",
+    "settings.shortcutSearchConversationsDesc":
+      "Bring up the window and search saved conversation history",
     "settings.shortcutPin": "Pin Window",
     "settings.shortcutPinDesc": "Toggle always-on-top so ReactorPro floats above other apps",
     "settings.shortcutNotSet": "Not set — click to record",
@@ -262,12 +284,16 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "tray.tooltipRunning": "{count} chats running",
     "settings.trayTitle": "Tray Menu",
     "settings.trayShowTitles": "Show conversation titles",
-    "settings.trayShowTitlesDesc": "When off, the tray menu shows \"Conversation 1/2/3\" instead of real titles, for safer screen sharing.",
+    "settings.trayShowTitlesDesc":
+      'When off, the tray menu shows "Conversation 1/2/3" instead of real titles, for safer screen sharing.',
     "settings.trayRunningBadge": "Menu bar running badge",
     "settings.trayRunningBadgeDesc": "Show the running-chat count next to the macOS menu bar icon.",
-    "settings.workdirDesc": "File tools in Agent mode use the current project folder as their root.",
-    "settings.remoteAgentIdHint": "Generated and persisted by this installation; it stays stable across Gateway connections",
-    "settings.remoteWebTerminalHint": "Allow authenticated WebUI clients to start and control local project terminals.",
+    "settings.workdirDesc":
+      "File tools in Agent mode use the current project folder as their root.",
+    "settings.remoteAgentIdHint":
+      "Generated and persisted by this installation; it stays stable across Gateway connections",
+    "settings.remoteWebTerminalHint":
+      "Allow authenticated WebUI clients to start and control local project terminals.",
     "settings.remoteWebSshTerminalHint":
       "Allow authenticated WebUI clients to create and control remote interactive terminals using SSH profiles saved on this desktop.",
     "settings.remoteWebGitHint":

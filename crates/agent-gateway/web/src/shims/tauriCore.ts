@@ -68,7 +68,8 @@ async function invokeGatewayMemory<T>(command: string, args?: Record<string, unk
 async function pickWorkdirInBrowser(): Promise<string | null> {
   return promptPathInBrowser({
     title: "Select working directory",
-    description: "The browser cannot open the remote directory picker directly. Enter an absolute working directory path accessible to the desktop Agent.",
+    description:
+      "The browser cannot open the remote directory picker directly. Enter an absolute working directory path accessible to the desktop Agent.",
     label: "Working directory path",
     placeholder: "/Users/name/project",
     inputId: "gateway-browser-workdir-path",
@@ -78,7 +79,8 @@ async function pickWorkdirInBrowser(): Promise<string | null> {
 async function pickFilePathInBrowser(): Promise<string | null> {
   return promptPathInBrowser({
     title: "Select configuration file",
-    description: "The browser cannot open the remote file picker directly. Enter the absolute path of a configuration file accessible to the desktop Agent.",
+    description:
+      "The browser cannot open the remote file picker directly. Enter the absolute path of a configuration file accessible to the desktop Agent.",
     label: "Configuration file path",
     placeholder: "~/.mcp.json",
     inputId: "gateway-browser-file-path",

@@ -379,7 +379,8 @@ export async function replaceChatHistoryFromMessage(params: {
       expectedRevision: params.expectedRevision,
     });
     const parsed = await parseChatHistoryWindowRecord(record, params.fallbackSystemPrompt);
-    if (!parsed.activeSegment) throw new Error("History replacement result is missing an active segment");
+    if (!parsed.activeSegment)
+      throw new Error("History replacement result is missing an active segment");
     return parsed;
   });
 }
@@ -671,10 +672,14 @@ async function writeConversationRuntime(
     const previousSegment = findSegmentByIndex(state, workingCursor.activeSegmentIndex);
     const nextSegment = findSegmentByIndex(state, workingCursor.activeSegmentIndex + 1);
     if (!previousSegment) {
-      throw new Error("Missing the previous active segment to seal while appending a history segment");
+      throw new Error(
+        "Missing the previous active segment to seal while appending a history segment",
+      );
     }
     if (!nextSegment) {
-      throw new Error(`Missing target segment while appending a history segment: ${workingCursor.activeSegmentIndex + 1}`);
+      throw new Error(
+        `Missing target segment while appending a history segment: ${workingCursor.activeSegmentIndex + 1}`,
+      );
     }
     if (previousSegment.segmentId !== workingCursor.activeSegmentId) {
       throw new Error("History segment identity to seal does not match the persistence cursor");

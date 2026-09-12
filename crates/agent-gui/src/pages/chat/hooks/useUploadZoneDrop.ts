@@ -94,7 +94,10 @@ export function useUploadZoneDrop(params: UseUploadZoneDropParams) {
           ? resolveConversationTarget(targetConversationId)
           : null;
         if (targetConversationId && !target) {
-          addNotify("warning", "The conversation targeted by the file drop is no longer valid, please retry");
+          addNotify(
+            "warning",
+            "The conversation targeted by the file drop is no longer valid, please retry",
+          );
           return;
         }
         const classified = await invoke<SystemClassifiedDroppedPaths>(

@@ -1532,7 +1532,9 @@ export async function runAssistantWithTools(params: {
             targetIndex: targetOrder[toIndex] ?? toIndex,
             errorMessage,
           });
-          params.onToolStatus?.(`Round ${round}: ${fromLabel} unavailable, switching to ${toLabel}...`);
+          params.onToolStatus?.(
+            `Round ${round}: ${fromLabel} unavailable, switching to ${toLabel}...`,
+          );
         },
         onCommitted: (candidateIndex) => {
           const targetIndex = targetOrder[candidateIndex] ?? activeFailoverTargetIndex;
@@ -1866,7 +1868,9 @@ export async function runAssistantWithTools(params: {
             ).length;
             if (toolCallCount > 0) {
               nativeWebSearchStatusController.pause();
-              params.onToolStatus?.(`Round ${currentRound}: preparing to run ${toolCallCount} tools...`);
+              params.onToolStatus?.(
+                `Round ${currentRound}: preparing to run ${toolCallCount} tools...`,
+              );
             }
             params.onAssistantMessage?.(assistantMessage, currentRound);
           } else if (event.message.role === "toolResult") {

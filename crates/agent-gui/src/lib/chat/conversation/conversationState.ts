@@ -25,7 +25,10 @@ import { buildUiMessages, type UiRound } from "../messages/uiMessages";
 
 export const INTERNAL_RESUME_MESSAGE_TEXT =
   "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.";
-const SILENT_MEMORY_EXTRACTION_FINAL_TEXTS = new Set(["Memory organization complete.", "No memory update needed this turn."]);
+const SILENT_MEMORY_EXTRACTION_FINAL_TEXTS = new Set([
+  "Memory organization complete.",
+  "No memory update needed this turn.",
+]);
 
 export type StoredSummaryMessage = {
   role: "summary";

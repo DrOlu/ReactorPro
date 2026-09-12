@@ -105,7 +105,9 @@ function completedLabel(locale: "zh-CN" | "en-US", searchCount: number, sourceCo
     return `Searched ${searchCount} ${searchCount === 1 ? "time" : "times"}${sourceCount > 0 ? ` · ${sourceCount} sources` : ""}`;
   }
   if (searchCount === 0) {
-    return sourceCount > 0 ? `Web search complete · ${sourceCount} source(s)` : "Web search complete";
+    return sourceCount > 0
+      ? `Web search complete · ${sourceCount} source(s)`
+      : "Web search complete";
   }
   return `Searched ${searchCount} time(s)${sourceCount > 0 ? ` · ${sourceCount} source(s)` : ""}`;
 }

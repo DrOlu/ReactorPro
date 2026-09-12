@@ -298,7 +298,9 @@ export function createGatewayChatCommandActions(options: GatewayChatCommandActio
           pastes: draft.largePastes,
         });
         if (apiRef.current?.getActiveAgent().trim() !== agentID) {
-          throw new Error("The agent has changed, so sending this large-paste content has been cancelled.");
+          throw new Error(
+            "The agent has changed, so sending this large-paste content has been cancelled.",
+          );
         }
         text = buildTextFromComposerDraft(draft, imported.fileByPasteId);
         uploadedFiles = mergePendingUploadedFiles(files, imported.files);
