@@ -39,7 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
-import { type Locale, SUPPORTED_LOCALES, useLocale } from "@liveagent/ui/i18n/index";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   AgentActivationSwitch,
@@ -417,27 +417,10 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           <SettingsRow
             title={t("settings.language")}
             control={
-              <Select
-                value={settings.locale}
-                onValueChange={(locale) =>
-                  setSettings((prev) => ({ ...prev, locale: locale as Locale }))
-                }
-              >
-                <SettingsSelectTrigger>
-                  <SelectValue>
-                    {settings.locale === "zh-CN" ? "🇨🇳  Simplified Chinese" : "🇺🇸  English"}
-                  </SelectValue>
-                </SettingsSelectTrigger>
-                <SettingsSelectContent>
-                  {SUPPORTED_LOCALES.map((locale) => (
-                    <SelectItem key={locale} value={locale}>
-                      {locale === "zh-CN"
-                        ? `🇨🇳  ${t("settings.chinese")}`
-                        : `🇺🇸  ${t("settings.english")}`}
-                    </SelectItem>
-                  ))}
-                </SettingsSelectContent>
-              </Select>
+              // ReactorPro ships English only. The selector is a fixed value
+              // rather than a one-option dropdown so it never offers a language
+              // the app cannot render.
+              <div className="text-sm text-muted-foreground">{`🇺🇸  ${t("settings.english")}`}</div>
             }
           />
         </div>

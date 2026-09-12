@@ -64,6 +64,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
       "View the current version, release notes, and desktop update status.",
     "settings.aboutCurrentVersion": "Current Version",
     "settings.aboutOpenRelease": "Release",
+    "settings.aboutDownload": "Download",
+    "settings.aboutGetApiKey": "Get API Key",
     "settings.aboutCheckUpdate": "Check",
     "settings.aboutRestartBeforeCheck": "Restart the app first",
     "settings.aboutRestartBeforeCheckDesc":
@@ -354,6 +356,8 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
       "View the current version, release notes, and desktop update status.",
     "settings.aboutCurrentVersion": "Current Version",
     "settings.aboutOpenRelease": "Release",
+    "settings.aboutDownload": "Download",
+    "settings.aboutGetApiKey": "Get API Key",
     "settings.aboutCheckUpdate": "Check",
     "settings.aboutRestartBeforeCheck": "Restart the app first",
     "settings.aboutRestartBeforeCheckDesc":

@@ -247,12 +247,19 @@ function applyReadmeCredits() {
  *   - `Stack-Cairn/LiveAgent`                     upstream repository references
  */
 function rebrandVisibleName(text) {
-  return text.replace(/LiveAgent(?!SshClient|SkillFileRules|-?Proxy-Token)/g, (match, offset, whole) => {
-    // `Stack-Cairn/LiveAgent` points at the upstream project and must keep its
-    // real name; every other occurrence is our own product name.
-    if (whole.slice(Math.max(0, offset - 12), offset).endsWith("Stack-Cairn/")) return match;
-    return BRAND.name;
-  });
+  const singleWord = text.replace(
+    /LiveAgent(?!SshClient|SkillFileRules|-?Proxy-Token)/g,
+    (match, offset, whole) => {
+      // `Stack-Cairn/LiveAgent` points at the upstream project and must keep its
+      // real name; every other occurrence is our own product name.
+      if (whole.slice(Math.max(0, offset - 12), offset).endsWith("Stack-Cairn/")) return match;
+      return BRAND.name;
+    },
+  );
+  // The sidebar brand renders the product name as two words ("Live Agent"),
+  // which the single-word rule above never saw. Only the capitalised brand form
+  // is rewritten: lower-case "live agent" prose means a running agent.
+  return singleWord.replace(/\bLive Agent\b/g, BRAND.name);
 }
 
 /**

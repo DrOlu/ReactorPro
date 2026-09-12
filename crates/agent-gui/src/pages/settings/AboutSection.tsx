@@ -27,6 +27,14 @@ type AboutSectionProps = SettingsSectionProps & {
   appUpdate: AppUpdateController;
 };
 
+/**
+ * Downloads and API keys are handled by the ReactorPro site, not by an
+ * in-app updater: automatic updates stay disabled, so the About section sends
+ * people to the download page instead of a GitHub release.
+ */
+const DOWNLOAD_URL = "http://reactorpro.ng/download.html";
+const API_KEY_URL = "https://paystack.com/buy/reactor-api-key";
+
 function releaseTitle(result?: AppUpdateCheckResult) {
   if (!result) return "";
   return result.releaseName?.trim() || result.releaseTag?.trim() || result.version || "";
@@ -147,17 +155,24 @@ export function AboutSection(props: AboutSectionProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {latestResult?.releaseUrl ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void openUrl(latestResult.releaseUrl || "")}
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              {t("settings.aboutOpenRelease")}
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void openUrl(DOWNLOAD_URL)}
+          >
+            <Download className="h-3.5 w-3.5" />
+            {t("settings.aboutDownload")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void openUrl(API_KEY_URL)}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            {t("settings.aboutGetApiKey")}
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -246,7 +261,13 @@ export function AboutSection(props: AboutSectionProps) {
                 {installed ? t("settings.aboutRestartApp") : t("settings.aboutInstallUpdate")}
               </Button>
               <div className="text-xs text-muted-foreground">
-                {latestResult?.repository || "DrOlu/ReactorPro"}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:text-foreground"
+                  onClick={() => void openUrl(DOWNLOAD_URL)}
+                >
+                  {DOWNLOAD_URL}
+                </button>
               </div>
             </div>
           </div>

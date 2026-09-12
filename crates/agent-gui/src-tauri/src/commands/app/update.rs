@@ -10,6 +10,9 @@ use tauri_plugin_updater::UpdaterExt;
 
 const DEFAULT_UPDATE_REPOSITORY: &str = "DrOlu/ReactorPro";
 const UPDATE_MANIFEST_ASSET: &str = "latest.json";
+/// Where users are sent to get a new build. Automatic updates stay disabled, so
+/// this page — not a GitHub release — is the download link the app surfaces.
+const DEFAULT_DOWNLOAD_URL: &str = "http://reactorpro.ng/download.html";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -375,7 +378,7 @@ fn response_for_release(
         channel: release_channel(release),
         release_tag: Some(release.tag_name.clone()),
         release_name: release.name.clone(),
-        release_url: release.html_url.clone(),
+        release_url: Some(DEFAULT_DOWNLOAD_URL.to_string()),
         repository,
         message: None,
         manual_download: false,

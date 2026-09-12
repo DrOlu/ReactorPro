@@ -255,9 +255,9 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
   return [
     {
       id: "builtin-claude_code",
-      name: "Anthropic",
+      name: "SuperAgent",
       type: "claude_code",
-      baseUrl: "https://api.anthropic.com/v1",
+      baseUrl: "https://api.superagent.ng",
       isFullUrl: false,
       apiKey: "",
       customHeaders: [],
@@ -862,7 +862,7 @@ function normalizeProviderId(input: unknown): ProviderId {
 
 function normalizeProviderName(id: string, input: unknown): string {
   const name = typeof input === "string" && input.trim() ? input.trim() : "Unnamed Provider";
-  if (id === "builtin-claude_code" && name === "Claude Code") return "Anthropic";
+  if (id === "builtin-claude_code" && name === "Claude Code") return "SuperAgent";
   if (id === "builtin-codex" && name === "Codex") return "OpenAI";
   if (id === "builtin-xai" && (name === "xAI" || name === "XAI")) return "Grok";
   return name;
