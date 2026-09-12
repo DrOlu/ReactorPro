@@ -173,3 +173,43 @@ test("final native images and hosted search results stay in the answer layer", (
   );
   assert.deepEqual(textThenSearch.work, []);
 });
+
+test("a turn whose only output is reasoning surfaces it in the answer layer", () => {
+  const thinking = (id, value) => ({ kind: "thinking", id, text: value });
+  const text = (id, value) => ({ kind: "text", id, text: value });
+  const terminalMeta = { stopReason: "stop" };
+
+  // Some models leave `<think>` unclosed, so the runtime produces a thinking
+  // block and no answer block at all. Rendering that inside the collapsed work
+  // trace made the reply look empty until the user drilled in.
+  const reasoningOnly = resolveAssistantTurnLayout(
+    [{ round: 1, meta: terminalMeta, blocks: [thinking("t1", "still working it out")] }],
+    { live: false },
+  );
+  assert.deepEqual(
+    reasoningOnly.answer.map((entry) => entry.block.kind),
+    ["thinking"],
+  );
+  assert.deepEqual(reasoningOnly.work, []);
+
+  // A blank reasoning segment is not an answer: leave it in the work trace.
+  const blankReasoning = resolveAssistantTurnLayout(
+    [{ round: 1, meta: terminalMeta, blocks: [thinking("t2", "   ")] }],
+    { live: false },
+  );
+  assert.deepEqual(blankReasoning.answer, []);
+
+  // With a real answer present the reasoning stays folded in the work trace.
+  const withAnswer = resolveAssistantTurnLayout(
+    [{ round: 1, meta: terminalMeta, blocks: [thinking("t3", "deliberating"), text("a1", "Done.")] }],
+    { live: false },
+  );
+  assert.deepEqual(
+    withAnswer.answer.map((entry) => entry.block.kind),
+    ["text"],
+  );
+  assert.deepEqual(
+    withAnswer.work.map((entry) => entry.block.kind),
+    ["thinking"],
+  );
+});

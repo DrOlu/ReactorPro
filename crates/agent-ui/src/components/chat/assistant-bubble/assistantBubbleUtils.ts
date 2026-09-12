@@ -565,6 +565,17 @@ export function resolveAssistantTurnLayout(
 
   const lastEntry = background.at(-1);
   if (!lastEntry || !isAnswerResultBlock(lastEntry.block)) {
+    // A turn whose only output is reasoning never produces an answer block, so
+    // the text stays folded inside the collapsed work trace and the reply reads
+    // as empty until the user drills in. Surface the trailing reasoning as the
+    // answer instead; the disclosure renders it expanded (alwaysOpenThinking).
+    if (lastEntry?.block.kind === "thinking" && lastEntry.block.text.trim().length > 0) {
+      return {
+        work: compactAssistantWorkEntries(background.slice(0, -1)),
+        interaction,
+        answer: [lastEntry],
+      };
+    }
     return {
       work: compactAssistantWorkEntries(background),
       interaction,

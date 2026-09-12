@@ -32,6 +32,11 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
   runningToolCallIds: string[];
   thinkingOpen: boolean;
   isLatestThinking: boolean;
+  /**
+   * This reasoning segment is the round's whole visible answer, so it must not
+   * be folded away.
+   */
+  alwaysOpenThinking?: boolean;
   /** Transcript-stable entry key; block ids alone repeat across rounds. */
   traceKey?: string;
   showTurnStatus?: boolean;
@@ -47,6 +52,7 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
     runningToolCallIds,
     thinkingOpen,
     isLatestThinking,
+    alwaysOpenThinking = false,
     traceKey,
     showTurnStatus = false,
     readOnly = false,
@@ -65,6 +71,7 @@ export const RoundBlockContent = memo(function RoundBlockContent(props: {
         text={block.text}
         trackKey={traceKey ?? block.key}
         active={Boolean(isLive && thinkingOpen && isLatestThinking)}
+        alwaysOpen={alwaysOpenThinking}
         renderMode={renderMode}
         readOnly={readOnly}
         workdir={workdir}
@@ -242,6 +249,9 @@ export const AssistantTurnContent = memo(function AssistantTurnContent(props: {
       runningToolCallIds={entry.runningToolCallIds}
       thinkingOpen={insideWorkTrace && running ? entry.thinkingOpen : false}
       isLatestThinking={entry.key === activeThinkingKey}
+      // Only reasoning surfaced as the answer reaches here outside the work
+      // trace (see resolveAssistantTurnLayout); keep it expanded.
+      alwaysOpenThinking={!insideWorkTrace && entry.block.kind === "thinking"}
       traceKey={entry.key}
       showTurnStatus={insideWorkTrace && running && entry.key === latestToolGroupKey}
       readOnly={readOnly}

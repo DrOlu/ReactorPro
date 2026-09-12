@@ -25,6 +25,11 @@ export function ThinkingDisclosure(props: {
   readOnly?: boolean;
   workdir?: string;
   onOpenFileLink?: (link: ChatFileLink) => void;
+  /**
+   * Keep the reasoning expanded. Set when this segment is the whole visible
+   * answer — folding it would hide the model's only output behind a click.
+   */
+  alwaysOpen?: boolean;
 }) {
   const {
     text,
@@ -34,17 +39,22 @@ export function ThinkingDisclosure(props: {
     readOnly = false,
     workdir,
     onOpenFileLink,
+    alwaysOpen = false,
   } = props;
   const { t } = useLocale();
   // A segment born streaming starts open so the reasoning is watchable; once
   // it settles it folds back down — unless the user toggled it, after which
   // disclosure ownership stays with them.
-  const [open, setOpen] = useState(active);
+  const [open, setOpen] = useState(active || alwaysOpen);
   const userOwnsDisclosureRef = useRef(false);
 
   useEffect(() => {
+    if (alwaysOpen) {
+      setOpen(true);
+      return;
+    }
     if (!active && !userOwnsDisclosureRef.current) setOpen(false);
-  }, [active]);
+  }, [active, alwaysOpen]);
 
   // Callback ref → state so the follow engine re-binds whenever LazyCollapse
   // mounts a fresh body (the element identity changes on every reopen).
