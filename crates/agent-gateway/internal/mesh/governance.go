@@ -134,7 +134,17 @@ func (g *Governor) Wait(id string) (Approval, error) {
 		}
 		return approval, ErrApprovalDenied
 	case <-timer.C:
-		g.resolve(id, StatusExpired, "", "no decision before the timeout")
+		if err := g.resolve(id, StatusExpired, "", "no decision before the timeout"); err != nil {
+			// A decision landed at the same instant as the timeout. The decision
+			// wins: surface what was actually decided rather than expiring it.
+			g.mu.Lock()
+			approval := entry.approval
+			g.mu.Unlock()
+			if approval.Status == StatusApproved {
+				return approval, nil
+			}
+			return approval, ErrApprovalDenied
+		}
 		return Approval{ID: id, Status: StatusExpired}, ErrApprovalExpired
 	}
 }

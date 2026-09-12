@@ -57,7 +57,6 @@ type Manager struct {
 	governor   *Governor
 	subs       map[string]*Subscription
 	events     []EventRecord
-	started    bool
 	lastErr    string
 }
 
@@ -117,7 +116,6 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.mu.Lock()
 	m.identity = identity
 	m.agent = agent
-	m.started = true
 	m.lastErr = ""
 	m.mu.Unlock()
 
@@ -134,7 +132,6 @@ func (m *Manager) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	agent := m.agent
 	m.agent = nil
-	m.started = false
 	m.mu.Unlock()
 	if agent == nil {
 		return nil
@@ -287,11 +284,9 @@ func (m *Manager) Subscribe(ctx context.Context, subject string) (*Subscription,
 	}
 	m.mu.Unlock()
 
-	subscription, err := agent.Subscribe(ctx, subject, m.recordEvent)
-	if err != nil {
+	if _, err := agent.Subscribe(ctx, subject, m.recordEvent); err != nil {
 		return nil, err
 	}
-	_ = subscription
 
 	record := &Subscription{Subject: key, CreatedAt: now()}
 	m.mu.Lock()

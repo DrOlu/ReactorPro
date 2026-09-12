@@ -267,8 +267,14 @@ func (a *Agent) Discover(ctx context.Context, filter DiscoverFilter) ([]Manifest
 	deadline := time.Now().Add(timeout)
 	seen := map[string]Manifest{}
 	var drainErr error
-	for time.Now().Before(deadline) {
-		message, err := sub.NextMsg(remaining(deadline))
+	for {
+		wait := remaining(deadline)
+		if wait <= 0 {
+			break
+		}
+		// NextMsg treats a zero timeout as "wait forever", so the remaining time
+		// is always checked to be positive before waiting.
+		message, err := sub.NextMsg(wait)
 		if err != nil {
 			drainErr = err
 			break
