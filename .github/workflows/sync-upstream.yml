@@ -113,11 +113,15 @@ jobs:
         run: |
           set -euo pipefail
           git add -A
+          # The sync marker alone is not a reason to open a pull request: if
+          # upstream has not actually changed anything, this is a no-op sync.
+          git reset -q -- .upstream-commit 2>/dev/null || true
           if git diff --cached --quiet; then
-            echo "No changes to commit after rebranding."
+            echo "Upstream brought no changes after rebranding; nothing to sync."
             echo "pushed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          git add .upstream-commit
           git commit -m "chore: sync from upstream ${UPSTREAM_REPO} (${{ steps.upstream.outputs.head }})"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
