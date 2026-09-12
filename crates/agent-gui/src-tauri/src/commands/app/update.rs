@@ -44,7 +44,6 @@ struct SelectedRelease {
     tag_name: String,
     name: Option<String>,
     prerelease: bool,
-    html_url: Option<String>,
     published_at: Option<String>,
     manifest_url: String,
 }
@@ -135,12 +134,6 @@ fn repository_segments(repository: &str) -> Vec<&str> {
 fn release_feed_url(repository: &str) -> Result<String, String> {
     let mut segments = repository_segments(repository);
     segments.push("releases.atom");
-    github_url_with_segments(segments)
-}
-
-fn release_tag_url(repository: &str, tag_name: &str) -> Result<String, String> {
-    let mut segments = repository_segments(repository);
-    segments.extend(["releases", "tag", tag_name]);
     github_url_with_segments(segments)
 }
 
@@ -281,10 +274,6 @@ fn selected_release_candidates_from_entries(
             let prerelease = is_semver_prerelease_tag(&entry.tag_name);
             Ok(SelectedRelease {
                 manifest_url: release_manifest_url(repository, &entry.tag_name)?,
-                html_url: Some(match entry.html_url {
-                    Some(html_url) => html_url,
-                    None => release_tag_url(repository, &entry.tag_name)?,
-                }),
                 tag_name: entry.tag_name,
                 name: entry.title,
                 prerelease,

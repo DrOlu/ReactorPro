@@ -322,6 +322,7 @@ macro_rules! app_invoke_handler {
             commands::cua_driver::cua_driver_list_installed_apps,
             commands::gateway::gateway_connect,
             commands::gateway::gateway_disconnect,
+            commands::gateway::gateway_api_request,
             commands::gateway::gateway_status,
             commands::gateway::gateway_nudge_connection,
             commands::gateway::gateway_send_chat_ingress_batch,

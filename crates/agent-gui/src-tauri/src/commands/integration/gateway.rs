@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::commands::settings::{load_remote_settings, open_db, parse_remote_settings_payload};
+use crate::commands::settings::{
+    load_remote_settings, open_db, parse_remote_settings_payload, RemoteSettingsPayload,
+};
 use crate::services::gateway::{
     GatewayChatCheckpointCommitResult, GatewayChatCheckpointInput, GatewayChatClaimedRequest,
     GatewayChatIngressAcceptResult, GatewayChatIngressBatchInput, GatewayChatQueueEventInput,
@@ -324,4 +326,99 @@ pub fn workspace_watch_set(
         .workspace_watch
         .set_desired(WatchSource::Local, workdirs);
     Ok(())
+}
+
+/// Cap on a gateway API response body, so a runaway response cannot exhaust
+/// memory in the desktop process.
+const GATEWAY_API_RESPONSE_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+
+/// Base URL for the configured gateway, e.g. `https://host:443`.
+///
+/// The dedicated port setting wins over any port in the URL, matching how the
+/// Remote settings preview builds its endpoint.
+fn gateway_api_base_url(remote: &RemoteSettingsPayload) -> Result<String, String> {
+    let raw = remote.gateway_url.trim();
+    if raw.is_empty() {
+        return Err("No gateway URL is configured. Set it in Settings > Remote.".to_string());
+    }
+    let port = if remote.gateway_port == 0 {
+        443
+    } else {
+        remote.gateway_port
+    };
+    let normalized = if raw.contains("://") {
+        raw.to_string()
+    } else {
+        format!("https://{raw}")
+    };
+    let mut url =
+        reqwest::Url::parse(&normalized).map_err(|e| format!("Invalid gateway URL {raw:?}: {e}"))?;
+    url.set_port(Some(port))
+        .map_err(|_| format!("Gateway URL {raw:?} cannot take a port"))?;
+    url.set_path("");
+    url.set_query(None);
+    url.set_fragment(None);
+    Ok(url.as_str().trim_end_matches('/').to_string())
+}
+
+/// Call the gateway REST API on behalf of the UI.
+///
+/// The desktop WebView is a different origin from the gateway and the gateway
+/// sends no CORS headers, so the request has to go through the Rust side. The
+/// gateway token never leaves this process, and callers can only reach `/api/`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn gateway_api_request(
+    method: String,
+    path: String,
+    body: Option<Value>,
+) -> Result<Value, String> {
+    let conn = open_db()?;
+    let remote = load_remote_settings(&conn)?;
+    let path = path.trim();
+    if !path.starts_with("/api/") {
+        return Err("Gateway API path must start with /api/.".to_string());
+    }
+    if remote.token.trim().is_empty() {
+        return Err("No gateway token is configured. Set it in Settings > Remote.".to_string());
+    }
+    let base = gateway_api_base_url(&remote)?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to build the gateway client: {e}"))?;
+
+    let url = format!("{base}{path}");
+    let request = match method.to_ascii_uppercase().as_str() {
+        "GET" => client.get(&url),
+        "POST" => client.post(&url).json(&body.unwrap_or(Value::Null)),
+        other => return Err(format!("Unsupported gateway API method: {other}")),
+    };
+    let response = request
+        .bearer_auth(remote.token.trim())
+        .send()
+        .await
+        .map_err(|e| format!("Gateway request failed: {e}"))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read the gateway response: {e}"))?;
+    if text.len() > GATEWAY_API_RESPONSE_LIMIT_BYTES {
+        return Err("The gateway response was too large to display.".to_string());
+    }
+
+    // A non-JSON body (a proxy error page, for example) is surfaced as-is.
+    let parsed = serde_json::from_str::<Value>(&text)
+        .unwrap_or_else(|_| serde_json::json!({ "error": text.trim() }));
+
+    if !status.is_success() {
+        let message = parsed
+            .get("error")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("The gateway returned {status}."));
+        return Err(message);
+    }
+    Ok(parsed)
 }

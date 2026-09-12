@@ -20,6 +20,7 @@ import { AgentsSection } from "./AgentsSection";
 import { CronSection } from "./CronSection";
 import { CuaDriverSection } from "./CuaDriverSection";
 import { HooksSection } from "./HooksSection";
+import { MeshSection } from "./MeshSection";
 import { MemoryPanel } from "./memory/MemoryPanel";
 import { ProvidersSection } from "./ProvidersSection";
 import { RemoteSection } from "./RemoteSection";
@@ -183,6 +184,15 @@ export function SettingsPage(props: SettingsPageProps) {
         labelKey: "settings.navRemote",
         icon: <Cloud className={extension.iconClassName} />,
         render: () => <RemoteSection settings={settings} setSettings={setSettings} />,
+      },
+      {
+        id: "mesh",
+        groupKey: "settings.groupConnectivity",
+        groupOrder: 40,
+        order: 30,
+        labelKey: "settings.navMesh",
+        icon: <Cable className={extension.iconClassName} />,
+        render: () => <MeshSection settings={settings} setSettings={setSettings} />,
       },
       ...extension.sections,
     ],
