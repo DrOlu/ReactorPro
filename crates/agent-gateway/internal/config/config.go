@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/liveagent/agent-gateway/internal/mesh"
 )
 
 const DefaultMaxMessageBytes = 64 * 1024 * 1024
@@ -43,6 +45,17 @@ type Config struct {
 	WebSocketWriteQueueSize  int
 	MaxMessageBytes          int
 	RelayBufferSeconds       int
+
+	// NATS event mesh / Synapse bridge. Disabled by default: while MeshEnabled is
+	// false nothing connects anywhere, and a half-configured bridge is refused.
+	MeshEnabled      bool
+	MeshURL          string
+	MeshAgentID      string
+	MeshIdentityPath string
+	MeshToken        string
+	MeshUser         string
+	MeshPassword     string
+	MeshDisplayName  string
 }
 
 func Load() *Config {
@@ -56,6 +69,15 @@ func Load() *Config {
 	flag.StringVar(&cfg.HTTPAddr, "http-addr", getenv("LIVEAGENT_GATEWAY_HTTP_ADDR", defaultHTTPAddr()), "HTTP listen address")
 	flag.StringVar(&cfg.TLSCert, "tls-cert", getenv("LIVEAGENT_GATEWAY_TLS_CERT", ""), "TLS certificate path")
 	flag.StringVar(&cfg.TLSKey, "tls-key", getenv("LIVEAGENT_GATEWAY_TLS_KEY", ""), "TLS private key path")
+	// NATS event mesh / Synapse bridge (disabled unless explicitly enabled).
+	flag.BoolVar(&cfg.MeshEnabled, "mesh-enabled", getenvBool("LIVEAGENT_GATEWAY_MESH_ENABLED", false), "enable the NATS event mesh and Synapse bridge")
+	flag.StringVar(&cfg.MeshURL, "mesh-url", getenv("LIVEAGENT_GATEWAY_MESH_URL", ""), "NATS server URL for the mesh bridge")
+	flag.StringVar(&cfg.MeshAgentID, "mesh-agent-id", getenv("LIVEAGENT_GATEWAY_MESH_AGENT_ID", mesh.DefaultAgentID), "Synapse agent id (fixed once the identity file exists)")
+	flag.StringVar(&cfg.MeshIdentityPath, "mesh-identity-path", getenv("LIVEAGENT_GATEWAY_MESH_IDENTITY_PATH", defaultMeshIdentityPath()), "mesh identity file path (minted on first use)")
+	flag.StringVar(&cfg.MeshToken, "mesh-token", getenv("LIVEAGENT_GATEWAY_MESH_TOKEN", ""), "NATS token authentication")
+	flag.StringVar(&cfg.MeshUser, "mesh-user", getenv("LIVEAGENT_GATEWAY_MESH_USER", ""), "NATS user authentication")
+	flag.StringVar(&cfg.MeshPassword, "mesh-password", getenv("LIVEAGENT_GATEWAY_MESH_PASSWORD", ""), "NATS password authentication")
+	flag.StringVar(&cfg.MeshDisplayName, "mesh-name", getenv("LIVEAGENT_GATEWAY_MESH_NAME", "ReactorPro Gateway"), "mesh manifest display name")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
 	flag.DurationVar(&cfg.ChatPrepareTimeout, "chat-prepare-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT", 2*time.Second), "timeout for the pre-submit desktop agent liveness probe")
 	flag.DurationVar(&cfg.ChatDeliveryTimeout, "chat-delivery-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT", 5*time.Second), "timeout delivering an accepted chat command to the desktop agent stream")
@@ -193,6 +215,47 @@ func normalizeLegacyArgs(args []string) []string {
 		}
 	}
 	return normalized
+}
+
+// MeshConfig projects the gateway settings onto the mesh bridge configuration.
+// A disabled gateway yields a disabled bridge.
+func (c *Config) MeshConfig() mesh.Config {
+	cfg := mesh.DefaultConfig()
+	cfg.Enabled = c.MeshEnabled
+	cfg.URL = c.MeshURL
+	cfg.AgentID = c.MeshAgentID
+	cfg.IdentityPath = c.MeshIdentityPath
+	cfg.Token = c.MeshToken
+	cfg.User = c.MeshUser
+	cfg.Password = c.MeshPassword
+	if strings.TrimSpace(c.MeshDisplayName) != "" {
+		cfg.Name = c.MeshDisplayName
+	}
+	return cfg
+}
+
+func defaultMeshIdentityPath() string {
+	if dataDir := strings.TrimSpace(os.Getenv("LIVEAGENT_GATEWAY_DATA_DIR")); dataDir != "" {
+		return filepath.Join(dataDir, "mesh", "reactorpro-identity.json")
+	}
+	if configDir, err := os.UserConfigDir(); err == nil && strings.TrimSpace(configDir) != "" {
+		return filepath.Join(configDir, "liveagent", "mesh", "reactorpro-identity.json")
+	}
+	return filepath.Join(".", "reactorpro-mesh-identity.json")
+}
+
+func getenvBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	switch value {
+	case "":
+		return fallback
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }
 
 func defaultAgentDBPath() string {

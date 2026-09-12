@@ -3,6 +3,8 @@ package config
 import (
 	"flag"
 	"io"
+
+	"github.com/liveagent/agent-gateway/internal/mesh"
 	"os"
 	"path/filepath"
 	"testing"
@@ -197,4 +199,67 @@ func resetFlagsForTest(t *testing.T) {
 	flag.CommandLine = flag.NewFlagSet("gateway", flag.ContinueOnError)
 	flag.CommandLine.SetOutput(io.Discard)
 	os.Args = []string{"gateway"}
+}
+
+func TestMeshConfigDefaultsToDisabled(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	resetFlagsForTest(t)
+	meshConfig := Load().MeshConfig()
+	if meshConfig.Enabled {
+		t.Fatal("the mesh bridge must ship disabled")
+	}
+	if meshConfig.AgentID != mesh.DefaultAgentID {
+		t.Fatalf("agent id = %q, want %q", meshConfig.AgentID, mesh.DefaultAgentID)
+	}
+	if meshConfig.IdentityPath == "" {
+		t.Fatal("an identity path must be derived so the agent id can persist")
+	}
+	if err := meshConfig.Validate(); err != nil {
+		t.Fatalf("a disabled bridge must validate: %v", err)
+	}
+}
+
+func TestMeshConfigFromEnvironment(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	resetFlagsForTest(t)
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_ENABLED", "true")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_URL", "nats://mesh.internal:4222")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_TOKEN", "secret")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_AGENT_ID", "drolu/reactorpro")
+
+	meshConfig := Load().MeshConfig()
+	if !meshConfig.Enabled {
+		t.Fatal("expected the bridge to be enabled from the environment")
+	}
+	if meshConfig.URL != "nats://mesh.internal:4222" || meshConfig.Token != "secret" {
+		t.Fatalf("mesh config = %+v", meshConfig)
+	}
+	if err := meshConfig.Validate(); err != nil {
+		t.Fatalf("an enabled, configured bridge must validate: %v", err)
+	}
+}
+
+func TestGetenvBool(t *testing.T) {
+	cases := map[string]bool{
+		"true":  true,
+		"1":     true,
+		"yes":   true,
+		"on":    true,
+		"TRUE":  true,
+		"false": false,
+		"0":     false,
+		"no":    false,
+		"off":   false,
+		"bogus": false,
+	}
+	for value, want := range cases {
+		t.Setenv("LIVEAGENT_GATEWAY_TEST_BOOL", value)
+		if got := getenvBool("LIVEAGENT_GATEWAY_TEST_BOOL", false); got != want {
+			t.Fatalf("getenvBool(%q) = %v, want %v", value, got, want)
+		}
+	}
+
+	if got := getenvBool("LIVEAGENT_GATEWAY_TEST_BOOL_UNSET", true); got != true {
+		t.Fatalf("an unset variable must yield the fallback, got %v", got)
+	}
 }

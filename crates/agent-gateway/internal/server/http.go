@@ -17,6 +17,7 @@ import (
 	"github.com/liveagent/agent-gateway/internal/auth/agenttoken"
 	"github.com/liveagent/agent-gateway/internal/config"
 	"github.com/liveagent/agent-gateway/internal/handler"
+	"github.com/liveagent/agent-gateway/internal/mesh"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/pbws"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -24,6 +25,13 @@ import (
 
 // NewHTTPServer builds the HTTP routes; in production tokens is always an initialized Agent directory and credential store.
 func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store) http.Handler {
+	return NewHTTPServerWithMesh(cfg, sm, tokens, nil)
+}
+
+// NewHTTPServerWithMesh additionally exposes the NATS event mesh and Synapse
+// bridge. A nil manager leaves the bridge off and registers no mesh routes, so
+// the default deployment surface is unchanged.
+func NewHTTPServerWithMesh(cfg *config.Config, sm *session.Manager, tokens *agenttoken.Store, meshManager *mesh.Manager) http.Handler {
 	rootMux := http.NewServeMux()
 	rootMux.HandleFunc("GET /healthz", handler.Health())
 
@@ -46,6 +54,23 @@ func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.S
 	apiMux.HandleFunc("POST /api/agents/{id}/token", handler.IssueAgentToken(sm, tokens))
 	apiMux.HandleFunc("PATCH /api/agents/{id}", handler.UpdateAgentName(tokens))
 	apiMux.HandleFunc("DELETE /api/agents/{id}", handler.DeleteAgent(sm, tokens))
+	if meshManager != nil {
+		// NATS event mesh and Synapse bridge. Every route is behind the same
+		// admin-token middleware as the rest of the API, and the bridge itself
+		// stays disabled until it is configured.
+		apiMux.HandleFunc("GET /api/mesh/status", handler.MeshStatus(meshManager))
+		apiMux.HandleFunc("GET /api/mesh/health", handler.MeshHealth(meshManager))
+		apiMux.HandleFunc("POST /api/mesh/register", handler.MeshRegister(meshManager))
+		apiMux.HandleFunc("GET /api/mesh/agents", handler.MeshDiscover(meshManager))
+		apiMux.HandleFunc("POST /api/mesh/dispatch", handler.MeshDispatch(meshManager))
+		apiMux.HandleFunc("POST /api/mesh/emit", handler.MeshEmit(meshManager))
+		apiMux.HandleFunc("POST /api/mesh/subscribe", handler.MeshSubscribe(meshManager))
+		apiMux.HandleFunc("GET /api/mesh/events", handler.MeshEvents(meshManager))
+		apiMux.HandleFunc("GET /api/mesh/reputation", handler.MeshReputation(meshManager))
+		apiMux.HandleFunc("GET /api/mesh/approvals", handler.MeshApprovals(meshManager))
+		apiMux.HandleFunc("POST /api/mesh/approvals", handler.MeshApprovals(meshManager))
+		apiMux.HandleFunc("POST /api/mesh/approvals/{id}/decision", handler.MeshApprovalDecision(meshManager))
+	}
 	rootMux.Handle("/api/", auth.HTTPMiddleware(cfg.Token, apiMux))
 
 	webFS, err := fs.Sub(gateway.WebUIAssets, "web/dist")

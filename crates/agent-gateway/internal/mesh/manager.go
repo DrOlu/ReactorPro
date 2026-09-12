@@ -365,6 +365,10 @@ func (m *Manager) Approve(id, approver, decision, reason string) error {
 // PendingApprovals lists undecided approvals.
 func (m *Manager) PendingApprovals() []Approval { return m.governor.Pending() }
 
+// DecidedApproval reports a previously resolved approval, so a caller can tell
+// an unknown id apart from one that was already decided.
+func (m *Manager) DecidedApproval(id string) (Approval, bool) { return m.governor.Decided(id) }
+
 // Serving reports whether the agent is accepting inbound requests.
 func (m *Manager) Serving() bool {
 	m.mu.RLock()

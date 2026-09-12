@@ -159,6 +159,21 @@ func (g *Governor) Deny(id, approver, reason string) error {
 	return g.resolve(id, StatusDenied, approver, reason)
 }
 
+// Decided returns a resolved approval by id.
+//
+// Deciding removes an entry from the pending set, so this is how a caller tells
+// "never existed" apart from "already decided".
+func (g *Governor) Decided(id string) (Approval, bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, approval := range g.history {
+		if approval.ID == id {
+			return approval, true
+		}
+	}
+	return Approval{}, false
+}
+
 // Pending lists undecided approvals, oldest first.
 func (g *Governor) Pending() []Approval {
 	g.mu.Lock()

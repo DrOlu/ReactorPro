@@ -13,6 +13,7 @@ import (
 	"github.com/liveagent/agent-gateway/internal/auth/agenttoken"
 	"github.com/liveagent/agent-gateway/internal/config"
 	"github.com/liveagent/agent-gateway/internal/db"
+	"github.com/liveagent/agent-gateway/internal/mesh"
 	"github.com/liveagent/agent-gateway/internal/observability"
 	"github.com/liveagent/agent-gateway/internal/server"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -45,9 +46,18 @@ func main() {
 	slog.Info("agent registry db ready", "path", cfg.AgentDB)
 	slog.Info("agent authentication accepts gateway token or per-agent token")
 
+	// NATS event mesh / Synapse bridge. Disabled by default, so this connects
+	// nowhere until it is configured. A failure to start is not fatal: the
+	// gateway keeps serving and the reason is visible on /api/mesh/status.
+	meshManager := mesh.NewManager(cfg.MeshConfig(), slog.Default())
+	if err := meshManager.Start(context.Background()); err != nil {
+		slog.Error("mesh bridge failed to start", "err", err)
+	}
+	defer func() { _ = meshManager.Stop(context.Background()) }()
+
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.NewHTTPServer(cfg, sm, tokens),
+		Handler:           server.NewHTTPServerWithMesh(cfg, sm, tokens, meshManager),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Idle keep-alive connections must be reclaimed, otherwise REST/static-asset
 		// clients that hold connections open will slowly exhaust fds up to ulimit.
