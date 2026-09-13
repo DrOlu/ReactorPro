@@ -88,20 +88,50 @@ type inboundGuard struct {
 	replay  *replayCache
 	limiter *senderLimiter
 	logger  *slog.Logger
+
+	// versionsSeen records the protocol versions already reported, so a
+	// heterogeneous mesh is noticed once per version rather than on every
+	// message. Bounded, because the value is chosen by the sender.
+	versionMu    sync.Mutex
+	versionsSeen map[string]struct{}
 }
+
+// maxTrackedVersions bounds the informational version set.
+const maxTrackedVersions = 32
 
 func newInboundGuard(cfg Config, agentID string, logger *slog.Logger) *inboundGuard {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &inboundGuard{
-		config:  cfg,
-		agentID: agentID,
-		trust:   newTrustStore(cfg),
-		replay:  newReplayCache(cfg.MaxSeenIDs, 2*cfg.ClockSkew),
-		limiter: newSenderLimiter(cfg.RateLimit, cfg.MaxSenderStates),
-		logger:  logger,
+		config:       cfg,
+		agentID:      agentID,
+		trust:        newTrustStore(cfg),
+		replay:       newReplayCache(cfg.MaxSeenIDs, 2*cfg.ClockSkew),
+		limiter:      newSenderLimiter(cfg.RateLimit, cfg.MaxSenderStates),
+		logger:       logger,
+		versionsSeen: map[string]struct{}{},
 	}
+}
+
+// noteProtocolVersion reports a peer speaking a version we do not, once per
+// distinct value. Information only: the version is not enforced by default, but
+// an operator should be able to see that the mesh is heterogeneous.
+func (g *inboundGuard) noteProtocolVersion(version string) {
+	if version == ProtocolVersion {
+		return
+	}
+	g.versionMu.Lock()
+	_, seen := g.versionsSeen[version]
+	if !seen && len(g.versionsSeen) < maxTrackedVersions {
+		g.versionsSeen[version] = struct{}{}
+	}
+	g.versionMu.Unlock()
+	if seen {
+		return
+	}
+	g.logger.Info("mesh peer speaks a different protocol version",
+		"peerVersion", version, "ourVersion", ProtocolVersion)
 }
 
 // reject builds a rejection, counting it so operators can see refusals without
@@ -139,12 +169,19 @@ func (g *inboundGuard) check(env *Envelope) *guardRejection {
 
 	observability.Usage.MeshInboundTotal.Add(1)
 
-	// 2. Protocol version. A peer speaking a different version may mean
-	// something different by the same field.
-	if env.Version != ProtocolVersion {
+	// 2. Protocol version.
+	//
+	// Deliberately not strict equality against ProtocolVersion. A live mesh is
+	// heterogeneous — peers declare "1.0" and "0.3.0" alike — and refusing an
+	// unrecognised string rejects working peers over a label. The envelope is the
+	// contract, and it is validated field by field below. Enforcing a version is
+	// opt-in via AcceptedVersions for a closed fleet, where an unexpected value
+	// really does mean something is wrong.
+	if len(g.config.AcceptedVersions) > 0 && !containsString(g.config.AcceptedVersions, env.Version) {
 		return g.reject(&observability.Usage.MeshVerifyFailedTotal, CodeInvalidEnvelope,
-			"unsupported protocol version %q (this agent speaks %q)", env.Version, ProtocolVersion)
+			"protocol version %q is not in the accepted set %v", env.Version, g.config.AcceptedVersions)
 	}
+	g.noteProtocolVersion(env.Version)
 
 	// 3. Addressee. An empty To is a broadcast (events carry none) and
 	// SubjectRegistry means "for whoever answers the registry", which every

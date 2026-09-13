@@ -36,8 +36,12 @@ Every inbound message — requests *and* events *and* discovery replies — pass
 2. **Rate limit.** Per-sender token bucket. The tracked population is capped and the
    limiter **fails closed** once the cap is reached, so a flood of distinct sender ids
    cannot both exhaust memory and keep being served.
-3. **Protocol version.** A peer speaking a different version may mean something different
-   by the same field.
+3. **Protocol version — advisory, not enforced.** An unrecognised version is logged once
+   per distinct value and accepted. Strict equality against `ProtocolVersion` is wrong for
+   a live mesh: peers in the wild declare `1.0` while this agent declares `0.3.0`, and
+   refusing them silently emptied discovery. The envelope is the contract, and it is
+   validated field by field. Set `-mesh-accepted-versions` on a closed fleet to enforce a
+   set, where an unexpected value really is a fault.
 4. **Addressee.** `To` must be empty (broadcast — events carry none), `SubjectRegistry`
    (register/discover), or this agent. This check exists because register and discover
    envelopes are addressed to the registry rather than to a named agent.

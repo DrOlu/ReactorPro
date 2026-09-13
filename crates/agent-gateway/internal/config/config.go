@@ -73,6 +73,10 @@ type Config struct {
 	// Mesh served skills.
 	MeshSkillsEnabled bool
 	MeshSkills        string // comma-separated built-in skill ids; empty means all
+
+	// MeshAcceptedVersions, when set, is the only set of protocol versions
+	// accepted from peers. Empty accepts any version.
+	MeshAcceptedVersions string
 }
 
 func Load() *Config {
@@ -105,6 +109,7 @@ func Load() *Config {
 	flag.IntVar(&cfg.MeshRateLimitBurst, "mesh-rate-limit-burst", getenvInt("LIVEAGENT_GATEWAY_MESH_RATE_LIMIT_BURST", 100), "inbound mesh burst allowance per sender")
 	flag.BoolVar(&cfg.MeshSkillsEnabled, "mesh-skills-enabled", getenvBool("LIVEAGENT_GATEWAY_MESH_SKILLS_ENABLED", true), "serve the built-in read-only mesh skills (ping, describe, status)")
 	flag.StringVar(&cfg.MeshSkills, "mesh-skills", getenv("LIVEAGENT_GATEWAY_MESH_SKILLS", ""), "comma-separated built-in mesh skills to serve; empty serves all of them")
+	flag.StringVar(&cfg.MeshAcceptedVersions, "mesh-accepted-versions", getenv("LIVEAGENT_GATEWAY_MESH_ACCEPTED_VERSIONS", ""), "comma-separated protocol versions to accept from peers; empty accepts any")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
 	flag.DurationVar(&cfg.ChatPrepareTimeout, "chat-prepare-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT", 2*time.Second), "timeout for the pre-submit desktop agent liveness probe")
 	flag.DurationVar(&cfg.ChatDeliveryTimeout, "chat-delivery-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT", 5*time.Second), "timeout delivering an accepted chat command to the desktop agent stream")
@@ -280,6 +285,7 @@ func (c *Config) MeshConfig() mesh.Config {
 	}
 	cfg.SkillsEnabled = c.MeshSkillsEnabled
 	cfg.SkillAllowlist = splitList(c.MeshSkills)
+	cfg.AcceptedVersions = splitList(c.MeshAcceptedVersions)
 	return cfg
 }
 

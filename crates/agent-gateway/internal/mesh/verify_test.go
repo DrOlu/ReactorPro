@@ -401,7 +401,7 @@ func TestGuardRejectsOversizedEnvelope(t *testing.T) {
 	}
 }
 
-func TestGuardRejectsWrongAddresseeAndVersion(t *testing.T) {
+func TestGuardRejectsWrongAddressee(t *testing.T) {
 	guard, identity := newTestGuard(t, func(cfg *Config) {
 		cfg.VerifyMode = VerifyOff
 	})
@@ -411,16 +411,52 @@ func TestGuardRejectsWrongAddresseeAndVersion(t *testing.T) {
 		t.Fatal("an envelope addressed to another agent must not be served")
 	}
 
-	wrongVersion := signedRequest(t, identity, guard.agentID)
-	wrongVersion.Version = "9.9.9"
-	if rejection := guard.check(wrongVersion); rejection == nil {
-		t.Fatal("an incompatible protocol version must be refused")
-	}
-
 	// Events carry no addressee; an empty To must still be accepted.
 	broadcast := signedRequest(t, identity, "")
 	if rejection := guard.check(broadcast); rejection != nil {
 		t.Fatalf("a broadcast envelope must be accepted: %s", rejection.reason)
+	}
+}
+
+// A peer declaring a different protocol version must NOT be refused by default.
+//
+// This is a regression guard: an earlier revision compared the version for exact
+// equality against ProtocolVersion, which rejected every live peer on a real
+// mesh that declared "1.0" while this agent declared "0.3.0". Discovery silently
+// returned nothing. The version string is not the contract — the envelope is.
+func TestGuardAcceptsForeignProtocolVersionByDefault(t *testing.T) {
+	guard, identity := newTestGuard(t, func(cfg *Config) {
+		cfg.VerifyMode = VerifyOff
+	})
+
+	for _, version := range []string{"1.0", "1.0.0", "0.3.0", "2.1", "unknown"} {
+		t.Run(version, func(t *testing.T) {
+			envelope := signedRequest(t, identity, guard.agentID)
+			envelope.Version = version
+			if rejection := guard.check(envelope); rejection != nil {
+				t.Fatalf("version %q must be accepted by default: %s", version, rejection.reason)
+			}
+		})
+	}
+}
+
+// Pinning the accepted set is the opt-in way to enforce a version on a closed
+// fleet, where an unexpected value really is a fault.
+func TestGuardEnforcesAcceptedVersionsWhenPinned(t *testing.T) {
+	guard, identity := newTestGuard(t, func(cfg *Config) {
+		cfg.VerifyMode = VerifyOff
+		cfg.AcceptedVersions = []string{"0.3.0"}
+	})
+
+	accepted := signedRequest(t, identity, guard.agentID)
+	if rejection := guard.check(accepted); rejection != nil {
+		t.Fatalf("a pinned version must be accepted: %s", rejection.reason)
+	}
+
+	rejected := signedRequest(t, identity, guard.agentID)
+	rejected.Version = "1.0"
+	if rejection := guard.check(rejected); rejection == nil {
+		t.Fatal("an unpinned version must be refused when a set is configured")
 	}
 }
 

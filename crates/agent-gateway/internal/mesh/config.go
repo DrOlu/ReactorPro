@@ -49,6 +49,16 @@ type Config struct {
 	// because it is also how long the caller waits.
 	DiscoveryWindow time.Duration `json:"-"`
 
+	// AcceptedVersions, when non-empty, is the only set of protocol versions
+	// inbound envelopes may declare. Empty accepts any version.
+	//
+	// Enforcing a fixed version by default is wrong for a live mesh: peers in the
+	// wild declare "1.0" and "0.3.0" alike, and a version string we do not
+	// recognise is not evidence that a peer is incompatible — the envelope shape
+	// is what actually matters, and it is validated field by field. Pin this only
+	// on a closed fleet, where an unexpected version really is a fault.
+	AcceptedVersions []string `json:"acceptedVersions"`
+
 	// Trust controls how inbound envelopes are authenticated. See the Verify*
 	// constants; the modes exist so enforcement can be switched on without
 	// locking out peers that do not sign yet.
