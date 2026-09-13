@@ -52,6 +52,7 @@ type Config struct {
 	MeshURL          string
 	MeshAgentID      string
 	MeshIdentityPath string
+	MeshCapabilities string
 	MeshToken        string
 	MeshUser         string
 	MeshPassword     string
@@ -93,7 +94,8 @@ func Load() *Config {
 	// NATS event mesh / Synapse bridge (disabled unless explicitly enabled).
 	flag.BoolVar(&cfg.MeshEnabled, "mesh-enabled", getenvBool("LIVEAGENT_GATEWAY_MESH_ENABLED", false), "enable the NATS event mesh and Synapse bridge")
 	flag.StringVar(&cfg.MeshURL, "mesh-url", getenv("LIVEAGENT_GATEWAY_MESH_URL", ""), "NATS server URL for the mesh bridge")
-	flag.StringVar(&cfg.MeshAgentID, "mesh-agent-id", getenv("LIVEAGENT_GATEWAY_MESH_AGENT_ID", mesh.DefaultAgentID), "Synapse agent id (fixed once the identity file exists)")
+	flag.StringVar(&cfg.MeshAgentID, "mesh-agent-id", getenv("LIVEAGENT_GATEWAY_MESH_AGENT_ID", mesh.DefaultAgentID()), "mesh agent id, unique across the mesh (fixed once the identity file exists)")
+	flag.StringVar(&cfg.MeshCapabilities, "mesh-capabilities", getenv("LIVEAGENT_GATEWAY_MESH_CAPABILITIES", ""), "comma-separated capabilities this edge advertises to the mesh")
 	flag.StringVar(&cfg.MeshIdentityPath, "mesh-identity-path", getenv("LIVEAGENT_GATEWAY_MESH_IDENTITY_PATH", defaultMeshIdentityPath()), "mesh identity file path (minted on first use)")
 	flag.StringVar(&cfg.MeshToken, "mesh-token", getenv("LIVEAGENT_GATEWAY_MESH_TOKEN", ""), "NATS token authentication")
 	flag.StringVar(&cfg.MeshUser, "mesh-user", getenv("LIVEAGENT_GATEWAY_MESH_USER", ""), "NATS user authentication")
@@ -286,6 +288,11 @@ func (c *Config) MeshConfig() mesh.Config {
 	cfg.SkillsEnabled = c.MeshSkillsEnabled
 	cfg.SkillAllowlist = splitList(c.MeshSkills)
 	cfg.AcceptedVersions = splitList(c.MeshAcceptedVersions)
+	// Only override the default capabilities when the operator set some, so the
+	// shipping default is not replaced by an empty list.
+	if capabilities := splitList(c.MeshCapabilities); len(capabilities) > 0 {
+		cfg.Capabilities = capabilities
+	}
 	return cfg
 }
 

@@ -3,6 +3,7 @@ package mesh
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -10,10 +11,74 @@ import (
 	"github.com/nats-io/nuid"
 )
 
-// DefaultAgentID is the identity ReactorPro registers under. It is only a
-// default: once the identity file exists, the id it contains wins and cannot be
-// reassigned without failing the fingerprint check.
-const DefaultAgentID = "drolu/reactorpro"
+// LegacyDefaultAgentID is the shared default this bridge used to ship with.
+//
+// It is retained only for two reasons: an identity file minted under it pins
+// that id permanently and must keep loading, and a deployment still using it can
+// be told plainly that it cannot federate. No new deployment should acquire it.
+const LegacyDefaultAgentID = "drolu/reactorpro"
+
+// defaultAgentIDPrefix namespaces a derived id so it is recognisable on a shared
+// mesh as a ReactorPro edge.
+const defaultAgentIDPrefix = "reactorpro/"
+
+// DefaultAgentID derives a mesh id that is unique to this host.
+//
+// A shared constant is unusable on a mesh. Ids *address* agents: the subject a
+// request is routed to is built from this value, and the identity fingerprint is
+// computed over it. Two deployments defaulting to the same id therefore do not
+// merely become ambiguous — discovery discards them as "self", and the pinned
+// fingerprints disagree, so the second one to be seen is refused as an identity
+// mismatch. Three or more cannot coexist at all.
+//
+// Deriving from the hostname makes a fresh deployment unique without asking the
+// operator anything, and it stays deterministic per host, which matters because
+// the identity file binds the id permanently on the first start. Operators
+// federating across organisations should still set an explicit
+// `<org>/<site>/<edge>` id; this default removes the footgun, it does not remove
+// the need to think about naming.
+func DefaultAgentID() string {
+	host, err := os.Hostname()
+	if err != nil {
+		// Without a hostname there is nothing stable to derive from. The id is
+		// written into the identity file on first start, so a random value is
+		// only ever used once and then persists.
+		return defaultAgentIDPrefix + nuid.Next()[:8]
+	}
+	if sanitized := sanitizeSubjectToken(host); sanitized != "" {
+		return defaultAgentIDPrefix + sanitized
+	}
+	return defaultAgentIDPrefix + nuid.Next()[:8]
+}
+
+// sanitizeSubjectToken reduces a value to something safe inside a NATS subject
+// token. Dots and wildcards are structurally significant in a subject, so a
+// hostname such as `build.01.eu` must not be allowed to split the token and
+// change which inbox a request is routed to. Everything outside [a-z0-9-] is
+// folded to a dash.
+func sanitizeSubjectToken(value string) string {
+	var builder strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(value) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			builder.WriteRune(r)
+			lastDash = false
+		default:
+			if !lastDash && builder.Len() > 0 {
+				builder.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	return strings.Trim(builder.String(), "-")
+}
+
+// UsesLegacyAgentID reports whether an id is the shared default, which cannot be
+// federated because peers address agents by id.
+func UsesLegacyAgentID(agentID string) bool {
+	return strings.TrimSpace(agentID) == LegacyDefaultAgentID
+}
 
 // Config controls the mesh bridge.
 //
@@ -155,7 +220,7 @@ const (
 func DefaultConfig() Config {
 	return Config{
 		Enabled:           false,
-		AgentID:           DefaultAgentID,
+		AgentID:           DefaultAgentID(),
 		Name:              "ReactorPro",
 		Description:       "ReactorPro desktop agent and gateway",
 		Capabilities:      []string{"agent", "reactorpro"},

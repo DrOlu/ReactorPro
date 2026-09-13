@@ -557,6 +557,144 @@ func TestIntegrationSkillsCanBeDisabled(t *testing.T) {
 	}
 }
 
+// An edge must publish the directory of agents attached to it, so a peer in
+// another organisation can discover what sits behind it. This is the whole basis
+// of gateway-level addressing.
+func TestIntegrationManifestCarriesLocalAgentDirectory(t *testing.T) {
+	url := startTestNATS(t)
+	edgeID := uniqueID("test/edge")
+	// The provider stands in for the session manager that supplies this in the
+	// real gateway. Set after start, which also proves the manifest is rebuilt
+	// and re-registered rather than only published at connect time.
+	edge := testManager(t, url, edgeID, nil)
+	observer := testManager(t, url, uniqueID("test/observer"), nil)
+	edge.SetLocalAgentsProvider(func() []LocalAgent {
+		return []LocalAgent{
+			{ID: "agent-1111", Name: "Reception", Online: true, Version: "1.4.1"},
+			{ID: "agent-2222", Name: "Build Runner", Online: false},
+		}
+	})
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		manifests, err := observer.Discover(t.Context(), DiscoverFilter{})
+		if err != nil {
+			t.Fatalf("Discover: %v", err)
+		}
+		for _, manifest := range manifests {
+			if manifest.ID != edgeID {
+				continue
+			}
+			if manifest.LocalAgentTotal != 2 {
+				t.Fatalf("local_agent_total = %d, want 2", manifest.LocalAgentTotal)
+			}
+			if len(manifest.LocalAgents) != 2 {
+				t.Fatalf("advertised %d local agents, want 2", len(manifest.LocalAgents))
+			}
+			// Online agents sort first, so a peer looking for capacity sees them.
+			if manifest.LocalAgents[0].ID != "agent-1111" || !manifest.LocalAgents[0].Online {
+				t.Fatalf("directory order = %+v, want the online agent first", manifest.LocalAgents)
+			}
+			if manifest.LocalAgents[0].Name != "Reception" {
+				t.Fatalf("directory dropped the agent name: %+v", manifest.LocalAgents[0])
+			}
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatal("the observer never saw the edge's directory, so local agents are not being advertised")
+}
+
+// Two edges on the same mesh must be able to see each other under distinct ids.
+// This is the federation case the shared default used to break.
+func TestIntegrationDistinctEdgesDiscoverEachOther(t *testing.T) {
+	url := startTestNATS(t)
+	orgA := "acme/lagos/edge-1"
+	orgB := "globex/berlin/edge-1"
+	testManager(t, url, orgA, nil)
+	testManager(t, url, orgB, nil)
+	watcher := testManager(t, url, "acme/lagos/edge-2", nil)
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		manifests, err := watcher.Discover(t.Context(), DiscoverFilter{})
+		if err != nil {
+			t.Fatalf("Discover: %v", err)
+		}
+		seen := map[string]bool{}
+		for _, manifest := range manifests {
+			seen[manifest.ID] = true
+		}
+		if seen[orgA] && seen[orgB] {
+			// Each edge must be discoverable under its own id, with its own key.
+			if watcher.Status().IDCollision != "" {
+				t.Fatalf("no collision should be reported between distinct ids, got %q", watcher.Status().IDCollision)
+			}
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatal("two edges with distinct ids failed to find each other — this is the case the shared default broke")
+}
+
+// Two edges sharing one id cannot be routed to unambiguously. The condition must
+// be surfaced, not silently dropped: a peer that vanishes as "self" looks
+// identical to a healthy mesh with nobody on it.
+func TestIntegrationAgentIDCollisionIsDetected(t *testing.T) {
+	url := startTestNATS(t)
+	shared := "acme/shared/edge"
+
+	first := testManager(t, url, shared, nil)
+	// A second edge claiming the same id, with its own identity file and so its
+	// own keypair.
+	testManager(t, url, shared, nil)
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := first.Discover(t.Context(), DiscoverFilter{}); err != nil {
+			t.Fatalf("Discover: %v", err)
+		}
+		if collision := first.Status().IDCollision; collision != "" {
+			if collision != shared {
+				t.Fatalf("collision reported %q, want %q", collision, shared)
+			}
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatal("a second edge on the same agent id was not reported as a collision")
+}
+
+// Capabilities are what a peer filters on when looking for an edge that can do
+// something, so they must survive the round trip.
+func TestIntegrationCapabilitiesAreAdvertised(t *testing.T) {
+	url := startTestNATS(t)
+	edgeID := uniqueID("test/edge")
+	testManager(t, url, edgeID, func(cfg *Config) {
+		cfg.Capabilities = []string{"agent", "reactorpro", "billing", "west-africa"}
+	})
+	watcher := testManager(t, url, uniqueID("test/watcher"), nil)
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		manifests, err := watcher.Discover(t.Context(), DiscoverFilter{Capabilities: []string{"billing"}})
+		if err != nil {
+			t.Fatalf("Discover: %v", err)
+		}
+		for _, manifest := range manifests {
+			if manifest.ID != edgeID {
+				continue
+			}
+			if !containsString(manifest.Capabilities, "west-africa") {
+				t.Fatalf("capabilities = %v, want west-africa among them", manifest.Capabilities)
+			}
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatal("an edge advertising 'billing' was not returned by a capability-filtered discovery")
+}
+
 // A terminated connection must not panic a reply in flight: publishReply used to
 // dereference the connection field directly.
 func TestIntegrationReplyAfterStopDoesNotPanic(t *testing.T) {

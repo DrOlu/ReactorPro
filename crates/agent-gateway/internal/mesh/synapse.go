@@ -44,6 +44,10 @@ type Agent struct {
 	// dial cannot block readers of Connected().
 	lifecycle sync.Mutex
 
+	// localAgents supplies the directory published in the manifest. Injected by
+	// the manager so the bridge stays independent of the desktop layers.
+	localAgents LocalAgentProvider
+
 	mu       sync.RWMutex
 	conn     *nats.Conn
 	handlers map[string]Handler
@@ -51,6 +55,10 @@ type Agent struct {
 	started  bool
 	agentID  string
 	subs     []*nats.Subscription
+
+	// collision records a peer seen using this edge's own id, which makes the
+	// mesh ambiguous. Empty when none has been seen.
+	collision string
 }
 
 // NewAgent builds an agent. It does not connect until Start is called.
@@ -119,17 +127,74 @@ func (a *Agent) buildManifest() Manifest {
 	if capabilities == nil {
 		capabilities = []string{"agent"}
 	}
+	localAgents, localTotal := directorySnapshot(a.localAgents)
+
 	return Manifest{
-		ID:            a.agentID,
-		Name:          a.config.Name,
-		Description:   a.config.Description,
-		Capabilities:  capabilities,
-		Skills:        skills,
-		Endpoint:      AgentInboxSubject(a.agentID),
-		Availability:  AvailabilityOnline,
-		LastHeartbeat: timestamp(),
-		Fingerprint:   a.Fingerprint(),
+		ID:              a.agentID,
+		Name:            a.config.Name,
+		Description:     a.config.Description,
+		Capabilities:    capabilities,
+		Skills:          skills,
+		Endpoint:        AgentInboxSubject(a.agentID),
+		Availability:    AvailabilityOnline,
+		LastHeartbeat:   timestamp(),
+		Fingerprint:     a.Fingerprint(),
+		LocalAgents:     localAgents,
+		LocalAgentTotal: localTotal,
 	}
+}
+
+// SetLocalAgentsProvider installs the directory supplier used when building the
+// manifest. Safe to call before Start; the next manifest rebuild picks it up.
+func (a *Agent) SetLocalAgentsProvider(provider LocalAgentProvider) {
+	a.mu.Lock()
+	a.localAgents = provider
+	a.mu.Unlock()
+	if a.Connected() {
+		a.refreshManifest()
+	}
+}
+
+// refreshManifest rebuilds and stores the manifest, then re-registers so peers
+// see the change without waiting for a heartbeat window.
+func (a *Agent) refreshManifest() {
+	a.setManifest(a.buildManifest())
+	if err := a.Register(context.Background()); err != nil {
+		a.logger.Warn("mesh re-registration failed", "error", err)
+	}
+}
+
+// Collision reports a peer that was seen using this edge's own agent id, which
+// makes routing ambiguous. Empty when none has been observed.
+//
+// This is surfaced rather than merely logged because the failure it describes is
+// otherwise invisible: the peer is dropped as "self", so the mesh simply looks
+// empty while every service reports healthy.
+func (a *Agent) Collision() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.collision
+}
+
+// noteCollision records an id clash once, and logs it loudly.
+func (a *Agent) noteCollision(manifest Manifest) {
+	a.mu.Lock()
+	already := a.collision != ""
+	if !already {
+		a.collision = manifest.ID
+	}
+	a.mu.Unlock()
+	if already {
+		return
+	}
+	a.logger.Error("mesh agent id collision: another agent is using this edge's id",
+		"agentId", manifest.ID,
+		"theirEndpoint", manifest.Endpoint,
+		"theirFingerprint", manifest.Fingerprint,
+		"ourEndpoint", AgentInboxSubject(a.agentID),
+		"ourFingerprint", a.Fingerprint(),
+		"impact", "requests addressed to this id are ambiguous and discovery hides the peer",
+		"fix", "give each edge a unique -mesh-agent-id such as <org>/<site>/<edge>")
 }
 
 // Start connects to NATS, registers, begins serving and starts heartbeating.
@@ -177,10 +242,20 @@ func (a *Agent) Start(ctx context.Context) error {
 		a.logger.Warn("mesh discovery subscription failed", "error", err)
 	}
 
+	// Watch our own liveness subject. Only one agent should ever be speaking
+	// there, so this is how an id collision becomes visible rather than silent.
+	heartbeatSub, err := conn.Subscribe(HeartbeatSubject(a.agentID), a.handleHeartbeatPeers)
+	if err != nil {
+		a.logger.Warn("mesh heartbeat subscription failed", "error", err)
+	}
+
 	a.mu.Lock()
 	a.subs = append(a.subs, sub)
 	if discoverSub != nil {
 		a.subs = append(a.subs, discoverSub)
+	}
+	if heartbeatSub != nil {
+		a.subs = append(a.subs, heartbeatSub)
 	}
 	a.started = true
 	a.mu.Unlock()
@@ -192,6 +267,9 @@ func (a *Agent) Start(ctx context.Context) error {
 		// and can re-register on demand.
 		a.logger.Warn("mesh registration failed", "error", err)
 	}
+	// Announce immediately so a colliding peer is noticed within seconds rather
+	// than after a full heartbeat interval.
+	a.publishHeartbeat(HeartbeatSubject(a.agentID))
 	a.startHeartbeat(ctx)
 	return nil
 }
@@ -350,6 +428,22 @@ func (a *Agent) Discover(ctx context.Context, filter DiscoverFilter) ([]Manifest
 	out := make([]Manifest, 0, len(seen))
 	for _, manifest := range seen {
 		if manifest.ID == a.agentID {
+			// A manifest carrying our own id is normally us, echoed back — but it
+			// may be a different edge that took the same id, which makes routing to
+			// that id ambiguous. Dropping it silently would leave the operator with
+			// an inexplicably empty peer list.
+			//
+			// The fingerprint is the decisive signal, not the endpoint: the inbox
+			// subject is *derived from* the agent id, so a colliding peer's
+			// endpoint is identical to ours by construction. Only the key differs.
+			ours := a.Fingerprint()
+			switch {
+			case manifest.Fingerprint != "" && ours != "" && manifest.Fingerprint != ours:
+				a.noteCollision(manifest)
+			case manifest.Endpoint != "" && manifest.Endpoint != AgentInboxSubject(a.agentID):
+				// A peer using a different endpoint convention for the same id.
+				a.noteCollision(manifest)
+			}
 			continue
 		}
 		out = append(out, manifest)
@@ -683,20 +777,83 @@ func (a *Agent) startHeartbeat(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				conn, err := a.connection()
-				if err != nil {
-					return
-				}
-				payload, err := json.Marshal(HeartbeatPayload{TS: timestamp()})
-				if err != nil {
-					continue
-				}
-				if err := conn.Publish(subject, payload); err != nil {
-					a.logger.Warn("mesh heartbeat failed", "error", err)
-				}
+				a.publishHeartbeat(subject)
 			}
 		}
 	}()
+}
+
+// publishHeartbeat announces liveness as a signed envelope.
+func (a *Agent) publishHeartbeat(subject string) {
+	conn, err := a.connection()
+	if err != nil {
+		return
+	}
+	envelope := a.newEnvelope(TypeHeartbeat, "", "")
+	if err := a.attachPayload(envelope, HeartbeatPayload{TS: timestamp()}); err != nil {
+		return
+	}
+	raw, err := a.marshal(envelope)
+	if err != nil {
+		return
+	}
+	if err := conn.Publish(subject, raw); err != nil {
+		a.logger.Warn("mesh heartbeat failed", "error", err)
+	}
+}
+
+// handleHeartbeatPeers watches this agent's own liveness subject.
+//
+// Exactly one agent should ever speak on a given heartbeat subject, so a signed
+// heartbeat arriving from a different key means another edge has taken this id.
+// This is the only reliable collision signal: discovery cannot see it, because
+// two edges sharing an id each treat the other's query as their own and reply to
+// nobody — the collision presents as mutual silence, indistinguishable from an
+// empty mesh.
+//
+// This deliberately does not run the full inbound guard. The guard's trust store
+// exists to decide whether a peer may be *served*, and it answers a second
+// fingerprint under a known id with ErrIdentityMismatch — which is exactly the
+// condition being watched for. Letting it reject here would classify a collision
+// as an ordinary authentication failure and swallow the signal. What matters on
+// this channel is narrower: is this a genuine, signed announcement from a
+// different key claiming our id?
+func (a *Agent) handleHeartbeatPeers(message *nats.Msg) {
+	if rejection := a.guard.checkBytes(len(message.Data)); rejection != nil {
+		return
+	}
+	envelope, err := decodeEnvelope(message.Data)
+	if err != nil {
+		return
+	}
+	if envelope.From != a.agentID {
+		return
+	}
+	ours := a.Fingerprint()
+	if ours == "" {
+		return
+	}
+	// Our own announcement, echoed back by our own subscription.
+	if envelope.Fingerprint == "" || envelope.Fingerprint == ours {
+		return
+	}
+	// Require a valid signature before raising the alarm, so an unauthenticated
+	// forgery cannot make an operator chase a collision that is not happening.
+	if envelope.Signature != "" && envelope.PublicKey != "" {
+		if err := VerifyEnvelope(envelope); err != nil {
+			a.logger.Warn("ignoring unsigned claim on this agent's heartbeat subject",
+				"from", envelope.From, "error", err)
+			return
+		}
+	} else {
+		a.logger.Warn("ignoring unsigned traffic on this agent's heartbeat subject", "from", envelope.From)
+		return
+	}
+	a.noteCollision(Manifest{
+		ID:          envelope.From,
+		Endpoint:    AgentInboxSubject(envelope.From),
+		Fingerprint: envelope.Fingerprint,
+	})
 }
 
 func (a *Agent) stopHeartbeat() {

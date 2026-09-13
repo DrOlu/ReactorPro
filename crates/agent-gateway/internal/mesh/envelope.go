@@ -46,6 +46,12 @@ const (
 	TypeRequest  MessageType = "request"
 	TypeRespond  MessageType = "respond"
 	TypeEmit     MessageType = "emit"
+	// TypeHeartbeat is published on mesh.heartbeat.<id>. It carries the full
+	// signed envelope rather than a bare payload for two reasons: it matches the
+	// documented Synapse heartbeat shape, and it makes the liveness subject usable
+	// as a collision detector — only one agent should ever be speaking on a given
+	// heartbeat subject, and a signed envelope says which key is speaking.
+	TypeHeartbeat MessageType = "heartbeat"
 )
 
 // Error codes, aligned with the Synapse protocol's documented table so a
@@ -116,6 +122,12 @@ type Manifest struct {
 	// ever receives a message from it, so trust-on-first-use has something to
 	// compare against on the second contact.
 	Fingerprint string `json:"fingerprint,omitempty"`
+	// LocalAgents is the directory of desktop agents attached to this edge,
+	// truncated to maxAdvertisedLocalAgents.
+	LocalAgents []LocalAgent `json:"local_agents,omitempty"`
+	// LocalAgentTotal is the true number attached, so a truncated list is
+	// distinguishable from a small one.
+	LocalAgentTotal int `json:"local_agent_total,omitempty"`
 }
 
 // AvailabilityOnline is the only availability value an active agent reports.

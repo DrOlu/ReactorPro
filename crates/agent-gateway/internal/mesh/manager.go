@@ -40,6 +40,11 @@ type Status struct {
 	Reputation    []Reputation   `json:"reputation"`
 	Pending       []Approval     `json:"pendingApprovals"`
 	LastError     string         `json:"lastError,omitempty"`
+	// LocalAgents is the directory this edge publishes to the mesh.
+	LocalAgents []LocalAgent `json:"localAgents,omitempty"`
+	// IDCollision names a peer seen using this edge's own agent id, which makes
+	// that id ambiguous on the mesh. Empty when none has been observed.
+	IDCollision string `json:"idCollision,omitempty"`
 }
 
 // Manager owns the mesh lifecycle and implements the bridge's operations.
@@ -61,6 +66,9 @@ type Manager struct {
 	// startedAt is when the current connection came up, for the served
 	// `status` skill. Zero while the bridge is not running.
 	startedAt time.Time
+	// localAgents supplies the directory published in the manifest. Held here so
+	// it can be installed before Start.
+	localAgents LocalAgentProvider
 }
 
 // NewManager builds a manager from configuration.
@@ -109,8 +117,23 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.logger.Info("minted mesh identity",
 			"agentId", identity.AgentID, "fingerprint", identity.Fingerprint, "path", config.IdentityPath)
 	}
+	// An edge still on the shared default cannot federate: peers address agents by
+	// id, so two of them collide and discovery drops each other as "self". The
+	// identity is already minted under that id, so this is a warning rather than a
+	// startup failure — changing it means minting a new identity, which is the
+	// operator's call, and a single-edge deployment is unaffected.
+	if UsesLegacyAgentID(identity.AgentID) {
+		m.logger.Warn("mesh agent id is the shared default; this edge cannot federate",
+			"agentId", identity.AgentID,
+			"impact", "any peer using the same default is dropped as self, and routing to this id is ambiguous",
+			"fix", "set -mesh-agent-id to a unique value such as <org>/<site>/<edge>, then remove the identity file to mint a new identity")
+	}
 
 	agent := NewAgent(config, identity, m.logger)
+	m.mu.RLock()
+	provider := m.localAgents
+	m.mu.RUnlock()
+	agent.SetLocalAgentsProvider(provider)
 	// Register skills before connecting so they appear in the manifest the first
 	// registration publishes. A peer that discovers this agent immediately knows
 	// what it can ask for.
@@ -195,8 +218,48 @@ func (m *Manager) Status() Status {
 		status.Serving = agent.Connected()
 		status.Manifest = agent.Manifest()
 		status.Skills = agent.Skills()
+		status.LocalAgents = status.Manifest.LocalAgents
+		status.IDCollision = agent.Collision()
 	}
 	return status
+}
+
+// LocalAgents returns the directory this edge publishes, whether or not the
+// bridge is connected. Available offline so the Settings UI can show what would
+// be advertised.
+func (m *Manager) LocalAgents() []LocalAgent {
+	agents, _ := directorySnapshot(m.localAgentsSnapshot())
+	return agents
+}
+
+func (m *Manager) localAgentsSnapshot() LocalAgentProvider {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.localAgents
+}
+
+// SetLocalAgentsProvider installs the directory supplier. Callable before Start;
+// if the bridge is already running the manifest is rebuilt and re-registered so
+// peers see the change immediately rather than after the next heartbeat.
+func (m *Manager) SetLocalAgentsProvider(provider LocalAgentProvider) {
+	m.mu.Lock()
+	m.localAgents = provider
+	agent := m.agent
+	m.mu.Unlock()
+	if agent != nil {
+		agent.SetLocalAgentsProvider(provider)
+	}
+}
+
+// IDCollision reports a peer using this edge's own agent id, if one has been
+// seen. Surfaced by the HTTP status so the condition is visible without reading
+// logs.
+func (m *Manager) IDCollision() string {
+	agent, err := m.requireAgent()
+	if err != nil {
+		return ""
+	}
+	return agent.Collision()
 }
 
 // Health is the synapse_health tool.

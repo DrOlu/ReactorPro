@@ -19,6 +19,11 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
+// agentDirectoryPageSize bounds how many agent names are read when building the
+// mesh directory. Names are a nicety — an unnamed agent is still addressable by
+// id — so a truncated page degrades gracefully rather than failing the directory.
+const agentDirectoryPageSize = 500
+
 // fatal logs the error and exits with a non-zero code (slog has no Fatal level, so it is handled centrally here).
 func fatal(msg string, args ...any) {
 	slog.Error(msg, args...)
@@ -50,6 +55,39 @@ func main() {
 	// nowhere until it is configured. A failure to start is not fatal: the
 	// gateway keeps serving and the reason is visible on /api/mesh/status.
 	meshManager := mesh.NewManager(cfg.MeshConfig(), slog.Default())
+
+	// Publish the local agent directory to the mesh. A peer in another
+	// organisation should be able to discover what sits behind this edge rather
+	// than having to be told, which is what makes gateway-level addressing
+	// workable: the mesh routes to the edge, and the edge knows its own agents.
+	//
+	// Assembled here from the two subsystems that own the pieces — live session
+	// state and the token store's names — because the mesh package deliberately
+	// knows about neither.
+	meshManager.SetLocalAgentsProvider(func() []mesh.LocalAgent {
+		statuses, _ := sm.AgentDirectoryStatusSnapshot()
+		if len(statuses) == 0 {
+			return nil
+		}
+		names := map[string]string{}
+		if page, err := tokens.List(agenttoken.PageParams{PageSize: agentDirectoryPageSize}); err == nil {
+			for _, entry := range page.Entries {
+				names[entry.AgentID] = entry.Name
+			}
+		}
+		agents := make([]mesh.LocalAgent, 0, len(statuses))
+		for agentID, status := range statuses {
+			agents = append(agents, mesh.LocalAgent{
+				ID:             agentID,
+				Name:           names[agentID],
+				Online:         status.Online,
+				Version:        status.AgentVersion,
+				ConnectedSince: status.ConnectedSince,
+			})
+		}
+		return agents
+	})
+
 	if err := meshManager.Start(context.Background()); err != nil {
 		slog.Error("mesh bridge failed to start", "err", err)
 	}

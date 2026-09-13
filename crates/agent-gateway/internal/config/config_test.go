@@ -208,8 +208,12 @@ func TestMeshConfigDefaultsToDisabled(t *testing.T) {
 	if meshConfig.Enabled {
 		t.Fatal("the mesh bridge must ship disabled")
 	}
-	if meshConfig.AgentID != mesh.DefaultAgentID {
-		t.Fatalf("agent id = %q, want %q", meshConfig.AgentID, mesh.DefaultAgentID)
+	if want := mesh.DefaultAgentID(); meshConfig.AgentID != want {
+		t.Fatalf("agent id = %q, want %q", meshConfig.AgentID, want)
+	}
+	if mesh.UsesLegacyAgentID(meshConfig.AgentID) {
+		t.Fatalf("the shipping default must not be the shared legacy id %q; two edges on it cannot federate",
+			mesh.LegacyDefaultAgentID)
 	}
 	if meshConfig.IdentityPath == "" {
 		t.Fatal("an identity path must be derived so the agent id can persist")

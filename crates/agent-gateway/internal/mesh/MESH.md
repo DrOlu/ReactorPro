@@ -142,6 +142,114 @@ Known divergences:
    use `id`. ReactorPro cannot see RTerm in discovery until that is fixed in RTerm.
 6. **Heartbeat and deregistration** exist here and not in RTerm. Harmless extra surface.
 
+## Federation and addressing
+
+The mesh exists so that agents in one organisation can reach agents in another. The
+addressing model that makes that safe is **gateway-level**: the mesh routes to an *edge*,
+and the edge knows its own desktop agents.
+
+### Why the edge, not the desktop
+
+A desktop machine is ephemeral — it sleeps, moves networks, gets reimaged. It should not
+own a mesh identity, and a peer in another organisation should not have to pin trust to
+one. Routing to the edge instead means one stable identity per site, one place for policy
+and audit, and no NATS credentials on the endpoints. It also means the edge decides what it
+is willing to expose, rather than every laptop being independently reachable.
+
+### Agent ids must be unique
+
+An agent id *is* an address: the request subject is `mesh.agent.<id>.inbox`, and the
+identity fingerprint is computed over it. Two edges sharing an id do not merely become
+ambiguous:
+
+- discovery discards the peer as "self", so the mesh simply looks empty;
+- the id-keyed dedupe collapses them into one entry;
+- the pinned fingerprints disagree, so the trust store refuses one outright.
+
+There were three same-id edges, none can coexist. The id is bound into the identity file on
+first start and **cannot be changed later** without minting a new identity, so it has to be
+right the first time.
+
+Federation therefore requires an explicit, unique id:
+
+```bash
+-mesh-agent-id=acme/lagos/edge-1
+```
+
+The `<org>/<site>/<edge>` convention is recommended because it is self-describing in logs,
+subject traces and audit records. A *derived* default (`reactorpro/<hostname>`) is used when
+none is set, which removes the footgun for a single deployment but does not remove the need
+to think about naming when federating. An edge still on the legacy shared default
+(`drolu/reactorpro`) logs a warning at startup, because it cannot federate.
+
+### Collisions are detected, not hidden
+
+Because a colliding peer is dropped as "self", the failure looks identical to a healthy mesh
+with nobody on it. It is therefore detected explicitly — on the heartbeat subject, which is
+the one place exactly one agent should ever speak.
+
+A signed heartbeat arriving on `mesh.heartbeat.<our-id>` from a *different key* means
+another edge has taken the id. The `status` endpoint reports it as `idCollision`, and the
+log carries the peer's endpoint and fingerprint alongside ours. Detection requires a valid
+signature, so an unsigned forgery cannot raise a false alarm.
+
+Note this is deliberately not run through the inbound guard's trust store: that store
+decides whether a peer may be *served*, and it rejects a second fingerprint under a known id
+as `ErrIdentityMismatch` — which is precisely the condition being watched for. Running it
+through would swallow the signal as an ordinary authentication failure.
+
+### The local agent directory
+
+Each edge publishes the desktop agents attached to it in its manifest:
+
+```json
+"local_agents": [
+  {"id": "agent-1111", "name": "Reception", "online": true, "version": "1.5.0"}
+],
+"local_agent_total": 2
+```
+
+A peer in another organisation can therefore discover what sits behind an edge instead of
+having to be told, and address it through the edge. The list is sorted online-first then by
+id, so a peer looking for capacity sees it first, and the manifest is stable across rebuilds
+rather than churning through peer caches.
+
+Two properties matter operationally:
+
+- **Truncated, not unbounded.** At most `maxAdvertisedLocalAgents` (128) entries are
+  advertised, because the manifest travels in every discovery reply and an unbounded list
+  could push an envelope past a peer's size limit — turning a busy edge into one that is
+  silently unreachable. `local_agent_total` carries the true count so truncation is visible.
+- **Read-only.** The directory advertises existence, not authority. Nothing in it lets a
+  peer act on an agent; the edge still decides what it serves.
+
+### Capabilities
+
+Edges advertise capabilities so a peer can filter for one that can do something:
+
+```bash
+-mesh-capabilities=agent,reactorpro,billing,west-africa
+```
+
+A discovery filter matches on a subset: an edge advertising `billing` is returned to a peer
+asking for `billing`, and a peer asking for `billing,west-africa` gets only edges with both.
+Namespacing the id and the capabilities together is what lets an operator express policy
+per organisation.
+
+### Cross-organisation trust
+
+Each edge already holds an Ed25519 identity and signs what it sends. For federation, pin the
+peer organisation's edges and turn off first-use learning, so only known keys are accepted:
+
+```bash
+-mesh-verify-mode=require
+-mesh-trust-on-first-use=false
+-mesh-trusted-peers=sha256:<their-edge>,sha256:<their-other-edge>
+```
+
+This is the configuration the identity and trust work was built for; without it, `prefer`
+accepts unsigned traffic and any peer can appear.
+
 ## Served skills
 
 The gateway answers a small, deliberately read-only surface, so a peer that discovers it
