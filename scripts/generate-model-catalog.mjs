@@ -67,7 +67,7 @@ const SECTIONS = [
   // zai (Z.AI, international brand) is a superset of zhipuai with identical
   // ids and limits for the overlap; keep the domestic brand as the key.
   { key: "zhipuai", sources: ["zai", "zhipuai"], min: 10 },
-  { key: "moonshotai", sources: ["moonshotai-cn", "moonshotai"], min: 8 },
+  { key: "moonshotai", sources: ["moonshotai-cn", "moonshotai"], min: 4 },
   { key: "minimax", sources: ["minimax-cn", "minimax"], min: 5 },
   { key: "stepfun", sources: ["stepfun"], min: 4 },
   { key: "xiaomi", sources: ["xiaomi"], min: 4 },
