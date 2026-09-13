@@ -215,6 +215,72 @@ const chatRemarkPlugins = [...remarkPlugins, remarkChatFileLinks];
 
 type StreamdownRehypePlugins = NonNullable<ComponentProps<typeof Streamdown>["rehypePlugins"]>;
 
+/**
+ * Inline SVG for hand-written diagrams in chat.
+ *
+ * The default `rehype-sanitize` schema is an allow-list of 53 HTML tags and
+ * contains no SVG element at all, so an `<svg>` an agent writes is silently
+ * deleted from the rendered message. Static diagrams are worth keeping, so a
+ * deliberately small subset is allowed through.
+ *
+ * The allow-list *is* the boundary — everything unnamed is dropped, which is why
+ * this is safe to extend:
+ *   - `script` is already in the schema's `strip` list;
+ *   - the schema's global attribute list contains no event handlers, so `onload`
+ *     and friends can never match;
+ *   - `foreignObject` (HTML-inside-SVG), `use`/`xlink:href` (references to other
+ *     documents) and the `animate*` family are simply not named here.
+ * Excluding them by omission is the point: a block list of "dangerous SVG" would
+ * be a guess, an allow-list of what is actually needed is not.
+ *
+ * Gradients (`defs`/`linearGradient`/`stop`) are deliberately absent even though
+ * they are harmless. They cannot work here: the schema rewrites `id` with its
+ * `user-content-` clobber prefix, so `<linearGradient id="fade">` becomes
+ * `id="user-content-fade"` while `fill="url(#fade)"` is left untouched and the
+ * reference dangles. A listed-but-unresolvable tag renders as flat black, which
+ * looks like a rendering bug; better to not offer it. Verified against
+ * hast-util-sanitize 5.0.2.
+ */
+const SVG_TAG_NAMES = [
+  "svg",
+  "g",
+  "path",
+  "rect",
+  "circle",
+  "ellipse",
+  "line",
+  "polyline",
+  "polygon",
+  "text",
+  "tspan",
+];
+
+const SVG_PAINT_ATTRIBUTES = ["fill", "stroke", "strokeWidth", "opacity"];
+
+const SVG_ATTRIBUTES: Record<string, string[]> = {
+  svg: ["viewBox", "width", "height", "x", "y", "role", "aria-label", ...SVG_PAINT_ATTRIBUTES],
+  g: ["transform", ...SVG_PAINT_ATTRIBUTES],
+  path: ["d", "fillRule", "clipRule", "transform", ...SVG_PAINT_ATTRIBUTES],
+  rect: ["x", "y", "width", "height", "rx", "ry", "transform", ...SVG_PAINT_ATTRIBUTES],
+  circle: ["cx", "cy", "r", "transform", ...SVG_PAINT_ATTRIBUTES],
+  ellipse: ["cx", "cy", "rx", "ry", "transform", ...SVG_PAINT_ATTRIBUTES],
+  line: ["x1", "y1", "x2", "y2", "transform", ...SVG_PAINT_ATTRIBUTES],
+  polyline: ["points", "transform", ...SVG_PAINT_ATTRIBUTES],
+  polygon: ["points", "transform", ...SVG_PAINT_ATTRIBUTES],
+  text: [
+    "x",
+    "y",
+    "dx",
+    "dy",
+    "fontSize",
+    "fontFamily",
+    "textAnchor",
+    "transform",
+    ...SVG_PAINT_ATTRIBUTES,
+  ],
+  tspan: ["x", "y", "dx", "dy", "fontSize", "textAnchor", ...SVG_PAINT_ATTRIBUTES],
+};
+
 function createSanitizedRehypePlugins(options: {
   allowDataImages: boolean;
   preserveRelativeUrls: boolean;
@@ -231,6 +297,8 @@ function createSanitizedRehypePlugins(options: {
   }
   const schema = (sanitize[1] ?? {}) as {
     protocols?: Record<string, unknown[]>;
+    tagNames?: string[];
+    attributes?: Record<string, unknown[]>;
   };
   const srcProtocols = schema.protocols?.src;
   const hrefProtocols = schema.protocols?.href;
@@ -254,7 +322,18 @@ function createSanitizedRehypePlugins(options: {
   return [
     defaultRehypePlugins.raw,
     ...(options.rewriteFileLinks ? [rewriteChatFileLinks] : []),
-    [sanitize[0], { ...schema, protocols }],
+    [
+      sanitize[0],
+      {
+        ...schema,
+        protocols,
+        // Inline SVG survives only if it is named here; see the note on
+        // SVG_TAG_NAMES. Merged rather than replaced, so the caller's own
+        // allowedTags still apply.
+        tagNames: [...new Set([...(schema.tagNames ?? []), ...SVG_TAG_NAMES])],
+        attributes: { ...(schema.attributes ?? {}), ...SVG_ATTRIBUTES },
+      },
+    ],
     ...(options.preserveRelativeUrls ? [] : [defaultRehypePlugins.harden]),
   ] as StreamdownRehypePlugins;
 }

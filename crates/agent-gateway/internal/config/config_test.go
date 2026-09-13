@@ -267,6 +267,56 @@ func TestMeshConfigRegistryFromEnvironment(t *testing.T) {
 	}
 }
 
+func TestMeshConfigMailboxFromEnvironment(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	resetFlagsForTest(t)
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_ENABLED", "true")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_URL", "nats://mesh.internal:4222")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_MAILBOX", "true")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_MAILBOX_STREAM", "ACME_INBOXES")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_MAILBOX_MAX_AGE", "72h")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_MAILBOX_MAX_MSGS", "250")
+
+	meshConfig := Load().MeshConfig()
+	if !meshConfig.MailboxEnabled {
+		t.Fatal("the mailbox was not enabled from the environment")
+	}
+	if meshConfig.MailboxStream != "ACME_INBOXES" {
+		t.Fatalf("stream = %q, want ACME_INBOXES", meshConfig.MailboxStream)
+	}
+	if meshConfig.MailboxMaxAge != 72*time.Hour {
+		t.Fatalf("max age = %s, want 72h", meshConfig.MailboxMaxAge)
+	}
+	if meshConfig.MailboxMaxMsgs != 250 {
+		t.Fatalf("max msgs = %d, want 250", meshConfig.MailboxMaxMsgs)
+	}
+	if err := meshConfig.Validate(); err != nil {
+		t.Fatalf("an enabled, configured bridge must validate: %v", err)
+	}
+}
+
+// The mailbox is off unless asked for: it needs JetStream, and a deployment
+// that has none must not have messages buffered behind its back.
+func TestMeshConfigMailboxDefaultsToOff(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	resetFlagsForTest(t)
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_ENABLED", "true")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_URL", "nats://mesh.internal:4222")
+
+	meshConfig := Load().MeshConfig()
+	if meshConfig.MailboxEnabled {
+		t.Fatal("the mailbox is on without being configured")
+	}
+	// The bounds are still filled in, so switching it on later needs no extra
+	// configuration and cannot produce a zero-valued stream name.
+	if meshConfig.MailboxStream != mesh.DefaultMailboxStream {
+		t.Fatalf("stream = %q, want the default", meshConfig.MailboxStream)
+	}
+	if meshConfig.MailboxMaxAge != mesh.DefaultMailboxMaxAge || meshConfig.MailboxMaxMsgs != mesh.DefaultMailboxMaxMsgs {
+		t.Fatalf("bounds = %v/%v, want the defaults even while disabled", meshConfig.MailboxMaxAge, meshConfig.MailboxMaxMsgs)
+	}
+}
+
 func TestGetenvBool(t *testing.T) {
 	cases := map[string]bool{
 		"true":  true,

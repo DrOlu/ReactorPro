@@ -118,6 +118,25 @@ type Config struct {
 	// entry older than this as absent.
 	RegistryTTL time.Duration `json:"-"`
 
+	// MailboxEnabled turns on the durable agent mailbox: a JetStream stream
+	// captures `mesh.agent.*.mailbox` so a skill invocation addressed to an agent
+	// survives that agent being briefly away, instead of being lost to the
+	// fire-and-forget nature of NATS core. Off by default, and requires
+	// JetStream: enabled without it is a startup error, not a silent downgrade.
+	//
+	// Note the subject. It is deliberately NOT `mesh.agent.*.inbox`: see
+	// AgentMailboxSubject for why streaming the request/reply inbox breaks the
+	// protocol rather than protecting it.
+	MailboxEnabled bool `json:"mailboxEnabled"`
+	// MailboxStream names the JetStream stream backing the mailbox.
+	MailboxStream string `json:"mailboxStream"`
+	// MailboxMaxAge bounds how long an undelivered message is retained, so a
+	// long-dead agent does not accumulate post indefinitely.
+	MailboxMaxAge time.Duration `json:"-"`
+	// MailboxMaxMsgs bounds the stream by message count as well as by age; a
+	// mailbox is a handoff buffer, not an archive.
+	MailboxMaxMsgs int64 `json:"mailboxMaxMsgs"`
+
 	// Timing
 	HeartbeatInterval time.Duration `json:"-"`
 	// RequestTimeout bounds a skill dispatch waiting for a peer's reply.
@@ -267,6 +286,17 @@ const (
 	DefaultRegistryTTL    = 3 * 30 * time.Second
 )
 
+// Mailbox defaults. A week is long enough to cover a scheduled maintenance
+// window and short enough that an abandoned agent's backlog expires on its own.
+const (
+	// DefaultMailboxStream keeps the name the durable inbox was asked for. The
+	// name is the stream's identity, not its subjects — what it captures is
+	// defined by AgentMailboxSubject, and that is the part that matters.
+	DefaultMailboxStream  = "AGENT_INBOXES"
+	DefaultMailboxMaxAge  = 7 * 24 * time.Hour
+	DefaultMailboxMaxMsgs = 10_000
+)
+
 // fingerprintPrefix is the only fingerprint shape accepted in TrustedPeers.
 const fingerprintPrefix = "sha256:"
 
@@ -303,12 +333,17 @@ func DefaultConfig() Config {
 		RegistryMode:      RegistryAuto,
 		RegistryBucket:    DefaultRegistryBucket,
 		RegistryTTL:       DefaultRegistryTTL,
-		VerifyMode:        VerifyPrefer,
-		ClockSkew:         DefaultClockSkew,
-		TrustOnFirstUse:   true,
-		MaxEnvelopeBytes:  DefaultMaxEnvelopeBytes,
-		MaxSeenIDs:        DefaultMaxSeenIDs,
-		MaxSenderStates:   DefaultMaxSenderStates,
+		// Filled in even though the mailbox ships disabled, so turning it on is a
+		// single flag rather than a flag plus three bounds.
+		MailboxStream:    DefaultMailboxStream,
+		MailboxMaxAge:    DefaultMailboxMaxAge,
+		MailboxMaxMsgs:   DefaultMailboxMaxMsgs,
+		VerifyMode:       VerifyPrefer,
+		ClockSkew:        DefaultClockSkew,
+		TrustOnFirstUse:  true,
+		MaxEnvelopeBytes: DefaultMaxEnvelopeBytes,
+		MaxSeenIDs:       DefaultMaxSeenIDs,
+		MaxSenderStates:  DefaultMaxSenderStates,
 		RateLimit: RateLimitConfig{
 			Enabled:   true,
 			PerSecond: 50,
@@ -354,6 +389,22 @@ func (c *Config) normalize() {
 		c.InvokeTimeout = DefaultInvokeTimeout
 	}
 	c.normalizeRegistry()
+	c.normalizeMailbox()
+}
+
+// normalizeMailbox fills the mailbox settings a literal-built Config omits, so
+// a Config assembled from struct literals cannot produce a zero-valued stream
+// name or an unbounded stream.
+func (c *Config) normalizeMailbox() {
+	if strings.TrimSpace(c.MailboxStream) == "" {
+		c.MailboxStream = DefaultMailboxStream
+	}
+	if c.MailboxMaxAge <= 0 {
+		c.MailboxMaxAge = DefaultMailboxMaxAge
+	}
+	if c.MailboxMaxMsgs <= 0 {
+		c.MailboxMaxMsgs = DefaultMailboxMaxMsgs
+	}
 }
 
 // normalizeRegistry fills the registry settings a literal-built Config omits.

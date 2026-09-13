@@ -63,6 +63,7 @@ func NewHTTPServerWithMesh(cfg *config.Config, sm *session.Manager, tokens *agen
 		apiMux.HandleFunc("POST /api/mesh/register", handler.MeshRegister(meshManager))
 		apiMux.HandleFunc("GET /api/mesh/agents", handler.MeshDiscover(meshManager))
 		apiMux.HandleFunc("POST /api/mesh/dispatch", handler.MeshDispatch(meshManager))
+		apiMux.HandleFunc("POST /api/mesh/mailbox", handler.MeshMailbox(meshManager))
 		apiMux.HandleFunc("POST /api/mesh/emit", handler.MeshEmit(meshManager))
 		apiMux.HandleFunc("POST /api/mesh/subscribe", handler.MeshSubscribe(meshManager))
 		apiMux.HandleFunc("GET /api/mesh/events", handler.MeshEvents(meshManager))

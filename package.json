@@ -30,6 +30,7 @@
     "lint:gui": "pnpm --filter liveagent lint",
     "lint:webui": "pnpm --filter @liveagent/gateway-webui lint",
     "test:gui": "pnpm --filter liveagent test:frontend",
+    "test:ui": "pnpm --filter @liveagent/ui test",
     "test:webui": "pnpm --filter @liveagent/gateway-webui test"
   },
   "pnpm": {

@@ -92,6 +92,43 @@ func MeshDispatch(m *mesh.Manager) http.HandlerFunc {
 	}
 }
 
+type meshMailboxRequest struct {
+	Target string `json:"target"`
+	Skill  string `json:"skill"`
+	Input  any    `json:"input"`
+	TaskID string `json:"taskId"`
+}
+
+// MeshMailbox leaves a skill invocation in a peer's durable mailbox.
+//
+// Distinct from MeshDispatch on purpose: this returns as soon as the message is
+// stored, not when the work is done, because a mailbox message cannot be
+// answered. The 202 says so rather than implying a result is coming.
+func MeshMailbox(m *mesh.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var request meshMailboxRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if strings.TrimSpace(request.Target) == "" || strings.TrimSpace(request.Skill) == "" {
+			writeError(w, http.StatusBadRequest, "target and skill are required")
+			return
+		}
+		sequence, err := m.SendMailbox(r.Context(), request.Target, request.Skill, request.Input, request.TaskID)
+		if err != nil {
+			writeMeshError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"accepted": true,
+			"sequence": sequence,
+			"target":   request.Target,
+			"note":     "queued in the peer's durable mailbox; it is not answered, and is delivered at least once",
+		})
+	}
+}
+
 type meshEmitRequest struct {
 	Type string `json:"type"`
 	Data any    `json:"data"`

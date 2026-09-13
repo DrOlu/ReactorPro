@@ -69,6 +69,9 @@ type Agent struct {
 	// unavailable or the mode is broadcast. Guarded by mu because auto mode
 	// installs it from a detection goroutine after Start returns.
 	registry *registryClient
+	// mailbox is the durable inbox consumer, or nil when the feature is off or
+	// has not started. Guarded by mu because Stop clears it concurrently.
+	mailbox *mailbox
 
 	// collision records a peer seen using this edge's own id, which makes the
 	// mesh ambiguous. Empty when none has been seen.
@@ -295,6 +298,26 @@ func (a *Agent) Start(ctx context.Context) error {
 		return err
 	}
 
+	// The durable mailbox. Started after the registry because it is opt-in: an
+	// operator who asked for it should hear about a failure at startup rather
+	// than discover months later that mail was never being kept, but it must not
+	// leave a half-started agent behind.
+	if err := a.startMailbox(ctx); err != nil {
+		a.stopMailbox()
+		_ = sub.Unsubscribe()
+		if discoverSub != nil {
+			_ = discoverSub.Unsubscribe()
+		}
+		if heartbeatSub != nil {
+			_ = heartbeatSub.Unsubscribe()
+		}
+		a.mu.Lock()
+		a.conn = nil
+		a.mu.Unlock()
+		conn.Close()
+		return err
+	}
+
 	a.mu.Lock()
 	a.subs = append(a.subs, sub)
 	if discoverSub != nil {
@@ -341,6 +364,10 @@ func (a *Agent) Stop(ctx context.Context) error {
 	for _, sub := range subs {
 		_ = sub.Unsubscribe()
 	}
+	// Stop consuming before the connection drains. Anything unacked stays in the
+	// stream and comes back to this same durable consumer on the next start,
+	// which is the guarantee the mailbox exists to provide.
+	a.stopMailbox()
 	// Remove the registry entry before draining the connection so a stopped edge
 	// disappears from discovery at once; the TTL is only the crash fallback.
 	if err := registry.remove(agentID); err != nil {

@@ -183,6 +183,12 @@ jobs:
         working-directory: crates/agent-gui
         run: pnpm test:frontend
 
+      # The shared UI package owns the Markdown renderer, so its sanitiser
+      # allow-list is worth a real test rather than a lint rule.
+      - name: Test shared UI modules
+        working-directory: crates/agent-ui
+        run: pnpm test
+
       - name: Test release scripts
         working-directory: crates/agent-gui
         run: pnpm test:release
