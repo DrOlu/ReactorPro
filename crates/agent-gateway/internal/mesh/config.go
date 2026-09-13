@@ -289,10 +289,22 @@ const (
 // Mailbox defaults. A week is long enough to cover a scheduled maintenance
 // window and short enough that an abandoned agent's backlog expires on its own.
 const (
-	// DefaultMailboxStream keeps the name the durable inbox was asked for. The
-	// name is the stream's identity, not its subjects — what it captures is
-	// defined by AgentMailboxSubject, and that is the part that matters.
-	DefaultMailboxStream  = "AGENT_INBOXES"
+	// DefaultMailboxStream is namespaced rather than generic.
+	//
+	// It deliberately does NOT default to "AGENT_INBOXES". That name is already
+	// taken in real deployments: a live fleet was found running an AGENT_INBOXES
+	// stream over `mesh.agent.*.inbox` with workqueue retention and one durable
+	// consumer per peer, created months before this feature existed. Defaulting
+	// to that name meant the mailbox tried to take over someone else's stream —
+	// and because its retention policy differed, the update was rejected and the
+	// whole mesh bridge refused to start.
+	//
+	// A default that collides with infrastructure we do not own is a bad default,
+	// so the name is prefixed like `mesh_registry` is. Operators are still free to
+	// point -mesh-mailbox-stream anywhere, including at an existing stream that
+	// genuinely has the right shape; the mailbox adopts such a stream rather than
+	// rewriting it.
+	DefaultMailboxStream  = "MESH_AGENT_MAILBOX"
 	DefaultMailboxMaxAge  = 7 * 24 * time.Hour
 	DefaultMailboxMaxMsgs = 10_000
 )

@@ -72,6 +72,9 @@ type Agent struct {
 	// mailbox is the durable inbox consumer, or nil when the feature is off or
 	// has not started. Guarded by mu because Stop clears it concurrently.
 	mailbox *mailbox
+	// mailboxErr records why the mailbox is not running, so a failure is
+	// reported rather than only logged. Empty when it started or is off.
+	mailboxErr string
 
 	// collision records a peer seen using this edge's own id, which makes the
 	// mesh ambiguous. Empty when none has been seen.
@@ -298,24 +301,25 @@ func (a *Agent) Start(ctx context.Context) error {
 		return err
 	}
 
-	// The durable mailbox. Started after the registry because it is opt-in: an
-	// operator who asked for it should hear about a failure at startup rather
-	// than discover months later that mail was never being kept, but it must not
-	// leave a half-started agent behind.
+	// The durable mailbox.
+	//
+	// A failure here is logged loudly and recorded, but it does NOT fail the
+	// bridge. The mailbox is an added capability; taking the whole thing down
+	// over it would cost discovery, invocation and serving as well, which is a
+	// far worse outcome than running without an inbox. This mirrors how the mesh
+	// itself is treated by the gateway, and how the discovery and heartbeat
+	// subscriptions above are treated here. The reason is reported on
+	// /api/mesh/status so it is visible rather than merely logged.
+	a.mu.Lock()
+	a.mailboxErr = ""
+	a.mu.Unlock()
 	if err := a.startMailbox(ctx); err != nil {
-		a.stopMailbox()
-		_ = sub.Unsubscribe()
-		if discoverSub != nil {
-			_ = discoverSub.Unsubscribe()
-		}
-		if heartbeatSub != nil {
-			_ = heartbeatSub.Unsubscribe()
-		}
+		a.logger.Error("mesh mailbox failed to start; the mesh continues without it",
+			"err", err, "stream", a.config.MailboxStream,
+			"hint", "pick a free stream name with -mesh-mailbox-stream, or drop -mesh-mailbox")
 		a.mu.Lock()
-		a.conn = nil
+		a.mailboxErr = err.Error()
 		a.mu.Unlock()
-		conn.Close()
-		return err
 	}
 
 	a.mu.Lock()

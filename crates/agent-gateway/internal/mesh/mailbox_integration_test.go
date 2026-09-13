@@ -9,26 +9,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/nats-io/nuid"
 )
-
-// matchesSubject reports whether a NATS subject pattern matches a subject, for
-// the one assertion that the mailbox stream cannot capture protocol traffic.
-func matchesSubject(pattern, subject string) bool {
-	patternTokens := strings.Split(pattern, ".")
-	subjectTokens := strings.Split(subject, ".")
-	for i, token := range patternTokens {
-		if token == ">" {
-			return true
-		}
-		if i >= len(subjectTokens) {
-			return false
-		}
-		if token != "*" && token != subjectTokens[i] {
-			return false
-		}
-	}
-	return len(patternTokens) == len(subjectTokens)
-}
 
 // The mailbox is exercised against a real nats-server with JetStream enabled:
 // stream creation, durable consumer position, redelivery and ack are all server
@@ -441,11 +423,176 @@ func TestMailboxStreamDoesNotCaptureProtocolSubjects(t *testing.T) {
 		SubjectRegistryDiscover,
 		"mesh.event.something",
 	} {
-		if matchesSubject(pattern, subject) {
+		if subjectMatchesPattern(pattern, subject) {
 			t.Fatalf("the mailbox stream pattern %q captures %q", pattern, subject)
 		}
 	}
-	if !matchesSubject(pattern, AgentMailboxSubject("acme/lagos/edge-1")) {
+	if !subjectMatchesPattern(pattern, AgentMailboxSubject("acme/lagos/edge-1")) {
 		t.Fatal("the mailbox stream pattern does not match an agent mailbox subject")
+	}
+}
+
+// --- stream ownership -------------------------------------------------------
+
+// A stream with the configured name may already exist and may not be ours.
+// Rewriting it is what caused a real outage: an existing AGENT_INBOXES stream
+// with workqueue retention refused the update, and the failure took the whole
+// mesh bridge down. This pins that we adopt-compatible or refuse-cleanly, and
+// that either way the mesh itself keeps running.
+func TestMailboxRefusesAForeignStreamWithoutBreakingTheMesh(t *testing.T) {
+	url := startTestNATSJetStream(t)
+	agentID := uniqueID("foreign")
+	streamName := "FOREIGN_" + strings.ToUpper(nuid.Next()[:6])
+
+	conn, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer conn.Close()
+	js, err := jetstream.New(conn)
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Stand in for the real thing: someone else's stream, workqueue retention,
+	// capturing the request/reply inbox rather than any mailbox.
+	if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:        streamName,
+		Description: "not ours",
+		Subjects:    []string{SubjectAgentInboxPrefix + "*" + SubjectAgentInboxSuffix},
+		Retention:   jetstream.WorkQueuePolicy,
+		Storage:     jetstream.FileStorage,
+	}); err != nil {
+		t.Fatalf("create foreign stream: %v", err)
+	}
+
+	agent := buildTestAgent(t, url, agentID, func(c *Config) {
+		c.MailboxEnabled = true
+		c.MailboxStream = streamName
+	})
+	if err := agent.Start(t.Context()); err != nil {
+		t.Fatalf("a mailbox problem must not fail the bridge, got: %v", err)
+	}
+	defer func() { _ = agent.Stop(context.Background()) }()
+
+	if !agent.Connected() {
+		t.Fatal("the mesh bridge is not connected: a mailbox failure took the mesh down with it")
+	}
+
+	status := agent.MailboxStatus()
+	if status["running"] != false {
+		t.Fatalf("the mailbox claims to be running against a foreign stream: %v", status)
+	}
+	reason, _ := status["error"].(string)
+	if !strings.Contains(reason, "does not capture") || !strings.Contains(reason, streamName) {
+		t.Fatalf("the failure reason is not actionable: %q", reason)
+	}
+
+	// And the foreign stream must be exactly as it was.
+	info, err := js.Stream(ctx, streamName)
+	if err != nil {
+		t.Fatalf("re-open foreign stream: %v", err)
+	}
+	got, err := info.Info(ctx)
+	if err != nil {
+		t.Fatalf("foreign stream info: %v", err)
+	}
+	if got.Config.Retention != jetstream.WorkQueuePolicy || got.Config.Description != "not ours" {
+		t.Fatalf("the foreign stream was modified: retention=%v description=%q",
+			got.Config.Retention, got.Config.Description)
+	}
+}
+
+// A stream that genuinely captures this agent's mailbox is adopted as-is, even
+// if its other settings differ — we do not get to rewrite someone else's
+// retention policy just because the subject line up.
+func TestMailboxAdoptsACompatibleExistingStream(t *testing.T) {
+	url := startTestNATSJetStream(t)
+	agentID := uniqueID("adopt")
+	streamName := "ADOPT_" + strings.ToUpper(nuid.Next()[:6])
+
+	conn, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer conn.Close()
+	js, err := jetstream.New(conn)
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Right subjects, deliberately different bounds.
+	if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:     streamName,
+		Subjects: []string{AgentMailboxSubjectPattern()},
+		MaxAge:   3 * time.Hour,
+		Storage:  jetstream.FileStorage,
+	}); err != nil {
+		t.Fatalf("create stream: %v", err)
+	}
+
+	agent := buildTestAgent(t, url, agentID, func(c *Config) {
+		c.MailboxEnabled = true
+		c.MailboxStream = streamName
+	})
+	if err := agent.Start(t.Context()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer func() { _ = agent.Stop(context.Background()) }()
+
+	status := agent.MailboxStatus()
+	if status["running"] != true {
+		t.Fatalf("a compatible existing stream was not adopted: %v", status)
+	}
+	if _, hasErr := status["error"]; hasErr {
+		t.Fatalf("adoption reported an error: %v", status)
+	}
+	if status["consumer"] == nil {
+		t.Fatal("no durable consumer was reported after adopting a stream")
+	}
+
+	stream, err := js.Stream(ctx, streamName)
+	if err != nil {
+		t.Fatalf("re-open: %v", err)
+	}
+	info, err := stream.Info(ctx)
+	if err != nil {
+		t.Fatalf("info: %v", err)
+	}
+	if info.Config.MaxAge != 3*time.Hour {
+		t.Fatalf("the adopted stream's max age was rewritten to %v, want the original 3h", info.Config.MaxAge)
+	}
+}
+
+func TestSubjectMatchesPattern(t *testing.T) {
+	cases := []struct {
+		pattern, subject string
+		want             bool
+	}{
+		{"mesh.agent.*.mailbox", "mesh.agent.acme/lagos/edge-1.mailbox", true},
+		{"mesh.agent.*.mailbox", "mesh.agent.acme/lagos/edge-1.inbox", false},
+		{"mesh.agent.*.inbox", "mesh.agent.acme/edge-1.mailbox", false},
+		{"mesh.agent.>", "mesh.agent.acme/edge-1.mailbox", true},
+		{"mesh.>", "mesh.agent.acme/edge-1.mailbox", true},
+		{"mesh.agent.*.mailbox", "mesh.agent.a.b.mailbox", false},
+		{"mesh.agent.*.mailbox", "mesh.agent.a.mailbox.extra", false},
+	}
+	for _, tc := range cases {
+		if got := subjectMatchesPattern(tc.pattern, tc.subject); got != tc.want {
+			t.Errorf("subjectMatchesPattern(%q, %q) = %v, want %v", tc.pattern, tc.subject, got, tc.want)
+		}
+	}
+
+	// The property that matters for refusal: the real, pre-existing stream in the
+	// fleet does not capture a mailbox subject.
+	if capturesSubject([]string{"mesh.agent.*.inbox"}, AgentMailboxSubject("acme/edge-1")) {
+		t.Fatal("a stream over the inbox subject was treated as capturing the mailbox")
+	}
+	if !capturesSubject([]string{"mesh.agent.*.mailbox"}, AgentMailboxSubject("acme/edge-1")) {
+		t.Fatal("a stream over the mailbox subject was not recognised")
 	}
 }
