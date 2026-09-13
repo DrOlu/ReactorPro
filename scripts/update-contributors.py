@@ -71,6 +71,16 @@ def render_fallback(login):
     )
 
 
+def render_empty():
+    width = AVATAR_SIZE + 2 * GAP
+    height = AVATAR_SIZE + 2 * GAP
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="Contributors" data-contributor-count="0" font-family="Arial,sans-serif">'
+        f'<text x="50%" y="50%" fill="#8b949e" font-size="13" text-anchor="middle" dominant-baseline="middle">No contributors yet</text>'
+        f"</svg>"
+    )
+
+
 def render_chart(contributors):
     count = len(contributors)
     columns = min(COLUMNS, max(count, 1))
@@ -101,11 +111,12 @@ def main():
         raise SystemExit("usage: update-contributors.py CONTRIBUTORS_JSON OUTPUT_SVG")
     payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     contributors = parse_contributors(payload)
-    if not contributors:
-        raise SystemExit("contributor response contained no usable entries")
     destination = Path(sys.argv[2])
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(render_chart(contributors), encoding="utf-8")
+    if contributors:
+        destination.write_text(render_chart(contributors), encoding="utf-8")
+    else:
+        destination.write_text(render_empty(), encoding="utf-8")
 
 
 if __name__ == "__main__":

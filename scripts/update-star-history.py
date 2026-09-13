@@ -50,6 +50,19 @@ def nice_step(value):
     return factor * scale
 
 
+def render_empty(dark):
+    foreground = "#f0f6fc" if dark else "#000"
+    background = "#0d1117" if dark else "#fff"
+    muted = "#8b949e"
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{HEIGHT}" viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-label="Star History" data-star-count="0" style="background:{background};font-family:Arial,sans-serif">'
+        f'<rect width="{WIDTH}" height="{HEIGHT}" fill="{background}"/>'
+        f'<text x="50%" y="30" fill="{foreground}" font-size="20" font-weight="700" text-anchor="middle">Star History</text>'
+        f'<text x="50%" y="{HEIGHT // 2}" fill="{muted}" font-size="18" text-anchor="middle">No stars yet</text>'
+        f"</svg>"
+    )
+
+
 def render_chart(entries, dark):
     foreground = "#f0f6fc" if dark else "#000"
     background = "#0d1117" if dark else "#fff"
@@ -118,12 +131,13 @@ def main():
         raise SystemExit("usage: update-star-history.py STARGAZERS_JSON LIGHT_SVG DARK_SVG")
     payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     entries = parse_entries(payload)
-    if not entries:
-        raise SystemExit("stargazer response contained no starred_at timestamps")
     for output_path, dark in ((sys.argv[2], False), (sys.argv[3], True)):
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(render_chart(entries, dark), encoding="utf-8")
+        if entries:
+            destination.write_text(render_chart(entries, dark), encoding="utf-8")
+        else:
+            destination.write_text(render_empty(dark), encoding="utf-8")
 
 
 if __name__ == "__main__":
