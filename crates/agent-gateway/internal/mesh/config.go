@@ -104,6 +104,20 @@ type Config struct {
 	Description  string   `json:"description"`
 	Capabilities []string `json:"capabilities"`
 
+	// Registry selects how discovery learns about peers.
+	//
+	// The default "auto" uses a JetStream KV bucket when the server offers
+	// JetStream and degrades to the broadcast window when it does not, so a plain
+	// nats-server deployment keeps working. "jetstream" requires the bucket and
+	// fails startup without it; "broadcast" never touches JetStream.
+	RegistryMode string `json:"registryMode"`
+	// RegistryBucket names the JetStream KV bucket holding one manifest per edge.
+	RegistryBucket string `json:"registryBucket"`
+	// RegistryTTL is how long a manifest stays valid without a heartbeat. An
+	// edge that crashes stops refreshing its entry, and discovery treats an
+	// entry older than this as absent.
+	RegistryTTL time.Duration `json:"-"`
+
 	// Timing
 	HeartbeatInterval time.Duration `json:"-"`
 	// RequestTimeout bounds a skill dispatch waiting for a peer's reply.
@@ -111,7 +125,8 @@ type Config struct {
 	// DiscoveryWindow is how long discovery collects replies. Agents answer
 	// discovery individually as well as the registry, so the only way to know
 	// every peer has replied is to wait a fixed window — it must be short,
-	// because it is also how long the caller waits.
+	// because it is also how long the caller waits. It is only used on the
+	// broadcast path; a JetStream registry answers deterministically.
 	DiscoveryWindow time.Duration `json:"-"`
 
 	// AcceptedVersions, when non-empty, is the only set of protocol versions
@@ -194,6 +209,17 @@ type Config struct {
 	EventSubscriptions []string `json:"eventSubscriptions"`
 }
 
+// registryMode returns the registry mode in its canonical lowercase form,
+// defaulting an unset value to auto. Validate and normalize make the same
+// choice, so every caller agrees.
+func (c Config) registryMode() string {
+	mode := strings.ToLower(strings.TrimSpace(c.RegistryMode))
+	if mode == "" {
+		return RegistryAuto
+	}
+	return mode
+}
+
 // servesSkill reports whether a built-in skill may be served. An empty
 // allowlist means all of them.
 func (c Config) servesSkill(id string) bool {
@@ -220,6 +246,25 @@ const (
 	// VerifyRequire rejects any unsigned envelope. Correct for a closed fleet
 	// where every peer holds an identity.
 	VerifyRequire = "require"
+)
+
+// Discovery registry modes. See Config.RegistryMode.
+const (
+	// RegistryAuto uses JetStream KV when it is available and falls back to the
+	// broadcast discovery window when it is not.
+	RegistryAuto = "auto"
+	// RegistryJetStream requires JetStream KV: startup fails when it is absent.
+	RegistryJetStream = "jetstream"
+	// RegistryBroadcast never uses JetStream; discovery is the broadcast window.
+	RegistryBroadcast = "broadcast"
+)
+
+// Registry defaults. The TTL is three default heartbeats, so a crashed edge
+// remains visible for a short grace period and then ages out without operator
+// action.
+const (
+	DefaultRegistryBucket = "mesh_registry"
+	DefaultRegistryTTL    = 3 * 30 * time.Second
 )
 
 // fingerprintPrefix is the only fingerprint shape accepted in TrustedPeers.
@@ -255,6 +300,9 @@ func DefaultConfig() Config {
 		HeartbeatInterval: 30 * time.Second,
 		RequestTimeout:    120 * time.Second,
 		DiscoveryWindow:   2 * time.Second,
+		RegistryMode:      RegistryAuto,
+		RegistryBucket:    DefaultRegistryBucket,
+		RegistryTTL:       DefaultRegistryTTL,
 		VerifyMode:        VerifyPrefer,
 		ClockSkew:         DefaultClockSkew,
 		TrustOnFirstUse:   true,
@@ -305,6 +353,29 @@ func (c *Config) normalize() {
 	if c.InvokeTimeout <= 0 {
 		c.InvokeTimeout = DefaultInvokeTimeout
 	}
+	c.normalizeRegistry()
+}
+
+// normalizeRegistry fills the registry settings a literal-built Config omits.
+//
+// The TTL default tracks the heartbeat interval rather than being a fixed
+// constant: an operator who lengthens the heartbeat must not have every entry
+// age out between heartbeats, which would empty discovery at exactly the moment
+// the operator slowed it down.
+func (c *Config) normalizeRegistry() {
+	if strings.TrimSpace(c.RegistryMode) == "" {
+		c.RegistryMode = RegistryAuto
+	}
+	if strings.TrimSpace(c.RegistryBucket) == "" {
+		c.RegistryBucket = DefaultRegistryBucket
+	}
+	if c.RegistryTTL <= 0 {
+		heartbeat := c.HeartbeatInterval
+		if heartbeat <= 0 {
+			heartbeat = 30 * time.Second
+		}
+		c.RegistryTTL = 3 * heartbeat
+	}
 }
 
 // servesOperation reports whether a remote invocation may name this operation.
@@ -351,6 +422,22 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("mesh verify mode %q is not one of %q, %q, %q",
 			c.VerifyMode, VerifyOff, VerifyPrefer, VerifyRequire)
+	}
+	// Registry mode is rejected the same way as verify mode: an unrecognised
+	// value must not silently degrade, because "auto" and "jetstream" have very
+	// different operational guarantees and a typo would hide which one is live.
+	switch strings.ToLower(strings.TrimSpace(c.RegistryMode)) {
+	case "", RegistryAuto, RegistryJetStream, RegistryBroadcast:
+	default:
+		return fmt.Errorf("mesh registry mode %q is not one of %q, %q, %q",
+			c.RegistryMode, RegistryAuto, RegistryJetStream, RegistryBroadcast)
+	}
+	// An empty bucket means "use the default"; a non-empty one must be a valid
+	// JetStream bucket name so the failure is reported at startup rather than
+	// when the first registry write is attempted.
+	if bucket := strings.TrimSpace(c.RegistryBucket); bucket != "" && !validRegistryBucket(bucket) {
+		return fmt.Errorf("mesh registry bucket %q is not a valid JetStream bucket name "+
+			"(letters, digits, underscores and dashes only)", bucket)
 	}
 	if !c.TrustOnFirstUse && len(c.TrustedPeers) == 0 && c.VerifyMode != VerifyOff {
 		return errors.New("mesh has trust-on-first-use disabled and no trusted peers configured: " +

@@ -79,6 +79,12 @@ type Config struct {
 	// accepted from peers. Empty accepts any version.
 	MeshAcceptedVersions string
 
+	// Mesh discovery registry: a JetStream KV bucket each edge publishes its
+	// manifest into, so discovery is deterministic rather than a fixed window.
+	MeshRegistryMode   string // auto, jetstream, or broadcast
+	MeshRegistryBucket string
+	MeshRegistryTTL    time.Duration
+
 	// Mesh remote invocation: whether a verified peer may ask a desktop agent
 	// behind this edge to run a task, and under what limits.
 	MeshAllowRemoteInvoke     bool
@@ -119,6 +125,9 @@ func Load() *Config {
 	flag.BoolVar(&cfg.MeshSkillsEnabled, "mesh-skills-enabled", getenvBool("LIVEAGENT_GATEWAY_MESH_SKILLS_ENABLED", true), "serve mesh skills at all (ping, describe, status and the gated invoke); false serves none")
 	flag.StringVar(&cfg.MeshSkills, "mesh-skills", getenv("LIVEAGENT_GATEWAY_MESH_SKILLS", ""), "comma-separated built-in mesh skills to serve; empty serves all of them")
 	flag.StringVar(&cfg.MeshAcceptedVersions, "mesh-accepted-versions", getenv("LIVEAGENT_GATEWAY_MESH_ACCEPTED_VERSIONS", ""), "comma-separated protocol versions to accept from peers; empty accepts any")
+	flag.StringVar(&cfg.MeshRegistryMode, "mesh-registry", getenv("LIVEAGENT_GATEWAY_MESH_REGISTRY", mesh.RegistryAuto), "mesh discovery registry: auto (JetStream KV when available, else broadcast), jetstream (required), or broadcast")
+	flag.StringVar(&cfg.MeshRegistryBucket, "mesh-registry-bucket", getenv("LIVEAGENT_GATEWAY_MESH_REGISTRY_BUCKET", mesh.DefaultRegistryBucket), "JetStream KV bucket holding one manifest per mesh edge")
+	flag.DurationVar(&cfg.MeshRegistryTTL, "mesh-registry-ttl", getenvDuration("LIVEAGENT_GATEWAY_MESH_REGISTRY_TTL", 0), "how long a registry entry stays valid without a heartbeat (0 uses three heartbeat intervals)")
 	flag.BoolVar(&cfg.MeshAllowRemoteInvoke, "mesh-allow-remote-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_ALLOW_REMOTE_INVOKE", true), "allow peers to invoke operations on desktop agents behind this edge")
 	flag.BoolVar(&cfg.MeshRequireVerifiedInvoke, "mesh-require-verified-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_REQUIRE_VERIFIED_INVOKE", true), "refuse remote invocation whose caller identity was not verified (needs a signed, trusted peer)")
 	flag.StringVar(&cfg.MeshInvokeOperations, "mesh-invoke-operations", getenv("LIVEAGENT_GATEWAY_MESH_INVOKE_OPERATIONS", mesh.OperationTask), "comma-separated operations a peer may invoke remotely; empty exposes none")
@@ -299,6 +308,17 @@ func (c *Config) MeshConfig() mesh.Config {
 	cfg.SkillsEnabled = c.MeshSkillsEnabled
 	cfg.SkillAllowlist = splitList(c.MeshSkills)
 	cfg.AcceptedVersions = splitList(c.MeshAcceptedVersions)
+	if mode := strings.TrimSpace(c.MeshRegistryMode); mode != "" {
+		cfg.RegistryMode = mode
+	}
+	if bucket := strings.TrimSpace(c.MeshRegistryBucket); bucket != "" {
+		cfg.RegistryBucket = bucket
+	}
+	// 0 means "derive from the heartbeat interval", which normalize does; only an
+	// explicit positive TTL overrides the default.
+	if c.MeshRegistryTTL > 0 {
+		cfg.RegistryTTL = c.MeshRegistryTTL
+	}
 	cfg.AllowRemoteInvoke = c.MeshAllowRemoteInvoke
 	cfg.RequireVerifiedInvoke = c.MeshRequireVerifiedInvoke
 	cfg.InvokeOperations = splitList(c.MeshInvokeOperations)

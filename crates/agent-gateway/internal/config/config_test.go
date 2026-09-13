@@ -243,6 +243,30 @@ func TestMeshConfigFromEnvironment(t *testing.T) {
 	}
 }
 
+func TestMeshConfigRegistryFromEnvironment(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	resetFlagsForTest(t)
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_ENABLED", "true")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_URL", "nats://mesh.internal:4222")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_REGISTRY", "jetstream")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_REGISTRY_BUCKET", "acme_registry")
+	t.Setenv("LIVEAGENT_GATEWAY_MESH_REGISTRY_TTL", "45s")
+
+	meshConfig := Load().MeshConfig()
+	if meshConfig.RegistryMode != mesh.RegistryJetStream {
+		t.Fatalf("registry mode = %q, want %q", meshConfig.RegistryMode, mesh.RegistryJetStream)
+	}
+	if meshConfig.RegistryBucket != "acme_registry" {
+		t.Fatalf("registry bucket = %q, want %q", meshConfig.RegistryBucket, "acme_registry")
+	}
+	if meshConfig.RegistryTTL != 45*time.Second {
+		t.Fatalf("registry ttl = %s, want 45s", meshConfig.RegistryTTL)
+	}
+	if err := meshConfig.Validate(); err != nil {
+		t.Fatalf("an enabled, configured bridge must validate: %v", err)
+	}
+}
+
 func TestGetenvBool(t *testing.T) {
 	cases := map[string]bool{
 		"true":  true,
