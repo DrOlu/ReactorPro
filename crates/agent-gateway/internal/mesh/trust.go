@@ -38,6 +38,24 @@ type trustStore struct {
 	mu        sync.RWMutex
 	pins      map[string]string // agent id -> fingerprint
 	pinnedFPs map[string]struct{}
+	// onLearn is called whenever a *new* id-to-fingerprint binding is recorded,
+	// so it can be written to durable storage. Nil means "do not persist".
+	//
+	// Note that it fires for both learning paths: trust-on-first-use, and an id
+	// whose fingerprint appears in the configured allowlist. In both cases the
+	// binding itself is an observation — the configuration lists fingerprints,
+	// never which agent id owns one.
+	onLearn func(PeerPin)
+}
+
+// setPinRecorder installs the callback invoked when a new pin is recorded.
+func (s *trustStore) setPinRecorder(record func(PeerPin)) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.onLearn = record
+	s.mu.Unlock()
 }
 
 func newTrustStore(cfg Config) *trustStore {
@@ -93,28 +111,40 @@ func (s *trustStore) allow(agentID, fingerprint string) error {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if known, pinned := s.pins[agentID]; pinned {
 		if known != fingerprint {
 			// The identity changed under a name we already know. This is the
 			// signal that matters: either the peer was rebuilt with a new key, or
 			// something is speaking as it.
+			s.mu.Unlock()
 			return ErrIdentityMismatch
 		}
+		s.mu.Unlock()
 		return nil
 	}
 
+	learned := true
 	if _, trusted := s.pinnedFPs[fingerprint]; trusted {
 		s.pins[agentID] = fingerprint
-		return nil
+	} else if s.trustOnFirstUse {
+		s.pins[agentID] = fingerprint
+	} else {
+		learned = false
 	}
+	record := s.onLearn
+	s.mu.Unlock()
 
-	if !s.trustOnFirstUse {
+	if !learned {
 		return ErrPeerNotTrusted
 	}
 
-	s.pins[agentID] = fingerprint
+	// Recorded outside the lock on purpose. This store sits on the inbound hot
+	// path, and holding its lock across a disk write would make every peer's
+	// verification wait behind I/O.
+	if record != nil {
+		record(PeerPin{AgentID: agentID, Fingerprint: fingerprint})
+	}
 	return nil
 }
 

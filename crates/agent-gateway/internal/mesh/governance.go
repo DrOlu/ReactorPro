@@ -15,6 +15,18 @@ type GovernanceConfig struct {
 	RequireApprovalFor []string `json:"requireApprovalFor"`
 	// ApprovalTimeout bounds how long a dispatch waits for a decision.
 	ApprovalTimeout time.Duration `json:"-"`
+	// MaxHistory bounds how many decided approvals are retained, in memory and in
+	// durable storage.
+	//
+	// Without a bound the history grows for the life of the process, and — now
+	// that it is persisted — for the life of the deployment. An approval record is
+	// an audit trail worth keeping, so the bound is generous rather than minimal;
+	// it exists to stop unbounded growth, not to shorten the trail.
+	//
+	// Zero takes the default rather than meaning "unbounded", so a Config built
+	// from literals cannot silently accumulate without limit. A negative value is
+	// the explicit way to opt out of the bound.
+	MaxHistory int `json:"maxHistory"`
 }
 
 // DefaultGovernanceConfig returns the shipping defaults: enabled, but with no
@@ -24,8 +36,13 @@ func DefaultGovernanceConfig() GovernanceConfig {
 		Enabled:            true,
 		RequireApprovalFor: nil,
 		ApprovalTimeout:    5 * time.Minute,
+		MaxHistory:         DefaultMaxApprovalHistory,
 	}
 }
+
+// DefaultMaxApprovalHistory is how many decided approvals are retained when the
+// operator does not choose a bound.
+const DefaultMaxApprovalHistory = 200
 
 // ApprovalStatus is the state of an approval request.
 type ApprovalStatus string
@@ -69,10 +86,54 @@ type Governor struct {
 	mu      sync.Mutex
 	pending map[string]*pendingApproval
 	history []Approval
+	// onDecide is called after a decision is recorded, so it can be persisted.
+	// Nil means "do not persist".
+	onDecide func(Approval)
+}
+
+// setRecorder installs the callback invoked after a decision is recorded.
+func (g *Governor) setRecorder(record func(Approval)) {
+	g.mu.Lock()
+	g.onDecide = record
+	g.mu.Unlock()
+}
+
+// restore installs persisted decisions.
+//
+// Called once at start-up. Pending approvals are deliberately *not* restored: a
+// request whose decision channel died with the previous process can never be
+// answered or waited on again, so resurrecting it would produce a permanently
+// pending approval that no one can resolve. Only decided history is durable.
+func (g *Governor) restore(decided []Approval) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, approval := range decided {
+		if approval.ID == "" {
+			continue
+		}
+		g.history = append(g.history, approval)
+	}
+	g.trimHistoryLocked()
+}
+
+// trimHistoryLocked enforces the configured bound. Callers must hold the lock.
+func (g *Governor) trimHistoryLocked() {
+	max := g.config.MaxHistory
+	if max <= 0 || len(g.history) <= max {
+		return
+	}
+	// Copy rather than re-slice: re-slicing keeps the old backing array alive, so
+	// the memory would not actually be released.
+	g.history = append([]Approval(nil), g.history[len(g.history)-max:]...)
 }
 
 // NewGovernor builds a governor.
 func NewGovernor(config GovernanceConfig) *Governor {
+	// A zero bound takes the default so that a Config assembled from literals
+	// cannot grow without limit; only an explicit negative opts out.
+	if config.MaxHistory == 0 {
+		config.MaxHistory = DefaultMaxApprovalHistory
+	}
 	return &Governor{config: config, pending: map[string]*pendingApproval{}}
 }
 
@@ -221,6 +282,13 @@ func (g *Governor) resolve(id string, status ApprovalStatus, decidedBy, reason s
 	close(entry.done)
 	delete(g.pending, id)
 	g.history = append(g.history, decided)
+	g.trimHistoryLocked()
+	persist := g.onDecide
 	g.mu.Unlock()
+
+	// Outside the lock, so a storage write does not serialise approval decisions.
+	if persist != nil {
+		persist(decided)
+	}
 	return nil
 }

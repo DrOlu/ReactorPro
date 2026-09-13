@@ -101,6 +101,17 @@ func (a *Agent) TrustPeers() []PeerPin { return a.guard.trust.peers() }
 // SeedTrustedPeers installs previously persisted identity pins.
 func (a *Agent) SeedTrustedPeers(pins []PeerPin) { a.guard.trust.seed(pins) }
 
+// SetTrustPinRecorder installs a callback invoked when a new peer identity pin
+// is learned, so it can be written to durable storage. Without it, pins live
+// only as long as the process — which resets the impersonation detection this
+// store exists to provide.
+func (a *Agent) SetTrustPinRecorder(record func(PeerPin)) {
+	if a.guard == nil {
+		return
+	}
+	a.guard.trust.setPinRecorder(record)
+}
+
 // AgentID returns the immutable id this agent speaks as.
 func (a *Agent) AgentID() string { return a.agentID }
 
@@ -477,6 +488,7 @@ func (a *Agent) deregisterWith(ctx context.Context, conn *nats.Conn, agentID str
 		Type:    TypeRegister,
 		TS:      timestamp(),
 		From:    agentID,
+		Trace:   newTrace(),
 	}
 	if a.identity != nil {
 		_ = a.identity.Sign(envelope)
@@ -671,8 +683,8 @@ func (a *Agent) Dispatch(ctx context.Context, targetAgent, skill string, input a
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
+	// newEnvelope already attaches a fresh trace; no need to mint a second one.
 	envelope := a.newEnvelope(TypeRequest, targetAgent, newID())
-	envelope.Trace = &Trace{TraceID: newID(), SpanID: newID()}
 	if err := a.attachPayload(envelope, RequestPayload{Skill: skill, Input: input}); err != nil {
 		return nil, err
 	}
@@ -932,12 +944,29 @@ func (a *Agent) replyEnvelope(request *Envelope) *Envelope {
 		reply.To = request.From
 		reply.TaskID = request.TaskID
 		reply.Trace = request.Trace
+		// Correlate the answer to the question it answers, rather than relying on
+		// the NATS reply subject — that subject is transport, not part of the
+		// signed envelope, so it does not survive a store-and-forward path and
+		// cannot be verified. InReplyTo is covered by the signature.
+		reply.InReplyTo = request.ID
+	}
+	if reply.Trace == nil {
+		// A request that carried no trace still gets a correlateable answer.
+		reply.Trace = newTrace()
 	}
 	if a.identity != nil {
 		_ = a.identity.Sign(reply)
 	}
 	return reply
 }
+
+// newTrace mints a trace for an outbound envelope.
+//
+// Every envelope carries one, including the ones with no task id — registration,
+// heartbeats and events. A trace is what lets a peer follow one logical action
+// across hops, and it costs two short ids. Both fields are covered by the
+// signature (see SigningPayload), so a trace cannot be rewritten in transit.
+func newTrace() *Trace { return &Trace{TraceID: newID(), SpanID: newID()} }
 
 func (a *Agent) newEnvelope(messageType MessageType, to, taskID string) *Envelope {
 	envelope := &Envelope{
@@ -948,6 +977,7 @@ func (a *Agent) newEnvelope(messageType MessageType, to, taskID string) *Envelop
 		From:    a.agentID,
 		To:      to,
 		TaskID:  taskID,
+		Trace:   newTrace(),
 	}
 	if a.identity != nil {
 		_ = a.identity.Sign(envelope)

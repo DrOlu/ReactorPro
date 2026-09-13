@@ -73,6 +73,10 @@ type Manager struct {
 	// the same reason, and nil until one is injected, which is what keeps
 	// invocation unserved rather than half-working.
 	localInvoker LocalInvoker
+	// stateStore is durable storage for trust pins, reputation and approvals.
+	// Nil means "run without persistence", which is a supported mode: the mesh
+	// works exactly as before, it simply forgets across a restart.
+	stateStore StateStore
 }
 
 // NewManager builds a manager from configuration.
@@ -150,6 +154,11 @@ func (m *Manager) Start(ctx context.Context) error {
 	if err := m.registerInvokeSkill(agent); err != nil {
 		m.logger.Warn("mesh invoke skill registration failed", "error", err)
 	}
+	// Durable state: rehydrate what a previous run recorded, then arrange for
+	// anything learned from here on to be written back. Restore runs first so
+	// reloaded state is not immediately written out again.
+	m.restoreState(agent)
+	m.wirePersistence(agent)
 	if err := agent.Start(ctx); err != nil {
 		m.setLastError(err.Error())
 		return err

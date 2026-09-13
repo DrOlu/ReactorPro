@@ -91,6 +91,10 @@ type Config struct {
 	MeshRequireVerifiedInvoke bool
 	MeshInvokeOperations      string // comma-separated operation names
 	MeshInvokeTimeout         time.Duration
+
+	// MeshApprovalHistory bounds how many decided approvals are retained, in
+	// memory and in durable storage. A negative value removes the bound.
+	MeshApprovalHistory int
 }
 
 func Load() *Config {
@@ -132,6 +136,7 @@ func Load() *Config {
 	flag.BoolVar(&cfg.MeshRequireVerifiedInvoke, "mesh-require-verified-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_REQUIRE_VERIFIED_INVOKE", true), "refuse remote invocation whose caller identity was not verified (needs a signed, trusted peer)")
 	flag.StringVar(&cfg.MeshInvokeOperations, "mesh-invoke-operations", getenv("LIVEAGENT_GATEWAY_MESH_INVOKE_OPERATIONS", mesh.OperationTask), "comma-separated operations a peer may invoke remotely; empty exposes none")
 	flag.DurationVar(&cfg.MeshInvokeTimeout, "mesh-invoke-timeout", getenvDuration("LIVEAGENT_GATEWAY_MESH_INVOKE_TIMEOUT", 60*time.Second), "how long one remote invocation may run before the edge gives up on it")
+	flag.IntVar(&cfg.MeshApprovalHistory, "mesh-approval-history", getenvInt("LIVEAGENT_GATEWAY_MESH_APPROVAL_HISTORY", mesh.DefaultMaxApprovalHistory), "how many decided mesh approvals to retain in memory and on disk (negative removes the bound)")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
 	flag.DurationVar(&cfg.ChatPrepareTimeout, "chat-prepare-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT", 2*time.Second), "timeout for the pre-submit desktop agent liveness probe")
 	flag.DurationVar(&cfg.ChatDeliveryTimeout, "chat-delivery-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT", 5*time.Second), "timeout delivering an accepted chat command to the desktop agent stream")
@@ -308,6 +313,11 @@ func (c *Config) MeshConfig() mesh.Config {
 	cfg.SkillsEnabled = c.MeshSkillsEnabled
 	cfg.SkillAllowlist = splitList(c.MeshSkills)
 	cfg.AcceptedVersions = splitList(c.MeshAcceptedVersions)
+	// Only override when the operator chose a value, so the shipping default is
+	// not replaced by a zero — a negative value is the explicit opt-out.
+	if c.MeshApprovalHistory != 0 {
+		cfg.Governance.MaxHistory = c.MeshApprovalHistory
+	}
 	if mode := strings.TrimSpace(c.MeshRegistryMode); mode != "" {
 		cfg.RegistryMode = mode
 	}
