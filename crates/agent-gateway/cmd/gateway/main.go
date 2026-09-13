@@ -14,6 +14,7 @@ import (
 	"github.com/liveagent/agent-gateway/internal/config"
 	"github.com/liveagent/agent-gateway/internal/db"
 	"github.com/liveagent/agent-gateway/internal/mesh"
+	"github.com/liveagent/agent-gateway/internal/meshstate"
 	"github.com/liveagent/agent-gateway/internal/observability"
 	"github.com/liveagent/agent-gateway/internal/server"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -106,6 +107,21 @@ func main() {
 	// through would answer a peer with an internal error, which reads as a broken
 	// edge rather than a half-wired one.
 	meshManager.SetLocalInvoker(desktopMeshInvoker{manager: sm})
+
+	// Persist the mesh's long-lived state — trust pins, reputation and approval
+	// decisions — so it survives a restart.
+	//
+	// The pins are the ones that matter: with trust-on-first-use, the first key an
+	// agent id presents is remembered and any different key is refused, which is
+	// what detects impersonation. An empty pin set after a restart hands that role
+	// to whoever speaks first. A storage problem is therefore logged loudly rather
+	// than ignored, but it is not fatal: the mesh still works, it just forgets.
+	if meshState, err := meshstate.NewStore(database); err != nil {
+		slog.Warn("mesh state will not be persisted; trust pins, reputation and approvals will reset on restart",
+			"err", err)
+	} else {
+		meshManager.SetStateStore(meshState)
+	}
 
 	if err := meshManager.Start(context.Background()); err != nil {
 		slog.Error("mesh bridge failed to start", "err", err)

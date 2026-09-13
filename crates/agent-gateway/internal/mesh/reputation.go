@@ -47,12 +47,19 @@ type Reputation struct {
 
 // ReputationStore tracks per-agent reliability.
 //
-// Scores are kept in memory: reputation is advisory and rebuilt from observed
-// traffic, so it does not warrant durable storage.
+// Scores are derived from observed traffic and decay toward the initial score
+// over a half-life, which is exactly why they are now persisted. A score is a
+// function of *when* it was last updated, so a store that resets on every
+// restart does not merely forget the totals — it silently resets every peer to
+// the initial score, discarding accumulated evidence and restarting the decay
+// clock. Persisting keeps the curve continuous across restarts.
 type ReputationStore struct {
-	config  ReputationConfig
-	mu      sync.Mutex
-	records map[string]*Reputation
+	config ReputationConfig
+	mu     sync.Mutex
+	// onRecord is called after a score changes, so it can be persisted. Nil means
+	// "do not persist", which is the mode when no state store is installed.
+	onRecord func(Reputation)
+	records  map[string]*Reputation
 }
 
 // NewReputationStore builds a store.
@@ -63,6 +70,30 @@ func NewReputationStore(config ReputationConfig) *ReputationStore {
 	return &ReputationStore{config: config, records: map[string]*Reputation{}}
 }
 
+// setRecorder installs the callback invoked after a score changes.
+func (s *ReputationStore) setRecorder(record func(Reputation)) {
+	s.mu.Lock()
+	s.onRecord = record
+	s.mu.Unlock()
+}
+
+// restore replaces the in-memory records with persisted ones.
+//
+// Called once at start-up, before the bridge serves traffic. The newest update
+// wins per agent, so a record already present is not overwritten by an older one.
+func (s *ReputationStore) restore(records []Reputation) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, record := range records {
+		if record.AgentID == "" {
+			continue
+		}
+		clamped := record
+		clamped.Score = s.clamp(record.Score)
+		s.records[record.AgentID] = &clamped
+	}
+}
+
 // RecordSuccess rewards an agent for a completed task.
 func (s *ReputationStore) RecordSuccess(agentID string) { s.record(agentID, true) }
 
@@ -71,7 +102,6 @@ func (s *ReputationStore) RecordFailure(agentID string) { s.record(agentID, fals
 
 func (s *ReputationStore) record(agentID string, success bool) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	record := s.ensure(agentID)
 	s.decayLocked(record)
 	if success {
@@ -83,6 +113,15 @@ func (s *ReputationStore) record(agentID string, success bool) {
 	}
 	record.Score = s.clamp(record.Score)
 	record.UpdatedAt = now()
+	snapshot := *record
+	persist := s.onRecord
+	s.mu.Unlock()
+
+	// Outside the lock: this runs on the dispatch path, and a disk write must not
+	// stall every other agent's score update behind it.
+	if persist != nil {
+		persist(snapshot)
+	}
 }
 
 // Score returns an agent's current score, applying decay for elapsed time.
