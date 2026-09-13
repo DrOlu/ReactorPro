@@ -16,7 +16,7 @@ const MIN_MODELS_PER_PROVIDER = {
   xai: 3,
   deepseek: 2,
   zhipuai: 10,
-  moonshotai: 8,
+  moonshotai: 4,
   minimax: 5,
   stepfun: 4,
   xiaomi: 4,
