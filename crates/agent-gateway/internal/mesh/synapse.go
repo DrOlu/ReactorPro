@@ -516,6 +516,33 @@ func (a *Agent) Discover(ctx context.Context, filter DiscoverFilter) ([]Manifest
 			for _, manifest := range manifests {
 				seen[manifest.ID] = manifest
 			}
+			// `jetstream` means the registry is the only source: the operator has
+			// declared that the whole fleet publishes to it, and paying the
+			// broadcast window as well would defeat the point of asking for it.
+			if mode == RegistryJetStream {
+				return a.collectPeers(seen), nil
+			}
+			// `auto` unions the registry with broadcast, and that is not a
+			// nicety — returning the registry alone made an upgraded edge blind
+			// to its own fleet. A peer that has not been upgraded, or that runs a
+			// different implementation, publishes nothing to the bucket and only
+			// answers a broadcast; the registry read still *succeeds*, so the
+			// fallback below never triggers and discovery quietly returns almost
+			// nothing. That is a worse failure than the lossy window it replaced,
+			// because it looks like a healthy mesh with nobody on it.
+			broadcast, broadcastErr := a.broadcastDiscover(conn, filter)
+			if broadcastErr != nil {
+				// The registry answered, so a broadcast problem must not lose what
+				// we already have.
+				a.logger.Warn("mesh broadcast discovery failed; using the registry alone",
+					"error", broadcastErr)
+				return a.collectPeers(seen), nil
+			}
+			for _, manifest := range broadcast {
+				if _, ok := seen[manifest.ID]; !ok {
+					seen[manifest.ID] = manifest
+				}
+			}
 			return a.collectPeers(seen), nil
 		}
 		// jetstream mode is a hard requirement: surface the failure rather than
