@@ -75,6 +75,12 @@ message GatewayEnvelope {
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
   // never-wired chat event replay request.
   reserved 67, 68, 69, 74;
+  // Remote mesh invocation was once carried as a gateway->desktop frame. It was
+  // removed when remote tasks moved onto the ordinary chat command path (the
+  // desktop has no execution surface of its own). The number and name are
+  // reserved so the wire id can never be reused for a different meaning.
+  reserved 103;
+  reserved "mesh_invoke";
 }
 
 message AgentEnvelope {
@@ -158,6 +164,9 @@ message AgentEnvelope {
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
   // never-wired chat event replay response.
   reserved 67, 68, 69, 78;
+  // The corresponding mesh invocation reply frame; see GatewayEnvelope.
+  reserved 109;
+  reserved "mesh_invoke_resp";
 }
 
 message ChatSelectedModel {

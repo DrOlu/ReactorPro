@@ -69,6 +69,10 @@ type Manager struct {
 	// localAgents supplies the directory published in the manifest. Held here so
 	// it can be installed before Start.
 	localAgents LocalAgentProvider
+	// localInvoker reaches a desktop agent attached to this edge. Held here for
+	// the same reason, and nil until one is injected, which is what keeps
+	// invocation unserved rather than half-working.
+	localInvoker LocalInvoker
 }
 
 // NewManager builds a manager from configuration.
@@ -139,6 +143,12 @@ func (m *Manager) Start(ctx context.Context) error {
 	// what it can ask for.
 	if err := m.registerBuiltinSkills(agent); err != nil {
 		m.logger.Warn("mesh built-in skill registration failed", "error", err)
+	}
+	// Registration order matters only for the first published manifest, and the
+	// invoke skill is registered here so it appears in that first manifest: a peer
+	// should not have to wait for a heartbeat to learn that an edge takes work.
+	if err := m.registerInvokeSkill(agent); err != nil {
+		m.logger.Warn("mesh invoke skill registration failed", "error", err)
 	}
 	if err := agent.Start(ctx); err != nil {
 		m.setLastError(err.Error())

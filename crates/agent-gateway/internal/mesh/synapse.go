@@ -20,6 +20,16 @@ type RequestMeta struct {
 	TaskID string
 	From   string
 	Trace  *Trace
+	// Verified reports that the inbound guard established the sender's identity:
+	// a signature that verified against a fingerprint the trust store pinned.
+	//
+	// False for an unsigned envelope that the prefer mode accepted, and always
+	// false under verify-off. "It passed the guard" therefore does not mean "we
+	// know who sent it", and a skill with a side effect must check this rather
+	// than assume the stronger reading.
+	Verified bool
+	// CallerFingerprint is the verified fingerprint, empty when Verified is false.
+	CallerFingerprint string
 }
 
 // Handler serves one skill. Returning an error produces a 5001 respond
@@ -55,6 +65,10 @@ type Agent struct {
 	started  bool
 	agentID  string
 	subs     []*nats.Subscription
+	// registry is the JetStream KV discovery registry, or nil when it is
+	// unavailable or the mode is broadcast. Guarded by mu because auto mode
+	// installs it from a detection goroutine after Start returns.
+	registry *registryClient
 
 	// collision records a peer seen using this edge's own id, which makes the
 	// mesh ambiguous. Empty when none has been seen.
@@ -249,6 +263,27 @@ func (a *Agent) Start(ctx context.Context) error {
 		a.logger.Warn("mesh heartbeat subscription failed", "error", err)
 	}
 
+	a.setManifest(a.buildManifest())
+
+	// Probe and bind the discovery registry before going live. In jetstream mode
+	// a failure is fatal, so tear down what this Start created rather than leave a
+	// half-started agent behind. In auto mode this only starts a background probe
+	// and returns immediately, so a server without JetStream never delays startup.
+	if err := a.setupRegistry(ctx); err != nil {
+		_ = sub.Unsubscribe()
+		if discoverSub != nil {
+			_ = discoverSub.Unsubscribe()
+		}
+		if heartbeatSub != nil {
+			_ = heartbeatSub.Unsubscribe()
+		}
+		a.mu.Lock()
+		a.conn = nil
+		a.mu.Unlock()
+		conn.Close()
+		return err
+	}
+
 	a.mu.Lock()
 	a.subs = append(a.subs, sub)
 	if discoverSub != nil {
@@ -259,8 +294,6 @@ func (a *Agent) Start(ctx context.Context) error {
 	}
 	a.started = true
 	a.mu.Unlock()
-
-	a.setManifest(a.buildManifest())
 
 	if err := a.Register(ctx); err != nil {
 		// Registration failing is not fatal: the agent still serves requests
@@ -283,10 +316,12 @@ func (a *Agent) Stop(ctx context.Context) error {
 	conn := a.conn
 	subs := a.subs
 	started := a.started
+	agentID := a.agentID
+	registry := a.registry
 	a.started = false
 	a.conn = nil
 	a.subs = nil
-	agentID := a.agentID
+	a.registry = nil
 	a.mu.Unlock()
 
 	if !started || conn == nil {
@@ -294,6 +329,11 @@ func (a *Agent) Stop(ctx context.Context) error {
 	}
 	for _, sub := range subs {
 		_ = sub.Unsubscribe()
+	}
+	// Remove the registry entry before draining the connection so a stopped edge
+	// disappears from discovery at once; the TTL is only the crash fallback.
+	if err := registry.remove(agentID); err != nil {
+		a.logger.Debug("mesh registry deregister failed", "error", err)
 	}
 	a.deregisterWith(ctx, conn, agentID)
 	a.stopHeartbeat()
@@ -328,7 +368,106 @@ func (a *Agent) Register(ctx context.Context) error {
 	if err := conn.Publish(SubjectRegistryRegister, raw); err != nil {
 		return fmt.Errorf("publish registration: %w", err)
 	}
+	// Mirror the manifest into the KV registry. This is best-effort: a registry
+	// write failure is logged, not returned, because registration and the mesh
+	// connection are what keep this edge reachable and neither may depend on it.
+	a.publishToRegistry()
 	return nil
+}
+
+// registryClient returns the live registry client, or nil when discovery must
+// broadcast.
+func (a *Agent) registryClient() *registryClient {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.registry
+}
+
+func (a *Agent) setRegistryClient(client *registryClient) {
+	a.mu.Lock()
+	a.registry = client
+	a.mu.Unlock()
+}
+
+// installRegistryIfStarted installs a client only while the agent is running.
+// The auto-mode probe runs concurrently with Stop, so this closes the window in
+// which a probe completing during shutdown could resurrect a client on an agent
+// whose entry was just removed.
+func (a *Agent) installRegistryIfStarted(client *registryClient) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.started {
+		return false
+	}
+	a.registry = client
+	return true
+}
+
+// setupRegistry installs the discovery registry according to the configured
+// mode. Auto mode never blocks the connect path: the JetStream probe runs in the
+// background and discovery broadcasts until (and unless) it succeeds.
+func (a *Agent) setupRegistry(ctx context.Context) error {
+	switch a.config.registryMode() {
+	case RegistryBroadcast:
+		a.logger.Info("mesh discovery registry disabled; using broadcast discovery")
+		return nil
+	case RegistryJetStream:
+		client, err := a.connectRegistry(ctx, registryProbeTimeout)
+		if err != nil {
+			return fmt.Errorf("mesh registry mode %q requires JetStream: %w", RegistryJetStream, err)
+		}
+		a.setRegistryClient(client)
+		a.logger.Info("mesh discovery registry ready",
+			"mode", RegistryJetStream, "bucket", client.bucket, "ttl", client.ttl)
+		return nil
+	default: // RegistryAuto
+		// Detection is asynchronous on purpose: a plain nats-server must not make
+		// Start wait out a probe that can only fail.
+		go a.detectRegistry(ctx)
+		return nil
+	}
+}
+
+// detectRegistry probes for JetStream off the connect path and, on success,
+// installs the client and publishes the current manifest immediately so peers
+// find this edge before the first heartbeat.
+func (a *Agent) detectRegistry(ctx context.Context) {
+	client, err := a.connectRegistry(ctx, registryProbeTimeout)
+	if err != nil {
+		// Info, not Warn: a plain nats-server is a legitimate deployment and this
+		// is the expected path there, not a fault.
+		a.logger.Info("mesh discovery registry unavailable; using broadcast discovery", "error", err)
+		return
+	}
+	// Stop may have run while the probe was in flight; do not resurrect a client
+	// on a stopped agent.
+	if !a.installRegistryIfStarted(client) {
+		return
+	}
+	a.logger.Info("mesh discovery registry ready",
+		"mode", RegistryAuto, "bucket", client.bucket, "ttl", client.ttl)
+	a.publishToRegistry()
+}
+
+// publishToRegistry refreshes this edge's entry in the KV registry with a
+// current heartbeat timestamp.
+//
+// Failures are deliberately swallowed to a log line: the registry is an
+// accelerator for discovery, and neither registration nor the heartbeat that
+// keeps the edge visible may fail because the bucket is briefly unavailable.
+func (a *Agent) publishToRegistry() {
+	client := a.registryClient()
+	if client == nil {
+		return
+	}
+	manifest := a.Manifest()
+	// Refresh the timestamp on the registry copy: the stored manifest's
+	// LastHeartbeat is what TTL expiry is measured against, so a heartbeat that
+	// republished a stale value would age out even while the edge is alive.
+	manifest.LastHeartbeat = timestamp()
+	if err := client.publish(manifest); err != nil {
+		a.logger.Warn("mesh registry publish failed", "error", err)
+	}
 }
 
 func (a *Agent) deregisterWith(ctx context.Context, conn *nats.Conn, agentID string) {
@@ -349,13 +488,49 @@ func (a *Agent) deregisterWith(ctx context.Context, conn *nats.Conn, agentID str
 	_ = conn.Publish(SubjectRegistryDeregister, raw)
 }
 
-// Discover asks the registry for matching agents and also honours direct
-// replies from agents that answer discovery themselves (the SDK's behaviour).
+// Discover lists agents matching a filter.
+//
+// Discovery uses the JetStream KV registry when it is available, which is
+// deterministic: every edge publishes its manifest on register and heartbeat, so
+// a peer is either present or it is not and there is no window to fall out of.
+// When the registry is not available it falls back to the original broadcast,
+// which asks every agent to reply and waits a fixed window.
+//
+// The two are not merged in the common case: with the registry live, auto mode
+// reads it and returns, because broadcasting as well would reintroduce the very
+// window the registry exists to remove. Auto mode does broadcast whenever the
+// registry is not ready or a read fails, so a mixed fleet — some edges with
+// JetStream, some without — still discovers every peer through whichever
+// mechanism each edge supports.
 func (a *Agent) Discover(ctx context.Context, filter DiscoverFilter) ([]Manifest, error) {
 	conn, err := a.connection()
 	if err != nil {
 		return nil, err
 	}
+
+	mode := a.config.registryMode()
+	if client := a.registryClient(); mode != RegistryBroadcast && client != nil {
+		manifests, registryErr := client.manifests(ctx, filter)
+		if registryErr == nil {
+			seen := make(map[string]Manifest, len(manifests))
+			for _, manifest := range manifests {
+				seen[manifest.ID] = manifest
+			}
+			return a.collectPeers(seen), nil
+		}
+		// jetstream mode is a hard requirement: surface the failure rather than
+		// silently downgrading to a mechanism the operator turned off.
+		if mode == RegistryJetStream {
+			return nil, fmt.Errorf("read mesh registry: %w", registryErr)
+		}
+		a.logger.Warn("mesh registry read failed; falling back to broadcast discovery", "error", registryErr)
+	}
+	return a.broadcastDiscover(conn, filter)
+}
+
+// broadcastDiscover is the original discovery mechanism: ask the registry and
+// every agent to answer, and collect replies for the discovery window.
+func (a *Agent) broadcastDiscover(conn *nats.Conn, filter DiscoverFilter) ([]Manifest, error) {
 	envelope := a.newEnvelope(TypeDiscover, SubjectRegistry, "")
 	if err := a.attachPayload(envelope, filter); err != nil {
 		return nil, err
@@ -425,6 +600,12 @@ func (a *Agent) Discover(ctx context.Context, filter DiscoverFilter) ([]Manifest
 	if len(seen) == 0 && drainErr != nil && !errors.Is(drainErr, nats.ErrTimeout) {
 		return nil, fmt.Errorf("collect discovery replies: %w", drainErr)
 	}
+	return a.collectPeers(seen), nil
+}
+
+// collectPeers drops this edge's own manifest and flags a peer using our id.
+// Both discovery mechanisms share it so collision handling cannot diverge.
+func (a *Agent) collectPeers(seen map[string]Manifest) []Manifest {
 	out := make([]Manifest, 0, len(seen))
 	for _, manifest := range seen {
 		if manifest.ID == a.agentID {
@@ -448,7 +629,7 @@ func (a *Agent) Discover(ctx context.Context, filter DiscoverFilter) ([]Manifest
 		}
 		out = append(out, manifest)
 	}
-	return out, nil
+	return out
 }
 
 // Dispatch sends a skill request to another agent and waits for its reply.
@@ -654,10 +835,25 @@ func (a *Agent) handleInboundRequest(message *nats.Msg) {
 		a.respondError(message, envelope, CodeSkillNotFound, fmt.Sprintf("Skill %q not found", payload.Skill))
 		return
 	}
-	meta := RequestMeta{TaskID: envelope.TaskID, From: envelope.From, Trace: envelope.Trace}
+	callerFingerprint, verified := a.guard.callerIdentity(envelope)
+	meta := RequestMeta{
+		TaskID:            envelope.TaskID,
+		From:              envelope.From,
+		Trace:             envelope.Trace,
+		Verified:          verified,
+		CallerFingerprint: callerFingerprint,
+	}
 	output, handlerErr := handler(context.Background(), payload.Input, meta)
 	if handlerErr != nil {
-		a.respondError(message, envelope, CodeInternalError, handlerErr.Error())
+		// A skill may name the code a peer sees; anything else is internal. Without
+		// this every refusal would arrive as 5001, and a caller could not tell "no
+		// such operation" from "this edge is broken".
+		code, reason := CodeInternalError, handlerErr.Error()
+		var refusal *codedError
+		if errors.As(handlerErr, &refusal) {
+			code, reason = refusal.code, refusal.reason
+		}
+		a.respondError(message, envelope, code, reason)
 		return
 	}
 	reply := a.replyEnvelope(envelope)
@@ -800,6 +996,9 @@ func (a *Agent) publishHeartbeat(subject string) {
 	if err := conn.Publish(subject, raw); err != nil {
 		a.logger.Warn("mesh heartbeat failed", "error", err)
 	}
+	// Refresh the registry entry on the same cadence, so a live edge's manifest
+	// never ages out and a crashed edge's does.
+	a.publishToRegistry()
 }
 
 // handleHeartbeatPeers watches this agent's own liveness subject.

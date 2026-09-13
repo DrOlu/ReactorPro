@@ -104,6 +104,20 @@ type Config struct {
 	Description  string   `json:"description"`
 	Capabilities []string `json:"capabilities"`
 
+	// Registry selects how discovery learns about peers.
+	//
+	// The default "auto" uses a JetStream KV bucket when the server offers
+	// JetStream and degrades to the broadcast window when it does not, so a plain
+	// nats-server deployment keeps working. "jetstream" requires the bucket and
+	// fails startup without it; "broadcast" never touches JetStream.
+	RegistryMode string `json:"registryMode"`
+	// RegistryBucket names the JetStream KV bucket holding one manifest per edge.
+	RegistryBucket string `json:"registryBucket"`
+	// RegistryTTL is how long a manifest stays valid without a heartbeat. An
+	// edge that crashes stops refreshing its entry, and discovery treats an
+	// entry older than this as absent.
+	RegistryTTL time.Duration `json:"-"`
+
 	// Timing
 	HeartbeatInterval time.Duration `json:"-"`
 	// RequestTimeout bounds a skill dispatch waiting for a peer's reply.
@@ -111,7 +125,8 @@ type Config struct {
 	// DiscoveryWindow is how long discovery collects replies. Agents answer
 	// discovery individually as well as the registry, so the only way to know
 	// every peer has replied is to wait a fixed window — it must be short,
-	// because it is also how long the caller waits.
+	// because it is also how long the caller waits. It is only used on the
+	// broadcast path; a JetStream registry answers deterministically.
 	DiscoveryWindow time.Duration `json:"-"`
 
 	// AcceptedVersions, when non-empty, is the only set of protocol versions
@@ -162,8 +177,47 @@ type Config struct {
 	// disabling a skill the operator expected to be exposed.
 	SkillAllowlist []string `json:"skillAllowlist"`
 
+	// Remote invocation: whether a peer may ask a desktop agent behind this edge
+	// to run a task.
+	//
+	// This is the one place the bridge can be *driven* rather than merely read,
+	// so it is the one place the read-only posture described in MESH.md is
+	// deliberately relaxed. Two independent gates stand in front of it:
+	// AllowRemoteInvoke (is the capability offered at all) and
+	// RequireVerifiedInvoke (must the caller's identity have been established).
+	AllowRemoteInvoke bool `json:"allowRemoteInvoke"`
+	// RequireVerifiedInvoke refuses an invocation whose sender identity the
+	// inbound guard did not actually verify.
+	//
+	// It is load-bearing. The shipping verify mode is "prefer", which accepts
+	// unsigned envelopes, so without this floor an invocation is reachable by
+	// anything that can publish to the subject — anonymous remote code execution
+	// on a desktop machine. With it, "allowed" means "allowed for an
+	// authenticated peer": a caller must have proven a key that the trust store
+	// pinned.
+	RequireVerifiedInvoke bool `json:"requireVerifiedInvoke"`
+	// InvokeOperations is the set of operations a peer may invoke, matched
+	// exactly. An empty set means none, never all — exposing something is a
+	// deliberate act, so an unset list must not read as "anything goes".
+	InvokeOperations []string `json:"invokeOperations"`
+	// InvokeTimeout bounds a single remote invocation. The desktop enforces its
+	// own deadline too; this one exists so an unresponsive agent cannot pin a
+	// remote caller.
+	InvokeTimeout time.Duration `json:"-"`
+
 	// Events to subscribe to automatically once connected.
 	EventSubscriptions []string `json:"eventSubscriptions"`
+}
+
+// registryMode returns the registry mode in its canonical lowercase form,
+// defaulting an unset value to auto. Validate and normalize make the same
+// choice, so every caller agrees.
+func (c Config) registryMode() string {
+	mode := strings.ToLower(strings.TrimSpace(c.RegistryMode))
+	if mode == "" {
+		return RegistryAuto
+	}
+	return mode
 }
 
 // servesSkill reports whether a built-in skill may be served. An empty
@@ -192,6 +246,25 @@ const (
 	// VerifyRequire rejects any unsigned envelope. Correct for a closed fleet
 	// where every peer holds an identity.
 	VerifyRequire = "require"
+)
+
+// Discovery registry modes. See Config.RegistryMode.
+const (
+	// RegistryAuto uses JetStream KV when it is available and falls back to the
+	// broadcast discovery window when it is not.
+	RegistryAuto = "auto"
+	// RegistryJetStream requires JetStream KV: startup fails when it is absent.
+	RegistryJetStream = "jetstream"
+	// RegistryBroadcast never uses JetStream; discovery is the broadcast window.
+	RegistryBroadcast = "broadcast"
+)
+
+// Registry defaults. The TTL is three default heartbeats, so a crashed edge
+// remains visible for a short grace period and then ages out without operator
+// action.
+const (
+	DefaultRegistryBucket = "mesh_registry"
+	DefaultRegistryTTL    = 3 * 30 * time.Second
 )
 
 // fingerprintPrefix is the only fingerprint shape accepted in TrustedPeers.
@@ -227,6 +300,9 @@ func DefaultConfig() Config {
 		HeartbeatInterval: 30 * time.Second,
 		RequestTimeout:    120 * time.Second,
 		DiscoveryWindow:   2 * time.Second,
+		RegistryMode:      RegistryAuto,
+		RegistryBucket:    DefaultRegistryBucket,
+		RegistryTTL:       DefaultRegistryTTL,
 		VerifyMode:        VerifyPrefer,
 		ClockSkew:         DefaultClockSkew,
 		TrustOnFirstUse:   true,
@@ -239,8 +315,15 @@ func DefaultConfig() Config {
 			Burst:     100,
 		},
 		SkillsEnabled: true,
-		Reputation:    DefaultReputationConfig(),
-		Governance:    DefaultGovernanceConfig(),
+		// Remote invocation ships on so a federated edge is usable without a flag
+		// hunt; RequireVerifiedInvoke is the floor that stops "on" from meaning
+		// "open to anyone". See the field docs.
+		AllowRemoteInvoke:     true,
+		RequireVerifiedInvoke: true,
+		InvokeOperations:      []string{OperationTask},
+		InvokeTimeout:         DefaultInvokeTimeout,
+		Reputation:            DefaultReputationConfig(),
+		Governance:            DefaultGovernanceConfig(),
 	}
 }
 
@@ -267,6 +350,50 @@ func (c *Config) normalize() {
 		c.RateLimit.PerSecond = 50
 		c.RateLimit.Burst = 100
 	}
+	if c.InvokeTimeout <= 0 {
+		c.InvokeTimeout = DefaultInvokeTimeout
+	}
+	c.normalizeRegistry()
+}
+
+// normalizeRegistry fills the registry settings a literal-built Config omits.
+//
+// The TTL default tracks the heartbeat interval rather than being a fixed
+// constant: an operator who lengthens the heartbeat must not have every entry
+// age out between heartbeats, which would empty discovery at exactly the moment
+// the operator slowed it down.
+func (c *Config) normalizeRegistry() {
+	if strings.TrimSpace(c.RegistryMode) == "" {
+		c.RegistryMode = RegistryAuto
+	}
+	if strings.TrimSpace(c.RegistryBucket) == "" {
+		c.RegistryBucket = DefaultRegistryBucket
+	}
+	if c.RegistryTTL <= 0 {
+		heartbeat := c.HeartbeatInterval
+		if heartbeat <= 0 {
+			heartbeat = 30 * time.Second
+		}
+		c.RegistryTTL = 3 * heartbeat
+	}
+}
+
+// servesOperation reports whether a remote invocation may name this operation.
+//
+// Deliberately the opposite default to servesSkill: an empty skill allowlist
+// serves every built-in skill, but an empty operation allowlist serves nothing.
+// Reading a skill is safe to leave open; driving a desktop machine is not.
+func (c Config) servesOperation(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	for _, allowed := range c.InvokeOperations {
+		if strings.TrimSpace(allowed) == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Validate reports why the bridge cannot start, or nil when it can.
@@ -296,6 +423,22 @@ func (c Config) Validate() error {
 		return fmt.Errorf("mesh verify mode %q is not one of %q, %q, %q",
 			c.VerifyMode, VerifyOff, VerifyPrefer, VerifyRequire)
 	}
+	// Registry mode is rejected the same way as verify mode: an unrecognised
+	// value must not silently degrade, because "auto" and "jetstream" have very
+	// different operational guarantees and a typo would hide which one is live.
+	switch strings.ToLower(strings.TrimSpace(c.RegistryMode)) {
+	case "", RegistryAuto, RegistryJetStream, RegistryBroadcast:
+	default:
+		return fmt.Errorf("mesh registry mode %q is not one of %q, %q, %q",
+			c.RegistryMode, RegistryAuto, RegistryJetStream, RegistryBroadcast)
+	}
+	// An empty bucket means "use the default"; a non-empty one must be a valid
+	// JetStream bucket name so the failure is reported at startup rather than
+	// when the first registry write is attempted.
+	if bucket := strings.TrimSpace(c.RegistryBucket); bucket != "" && !validRegistryBucket(bucket) {
+		return fmt.Errorf("mesh registry bucket %q is not a valid JetStream bucket name "+
+			"(letters, digits, underscores and dashes only)", bucket)
+	}
 	if !c.TrustOnFirstUse && len(c.TrustedPeers) == 0 && c.VerifyMode != VerifyOff {
 		return errors.New("mesh has trust-on-first-use disabled and no trusted peers configured: " +
 			"no peer could ever be authenticated")
@@ -314,16 +457,25 @@ func (c Config) Validate() error {
 			continue
 		}
 		known := false
-		for _, builtin := range builtinSkillIDs {
+		for _, builtin := range servableSkillIDs() {
 			if builtin == trimmed {
 				known = true
 				break
 			}
 		}
 		if !known {
-			return fmt.Errorf("mesh skill %q is not a built-in skill (known: %s)",
-				id, strings.Join(builtinSkillIDs, ", "))
+			return fmt.Errorf("mesh skill %q is not a servable skill (known: %s)",
+				id, strings.Join(servableSkillIDs(), ", "))
 		}
+	}
+	// Invocation with verification required is unachievable when identity is not
+	// consulted at all: every caller would be refused, which looks like a broken
+	// mesh rather than a misconfiguration. Reject it here, where the reason is
+	// visible, instead of at the point of use.
+	if c.AllowRemoteInvoke && c.RequireVerifiedInvoke && c.VerifyMode == VerifyOff {
+		return errors.New("mesh allows remote invocation and requires a verified caller, " +
+			"but verify mode is off: no caller identity can ever be established, so every " +
+			"invocation would be refused. Set -mesh-verify-mode to prefer or require")
 	}
 	return nil
 }

@@ -14777,7 +14777,7 @@ var File_proto_v2_gateway_proto protoreflect.FileDescriptor
 
 const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\n" +
-	"\x16proto/v2/gateway.proto\x12\x14liveagent.gateway.v2\"\xeb&\n" +
+	"\x16proto/v2/gateway.proto\x12\x14liveagent.gateway.v2\"\xfe&\n" +
 	"\x0fGatewayEnvelope\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +
@@ -14849,7 +14849,7 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\fclarify_turn\x18e \x01(\v2(.liveagent.gateway.v2.ClarifyTurnRequestH\x00R\vclarifyTurn\x12G\n" +
 	"\n" +
 	"cua_driver\x18f \x01(\v2&.liveagent.gateway.v2.CuaDriverRequestH\x00R\tcuaDriverB\t\n" +
-	"\apayloadJ\x04\bC\x10DJ\x04\bD\x10EJ\x04\bE\x10FJ\x04\bJ\x10K\"\xef3\n" +
+	"\apayloadJ\x04\bC\x10DJ\x04\bD\x10EJ\x04\bE\x10FJ\x04\bJ\x10KJ\x04\bg\x10hR\vmesh_invoke\"\x874\n" +
 	"\rAgentEnvelope\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +
@@ -14929,7 +14929,7 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x11clarify_turn_resp\x18j \x01(\v2).liveagent.gateway.v2.ClarifyTurnResponseH\x00R\x0fclarifyTurnResp\x12Q\n" +
 	"\x0fcua_driver_resp\x18k \x01(\v2'.liveagent.gateway.v2.CuaDriverResponseH\x00R\rcuaDriverResp\x12V\n" +
 	"\x12clarify_turn_delta\x18l \x01(\v2&.liveagent.gateway.v2.ClarifyTurnDeltaH\x00R\x10clarifyTurnDeltaB\t\n" +
-	"\apayloadJ\x04\bC\x10DJ\x04\bD\x10EJ\x04\bE\x10FJ\x04\bN\x10O\"|\n" +
+	"\apayloadJ\x04\bC\x10DJ\x04\bD\x10EJ\x04\bE\x10FJ\x04\bN\x10OJ\x04\bm\x10nR\x10mesh_invoke_resp\"|\n" +
 	"\x11ChatSelectedModel\x12,\n" +
 	"\x12custom_provider_id\x18\x01 \x01(\tR\x10customProviderId\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12#\n" +

@@ -281,3 +281,31 @@ func (g *inboundGuard) checkSignature(env *Envelope) *guardRejection {
 	}
 	return nil
 }
+
+// callerIdentity reports the verified fingerprint of an envelope that has
+// already passed check, or ok=false when no identity was established.
+//
+// This exists because check's accepting paths are not equivalent. An envelope
+// accepted under verify-off, or accepted unsigned under prefer, passed the guard
+// with *nothing proven about who sent it*. A skill that is about to let a remote
+// peer run something has to be able to tell that apart from a verified caller,
+// and check's rejection-or-nil return cannot express the difference.
+//
+// Re-deriving the fingerprint is cheap — a hash, not a second signature check —
+// and cannot disagree with the decision check already made, because it is
+// computed from the same envelope and the same trust store. It is only ever
+// called after check has returned nil.
+func (g *inboundGuard) callerIdentity(env *Envelope) (string, bool) {
+	if env == nil || g.config.VerifyMode == VerifyOff {
+		return "", false
+	}
+	if env.Signature == "" || env.PublicKey == "" {
+		// Accepted by policy under prefer, but nothing was proven.
+		return "", false
+	}
+	fingerprint, err := EnvelopeFingerprint(env)
+	if err != nil {
+		return "", false
+	}
+	return fingerprint, true
+}

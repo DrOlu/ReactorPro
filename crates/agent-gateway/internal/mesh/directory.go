@@ -29,6 +29,15 @@ type LocalAgent struct {
 	Version string `json:"version,omitempty"`
 	// ConnectedSince is a Unix timestamp in seconds; zero when unknown.
 	ConnectedSince int64 `json:"connected_since,omitempty"`
+	// Capabilities are the operations this agent will accept from a remote peer,
+	// e.g. ["task"].
+	//
+	// Advertised so a caller in another organisation can choose an agent by what
+	// it can do instead of having to know an id in advance, which is the
+	// difference between a directory and a phone book. Read-only: it describes
+	// what the agent will accept, and the edge's own policy still decides whether
+	// anything is served at all.
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // LocalAgentProvider reports the desktop agents currently attached to this edge.
@@ -92,6 +101,31 @@ func LocalAgentByID(agents []LocalAgent, key string) (LocalAgent, bool) {
 	for _, agent := range agents {
 		if agent.Name != "" && strings.EqualFold(agent.Name, key) {
 			return agent, true
+		}
+	}
+	return LocalAgent{}, false
+}
+
+// LocalAgentByCapability picks an online agent advertising a capability.
+//
+// Takes the first in directory order rather than a random or least-loaded one:
+// the directory is already sorted online-first then by id, so the choice is
+// deterministic and a caller repeating a request lands on the same agent instead
+// of being scattered. Offline agents are skipped even when they advertise the
+// capability, because routing to one would only fail after a timeout.
+func LocalAgentByCapability(agents []LocalAgent, capability string) (LocalAgent, bool) {
+	capability = strings.TrimSpace(capability)
+	if capability == "" {
+		return LocalAgent{}, false
+	}
+	for _, agent := range agents {
+		if !agent.Online {
+			continue
+		}
+		for _, advertised := range agent.Capabilities {
+			if strings.EqualFold(strings.TrimSpace(advertised), capability) {
+				return agent, true
+			}
 		}
 	}
 	return LocalAgent{}, false

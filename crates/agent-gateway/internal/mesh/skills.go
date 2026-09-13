@@ -29,6 +29,16 @@ func BuiltinSkillIDs() []string {
 	return out
 }
 
+// servableSkillIDs lists every id that may be named in the skill allowlist: the
+// read-only built-ins plus the gated invoke skill.
+//
+// Kept separate from BuiltinSkillIDs so that adding `invoke` to what an operator
+// may select does not also enrol it in the read-only registration path, which
+// assumes every id has a side-effect-free handler.
+func servableSkillIDs() []string {
+	return append(BuiltinSkillIDs(), SkillInvoke)
+}
+
 // registerBuiltinSkills exposes the read-only introspection surface.
 //
 // Every skill here is deliberately read-only and free of side effects. A mesh
