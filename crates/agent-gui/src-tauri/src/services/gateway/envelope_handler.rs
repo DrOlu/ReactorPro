@@ -1227,6 +1227,9 @@ impl GatewayController {
                 });
                 Ok(())
             }
+            Some(proto::gateway_envelope::Payload::MeshInvoke(request)) => {
+                self.handle_mesh_invoke(request_id, request).await
+            }
             None => Ok(()),
         }
     }
