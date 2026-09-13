@@ -85,6 +85,13 @@ type Config struct {
 	MeshRegistryBucket string
 	MeshRegistryTTL    time.Duration
 
+	// Mesh durable mailbox: a JetStream stream that keeps skill invocations for
+	// an agent that is momentarily away, instead of losing them to core NATS.
+	MeshMailbox        bool
+	MeshMailboxStream  string
+	MeshMailboxMaxAge  time.Duration
+	MeshMailboxMaxMsgs int64
+
 	// Mesh remote invocation: whether a verified peer may ask a desktop agent
 	// behind this edge to run a task, and under what limits.
 	MeshAllowRemoteInvoke     bool
@@ -132,6 +139,10 @@ func Load() *Config {
 	flag.StringVar(&cfg.MeshRegistryMode, "mesh-registry", getenv("LIVEAGENT_GATEWAY_MESH_REGISTRY", mesh.RegistryAuto), "mesh discovery registry: auto (JetStream KV when available, else broadcast), jetstream (required), or broadcast")
 	flag.StringVar(&cfg.MeshRegistryBucket, "mesh-registry-bucket", getenv("LIVEAGENT_GATEWAY_MESH_REGISTRY_BUCKET", mesh.DefaultRegistryBucket), "JetStream KV bucket holding one manifest per mesh edge")
 	flag.DurationVar(&cfg.MeshRegistryTTL, "mesh-registry-ttl", getenvDuration("LIVEAGENT_GATEWAY_MESH_REGISTRY_TTL", 0), "how long a registry entry stays valid without a heartbeat (0 uses three heartbeat intervals)")
+	flag.BoolVar(&cfg.MeshMailbox, "mesh-mailbox", getenvBool("LIVEAGENT_GATEWAY_MESH_MAILBOX", false), "keep mesh skill invocations for an absent agent in a JetStream stream (mesh.agent.*.mailbox) and deliver them when it returns; requires JetStream")
+	flag.StringVar(&cfg.MeshMailboxStream, "mesh-mailbox-stream", getenv("LIVEAGENT_GATEWAY_MESH_MAILBOX_STREAM", mesh.DefaultMailboxStream), "JetStream stream backing the durable mesh mailbox")
+	flag.DurationVar(&cfg.MeshMailboxMaxAge, "mesh-mailbox-max-age", getenvDuration("LIVEAGENT_GATEWAY_MESH_MAILBOX_MAX_AGE", 0), "how long an undelivered mailbox message is retained (0 uses seven days)")
+	flag.Int64Var(&cfg.MeshMailboxMaxMsgs, "mesh-mailbox-max-msgs", getenvInt64("LIVEAGENT_GATEWAY_MESH_MAILBOX_MAX_MSGS", 0), "how many mailbox messages are retained per stream (0 uses the built-in bound)")
 	flag.BoolVar(&cfg.MeshAllowRemoteInvoke, "mesh-allow-remote-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_ALLOW_REMOTE_INVOKE", true), "allow peers to invoke operations on desktop agents behind this edge")
 	flag.BoolVar(&cfg.MeshRequireVerifiedInvoke, "mesh-require-verified-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_REQUIRE_VERIFIED_INVOKE", true), "refuse remote invocation whose caller identity was not verified (needs a signed, trusted peer)")
 	flag.StringVar(&cfg.MeshInvokeOperations, "mesh-invoke-operations", getenv("LIVEAGENT_GATEWAY_MESH_INVOKE_OPERATIONS", mesh.OperationTask), "comma-separated operations a peer may invoke remotely; empty exposes none")
@@ -329,6 +340,20 @@ func (c *Config) MeshConfig() mesh.Config {
 	if c.MeshRegistryTTL > 0 {
 		cfg.RegistryTTL = c.MeshRegistryTTL
 	}
+	// The mailbox. The stream name and bounds fall back to the built-in defaults
+	// through normalizeMailbox, so only explicit values are copied here — a
+	// zero-valued flag must not become a zero-valued bound.
+	cfg.MailboxEnabled = c.MeshMailbox
+	if stream := strings.TrimSpace(c.MeshMailboxStream); stream != "" {
+		cfg.MailboxStream = stream
+	}
+	if c.MeshMailboxMaxAge > 0 {
+		cfg.MailboxMaxAge = c.MeshMailboxMaxAge
+	}
+	if c.MeshMailboxMaxMsgs > 0 {
+		cfg.MailboxMaxMsgs = c.MeshMailboxMaxMsgs
+	}
+
 	cfg.AllowRemoteInvoke = c.MeshAllowRemoteInvoke
 	cfg.RequireVerifiedInvoke = c.MeshRequireVerifiedInvoke
 	cfg.InvokeOperations = splitList(c.MeshInvokeOperations)
@@ -413,6 +438,21 @@ func getenvInt(key string, fallback int) int {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+// getenvInt64 reads a 64-bit count. Like getenvInt, a non-positive or malformed
+// value falls back: every count it serves is a bound, and zero would mean
+// "unbounded" rather than the intended default.
+func getenvInt64(key string, fallback int64) int64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || parsed <= 0 {
 		return fallback
 	}

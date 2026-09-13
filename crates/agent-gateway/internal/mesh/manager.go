@@ -45,6 +45,9 @@ type Status struct {
 	// IDCollision names a peer seen using this edge's own agent id, which makes
 	// that id ambiguous on the mesh. Empty when none has been observed.
 	IDCollision string `json:"idCollision,omitempty"`
+	// Mailbox is the durable mailbox's state. Reported always so an operator can
+	// tell "off" from "on but not running", which are different problems.
+	Mailbox map[string]any `json:"mailbox,omitempty"`
 }
 
 // Manager owns the mesh lifecycle and implements the bridge's operations.
@@ -239,8 +242,30 @@ func (m *Manager) Status() Status {
 		status.Skills = agent.Skills()
 		status.LocalAgents = status.Manifest.LocalAgents
 		status.IDCollision = agent.Collision()
+		status.Mailbox = agent.MailboxStatus()
 	}
 	return status
+}
+
+// SendMailbox leaves a skill invocation in a peer agent's durable mailbox and
+// returns the stream sequence it was stored at.
+//
+// Unlike Dispatch this does not wait for a result, and cannot: a mailbox
+// message has no reply path by design. It is for handing work to an agent that
+// may not be running yet, where the answer is not wanted synchronously — the
+// point is that the work is not lost.
+func (m *Manager) SendMailbox(ctx context.Context, target, skill string, input any, taskID string) (uint64, error) {
+	m.mu.RLock()
+	agent := m.agent
+	m.mu.RUnlock()
+	if agent == nil {
+		return 0, ErrNotConnected
+	}
+	asMap, ok := input.(map[string]any)
+	if !ok && input != nil {
+		return 0, fmt.Errorf("mailbox input must be a JSON object, got %T", input)
+	}
+	return agent.SendMailboxMessage(ctx, target, skill, asMap, taskID)
 }
 
 // LocalAgents returns the directory this edge publishes, whether or not the

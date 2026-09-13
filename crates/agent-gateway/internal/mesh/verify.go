@@ -157,6 +157,31 @@ func (g *inboundGuard) checkBytes(size int) *guardRejection {
 // check applies every policy that needs a decoded envelope, in cheapest-first
 // order so a flood is shed before any signature arithmetic runs.
 func (g *inboundGuard) check(env *Envelope) *guardRejection {
+	return g.checkEnvelope(env, true)
+}
+
+// checkRedelivered applies every inbound policy except the replay cache, for
+// messages arriving from our own durable consumer.
+//
+// A JetStream redelivery repeats an envelope id we have already seen, because
+// that is exactly what redelivery is: the same message, offered again after an
+// unacknowledged delivery. Rejecting it as a replay would defeat the mailbox —
+// the one case it must handle, an agent that was away or that crashed mid
+// handler, is indistinguishable from a replay by id alone.
+//
+// Skipping it is not a hole. The replay cache exists to stop a *third party*
+// re-injecting a captured envelope onto the wire; here the message came out of
+// our own authenticated stream, and everything that makes a capture useless
+// still applies: the signature binds the id, the sender and the content, the
+// timestamp window still bounds how old an acceptable message is, and the
+// trust store still decides whose signature counts. What is given up is
+// deduplication, not authentication — hence at-least-once delivery, and
+// skill handlers reached this way must be idempotent.
+func (g *inboundGuard) checkRedelivered(env *Envelope) *guardRejection {
+	return g.checkEnvelope(env, false)
+}
+
+func (g *inboundGuard) checkEnvelope(env *Envelope, checkReplay bool) *guardRejection {
 	if env == nil {
 		return g.reject(&observability.Usage.MeshVerifyFailedTotal, CodeInvalidEnvelope, "envelope is empty")
 	}
@@ -199,7 +224,7 @@ func (g *inboundGuard) check(env *Envelope) *guardRejection {
 	}
 
 	// 5. Replay.
-	if !g.replay.observe(env.ID) {
+	if checkReplay && !g.replay.observe(env.ID) {
 		return g.reject(&observability.Usage.MeshReplayRejectedTotal, CodeInvalidEnvelope,
 			"envelope %s is a replay", env.ID)
 	}

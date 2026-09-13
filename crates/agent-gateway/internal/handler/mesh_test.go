@@ -207,3 +207,36 @@ func TestSplitQueryList(t *testing.T) {
 		}
 	}
 }
+
+// The mailbox endpoint must validate before it reaches the mesh, and must fail
+// loudly when the bridge is not running rather than reporting a queued message
+// that was never stored.
+func TestMeshMailboxRequiresTargetAndSkill(t *testing.T) {
+	handler := MeshMailbox(meshHandlerManager())
+	for _, body := range []string{`{}`, `{"target":"acme/edge-1"}`, `{"skill":"echo"}`, `not json`} {
+		recorder := perform(t, handler, http.MethodPost, body, nil)
+		if recorder.Code != http.StatusBadRequest {
+			t.Fatalf("body %q: status = %d, want 400", body, recorder.Code)
+		}
+	}
+}
+
+func TestMeshMailboxFailsWhenTheBridgeIsNotRunning(t *testing.T) {
+	recorder := perform(t, MeshMailbox(meshHandlerManager()), http.MethodPost,
+		`{"target":"acme/edge-1","skill":"echo","input":{"a":1}}`, nil)
+	if recorder.Code == http.StatusAccepted {
+		t.Fatalf("a message was reported accepted with no bridge running: %s", recorder.Body.String())
+	}
+}
+
+// The status payload reports the mailbox even when it is off, so "off" and "on
+// but not running" are distinguishable to an operator.
+func TestMeshStatusReportsMailboxState(t *testing.T) {
+	recorder := perform(t, MeshStatus(meshHandlerManager()), http.MethodGet, "", nil)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", recorder.Code)
+	}
+	if payload := decodeBody(t, recorder); payload["mailbox"] != nil {
+		t.Fatalf("a disabled bridge reported mailbox state %v", payload["mailbox"])
+	}
+}

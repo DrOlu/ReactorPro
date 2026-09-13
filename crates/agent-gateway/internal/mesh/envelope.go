@@ -22,6 +22,7 @@ const (
 	SubjectHeartbeatPrefix    = "mesh.heartbeat."
 	SubjectAgentInboxPrefix   = "mesh.agent."
 	SubjectAgentInboxSuffix   = ".inbox"
+	SubjectAgentMailboxSuffix = ".mailbox"
 	SubjectEventPrefix        = "mesh.event."
 	SubjectEventWildcard      = "mesh.event.>"
 	SubjectRegistry           = "REGISTRY"
@@ -30,6 +31,39 @@ const (
 // AgentInboxSubject returns the request/reply subject for an agent.
 func AgentInboxSubject(agentID string) string {
 	return SubjectAgentInboxPrefix + agentID + SubjectAgentInboxSuffix
+}
+
+// AgentMailboxSubject returns the durable mailbox subject for an agent.
+//
+// Why this is a separate subject rather than a stream over the inbox:
+//
+// `mesh.agent.<id>.inbox` is a request/reply subject. A caller uses
+// conn.Request, which publishes with a reply inbox and waits. Putting a
+// JetStream stream over that subject breaks it in two ways, both measured
+// against a real server (nats-server 2.14.2, nats.go v1.53.1):
+//
+//  1. JetStream answers the publish. Because the caller supplied a reply
+//     subject, the server delivers its PubAck — `{"stream":...,"seq":...}` — to
+//     the caller's inbox. The caller receives that instead of the skill's
+//     response and tries to decode it as one.
+//  2. The consumer cannot answer the caller at all. For a push consumer the
+//     delivered message's Reply is the JetStream ack subject
+//     (`$JS.ACK.<stream>.<consumer>...`), not the requester's inbox, so a reply
+//     published there goes nowhere the caller is listening.
+//
+// A durable mailbox therefore has to be its own subject. Mailbox traffic is
+// one-way: a sender publishes and does not wait, which is what makes an ack
+// both meaningful and harmless, and what makes at-least-once delivery
+// acceptable. Request/reply stays on the inbox and stays exactly as it was.
+func AgentMailboxSubject(agentID string) string {
+	return SubjectAgentInboxPrefix + agentID + SubjectAgentMailboxSuffix
+}
+
+// AgentMailboxSubjectPattern is the stream's subject filter: every agent's
+// mailbox. Not `>` — a stream that captured the inbox, registry or heartbeat
+// subjects would interfere with the protocol rather than buffer it.
+func AgentMailboxSubjectPattern() string {
+	return SubjectAgentInboxPrefix + "*" + SubjectAgentMailboxSuffix
 }
 
 // HeartbeatSubject returns the liveness subject for an agent.
