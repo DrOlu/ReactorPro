@@ -236,6 +236,64 @@ asking for `billing`, and a peer asking for `billing,west-africa` gets only edge
 Namespacing the id and the capabilities together is what lets an operator express policy
 per organisation.
 
+### Remote invocation
+
+Discovery makes an edge *known*; `invoke` makes it *callable*. A peer asks an edge to run a
+task on one of its attached agents, addressing either a specific agent (by id, or by the
+name an operator configured) or a capability:
+
+```json
+{"target": "agent-1111", "operation": "task", "arguments": {"prompt": "..."}}
+{"capability": "task", "operation": "task", "arguments": {"prompt": "..."}}
+```
+
+Target and capability are mutually exclusive and neither is defaulted: an edge that has to
+guess which laptop to run a task on should refuse rather than choose. A capability is
+resolved to the first online agent advertising it in directory order, so a repeated request
+lands on the same agent instead of being scattered.
+
+**Tasks run on the desktop's own chat runtime.** The edge submits a chat command to the
+target agent exactly as the browser does; the desktop runs a real tool-using turn and the
+result returns through the reliable chat ingress. There is deliberately no mesh-specific
+execution path: a desktop has no execution surface of its own (its agent loop, provider
+client and tool registry live in the WebView's TypeScript runtime), so a parallel path would
+have had nothing to execute on and would have drifted from the chat pipeline.
+
+Gates, in the order they are applied — all fail closed:
+
+| Gate | Flag | Default |
+|---|---|---|
+| Is the capability offered at all? | `-mesh-allow-remote-invoke` | on |
+| Was the caller's identity verified? | `-mesh-require-verified-invoke` | on |
+| Is the operation exposed? | `-mesh-invoke-operations` | `task` only |
+| Are skills served at all? | `-mesh-skills-enabled` | on |
+
+The second gate is the one that matters, and it is the reason "on by default" is not
+reckless. The shipping verify mode is `prefer`, which accepts unsigned envelopes; without
+this floor an invocation would be reachable by anything able to publish to the subject —
+anonymous remote code execution on a desktop machine. With it, "allowed" means "allowed for
+an authenticated peer": a caller must have proven a key the trust store pinned.
+`Validate()` refuses the contradictory configuration (`invoke` enabled, verification
+required, verify mode `off`), because there no caller could ever be verified and every
+invocation would be refused.
+
+Two properties are load-bearing:
+
+- **The caller identity is never taken from the payload.** `meta.Verified` and
+  `meta.CallerFingerprint` are populated from the guard's verification, so a peer cannot
+  forge the identity the edge logs or acts on. `inboundGuard.callerIdentity` exists because
+  `check`'s rejection-or-nil return cannot express the difference between a verified caller
+  and one merely accepted unsigned — and that difference is the whole floor.
+- **Giving up stops the work.** When the edge stops waiting it cancels the run on the
+  desktop, through the same command the browser's cancel uses. Without that, an abandoned
+  task would keep running on someone's machine, spending their provider quota for a caller
+  who is gone — which a peer could do deliberately.
+
+Because a remote task runs as an ordinary chat turn, every invariant of that pipeline
+applies unchanged. The task runs in a namespaced synthetic conversation (`remote-task-*`)
+so it is unmistakable in logs and cannot collide with a human's conversation on the same
+agent.
+
 ### Cross-organisation trust
 
 Each edge already holds an Ed25519 identity and signs what it sends. For federation, pin the
@@ -252,21 +310,25 @@ accepts unsigned traffic and any peer can appear.
 
 ## Served skills
 
-The gateway answers a small, deliberately read-only surface, so a peer that discovers it
-gets a real response instead of `3001`:
+The gateway answers a small surface, so a peer that discovers it gets a real response
+instead of `3001`:
 
 | Skill | Returns |
 |---|---|
 | `ping` | `{pong: true, ts}`. Touches no state, so it stays cheap under load. |
 | `describe` | This agent's manifest — what it is and what it serves. |
 | `status` | `agent_id`, `fingerprint`, `connected`, `skills`, `uptime_seconds`, and the mesh traffic counters. |
+| `invoke` | Routes a verified remote request to a desktop agent behind this edge. The one gated exception — see below. |
 
 Two properties are intentional and should survive future changes:
 
-- **Nothing here mutates state.** A mesh that can be asked to run a shell command or touch
-  the filesystem is a remote-code hole; the value of serving anything is that a peer can
-  see what you are, not that it can drive you. Anything stateful belongs behind its own
-  explicit, separately gated skill.
+- **Only `invoke` mutates anything, and it is gated.** The introspection skills stay
+  read-only: the value of serving *those* is that a peer can see what you are. `invoke` is
+  the deliberate exception, because reaching an agent in another organisation is what the
+  mesh exists for — but it does not execute anything itself. It routes to a desktop agent,
+  and every gate on what may be routed sits in front of it (see Remote invocation below).
+  A new stateful skill still belongs behind its own explicit, separately gated surface
+  rather than being folded in here.
 - **`status` is narrow.** It reports this agent's own identity and counters — never the
   desktop agents connected to it, their tokens, or the local API surface. A test pins the
   payload to an exact key set so adding a field has to be a deliberate act.
@@ -303,10 +365,14 @@ Stated plainly so they are not mistaken for oversights:
 ## Remaining work
 
 1. Persist reputation, approvals and trust pins to SQLite; bound approval history.
-2. Optional JetStream: durable inboxes (stream `AGENT_INBOXES`, matching RTerm) and a
-   KV-backed registry for deterministic discovery.
+2. Optional JetStream: durable inboxes (stream `AGENT_INBOXES`, matching RTerm). The
+   KV-backed registry *is* implemented (`registry.go`, `-mesh-registry`); durable inboxes
+   are not.
 3. Configurable subject prefix, `trace` on every envelope type, `in_reply_to` on replies.
 4. Per-(agent, skill) reputation implementing Formula 11.5, and wire-level governance
    subjects so approvals federate.
 5. Surface trust pins and the approval audit trail in the Settings UI — both endpoints
    exist (`/api/mesh/trust`, `/api/mesh/history`).
+6. Forward the verified caller identity onto the desktop for remote invocations, so the
+   desktop keeps its own audit record rather than relying on the edge's. `ChatRequest` has
+   no field for it today, which is why the edge is currently the only audit point.
