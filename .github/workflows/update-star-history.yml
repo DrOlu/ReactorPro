@@ -26,7 +26,7 @@ jobs:
 
       - name: Collect stargazer history
         env:
-          GH_TOKEN: ${{ secrets.STARGAZER_GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.STARGAZER_GH_TOKEN || github.token }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/charts"
@@ -41,7 +41,7 @@ jobs:
 
       - name: Collect contributors
         env:
-          GH_TOKEN: ${{ secrets.STARGAZER_GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.STARGAZER_GH_TOKEN || github.token }}
         run: |
           set -euo pipefail
           gh api --paginate --slurp \
