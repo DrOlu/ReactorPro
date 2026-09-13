@@ -684,3 +684,85 @@ func TestCallerIdentityDistinguishesVerifiedFromAccepted(t *testing.T) {
 		}
 	})
 }
+
+// ---------------------------------------------------------------------------
+// The "task" operation end-to-end with a stub invoker
+// ---------------------------------------------------------------------------
+
+// The task operation is the one side-effecting skill. This pins the whole mesh
+// contract the session-layer transport must satisfy: the verified caller's
+// routing reaches the stub, the caller's prompt is passed through, and the
+// agent's result comes back as the caller's result unchanged.
+func TestInvokeTaskOperationReturnsTheAgentResult(t *testing.T) {
+	invoker := &recordingInvoker{result: LocalInvokeResult{
+		OK:     true,
+		Result: json.RawMessage(`{"text":"the report is filed"}`),
+	}}
+	manager := invokeTestManager(t, invokeAgents(), nil)
+	manager.SetLocalInvoker(invoker)
+
+	output, err := manager.skillInvoke(t.Context(), map[string]any{
+		"target":    "agent-1",
+		"operation": OperationTask,
+		"arguments": map[string]any{"prompt": "file the report"},
+	}, verifiedCaller())
+	if err != nil {
+		t.Fatalf("skillInvoke: %v", err)
+	}
+
+	result := output.(InvokeOutput)
+	if result.Operation != OperationTask || result.Agent != "agent-1" {
+		t.Fatalf("output = %+v, want agent-1/task", result)
+	}
+	if string(result.Result) != `{"text":"the report is filed"}` {
+		t.Fatalf("result = %s, want the agent's task output", result.Result)
+	}
+	if len(invoker.requests) != 1 {
+		t.Fatalf("invoker saw %d requests, want 1", len(invoker.requests))
+	}
+	sent := invoker.requests[0]
+	if sent.Operation != OperationTask {
+		t.Fatalf("operation = %q, want %q", sent.Operation, OperationTask)
+	}
+	if string(sent.Arguments) != `{"prompt":"file the report"}` {
+		t.Fatalf("arguments = %s, want the caller's prompt", sent.Arguments)
+	}
+}
+
+// A desktop refusal carries the session layer's code vocabulary; every spell it
+// can emit must map onto a specific mesh code rather than collapsing to 5001.
+func TestInvokeTaskRefusalCodesMapOntoMeshCodes(t *testing.T) {
+	cases := []struct {
+		agentCode string
+		want      int
+	}{
+		{agentCode: "timeout", want: CodeOverloaded},
+		{agentCode: "agent_offline", want: CodeAgentUnavailable},
+		{agentCode: "invalid_request", want: CodeInvalidEnvelope},
+		{agentCode: "denied", want: CodeGovernanceDenied},
+		{agentCode: "overloaded", want: CodeOverloaded},
+		{agentCode: "unsupported_operation", want: CodeSkillNotFound},
+		{agentCode: "internal", want: CodeInternalError},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.agentCode, func(t *testing.T) {
+			manager := invokeTestManager(t, invokeAgents(), nil)
+			manager.SetLocalInvoker(&recordingInvoker{result: LocalInvokeResult{
+				OK:           false,
+				ErrorCode:    testCase.agentCode,
+				ErrorMessage: "the desktop agent refused the task",
+			}})
+
+			_, err := manager.skillInvoke(t.Context(), map[string]any{
+				"target":    "agent-1",
+				"operation": OperationTask,
+				"arguments": map[string]any{"prompt": "do it"},
+			}, verifiedCaller())
+
+			if code := codeOf(t, err); code != testCase.want {
+				t.Fatalf("code for %q = %d, want %d", testCase.agentCode, code, testCase.want)
+			}
+		})
+	}
+}

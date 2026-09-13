@@ -70,15 +70,17 @@ message GatewayEnvelope {
     InstalledAppsListRequest installed_apps_list = 100;
     ClarifyTurnRequest clarify_turn = 101;
     CuaDriverRequest cua_driver = 102;
-    // Remote mesh invocation: an agent in another organisation asking an agent
-    // behind this edge to run a task. Forwarded only after this edge's inbound
-    // guard has verified the caller; see internal/mesh/invoke.go.
-    MeshInvokeRequest mesh_invoke = 103;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
   // never-wired chat event replay request.
   reserved 67, 68, 69, 74;
+  // Remote mesh invocation was once carried as a gateway->desktop frame. It was
+  // removed when remote tasks moved onto the ordinary chat command path (the
+  // desktop has no execution surface of its own). The number and name are
+  // reserved so the wire id can never be reused for a different meaning.
+  reserved 103;
+  reserved "mesh_invoke";
 }
 
 message AgentEnvelope {
@@ -157,12 +159,14 @@ message AgentEnvelope {
     ClarifyTurnResponse clarify_turn_resp = 106;
     CuaDriverResponse cua_driver_resp = 107;
     ClarifyTurnDelta clarify_turn_delta = 108;
-    MeshInvokeResponse mesh_invoke_resp = 109;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
   // never-wired chat event replay response.
   reserved 67, 68, 69, 78;
+  // The corresponding mesh invocation reply frame; see GatewayEnvelope.
+  reserved 109;
+  reserved "mesh_invoke_resp";
 }
 
 message ChatSelectedModel {
@@ -1580,52 +1584,4 @@ message ChatConversationReference {
   string title = 2;
   string cwd = 3;
   int64 updated_at = 4;
-}
-
-// ---------------------------------------------------------------------------
-// Remote mesh invocation (gateway -> desktop)
-// ---------------------------------------------------------------------------
-
-// MeshInvokeRequest asks a desktop agent to run a task on behalf of an agent in
-// another organisation, reached over the mesh.
-//
-// The edge, not the peer, decides whether this is allowed. A request reaches a
-// desktop agent only after the edge's inbound guard has verified the caller's
-// signature against a trusted fingerprint and the edge's policy has accepted the
-// operation. The desktop is therefore never asked to trust an unauthenticated
-// caller, and the caller's verified identity travels with the request so the
-// desktop can apply its own per-organisation policy and produce an audit record.
-message MeshInvokeRequest {
-  // Mesh task id, for correlation in logs and audit. Not a security boundary.
-  string task_id = 1;
-  // Verified mesh agent id of the requesting edge, e.g. "acme/lagos/edge-1".
-  string caller = 2;
-  // Verified identity fingerprint of the requesting edge. Populated by the edge
-  // after signature verification, never taken from the peer's own claim.
-  string caller_fingerprint = 3;
-  // Local agent id this request was routed to. Carried so a desktop that receives
-  // a misrouted request can refuse it rather than act on it.
-  string target = 4;
-  // Operation to run, e.g. "task".
-  string operation = 5;
-  // Operation arguments as JSON. Carried as bytes rather than modelled because
-  // the argument shape belongs to the operation, not to the transport.
-  bytes arguments_json = 6;
-  // Unix milliseconds after which the desktop should abandon the work. The edge
-  // enforces its own deadline as well, so a desktop that never answers cannot
-  // pin a remote caller indefinitely.
-  int64 deadline_unix_ms = 7;
-}
-
-// MeshInvokeResponse reports the outcome of a MeshInvokeRequest. Exactly one is
-// sent per request, and it is correlated by the enclosing envelope's request_id.
-message MeshInvokeResponse {
-  bool ok = 1;
-  // Operation result as JSON; the shape belongs to the operation.
-  bytes result_json = 2;
-  // Stable machine-readable failure code, empty on success. The edge maps this
-  // onto a mesh error code so a remote peer sees a meaningful refusal rather
-  // than a generic internal error.
-  string error_code = 3;
-  string error_message = 4;
 }

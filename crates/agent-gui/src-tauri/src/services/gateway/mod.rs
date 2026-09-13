@@ -54,7 +54,6 @@ mod controller;
 mod envelope_handler;
 mod history_sync;
 mod managed_process;
-mod mesh_invoke;
 mod settings_sync;
 mod sftp;
 mod terminal;

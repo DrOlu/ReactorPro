@@ -360,6 +360,8 @@ func invokeResponseCode(code string) int {
 		return CodeOverloaded
 	case "invalid_request", "invalid":
 		return CodeInvalidEnvelope
+	case "internal":
+		return CodeInternalError
 	default:
 		return CodeInternalError
 	}
