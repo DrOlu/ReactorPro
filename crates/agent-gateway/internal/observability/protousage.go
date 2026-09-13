@@ -34,6 +34,15 @@ type ProtoUsage struct {
 	MeshDispatchTotal         atomic.Int64
 	MeshDispatchFailedTotal   atomic.Int64
 	MeshGovernanceDeniedTotal atomic.Int64
+	// Mesh remote invocation. MeshInvokeTotal counts invocations that passed
+	// every gate and were forwarded to a desktop agent; MeshInvokeDeniedTotal
+	// counts refusals by this edge's policy, and MeshInvokeFailedTotal counts
+	// forwarded invocations that then failed or were refused by the agent.
+	// A rising denied count with a flat total is the signal that a peer is being
+	// held off, which is exactly what an operator needs to see.
+	MeshInvokeTotal       atomic.Int64
+	MeshInvokeDeniedTotal atomic.Int64
+	MeshInvokeFailedTotal atomic.Int64
 }
 
 // Usage is a process-level singleton; each protocol layer increments it directly.
@@ -67,5 +76,8 @@ func (u *ProtoUsage) Snapshot() map[string]int64 {
 		"mesh_dispatch_total":                      u.MeshDispatchTotal.Load(),
 		"mesh_dispatch_failed_total":               u.MeshDispatchFailedTotal.Load(),
 		"mesh_governance_denied_total":             u.MeshGovernanceDeniedTotal.Load(),
+		"mesh_invoke_total":                        u.MeshInvokeTotal.Load(),
+		"mesh_invoke_denied_total":                 u.MeshInvokeDeniedTotal.Load(),
+		"mesh_invoke_failed_total":                 u.MeshInvokeFailedTotal.Load(),
 	}
 }

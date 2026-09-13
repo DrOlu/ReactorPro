@@ -78,6 +78,13 @@ type Config struct {
 	// MeshAcceptedVersions, when set, is the only set of protocol versions
 	// accepted from peers. Empty accepts any version.
 	MeshAcceptedVersions string
+
+	// Mesh remote invocation: whether a verified peer may ask a desktop agent
+	// behind this edge to run a task, and under what limits.
+	MeshAllowRemoteInvoke     bool
+	MeshRequireVerifiedInvoke bool
+	MeshInvokeOperations      string // comma-separated operation names
+	MeshInvokeTimeout         time.Duration
 }
 
 func Load() *Config {
@@ -109,9 +116,13 @@ func Load() *Config {
 	flag.IntVar(&cfg.MeshMaxEnvelopeBytes, "mesh-max-envelope-bytes", getenvInt("LIVEAGENT_GATEWAY_MESH_MAX_ENVELOPE_BYTES", mesh.DefaultMaxEnvelopeBytes), "maximum size of a single inbound mesh envelope in bytes")
 	flag.Float64Var(&cfg.MeshRateLimitPerSec, "mesh-rate-limit-per-second", getenvFloat("LIVEAGENT_GATEWAY_MESH_RATE_LIMIT_PER_SECOND", 50), "sustained inbound mesh messages per second allowed from one sender (0 disables)")
 	flag.IntVar(&cfg.MeshRateLimitBurst, "mesh-rate-limit-burst", getenvInt("LIVEAGENT_GATEWAY_MESH_RATE_LIMIT_BURST", 100), "inbound mesh burst allowance per sender")
-	flag.BoolVar(&cfg.MeshSkillsEnabled, "mesh-skills-enabled", getenvBool("LIVEAGENT_GATEWAY_MESH_SKILLS_ENABLED", true), "serve the built-in read-only mesh skills (ping, describe, status)")
+	flag.BoolVar(&cfg.MeshSkillsEnabled, "mesh-skills-enabled", getenvBool("LIVEAGENT_GATEWAY_MESH_SKILLS_ENABLED", true), "serve mesh skills at all (ping, describe, status and the gated invoke); false serves none")
 	flag.StringVar(&cfg.MeshSkills, "mesh-skills", getenv("LIVEAGENT_GATEWAY_MESH_SKILLS", ""), "comma-separated built-in mesh skills to serve; empty serves all of them")
 	flag.StringVar(&cfg.MeshAcceptedVersions, "mesh-accepted-versions", getenv("LIVEAGENT_GATEWAY_MESH_ACCEPTED_VERSIONS", ""), "comma-separated protocol versions to accept from peers; empty accepts any")
+	flag.BoolVar(&cfg.MeshAllowRemoteInvoke, "mesh-allow-remote-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_ALLOW_REMOTE_INVOKE", true), "allow peers to invoke operations on desktop agents behind this edge")
+	flag.BoolVar(&cfg.MeshRequireVerifiedInvoke, "mesh-require-verified-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_REQUIRE_VERIFIED_INVOKE", true), "refuse remote invocation whose caller identity was not verified (needs a signed, trusted peer)")
+	flag.StringVar(&cfg.MeshInvokeOperations, "mesh-invoke-operations", getenv("LIVEAGENT_GATEWAY_MESH_INVOKE_OPERATIONS", mesh.OperationTask), "comma-separated operations a peer may invoke remotely; empty exposes none")
+	flag.DurationVar(&cfg.MeshInvokeTimeout, "mesh-invoke-timeout", getenvDuration("LIVEAGENT_GATEWAY_MESH_INVOKE_TIMEOUT", 60*time.Second), "how long one remote invocation may run before the edge gives up on it")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
 	flag.DurationVar(&cfg.ChatPrepareTimeout, "chat-prepare-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT", 2*time.Second), "timeout for the pre-submit desktop agent liveness probe")
 	flag.DurationVar(&cfg.ChatDeliveryTimeout, "chat-delivery-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT", 5*time.Second), "timeout delivering an accepted chat command to the desktop agent stream")
@@ -288,6 +299,12 @@ func (c *Config) MeshConfig() mesh.Config {
 	cfg.SkillsEnabled = c.MeshSkillsEnabled
 	cfg.SkillAllowlist = splitList(c.MeshSkills)
 	cfg.AcceptedVersions = splitList(c.MeshAcceptedVersions)
+	cfg.AllowRemoteInvoke = c.MeshAllowRemoteInvoke
+	cfg.RequireVerifiedInvoke = c.MeshRequireVerifiedInvoke
+	cfg.InvokeOperations = splitList(c.MeshInvokeOperations)
+	if c.MeshInvokeTimeout > 0 {
+		cfg.InvokeTimeout = c.MeshInvokeTimeout
+	}
 	// Only override the default capabilities when the operator set some, so the
 	// shipping default is not replaced by an empty list.
 	if capabilities := splitList(c.MeshCapabilities); len(capabilities) > 0 {

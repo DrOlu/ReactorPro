@@ -162,6 +162,34 @@ type Config struct {
 	// disabling a skill the operator expected to be exposed.
 	SkillAllowlist []string `json:"skillAllowlist"`
 
+	// Remote invocation: whether a peer may ask a desktop agent behind this edge
+	// to run a task.
+	//
+	// This is the one place the bridge can be *driven* rather than merely read,
+	// so it is the one place the read-only posture described in MESH.md is
+	// deliberately relaxed. Two independent gates stand in front of it:
+	// AllowRemoteInvoke (is the capability offered at all) and
+	// RequireVerifiedInvoke (must the caller's identity have been established).
+	AllowRemoteInvoke bool `json:"allowRemoteInvoke"`
+	// RequireVerifiedInvoke refuses an invocation whose sender identity the
+	// inbound guard did not actually verify.
+	//
+	// It is load-bearing. The shipping verify mode is "prefer", which accepts
+	// unsigned envelopes, so without this floor an invocation is reachable by
+	// anything that can publish to the subject — anonymous remote code execution
+	// on a desktop machine. With it, "allowed" means "allowed for an
+	// authenticated peer": a caller must have proven a key that the trust store
+	// pinned.
+	RequireVerifiedInvoke bool `json:"requireVerifiedInvoke"`
+	// InvokeOperations is the set of operations a peer may invoke, matched
+	// exactly. An empty set means none, never all — exposing something is a
+	// deliberate act, so an unset list must not read as "anything goes".
+	InvokeOperations []string `json:"invokeOperations"`
+	// InvokeTimeout bounds a single remote invocation. The desktop enforces its
+	// own deadline too; this one exists so an unresponsive agent cannot pin a
+	// remote caller.
+	InvokeTimeout time.Duration `json:"-"`
+
 	// Events to subscribe to automatically once connected.
 	EventSubscriptions []string `json:"eventSubscriptions"`
 }
@@ -239,8 +267,15 @@ func DefaultConfig() Config {
 			Burst:     100,
 		},
 		SkillsEnabled: true,
-		Reputation:    DefaultReputationConfig(),
-		Governance:    DefaultGovernanceConfig(),
+		// Remote invocation ships on so a federated edge is usable without a flag
+		// hunt; RequireVerifiedInvoke is the floor that stops "on" from meaning
+		// "open to anyone". See the field docs.
+		AllowRemoteInvoke:     true,
+		RequireVerifiedInvoke: true,
+		InvokeOperations:      []string{OperationTask},
+		InvokeTimeout:         DefaultInvokeTimeout,
+		Reputation:            DefaultReputationConfig(),
+		Governance:            DefaultGovernanceConfig(),
 	}
 }
 
@@ -267,6 +302,27 @@ func (c *Config) normalize() {
 		c.RateLimit.PerSecond = 50
 		c.RateLimit.Burst = 100
 	}
+	if c.InvokeTimeout <= 0 {
+		c.InvokeTimeout = DefaultInvokeTimeout
+	}
+}
+
+// servesOperation reports whether a remote invocation may name this operation.
+//
+// Deliberately the opposite default to servesSkill: an empty skill allowlist
+// serves every built-in skill, but an empty operation allowlist serves nothing.
+// Reading a skill is safe to leave open; driving a desktop machine is not.
+func (c Config) servesOperation(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	for _, allowed := range c.InvokeOperations {
+		if strings.TrimSpace(allowed) == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Validate reports why the bridge cannot start, or nil when it can.
@@ -314,16 +370,25 @@ func (c Config) Validate() error {
 			continue
 		}
 		known := false
-		for _, builtin := range builtinSkillIDs {
+		for _, builtin := range servableSkillIDs() {
 			if builtin == trimmed {
 				known = true
 				break
 			}
 		}
 		if !known {
-			return fmt.Errorf("mesh skill %q is not a built-in skill (known: %s)",
-				id, strings.Join(builtinSkillIDs, ", "))
+			return fmt.Errorf("mesh skill %q is not a servable skill (known: %s)",
+				id, strings.Join(servableSkillIDs(), ", "))
 		}
+	}
+	// Invocation with verification required is unachievable when identity is not
+	// consulted at all: every caller would be refused, which looks like a broken
+	// mesh rather than a misconfiguration. Reject it here, where the reason is
+	// visible, instead of at the point of use.
+	if c.AllowRemoteInvoke && c.RequireVerifiedInvoke && c.VerifyMode == VerifyOff {
+		return errors.New("mesh allows remote invocation and requires a verified caller, " +
+			"but verify mode is off: no caller identity can ever be established, so every " +
+			"invocation would be refused. Set -mesh-verify-mode to prefer or require")
 	}
 	return nil
 }

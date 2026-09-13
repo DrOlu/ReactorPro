@@ -433,8 +433,11 @@ func TestIntegrationBuiltinSkillsAnswer(t *testing.T) {
 			t.Fatalf("describe fingerprint = %v, want %s", output["fingerprint"], want)
 		}
 		skills, _ := output["skills"].([]any)
-		if len(skills) != len(BuiltinSkillIDs()) {
-			t.Fatalf("describe advertised %d skills, want %d", len(skills), len(BuiltinSkillIDs()))
+		// The servable set, not just the read-only built-ins: the gated invoke
+		// skill is registered alongside them and belongs in the manifest a peer
+		// reads to decide whether this edge takes work.
+		if want := servableSkillIDs(); len(skills) != len(want) {
+			t.Fatalf("describe advertised %d skills, want %d (%v)", len(skills), len(want), want)
 		}
 	})
 
@@ -739,5 +742,147 @@ func TestIntegrationReplyAfterStopDoesNotPanic(t *testing.T) {
 		t.Log("unexpected reply from a stopped agent")
 	} else if !errors.Is(err, nats.ErrTimeout) {
 		t.Logf("request error (acceptable): %v", err)
+	}
+}
+
+// The case the mesh exists for: an agent in one organisation reaching an agent
+// behind an edge in another, over the wire, with the caller's identity verified
+// by the receiving edge rather than taken on trust.
+//
+// This exercises the whole chain rather than the handler in isolation — real
+// NATS, a real signed dispatch, the inbound guard, the trust store learning the
+// caller, the verified identity travelling to the desktop, and the result
+// travelling back.
+func TestIntegrationRemoteInvocationCrossesTheMesh(t *testing.T) {
+	url := startTestNATS(t)
+	// Org A and org B, named the way the convention recommends.
+	peerID := uniqueID("acme/lagos/edge")
+	callerID := uniqueID("globex/berlin/edge")
+
+	invoker := &recordingInvoker{result: LocalInvokeResult{
+		OK:     true,
+		Result: json.RawMessage(`{"report":"filed"}`),
+	}}
+
+	// The edge that owns the desktop agent.
+	peer := testManager(t, url, peerID, nil)
+	peer.SetLocalAgentsProvider(func() []LocalAgent {
+		return []LocalAgent{{
+			ID:           "agent-1",
+			Name:         "reception",
+			Online:       true,
+			Capabilities: []string{OperationTask},
+		}}
+	})
+	peer.SetLocalInvoker(invoker)
+
+	// The edge asking on behalf of an agent in the other organisation.
+	caller := testManager(t, url, callerID, nil)
+
+	response, err := caller.Dispatch(t.Context(), peerID, SkillInvoke, map[string]any{
+		"target":    "agent-1",
+		"operation": OperationTask,
+		"arguments": map[string]any{"prompt": "file the report"},
+	}, 10*time.Second)
+	if err != nil {
+		t.Fatalf("dispatch %s: %v", SkillInvoke, err)
+	}
+	if response.Error != nil {
+		t.Fatalf("invoke returned %+v, want success", response.Error)
+	}
+
+	var payload RespondPayload
+	if err := json.Unmarshal(response.Payload, &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	output, ok := payload.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("output = %#v, want an object", payload.Output)
+	}
+	if output["agent"] != "agent-1" {
+		t.Fatalf("output agent = %v, want agent-1", output["agent"])
+	}
+
+	if len(invoker.requests) != 1 {
+		t.Fatalf("the desktop was invoked %d times, want exactly 1", len(invoker.requests))
+	}
+	sent := invoker.requests[0]
+	if sent.Caller != callerID {
+		t.Fatalf("desktop saw caller %q, want the dispatching edge %q", sent.Caller, callerID)
+	}
+	// The load-bearing assertion: this fingerprint was established by the
+	// receiving edge's guard from the caller's signature. If it were taken from
+	// the payload, any peer could name any identity.
+	if sent.CallerFingerprint != caller.Status().Fingerprint {
+		t.Fatalf("desktop saw fingerprint %q, want the caller's real fingerprint %q",
+			sent.CallerFingerprint, caller.Status().Fingerprint)
+	}
+	if sent.TaskID == "" {
+		t.Fatal("the desktop should receive the task id for its audit trail")
+	}
+}
+
+// The floor, proven over the wire rather than argued: anything that can reach the
+// NATS subject but holds no identity must not reach a desktop agent.
+//
+// The envelope is published by hand and unsigned, because every manager signs
+// what it sends — this is the shape of a caller that has no relationship to the
+// fleet at all, which is exactly what the default verify mode would otherwise
+// accept.
+func TestIntegrationRemoteInvocationRefusesAnUnsignedCaller(t *testing.T) {
+	url := startTestNATS(t)
+	peerID := uniqueID("acme/lagos/edge")
+
+	invoker := &recordingInvoker{result: LocalInvokeResult{OK: true, Result: json.RawMessage(`{}`)}}
+	peer := testManager(t, url, peerID, nil)
+	peer.SetLocalAgentsProvider(func() []LocalAgent {
+		return []LocalAgent{{ID: "agent-1", Online: true, Capabilities: []string{OperationTask}}}
+	})
+	peer.SetLocalInvoker(invoker)
+
+	payload, err := encodePayload(RequestPayload{
+		Skill: SkillInvoke,
+		Input: map[string]any{"target": "agent-1", "operation": OperationTask},
+	})
+	if err != nil {
+		t.Fatalf("encode payload: %v", err)
+	}
+	envelope := &Envelope{
+		Version: ProtocolVersion,
+		ID:      newID(),
+		Type:    TypeRequest,
+		TS:      timestamp(),
+		From:    "globex/berlin/attacker",
+		To:      peerID,
+		Payload: payload,
+	}
+	raw, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatalf("marshal envelope: %v", err)
+	}
+
+	conn, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer conn.Close()
+
+	message, err := conn.Request(AgentInboxSubject(peerID), raw, 5*time.Second)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	reply, err := decodeEnvelope(message.Data)
+	if err != nil {
+		t.Fatalf("decode reply: %v", err)
+	}
+	if reply.Error == nil {
+		t.Fatal("an unsigned caller was served; the identity floor is not holding")
+	}
+	if reply.Error.Code != CodeGovernanceDenied {
+		t.Fatalf("code = %d (%s), want %d GOVERNANCE_DENIED",
+			reply.Error.Code, reply.Error.Message, CodeGovernanceDenied)
+	}
+	if len(invoker.requests) != 0 {
+		t.Fatalf("an unsigned caller reached the desktop %d times, want 0", len(invoker.requests))
 	}
 }

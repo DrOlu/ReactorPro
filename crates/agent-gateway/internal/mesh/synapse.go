@@ -20,6 +20,16 @@ type RequestMeta struct {
 	TaskID string
 	From   string
 	Trace  *Trace
+	// Verified reports that the inbound guard established the sender's identity:
+	// a signature that verified against a fingerprint the trust store pinned.
+	//
+	// False for an unsigned envelope that the prefer mode accepted, and always
+	// false under verify-off. "It passed the guard" therefore does not mean "we
+	// know who sent it", and a skill with a side effect must check this rather
+	// than assume the stronger reading.
+	Verified bool
+	// CallerFingerprint is the verified fingerprint, empty when Verified is false.
+	CallerFingerprint string
 }
 
 // Handler serves one skill. Returning an error produces a 5001 respond
@@ -654,10 +664,25 @@ func (a *Agent) handleInboundRequest(message *nats.Msg) {
 		a.respondError(message, envelope, CodeSkillNotFound, fmt.Sprintf("Skill %q not found", payload.Skill))
 		return
 	}
-	meta := RequestMeta{TaskID: envelope.TaskID, From: envelope.From, Trace: envelope.Trace}
+	callerFingerprint, verified := a.guard.callerIdentity(envelope)
+	meta := RequestMeta{
+		TaskID:            envelope.TaskID,
+		From:              envelope.From,
+		Trace:             envelope.Trace,
+		Verified:          verified,
+		CallerFingerprint: callerFingerprint,
+	}
 	output, handlerErr := handler(context.Background(), payload.Input, meta)
 	if handlerErr != nil {
-		a.respondError(message, envelope, CodeInternalError, handlerErr.Error())
+		// A skill may name the code a peer sees; anything else is internal. Without
+		// this every refusal would arrive as 5001, and a caller could not tell "no
+		// such operation" from "this edge is broken".
+		code, reason := CodeInternalError, handlerErr.Error()
+		var refusal *codedError
+		if errors.As(handlerErr, &refusal) {
+			code, reason = refusal.code, refusal.reason
+		}
+		a.respondError(message, envelope, code, reason)
 		return
 	}
 	reply := a.replyEnvelope(envelope)

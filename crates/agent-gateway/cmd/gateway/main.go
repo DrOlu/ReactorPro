@@ -54,7 +54,8 @@ func main() {
 	// NATS event mesh / Synapse bridge. Disabled by default, so this connects
 	// nowhere until it is configured. A failure to start is not fatal: the
 	// gateway keeps serving and the reason is visible on /api/mesh/status.
-	meshManager := mesh.NewManager(cfg.MeshConfig(), slog.Default())
+	meshConfig := cfg.MeshConfig()
+	meshManager := mesh.NewManager(meshConfig, slog.Default())
 
 	// Publish the local agent directory to the mesh. A peer in another
 	// organisation should be able to discover what sits behind this edge rather
@@ -75,6 +76,15 @@ func main() {
 				names[entry.AgentID] = entry.Name
 			}
 		}
+		// Advertise the operations this edge will actually route on the agent's
+		// behalf. Until a desktop reports a capability list of its own, the edge's
+		// policy is the honest answer: advertising more than it will accept would
+		// invite a request that is then refused, which is worse than saying nothing.
+		var capabilities []string
+		if meshConfig.AllowRemoteInvoke {
+			capabilities = meshConfig.InvokeOperations
+		}
+
 		agents := make([]mesh.LocalAgent, 0, len(statuses))
 		for agentID, status := range statuses {
 			agents = append(agents, mesh.LocalAgent{
@@ -83,10 +93,19 @@ func main() {
 				Online:         status.Online,
 				Version:        status.AgentVersion,
 				ConnectedSince: status.ConnectedSince,
+				Capabilities:   capabilities,
 			})
 		}
 		return agents
 	})
+
+	// Route a verified remote invocation to the desktop agent it was addressed to.
+	//
+	// Installed before Start so the skill is registered with its transport already
+	// in place: an invoke skill that is advertised while it has nothing to route
+	// through would answer a peer with an internal error, which reads as a broken
+	// edge rather than a half-wired one.
+	meshManager.SetLocalInvoker(desktopMeshInvoker{manager: sm})
 
 	if err := meshManager.Start(context.Background()); err != nil {
 		slog.Error("mesh bridge failed to start", "err", err)
