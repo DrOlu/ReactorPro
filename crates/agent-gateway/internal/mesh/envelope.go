@@ -205,6 +205,14 @@ func timestamp() string { return now().Format(time.RFC3339Nano) }
 type RequestPayload struct {
 	Skill string `json:"skill"`
 	Input any    `json:"input"`
+	// Text carries a free-form prompt at the payload's top level.
+	//
+	// Peers whose request shape is text-based — the Synapse bridges read
+	// payload.text, payload.message and payload.prompt and never look inside
+	// Input — cannot otherwise see what is being asked of them, and reject the
+	// request as empty even though it arrived intact. Omitted when empty, so
+	// requests between edges that agree on the skill shape are unchanged.
+	Text string `json:"text,omitempty"`
 }
 
 type RespondPayload struct {

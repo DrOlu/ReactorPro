@@ -715,8 +715,21 @@ func (a *Agent) Dispatch(ctx context.Context, targetAgent, skill string, input a
 		timeout = 120 * time.Second
 	}
 	// newEnvelope already attaches a fresh trace; no need to mint a second one.
+	payload := RequestPayload{Skill: skill, Input: input}
+	// Surface a text prompt at the payload's top level as well, so text-based
+	// peers can act on it. See RequestPayload.Text.
+	if asMap, ok := input.(map[string]any); ok {
+		for _, key := range []string{"text", "message", "prompt"} {
+			if value, present := asMap[key]; present {
+				if text, isString := value.(string); isString && text != "" {
+					payload.Text = text
+					break
+				}
+			}
+		}
+	}
 	envelope := a.newEnvelope(TypeRequest, targetAgent, newID())
-	if err := a.attachPayload(envelope, RequestPayload{Skill: skill, Input: input}); err != nil {
+	if err := a.attachPayload(envelope, payload); err != nil {
 		return nil, err
 	}
 	raw, err := a.marshal(envelope)
