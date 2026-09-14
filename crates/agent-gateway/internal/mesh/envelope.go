@@ -205,6 +205,13 @@ func timestamp() string { return now().Format(time.RFC3339Nano) }
 type RequestPayload struct {
 	Skill string `json:"skill"`
 	Input any    `json:"input"`
+	// ReplyTo is the caller's reply inbox, carried inside the payload rather
+	// than relying on the NATS reply subject. A peer consuming the request
+	// through a JetStream push delivery cannot use msg.reply — it is the ack
+	// subject — so the fleet's bridges read reply_to from the envelope/payload
+	// instead and only answer when it carries a "_REPLY" prefix. The payload is
+	// covered by the signature, so this cannot be rewritten in transit.
+	ReplyTo string `json:"reply_to,omitempty"`
 	// Text carries a free-form prompt at the payload's top level.
 	//
 	// Peers whose request shape is text-based — the Synapse bridges read

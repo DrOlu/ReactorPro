@@ -729,16 +729,9 @@ func (a *Agent) Dispatch(ctx context.Context, targetAgent, skill string, input a
 		}
 	}
 	envelope := a.newEnvelope(TypeRequest, targetAgent, newID())
-	if err := a.attachPayload(envelope, payload); err != nil {
-		return nil, err
-	}
-	raw, err := a.marshal(envelope)
-	if err != nil {
-		return nil, err
-	}
 	// Not conn.Request: a stream capturing the subject makes the server answer
 	// the publish, and conn.Request would return that ack as the reply.
-	data, err := a.requestReply(conn, AgentInboxSubject(targetAgent), raw, timeout)
+	data, err := a.requestReply(conn, AgentInboxSubject(targetAgent), envelope, payload, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("dispatch %q to %s: %w", skill, targetAgent, err)
 	}

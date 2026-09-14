@@ -3,6 +3,7 @@ package mesh
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -50,15 +51,28 @@ func isJetStreamPublishAck(data []byte) bool {
 // publish acknowledgements that a stream capturing the subject may inject.
 //
 // Unlike conn.Request this uses its own subscription, because it needs to look
-// at more than one message. It returns the raw reply bytes; interpreting them is
-// the caller's job, because only the caller knows what shape it expects.
-func (a *Agent) requestReply(conn *nats.Conn, subject string, raw []byte, timeout time.Duration) ([]byte, error) {
-	inbox := conn.NewRespInbox()
+// at more than one message. It builds the envelope itself so that the reply
+// inbox can be carried inside the payload — see RequestPayload.ReplyTo — and
+// still sets it as the NATS reply subject for peers that use msg.reply on a core
+// delivery. It returns the raw reply bytes; interpreting them is the caller's
+// job, because only the caller knows what shape it expects.
+func (a *Agent) requestReply(conn *nats.Conn, subject string, envelope *Envelope, payload RequestPayload, timeout time.Duration) ([]byte, error) {
+	// The fleet's bridges only honour a reply subject with this prefix.
+	inbox := strings.Replace(conn.NewRespInbox(), "_INBOX.", "_REPLY.", 1)
 	sub, err := conn.SubscribeSync(inbox)
 	if err != nil {
 		return nil, fmt.Errorf("subscribe to reply inbox: %w", err)
 	}
 	defer func() { _ = sub.Unsubscribe() }()
+
+	payload.ReplyTo = inbox
+	if err := a.attachPayload(envelope, payload); err != nil {
+		return nil, err
+	}
+	raw, err := a.marshal(envelope)
+	if err != nil {
+		return nil, err
+	}
 
 	// Publish after subscribing, and flush so the subscription is registered on
 	// the server before the request can be answered. A reply that arrives first
