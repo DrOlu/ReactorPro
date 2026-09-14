@@ -723,13 +723,21 @@ func (a *Agent) Dispatch(ctx context.Context, targetAgent, skill string, input a
 	if err != nil {
 		return nil, err
 	}
-	message, err := conn.Request(AgentInboxSubject(targetAgent), raw, timeout)
+	// Not conn.Request: a stream capturing the subject makes the server answer
+	// the publish, and conn.Request would return that ack as the reply.
+	data, err := a.requestReply(conn, AgentInboxSubject(targetAgent), raw, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("dispatch %q to %s: %w", skill, targetAgent, err)
 	}
-	response, err := decodeEnvelope(message.Data)
+	response, err := decodeEnvelope(data)
 	if err != nil {
 		return nil, err
+	}
+	// A decoded message that carries no identity is not a mesh envelope, and must
+	// not be reported as a successful empty reply. This is the check that turns a
+	// silent wrong answer into a loud failure.
+	if response.ID == "" || response.Type == "" || response.From == "" {
+		return nil, fmt.Errorf("dispatch %q to %s: reply is not a mesh envelope (no id, type or sender)", skill, targetAgent)
 	}
 	if response.Error != nil {
 		return response, response.Error

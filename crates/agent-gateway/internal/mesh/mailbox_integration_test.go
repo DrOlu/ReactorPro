@@ -596,3 +596,104 @@ func TestSubjectMatchesPattern(t *testing.T) {
 		t.Fatal("a stream over the mailbox subject was not recognised")
 	}
 }
+
+// Dispatch must keep working even when a JetStream stream captures the
+// request/reply inbox subject.
+//
+// This is the production failure, reproduced: with a stream over
+// `mesh.agent.*.inbox` the server answers the publish, and `conn.Request` takes
+// that PubAck as the reply — so Dispatch returned success with an empty envelope
+// (`{"v":"","id":"","type":"","ts":"","from":""}`) while the peer's real answer
+// was discarded. A wrong answer reported as a good one.
+func TestDispatchSurvivesAStreamCapturingTheInbox(t *testing.T) {
+	url := startTestNATSJetStream(t)
+
+	conn, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer conn.Close()
+	js, err := jetstream.New(conn)
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// The fleet's configuration: a workqueue stream over every agent's inbox.
+	if _, err := js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:      "INBOX_CAPTURE",
+		Subjects:  []string{SubjectAgentInboxPrefix + "*" + SubjectAgentInboxSuffix},
+		Retention: jetstream.WorkQueuePolicy,
+		Storage:   jetstream.FileStorage,
+	}); err != nil {
+		t.Fatalf("create capturing stream: %v", err)
+	}
+
+	responder := buildTestAgent(t, url, uniqueID("responder"), nil)
+	responder.RegisterSkill("ping", func(context.Context, any, RequestMeta) (any, error) {
+		return map[string]any{"pong": true}, nil
+	})
+	if err := responder.Start(t.Context()); err != nil {
+		t.Fatalf("start responder: %v", err)
+	}
+	defer func() { _ = responder.Stop(context.Background()) }()
+
+	caller := buildTestAgent(t, url, uniqueID("caller"), nil)
+	if err := caller.Start(t.Context()); err != nil {
+		t.Fatalf("start caller: %v", err)
+	}
+	defer func() { _ = caller.Stop(context.Background()) }()
+
+	response, err := caller.Dispatch(ctx, responder.AgentID(), "ping", map[string]any{}, 8*time.Second)
+	if err != nil {
+		t.Fatalf("dispatch through a captured inbox: %v", err)
+	}
+	if response.ID == "" || response.Type == "" || response.From == "" {
+		t.Fatalf("dispatch reported success with a non-envelope reply: %+v", response)
+	}
+	if response.Type != TypeRespond {
+		t.Fatalf("reply type = %q, want %q", response.Type, TypeRespond)
+	}
+	if response.From != responder.AgentID() {
+		t.Fatalf("reply from = %q, want the responder %q", response.From, responder.AgentID())
+	}
+}
+
+// A reply that is not a mesh envelope must be an error, never a successful empty
+// result — that is what made the production failure invisible.
+func TestDispatchRejectsANonEnvelopeReply(t *testing.T) {
+	url := startTestNATSJetStream(t)
+	targetID := uniqueID("silent")
+
+	// An agent that answers every request with a bare JetStream-ish ack and never
+	// sends a real reply. Dispatch must not mistake it for success.
+	conn, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.Subscribe(AgentInboxSubject(targetID), func(message *nats.Msg) {
+		if message.Reply != "" {
+			_ = conn.Publish(message.Reply, []byte(`{"stream":"X","seq":1}`))
+		}
+	}); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err := conn.Flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+
+	caller := buildTestAgent(t, url, uniqueID("caller"), nil)
+	if err := caller.Start(t.Context()); err != nil {
+		t.Fatalf("start caller: %v", err)
+	}
+	defer func() { _ = caller.Stop(context.Background()) }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	response, err := caller.Dispatch(ctx, targetID, "ping", map[string]any{}, 3*time.Second)
+	if err == nil {
+		t.Fatalf("dispatch accepted a non-envelope reply as success: %+v", response)
+	}
+}
