@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -55,7 +56,103 @@ func mailboxDurableName(agentID string) string {
 	return "mailbox-" + hex.EncodeToString(sum[:8])
 }
 
-// startMailbox creates the stream and consumer and begins delivering to the
+// acquireMailboxStream opens the configured stream, creating it only when it
+// does not already exist.
+//
+// It must never be CreateOrUpdateStream. A stream with the configured name may
+// already belong to something else entirely, and rewriting its configuration is
+// both rude and brittle: JetStream refuses an update that would change the
+// retention policy, which turns a name collision into a hard failure. That is
+// not hypothetical — it is what a live deployment did, against an existing
+// AGENT_INBOXES stream with workqueue retention, and the failure took down the
+// whole mesh bridge rather than just the mailbox.
+//
+// So: look first. Adopt an existing stream if it actually captures this agent's
+// mailbox, and refuse plainly if it does not. Never mutate a stream we did not
+// create and cannot claim to understand.
+func (a *Agent) acquireMailboxStream(ctx context.Context, js jetstream.JetStream) (jetstream.Stream, error) {
+	name := a.config.MailboxStream
+	mailboxSubject := AgentMailboxSubject(a.agentID)
+
+	existing, err := js.Stream(ctx, name)
+	switch {
+	case err == nil:
+		info, infoErr := existing.Info(ctx)
+		if infoErr != nil {
+			return nil, fmt.Errorf("inspect existing stream %q: %w", name, infoErr)
+		}
+		if !capturesSubject(info.Config.Subjects, mailboxSubject) {
+			return nil, fmt.Errorf(
+				"stream %q already exists but does not capture %q (its subjects are %v); refusing to rewrite a stream this edge did not create — choose a free name with -mesh-mailbox-stream",
+				name, mailboxSubject, info.Config.Subjects)
+		}
+		a.logger.Warn("adopting an existing mailbox stream; its configuration is left untouched",
+			"stream", name, "subjects", info.Config.Subjects,
+			"retention", info.Config.Retention, "maxAge", info.Config.MaxAge)
+		return existing, nil
+
+	case errors.Is(err, jetstream.ErrStreamNotFound):
+		// Bounded on both axes: a mailbox is a handoff buffer, not an archive, so
+		// an agent that never returns cannot grow the store without limit.
+		// DiscardOld drops the oldest undelivered message under pressure, which is
+		// the right loss for a mailbox — the newest instruction is the one that
+		// still matters.
+		stream, createErr := js.CreateStream(ctx, jetstream.StreamConfig{
+			Name:        name,
+			Description: "durable mailbox for mesh agents (mesh.agent.*.mailbox)",
+			Subjects:    []string{AgentMailboxSubjectPattern()},
+			MaxAge:      a.config.MailboxMaxAge,
+			MaxMsgs:     a.config.MailboxMaxMsgs,
+			Storage:     jetstream.FileStorage,
+			Discard:     jetstream.DiscardOld,
+		})
+		if createErr != nil {
+			return nil, fmt.Errorf("create mailbox stream %q: %w", name, createErr)
+		}
+		a.logger.Info("created mailbox stream", "stream", name, "subject", mailboxSubject)
+		return stream, nil
+
+	default:
+		return nil, fmt.Errorf("look up mailbox stream %q: %w", name, err)
+	}
+}
+
+// capturesSubject reports whether any of a stream's subject filters would
+// capture the given subject.
+//
+// The direction matters: a stream's filters are patterns and the subject is
+// concrete, so a stream over `mesh.agent.*.mailbox` captures
+// `mesh.agent.acme/edge-1.mailbox`, while a stream over `mesh.agent.*.inbox`
+// does not.
+func capturesSubject(streamSubjects []string, subject string) bool {
+	for _, pattern := range streamSubjects {
+		if subjectMatchesPattern(pattern, subject) {
+			return true
+		}
+	}
+	return false
+}
+
+// subjectMatchesPattern implements the NATS subject matching used by streams:
+// `*` matches exactly one token, `>` matches one or more trailing tokens.
+func subjectMatchesPattern(pattern, subject string) bool {
+	patternTokens := strings.Split(pattern, ".")
+	subjectTokens := strings.Split(subject, ".")
+	for i, token := range patternTokens {
+		if token == ">" {
+			return i < len(subjectTokens)
+		}
+		if i >= len(subjectTokens) {
+			return false
+		}
+		if token != "*" && token != subjectTokens[i] {
+			return false
+		}
+	}
+	return len(patternTokens) == len(subjectTokens)
+}
+
+// startMailbox opens the stream and consumer and begins delivering to the
 // agent's skill handlers. It is a no-op when the feature is off.
 func (a *Agent) startMailbox(ctx context.Context) error {
 	if !a.config.MailboxEnabled {
@@ -70,21 +167,9 @@ func (a *Agent) startMailbox(ctx context.Context) error {
 		return fmt.Errorf("create JetStream context for mailbox: %w", err)
 	}
 
-	// Bounded on both axes: a mailbox is a handoff buffer, not an archive, so an
-	// agent that never returns cannot grow the store without limit. DiscardOld
-	// drops the oldest undelivered message under pressure, which is the right
-	// loss for a mailbox — the newest instruction is the one that still matters.
-	stream, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:        a.config.MailboxStream,
-		Description: "durable mailbox for mesh agents (mesh.agent.*.mailbox)",
-		Subjects:    []string{AgentMailboxSubjectPattern()},
-		MaxAge:      a.config.MailboxMaxAge,
-		MaxMsgs:     a.config.MailboxMaxMsgs,
-		Storage:     jetstream.FileStorage,
-		Discard:     jetstream.DiscardOld,
-	})
+	stream, err := a.acquireMailboxStream(ctx, js)
 	if err != nil {
-		return fmt.Errorf("create mailbox stream %q: %w", a.config.MailboxStream, err)
+		return err
 	}
 
 	name := mailboxDurableName(a.agentID)
@@ -286,16 +371,22 @@ func (a *Agent) SendMailboxMessage(ctx context.Context, targetAgent, skill strin
 func (a *Agent) MailboxStatus() map[string]any {
 	a.mu.RLock()
 	box := a.mailbox
+	boxErr := a.mailboxErr
 	a.mu.RUnlock()
 
 	status := map[string]any{
 		"enabled": a.config.MailboxEnabled,
 		"subject": AgentMailboxSubject(a.agentID),
 		"stream":  a.config.MailboxStream,
+		"running": box != nil,
 	}
-	status["running"] = box != nil
 	if box != nil {
 		status["consumer"] = box.name
+	}
+	// "enabled but not running" is a failure an operator needs to see, and it is
+	// indistinguishable from "off" without this.
+	if boxErr != "" {
+		status["error"] = boxErr
 	}
 	return status
 }
