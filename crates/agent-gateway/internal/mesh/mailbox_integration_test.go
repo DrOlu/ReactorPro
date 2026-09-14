@@ -697,3 +697,52 @@ func TestDispatchRejectsANonEnvelopeReply(t *testing.T) {
 		t.Fatalf("dispatch accepted a non-envelope reply as success: %+v", response)
 	}
 }
+
+// The mailbox is at-least-once, so it must never execute the one skill with
+// side effects: a crash between starting a remote task and the ack would run
+// the task a second time on redelivery. This pins the refusal — and, for
+// contrast, that a read-only skill still runs.
+func TestMailboxRefusesToExecuteARemoteTask(t *testing.T) {
+	url := startTestNATSJetStream(t)
+	agentID := uniqueID("no-invoke")
+
+	invokeRan := make(chan struct{}, 1)
+	agent := buildTestAgent(t, url, agentID, func(c *Config) { c.MailboxEnabled = true })
+	agent.RegisterSkill(SkillInvoke, func(context.Context, any, RequestMeta) (any, error) {
+		invokeRan <- struct{}{}
+		return nil, nil
+	})
+	if err := agent.Start(t.Context()); err != nil {
+		t.Fatalf("start agent: %v", err)
+	}
+	defer func() { _ = agent.Stop(context.Background()) }()
+
+	envelope := agent.newEnvelope(TypeEmit, agentID, "task-twice")
+	if err := agent.attachPayload(envelope, RequestPayload{Skill: SkillInvoke, Input: map[string]any{}}); err != nil {
+		t.Fatalf("attachPayload: %v", err)
+	}
+	raw, err := agent.marshal(envelope)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	conn, err := agent.connection()
+	if err != nil {
+		t.Fatalf("connection: %v", err)
+	}
+	js, err := jetstream.New(conn)
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := js.Publish(ctx, AgentMailboxSubject(agentID), raw); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	select {
+	case <-invokeRan:
+		t.Fatal("the mailbox executed a remote task; at-least-once redelivery can run it twice")
+	case <-time.After(2 * time.Second):
+		// Refused, as it must be.
+	}
+}

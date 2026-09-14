@@ -270,6 +270,21 @@ func (a *Agent) handleMailboxMessage(message jetstream.Msg) {
 		}
 	}
 
+	// The one handler this must never run: SkillInvoke executes a task on a
+	// desktop agent, and a mailbox delivery is at-least-once — an unacked
+	// message is redelivered, and a redelivery repeats the envelope id by
+	// definition. A crash between starting the turn and the ack means the task
+	// runs twice, and there is no exactly-once delivery to build on here. So the
+	// mailbox refuses it outright rather than pretend it is safe; remote tasks
+	// belong on the request/reply inbox, which is once per call.
+	if payload.Skill == SkillInvoke {
+		a.logger.Warn("refusing a remote task on the mailbox subject: at-least-once delivery cannot run it exactly once",
+			"from", envelope.From, "id", envelope.ID,
+			"hint", "invoke belongs on the agent inbox subject, which is once per call")
+		_ = message.Term()
+		return
+	}
+
 	a.mu.RLock()
 	handler := a.handlers[payload.Skill]
 	a.mu.RUnlock()
