@@ -186,10 +186,17 @@ func (a *Agent) SetLocalAgentsProvider(provider LocalAgentProvider) {
 	}
 }
 
-// refreshManifest rebuilds and stores the manifest, then re-registers so peers
-// see the change without waiting for a heartbeat window.
+// refreshManifest rebuilds the manifest, publishes it to the registry, and
+// stores it — in that order — so the KV bucket never lags the in-memory
+// snapshot that Manifest() exposes. Publishing before storing closes the race
+// in which a reader observes a fresh Manifest() while the bucket still holds
+// the previous value (the heartbeat's own publishToRegistry may have just
+// re-published the stale snapshot a tick early). Re-registering then announces
+// the same value on the registry subject.
 func (a *Agent) refreshManifest() {
-	a.setManifest(a.buildManifest())
+	manifest := a.buildManifest()
+	a.publishManifestToRegistry(manifest)
+	a.setManifest(manifest)
 	if err := a.Register(context.Background()); err != nil {
 		a.logger.Warn("mesh re-registration failed", "error", err)
 	}
@@ -498,11 +505,19 @@ func (a *Agent) detectRegistry(ctx context.Context) {
 // accelerator for discovery, and neither registration nor the heartbeat that
 // keeps the edge visible may fail because the bucket is briefly unavailable.
 func (a *Agent) publishToRegistry() {
+	a.publishManifestToRegistry(a.Manifest())
+}
+
+// publishManifestToRegistry writes a specific manifest to the KV registry,
+// refreshing its heartbeat timestamp first. Splitting the snapshot out lets
+// refreshManifest publish a freshly built manifest before it is stored — so the
+// bucket cannot trail the value Manifest() returns — while the heartbeat and
+// registry-detect paths continue to republish the stored snapshot.
+func (a *Agent) publishManifestToRegistry(manifest Manifest) {
 	client := a.registryClient()
 	if client == nil {
 		return
 	}
-	manifest := a.Manifest()
 	// Refresh the timestamp on the registry copy: the stored manifest's
 	// LastHeartbeat is what TTL expiry is measured against, so a heartbeat that
 	// republished a stale value would age out even while the edge is alive.
