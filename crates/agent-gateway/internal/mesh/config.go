@@ -224,6 +224,18 @@ type Config struct {
 	// remote caller.
 	InvokeTimeout time.Duration `json:"-"`
 
+	// TaskMaxRuntime bounds one async task's run. Unlike InvokeTimeout this is
+	// hours-scale: an async caller has disconnected, so the deadline exists to
+	// keep an abandoned task from holding a desktop agent open forever, not to
+	// keep a caller's connection short. A caller may narrow it per task via
+	// timeout_ms, never extend it.
+	TaskMaxRuntime time.Duration `json:"-"`
+	// TaskRetention is how long a terminal task (and its result) stays
+	// queryable before the startup sweep prunes it. A task record is the
+	// caller's receipt; a week covers a human's "what happened to that run
+	// last Tuesday" without keeping every task ever created forever.
+	TaskRetention time.Duration `json:"-"`
+
 	// Events to subscribe to automatically once connected.
 	EventSubscriptions []string `json:"eventSubscriptions"`
 }
@@ -307,6 +319,15 @@ const (
 	DefaultMailboxStream  = "MESH_AGENT_MAILBOX"
 	DefaultMailboxMaxAge  = 7 * 24 * time.Hour
 	DefaultMailboxMaxMsgs = 10_000
+)
+
+// Task defaults. The runtime cap is deliberately generous — the whole point of
+// async tasks is that a caller does not wait, so the edge is not protecting a
+// connection by cutting work short. The retention window matches the mailbox's
+// one-week "receipt stays queryable for a human's sense of recent" bound.
+const (
+	DefaultTaskMaxRuntime = 30 * time.Minute
+	DefaultTaskRetention  = 7 * 24 * time.Hour
 )
 
 // fingerprintPrefix is the only fingerprint shape accepted in TrustedPeers.
@@ -399,6 +420,12 @@ func (c *Config) normalize() {
 	}
 	if c.InvokeTimeout <= 0 {
 		c.InvokeTimeout = DefaultInvokeTimeout
+	}
+	if c.TaskMaxRuntime <= 0 {
+		c.TaskMaxRuntime = DefaultTaskMaxRuntime
+	}
+	if c.TaskRetention <= 0 {
+		c.TaskRetention = DefaultTaskRetention
 	}
 	c.normalizeRegistry()
 	c.normalizeMailbox()

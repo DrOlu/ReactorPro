@@ -121,6 +121,10 @@ func main() {
 			"err", err)
 	} else {
 		meshManager.SetStateStore(meshState)
+		// The same database backs the task lifecycle. Task storage is
+		// load-bearing rather than a cache, so an edge without it refuses
+		// async tasks instead of handing out handles it cannot honour.
+		meshManager.SetTaskStore(meshState)
 	}
 
 	if err := meshManager.Start(context.Background()); err != nil {

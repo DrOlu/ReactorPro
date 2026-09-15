@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -282,6 +283,211 @@ func MeshApprovalHistory(m *mesh.Manager) http.HandlerFunc {
 			history = []mesh.Approval{}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"count": len(history), "approvals": history})
+	}
+}
+
+type meshTaskCreateRequest struct {
+	Target          string         `json:"target"`
+	Skill           string         `json:"skill"`
+	Input           map[string]any `json:"input"`
+	TaskID          string         `json:"taskId"`
+	CreateTimeoutMs int64          `json:"createTimeoutMs"`
+}
+
+// MeshTaskCreate starts an async task on a peer and returns the handle.
+//
+// 202, not 200: like the mailbox, the reply is an acceptance, not a result —
+// the caller is expected to poll, watch mesh.event.task.<id>, or pass
+// refresh=true on the GET. A peer that has not adopted the task contract
+// answers the old synchronous way, and that answer becomes an
+// already-completed task, so every caller gets the same object shape.
+func MeshTaskCreate(m *mesh.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var request meshTaskCreateRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if strings.TrimSpace(request.Target) == "" {
+			writeError(w, http.StatusBadRequest, "target is required")
+			return
+		}
+		stub, err := m.CreateRemoteTask(r.Context(), mesh.CreateRemoteTaskParams{
+			Target:        request.Target,
+			Skill:         request.Skill,
+			Input:         request.Input,
+			TaskID:        request.TaskID,
+			CreateTimeout: time.Duration(request.CreateTimeoutMs) * time.Millisecond,
+		})
+		if err != nil {
+			writeMeshError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"task": stub,
+			"note": "accepted: the task runs on the peer; poll GET /api/mesh/tasks/" +
+				stub.TaskID + " (refresh=true fetches the current state from the peer)",
+		})
+	}
+}
+
+// MeshTaskList lists tasks this gateway knows: its own outgoing tasks (the
+// default) or the tasks it executed for peers (role=executor).
+//
+// Cursor pagination: pass the last row's created_at as `before` (plus its
+// task_id as `beforeId` for executor listings) to fetch the next page.
+// role=executor accepts `caller` to scope to one tenant's tasks.
+func MeshTaskList(m *mesh.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		limit := 50
+		if parsed, err := strconv.Atoi(query.Get("limit")); err == nil && parsed > 0 && parsed <= 500 {
+			limit = parsed
+		}
+		var before time.Time
+		if raw := query.Get("before"); raw != "" {
+			parsed, err := time.Parse(time.RFC3339Nano, raw)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "before must be an RFC3339 timestamp")
+				return
+			}
+			before = parsed
+		}
+		if query.Get("role") == "executor" {
+			filter := mesh.TaskFilter{
+				Before:       before,
+				BeforeTaskID: query.Get("beforeId"),
+				Limit:        limit,
+			}
+			if caller := strings.TrimSpace(query.Get("caller")); caller != "" {
+				filter.Caller = caller
+			}
+			if states := splitQueryList(query.Get("status")); len(states) > 0 {
+				for _, state := range states {
+					filter.States = append(filter.States, mesh.TaskState(state))
+				}
+			}
+			tasks, err := m.ExecutorTasks(filter)
+			if err != nil {
+				writeMeshError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"count": len(tasks), "tasks": tasks})
+			return
+		}
+		stubs, err := m.TaskStubs(before, limit)
+		if err != nil {
+			writeMeshError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"count": len(stubs), "tasks": stubs})
+	}
+}
+
+// MeshTaskGet returns one task. A stub (a task this gateway created on a
+// peer) is the default; `caller` selects one of this edge's executed tasks,
+// because executor records are keyed per tenant and may not be read without
+// naming one.
+func MeshTaskGet(m *mesh.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		taskID := strings.TrimSpace(r.PathValue("id"))
+		if taskID == "" {
+			writeError(w, http.StatusBadRequest, "task id is required")
+			return
+		}
+		if caller := strings.TrimSpace(r.URL.Query().Get("caller")); caller != "" {
+			task, ok, err := m.ExecutorTask(caller, taskID)
+			if err != nil {
+				writeMeshError(w, err)
+				return
+			}
+			if !ok {
+				writeError(w, http.StatusNotFound, fmt.Sprintf("no task %q for caller %q", taskID, caller))
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"task": task})
+			return
+		}
+		stub, ok, err := m.TaskStubByID(taskID)
+		if err != nil {
+			writeMeshError(w, err)
+			return
+		}
+		if !ok {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no task %q", taskID))
+			return
+		}
+		if r.URL.Query().Get("refresh") == "true" {
+			// Ask the owning edge. The stub is this gateway's cache; the
+			// peer's task.get is the truth, and a missed event should not
+			// make a caller wait for a poll that says the wrong thing.
+			refreshed, _, err := m.RefreshTaskStub(r.Context(), taskID)
+			if err == nil {
+				stub = refreshed
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"task": stub})
+	}
+}
+
+// MeshTaskCancel cancels a task. Outgoing (stub) tasks are canceled by
+// dispatching task.cancel to the owning edge; executed tasks need `caller`,
+// for the same reason as the GET.
+func MeshTaskCancel(m *mesh.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		taskID := strings.TrimSpace(r.PathValue("id"))
+		if taskID == "" {
+			writeError(w, http.StatusBadRequest, "task id is required")
+			return
+		}
+		if caller := strings.TrimSpace(r.URL.Query().Get("caller")); caller != "" {
+			task, err := m.CancelLocalTask(caller, taskID)
+			if err != nil {
+				writeMeshError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"task": task})
+			return
+		}
+		stub, err := m.CancelTaskByStub(r.Context(), taskID)
+		if err != nil {
+			writeMeshError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"task": stub})
+	}
+}
+
+type meshTaskInputRequest struct {
+	Caller string          `json:"caller"`
+	Input  json.RawMessage `json:"input"`
+}
+
+// MeshTaskInput answers an input-required task with new input. Phase 1
+// scaffolding: the shape ships so clients never change, and the executor
+// paths that produce input-required arrive with streaming.
+func MeshTaskInput(m *mesh.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		taskID := strings.TrimSpace(r.PathValue("id"))
+		if taskID == "" {
+			writeError(w, http.StatusBadRequest, "task id is required")
+			return
+		}
+		var request meshTaskInputRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if strings.TrimSpace(request.Caller) == "" {
+			writeError(w, http.StatusBadRequest, "caller is required (executor tasks are per-tenant)")
+			return
+		}
+		task, err := m.ResolveTaskInput(request.Caller, taskID, request.Input)
+		if err != nil {
+			writeMeshError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"task": task})
 	}
 }
 

@@ -66,6 +66,16 @@ type InvokeInput struct {
 	// tighten it, never extend it: a remote caller does not get to decide how long
 	// this edge is willing to wait.
 	TimeoutMS int64 `json:"timeout_ms,omitempty"`
+	// Async turns the invoke into a task CREATE: the edge replies immediately
+	// with a task handle and the run continues on its own. The caller may
+	// disconnect; task.get and the task events are how it finds out what
+	// happened. Text-based peers ignore the field, exactly as they ignore the
+	// rest of the invoke input.
+	Async bool `json:"async,omitempty"`
+	// TaskID is the caller-minted task id. It is the idempotency key: a retried
+	// CREATE with the same id returns the existing task instead of running the
+	// work twice. Empty lets the edge mint one.
+	TaskID string `json:"task_id,omitempty"`
 }
 
 // InvokeOutput is returned to the caller on success.
@@ -202,13 +212,48 @@ func (m *Manager) skillInvoke(ctx context.Context, input any, meta RequestMeta) 
 	// Gate 3 — is this operation exposed?
 	if !config.servesOperation(request.Operation) {
 		observability.Usage.MeshInvokeDeniedTotal.Add(1)
+		if request.Async {
+			// The caller asked for a durable object, so it gets one: the
+			// refusal is recorded as a rejected task rather than evaporating
+			// with the reply envelope.
+			handle, herr := m.rejectAsyncTask(request, meta, CodeSkillNotFound,
+				fmt.Sprintf("operation %q is not served by this edge", request.Operation))
+			if herr != nil {
+				return nil, herr
+			}
+			return handle, nil
+		}
 		return nil, coded(CodeSkillNotFound, "operation %q is not served by this edge", request.Operation)
 	}
 
 	// Gate 4 — which attached agent?
 	agent, err := m.resolveInvokeTarget(request)
 	if err != nil {
+		if request.Async {
+			// As above: an unusable target is a rejected task, not a lost one.
+			code, reason := CodeAgentUnavailable, err.Error()
+			var refusal *codedError
+			if errors.As(err, &refusal) {
+				code, reason = refusal.code, refusal.reason
+			}
+			handle, herr := m.rejectAsyncTask(request, meta, code, reason)
+			if herr != nil {
+				return nil, herr
+			}
+			return handle, nil
+		}
 		return nil, err
+	}
+
+	// The async branch: CREATE returns a handle in one reply and the run
+	// continues on its own context, disconnected from the caller's. Everything
+	// past this point is the original synchronous path.
+	if request.Async {
+		handle, herr := m.startAsyncTask(request, meta, agent)
+		if herr != nil {
+			return nil, herr
+		}
+		return handle, nil
 	}
 
 	invoker := m.localInvokerSnapshot()

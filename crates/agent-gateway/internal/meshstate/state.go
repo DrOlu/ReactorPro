@@ -70,7 +70,14 @@ func NewStore(database *db.DB) (*Store, error) {
 			return nil, fmt.Errorf("init mesh state schema: %w", err)
 		}
 	}
-	return &Store{pool: pool}, nil
+	store := &Store{pool: pool}
+	// The task tables are created alongside the rest: one gateway, one schema.
+	// An edge that never receives a task pays for two empty tables, and an
+	// edge that does cannot run with a schema it silently lacks.
+	if err := store.initTaskSchema(); err != nil {
+		return nil, err
+	}
+	return store, nil
 }
 
 // LoadTrustPins returns every recorded identity pin.

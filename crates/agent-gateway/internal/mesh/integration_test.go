@@ -433,10 +433,13 @@ func TestIntegrationBuiltinSkillsAnswer(t *testing.T) {
 			t.Fatalf("describe fingerprint = %v, want %s", output["fingerprint"], want)
 		}
 		skills, _ := output["skills"].([]any)
-		// The servable set, not just the read-only built-ins: the gated invoke
-		// skill is registered alongside them and belongs in the manifest a peer
-		// reads to decide whether this edge takes work.
-		if want := servableSkillIDs(); len(skills) != len(want) {
+		// The full set a store-less manager serves: the read-only built-ins
+		// plus the gated invoke skill, which belongs in the manifest a peer
+		// reads to decide whether this edge takes work. The task skills are
+		// deliberately absent — they only register with a task store, and the
+		// task integration tests pin that both directions.
+		want := append(append([]string{}, builtinSkillIDs...), SkillInvoke)
+		if len(skills) != len(want) {
 			t.Fatalf("describe advertised %d skills, want %d (%v)", len(skills), len(want), want)
 		}
 	})

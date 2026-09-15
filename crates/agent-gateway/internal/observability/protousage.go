@@ -43,6 +43,15 @@ type ProtoUsage struct {
 	MeshInvokeTotal       atomic.Int64
 	MeshInvokeDeniedTotal atomic.Int64
 	MeshInvokeFailedTotal atomic.Int64
+	// Mesh task lifecycle. Created counts accepted async tasks (including the
+	// ones later rejected by a gate, because the caller held an object); the
+	// terminal counters count how each task ended. Canceled counts both a
+	// caller cancel and the startup sweep's "edge restarted" failures are
+	// failed, not canceled — the distinction is who decided.
+	MeshTaskCreatedTotal   atomic.Int64
+	MeshTaskCompletedTotal atomic.Int64
+	MeshTaskFailedTotal    atomic.Int64
+	MeshTaskCanceledTotal  atomic.Int64
 }
 
 // Usage is a process-level singleton; each protocol layer increments it directly.
@@ -79,5 +88,9 @@ func (u *ProtoUsage) Snapshot() map[string]int64 {
 		"mesh_invoke_total":                        u.MeshInvokeTotal.Load(),
 		"mesh_invoke_denied_total":                 u.MeshInvokeDeniedTotal.Load(),
 		"mesh_invoke_failed_total":                 u.MeshInvokeFailedTotal.Load(),
+		"mesh_task_created_total":                  u.MeshTaskCreatedTotal.Load(),
+		"mesh_task_completed_total":                u.MeshTaskCompletedTotal.Load(),
+		"mesh_task_failed_total":                   u.MeshTaskFailedTotal.Load(),
+		"mesh_task_canceled_total":                 u.MeshTaskCanceledTotal.Load(),
 	}
 }
