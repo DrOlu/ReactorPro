@@ -212,6 +212,47 @@ func (i *Identity) Sign(env *Envelope) error {
 	return nil
 }
 
+// SignBytes signs an arbitrary byte string with the identity key — the raw
+// form of the envelope signing, for payloads that are not envelopes (a task
+// webhook body). Returns the hex signature and publishes the same trio the
+// envelope carries (sig + pub + fp) so a recipient verifies identically.
+func (i *Identity) SignBytes(data []byte) string {
+	if i == nil || i.privateKey == nil {
+		return ""
+	}
+	return hex.EncodeToString(ed25519.Sign(i.privateKey, data))
+}
+
+// VerifySignedBody checks a raw-body signature against the advertised public
+// key, and — when the sender stated one — that the key proves the claimed
+// fingerprint: the same binding VerifyEnvelope enforces, over an arbitrary
+// payload. This is the recipient's one function: a webhook consumer calls it
+// with the three header values and the raw request body, and trusts the body
+// only if it returns nil.
+func VerifySignedBody(agentID, claimedFingerprint, publicKeyPEM string, data []byte, signatureHex string) error {
+	if signatureHex == "" || publicKeyPEM == "" {
+		return errors.New("payload is not signed")
+	}
+	publicKey, err := parsePublicKey(publicKeyPEM)
+	if err != nil {
+		return err
+	}
+	signature, err := hex.DecodeString(signatureHex)
+	if err != nil {
+		return fmt.Errorf("decode signature: %w", err)
+	}
+	if !ed25519.Verify(publicKey, data, signature) {
+		return errors.New("payload signature is invalid")
+	}
+	if claimedFingerprint != "" {
+		if proved := FingerprintFor(agentID, publicKey); claimedFingerprint != proved {
+			return fmt.Errorf("%w: payload claims %s but the key proves %s",
+				ErrIdentityMismatch, claimedFingerprint, proved)
+		}
+	}
+	return nil
+}
+
 // EnvelopeFingerprint derives the fingerprint that the envelope's embedded
 // public key proves for its claimed sender.
 func EnvelopeFingerprint(env *Envelope) (string, error) {

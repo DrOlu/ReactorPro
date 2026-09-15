@@ -68,6 +68,7 @@ func NewHTTPServerWithMesh(cfg *config.Config, sm *session.Manager, tokens *agen
 		apiMux.HandleFunc("GET /api/mesh/tasks", handler.MeshTaskList(meshManager))
 		apiMux.HandleFunc("GET /api/mesh/tasks/{id}", handler.MeshTaskGet(meshManager))
 		apiMux.HandleFunc("POST /api/mesh/tasks/{id}/cancel", handler.MeshTaskCancel(meshManager))
+		apiMux.HandleFunc("POST /api/mesh/tasks/{id}/retry", handler.MeshTaskRetry(meshManager))
 		apiMux.HandleFunc("POST /api/mesh/tasks/{id}/input", handler.MeshTaskInput(meshManager))
 		apiMux.HandleFunc("POST /api/mesh/emit", handler.MeshEmit(meshManager))
 		apiMux.HandleFunc("POST /api/mesh/subscribe", handler.MeshSubscribe(meshManager))

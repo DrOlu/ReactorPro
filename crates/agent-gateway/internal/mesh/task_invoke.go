@@ -384,7 +384,7 @@ func (m *Manager) cancelTask(caller, taskID string) (Task, error) {
 
 // TaskSkills returns the ids of the task skills this edge serves, in a stable
 // order for manifests and tests.
-func TaskSkills() []string { return []string{SkillTaskGet, SkillTaskCancel} }
+func TaskSkills() []string { return []string{SkillTaskGet, SkillTaskCancel, SkillTaskRetry} }
 
 // skillTaskGet serves task.get: the creating caller's task, and nobody else's.
 //
@@ -427,6 +427,17 @@ func (m *Manager) skillTaskCancel(_ context.Context, input any, meta RequestMeta
 		return nil, err
 	}
 	return task, nil
+}
+
+// skillTaskRetry serves task.retry: the creating caller re-runs its own failed
+// or canceled task. Same isolation as the other task skills — another caller
+// asking for the same id is told it does not exist.
+func (m *Manager) skillTaskRetry(_ context.Context, input any, meta RequestMeta) (any, error) {
+	taskID, _, err := taskInputFrom(input)
+	if err != nil {
+		return nil, err
+	}
+	return m.RetryTask(meta.From, taskID)
 }
 
 // taskInputFrom reads the shared shape of the task skills: a task id, and for
@@ -543,6 +554,11 @@ type CreateRemoteTaskParams struct {
 	TaskID string
 	// Stream opts the task into chunked streaming on the peer.
 	Stream bool
+	// NotifyURL is where the terminal state is POSTed, signed. Local operator
+	// input only — never carried to the peer, never read from a remote
+	// invoke's input, because a peer-supplied URL would be a request-forgery
+	// vector. Empty falls back to the gateway's -mesh-task-webhook default.
+	NotifyURL string
 	// CreateTimeout bounds only the handle reply, not the run.
 	CreateTimeout time.Duration
 }
@@ -591,6 +607,7 @@ func (m *Manager) CreateRemoteTask(ctx context.Context, params CreateRemoteTaskP
 		TaskID:    taskID,
 		Target:    params.Target,
 		Skill:     skill,
+		NotifyURL: strings.TrimSpace(params.NotifyURL),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -655,6 +672,9 @@ func (m *Manager) CreateRemoteTask(ctx context.Context, params CreateRemoteTaskP
 				m.logger.Warn("could not persist a task stub after a buffered event", "task", taskID, "error", err)
 			}
 		}
+		// A synchronous answer IS the terminal state: notify now, through the
+		// same once-only gate every other terminal path uses.
+		m.notifyTaskTerminal(stub)
 	}
 	return stub, nil
 }
@@ -836,6 +856,11 @@ func (m *Manager) ConsumeTaskEvents(ctx context.Context) error {
 		if err := store.SaveTaskStub(stub); err != nil {
 			m.logger.Warn("could not update a task stub from an event", "task", update.TaskID, "error", err)
 		}
+		// The event path is the normal notification trigger: the peer announced
+		// a terminal state, the stub now says so, and anyone who asked to be
+		// pushed is pushed. notifyTaskTerminal is a no-op for non-terminal
+		// states and fires at most once per (task, URL).
+		m.notifyTaskTerminal(stub)
 	})
 	return err
 }
@@ -886,6 +911,50 @@ func (m *Manager) ExecutorTask(caller, taskID string) (Task, bool, error) {
 // CancelLocalTask cancels a task this edge is executing, by creating caller.
 func (m *Manager) CancelLocalTask(caller, taskID string) (Task, error) {
 	return m.cancelTask(caller, taskID)
+}
+
+// RetryTask re-runs a failed or canceled task this edge executed, keeping the
+// same task id — the manual-resume primitive for long work that outlived a
+// restart or a runtime budget.
+//
+// Only failed and canceled tasks may be retried: completed needs nothing,
+// rejected would re-fail its gate for identical reasons, and a live task
+// cannot be interrupted by anything but its cancel. The reset deliberately
+// bypasses the state machine's terminal rule — this is an operator's explicit
+// decision, not an organic transition — and the relaunch reuses the same
+// launch path as the original create, so a retried task inherits every
+// guarantee: idempotency by (caller, task id), the runtime budget, the
+// streaming opt-in recorded on the task.
+func (m *Manager) RetryTask(caller, taskID string) (Task, error) {
+	store := m.taskStoreSnapshot()
+	if store == nil {
+		return Task{}, coded(CodeInternalError, "this edge has no task store configured")
+	}
+	m.taskMu.Lock()
+	task, ok, err := store.GetTask(caller, taskID)
+	if err != nil || !ok {
+		m.taskMu.Unlock()
+		return Task{}, coded(CodeSkillNotFound, "no task %q for this caller", taskID)
+	}
+	if task.State != TaskFailed && task.State != TaskCanceled {
+		m.taskMu.Unlock()
+		return Task{}, coded(CodeGovernanceDenied,
+			"only failed or canceled tasks can be retried; %s is %s", taskID, task.State)
+	}
+	task.State = TaskQueued
+	task.Result = nil
+	task.ErrorCode = ""
+	task.ErrorMessage = ""
+	task.UpdatedAt = time.Now().UTC()
+	if err := store.SaveTask(task); err != nil {
+		m.taskMu.Unlock()
+		return Task{}, coded(CodeInternalError, "task store write failed: %v", err)
+	}
+	m.taskMu.Unlock()
+	m.logger.Info("task retried", "task", taskID, "caller", caller,
+		"agent", task.Agent, "operation", task.Operation)
+	go m.executeTask(context.Background(), task)
+	return task, nil
 }
 
 // ResolveTaskInput answers an input-required task with new input.

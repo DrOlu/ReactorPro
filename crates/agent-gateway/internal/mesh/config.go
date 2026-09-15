@@ -235,6 +235,12 @@ type Config struct {
 	// caller's receipt; a week covers a human's "what happened to that run
 	// last Tuesday" without keeping every task ever created forever.
 	TaskRetention time.Duration `json:"-"`
+	// TaskWebhook is the gateway-wide default notification URL: when a task
+	// this gateway created goes terminal, one signed POST is delivered there
+	// (a per-task notify URL on the create takes precedence). Operator-only:
+	// the URL never comes from a remote peer — a peer-supplied URL would be a
+	// request-forgery vector, so the field is not read from invoke input.
+	TaskWebhook string `json:"taskWebhook,omitempty"`
 
 	// Events to subscribe to automatically once connected.
 	EventSubscriptions []string `json:"eventSubscriptions"`

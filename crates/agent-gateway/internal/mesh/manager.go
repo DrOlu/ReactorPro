@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -102,6 +103,12 @@ type Manager struct {
 	taskStreams    map[string]*taskChunkStream
 	taskChunks     map[string][]TaskChunk
 	taskChunkOrder []string
+	// webhookFired is the once-only set for task notifications, keyed
+	// (task, url), with webhookFiredOrder the FIFO that bounds it.
+	webhookFired      map[string]bool
+	webhookFiredOrder []string
+	// webhookHTTP is the shared webhook client, built on first delivery.
+	webhookHTTP *http.Client
 	// taskMu serialises task read-modify-write cycles against the store, so a
 	// run finishing concurrently with a cancel resolves the same way every time.
 	taskMu sync.Mutex

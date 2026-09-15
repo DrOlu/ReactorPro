@@ -292,6 +292,7 @@ type meshTaskCreateRequest struct {
 	Input           map[string]any `json:"input"`
 	TaskID          string         `json:"taskId"`
 	Stream          bool           `json:"stream"`
+	NotifyURL       string         `json:"notifyUrl"`
 	CreateTimeoutMs int64          `json:"createTimeoutMs"`
 }
 
@@ -314,11 +315,15 @@ func MeshTaskCreate(m *mesh.Manager) http.HandlerFunc {
 			return
 		}
 		stub, err := m.CreateRemoteTask(r.Context(), mesh.CreateRemoteTaskParams{
-			Target:        request.Target,
-			Skill:         request.Skill,
-			Input:         request.Input,
-			TaskID:        request.TaskID,
-			Stream:        request.Stream,
+			Target: request.Target,
+			Skill:  request.Skill,
+			Input:  request.Input,
+			TaskID: request.TaskID,
+			Stream: request.Stream,
+			// Operator input only: the URL is stored on the stub and never
+			// carried to the peer, so a remote peer cannot aim this gateway's
+			// POSTs anywhere.
+			NotifyURL:     request.NotifyURL,
 			CreateTimeout: time.Duration(request.CreateTimeoutMs) * time.Millisecond,
 		})
 		if err != nil {
@@ -511,6 +516,34 @@ func MeshTaskInput(m *mesh.Manager) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"task": task})
+	}
+}
+
+// MeshTaskRetry re-runs one of this edge's failed or canceled tasks. Executor
+// role only: the `caller` names the creating tenant, exactly as the executor
+// GET and cancel do, because task records are keyed per caller and may not be
+// acted on without naming one.
+func MeshTaskRetry(m *mesh.Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		taskID := strings.TrimSpace(r.PathValue("id"))
+		if taskID == "" {
+			writeError(w, http.StatusBadRequest, "task id is required")
+			return
+		}
+		caller := strings.TrimSpace(r.URL.Query().Get("caller"))
+		if caller == "" {
+			writeError(w, http.StatusBadRequest, "caller is required (executor tasks are per-tenant)")
+			return
+		}
+		task, err := m.RetryTask(caller, taskID)
+		if err != nil {
+			writeMeshError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"task": task,
+			"note": "requeued: the task runs again under its original id and settings",
+		})
 	}
 }
 
