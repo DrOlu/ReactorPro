@@ -32,11 +32,14 @@ async function gatewayApiRequest<T>(
   /** The Rust proxy caps this (see GATEWAY_API_MAX_TIMEOUT_SECS). */
   timeoutSecs?: number,
 ): Promise<T> {
+  // The command declares rename_all = "snake_case", so the key must be
+  // snake_case on this side — a camelCase key here is silently dropped and the
+  // call falls back to the 30s default, which times out real agent turns.
   return (await invoke<T>("gateway_api_request", {
     method,
     path,
     body: body ?? null,
-    timeoutSecs: timeoutSecs ?? null,
+    timeout_secs: timeoutSecs ?? null,
   })) as T;
 }
 
