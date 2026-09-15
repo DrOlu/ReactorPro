@@ -61,19 +61,23 @@ jobs:
             }
 
             // 2) UI changes must include a screenshot/preview: if changed files match frontend paths and the body has no image, treat it as missing.
+            //    Only visual files (components, styles, markup) count — plain .ts library/util modules under src/ are not user-visible surfaces.
             const UI_PATHS = [
               'crates/agent-ui/src/',
               'crates/agent-gui/src/',
               'crates/agent-gateway/web/src/',
             ];
+            const VISUAL_EXT = /\.(tsx|jsx|css|scss|sass|less|html|vue|svelte|svg)$/i;
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner,
               repo,
               pull_number: pr.number,
               per_page: 100,
             });
-            const uiTouched = files.some((f) =>
-              UI_PATHS.some((p) => f.filename.startsWith(p)),
+            const uiTouched = files.some(
+              (f) =>
+                UI_PATHS.some((p) => f.filename.startsWith(p)) &&
+                VISUAL_EXT.test(f.filename),
             );
             const hasImage =
               /!\[[^\]]*\]\([^)]+\)|<img\s|user-attachments\/assets/i.test(body);
