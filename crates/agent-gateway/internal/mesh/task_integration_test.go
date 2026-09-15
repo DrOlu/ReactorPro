@@ -10,9 +10,11 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nuid"
 )
 
@@ -257,6 +259,153 @@ func TestIntegrationSyncPeerBecomesACompletedTask(t *testing.T) {
 	}
 	if !json.Valid(stub.Result) {
 		t.Fatalf("cached result is not JSON: %s", stub.Result)
+	}
+}
+
+// TestIntegrationBridgeDialectAnswerBecomesACompletedTask pins the fleet
+// compatibility contract discovered live against grip-cli-001: the text-based
+// bridges answer an invoke with the payload itself — {task_id, text}, no
+// `output` key, their own minted task id — and that answer must complete the
+// caller's task, not strand it in "working" forever.
+func TestIntegrationBridgeDialectAnswerBecomesACompletedTask(t *testing.T) {
+	url := startTestNATS(t)
+	bridgeID := uniqueID("legacy/cli-bridge")
+	callerID := uniqueID("globex/berlin/caller")
+
+	// A raw NATS responder speaking the bridge dialect: it does not wrap its
+	// answer in {output}, because the bridges never did, and it mints its own
+	// task id rather than echoing the caller's.
+	conn, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect bridge responder: %v", err)
+	}
+	defer conn.Close()
+	sub, err := conn.Subscribe(AgentInboxSubject(bridgeID), func(msg *nats.Msg) {
+		if msg.Reply == "" {
+			return
+		}
+		answer, err := json.Marshal(map[string]any{
+			"v":    "1.0",
+			"id":   "bridge-reply-1",
+			"type": "respond",
+			"ts":   time.Now().UTC().Format(time.RFC3339Nano),
+			"from": bridgeID,
+			"to":   "*",
+			"payload": map[string]any{
+				"task_id": "bridge-internal-1",
+				"text":    "Q3 revenue was up 12%.",
+				"source":  "cli-bridge",
+			},
+		})
+		if err == nil {
+			_ = conn.Publish(msg.Reply, answer)
+		}
+	})
+	if err != nil {
+		t.Fatalf("subscribe bridge inbox: %v", err)
+	}
+	defer func() { _ = sub.Unsubscribe() }()
+
+	callerStore := newFakeTaskStore()
+	caller := taskEdge(t, url, callerID, &recordingInvoker{}, callerStore, nil)
+
+	stub, err := caller.CreateRemoteTask(t.Context(), CreateRemoteTaskParams{
+		Target: bridgeID,
+		TaskID: "bmc-run-2",
+		Input: map[string]any{
+			"target":    "agent-1",
+			"operation": OperationTask,
+			"arguments": map[string]any{"prompt": "Summarise Q3"},
+		},
+		CreateTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("CreateRemoteTask: %v", err)
+	}
+	if stub.State != TaskCompleted || !stub.CompletedSync {
+		t.Fatalf("a bridge-dialect answer must become a completed task, got %+v", stub)
+	}
+	// The answer is stored in the same shape an async invoke result uses, so
+	// callers read one shape whatever the peer runs.
+	if string(stub.Result) != `{"text":"Q3 revenue was up 12%."}` {
+		t.Fatalf("bridge answer not captured: %s", stub.Result)
+	}
+}
+
+// TestIntegrationRefreshNeverDispatchesToADialectPeer pins the guard's real
+// semantics: a stub completed by a bridge-dialect answer has no task.get to
+// ask, and a dispatched task.get would be spent as a real agent turn on that
+// peer — so refresh must be a local read. The raw responder counts requests;
+// only the CREATE may reach it.
+func TestIntegrationRefreshNeverDispatchesToADialectPeer(t *testing.T) {
+	url := startTestNATS(t)
+	bridgeID := uniqueID("legacy/cli-bridge")
+	callerID := uniqueID("globex/berlin/caller")
+
+	var requests atomic.Int32
+	conn, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect bridge responder: %v", err)
+	}
+	defer conn.Close()
+	sub, err := conn.Subscribe(AgentInboxSubject(bridgeID), func(msg *nats.Msg) {
+		requests.Add(1)
+		if msg.Reply == "" {
+			return
+		}
+		answer, err := json.Marshal(map[string]any{
+			"v":    "1.0",
+			"id":   "bridge-reply-1",
+			"type": "respond",
+			"ts":   time.Now().UTC().Format(time.RFC3339Nano),
+			"from": bridgeID,
+			"to":   "*",
+			"payload": map[string]any{
+				"task_id": "bridge-internal-1",
+				"text":    "Q3 revenue was up 12%.",
+				"source":  "cli-bridge",
+			},
+		})
+		if err == nil {
+			_ = conn.Publish(msg.Reply, answer)
+		}
+	})
+	if err != nil {
+		t.Fatalf("subscribe bridge inbox: %v", err)
+	}
+	defer func() { _ = sub.Unsubscribe() }()
+
+	callerStore := newFakeTaskStore()
+	caller := taskEdge(t, url, callerID, &recordingInvoker{}, callerStore, nil)
+
+	stub, err := caller.CreateRemoteTask(t.Context(), CreateRemoteTaskParams{
+		Target: bridgeID,
+		TaskID: "dialect-run-1",
+		Input: map[string]any{
+			"target":    "agent-1",
+			"operation": OperationTask,
+			"arguments": map[string]any{"prompt": "hello"},
+		},
+		CreateTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("CreateRemoteTask: %v", err)
+	}
+	if stub.State != TaskCompleted || !stub.CompletedSync {
+		t.Fatalf("setup: the dialect answer should have completed the stub, got %+v", stub)
+	}
+
+	// Refresh: must return the stub from local storage without a second
+	// request — a task.get sent to this peer would run as an agent turn.
+	refreshed, _, err := caller.RefreshTaskStub(t.Context(), "dialect-run-1")
+	if err != nil {
+		t.Fatalf("RefreshTaskStub: %v", err)
+	}
+	if refreshed.State != TaskCompleted || string(refreshed.Result) != `{"text":"Q3 revenue was up 12%."}` {
+		t.Fatalf("refresh should return the completed stub as-is: %+v", refreshed)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("the peer saw %d requests; refresh must not dispatch to a dialect peer (want 1: the create only)", got)
 	}
 }
 
