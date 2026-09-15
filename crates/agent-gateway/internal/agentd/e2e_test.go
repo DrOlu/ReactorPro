@@ -22,10 +22,12 @@ import (
 
 	"log/slog"
 
+	"github.com/gorilla/websocket"
 	"github.com/liveagent/agent-gateway/internal/auth/agenttoken"
 	"github.com/liveagent/agent-gateway/internal/chatcmd"
 	"github.com/liveagent/agent-gateway/internal/config"
 	"github.com/liveagent/agent-gateway/internal/db"
+	"github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/pbws"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
@@ -210,4 +212,178 @@ func TestE2ECancelFreesTheWorker(t *testing.T) {
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func TestE2EUnsupportedRequestsAnswerInsteadOfHang(t *testing.T) {
+	// The browser's desktop-surface requests (settings, providers, fs, …)
+	// must be ANSWERED by any attached agent — the desktop honours this with
+	// typed responses or errors, and the agentd must too: a correlated
+	// request that goes unanswered is a hang at the browser. History lists
+	// get an honest empty response; everything else a typed refusal.
+	manager := startE2E(t, 2, scriptedProvider().URL)
+
+	settings, err := manager.AwaitUnaryResponse(context.Background(), e2eAgentID, "req-settings-1",
+		&gatewayv2.GatewayEnvelope{
+			RequestId: "req-settings-1",
+			Timestamp: time.Now().Unix(),
+			Payload:   &gatewayv2.GatewayEnvelope_SettingsGet{SettingsGet: &gatewayv2.SettingsGetRequest{}},
+		})
+	if err != nil {
+		t.Fatalf("settings_get must be answered, not hung: %v", err)
+	}
+	if settings.GetError() == nil || settings.GetError().GetCode() != 501 {
+		t.Fatalf("settings_get should be a typed refusal, got %+v", settings.GetPayload())
+	}
+
+	history, err := manager.AwaitUnaryResponse(context.Background(), e2eAgentID, "req-history-1",
+		&gatewayv2.GatewayEnvelope{
+			RequestId: "req-history-1",
+			Timestamp: time.Now().Unix(),
+			Payload:   &gatewayv2.GatewayEnvelope_HistoryList{HistoryList: &gatewayv2.HistoryListRequest{}},
+		})
+	if err != nil {
+		t.Fatalf("history_list must be answered, not hung: %v", err)
+	}
+	list := history.GetHistoryListResp()
+	if list == nil || list.GetTotalCount() != 0 || len(list.GetConversations()) != 0 {
+		t.Fatalf("history_list should be an honest empty list, got %+v", history.GetPayload())
+	}
+}
+
+func TestE2EBrowserPassThroughIsAnswered(t *testing.T) {
+	// The user-visible path: a browser connects to /ws/v2, switches to the
+	// headless agent, and the UI fires its desktop-surface requests through
+	// the pass-through. Before this contract was implemented the agentd
+	// ignored them and the browser hung ("Gateway websocket request timed
+	// out: settings get"); now every request is answered.
+	manager, browserURL := startE2EBrowserAndAgent(t, scriptedProvider().URL)
+	_ = manager // the manager is the same one the agentd registered with
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(browserURL, "http"), nil)
+	if err != nil {
+		t.Fatalf("browser dial: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	writeBrowserFrame(conn, &gatewayv2.WebClientFrame{
+		Payload: &gatewayv2.WebClientFrame_Hello{Hello: &gatewayv2.ClientHello{
+			ProtocolVersion: 2,
+			Token:           e2eToken,
+			ClientName:      "e2e-browser",
+		}},
+	})
+	if _, raw, err := conn.ReadMessage(); err != nil {
+		t.Fatalf("browser hello: %v", err)
+	} else {
+		var frame gatewayv2.WebServerFrame
+		if err := decodeProto(raw, &frame); err != nil || frame.GetHello() == nil || !frame.GetHello().GetOk() {
+			t.Fatalf("browser handshake failed")
+		}
+	}
+
+	// settings_get through the pass-through: must come back promptly with
+	// the typed refusal, not time out.
+	writeBrowserFrame(conn, &gatewayv2.WebClientFrame{
+		RequestId: "browser-settings-1",
+		AgentId:   e2eAgentID,
+		Payload: &gatewayv2.WebClientFrame_AgentRequest{AgentRequest: &gatewayv2.GatewayEnvelope{
+			RequestId: "browser-settings-1",
+			Timestamp: time.Now().Unix(),
+			Payload:   &gatewayv2.GatewayEnvelope_SettingsGet{SettingsGet: &gatewayv2.SettingsGetRequest{}},
+		}},
+	})
+	response := readBrowserResponse(t, conn, "browser-settings-1")
+	if response.GetAgentResponse() == nil || response.GetAgentResponse().GetError() == nil ||
+		response.GetAgentResponse().GetError().GetCode() != 501 {
+		t.Fatalf("settings_get pass-through = %+v, want the typed refusal", response.GetPayload())
+	}
+
+	// history_list: an honest empty list.
+	writeBrowserFrame(conn, &gatewayv2.WebClientFrame{
+		RequestId: "browser-history-1",
+		AgentId:   e2eAgentID,
+		Payload: &gatewayv2.WebClientFrame_AgentRequest{AgentRequest: &gatewayv2.GatewayEnvelope{
+			RequestId: "browser-history-1",
+			Timestamp: time.Now().Unix(),
+			Payload:   &gatewayv2.GatewayEnvelope_HistoryList{HistoryList: &gatewayv2.HistoryListRequest{}},
+		}},
+	})
+	response = readBrowserResponse(t, conn, "browser-history-1")
+	list := response.GetAgentResponse().GetHistoryListResp()
+	if list == nil || list.GetTotalCount() != 0 {
+		t.Fatalf("history_list pass-through = %+v, want an empty list", response.GetPayload())
+	}
+}
+
+// startE2EBrowserAndAgent mounts the full v2 surface — both the browser link
+// and the agent link — with the agentd signed in, and returns the browser
+// endpoint URL.
+func startE2EBrowserAndAgent(t *testing.T, providerURL string) (*session.Manager, string) {
+	t.Helper()
+	manager := session.NewManager()
+	database, err := db.Open(filepath.Join(t.TempDir(), "e2e.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	tokens, err := agenttoken.NewStore(database)
+	if err != nil {
+		t.Fatalf("agent token store: %v", err)
+	}
+	server := pbws.NewServer(&config.Config{Token: e2eToken}, manager, tokens)
+	mux := http.NewServeMux()
+	mux.Handle("/ws/v2", server.BrowserHandler())
+	mux.Handle("/ws/v2/agent", server.AgentHandler())
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(httpServer.Close)
+
+	cfg := DefaultConfig()
+	cfg.GatewayURL = "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/ws/v2/agent"
+	cfg.AgentID = e2eAgentID
+	cfg.Token = e2eToken
+	cfg.ProviderURL = providerURL
+	cfg.ProviderModel = "fake-model"
+	cfg.Workdir = t.TempDir()
+	cfg.Heartbeat = 10 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = Serve(ctx, &cfg, discardLogger()) }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if manager.IsOnline(e2eAgentID) {
+			return manager, httpServer.URL + "/ws/v2"
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("the agentd never signed into the gateway")
+	return nil, ""
+}
+
+func writeBrowserFrame(conn *websocket.Conn, frame *gatewayv2.WebClientFrame) {
+	raw, err := encodeProto(frame)
+	if err != nil {
+		return
+	}
+	_ = conn.WriteMessage(websocket.BinaryMessage, raw)
+}
+
+func readBrowserResponse(t *testing.T, conn *websocket.Conn, requestID string) *gatewayv2.WebServerFrame {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("read response for %s: %v", requestID, err)
+		}
+		var frame gatewayv2.WebServerFrame
+		if err := decodeProto(raw, &frame); err != nil {
+			continue
+		}
+		if frame.GetRequestId() == requestID {
+			return &frame
+		}
+	}
+	t.Fatalf("no response arrived for %s within the deadline — the request would hang at the browser", requestID)
+	return nil
 }
