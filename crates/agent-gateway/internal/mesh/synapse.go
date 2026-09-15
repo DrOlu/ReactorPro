@@ -1076,6 +1076,15 @@ func (a *Agent) startHeartbeat(ctx context.Context) {
 				return
 			case <-ticker.C:
 				a.publishHeartbeat(subject)
+				// The registration refresh belongs on the heartbeat: the KV
+				// entry's TTL is shorter than "forever", and the manifest's
+				// agent directory must describe NOW. Register ran exactly
+				// once at Start before this existed — with a directory that
+				// was always empty, because attached agents connect after
+				// Start — so the entry expired after its TTL and peers had
+				// never seen this edge's agents (found live on a production
+				// edge whose bucket held zero entries).
+				a.refreshManifest()
 			}
 		}
 	}()
