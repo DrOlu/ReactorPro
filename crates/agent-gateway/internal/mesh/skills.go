@@ -2,6 +2,7 @@ package mesh
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,9 +18,19 @@ const (
 	SkillDescribe = "describe"
 	// SkillStatus returns a non-sensitive operational snapshot.
 	SkillStatus = "status"
+	// SkillTaskGet returns the creating caller's task by id. Served only when
+	// a task store is configured, and scoped to the caller: another caller
+	// asking for the same id is told the task does not exist.
+	SkillTaskGet = "task.get"
+	// SkillTaskCancel stops the creating caller's task. Idempotent — a cancel
+	// of a finished task reports the task's real state rather than failing.
+	SkillTaskCancel = "task.cancel"
 )
 
 // builtinSkillIDs is the served set, in a stable order for the UI and tests.
+// The task skills are conditionally registered (they need durable storage to
+// keep their promises), so the manifest reflects what this edge can really
+// do — see registerBuiltinSkills.
 var builtinSkillIDs = []string{SkillPing, SkillDescribe, SkillStatus}
 
 // BuiltinSkillIDs returns the ids of the skills this bridge can serve.
@@ -30,13 +41,15 @@ func BuiltinSkillIDs() []string {
 }
 
 // servableSkillIDs lists every id that may be named in the skill allowlist: the
-// read-only built-ins plus the gated invoke skill.
+// read-only built-ins, the task skills, and the gated invoke skill.
 //
 // Kept separate from BuiltinSkillIDs so that adding `invoke` to what an operator
 // may select does not also enrol it in the read-only registration path, which
-// assumes every id has a side-effect-free handler.
+// assumes every id has a side-effect-free handler. The task skills are always
+// acceptable names even though they only register with a task store, so an
+// operator's allowlist does not have to track this edge's storage.
 func servableSkillIDs() []string {
-	return append(BuiltinSkillIDs(), SkillInvoke)
+	return append(append(BuiltinSkillIDs(), SkillTaskGet, SkillTaskCancel), SkillInvoke)
 }
 
 // registerBuiltinSkills exposes the read-only introspection surface.
@@ -61,6 +74,15 @@ func (m *Manager) registerBuiltinSkills(agent *Agent) error {
 		SkillDescribe: m.skillDescribe,
 		SkillStatus:   m.skillStatus,
 	}
+	// The task skills are registered only when a task store is installed: a
+	// task handle from an edge that forgets tasks on restart would be a
+	// promise nothing could keep, so the edge does not advertise what it
+	// cannot honour. The allowlist still accepts the ids either way, so an
+	// operator's config does not have to track this edge's storage.
+	if m.taskStoreSnapshot() != nil {
+		handlers[SkillTaskGet] = m.skillTaskGet
+		handlers[SkillTaskCancel] = m.skillTaskCancel
+	}
 
 	for _, id := range builtinSkillIDs {
 		if !config.servesSkill(id) {
@@ -72,6 +94,15 @@ func (m *Manager) registerBuiltinSkills(agent *Agent) error {
 			// condition; surfacing it beats silently advertising a skill that
 			// answers 3001.
 			return &unknownBuiltinSkillError{id: id}
+		}
+		agent.RegisterSkill(id, handler)
+	}
+	for id, handler := range handlers {
+		if slices.Contains(builtinSkillIDs, id) {
+			continue
+		}
+		if !config.servesSkill(id) {
+			continue
 		}
 		agent.RegisterSkill(id, handler)
 	}

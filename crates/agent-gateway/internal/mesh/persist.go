@@ -42,6 +42,22 @@ func (m *Manager) SetStateStore(store StateStore) {
 	m.mu.Unlock()
 }
 
+// SetTaskStore installs durable task storage. Callable before Start; an edge
+// without one serves no task skills and refuses async invocation, which is
+// the honest failure: a task handle from an edge that forgets tasks on
+// restart would be a promise nothing could keep.
+func (m *Manager) SetTaskStore(store TaskStore) {
+	m.mu.Lock()
+	m.taskStore = store
+	m.mu.Unlock()
+}
+
+func (m *Manager) taskStoreSnapshot() TaskStore {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.taskStore
+}
+
 func (m *Manager) stateStoreSnapshot() StateStore {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

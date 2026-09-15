@@ -99,6 +99,10 @@ type Config struct {
 	MeshInvokeOperations      string // comma-separated operation names
 	MeshInvokeTimeout         time.Duration
 
+	// Mesh task lifecycle bounds.
+	MeshTaskMaxRuntime time.Duration
+	MeshTaskRetention  time.Duration
+
 	// MeshApprovalHistory bounds how many decided approvals are retained, in
 	// memory and in durable storage. A negative value removes the bound.
 	MeshApprovalHistory int
@@ -147,6 +151,8 @@ func Load() *Config {
 	flag.BoolVar(&cfg.MeshRequireVerifiedInvoke, "mesh-require-verified-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_REQUIRE_VERIFIED_INVOKE", true), "refuse remote invocation whose caller identity was not verified (needs a signed, trusted peer)")
 	flag.StringVar(&cfg.MeshInvokeOperations, "mesh-invoke-operations", getenv("LIVEAGENT_GATEWAY_MESH_INVOKE_OPERATIONS", mesh.OperationTask), "comma-separated operations a peer may invoke remotely; empty exposes none")
 	flag.DurationVar(&cfg.MeshInvokeTimeout, "mesh-invoke-timeout", getenvDuration("LIVEAGENT_GATEWAY_MESH_INVOKE_TIMEOUT", 60*time.Second), "how long one remote invocation may run before the edge gives up on it")
+	flag.DurationVar(&cfg.MeshTaskMaxRuntime, "mesh-task-max-runtime", getenvDuration("LIVEAGENT_GATEWAY_MESH_TASK_MAX_RUNTIME", 0), "how long one async task may run before the edge fails it (0 uses thirty minutes)")
+	flag.DurationVar(&cfg.MeshTaskRetention, "mesh-task-retention", getenvDuration("LIVEAGENT_GATEWAY_MESH_TASK_RETENTION", 0), "how long a finished task stays queryable before it is pruned (0 uses seven days)")
 	flag.IntVar(&cfg.MeshApprovalHistory, "mesh-approval-history", getenvInt("LIVEAGENT_GATEWAY_MESH_APPROVAL_HISTORY", mesh.DefaultMaxApprovalHistory), "how many decided mesh approvals to retain in memory and on disk (negative removes the bound)")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
 	flag.DurationVar(&cfg.ChatPrepareTimeout, "chat-prepare-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT", 2*time.Second), "timeout for the pre-submit desktop agent liveness probe")
@@ -359,6 +365,12 @@ func (c *Config) MeshConfig() mesh.Config {
 	cfg.InvokeOperations = splitList(c.MeshInvokeOperations)
 	if c.MeshInvokeTimeout > 0 {
 		cfg.InvokeTimeout = c.MeshInvokeTimeout
+	}
+	if c.MeshTaskMaxRuntime > 0 {
+		cfg.TaskMaxRuntime = c.MeshTaskMaxRuntime
+	}
+	if c.MeshTaskRetention > 0 {
+		cfg.TaskRetention = c.MeshTaskRetention
 	}
 	// Only override the default capabilities when the operator set some, so the
 	// shipping default is not replaced by an empty list.

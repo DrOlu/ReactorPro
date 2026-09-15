@@ -80,6 +80,24 @@ type Manager struct {
 	// Nil means "run without persistence", which is a supported mode: the mesh
 	// works exactly as before, it simply forgets across a restart.
 	stateStore StateStore
+	// taskStore is durable storage for the task lifecycle. Unlike stateStore it
+	// is load-bearing: a task result that can be lost makes the whole async
+	// contract a lie, so an edge with no task store refuses async tasks rather
+	// than running them anyway.
+	taskStore TaskStore
+	// taskRuns holds the cancel function for each in-flight task, keyed like
+	// the store records (caller + task id) so two tenants cannot cancel each
+	// other's runs.
+	taskRuns map[string]context.CancelFunc
+	// taskPendingEvents holds task events that arrived before this gateway's
+	// stub for them was saved — a fast peer can finish (and announce) before
+	// the creating caller has written the stub it just got the handle for.
+	// CreateRemoteTask drains the entry for its task after saving; entries
+	// age out on their own so the map cannot grow without bound.
+	taskPendingEvents map[string]pendingTaskEvent
+	// taskMu serialises task read-modify-write cycles against the store, so a
+	// run finishing concurrently with a cancel resolves the same way every time.
+	taskMu sync.Mutex
 }
 
 // NewManager builds a manager from configuration.
@@ -174,10 +192,21 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.startedAt = time.Now().UTC()
 	m.mu.Unlock()
 
+	// Task housekeeping, after the agent exists so the sweep's failure events
+	// can be published: anything the previous run left mid-flight is marked
+	// failed (the run died with the process), and terminal tasks past the
+	// retention window are dropped.
+	m.SweepTasks()
+
 	for _, subject := range config.EventSubscriptions {
 		if _, err := m.Subscribe(ctx, subject); err != nil {
 			m.logger.Warn("mesh auto-subscription failed", "subject", subject, "error", err)
 		}
+	}
+	// Watch task state events so this gateway's stubs stay fresh without
+	// polling. Events for tasks this edge did not create are ignored inside.
+	if err := m.ConsumeTaskEvents(ctx); err != nil {
+		m.logger.Warn("task event subscription failed", "error", err)
 	}
 	return nil
 }

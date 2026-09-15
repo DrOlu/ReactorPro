@@ -317,8 +317,61 @@ instead of `3001`:
 |---|---|
 | `ping` | `{pong: true, ts}`. Touches no state, so it stays cheap under load. |
 | `describe` | This agent's manifest — what it is and what it serves. |
-| `status` | `agent_id`, `fingerprint`, `connected`, `skills`, `uptime_seconds`, and the mesh traffic counters. |
-| `invoke` | Routes a verified remote request to a desktop agent behind this edge. The one gated exception — see below. |
+| `status` | `agent_id`, `fingerprint`, `connected`, `skills`, `uptime_seconds`, and the mesh traffic counters (the `mesh_task_*` counters included). |
+| `task.get` | The calling caller's task by id — another caller asking for the same id is told it does not exist. Served only when a task store is configured. |
+| `task.cancel` | Stops the calling caller's task. Idempotent: canceling a finished task reports its real state. Served only when a task store is configured. |
+| `invoke` | Routes a verified remote request to a desktop agent behind this edge. The one gated exception — see below. With `async: true` it becomes a task CREATE and returns a handle in one reply. |
+
+## The task lifecycle
+
+Dispatch's opaque request→reply holds a connection for a whole agent turn, which
+no serverless platform permits and no caller can survive a restart through.
+Tasks change the unit of work from "a reply" to "an object with a state":
+
+```json
+{"target": "agent-1111", "operation": "task", "async": true, "task_id": "bmc-run-1",
+ "arguments": {"prompt": "Query the last 10 incidents"}}
+```
+
+- **CREATE** (`invoke` + `async` + caller-minted `task_id`) answers in one reply
+  with a handle `{task_id, state, get_task}` and the run continues on its own
+  background context. The state machine is
+  `queued → working → (input-required) → completed | failed | canceled | rejected`
+  — terminal states admit no further transitions, so a late completion can
+  never overwrite a cancel.
+- **Idempotent by the caller-minted id**: a retried CREATE returns the existing
+  task instead of running the work twice. This is the property the mailbox's
+  refusal of `invoke` was waiting for — retry-safe by construction.
+- **Multi-tenant by construction**: tasks are keyed `(caller, task_id)` with
+  the caller taken from the guard's verification, never the payload. Only the
+  creating caller can `task.get` or `task.cancel` its own tasks; another caller
+  asking for the same id is told it does not exist, because another tenant's
+  task existing is that tenant's information.
+- **State events, not results**: every transition is published signed on
+  `mesh.event.task.<task_id>` — state, error code, timestamp, never the result,
+  because events go to whoever subscribes and a result belongs to its caller.
+  A gateway creating a remote task keeps a stub, updated by those events, with
+  a short buffered-event window covering the create→save race.
+- **Synchronous peers still work**: an edge or bridge without task support
+  answers the old way, and the caller records that answer as an
+  already-completed task (`completed_sync`), so every caller gets the same
+  object shape whatever the peer runs.
+- **Persistence and honesty**: tasks live in the gateway's SQLite database
+  (`mesh_tasks` keyed `(caller_id, task_id)`, caller stubs in `mesh_task_stubs`).
+  An edge without a store refuses async tasks and does not advertise the task
+  skills. On restart the sweep marks anything left mid-flight as failed
+  ("edge restarted") rather than pretending it is still working, and terminal
+  tasks older than the retention window (`-mesh-task-retention`, default 7d)
+  are pruned.
+- **Bounds**: one task may run for at most `-mesh-task-max-runtime` (default
+  30m; a caller may narrow it via `timeout_ms`, never extend it).
+- **REST** (on the creating gateway): `POST /api/mesh/tasks` (202 + handle
+  stub), `GET /api/mesh/tasks?role=caller|executor` with cursor pagination
+  (`before`, `beforeId`, `limit`; `caller=` scopes executor listings to one
+  tenant), `GET /api/mesh/tasks/{id}?refresh=true` (asks the owning edge),
+  `POST /api/mesh/tasks/{id}/cancel`, `POST /api/mesh/tasks/{id}/input`
+  (answers an `input-required` task; the executor paths that produce that
+  state arrive with streaming).
 
 Two properties are intentional and should survive future changes:
 
