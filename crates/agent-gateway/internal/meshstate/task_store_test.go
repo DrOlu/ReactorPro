@@ -6,9 +6,11 @@ package meshstate
 // where a subtle ordering or scoping bug would otherwise hide.
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/liveagent/agent-gateway/internal/db"
 	"github.com/liveagent/agent-gateway/internal/mesh"
 )
 
@@ -51,6 +53,86 @@ func TestTaskRoundTripAndCallerScoping(t *testing.T) {
 	}
 	if _, ok, _ := store.GetTask("acme/lagos/edge-1", "run-1"); !ok {
 		t.Fatal("saving another tenant's task must not displace the first")
+	}
+}
+
+// TestTaskStreamFlagSurvivesTheRoundTrip pins the bug the live validation
+// caught: v1.5.16 carried Task.Stream in the struct but not the SQL, so a
+// streamed task's own record read stream:false.
+func TestTaskStreamFlagSurvivesTheRoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	now := time.Now().UTC()
+	streamed := taskAt("caller/1", "streamed-1", mesh.TaskWorking, now)
+	streamed.Stream = true
+	if err := store.SaveTask(streamed); err != nil {
+		t.Fatalf("SaveTask: %v", err)
+	}
+	got, ok, err := store.GetTask("caller/1", "streamed-1")
+	if err != nil || !ok {
+		t.Fatalf("GetTask: ok=%v err=%v", ok, err)
+	}
+	if !got.Stream {
+		t.Fatal("the stream flag was dropped by the store round trip")
+	}
+	plain := taskAt("caller/1", "plain-1", mesh.TaskWorking, now)
+	if err := store.SaveTask(plain); err != nil {
+		t.Fatalf("SaveTask plain: %v", err)
+	}
+	if plainAgain, _, _ := store.GetTask("caller/1", "plain-1"); plainAgain.Stream {
+		t.Fatal("a non-streaming task must read stream:false")
+	}
+}
+
+// TestTaskStoreMigratesTheStreamColumn exercises the upgrade path: a database
+// whose mesh_tasks table predates the stream column (the v1.5.16 shape) is
+// migrated by NewStore, and the flag then round-trips.
+func TestTaskStoreMigratesTheStreamColumn(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "mesh-tasks.db"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	// Recreate the v1.5.16 table exactly: no stream column.
+	oldSchema := `
+CREATE TABLE mesh_tasks (
+	caller_id          TEXT NOT NULL,
+	task_id            TEXT NOT NULL,
+	caller_fingerprint TEXT NOT NULL DEFAULT '',
+	agent              TEXT NOT NULL DEFAULT '',
+	operation          TEXT NOT NULL DEFAULT '',
+	arguments_json     TEXT,
+	state              TEXT NOT NULL,
+	result_json        TEXT,
+	error_code         TEXT NOT NULL DEFAULT '',
+	error_message      TEXT NOT NULL DEFAULT '',
+	trace_id           TEXT NOT NULL DEFAULT '',
+	created_at         TEXT NOT NULL,
+	updated_at         TEXT NOT NULL,
+	PRIMARY KEY (caller_id, task_id)
+)`
+	if _, err := database.Pool().Exec(oldSchema); err != nil {
+		t.Fatalf("create legacy table: %v", err)
+	}
+
+	// NewStore must migrate rather than fail: CREATE IF NOT EXISTS leaves the
+	// old table alone, and the column check adds what is missing.
+	store, err := NewStore(database)
+	if err != nil {
+		t.Fatalf("NewStore over a legacy schema: %v", err)
+	}
+	now := time.Now().UTC()
+	streamed := taskAt("caller/1", "migrated-1", mesh.TaskWorking, now)
+	streamed.Stream = true
+	if err := store.SaveTask(streamed); err != nil {
+		t.Fatalf("SaveTask after migration: %v", err)
+	}
+	got, ok, err := store.GetTask("caller/1", "migrated-1")
+	if err != nil || !ok {
+		t.Fatalf("GetTask after migration: ok=%v err=%v", ok, err)
+	}
+	if !got.Stream {
+		t.Fatal("the stream flag did not survive the migrated schema")
 	}
 }
 

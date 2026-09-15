@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS mesh_tasks (
 	error_code         TEXT NOT NULL DEFAULT '',
 	error_message      TEXT NOT NULL DEFAULT '',
 	trace_id           TEXT NOT NULL DEFAULT '',
+	stream             INTEGER NOT NULL DEFAULT 0,
 	created_at         TEXT NOT NULL,
 	updated_at         TEXT NOT NULL,
 	PRIMARY KEY (caller_id, task_id)
@@ -63,16 +64,49 @@ CREATE TABLE IF NOT EXISTS mesh_task_stubs (
 	updated_at    TEXT NOT NULL
 )`
 
-// initTaskSchema creates the task tables. Kept separate from NewStore so an
-// older gateway binary that predates tasks simply does not have them, and
-// every method fails cleanly instead of half-working.
+// initTaskSchema creates the task tables and migrates them forward.
+//
+// v1.5.16 created mesh_tasks without the stream column: the Go struct carried
+// the field and the SQL silently dropped it, so a streamed task's own record
+// read stream:false — caught when a live streamed task was inspected on disk.
+// CREATE IF NOT EXISTS cannot add a column to an existing table, and SQLite
+// has no ADD COLUMN IF NOT EXISTS, so the migration checks first.
 func (s *Store) initTaskSchema() error {
 	for _, statement := range []string{taskSchema, stubSchema} {
 		if _, err := s.pool.Exec(statement); err != nil {
 			return fmt.Errorf("init mesh task schema: %w", err)
 		}
 	}
+	if !taskColumnExists(s.pool, "mesh_tasks", "stream") {
+		if _, err := s.pool.Exec(`ALTER TABLE mesh_tasks ADD COLUMN stream INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("migrate mesh_tasks stream column: %w", err)
+		}
+	}
 	return nil
+}
+
+// taskColumnExists reads PRAGMA table_info, the only way to ask SQLite whether
+// a column is present. The table name is a call-site constant, never a value.
+func taskColumnExists(pool *sql.DB, table, column string) bool {
+	rows, err := pool.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var index int
+		var name, columnType string
+		var notNull int
+		var defaultValue any
+		var primaryKey int
+		if err := rows.Scan(&index, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false
+		}
+		if name == column {
+			return true
+		}
+	}
+	return false
 }
 
 func formatTaskTime(t time.Time) string { return t.UTC().Format(taskTimeLayout) }
@@ -92,8 +126,8 @@ func (s *Store) SaveTask(task mesh.Task) error {
 	_, err := s.pool.Exec(`
 		INSERT INTO mesh_tasks
 			(caller_id, task_id, caller_fingerprint, agent, operation, arguments_json,
-			 state, result_json, error_code, error_message, trace_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 state, result_json, error_code, error_message, trace_id, stream, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(caller_id, task_id) DO UPDATE SET
 			caller_fingerprint = excluded.caller_fingerprint,
 			agent             = excluded.agent,
@@ -104,22 +138,31 @@ func (s *Store) SaveTask(task mesh.Task) error {
 			error_code        = excluded.error_code,
 			error_message    = excluded.error_message,
 			trace_id          = excluded.trace_id,
+			stream            = excluded.stream,
 			created_at        = excluded.created_at,
 			updated_at       = excluded.updated_at`,
 		task.Caller, task.TaskID, task.CallerFingerprint, task.Agent, task.Operation,
 		arguments, string(task.State), result, task.ErrorCode, task.ErrorMessage,
-		task.TraceID, formatTaskTime(task.CreatedAt), formatTaskTime(task.UpdatedAt))
+		task.TraceID, taskBool(task.Stream), formatTaskTime(task.CreatedAt), formatTaskTime(task.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("save mesh task: %w", err)
 	}
 	return nil
 }
 
+// taskBool converts a bool to the SQLite INTEGER the schema stores.
+func taskBool(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
 // GetTask returns one task, scoped by caller.
 func (s *Store) GetTask(caller, taskID string) (mesh.Task, bool, error) {
 	row := s.pool.QueryRow(`
 		SELECT caller_id, task_id, caller_fingerprint, agent, operation, arguments_json,
-		       state, result_json, error_code, error_message, trace_id, created_at, updated_at
+		       state, result_json, error_code, error_message, trace_id, stream, created_at, updated_at
 		FROM mesh_tasks WHERE caller_id = ? AND task_id = ?`, caller, taskID)
 	task, err := scanTask(row.Scan)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -137,10 +180,12 @@ func scanTask(scan func(dest ...any) error) (mesh.Task, error) {
 	var state, createdAt, updatedAt string
 	var fingerprint, agent, operation, errorCode, errorMessage, traceID string
 	var arguments, result sql.NullString
+	var stream int
 	if err := scan(&task.Caller, &task.TaskID, &fingerprint, &agent, &operation, &arguments,
-		&state, &result, &errorCode, &errorMessage, &traceID, &createdAt, &updatedAt); err != nil {
+		&state, &result, &errorCode, &errorMessage, &traceID, &stream, &createdAt, &updatedAt); err != nil {
 		return mesh.Task{}, err
 	}
+	task.Stream = stream != 0
 	task.CallerFingerprint, task.Agent = fingerprint, agent
 	task.Operation, task.ErrorCode, task.ErrorMessage, task.TraceID = operation, errorCode, errorMessage, traceID
 	task.State = mesh.TaskState(state)
@@ -169,7 +214,7 @@ func scanTask(scan func(dest ...any) error) (mesh.Task, error) {
 func (s *Store) ListTasks(filter mesh.TaskFilter) ([]mesh.Task, error) {
 	query := `
 		SELECT caller_id, task_id, caller_fingerprint, agent, operation, arguments_json,
-		       state, result_json, error_code, error_message, trace_id, created_at, updated_at
+		       state, result_json, error_code, error_message, trace_id, stream, created_at, updated_at
 		FROM mesh_tasks`
 	conditions := []string{}
 	args := []any{}
