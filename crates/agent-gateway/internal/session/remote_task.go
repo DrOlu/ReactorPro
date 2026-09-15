@@ -87,6 +87,10 @@ type RemoteTaskResult struct {
 	Output       json.RawMessage
 	ErrorCode    string
 	ErrorMessage string
+	// ConversationID is the conversation the run happened in. The caller
+	// persists it so a follow-up — the answer to a question the agent asked —
+	// resumes in place instead of starting a context-free second conversation.
+	ConversationID string
 }
 
 // SubmitRemoteTask runs one task on a desktop agent and returns the assistant's
@@ -118,8 +122,36 @@ func (m *Manager) SubmitRemoteTaskProgress(
 	prompt string,
 	onDelta func(delta string),
 ) (RemoteTaskResult, error) {
+	return m.submitRemoteTask(ctx, agentID, "", prompt, onDelta)
+}
+
+// SubmitRemoteTaskInConversation is SubmitRemoteTaskProgress in an existing
+// conversation — the resume path for an answered input-required task. The
+// desktop's chat log replays from the start and the accumulator filters by the
+// new run id, so prior turns are visible to the agent but never double-counted
+// as this run's output.
+func (m *Manager) SubmitRemoteTaskInConversation(
+	ctx context.Context,
+	agentID string,
+	conversationID string,
+	prompt string,
+	onDelta func(delta string),
+) (RemoteTaskResult, error) {
+	return m.submitRemoteTask(ctx, agentID, conversationID, prompt, onDelta)
+}
+
+// submitRemoteTask is the one implementation: an empty conversationID mints a
+// fresh conversation (the ordinary path), a provided one resumes it.
+func (m *Manager) submitRemoteTask(
+	ctx context.Context,
+	agentID string,
+	conversationID string,
+	prompt string,
+	onDelta func(delta string),
+) (RemoteTaskResult, error) {
 	agentID = strings.TrimSpace(agentID)
 	prompt = strings.TrimSpace(prompt)
+	conversationID = strings.TrimSpace(conversationID)
 	if agentID == "" {
 		return RemoteTaskResult{}, ErrAgentOffline
 	}
@@ -139,7 +171,9 @@ func (m *Manager) SubmitRemoteTaskProgress(
 	}
 
 	runID := RemoteTaskRunPrefix + uuid.NewString()
-	conversationID := RemoteTaskConversationPrefix + uuid.NewString()
+	if conversationID == "" {
+		conversationID = RemoteTaskConversationPrefix + uuid.NewString()
+	}
 	clientRequestID := RemoteTaskRequestPrefix + uuid.NewString()
 
 	// Register the run before anything else so the gateway can correlate the
@@ -201,7 +235,9 @@ func (m *Manager) SubmitRemoteTaskProgress(
 		return RemoteTaskResult{}, waitErr
 	}
 
-	return outcome.result(), nil
+	result := outcome.result()
+	result.ConversationID = conversationID
+	return result, nil
 }
 
 // cancelRemoteTask asks the desktop to stop a run this edge has given up on.
@@ -519,6 +555,15 @@ func remoteTaskFailure(status, code, message string) (string, string) {
 // id contains ":err:" are error placeholders the transcript reducer stores under
 // the assistant kind, so they are excluded. Multiple assistant entries (one per
 // tool-use round) are joined in order.
+//
+// The extraction is anchored at the LAST user entry: everything the assistant
+// said since it was last spoken to is the run's answer, and everything before it
+// is prior turns' context. That distinction did not matter when one task meant
+// one conversation, but an answered input-required task resumes the SAME
+// conversation, and its projection replays the earlier turns too — without the
+// anchor, the resumed answer would arrive with the old question prepended. Tool
+// results are their own kind ("tool_result"), never "user", so a tool-using
+// round cannot move the anchor mid-answer.
 func extractRemoteTaskText(entriesJSON string) (string, error) {
 	trimmed := strings.TrimSpace(entriesJSON)
 	if trimmed == "" || trimmed == "[]" {
@@ -532,8 +577,14 @@ func extractRemoteTaskText(entriesJSON string) (string, error) {
 	if err := json.Unmarshal([]byte(trimmed), &entries); err != nil {
 		return "", err
 	}
+	lastUser := -1
+	for index, entry := range entries {
+		if strings.EqualFold(strings.TrimSpace(entry.Kind), "user") {
+			lastUser = index
+		}
+	}
 	parts := make([]string, 0, len(entries))
-	for _, entry := range entries {
+	for _, entry := range entries[lastUser+1:] {
 		if !strings.EqualFold(strings.TrimSpace(entry.Kind), "assistant") {
 			continue
 		}

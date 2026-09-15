@@ -292,6 +292,7 @@ type meshTaskCreateRequest struct {
 	Input           map[string]any `json:"input"`
 	TaskID          string         `json:"taskId"`
 	Stream          bool           `json:"stream"`
+	AllowInput      bool           `json:"allowInput"`
 	NotifyURL       string         `json:"notifyUrl"`
 	CreateTimeoutMs int64          `json:"createTimeoutMs"`
 }
@@ -320,6 +321,10 @@ func MeshTaskCreate(m *mesh.Manager) http.HandlerFunc {
 			Input:  request.Input,
 			TaskID: request.TaskID,
 			Stream: request.Stream,
+			// The input opt-in rides to the peer exactly like the streaming
+			// opt-in: the peer's agent is only told it may ask when the caller
+			// can answer.
+			AllowInput: request.AllowInput,
 			// Operator input only: the URL is stored on the stub and never
 			// carried to the peer, so a remote peer cannot aim this gateway's
 			// POSTs anywhere.
@@ -491,9 +496,13 @@ type meshTaskInputRequest struct {
 	Input  json.RawMessage `json:"input"`
 }
 
-// MeshTaskInput answers an input-required task with new input. Phase 1
-// scaffolding: the shape ships so clients never change, and the executor
-// paths that produce input-required arrive with streaming.
+// MeshTaskInput answers an input-required task with new input.
+//
+// Two roles, like the cancel endpoint. With `caller` (body or query) this edge
+// is the executor and the answer resumes the task it runs; without one, this
+// edge is the caller and the answer is dispatched to the owning edge's
+// task.input skill. Executor records are per-tenant, so the executor role
+// requires the caller exactly as the executor GET, cancel and retry do.
 func MeshTaskInput(m *mesh.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		taskID := strings.TrimSpace(r.PathValue("id"))
@@ -506,16 +515,32 @@ func MeshTaskInput(m *mesh.Manager) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
-		if strings.TrimSpace(request.Caller) == "" {
-			writeError(w, http.StatusBadRequest, "caller is required (executor tasks are per-tenant)")
+		caller := strings.TrimSpace(request.Caller)
+		if caller == "" {
+			caller = strings.TrimSpace(r.URL.Query().Get("caller"))
+		}
+		if caller != "" {
+			task, err := m.ResolveTaskInput(caller, taskID, request.Input)
+			if err != nil {
+				writeMeshError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusAccepted, map[string]any{
+				"task": task,
+				"note": "resumed: the answer continues the task's conversation on the agent",
+			})
 			return
 		}
-		task, err := m.ResolveTaskInput(request.Caller, taskID, request.Input)
+		stub, err := m.SubmitTaskInput(r.Context(), taskID, request.Input)
 		if err != nil {
 			writeMeshError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"task": task})
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"task": stub,
+			"note": "accepted: the answer was delivered to the owning edge; poll GET /api/mesh/tasks/" +
+				stub.TaskID + " (refresh=true fetches the current state from the peer)",
+		})
 	}
 }
 

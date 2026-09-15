@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS mesh_tasks (
 	error_message      TEXT NOT NULL DEFAULT '',
 	trace_id           TEXT NOT NULL DEFAULT '',
 	stream             INTEGER NOT NULL DEFAULT 0,
+	allow_input        INTEGER NOT NULL DEFAULT 0,
+	pending_input      TEXT NOT NULL DEFAULT '',
+	conversation_id    TEXT NOT NULL DEFAULT '',
 	created_at         TEXT NOT NULL,
 	updated_at         TEXT NOT NULL,
 	PRIMARY KEY (caller_id, task_id)
@@ -86,6 +89,29 @@ func (s *Store) initTaskSchema() error {
 	if !taskColumnExists(s.pool, "mesh_tasks", "stream") {
 		if _, err := s.pool.Exec(`ALTER TABLE mesh_tasks ADD COLUMN stream INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return fmt.Errorf("migrate mesh_tasks stream column: %w", err)
+		}
+	}
+	// v1.5.19 added the input-request protocol: allow_input (the opt-in),
+	// pending_input (the question a paused task waits on) and conversation_id
+	// (where the answer resumes). Same PRAGMA-check pattern as above.
+	if !taskColumnExists(s.pool, "mesh_tasks", "allow_input") {
+		if _, err := s.pool.Exec(`ALTER TABLE mesh_tasks ADD COLUMN allow_input INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("migrate mesh_tasks allow_input column: %w", err)
+		}
+	}
+	if !taskColumnExists(s.pool, "mesh_tasks", "pending_input") {
+		if _, err := s.pool.Exec(`ALTER TABLE mesh_tasks ADD COLUMN pending_input TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("migrate mesh_tasks pending_input column: %w", err)
+		}
+	}
+	if !taskColumnExists(s.pool, "mesh_tasks", "conversation_id") {
+		if _, err := s.pool.Exec(`ALTER TABLE mesh_tasks ADD COLUMN conversation_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("migrate mesh_tasks conversation_id column: %w", err)
+		}
+	}
+	if !taskColumnExists(s.pool, "mesh_task_stubs", "pending_input") {
+		if _, err := s.pool.Exec(`ALTER TABLE mesh_task_stubs ADD COLUMN pending_input TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("migrate mesh_task_stubs pending_input column: %w", err)
 		}
 	}
 	return nil
@@ -132,8 +158,9 @@ func (s *Store) SaveTask(task mesh.Task) error {
 	_, err := s.pool.Exec(`
 		INSERT INTO mesh_tasks
 			(caller_id, task_id, caller_fingerprint, agent, operation, arguments_json,
-			 state, result_json, error_code, error_message, trace_id, stream, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 state, result_json, error_code, error_message, trace_id, stream,
+			 allow_input, pending_input, conversation_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(caller_id, task_id) DO UPDATE SET
 			caller_fingerprint = excluded.caller_fingerprint,
 			agent             = excluded.agent,
@@ -145,11 +172,16 @@ func (s *Store) SaveTask(task mesh.Task) error {
 			error_message    = excluded.error_message,
 			trace_id          = excluded.trace_id,
 			stream            = excluded.stream,
+			allow_input       = excluded.allow_input,
+			pending_input     = excluded.pending_input,
+			conversation_id   = excluded.conversation_id,
 			created_at        = excluded.created_at,
 			updated_at       = excluded.updated_at`,
 		task.Caller, task.TaskID, task.CallerFingerprint, task.Agent, task.Operation,
 		arguments, string(task.State), result, task.ErrorCode, task.ErrorMessage,
-		task.TraceID, taskBool(task.Stream), formatTaskTime(task.CreatedAt), formatTaskTime(task.UpdatedAt))
+		task.TraceID, taskBool(task.Stream), taskBool(task.AllowInput),
+		task.PendingInput, task.Conversation,
+		formatTaskTime(task.CreatedAt), formatTaskTime(task.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("save mesh task: %w", err)
 	}
@@ -168,7 +200,8 @@ func taskBool(value bool) int {
 func (s *Store) GetTask(caller, taskID string) (mesh.Task, bool, error) {
 	row := s.pool.QueryRow(`
 		SELECT caller_id, task_id, caller_fingerprint, agent, operation, arguments_json,
-		       state, result_json, error_code, error_message, trace_id, stream, created_at, updated_at
+		       state, result_json, error_code, error_message, trace_id, stream,
+		       allow_input, pending_input, conversation_id, created_at, updated_at
 		FROM mesh_tasks WHERE caller_id = ? AND task_id = ?`, caller, taskID)
 	task, err := scanTask(row.Scan)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -185,13 +218,16 @@ func scanTask(scan func(dest ...any) error) (mesh.Task, error) {
 	var task mesh.Task
 	var state, createdAt, updatedAt string
 	var fingerprint, agent, operation, errorCode, errorMessage, traceID string
-	var arguments, result sql.NullString
-	var stream int
+	var arguments, result, pendingInput, conversation sql.NullString
+	var stream, allowInput int
 	if err := scan(&task.Caller, &task.TaskID, &fingerprint, &agent, &operation, &arguments,
-		&state, &result, &errorCode, &errorMessage, &traceID, &stream, &createdAt, &updatedAt); err != nil {
+		&state, &result, &errorCode, &errorMessage, &traceID, &stream,
+		&allowInput, &pendingInput, &conversation, &createdAt, &updatedAt); err != nil {
 		return mesh.Task{}, err
 	}
 	task.Stream = stream != 0
+	task.AllowInput = allowInput != 0
+	task.PendingInput, task.Conversation = pendingInput.String, conversation.String
 	task.CallerFingerprint, task.Agent = fingerprint, agent
 	task.Operation, task.ErrorCode, task.ErrorMessage, task.TraceID = operation, errorCode, errorMessage, traceID
 	task.State = mesh.TaskState(state)
@@ -220,7 +256,8 @@ func scanTask(scan func(dest ...any) error) (mesh.Task, error) {
 func (s *Store) ListTasks(filter mesh.TaskFilter) ([]mesh.Task, error) {
 	query := `
 		SELECT caller_id, task_id, caller_fingerprint, agent, operation, arguments_json,
-		       state, result_json, error_code, error_message, trace_id, stream, created_at, updated_at
+		       state, result_json, error_code, error_message, trace_id, stream,
+		       allow_input, pending_input, conversation_id, created_at, updated_at
 		FROM mesh_tasks`
 	conditions := []string{}
 	args := []any{}
@@ -295,8 +332,9 @@ func (s *Store) SaveTaskStub(stub mesh.TaskStub) error {
 	}
 	_, err := s.pool.Exec(`
 		INSERT INTO mesh_task_stubs
-			(task_id, target, skill, state, result_json, error_message, notify_url, completed_sync, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(task_id, target, skill, state, result_json, error_message, notify_url,
+			 pending_input, completed_sync, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(task_id) DO UPDATE SET
 			target         = excluded.target,
 			skill          = excluded.skill,
@@ -304,11 +342,12 @@ func (s *Store) SaveTaskStub(stub mesh.TaskStub) error {
 			result_json    = excluded.result_json,
 			error_message  = excluded.error_message,
 			notify_url     = excluded.notify_url,
+			pending_input  = excluded.pending_input,
 			completed_sync = excluded.completed_sync,
 			created_at     = excluded.created_at,
 			updated_at    = excluded.updated_at`,
 		stub.TaskID, stub.Target, stub.Skill, string(stub.State), result,
-		stub.ErrorMessage, stub.NotifyURL, syncFlag,
+		stub.ErrorMessage, stub.NotifyURL, stub.PendingInput, syncFlag,
 		formatTaskTime(stub.CreatedAt), formatTaskTime(stub.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("save mesh task stub: %w", err)
@@ -320,13 +359,15 @@ func (s *Store) SaveTaskStub(stub mesh.TaskStub) error {
 func (s *Store) GetTaskStub(taskID string) (mesh.TaskStub, bool, error) {
 	var stub mesh.TaskStub
 	var state, createdAt, updatedAt string
-	var result sql.NullString
+	var result, pendingInput sql.NullString
 	var syncFlag int
 	err := s.pool.QueryRow(`
-		SELECT task_id, target, skill, state, result_json, error_message, notify_url, completed_sync, created_at, updated_at
+		SELECT task_id, target, skill, state, result_json, error_message, notify_url,
+		       pending_input, completed_sync, created_at, updated_at
 		FROM mesh_task_stubs WHERE task_id = ?`, taskID).
 		Scan(&stub.TaskID, &stub.Target, &stub.Skill, &state, &result,
-			&stub.ErrorMessage, &stub.NotifyURL, &syncFlag, &createdAt, &updatedAt)
+			&stub.ErrorMessage, &stub.NotifyURL, &pendingInput, &syncFlag, &createdAt, &updatedAt)
+	stub.PendingInput = pendingInput.String
 	if errors.Is(err, sql.ErrNoRows) {
 		return mesh.TaskStub{}, false, nil
 	}
@@ -350,7 +391,8 @@ func (s *Store) GetTaskStub(taskID string) (mesh.TaskStub, bool, error) {
 // ListTaskStubs returns stubs newest-first with the same cursor rule as tasks.
 func (s *Store) ListTaskStubs(before time.Time, limit int) ([]mesh.TaskStub, error) {
 	query := `
-		SELECT task_id, target, skill, state, result_json, error_message, notify_url, completed_sync, created_at, updated_at
+		SELECT task_id, target, skill, state, result_json, error_message, notify_url,
+		       pending_input, completed_sync, created_at, updated_at
 		FROM mesh_task_stubs`
 	args := []any{}
 	if !before.IsZero() {
@@ -371,13 +413,14 @@ func (s *Store) ListTaskStubs(before time.Time, limit int) ([]mesh.TaskStub, err
 	for rows.Next() {
 		var stub mesh.TaskStub
 		var state, createdAt, updatedAt string
-		var result sql.NullString
+		var result, pendingInput sql.NullString
 		var syncFlag int
 		if err := rows.Scan(&stub.TaskID, &stub.Target, &stub.Skill, &state, &result,
-			&stub.ErrorMessage, &stub.NotifyURL, &syncFlag, &createdAt, &updatedAt); err != nil {
+			&stub.ErrorMessage, &stub.NotifyURL, &pendingInput, &syncFlag, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan mesh task stub: %w", err)
 		}
 		stub.State = mesh.TaskState(state)
+		stub.PendingInput = pendingInput.String
 		if result.Valid && result.String != "" {
 			stub.Result = json.RawMessage(result.String)
 		}

@@ -402,18 +402,240 @@ func TestResolveTaskInputOnlyAnswersAnInputRequiredTask(t *testing.T) {
 		t.Fatalf("expected a policy refusal, got %v", err)
 	}
 
-	// An input-required task resumes as working with the input recorded.
+	// Another caller's task id is indistinguishable from a nonexistent one.
 	waiting := Task{TaskID: "input-2", Caller: meta.From, State: TaskInputRequired,
-		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+		PendingInput: "which quarter?", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	if err := store.SaveTask(waiting); err != nil {
 		t.Fatalf("SaveTask: %v", err)
 	}
-	updated, err := manager.ResolveTaskInput(meta.From, "input-2", json.RawMessage(`{"answer":"yes"}`))
+	if _, err := manager.ResolveTaskInput("someone/else", "input-2", json.RawMessage(`"yes"`)); err == nil {
+		t.Fatal("input on another caller's task should be refused")
+	} else if codeOf(t, err) != CodeSkillNotFound {
+		t.Fatalf("expected a scoped not-found, got %v", err)
+	}
+
+	// A string answer resumes the task as working, with the answer rendered
+	// as the prompt the resumed conversation continues with.
+	updated, err := manager.ResolveTaskInput(meta.From, "input-2", json.RawMessage(`"yes"`))
 	if err != nil {
 		t.Fatalf("ResolveTaskInput: %v", err)
 	}
-	if updated.State != TaskWorking || string(updated.Arguments) != `{"answer":"yes"}` {
-		t.Fatalf("input was not recorded: %+v", updated)
+	if updated.State != TaskWorking {
+		t.Fatalf("expected the resumed task working, got %s", updated.State)
+	}
+	if string(updated.Arguments) != `{"prompt":"yes"}` {
+		t.Fatalf("expected the answer rendered as a prompt, got %s", updated.Arguments)
+	}
+	if updated.PendingInput != "" {
+		t.Fatalf("the question should clear on resume, got %q", updated.PendingInput)
+	}
+	// The relaunch runs: the resumed task completes under the scripted result.
+	pollTask(t, store, meta.From, "input-2", TaskCompleted)
+
+	// An object answer is labelled JSON, not silently flattened to prose.
+	waitingObject := Task{TaskID: "input-3", Caller: meta.From, State: TaskInputRequired,
+		PendingInput: "which region?", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	if err := store.SaveTask(waitingObject); err != nil {
+		t.Fatalf("SaveTask: %v", err)
+	}
+	updated, err = manager.ResolveTaskInput(meta.From, "input-3", json.RawMessage(`{"answer":"yes"}`))
+	if err != nil {
+		t.Fatalf("ResolveTaskInput (object): %v", err)
+	}
+	if !strings.Contains(string(updated.Arguments), `"prompt":"The requester answered with the following JSON:`) {
+		t.Fatalf("expected a labelled JSON answer, got %s", updated.Arguments)
+	}
+	pollTask(t, store, meta.From, "input-3", TaskCompleted)
+
+	// Empty input is refused before anything runs.
+	if _, err := manager.ResolveTaskInput(meta.From, "input-4", json.RawMessage(`""`)); err == nil {
+		t.Fatal("an empty answer should be refused")
+	} else if codeOf(t, err) != CodeInvalidEnvelope {
+		t.Fatalf("expected a malformed-input refusal, got %v", err)
+	}
+}
+
+// scriptedInvoker hands out one result per call and records every request, so
+// a pause→resume cycle can be driven end to end.
+type scriptedInvoker struct {
+	mu       sync.Mutex
+	requests []LocalInvokeRequest
+	results  []LocalInvokeResult
+}
+
+func (s *scriptedInvoker) InvokeLocalAgent(_ context.Context, request LocalInvokeRequest) (LocalInvokeResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.requests = append(s.requests, request)
+	if len(s.results) == 0 {
+		return LocalInvokeResult{OK: true, Result: json.RawMessage(`{"text":"done"}`)}, nil
+	}
+	result := s.results[0]
+	s.results = s.results[1:]
+	return result, nil
+}
+
+func (s *scriptedInvoker) recorded() []LocalInvokeRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]LocalInvokeRequest, len(s.requests))
+	copy(out, s.requests)
+	return out
+}
+
+func TestAllowInputTaskPausesOnTheMarkerAndResumesInPlace(t *testing.T) {
+	invoker := &scriptedInvoker{results: []LocalInvokeResult{
+		// The first turn asks; the second turn, resumed with the answer,
+		// finishes.
+		{OK: true, ConversationID: "remote-task-conv-first",
+			Result: json.RawMessage(`{"text":"I need one detail.\n[[INPUT_REQUIRED: which quarter?]]"}`)},
+		{OK: true, ConversationID: "remote-task-conv-first",
+			Result: json.RawMessage(`{"text":"Q3 revenue was 4.1M."}`)},
+	}}
+	manager, store := taskTestManager(t, invoker, nil)
+	meta := verifiedCaller()
+	request := asyncInput("ask-1")
+	request.AllowInput = true
+	if _, err := manager.startAsyncTask(request, meta, LocalAgent{ID: "agent-1"}); err != nil {
+		t.Fatalf("startAsyncTask: %v", err)
+	}
+
+	paused := pollTask(t, store, meta.From, "ask-1", TaskInputRequired)
+	if paused.PendingInput != "which quarter?" {
+		t.Fatalf("expected the question recorded, got %q", paused.PendingInput)
+	}
+	if paused.Conversation != "remote-task-conv-first" {
+		t.Fatalf("expected the run's conversation recorded, got %q", paused.Conversation)
+	}
+	if paused.Result != nil {
+		t.Fatalf("a paused task holds no result, got %s", paused.Result)
+	}
+	first := invoker.recorded()[0]
+	if !first.AllowInput || first.ConversationID != "" {
+		t.Fatalf("the first run should carry the opt-in and no conversation: %+v", first)
+	}
+
+	// Answering resumes in the same conversation and completes.
+	updated, err := manager.ResolveTaskInput(meta.From, "ask-1", json.RawMessage(`"Q3"`))
+	if err != nil {
+		t.Fatalf("ResolveTaskInput: %v", err)
+	}
+	if updated.State != TaskWorking {
+		t.Fatalf("expected working after the answer, got %s", updated.State)
+	}
+	done := pollTask(t, store, meta.From, "ask-1", TaskCompleted)
+	if string(done.Result) != `{"text":"Q3 revenue was 4.1M."}` {
+		t.Fatalf("expected the resumed run's result, got %s", done.Result)
+	}
+	requests := invoker.recorded()
+	if len(requests) != 2 {
+		t.Fatalf("expected two invocations (ask, then resume), got %d", len(requests))
+	}
+	if requests[1].ConversationID != "remote-task-conv-first" {
+		t.Fatalf("the resume must continue the recorded conversation, got %q", requests[1].ConversationID)
+	}
+	if !requests[1].AllowInput {
+		t.Fatal("the resumed run keeps the input opt-in, so it may ask again")
+	}
+}
+
+func TestMarkerNeverPausesATaskWithoutTheOptIn(t *testing.T) {
+	invoker := &recordingInvoker{result: LocalInvokeResult{
+		OK: true, Result: json.RawMessage(`{"text":"unsure.\n[[INPUT_REQUIRED: which quarter?]]"}`)}}
+	manager, store := taskTestManager(t, invoker, nil)
+	meta := verifiedCaller()
+	if _, err := manager.startAsyncTask(asyncInput("plain-1"), meta, LocalAgent{ID: "agent-1"}); err != nil {
+		t.Fatalf("startAsyncTask: %v", err)
+	}
+	// Without the opt-in the marker is ordinary output: the task completes,
+	// the question and all.
+	done := pollTask(t, store, meta.From, "plain-1", TaskCompleted)
+	if done.PendingInput != "" {
+		t.Fatalf("no opt-in, no pause: pending_input should be empty, got %q", done.PendingInput)
+	}
+}
+
+func TestExtractTaskInputRequest(t *testing.T) {
+	cases := []struct {
+		name     string
+		text     string
+		question string
+		found    bool
+	}{
+		{"marker at the end", "Some context first.\n[[INPUT_REQUIRED: which region?]]", "which region?", true},
+		{"marker mid-reply is not a request", "before [[INPUT_REQUIRED: no]] after", "", false},
+		{"last marker wins", "[[INPUT_REQUIRED: first?]]\nmore\n[[INPUT_REQUIRED: second?]]", "second?", true},
+		{"empty question is not a request", "[[INPUT_REQUIRED: ]]", "", false},
+		{"no marker", "a plain answer", "", false},
+		{"lowercase spelling is not the marker", "[[input_required: which?]]", "", false},
+		{"indented marker line counts", "  [[INPUT_REQUIRED: which plan?]]  ", "which plan?", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			question, found := extractTaskInputRequest(tc.text)
+			if found != tc.found || question != tc.question {
+				t.Fatalf("extractTaskInputRequest(%q) = (%q, %v), want (%q, %v)",
+					tc.text, question, found, tc.question, tc.found)
+			}
+		})
+	}
+}
+
+func TestTaskInputSkillIsCallerScoped(t *testing.T) {
+	invoker := &recordingInvoker{result: LocalInvokeResult{OK: true}}
+	manager, store := taskTestManager(t, invoker, nil)
+	meta := verifiedCaller()
+	waiting := Task{TaskID: "scoped-1", Caller: meta.From, State: TaskInputRequired,
+		PendingInput: "which?", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	if err := store.SaveTask(waiting); err != nil {
+		t.Fatalf("SaveTask: %v", err)
+	}
+	// The creating caller may answer.
+	if _, err := manager.skillTaskInput(context.Background(),
+		map[string]any{"task_id": "scoped-1", "input": "yes"}, meta); err != nil {
+		t.Fatalf("skillTaskInput: %v", err)
+	}
+	pollTask(t, store, meta.From, "scoped-1", TaskCompleted)
+
+	// A different caller is told the task does not exist — scope, not refusal
+	// with detail.
+	err := store.SaveTask(Task{TaskID: "scoped-2", Caller: meta.From, State: TaskInputRequired,
+		PendingInput: "which?", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
+	if err != nil {
+		t.Fatalf("SaveTask: %v", err)
+	}
+	other := verifiedCaller()
+	other.From = "someone/else"
+	_, err = manager.skillTaskInput(context.Background(),
+		map[string]any{"task_id": "scoped-2", "input": "yes"}, other)
+	if err == nil || codeOf(t, err) != CodeSkillNotFound {
+		t.Fatalf("expected a scoped not-found for another caller, got %v", err)
+	}
+}
+
+func TestSweepKeepsInputRequiredTasks(t *testing.T) {
+	invoker := &recordingInvoker{result: LocalInvokeResult{OK: true}}
+	manager, store := taskTestManager(t, invoker, nil)
+	meta := verifiedCaller()
+	now := time.Now().UTC()
+	if err := store.SaveTask(Task{TaskID: "waiting-1", Caller: meta.From, State: TaskInputRequired,
+		PendingInput: "which?", Conversation: "remote-task-conv-x", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("SaveTask: %v", err)
+	}
+	if err := store.SaveTask(Task{TaskID: "running-1", Caller: meta.From, State: TaskWorking,
+		CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("SaveTask: %v", err)
+	}
+
+	manager.SweepTasks()
+
+	if task, ok, _ := store.GetTask(meta.From, "waiting-1"); !ok || task.State != TaskInputRequired {
+		t.Fatalf("an input-required task is waiting, not running; it must survive the sweep (got ok=%v state=%s)",
+			ok, task.State)
+	}
+	if task, ok, _ := store.GetTask(meta.From, "running-1"); !ok || task.State != TaskFailed {
+		t.Fatalf("a working task died with the process; the sweep must fail it honestly (got ok=%v state=%s)",
+			ok, task.State)
 	}
 }
 

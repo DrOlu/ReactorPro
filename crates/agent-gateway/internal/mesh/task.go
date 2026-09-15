@@ -93,6 +93,11 @@ func CanTransitionTask(from, to TaskState) bool {
 // ErrTaskState is the refusal an illegal transition returns.
 var ErrTaskState = errors.New("task state transition is not allowed")
 
+// ErrTaskNotFound is the scoped refusal for a task this caller has no record
+// of — indistinguishable from "never existed", because another tenant's task
+// existing is that tenant's information to give.
+var ErrTaskNotFound = errors.New("no task for this caller")
+
 // Task is one unit of remote work held by the edge that executes it.
 //
 // The primary key is (Caller, TaskID) — the caller's id from the guard's
@@ -114,9 +119,61 @@ type Task struct {
 	TraceID           string          `json:"trace_id,omitempty"`
 	// Stream records that this task opted into chunked streaming, so a task
 	// record says where its progress view lives.
-	Stream    bool      `json:"stream,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Stream bool `json:"stream,omitempty"`
+	// AllowInput records that the task opted into the input-request protocol:
+	// the prompt told the agent it may ask, and a reply carrying the marker
+	// pauses the task instead of completing it.
+	AllowInput bool `json:"allow_input,omitempty"`
+	// PendingInput is the question a paused task is waiting on. The caller
+	// answers it with task.input / POST …/input; the run resumes in the same
+	// desktop conversation, so the agent keeps its own context.
+	PendingInput string `json:"pending_input,omitempty"`
+	// Conversation is the desktop conversation the run lives in. It is what
+	// makes an answered task resume in place rather than start over: the
+	// desktop agent sees its own question and the requester's answer together.
+	Conversation string `json:"conversation,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// The input-request convention. A task created with allow_input carries the
+// instruction in its prompt; an agent that cannot finish without asking ends
+// its reply with the marker line, and the edge turns that into a paused task
+// rather than a completed one. The line is deliberately machine-shaped — one
+// exact spelling, its own line — so an agent asking a question in prose never
+// pauses a task by accident.
+const (
+	// taskInputMarkerPrefix opens the marker line; the line closes with "]]".
+	taskInputMarkerPrefix = "[[INPUT_REQUIRED:"
+	// TaskInputInstruction is appended to a task's prompt when the task opted
+	// into input. Exported because the local invoker appends it — the
+	// convention belongs to the mesh, so the text lives in one place.
+	TaskInputInstruction = "\n\n---\n" +
+		"If you need more information from the requester before you can complete this task, " +
+		"ask your question, then END your reply with this exact final line:\n" +
+		"[[INPUT_REQUIRED: your question]]\n" +
+		"The requester's answer will continue this task; do not use the line unless you " +
+		"genuinely cannot proceed, and never place it mid-reply."
+)
+
+// extractTaskInputRequest finds the marker line in an agent's reply and returns
+// the question it carries. The last marker wins: an agent that asked twice is
+// waiting on its newest question. An empty question is not a request — an
+// agent that emitted the bare marker is treated as having answered normally.
+func extractTaskInputRequest(text string) (string, bool) {
+	question, found := "", false
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, taskInputMarkerPrefix) || !strings.HasSuffix(trimmed, "]]") {
+			continue
+		}
+		inner := strings.TrimSpace(
+			strings.TrimSuffix(strings.TrimPrefix(trimmed, taskInputMarkerPrefix), "]]"))
+		if inner != "" {
+			question, found = inner, true
+		}
+	}
+	return question, found
 }
 
 // TaskHandle is the immediate answer to an async CREATE — small on purpose,
@@ -153,9 +210,13 @@ type TaskStub struct {
 	// CompletedSync records that the peer answered the old synchronous way —
 	// an unupgraded edge or a text-based bridge — so the handle and the answer
 	// arrived in one reply. The caller still gets a completed task object.
-	CompletedSync bool      `json:"completed_sync,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	CompletedSync bool `json:"completed_sync,omitempty"`
+	// PendingInput mirrors the owning edge's question when the task is
+	// input-required, so the caller can ask its human the right thing without
+	// a second round trip.
+	PendingInput string    `json:"pending_input,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // TaskFilter narrows a task listing. Cursor pagination: (Before, BeforeTaskID)

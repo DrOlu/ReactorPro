@@ -29,6 +29,10 @@ const (
 	// under the same id. The manual-resume primitive: a long task that
 	// outlived a restart or a runtime budget is one call from running again.
 	SkillTaskRetry = "task.retry"
+	// SkillTaskInput answers the creating caller's input-required task. The
+	// run resumes in the same conversation the question was asked in, so the
+	// desktop agent reads its own question and the answer together.
+	SkillTaskInput = "task.input"
 )
 
 // builtinSkillIDs is the served set, in a stable order for the UI and tests.
@@ -53,7 +57,8 @@ func BuiltinSkillIDs() []string {
 // acceptable names even though they only register with a task store, so an
 // operator's allowlist does not have to track this edge's storage.
 func servableSkillIDs() []string {
-	return append(append(BuiltinSkillIDs(), SkillTaskGet, SkillTaskCancel, SkillTaskRetry), SkillInvoke)
+	return append(append(BuiltinSkillIDs(),
+		SkillTaskGet, SkillTaskCancel, SkillTaskRetry, SkillTaskInput), SkillInvoke)
 }
 
 // registerBuiltinSkills exposes the read-only introspection surface.
@@ -87,6 +92,7 @@ func (m *Manager) registerBuiltinSkills(agent *Agent) error {
 		handlers[SkillTaskGet] = m.skillTaskGet
 		handlers[SkillTaskCancel] = m.skillTaskCancel
 		handlers[SkillTaskRetry] = m.skillTaskRetry
+		handlers[SkillTaskInput] = m.skillTaskInput
 	}
 
 	for _, id := range builtinSkillIDs {

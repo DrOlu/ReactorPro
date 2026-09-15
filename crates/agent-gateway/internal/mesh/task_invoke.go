@@ -97,6 +97,7 @@ func (m *Manager) startAsyncTask(request InvokeInput, meta RequestMeta, agent Lo
 		State:             TaskQueued,
 		TraceID:           traceID,
 		Stream:            request.Stream,
+		AllowInput:        request.AllowInput,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
@@ -112,16 +113,24 @@ func (m *Manager) startAsyncTask(request InvokeInput, meta RequestMeta, agent Lo
 		m.startTaskStream(meta.From, taskID)
 	}
 
+	m.launchTaskRun(request, task)
+	return handleFor(task), nil
+}
+
+// launchTaskRun starts a run on its own background context and registers its
+// cancel, so every relaunch path — create, retry, an answered input-required
+// task — inherits the same two guarantees: the caller has no hold over the
+// context, and the run can always be stopped.
+func (m *Manager) launchTaskRun(request InvokeInput, task Task) {
 	runCtx, cancel := context.WithTimeout(context.Background(), m.taskRunTimeout(request))
 	m.mu.Lock()
 	if m.taskRuns == nil {
 		m.taskRuns = map[string]context.CancelFunc{}
 	}
-	m.taskRuns[taskKey(meta.From, taskID)] = cancel
+	m.taskRuns[taskKey(task.Caller, task.TaskID)] = cancel
 	m.mu.Unlock()
 
 	go m.executeTask(runCtx, task)
-	return handleFor(task), nil
 }
 
 // rejectAsyncTask records a task that failed a gate before it could run, so
@@ -168,9 +177,7 @@ func (m *Manager) executeTask(runCtx context.Context, task Task) {
 		m.mu.Unlock()
 	}()
 
-	if err := m.transitionTask(task.Caller, task.TaskID, TaskWorking, nil); err != nil {
-		// The move to working was refused: the task was canceled (or already
-		// terminal) between create and start, so the run never begins.
+	if !m.beginTaskRun(task) {
 		return
 	}
 	if err := runCtx.Err(); err != nil {
@@ -207,6 +214,8 @@ func (m *Manager) executeTask(runCtx context.Context, task Task) {
 		Operation:         task.Operation,
 		Arguments:         arguments,
 		Timeout:           timeout,
+		AllowInput:        task.AllowInput,
+		ConversationID:    task.Conversation,
 		Progress:          progress,
 	})
 
@@ -227,8 +236,86 @@ func (m *Manager) executeTask(runCtx context.Context, task Task) {
 	case !result.OK:
 		m.finishTask(task, TaskFailed, result.ErrorCode, strings.TrimSpace(result.ErrorMessage))
 	default:
+		// The input-request protocol: a task that opted in and got the marker
+		// pauses instead of completing. The question is stored, the run's
+		// conversation is remembered so the answer resumes in place, and both
+		// sides are nudged — the executor's operator via the executor webhook,
+		// the caller via its own webhook when it next observes the state.
+		if task.AllowInput {
+			if question, found := extractTaskInputRequest(taskResultText(result.Result)); found {
+				m.pauseTask(task, result.ConversationID, question)
+				return
+			}
+		}
 		m.finishTask(task, TaskCompleted, "", "", result.Result)
 	}
+}
+
+// beginTaskRun moves a task to working, or accepts one that is already there.
+//
+// The second half exists for the resume path: an answered input-required task
+// was moved to working when the input was accepted, and the relaunch must not
+// be refused by the very transition that path already made. Everything else
+// that fails here — canceled, terminal, vanished — means the run must not
+// start, exactly as before.
+func (m *Manager) beginTaskRun(task Task) bool {
+	if err := m.transitionTask(task.Caller, task.TaskID, TaskWorking, nil); err == nil {
+		return true
+	}
+	store := m.taskStoreSnapshot()
+	if store == nil {
+		return false
+	}
+	m.taskMu.Lock()
+	defer m.taskMu.Unlock()
+	current, ok, err := store.GetTask(task.Caller, task.TaskID)
+	return err == nil && ok && current.State == TaskWorking
+}
+
+// pauseTask records a run that asked for input: input-required, the question
+// on the record, the conversation on the record so the answer resumes in
+// place, and the executor's operator notified (an input-required task is the
+// one state where a human on the executor's side may be the fastest path to
+// an answer). The chunk stream stays open — the task is not terminal, and the
+// resumed run's chunks continue the same sequence.
+func (m *Manager) pauseTask(task Task, conversationID, question string) {
+	err := m.transitionTask(task.Caller, task.TaskID, TaskInputRequired, func(current *Task) {
+		if current.Conversation == "" {
+			current.Conversation = strings.TrimSpace(conversationID)
+		}
+		current.PendingInput = question
+	})
+	if err != nil {
+		// The transition was refused — the task was canceled or finished
+		// while the turn ran. Whoever ended it decided the outcome; the
+		// question does not un-decide it.
+		m.logger.Warn("a finished task asked for input", "task", task.TaskID, "state_error", err)
+		return
+	}
+	observability.Usage.MeshTaskInputRequiredTotal.Add(1)
+	if url := m.Config().TaskExecutorWebhook; url != "" {
+		store := m.taskStoreSnapshot()
+		if store != nil {
+			if current, ok, err := store.GetTask(task.Caller, task.TaskID); err == nil && ok {
+				m.notifyTaskInputRequired(current, url)
+			}
+		}
+	}
+}
+
+// taskResultText decodes the invoker's {"text": …} result envelope. Empty when
+// there is nothing to decode — the callers treat that as ordinary output.
+func taskResultText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var decoded struct {
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(raw, &decoded) != nil {
+		return ""
+	}
+	return decoded.Text
 }
 
 // transitionTask moves a task to a non-terminal state, refusing illegal moves.
@@ -242,7 +329,7 @@ func (m *Manager) transitionTask(caller, taskID string, to TaskState, mutate fun
 	defer m.taskMu.Unlock()
 	task, ok, err := store.GetTask(caller, taskID)
 	if err != nil || !ok {
-		return fmt.Errorf("task %q not found", taskID)
+		return fmt.Errorf("%w: %q", ErrTaskNotFound, taskID)
 	}
 	if !CanTransitionTask(task.State, to) {
 		return ErrTaskState
@@ -308,16 +395,7 @@ func (m *Manager) finishTask(task Task, to TaskState, errorCode, errorMessage st
 	if to == TaskCompleted {
 		// The invoker's result is {"text": ...}; the canonical text is what the
 		// terminal chunk must extend.
-		resultText := ""
-		if len(current.Result) > 0 {
-			var decoded struct {
-				Text string `json:"text"`
-			}
-			if json.Unmarshal(current.Result, &decoded) == nil {
-				resultText = decoded.Text
-			}
-		}
-		m.closeTaskStream(current.Caller, current.TaskID, resultText)
+		m.closeTaskStream(current.Caller, current.TaskID, taskResultText(current.Result))
 	} else {
 		m.closeTaskStream(current.Caller, current.TaskID, "")
 	}
@@ -384,7 +462,9 @@ func (m *Manager) cancelTask(caller, taskID string) (Task, error) {
 
 // TaskSkills returns the ids of the task skills this edge serves, in a stable
 // order for manifests and tests.
-func TaskSkills() []string { return []string{SkillTaskGet, SkillTaskCancel, SkillTaskRetry} }
+func TaskSkills() []string {
+	return []string{SkillTaskGet, SkillTaskCancel, SkillTaskRetry, SkillTaskInput}
+}
 
 // skillTaskGet serves task.get: the creating caller's task, and nobody else's.
 //
@@ -396,7 +476,7 @@ func (m *Manager) skillTaskGet(_ context.Context, input any, meta RequestMeta) (
 	if store == nil {
 		return nil, coded(CodeInternalError, "this edge has no task store configured")
 	}
-	taskID, tail, err := taskInputFrom(input)
+	taskID, tail, _, err := taskInputFrom(input)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +498,7 @@ func (m *Manager) skillTaskGet(_ context.Context, input any, meta RequestMeta) (
 
 // skillTaskCancel serves task.cancel, gated to the creating caller.
 func (m *Manager) skillTaskCancel(_ context.Context, input any, meta RequestMeta) (any, error) {
-	taskID, _, err := taskInputFrom(input)
+	taskID, _, _, err := taskInputFrom(input)
 	if err != nil {
 		return nil, err
 	}
@@ -433,38 +513,51 @@ func (m *Manager) skillTaskCancel(_ context.Context, input any, meta RequestMeta
 // or canceled task. Same isolation as the other task skills — another caller
 // asking for the same id is told it does not exist.
 func (m *Manager) skillTaskRetry(_ context.Context, input any, meta RequestMeta) (any, error) {
-	taskID, _, err := taskInputFrom(input)
+	taskID, _, _, err := taskInputFrom(input)
 	if err != nil {
 		return nil, err
 	}
 	return m.RetryTask(meta.From, taskID)
 }
 
-// taskInputFrom reads the shared shape of the task skills: a task id, and for
-// task.get an optional chunk-tail length.
-func taskInputFrom(input any) (taskID string, tail int, err error) {
+// skillTaskInput serves task.input: the creating caller answers its
+// input-required task, and the run resumes in the same conversation the
+// question was asked in. Isolation as ever — the caller id is part of the key.
+func (m *Manager) skillTaskInput(_ context.Context, input any, meta RequestMeta) (any, error) {
+	taskID, _, answer, err := taskInputFrom(input)
+	if err != nil {
+		return nil, err
+	}
+	return m.ResolveTaskInput(meta.From, taskID, answer)
+}
+
+// taskInputFrom reads the shared shape of the task skills: a task id, for
+// task.get an optional chunk-tail length, and for task.input the answer the
+// caller is sending.
+func taskInputFrom(input any) (taskID string, tail int, answer json.RawMessage, err error) {
 	if input == nil {
-		return "", 0, coded(CodeInvalidEnvelope, "the task skills require an input object with a task_id")
+		return "", 0, nil, coded(CodeInvalidEnvelope, "the task skills require an input object with a task_id")
 	}
 	raw, err := json.Marshal(input)
 	if err != nil {
-		return "", 0, coded(CodeInvalidEnvelope, "task input is not encodable: %v", err)
+		return "", 0, nil, coded(CodeInvalidEnvelope, "task input is not encodable: %v", err)
 	}
 	var parsed struct {
-		TaskID string `json:"task_id"`
-		Tail   int    `json:"tail"`
+		TaskID string          `json:"task_id"`
+		Tail   int             `json:"tail"`
+		Input  json.RawMessage `json:"input"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", 0, coded(CodeInvalidEnvelope, "task input is malformed: %v", err)
+		return "", 0, nil, coded(CodeInvalidEnvelope, "task input is malformed: %v", err)
 	}
 	taskID = strings.TrimSpace(parsed.TaskID)
 	if taskID == "" {
-		return "", 0, coded(CodeInvalidEnvelope, "a task_id is required")
+		return "", 0, nil, coded(CodeInvalidEnvelope, "a task_id is required")
 	}
 	if parsed.Tail < 0 || parsed.Tail > taskChunkRingMax {
 		parsed.Tail = 0
 	}
-	return taskID, parsed.Tail, nil
+	return taskID, parsed.Tail, parsed.Input, nil
 }
 
 // pendingTaskEvent is a task state event that out-ran the stub it belongs to.
@@ -554,6 +647,13 @@ type CreateRemoteTaskParams struct {
 	TaskID string
 	// Stream opts the task into chunked streaming on the peer.
 	Stream bool
+	// AllowInput opts the task into the input-request protocol on the peer:
+	// the peer's agent may pause the task with a question instead of
+	// completing, and the answer resumes it. Without the opt-in the peer's
+	// agent is never told the convention, so its questions complete the task
+	// as ordinary output — exactly the behaviour a caller that cannot answer
+	// wants.
+	AllowInput bool
 	// NotifyURL is where the terminal state is POSTed, signed. Local operator
 	// input only — never carried to the peer, never read from a remote
 	// invoke's input, because a peer-supplied URL would be a request-forgery
@@ -592,6 +692,9 @@ func (m *Manager) CreateRemoteTask(ctx context.Context, params CreateRemoteTaskP
 	input["task_id"] = taskID
 	if params.Stream {
 		input["stream"] = true
+	}
+	if params.AllowInput {
+		input["allow_input"] = true
 	}
 	timeout := params.CreateTimeout
 	if timeout <= 0 {
@@ -749,16 +852,75 @@ func (m *Manager) RefreshTaskStub(ctx context.Context, taskID string, tail int) 
 	if err != nil {
 		return stub, TaskWithChunks{}, err
 	}
+	previous := stub.State
 	stub.State = task.State
 	stub.UpdatedAt = time.Now().UTC()
 	if task.State == TaskCompleted {
 		stub.Result = task.Result
 	}
+	stub.PendingInput = task.PendingInput
 	stub.ErrorMessage = task.ErrorMessage
 	if err := store.SaveTaskStub(stub); err != nil {
 		m.logger.Warn("could not persist a refreshed task stub", "task", taskID, "error", err)
 	}
+	// A task observed entering input-required pushes the caller's webhook:
+	// the question is what a sleeping mobile backend needs to be woken with,
+	// and a poll would have seen exactly this transition. Once per entry —
+	// the re-arm happens on the answer path.
+	if previous != TaskInputRequired && stub.State == TaskInputRequired {
+		m.notifyTaskInputRequired(stub, m.resolveTaskWebhook(stub))
+	}
 	return stub, task, nil
+}
+
+// SubmitTaskInput answers a task this gateway created on a peer, by
+// dispatching task.input to the owning edge — the input counterpart of
+// CancelTaskByStub. A peer that answered the create synchronously (an
+// unupgraded edge, a text bridge) has no task to resume, so the request is
+// refused rather than dispatched: those peers never pause a task, and a
+// dispatch there would be spent as an agent turn for nothing.
+func (m *Manager) SubmitTaskInput(ctx context.Context, taskID string, input json.RawMessage) (TaskStub, error) {
+	store := m.taskStoreSnapshot()
+	if store == nil {
+		return TaskStub{}, coded(CodeInternalError, "this gateway has no task store configured")
+	}
+	if len(input) == 0 || strings.TrimSpace(string(input)) == "" || strings.TrimSpace(string(input)) == "null" {
+		return TaskStub{}, coded(CodeInvalidEnvelope, "task input requires a non-empty answer")
+	}
+	stub, ok, err := store.GetTaskStub(taskID)
+	if err != nil || !ok {
+		return TaskStub{}, coded(CodeSkillNotFound, "no task %q", taskID)
+	}
+	if stub.CompletedSync {
+		return stub, coded(CodeSkillNotFound,
+			"the peer answered synchronously; it cannot accept task input")
+	}
+	envelope, err := m.Dispatch(ctx, stub.Target, SkillTaskInput, map[string]any{
+		"task_id": taskID,
+		"input":   json.RawMessage(input),
+	}, 30*time.Second)
+	if err != nil {
+		return stub, err
+	}
+	var respond RespondPayload
+	if len(envelope.Payload) > 0 {
+		_ = json.Unmarshal(envelope.Payload, &respond)
+	}
+	task, err := taskFromOutput(respond.Output)
+	if err != nil {
+		return stub, err
+	}
+	stub.State = task.State
+	stub.PendingInput = task.PendingInput
+	stub.ErrorMessage = task.ErrorMessage
+	stub.UpdatedAt = time.Now().UTC()
+	if err := store.SaveTaskStub(stub); err != nil {
+		m.logger.Warn("could not persist a resumed task stub", "task", taskID, "error", err)
+	}
+	// Leaving input-required re-arms the caller's own input notification, so
+	// a peer that asks twice nudges this gateway's operator twice.
+	m.clearWebhookFired(taskID, m.resolveTaskWebhook(stub), webhookClassInput)
+	return stub, nil
 }
 
 // CancelTaskByStub cancels a task this gateway created on a peer, by
@@ -850,11 +1012,22 @@ func (m *Manager) ConsumeTaskEvents(ctx context.Context) error {
 			m.stashPendingTaskEvent(update)
 			return
 		}
+		previous := stub.State
 		stub.State = update.State
 		stub.ErrorMessage = update.ErrorMessage
 		stub.UpdatedAt = time.Now().UTC()
 		if err := store.SaveTaskStub(stub); err != nil {
 			m.logger.Warn("could not update a task stub from an event", "task", update.TaskID, "error", err)
+		}
+		// Input-required is the one non-terminal state a webhook is fired
+		// for: the peer's agent asked a question, and the caller's sleeping
+		// backend needs to be woken to answer it. Entering the state notifies;
+		// leaving it re-arms, so a second question notifies again.
+		if previous != TaskInputRequired && stub.State == TaskInputRequired {
+			m.notifyTaskInputRequired(stub, m.resolveTaskWebhook(stub))
+		}
+		if previous == TaskInputRequired && stub.State != TaskInputRequired {
+			m.clearWebhookFired(update.TaskID, m.resolveTaskWebhook(stub), webhookClassInput)
 		}
 		// The event path is the normal notification trigger: the peer announced
 		// a terminal state, the stub now says so, and anyone who asked to be
@@ -953,37 +1126,87 @@ func (m *Manager) RetryTask(caller, taskID string) (Task, error) {
 	m.taskMu.Unlock()
 	m.logger.Info("task retried", "task", taskID, "caller", caller,
 		"agent", task.Agent, "operation", task.Operation)
-	go m.executeTask(context.Background(), task)
+	// The same launch path as the original create: the relaunch gets a
+	// registered cancel (a retried task must remain stoppable) and the edge's
+	// runtime budget.
+	m.launchTaskRun(InvokeInput{}, task)
 	return task, nil
 }
 
-// ResolveTaskInput answers an input-required task with new input.
+// ResolveTaskInput answers an input-required task with new input and resumes
+// the run.
 //
-// Phase 1 scaffolding: no executor path puts a task into input-required yet
-// (that arrives with streaming, when the desktop's approval and clarify gates
-// surface), so this validates the transition and records the input, and
-// refuses everything else. The API shape ships now so clients never change.
+// The resume is in place: the answer becomes the next user message in the same
+// desktop conversation the question was asked in, so the agent reads its own
+// question and the requester's answer together. A task whose conversation is
+// gone (the desktop discarded it) fails honestly on the resumed run, and the
+// caller can still retry, which starts fresh with the original arguments.
+//
+// The input may be a JSON string (preferred — it is a chat message) or any
+// other JSON value, which is handed to the agent as its JSON encoding. A task
+// not in input-required refuses: the state machine is the gate, not a flag.
 func (m *Manager) ResolveTaskInput(caller, taskID string, input json.RawMessage) (Task, error) {
 	store := m.taskStoreSnapshot()
 	if store == nil {
 		return Task{}, coded(CodeInternalError, "this gateway has no task store configured")
 	}
-	if len(input) == 0 {
-		return Task{}, coded(CodeInvalidEnvelope, "task input requires a non-empty input object")
+	trimmed := strings.TrimSpace(string(input))
+	if trimmed == "" || trimmed == "null" {
+		return Task{}, coded(CodeInvalidEnvelope, "task input requires a non-empty answer")
 	}
+	answer, err := taskAnswerText(input)
+	if err != nil {
+		return Task{}, err
+	}
+	if strings.TrimSpace(answer) == "" {
+		return Task{}, coded(CodeInvalidEnvelope, "task input requires a non-empty answer")
+	}
+
 	var updated Task
-	err := m.transitionTask(caller, taskID, TaskWorking, func(task *Task) {
-		task.Arguments = input
+	err = m.transitionTask(caller, taskID, TaskWorking, func(task *Task) {
+		if arguments, marshalErr := json.Marshal(map[string]string{"prompt": answer}); marshalErr == nil {
+			task.Arguments = arguments
+		}
+		task.PendingInput = ""
 		updated = *task
 	})
 	if err != nil {
+		if errors.Is(err, ErrTaskNotFound) {
+			return Task{}, coded(CodeSkillNotFound, "no task %q for this caller", taskID)
+		}
 		if errors.Is(err, ErrTaskState) {
 			return Task{}, coded(CodeGovernanceDenied,
 				"task %q is not waiting for input", taskID)
 		}
 		return Task{}, coded(CodeInternalError, "task input could not be recorded: %v", err)
 	}
+	// Leaving input-required re-arms its notification, so a task that asks
+	// twice nudges the executor's operator twice.
+	m.clearWebhookFired(taskID, m.Config().TaskExecutorWebhook, webhookClassInput)
+	m.launchTaskRun(InvokeInput{}, updated)
+	m.logger.Info("task resumed with caller input",
+		"task", taskID, "caller", caller, "agent", updated.Agent)
 	return updated, nil
+}
+
+// taskAnswerText renders the caller's answer as the message the desktop agent
+// reads. A string is itself (empty renders empty, which the caller refuses);
+// anything else arrives as its JSON encoding, labelled, so a structured answer
+// never looks to the agent like prose.
+func taskAnswerText(input json.RawMessage) (string, error) {
+	var asString string
+	if err := json.Unmarshal(input, &asString); err == nil {
+		return asString, nil
+	}
+	var asAny any
+	if err := json.Unmarshal(input, &asAny); err != nil {
+		return "", coded(CodeInvalidEnvelope, "task input is not valid JSON: %v", err)
+	}
+	encoded, err := json.Marshal(asAny)
+	if err != nil {
+		return "", coded(CodeInvalidEnvelope, "task input is not encodable: %v", err)
+	}
+	return "The requester answered with the following JSON:\n" + string(encoded), nil
 }
 
 // TaskStoreConfigured reports whether task APIs can keep their promises.
@@ -1023,6 +1246,14 @@ func (m *Manager) SweepTasks() {
 	}
 	for _, task := range tasks {
 		if TaskTerminal(task.State) {
+			continue
+		}
+		// An input-required task is not mid-flight: no run is active, and the
+		// conversation it waits in is durable on both sides (its id is on the
+		// task record, the conversation itself on the desktop). It stays
+		// answerable across the restart — failing it here would be the one
+		// task that did not need to die.
+		if task.State == TaskInputRequired {
 			continue
 		}
 		m.finishTask(task, TaskFailed, "edge-restarted",

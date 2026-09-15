@@ -82,6 +82,13 @@ type InvokeInput struct {
 	// CREATE with the same id returns the existing task instead of running the
 	// work twice. Empty lets the edge mint one.
 	TaskID string `json:"task_id,omitempty"`
+	// AllowInput, with Async, opts the task into the input-request protocol:
+	// the prompt tells the agent it may ask, and a reply ending in the
+	// [[INPUT_REQUIRED: …]] marker pauses the task as input-required instead
+	// of completing it. The caller then answers with task.input and the run
+	// resumes. Opt-in for the same reason streaming is: an agent that has not
+	// been told the convention must not have its questions reinterpreted.
+	AllowInput bool `json:"allow_input,omitempty"`
 }
 
 // InvokeOutput is returned to the caller on success.
@@ -122,6 +129,13 @@ type LocalInvokeRequest struct {
 	Operation         string
 	Arguments         json.RawMessage
 	Timeout           time.Duration
+	// AllowInput tells the transport the task opted into the input-request
+	// protocol, so it appends TaskInputInstruction to the prompt it builds.
+	AllowInput bool
+	// ConversationID, when set, resumes the named desktop conversation instead
+	// of minting a fresh one — the continuation path for an answered
+	// input-required task. Empty starts a new conversation.
+	ConversationID string
 	// Progress, when set, receives the growth of the assistant's text as the
 	// desktop commits conversation snapshots. Only a streaming task sets it;
 	// the transport is free to ignore it (an ordinary invoke answers whole).
@@ -134,6 +148,10 @@ type LocalInvokeResult struct {
 	Result       json.RawMessage
 	ErrorCode    string
 	ErrorMessage string
+	// ConversationID is the desktop conversation the run happened in. The mesh
+	// persists it on the task so an answered input-required task resumes in
+	// place, with the agent's own question still in its context.
+	ConversationID string
 }
 
 // LocalInvoker forwards an invocation to a desktop agent attached to this edge.

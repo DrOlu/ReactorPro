@@ -67,8 +67,54 @@ const (
 
 // webhookFiredKey is the URL-scoped identity of a notification: the same task
 // notified at two different URLs (per-task changed mid-life) is two deliveries,
-// but the same (task, url) fires once.
-func webhookFiredKey(taskID, url string) string { return taskID + "\x00" + url }
+// but the same (task, url, class) fires once. The class separates a terminal
+// push from an input-required push, so both may go to the same URL — and the
+// input class is cleared when the task resumes, so a task that asks twice
+// notifies twice.
+func webhookFiredKey(taskID, url, class string) string {
+	return taskID + "\x00" + url + "\x00" + class
+}
+
+const (
+	// webhookClassTerminal is the one-per-task "it finished" push.
+	webhookClassTerminal = "terminal"
+	// webhookClassInput is the "it needs a human" push, re-armed on resume.
+	webhookClassInput = "input"
+)
+
+// markWebhookFired claims a notification slot: true when this call is the one
+// that should deliver, false when the notification already went out.
+func (m *Manager) markWebhookFired(key string) bool {
+	m.taskMu.Lock()
+	defer m.taskMu.Unlock()
+	if m.webhookFired == nil {
+		m.webhookFired = map[string]bool{}
+		m.webhookFiredOrder = nil
+	}
+	if m.webhookFired[key] {
+		return false
+	}
+	m.webhookFired[key] = true
+	m.webhookFiredOrder = append(m.webhookFiredOrder, key)
+	for len(m.webhookFiredOrder) > webhookFiredCap {
+		oldest := m.webhookFiredOrder[0]
+		m.webhookFiredOrder = m.webhookFiredOrder[1:]
+		delete(m.webhookFired, oldest)
+	}
+	return true
+}
+
+// clearWebhookFired re-arms a notification (used when a task leaves
+// input-required, so its next question pushes again). A no-op when nothing
+// was fired or the URL is unset.
+func (m *Manager) clearWebhookFired(taskID, url, class string) {
+	if taskID == "" || url == "" {
+		return
+	}
+	m.taskMu.Lock()
+	delete(m.webhookFired, webhookFiredKey(taskID, url, class))
+	m.taskMu.Unlock()
+}
 
 // resolveTaskWebhook decides where a terminal stub notifies: the stub's own
 // URL when the operator set one on the create, else the gateway-wide default.
@@ -91,36 +137,72 @@ func (m *Manager) notifyTaskTerminal(stub TaskStub) {
 	if url == "" {
 		return
 	}
-	key := webhookFiredKey(stub.TaskID, url)
-	m.taskMu.Lock()
-	if m.webhookFired == nil {
-		m.webhookFired = map[string]bool{}
-		m.webhookFiredOrder = nil
-	}
-	if m.webhookFired[key] {
-		m.taskMu.Unlock()
+	if !m.markWebhookFired(webhookFiredKey(stub.TaskID, url, webhookClassTerminal)) {
 		return
 	}
-	m.webhookFired[key] = true
-	m.webhookFiredOrder = append(m.webhookFiredOrder, key)
-	for len(m.webhookFiredOrder) > webhookFiredCap {
-		oldest := m.webhookFiredOrder[0]
-		m.webhookFiredOrder = m.webhookFiredOrder[1:]
-		delete(m.webhookFired, oldest)
-	}
-	m.taskMu.Unlock()
-
 	go m.deliverTaskWebhook(stub, url)
+}
+
+// notifyTaskInputRequired fires the webhook for a task that just entered
+// input-required. The payload is the task itself on the executing edge (the
+// operator there is being told a peer's work needs a human answer) or the
+// stub on the creating edge (its operator is being told the same thing about
+// work it handed out). Once per entry into the state; the resume path re-arms.
+func (m *Manager) notifyTaskInputRequired(payload any, url string) {
+	if url == "" {
+		return
+	}
+	taskID := ""
+	switch value := payload.(type) {
+	case Task:
+		taskID = value.TaskID
+	case TaskStub:
+		taskID = value.TaskID
+	}
+	if taskID == "" {
+		return
+	}
+	if !m.markWebhookFired(webhookFiredKey(taskID, url, webhookClassInput)) {
+		return
+	}
+	go m.deliverTaskInputWebhook(payload, url)
+}
+
+// deliverTaskInputWebhook marshals and POSTs an input-required notification.
+// A stub payload may predate the question (the state event carries no content
+// by design), so the question is fetched from the owning edge first — a
+// notification that says "input needed" without the question sends the
+// receiver straight back to polling, which is what the webhook exists to
+// avoid. A task payload already carries it.
+func (m *Manager) deliverTaskInputWebhook(payload any, url string) {
+	if stub, ok := payload.(TaskStub); ok && stub.PendingInput == "" && !stub.CompletedSync {
+		if refreshed, _, err := m.RefreshTaskStub(context.Background(), stub.TaskID, 0); err == nil {
+			stub = refreshed
+			payload = stub
+		} else {
+			m.logger.Warn("task input webhook could not fetch the question before delivery",
+				"task", stub.TaskID, "error", err)
+		}
+	}
+	taskID, state := "", TaskInputRequired
+	switch value := payload.(type) {
+	case Task:
+		taskID, state = value.TaskID, value.State
+	case TaskStub:
+		taskID, state = value.TaskID, value.State
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		m.logger.Warn("task webhook payload could not be encoded", "task", taskID, "error", err)
+		return
+	}
+	m.deliverWebhookBody(body, taskID, state, url)
 }
 
 // deliverTaskWebhook signs and POSTs the stub, with retries. The payload is
 // the stub as JSON — the same object a poll returns, so a consumer needs one
 // parser for both paths.
 func (m *Manager) deliverTaskWebhook(stub TaskStub, url string) {
-	identity := m.Identity()
-	if identity == nil {
-		return
-	}
 	// The state event that triggered this notification carries no result —
 	// results never ride events — and the point of a webhook is that the
 	// receiver does not have to poll afterwards. Fetch the answer from the
@@ -141,6 +223,17 @@ func (m *Manager) deliverTaskWebhook(stub TaskStub, url string) {
 		m.logger.Warn("task webhook payload could not be encoded", "task", stub.TaskID, "error", err)
 		return
 	}
+	m.deliverWebhookBody(body, stub.TaskID, stub.State, url)
+}
+
+// deliverWebhookBody signs and POSTs one notification, with retries. Identity
+// headers are the same trio the envelope protocol carries, so a receiver
+// verifies input pushes and terminal pushes with one code path.
+func (m *Manager) deliverWebhookBody(body []byte, taskID string, state TaskState, url string) {
+	identity := m.Identity()
+	if identity == nil {
+		return
+	}
 	signature := identity.SignBytes(body)
 
 	observability.Usage.MeshTaskWebhookTotal.Add(1)
@@ -153,7 +246,7 @@ func (m *Manager) deliverTaskWebhook(stub TaskStub, url string) {
 		request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
 			cancel()
-			m.logger.Warn("task webhook URL is not usable", "task", stub.TaskID, "url", url, "error", err)
+			m.logger.Warn("task webhook URL is not usable", "task", taskID, "url", url, "error", err)
 			observability.Usage.MeshTaskWebhookFailedTotal.Add(1)
 			return
 		}
@@ -162,8 +255,8 @@ func (m *Manager) deliverTaskWebhook(stub TaskStub, url string) {
 		request.Header.Set(WebhookHeaderFingerprint, identity.Fingerprint)
 		request.Header.Set(WebhookHeaderPublicKey, base64.StdEncoding.EncodeToString([]byte(identity.PublicKeyPEM)))
 		request.Header.Set(WebhookHeaderSignature, signature)
-		request.Header.Set(WebhookHeaderTaskID, stub.TaskID)
-		request.Header.Set(WebhookHeaderTaskState, string(stub.State))
+		request.Header.Set(WebhookHeaderTaskID, taskID)
+		request.Header.Set(WebhookHeaderTaskState, string(state))
 
 		response, err := m.webhookClient().Do(request)
 		// Cancel on every path — a returned 2xx must not leak the context's
@@ -179,12 +272,12 @@ func (m *Manager) deliverTaskWebhook(stub TaskStub, url string) {
 			lastErr = err
 		}
 		m.logger.Warn("task webhook delivery failed",
-			"task", stub.TaskID, "url", url, "attempt", attempt,
+			"task", taskID, "url", url, "attempt", attempt,
 			"of", webhookAttempts, "error", lastErr)
 	}
 	observability.Usage.MeshTaskWebhookFailedTotal.Add(1)
 	m.logger.Warn("task webhook delivery gave up",
-		"task", stub.TaskID, "url", url, "attempts", webhookAttempts, "error", lastErr)
+		"task", taskID, "url", url, "attempts", webhookAttempts, "error", lastErr)
 }
 
 // webhookClient is the one HTTP client webhooks use, so its timebounds are set
