@@ -366,11 +366,24 @@ fn gateway_api_base_url(remote: &RemoteSettingsPayload) -> Result<String, String
 /// sends no CORS headers, so the request has to go through the Rust side. The
 /// gateway token never leaves this process, and callers can only reach `/api/`.
 /// The longest a single gateway API call may run, and the cap on a caller's
-/// own request. Mesh dispatches run a real agent turn on a peer and routinely
-/// take tens of seconds, so the old fixed 30s was too short for them; the cap
-/// exists so a caller cannot hold a connection open indefinitely.
-const GATEWAY_API_MAX_TIMEOUT_SECS: u64 = 180;
+/// own request. Mesh dispatches run a real agent turn on the peer and can
+/// take minutes, not seconds: a live fleet BMC query measured 2m29s on
+/// grip-001 and longer on the CLI bridges, which is why the old 180s ceiling
+/// silently cut short every "slow peer" report. 31 minutes covers a full
+/// 30-minute send timeout (Settings → Mesh, the documented maximum) plus the
+/// client's +5s grace, while still existing so a caller cannot hold a
+/// connection open indefinitely.
+const GATEWAY_API_MAX_TIMEOUT_SECS: u64 = 1860;
 const GATEWAY_API_DEFAULT_TIMEOUT_SECS: u64 = 30;
+
+/// Resolve a caller's timeout request against the default and the cap.
+/// Extracted so the ceiling — the number a user's "raise the timeout" hope
+/// lives or dies on — is pinned by a test rather than by inference.
+fn clamp_gateway_timeout_secs(requested: Option<u64>) -> u64 {
+    requested
+        .unwrap_or(GATEWAY_API_DEFAULT_TIMEOUT_SECS)
+        .clamp(1, GATEWAY_API_MAX_TIMEOUT_SECS)
+}
 
 /// Resolve a gateway API base URL and a caller-supplied path to one final URL,
 /// refusing anything that would leave /api/.
@@ -406,9 +419,7 @@ pub async fn gateway_api_request(
     // Resolve BEFORE the request is built, so the guard sees the final path.
     let url = resolve_gateway_api_url(&base, &path)?;
 
-    let timeout_secs = timeout_secs
-        .unwrap_or(GATEWAY_API_DEFAULT_TIMEOUT_SECS)
-        .clamp(1, GATEWAY_API_MAX_TIMEOUT_SECS);
+    let timeout_secs = clamp_gateway_timeout_secs(timeout_secs);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
@@ -428,10 +439,13 @@ pub async fn gateway_api_request(
             // real agent turn and routinely outlives a short budget), and the
             // generic reqwest text points the user at a network fault instead.
             if e.is_timeout() {
+                // No trailing period: callers append their own sentences to
+                // this detail, and a full stop here produced ".. may be
+                // needed.. If the mesh is off" in the tool result.
                 return format!(
                     "The gateway did not answer within {timeout_secs}s. A mesh \
                      dispatch runs a real agent turn on the peer, so a longer \
-                     send timeout in Settings → Mesh may be needed."
+                     send timeout in Settings → Mesh may be needed"
                 );
             }
             format!("Gateway request failed: {e}")
@@ -462,7 +476,7 @@ pub async fn gateway_api_request(
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_gateway_api_url;
+    use super::{clamp_gateway_timeout_secs, resolve_gateway_api_url};
 
     const BASE: &str = "http://127.0.0.1:3000";
 
@@ -497,5 +511,26 @@ mod tests {
     fn whitespace_is_trimmed_but_the_path_is_still_checked() {
         let url = resolve_gateway_api_url(BASE, "  /api/status  ").expect("allowed");
         assert_eq!(url.path(), "/api/status");
+    }
+
+    // The ceiling is load-bearing: a 180s cap silently truncated every
+    // "raise the send timeout" attempt, so a slow-but-healthy peer looked
+    // unreachable. Pin both edges and the documented maximum.
+    #[test]
+    fn gateway_timeout_defaults_to_thirty_seconds() {
+        assert_eq!(clamp_gateway_timeout_secs(None), 30);
+    }
+
+    #[test]
+    fn gateway_timeout_honours_a_full_thirty_minute_send_budget() {
+        // The desktop sends ceil(timeoutMs/1000)+5 for the send timeout, so a
+        // 30-minute setting asks for 1805s — that must fit under the cap.
+        assert_eq!(clamp_gateway_timeout_secs(Some(1805)), 1805);
+    }
+
+    #[test]
+    fn gateway_timeout_is_capped_above_a_half_hour_and_floored_at_one_second() {
+        assert_eq!(clamp_gateway_timeout_secs(Some(u64::MAX)), 1860);
+        assert_eq!(clamp_gateway_timeout_secs(Some(0)), 1);
     }
 }

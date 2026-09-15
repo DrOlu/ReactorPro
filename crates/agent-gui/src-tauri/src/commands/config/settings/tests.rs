@@ -178,6 +178,44 @@ mod tests {
     }
 
     #[test]
+    fn normalize_remote_settings_clamps_mesh_timeout_to_a_thirty_minute_ceiling() {
+        // Live fleet evidence: a BMC query on grip-001 measured 2m29s and the
+        // CLI bridges run longer, so the send budget must reach a half hour —
+        // while an absurd draft still lands inside it.
+        let payload = |timeout_ms: u64| RemoteSettingsPayload {
+            enabled: true,
+            gateway_url: "https://agent.cnweb.org".to_string(),
+            gateway_port: 443,
+            token: "agent-token-dev".to_string(),
+            agent_id: "mac-mini".to_string(),
+            auto_reconnect: true,
+            heartbeat_interval: 30,
+            enable_web_terminal: false,
+            enable_web_ssh_terminal: false,
+            enable_web_git: false,
+            enable_web_tunnels: false,
+            enable_mesh_chat: true,
+            mesh_chat_timeout_ms: timeout_ms,
+            mesh_chat_peer_allowlist: Vec::new(),
+        };
+        // The documented maximum passes through untouched…
+        assert_eq!(
+            normalize_remote_settings_payload(payload(1_800_000)).mesh_chat_timeout_ms,
+            1_800_000
+        );
+        // …an absurd draft is contained to it, and a too-small one is raised
+        // to the floor.
+        assert_eq!(
+            normalize_remote_settings_payload(payload(9_999_999_999)).mesh_chat_timeout_ms,
+            1_800_000
+        );
+        assert_eq!(
+            normalize_remote_settings_payload(payload(1_000)).mesh_chat_timeout_ms,
+            5_000
+        );
+    }
+
+    #[test]
     fn ensure_remote_agent_id_migrates_legacy_grpc_port() {
         let mut conn = open_memory_db();
         let legacy = json!({

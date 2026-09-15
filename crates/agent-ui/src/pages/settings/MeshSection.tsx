@@ -374,9 +374,12 @@ export function MeshSection(props: SettingsSectionProps) {
             control={
               <Input
                 type="number"
-                min={5000}
-                max={600000}
-                step={5000}
+                // The value is in SECONDS (converted below), so the bounds are
+                // too: 5s floor, 30min ceiling — matching the save clamp and
+                // the Rust proxy cap, so what the input promises is what ships.
+                min={5}
+                max={1800}
+                step={5}
                 value={Math.round(settings.remote.meshChatTimeoutMs / 1000)}
                 onChange={(event) => {
                   const seconds = Number(event.target.value);
@@ -386,7 +389,7 @@ export function MeshSection(props: SettingsSectionProps) {
                     remote: {
                       ...prev.remote,
                       // Stored in ms; clamped on save, so a wild draft cannot persist.
-                      meshChatTimeoutMs: Math.min(600_000, Math.max(5_000, seconds * 1000)),
+                      meshChatTimeoutMs: Math.min(1_800_000, Math.max(5_000, seconds * 1000)),
                     },
                   }));
                 }}

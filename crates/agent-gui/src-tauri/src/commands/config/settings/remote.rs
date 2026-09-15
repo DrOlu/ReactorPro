@@ -72,7 +72,7 @@ pub(crate) fn normalize_remote_settings_payload(
         enable_web_git: payload.enable_web_git,
         enable_web_tunnels: payload.enable_web_tunnels,
         enable_mesh_chat: payload.enable_mesh_chat,
-        mesh_chat_timeout_ms: payload.mesh_chat_timeout_ms.clamp(5_000, 600_000),
+        mesh_chat_timeout_ms: payload.mesh_chat_timeout_ms.clamp(5_000, 1_800_000),
         mesh_chat_peer_allowlist: payload
             .mesh_chat_peer_allowlist
             .iter()
