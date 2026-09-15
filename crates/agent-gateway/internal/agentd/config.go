@@ -66,6 +66,11 @@ type Config struct {
 	// unattended parallel turns are its reason to exist. Extra commands
 	// queue rather than fail.
 	Concurrency int
+	// SkillsDir points at a library of SKILL.md collections (e.g.
+	// ~/.agents/skills). When set, the skills are listed in every turn's
+	// system prompt and served read-only through the read_skill tools.
+	// Empty disables the skill surface entirely.
+	SkillsDir string
 	// ShellEnabled / FetchEnabled toggle the two tools with the widest
 	// blast radius, so an operator can ship a read-only worker.
 	ShellEnabled bool
@@ -140,6 +145,8 @@ func (c *Config) RegisterFlags(fs *flag.FlagSet) {
 		"enable the run_command tool")
 	fs.BoolVar(&c.FetchEnabled, "fetch", getenvBool("LIVEAGENT_AGENTD_FETCH", c.FetchEnabled),
 		"enable the fetch_url tool")
+	fs.StringVar(&c.SkillsDir, "skills-dir", getenv("LIVEAGENT_AGENTD_SKILLS_DIR", c.SkillsDir),
+		"directory of SKILL.md collections exposed to the worker (read-only; empty disables skills)")
 	fs.DurationVar(&c.CommandTimeout, "command-timeout", getenvDuration("LIVEAGENT_AGENTD_COMMAND_TIMEOUT", c.CommandTimeout),
 		"timeout for one shell command")
 	fs.DurationVar(&c.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_AGENTD_REQUEST_TIMEOUT", c.RequestTimeout),

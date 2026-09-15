@@ -211,7 +211,7 @@ func (r *Runner) runTurn(ctx context.Context, next job, entries *[]Entry, writer
 	system := "You are a server-side agent running inside a sandboxed working directory. " +
 		"Answer the request directly and completely; use the tools when the answer needs " +
 		"files, commands or the network. The requester cannot be asked questions — " +
-		"produce the best complete answer you can."
+		"produce the best complete answer you can." + PromptSection(r.tools.Skills())
 	messages := []Message{
 		{Role: "system", Content: system},
 		{Role: "user", Content: next.prompt},
