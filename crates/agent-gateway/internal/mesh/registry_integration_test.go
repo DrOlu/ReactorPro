@@ -381,6 +381,28 @@ func TestIntegrationRegistryBroadcastModeNeverUsesJetStream(t *testing.T) {
 func TestIntegrationHeartbeatRefreshesRegistrationWithTheLiveDirectory(t *testing.T) {
 	url := startTestNATSJetStream(t)
 
+	// Pre-create the registry bucket, the production shape: an existing bucket
+	// binds in ~one round trip, so the async probe completes BEFORE Start
+	// finishes — the race that (before the stopped flag) silently discarded
+	// the probe result and left every production edge without a registry.
+	preconnect, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { preconnect.Close() })
+	preJS, err := preconnect.JetStream()
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	if _, err := preJS.CreateKeyValue(&nats.KeyValueConfig{
+		Bucket:  DefaultConfig().RegistryBucket,
+		TTL:     800 * time.Millisecond,
+		History: 1,
+		Storage: nats.FileStorage,
+	}); err != nil {
+		t.Fatalf("pre-create registry bucket: %v", err)
+	}
+
 	// A directory that starts empty and gains an agent after Start — the
 	// shape every real gateway boots in. The provider runs on the heartbeat
 	// goroutine, so it must be safe to call concurrently — the real
@@ -434,17 +456,29 @@ func TestIntegrationHeartbeatRefreshesRegistrationWithTheLiveDirectory(t *testin
 		t.Fatalf("the stored manifest never picked up the attached agent: %+v", agent.Manifest().LocalAgents)
 	}
 
-	entry, err = kv.Get(key)
-	if err != nil {
-		t.Fatalf("read the refreshed registry entry: %v", err)
+	// The stored snapshot and the KV put happen in the same heartbeat tick,
+	// but a poll can observe the snapshot in the instant before the put
+	// lands — so the bucket is polled too, not read once.
+	published, carried := Manifest{}, false
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		entry, err := kv.Get(key)
+		if err != nil {
+			t.Fatalf("read the refreshed registry entry: %v", err)
+		}
+		published = Manifest{}
+		if err := json.Unmarshal(entry.Value(), &published); err != nil {
+			t.Fatalf("the registry entry is not a manifest: %v", err)
+		}
+		if published.LocalAgentTotal == 1 && len(published.LocalAgents) == 1 &&
+			published.LocalAgents[0].ID == "agent-7" {
+			carried = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
-	var published Manifest
-	if err := json.Unmarshal(entry.Value(), &published); err != nil {
-		t.Fatalf("the registry entry is not a manifest: %v", err)
-	}
-	if published.LocalAgentTotal != 1 || len(published.LocalAgents) != 1 ||
-		published.LocalAgents[0].ID != "agent-7" {
-		t.Fatalf("the bucket's manifest does not carry the live directory: %+v", published.LocalAgents)
+	if !carried {
+		t.Fatalf("the bucket's manifest never carried the live directory: %+v", published.LocalAgents)
 	}
 
 	// The describe skill serves the stored snapshot, so it must carry the
