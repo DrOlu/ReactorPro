@@ -72,6 +72,12 @@ type InvokeInput struct {
 	// happened. Text-based peers ignore the field, exactly as they ignore the
 	// rest of the invoke input.
 	Async bool `json:"async,omitempty"`
+	// Stream, with Async, publishes the run's assistant-text growth as
+	// ordered chunks on mesh.event.task.<id>.chunk (and answers tails through
+	// task.get). Opt-in: the chunks share the plaintext posture of the rest of
+	// the mesh — a dispatch's prompt and reply are already visible to whoever
+	// can subscribe — but a task that does not ask streams nothing but states.
+	Stream bool `json:"stream,omitempty"`
 	// TaskID is the caller-minted task id. It is the idempotency key: a retried
 	// CREATE with the same id returns the existing task instead of running the
 	// work twice. Empty lets the edge mint one.
@@ -116,6 +122,10 @@ type LocalInvokeRequest struct {
 	Operation         string
 	Arguments         json.RawMessage
 	Timeout           time.Duration
+	// Progress, when set, receives the growth of the assistant's text as the
+	// desktop commits conversation snapshots. Only a streaming task sets it;
+	// the transport is free to ignore it (an ordinary invoke answers whole).
+	Progress func(delta string)
 }
 
 // LocalInvokeResult is the desktop agent's answer.

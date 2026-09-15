@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -142,7 +144,7 @@ func TestIntegrationTaskLifecycleAcrossEdges(t *testing.T) {
 	}
 
 	// Refresh asks the owning edge directly and returns the result.
-	refreshedStub, refreshed, err := caller.RefreshTaskStub(t.Context(), "bmc-run-1")
+	refreshedStub, refreshed, err := caller.RefreshTaskStub(t.Context(), "bmc-run-1", 0)
 	if err != nil {
 		t.Fatalf("RefreshTaskStub: %v", err)
 	}
@@ -397,7 +399,7 @@ func TestIntegrationRefreshNeverDispatchesToADialectPeer(t *testing.T) {
 
 	// Refresh: must return the stub from local storage without a second
 	// request — a task.get sent to this peer would run as an agent turn.
-	refreshed, _, err := caller.RefreshTaskStub(t.Context(), "dialect-run-1")
+	refreshed, _, err := caller.RefreshTaskStub(t.Context(), "dialect-run-1", 0)
 	if err != nil {
 		t.Fatalf("RefreshTaskStub: %v", err)
 	}
@@ -406,6 +408,173 @@ func TestIntegrationRefreshNeverDispatchesToADialectPeer(t *testing.T) {
 	}
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("the peer saw %d requests; refresh must not dispatch to a dialect peer (want 1: the create only)", got)
+	}
+}
+
+// streamingInvoker plays a desktop that commits snapshots: it feeds the
+// request's progress callback with the assistant text's growth and then
+// returns the full text as the result — the same shape the session layer
+// produces from real conversation projections.
+type streamingInvoker struct {
+	deltas   []string
+	requests []LocalInvokeRequest
+}
+
+func (s *streamingInvoker) InvokeLocalAgent(ctx context.Context, request LocalInvokeRequest) (LocalInvokeResult, error) {
+	s.requests = append(s.requests, request)
+	full := strings.Join(s.deltas, "")
+	if request.Progress != nil {
+		for _, delta := range s.deltas {
+			request.Progress(delta)
+		}
+	}
+	encoded, err := json.Marshal(map[string]string{"text": full})
+	if err != nil {
+		return LocalInvokeResult{}, err
+	}
+	return LocalInvokeResult{OK: true, Result: encoded}, nil
+}
+
+// TestIntegrationStreamedTaskPublishesOrderedChunksAndATerminalTail is the
+// streaming contract on the wire: a task created with stream:true publishes
+// its assistant text's growth as ordered chunks on mesh.event.task.<id>.chunk,
+// the terminal chunk carries the unflushed tail and last:true, a tail read
+// catches a listener up, and the caller's stub is never corrupted by chunk
+// events (which carry no state field). A task that did not opt in publishes
+// none of this.
+func TestIntegrationStreamedTaskPublishesOrderedChunksAndATerminalTail(t *testing.T) {
+	url := startTestNATS(t)
+	executorID := uniqueID("acme/lagos/executor")
+	callerID := uniqueID("globex/berlin/caller")
+
+	deltas := []string{
+		"Q3 revenue was up 12% year on year. ",
+		"Margins improved by two points, driven by the switch to local egress. ",
+		"The board summary follows in the appendix of the report.",
+	}
+	invoker := &streamingInvoker{deltas: deltas}
+	executorStore := newFakeTaskStore()
+	_ = taskEdge(t, url, executorID, invoker, executorStore, nil)
+	callerStore := newFakeTaskStore()
+	caller := taskEdge(t, url, callerID, &recordingInvoker{}, callerStore, nil)
+
+	// A live listener on the chunk subject, attached before the create.
+	listener, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect listener: %v", err)
+	}
+	defer listener.Close()
+	var mu sync.Mutex
+	var observed []TaskChunk
+	sub, err := listener.Subscribe(TaskEventSubject("stream-1")+".chunk", func(msg *nats.Msg) {
+		// The wire message is a full mesh envelope; the chunk rides in
+		// payload.data, the emit event's body.
+		var envelope struct {
+			Payload struct {
+				Data taskChunkEvent `json:"data"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+			return
+		}
+		mu.Lock()
+		observed = append(observed, TaskChunk{
+			Seq:  envelope.Payload.Data.Seq,
+			Text: envelope.Payload.Data.Text,
+			Last: envelope.Payload.Data.Last,
+		})
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatalf("subscribe chunk subject: %v", err)
+	}
+	defer func() { _ = sub.Unsubscribe() }()
+
+	stub, err := caller.CreateRemoteTask(t.Context(), CreateRemoteTaskParams{
+		Target: executorID,
+		TaskID: "stream-1",
+		Stream: true,
+		Input: map[string]any{
+			"target":    "agent-1",
+			"operation": OperationTask,
+			"arguments": map[string]any{"prompt": "Summarise Q3"},
+		},
+		CreateTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("CreateRemoteTask: %v", err)
+	}
+	if stub.State != TaskWorking && stub.State != TaskQueued {
+		t.Fatalf("a streaming create should start non-terminal, got %s", stub.State)
+	}
+
+	waitStubState(t, callerStore, "stream-1", TaskCompleted)
+
+	// The listener saw ordered chunks ending in exactly one terminal.
+	mu.Lock()
+	chunks := append([]TaskChunk{}, observed...)
+	mu.Unlock()
+	if len(chunks) == 0 {
+		t.Fatal("no chunk events were observed on the wire")
+	}
+	lastSeq := 0
+	var text strings.Builder
+	terminals := 0
+	for _, chunk := range chunks {
+		if chunk.Seq <= lastSeq {
+			t.Fatalf("chunk seqs must strictly increase: %+v", chunks)
+		}
+		lastSeq = chunk.Seq
+		text.WriteString(chunk.Text)
+		if chunk.Last {
+			terminals++
+		}
+	}
+	if terminals != 1 {
+		t.Fatalf("a stream ends exactly once; saw %d terminal chunks: %+v", terminals, chunks)
+	}
+	full := strings.Join(deltas, "")
+	if text.String() != full {
+		t.Fatalf("chunk concatenation should rebuild the answer:\n got %q\nwant %q", text.String(), full)
+	}
+
+	// The caller's stub survived the chunk events: state came from state
+	// events only, never parsed from a chunk's state-less data.
+	if stub2, _, _ := callerStore.GetTaskStub("stream-1"); stub2.State != TaskCompleted {
+		t.Fatalf("the stub was corrupted by chunk events: %+v", stub2)
+	}
+
+	// The tail read catches a listener up through the owner: the chunks come
+	// back from task.get, terminal included.
+	_, refreshed, err := caller.RefreshTaskStub(t.Context(), "stream-1", 16)
+	if err != nil {
+		t.Fatalf("RefreshTaskStub with tail: %v", err)
+	}
+	if len(refreshed.Chunks) == 0 {
+		t.Fatal("a tail read should return the streamed chunks")
+	}
+	if !refreshed.Chunks[len(refreshed.Chunks)-1].Last {
+		t.Fatal("the tail's newest chunk should be the terminal")
+	}
+
+	// A task that did not opt in publishes nothing on any chunk subject and
+	// reaches its invoker with no progress callback.
+	_, err = caller.CreateRemoteTask(t.Context(), CreateRemoteTaskParams{
+		Target: executorID,
+		TaskID: "quiet-1",
+		Input: map[string]any{
+			"target":    "agent-1",
+			"operation": OperationTask,
+			"arguments": map[string]any{"prompt": "Summarise Q4"},
+		},
+		CreateTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("CreateRemoteTask quiet: %v", err)
+	}
+	waitStubState(t, callerStore, "quiet-1", TaskCompleted)
+	if invoker.requests[len(invoker.requests)-1].Progress != nil {
+		t.Fatal("a task that did not opt into streaming must not reach the invoker with a progress callback")
 	}
 }
 

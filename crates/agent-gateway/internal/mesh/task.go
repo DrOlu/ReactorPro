@@ -112,8 +112,11 @@ type Task struct {
 	ErrorCode         string          `json:"error_code,omitempty"`
 	ErrorMessage      string          `json:"error_message,omitempty"`
 	TraceID           string          `json:"trace_id,omitempty"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
+	// Stream records that this task opted into chunked streaming, so a task
+	// record says where its progress view lives.
+	Stream    bool      `json:"stream,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // TaskHandle is the immediate answer to an async CREATE — small on purpose,

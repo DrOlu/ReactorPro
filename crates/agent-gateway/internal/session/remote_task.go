@@ -99,6 +99,25 @@ type RemoteTaskResult struct {
 // command bookkeeping, so a long-running edge does not accumulate subscriptions
 // or run records for remote tasks that never completed.
 func (m *Manager) SubmitRemoteTask(ctx context.Context, agentID, prompt string) (RemoteTaskResult, error) {
+	return m.SubmitRemoteTaskProgress(ctx, agentID, prompt, nil)
+}
+
+// SubmitRemoteTaskProgress is SubmitRemoteTask with a live view of the run.
+//
+// onDelta receives the GROWTH of the assistant's text each time the desktop
+// commits a conversation snapshot, so a caller that stays connected can watch
+// the answer build instead of waiting for the whole terminal. The deltas are
+// derived from the same projections the terminal result comes from — there is
+// no second channel to the desktop — and append-only growth is the only thing
+// emitted: a projection that rewrote already-delivered text (a retracted entry,
+// an error placeholder swap) yields no delta rather than a duplicated one. The
+// terminal result stays the canonical text; the delta stream is a progress view.
+func (m *Manager) SubmitRemoteTaskProgress(
+	ctx context.Context,
+	agentID string,
+	prompt string,
+	onDelta func(delta string),
+) (RemoteTaskResult, error) {
 	agentID = strings.TrimSpace(agentID)
 	prompt = strings.TrimSpace(prompt)
 	if agentID == "" {
@@ -166,7 +185,7 @@ func (m *Manager) SubmitRemoteTask(ctx context.Context, agentID, prompt string) 
 		return RemoteTaskResult{}, err
 	}
 
-	outcome, waitErr := m.awaitRemoteTask(ctx, agentID, runID, conversationID)
+	outcome, waitErr := m.awaitRemoteTask(ctx, agentID, runID, conversationID, onDelta)
 
 	// When the run never reached a terminal this call consumed, settle the
 	// bookkeeping so it does not linger. awaitRemoteTask always releases its own
@@ -250,8 +269,9 @@ func (m *Manager) awaitRemoteTask(
 	agentID string,
 	runID string,
 	conversationID string,
+	onDelta func(delta string),
 ) (remoteTaskAccumulator, error) {
-	acc := remoteTaskAccumulator{runID: runID}
+	acc := remoteTaskAccumulator{runID: runID, onDelta: onDelta}
 	afterSeq := int64(0)
 	for attempt := 0; attempt < remoteTaskMaxResubscribes; attempt++ {
 		subscription := m.SubscribeConversationStream(agentID, conversationID, afterSeq, "")
@@ -354,6 +374,32 @@ type remoteTaskAccumulator struct {
 	errMessage string
 	settled    bool
 	lastSeq    int64
+	// onDelta, when set, receives each snapshot's assistant-text growth.
+	onDelta  func(delta string)
+	streamer remoteTaskDeltaStream
+}
+
+// remoteTaskDeltaStream turns successive conversation snapshots into the
+// growth of the assistant's text, so a live listener can be fed deltas instead
+// of whole projections. Append-only by policy: a projection that rewrote
+// already-delivered text yields no delta rather than a duplicated one — the
+// terminal result is the canonical text, and the delta stream is a progress
+// view. Pure, so the growth rule is testable without a conversation.
+type remoteTaskDeltaStream struct {
+	prev string
+}
+
+func (s *remoteTaskDeltaStream) delta(current string) string {
+	defer func() { s.prev = current }()
+	if current == "" {
+		return ""
+	}
+	if strings.HasPrefix(current, s.prev) {
+		return current[len(s.prev):]
+	}
+	// A rewrite, not a growth. Swallow it and re-anchor: the listener's view
+	// falls behind until the terminal result replaces it wholesale.
+	return ""
 }
 
 func (a *remoteTaskAccumulator) observe(event *ConversationEvent) {
@@ -378,6 +424,16 @@ func (a *remoteTaskAccumulator) observe(event *ConversationEvent) {
 		// placeholder if that is all there is.
 		if raw != "[]" || a.entries == "" {
 			a.entries = raw
+		}
+		// The live view: each meaningful snapshot's assistant-text growth is
+		// handed to the delta listener, if there is one, after the entries are
+		// recorded (so a terminal snapshot always dominates the stream).
+		if a.onDelta != nil && raw != "[]" {
+			if text, err := extractRemoteTaskText(raw); err == nil && text != "" {
+				if delta := a.streamer.delta(text); delta != "" {
+					a.onDelta(delta)
+				}
+			}
 		}
 	case StreamEventRunFinished:
 		a.settled = true
