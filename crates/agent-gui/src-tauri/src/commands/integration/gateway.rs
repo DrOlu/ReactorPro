@@ -423,7 +423,19 @@ pub async fn gateway_api_request(
         .bearer_auth(remote.token.trim())
         .send()
         .await
-        .map_err(|e| format!("Gateway request failed: {e}"))?;
+        .map_err(|e| {
+            // A timeout is by far the common case here (a mesh dispatch is a
+            // real agent turn and routinely outlives a short budget), and the
+            // generic reqwest text points the user at a network fault instead.
+            if e.is_timeout() {
+                return format!(
+                    "The gateway did not answer within {timeout_secs}s. A mesh \
+                     dispatch runs a real agent turn on the peer, so a longer \
+                     send timeout in Settings → Mesh may be needed."
+                );
+            }
+            format!("Gateway request failed: {e}")
+        })?;
     let status = response.status();
     let text = response
         .text()
