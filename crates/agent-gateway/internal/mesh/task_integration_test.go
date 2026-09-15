@@ -812,3 +812,167 @@ func TestIntegrationEdgeWithoutStoreDoesNotAdvertiseTasks(t *testing.T) {
 	}
 	_ = nuid.Next()
 }
+
+// TestIntegrationInputRequiredPausesAndResumesAcrossEdges is the interactive
+// loop end to end: a task that opted into input asks a question on the
+// executor, both operators are pushed (the executor's webhook carries the
+// question), the caller answers through the task.input skill, and the run
+// resumes in the same desktop conversation and completes.
+func TestIntegrationInputRequiredPausesAndResumesAcrossEdges(t *testing.T) {
+	url := startTestNATS(t)
+	executorID := uniqueID("acme/lagos/worker")
+	callerID := uniqueID("globex/berlin/caller")
+
+	// The receiver for the executor's own input notification.
+	receipts := make(chan webhookReceipt, 4)
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		publicKey, err := base64.StdEncoding.DecodeString(r.Header.Get(WebhookHeaderPublicKey))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		receipts <- webhookReceipt{
+			body:        body,
+			agentID:     r.Header.Get(WebhookHeaderAgent),
+			fingerprint: r.Header.Get(WebhookHeaderFingerprint),
+			publicKey:   string(publicKey),
+			signature:   r.Header.Get(WebhookHeaderSignature),
+			taskState:   r.Header.Get(WebhookHeaderTaskState),
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer receiver.Close()
+
+	const conversation = "remote-task-conv-live-1"
+	invoker := &scriptedInvoker{results: []LocalInvokeResult{
+		{OK: true, ConversationID: conversation,
+			Result: json.RawMessage(`{"text":"I need one detail.\n[[INPUT_REQUIRED: which quarter?]]"}`)},
+		{OK: true, ConversationID: conversation,
+			Result: json.RawMessage(`{"text":"Q3 revenue was 4.1M."}`)},
+	}}
+	executorStore := newFakeTaskStore()
+	executor := taskEdge(t, url, executorID, invoker, executorStore, func(c *Config) {
+		c.TaskExecutorWebhook = receiver.URL
+	})
+	_ = executor
+	callerStore := newFakeTaskStore()
+	caller := taskEdge(t, url, callerID, &recordingInvoker{}, callerStore, nil)
+
+	if _, err := caller.CreateRemoteTask(t.Context(), CreateRemoteTaskParams{
+		Target:     executorID,
+		TaskID:     "ask-live-1",
+		AllowInput: true,
+		Input: map[string]any{
+			"target":    "agent-1",
+			"operation": OperationTask,
+			"arguments": map[string]any{"prompt": "Report the quarter's revenue"},
+		},
+		CreateTimeout: 5 * time.Second,
+	}); err != nil {
+		t.Fatalf("CreateRemoteTask: %v", err)
+	}
+
+	// The executor's task pauses with the question and the conversation.
+	deadline := time.Now().Add(5 * time.Second)
+	var paused Task
+	for time.Now().Before(deadline) {
+		if task, ok, _ := executorStore.GetTask(callerID, "ask-live-1"); ok && task.State == TaskInputRequired {
+			paused = task
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if paused.State != TaskInputRequired {
+		task, _, _ := executorStore.GetTask(callerID, "ask-live-1")
+		t.Fatalf("the task never paused (state %s)", task.State)
+	}
+	if paused.PendingInput != "which quarter?" {
+		t.Fatalf("the question was not recorded: %q", paused.PendingInput)
+	}
+	if paused.Conversation != conversation {
+		t.Fatalf("the conversation was not recorded: %q", paused.Conversation)
+	}
+
+	// The executor's operator is pushed: a signed POST whose payload is the
+	// task, question included.
+	select {
+	case receipt := <-receipts:
+		if err := VerifySignedBody(receipt.agentID, receipt.fingerprint,
+			receipt.publicKey, receipt.body, receipt.signature); err != nil {
+			t.Fatalf("the input webhook did not verify: %v", err)
+		}
+		if receipt.fingerprint != executor.Status().Fingerprint {
+			t.Fatalf("input webhook fingerprint %s is not the executor's %s",
+				receipt.fingerprint, executor.Status().Fingerprint)
+		}
+		if receipt.taskState != string(TaskInputRequired) {
+			t.Fatalf("the state header should say input-required, got %s", receipt.taskState)
+		}
+		var delivered Task
+		if err := json.Unmarshal(receipt.body, &delivered); err != nil {
+			t.Fatalf("the input payload is not task JSON: %v", err)
+		}
+		if delivered.TaskID != "ask-live-1" || delivered.PendingInput != "which quarter?" {
+			t.Fatalf("the input payload is wrong: %+v", delivered)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the executor input webhook was never delivered (attempts=%d failures=%d)",
+			observability.Usage.MeshTaskWebhookTotal.Load(),
+			observability.Usage.MeshTaskWebhookFailedTotal.Load())
+	}
+
+	// The caller's own record learns the state through the event, and a
+	// refresh mirrors the question.
+	stub := waitStubState(t, callerStore, "ask-live-1", TaskInputRequired)
+	if _, _, err := caller.RefreshTaskStub(t.Context(), "ask-live-1", 0); err != nil {
+		t.Fatalf("RefreshTaskStub: %v", err)
+	}
+	if refreshed, ok, _ := callerStore.GetTaskStub("ask-live-1"); !ok || refreshed.PendingInput != "which quarter?" {
+		t.Fatalf("the refresh did not mirror the question: ok=%v pending=%q",
+			ok, refreshed.PendingInput)
+	}
+	_ = stub
+
+	// The caller answers; the owning edge resumes the run in place.
+	if _, err := caller.SubmitTaskInput(t.Context(), "ask-live-1", json.RawMessage(`"Q3"`)); err != nil {
+		t.Fatalf("SubmitTaskInput: %v", err)
+	}
+
+	deadline = time.Now().Add(5 * time.Second)
+	var done Task
+	for time.Now().Before(deadline) {
+		if task, ok, _ := executorStore.GetTask(callerID, "ask-live-1"); ok && task.State == TaskCompleted {
+			done = task
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if done.State != TaskCompleted {
+		task, _, _ := executorStore.GetTask(callerID, "ask-live-1")
+		t.Fatalf("the resumed task never completed (state %s)", task.State)
+	}
+	if string(done.Result) != `{"text":"Q3 revenue was 4.1M."}` {
+		t.Fatalf("the resumed run's result: %s", done.Result)
+	}
+	if done.PendingInput != "" {
+		t.Fatalf("the question should be cleared on resume, got %q", done.PendingInput)
+	}
+	requests := invoker.recorded()
+	if len(requests) != 2 {
+		t.Fatalf("expected ask + resume invocations, got %d", len(requests))
+	}
+	if requests[1].ConversationID != conversation {
+		t.Fatalf("the resume must continue the recorded conversation, got %q", requests[1].ConversationID)
+	}
+	if !requests[0].AllowInput || !requests[1].AllowInput {
+		t.Fatal("both runs must carry the input opt-in (the task may ask again)")
+	}
+
+	// And the caller's record reaches completed through the event path.
+	waitStubState(t, callerStore, "ask-live-1", TaskCompleted)
+}

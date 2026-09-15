@@ -237,3 +237,121 @@ func TestPruneTasksRemovesOnlyOldTerminalTasks(t *testing.T) {
 		t.Fatal("a terminal task inside the window must stay")
 	}
 }
+
+// TestTaskInputFieldsSurviveTheRoundTrip pins the v1.5.19 input-protocol
+// columns: the opt-in, the pending question, the resume conversation, and the
+// question mirrored onto a caller stub.
+func TestTaskInputFieldsSurviveTheRoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	now := time.Now().UTC()
+	paused := taskAt("caller/1", "asking-1", mesh.TaskInputRequired, now)
+	paused.AllowInput = true
+	paused.PendingInput = "which quarter?"
+	paused.Conversation = "remote-task-conv-abc"
+	if err := store.SaveTask(paused); err != nil {
+		t.Fatalf("SaveTask: %v", err)
+	}
+	got, ok, err := store.GetTask("caller/1", "asking-1")
+	if err != nil || !ok {
+		t.Fatalf("GetTask: ok=%v err=%v", ok, err)
+	}
+	if !got.AllowInput || got.PendingInput != "which quarter?" ||
+		got.Conversation != "remote-task-conv-abc" {
+		t.Fatalf("input fields were dropped: allow=%v pending=%q conversation=%q",
+			got.AllowInput, got.PendingInput, got.Conversation)
+	}
+
+	stub := mesh.TaskStub{TaskID: "asking-1", Target: "acme/berlin/edge-1",
+		State: mesh.TaskInputRequired, PendingInput: "which quarter?",
+		CreatedAt: now, UpdatedAt: now}
+	if err := store.SaveTaskStub(stub); err != nil {
+		t.Fatalf("SaveTaskStub: %v", err)
+	}
+	stubAgain, ok, err := store.GetTaskStub("asking-1")
+	if err != nil || !ok {
+		t.Fatalf("GetTaskStub: ok=%v err=%v", ok, err)
+	}
+	if stubAgain.PendingInput != "which quarter?" {
+		t.Fatalf("the stub dropped the pending question: %q", stubAgain.PendingInput)
+	}
+}
+
+// TestTaskStoreMigratesTheInputColumns exercises the upgrade path from the
+// v1.5.18 shape (stream and notify_url present, no input-protocol columns).
+func TestTaskStoreMigratesTheInputColumns(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "mesh-input-migration.db"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	oldTasks := `
+CREATE TABLE mesh_tasks (
+	caller_id          TEXT NOT NULL,
+	task_id            TEXT NOT NULL,
+	caller_fingerprint TEXT NOT NULL DEFAULT '',
+	agent              TEXT NOT NULL DEFAULT '',
+	operation          TEXT NOT NULL DEFAULT '',
+	arguments_json     TEXT,
+	state              TEXT NOT NULL,
+	result_json        TEXT,
+	error_code         TEXT NOT NULL DEFAULT '',
+	error_message      TEXT NOT NULL DEFAULT '',
+	trace_id           TEXT NOT NULL DEFAULT '',
+	stream             INTEGER NOT NULL DEFAULT 0,
+	created_at         TEXT NOT NULL,
+	updated_at         TEXT NOT NULL,
+	PRIMARY KEY (caller_id, task_id)
+)`
+	oldStubs := `
+CREATE TABLE mesh_task_stubs (
+	task_id        TEXT PRIMARY KEY,
+	target         TEXT NOT NULL,
+	skill          TEXT NOT NULL DEFAULT '',
+	state          TEXT NOT NULL,
+	result_json    TEXT,
+	error_message  TEXT NOT NULL DEFAULT '',
+	notify_url     TEXT NOT NULL DEFAULT '',
+	completed_sync INTEGER NOT NULL DEFAULT 0,
+	created_at     TEXT NOT NULL,
+	updated_at     TEXT NOT NULL
+)`
+	for _, statement := range []string{oldTasks, oldStubs} {
+		if _, err := database.Pool().Exec(statement); err != nil {
+			t.Fatalf("create legacy table: %v", err)
+		}
+	}
+
+	store, err := NewStore(database)
+	if err != nil {
+		t.Fatalf("NewStore over the v1.5.18 schema: %v", err)
+	}
+	now := time.Now().UTC()
+	paused := taskAt("caller/1", "migrated-ask-1", mesh.TaskInputRequired, now)
+	paused.AllowInput = true
+	paused.PendingInput = "which plan?"
+	paused.Conversation = "remote-task-conv-legacy"
+	if err := store.SaveTask(paused); err != nil {
+		t.Fatalf("SaveTask after migration: %v", err)
+	}
+	got, ok, err := store.GetTask("caller/1", "migrated-ask-1")
+	if err != nil || !ok {
+		t.Fatalf("GetTask after migration: ok=%v err=%v", ok, err)
+	}
+	if !got.AllowInput || got.PendingInput != "which plan?" ||
+		got.Conversation != "remote-task-conv-legacy" {
+		t.Fatalf("input fields did not survive the migrated schema: %+v", got)
+	}
+
+	stub := mesh.TaskStub{TaskID: "migrated-ask-1", Target: "acme/berlin/edge-1",
+		State: mesh.TaskInputRequired, PendingInput: "which plan?",
+		CreatedAt: now, UpdatedAt: now}
+	if err := store.SaveTaskStub(stub); err != nil {
+		t.Fatalf("SaveTaskStub after migration: %v", err)
+	}
+	if stubAgain, ok, _ := store.GetTaskStub("migrated-ask-1"); !ok ||
+		stubAgain.PendingInput != "which plan?" {
+		t.Fatalf("the stub's pending question did not survive migration: ok=%v pending=%q",
+			ok, stubAgain.PendingInput)
+	}
+}

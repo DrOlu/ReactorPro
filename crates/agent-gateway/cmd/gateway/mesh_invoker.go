@@ -50,8 +50,15 @@ func (i desktopMeshInvoker) InvokeLocalAgent(ctx context.Context, request mesh.L
 	if err != nil {
 		return refuseRemoteTask("invalid_request", err.Error()), nil
 	}
-	if arguments.Prompt == "" {
+	prompt := arguments.Prompt
+	if prompt == "" {
 		return refuseRemoteTask("invalid_request", "task arguments require a non-empty prompt"), nil
+	}
+	// The input-request convention is taught, not configured: a task that
+	// opted in carries the instruction, so the agent knows the one line that
+	// pauses the task instead of completing it.
+	if request.AllowInput {
+		prompt += mesh.TaskInputInstruction
 	}
 
 	// Wake the Chat WebView runtime before submitting, exactly as the browser
@@ -64,20 +71,30 @@ func (i desktopMeshInvoker) InvokeLocalAgent(ctx context.Context, request mesh.L
 	// A streaming task gets the live view: growth deltas as the desktop commits
 	// snapshots. The transport is unchanged otherwise — an ordinary invoke
 	// answers whole, and the mesh's streamer is what makes deltas into chunks.
+	// A resumed task names its conversation: the answer continues the one the
+	// question was asked in, so the agent keeps its own context.
 	var result session.RemoteTaskResult
-	if request.Progress != nil {
-		result, err = i.manager.SubmitRemoteTaskProgress(ctx, request.AgentID, arguments.Prompt, request.Progress)
-	} else {
-		result, err = i.manager.SubmitRemoteTask(ctx, request.AgentID, arguments.Prompt)
+	switch {
+	case request.ConversationID != "" && request.Progress != nil:
+		result, err = i.manager.SubmitRemoteTaskInConversation(ctx, request.AgentID,
+			request.ConversationID, prompt, request.Progress)
+	case request.ConversationID != "":
+		result, err = i.manager.SubmitRemoteTaskInConversation(ctx, request.AgentID,
+			request.ConversationID, prompt, nil)
+	case request.Progress != nil:
+		result, err = i.manager.SubmitRemoteTaskProgress(ctx, request.AgentID, prompt, request.Progress)
+	default:
+		result, err = i.manager.SubmitRemoteTask(ctx, request.AgentID, prompt)
 	}
 	if err != nil {
 		return mesh.LocalInvokeResult{}, translateInvokeError(err)
 	}
 	return mesh.LocalInvokeResult{
-		OK:           result.OK,
-		Result:       result.Output,
-		ErrorCode:    result.ErrorCode,
-		ErrorMessage: result.ErrorMessage,
+		OK:             result.OK,
+		Result:         result.Output,
+		ErrorCode:       result.ErrorCode,
+		ErrorMessage:    result.ErrorMessage,
+		ConversationID:  result.ConversationID,
 	}, nil
 }
 

@@ -241,6 +241,12 @@ type Config struct {
 	// the URL never comes from a remote peer — a peer-supplied URL would be a
 	// request-forgery vector, so the field is not read from invoke input.
 	TaskWebhook string `json:"taskWebhook,omitempty"`
+	// TaskExecutorWebhook is the executing edge's own notification URL: when
+	// a peer's task running here enters input-required, one signed POST with
+	// the task (question included) is delivered there, so the operator on this
+	// side learns a remote caller's work is waiting on a human. Re-armed every
+	// time the task resumes, so a task that asks twice notifies twice.
+	TaskExecutorWebhook string `json:"taskExecutorWebhook,omitempty"`
 
 	// Events to subscribe to automatically once connected.
 	EventSubscriptions []string `json:"eventSubscriptions"`

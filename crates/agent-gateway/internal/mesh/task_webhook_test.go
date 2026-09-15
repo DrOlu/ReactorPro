@@ -157,3 +157,62 @@ func TestRetryTaskOnlyAcceptsFailedOrCanceledTasks(t *testing.T) {
 		t.Fatalf("a rival retrying another tenant's task should be told it does not exist, got %v", err)
 	}
 }
+
+func TestNotifyTaskInputRequiredFiresOnceAndRearms(t *testing.T) {
+	manager := invokeTestManager(t, invokeAgents(), nil)
+	question := Task{TaskID: "ask-1", Caller: "acme/lagos/edge-1",
+		State: TaskInputRequired, PendingInput: "which quarter?"}
+	const url = "http://127.0.0.1:1/inputs"
+
+	// The same entry into input-required notifies once.
+	for i := 0; i < 3; i++ {
+		manager.notifyTaskInputRequired(question, url)
+	}
+	manager.taskMu.Lock()
+	fired := len(manager.webhookFired)
+	manager.taskMu.Unlock()
+	if fired != 1 {
+		t.Fatalf("one entry into input-required notifies once, not %d times", fired)
+	}
+
+	// A terminal push for the same task at the same URL is a different
+	// notification — the class is part of the key, so the receiver can be
+	// told "finished" and "needs input" of the same task.
+	manager.notifyTaskTerminal(TaskStub{TaskID: "ask-1", State: TaskCompleted, NotifyURL: url})
+	manager.taskMu.Lock()
+	fired = len(manager.webhookFired)
+	manager.taskMu.Unlock()
+	if fired != 2 {
+		t.Fatalf("input and terminal are different notifications, saw %d", fired)
+	}
+
+	// Leaving input-required re-arms the input class, so a second question
+	// notifies again: the clear forgets the claim (back to the terminal one
+	// alone), and the same state fires afresh.
+	manager.clearWebhookFired("ask-1", url, webhookClassInput)
+	manager.taskMu.Lock()
+	fired = len(manager.webhookFired)
+	manager.taskMu.Unlock()
+	if fired != 1 {
+		t.Fatalf("clearing re-arms by forgetting the input claim, saw %d", fired)
+	}
+	manager.notifyTaskInputRequired(question, url)
+	manager.taskMu.Lock()
+	fired = len(manager.webhookFired)
+	manager.taskMu.Unlock()
+	if fired != 2 {
+		t.Fatalf("a re-armed input notification fires again, saw %d", fired)
+	}
+}
+
+func TestNotifyTaskInputRequiredIgnoresEmptyURLAndUnknownPayloads(t *testing.T) {
+	manager := invokeTestManager(t, invokeAgents(), nil)
+	manager.notifyTaskInputRequired(Task{TaskID: "ask-2", State: TaskInputRequired}, "")
+	manager.notifyTaskInputRequired("not a task", "http://127.0.0.1:1/x")
+	manager.taskMu.Lock()
+	fired := len(manager.webhookFired)
+	manager.taskMu.Unlock()
+	if fired != 0 {
+		t.Fatalf("nothing should have been claimed, saw %d", fired)
+	}
+}

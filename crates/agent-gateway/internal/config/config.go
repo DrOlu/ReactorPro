@@ -104,6 +104,9 @@ type Config struct {
 	MeshTaskRetention  time.Duration
 	// MeshTaskWebhook is the gateway-wide default task notification URL.
 	MeshTaskWebhook string
+	// MeshTaskExecutorWebhook is the executing edge's input-required
+	// notification URL — where a peer's paused task pushes its question.
+	MeshTaskExecutorWebhook string
 
 	// MeshApprovalHistory bounds how many decided approvals are retained, in
 	// memory and in durable storage. A negative value removes the bound.
@@ -156,6 +159,7 @@ func Load() *Config {
 	flag.DurationVar(&cfg.MeshTaskMaxRuntime, "mesh-task-max-runtime", getenvDuration("LIVEAGENT_GATEWAY_MESH_TASK_MAX_RUNTIME", 0), "how long one async task may run before the edge fails it (0 uses thirty minutes)")
 	flag.DurationVar(&cfg.MeshTaskRetention, "mesh-task-retention", getenvDuration("LIVEAGENT_GATEWAY_MESH_TASK_RETENTION", 0), "how long a finished task stays queryable before it is pruned (0 uses seven days)")
 	flag.StringVar(&cfg.MeshTaskWebhook, "mesh-task-webhook", getenv("LIVEAGENT_GATEWAY_MESH_TASK_WEBHOOK", ""), "default URL to POST a signed task notification to when a task this gateway created finishes (a per-task notifyUrl on the create takes precedence)")
+	flag.StringVar(&cfg.MeshTaskExecutorWebhook, "mesh-task-executor-webhook", getenv("LIVEAGENT_GATEWAY_MESH_TASK_EXECUTOR_WEBHOOK", ""), "URL to POST a signed notification to when a task this gateway executes for a peer pauses for input (the task and its question are the payload)")
 	flag.IntVar(&cfg.MeshApprovalHistory, "mesh-approval-history", getenvInt("LIVEAGENT_GATEWAY_MESH_APPROVAL_HISTORY", mesh.DefaultMaxApprovalHistory), "how many decided mesh approvals to retain in memory and on disk (negative removes the bound)")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
 	flag.DurationVar(&cfg.ChatPrepareTimeout, "chat-prepare-timeout", getenvDuration("LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT", 2*time.Second), "timeout for the pre-submit desktop agent liveness probe")
@@ -376,6 +380,7 @@ func (c *Config) MeshConfig() mesh.Config {
 		cfg.TaskRetention = c.MeshTaskRetention
 	}
 	cfg.TaskWebhook = strings.TrimSpace(c.MeshTaskWebhook)
+	cfg.TaskExecutorWebhook = strings.TrimSpace(c.MeshTaskExecutorWebhook)
 	// Only override the default capabilities when the operator set some, so the
 	// shipping default is not replaced by an empty list.
 	if capabilities := splitList(c.MeshCapabilities); len(capabilities) > 0 {

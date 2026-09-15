@@ -450,3 +450,81 @@ func TestSubmitRemoteTaskSeedsUserMessage(t *testing.T) {
 		t.Fatal("the remote task prompt was not seeded into the conversation log")
 	}
 }
+
+// TestSubmitRemoteTaskInConversationResumesInPlace is the input-required
+// resume path: the second run names the first's conversation, the result
+// reports that conversation, and the prior turn's entries are context for the
+// agent — never counted as the new run's output.
+func TestSubmitRemoteTaskInConversationResumesInPlace(t *testing.T) {
+	manager, agentSession := remoteTaskTestManager(t)
+
+	type outcome struct {
+		result RemoteTaskResult
+		err    error
+	}
+	first := make(chan outcome, 1)
+	go func() {
+		result, err := manager.SubmitRemoteTask(context.Background(), remoteTaskTestAgentID, "report Q3 revenue")
+		first <- outcome{result: result, err: err}
+	}()
+
+	deliveryOne := receiveRemoteTaskDelivery(t, agentSession)
+	completeRemoteTask(t, manager, deliveryOne, "completed",
+		`[{"id":"u1","kind":"user","text":"report Q3 revenue"},`+
+			`{"id":"a1","kind":"assistant","text":"which quarter?"}]`)
+	gotFirst := <-first
+	if gotFirst.err != nil || !gotFirst.result.OK {
+		t.Fatalf("first run: %+v err=%v", gotFirst.result, gotFirst.err)
+	}
+	if gotFirst.result.ConversationID != deliveryOne.conversationID {
+		t.Fatalf("the result must report the run's conversation: got %q want %q",
+			gotFirst.result.ConversationID, deliveryOne.conversationID)
+	}
+
+	// The answer resumes the same conversation.
+	second := make(chan outcome, 1)
+	go func() {
+		result, err := manager.SubmitRemoteTaskInConversation(context.Background(),
+			remoteTaskTestAgentID, deliveryOne.conversationID, "Q3", nil)
+		second <- outcome{result: result, err: err}
+	}()
+
+	deliveryTwo := receiveRemoteTaskDelivery(t, agentSession)
+	if deliveryTwo.conversationID != deliveryOne.conversationID {
+		t.Fatalf("the resume minted a new conversation: got %q want %q",
+			deliveryTwo.conversationID, deliveryOne.conversationID)
+	}
+	if deliveryTwo.prompt != "Q3" {
+		t.Fatalf("the answer should be delivered as the prompt, got %q", deliveryTwo.prompt)
+	}
+	// The new run's terminal carries both turns' entries — the conversation is
+	// the agent's context — but only the new run's assistant text is the answer.
+	completeRemoteTask(t, manager, deliveryTwo, "completed",
+		`[{"id":"u1","kind":"user","text":"report Q3 revenue"},`+
+			`{"id":"a1","kind":"assistant","text":"which quarter?"},`+
+			`{"id":"u2","kind":"user","text":"Q3"},`+
+			`{"id":"a2","kind":"assistant","text":"Q3 revenue was 4.1M."}]`)
+
+	select {
+	case got := <-second:
+		if got.err != nil {
+			t.Fatalf("SubmitRemoteTaskInConversation: %v", got.err)
+		}
+		if !got.result.OK {
+			t.Fatalf("resumed result = %+v, want OK", got.result)
+		}
+		if string(got.result.Output) != `{"text":"Q3 revenue was 4.1M."}` {
+			t.Fatalf("resumed output = %s, want only the new run's answer (the old question is context, not output)",
+				got.result.Output)
+		}
+		if got.result.ConversationID != deliveryOne.conversationID {
+			t.Fatalf("the resumed result must report the same conversation, got %q", got.result.ConversationID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the resumed run did not return after the run settled")
+	}
+
+	if count := remoteTaskSubscriberCount(manager, deliveryOne.conversationID); count != 0 {
+		t.Fatalf("subscription leaked: %d subscribers remain", count)
+	}
+}
