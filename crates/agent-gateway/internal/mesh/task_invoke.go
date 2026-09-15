@@ -536,18 +536,43 @@ func (m *Manager) CreateRemoteTask(ctx context.Context, params CreateRemoteTaskP
 		UpdatedAt: now,
 	}
 	var respond RespondPayload
+	// Two synchronous dialects answer a CREATE, and both must complete the
+	// task rather than leave it "working" forever:
+	//   - an unupgraded ReactorPro edge wraps its answer as {output: {...}}
+	//     (the skill reply shape);
+	//   - the fleet's text-based bridges answer with the payload itself —
+	//     {task_id, text, ...} and no output key at all. Not recognising the
+	//     second dialect recorded real fleet peers' answers as eternal
+	//     "working" tasks; discovered live against grip-cli-001.
+	var dialect struct {
+		Text    string `json:"text"`
+		Message string `json:"message"`
+	}
 	if len(envelope.Payload) > 0 {
 		_ = json.Unmarshal(envelope.Payload, &respond)
+		_ = json.Unmarshal(envelope.Payload, &dialect)
 	}
 	handle, handleErr := decodeTaskHandle(respond.Output)
 	switch {
 	case handleErr == nil && handle.TaskID != "":
 		stub.State = handle.State
 	case respond.Output != nil:
-		// The peer answered synchronously — an unupgraded edge or a
-		// text-based bridge. One reply, task complete.
+		// The ReactorPro dialect: one reply, task complete.
 		encoded, err := json.Marshal(respond.Output)
 		if err == nil {
+			stub.Result = encoded
+		}
+		stub.State = TaskCompleted
+		stub.CompletedSync = true
+	case dialect.Text != "" || dialect.Message != "":
+		// The bridge dialect: the answer is the payload's top-level text.
+		// Stored in the same {"text": ...} shape an async invoke result
+		// arrives in, so a caller reads one shape whatever the peer runs.
+		answer := dialect.Text
+		if answer == "" {
+			answer = dialect.Message
+		}
+		if encoded, err := json.Marshal(map[string]string{"text": answer}); err == nil {
 			stub.Result = encoded
 		}
 		stub.State = TaskCompleted
@@ -608,6 +633,18 @@ func (m *Manager) RefreshTaskStub(ctx context.Context, taskID string) (TaskStub,
 	}
 	if !ok {
 		return TaskStub{}, Task{}, coded(CodeSkillNotFound, "no task %q", taskID)
+	}
+	// A sync-completed stub has no task.get to ask — its peer answered the
+	// old way, and a task.get dispatched there would be spent as a real agent
+	// turn for nothing. Everything else may fetch: task.get on a task-capable
+	// edge is a store read, and a terminal stub with no cached result is a
+	// cache miss, not a finished conversation — fetching the result is the
+	// one thing refresh exists for.
+	if stub.CompletedSync {
+		return stub, Task{}, nil
+	}
+	if TaskTerminal(stub.State) && len(stub.Result) > 0 {
+		return stub, Task{}, nil
 	}
 	envelope, err := m.Dispatch(ctx, stub.Target, SkillTaskGet, map[string]any{"task_id": taskID}, 30*time.Second)
 	if err != nil {
