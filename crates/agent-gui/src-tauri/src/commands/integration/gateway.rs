@@ -9,8 +9,7 @@ use crate::services::gateway::{
     GatewayChatCheckpointCommitResult, GatewayChatCheckpointInput, GatewayChatClaimedRequest,
     GatewayChatIngressAcceptResult, GatewayChatIngressBatchInput, GatewayChatQueueEventInput,
     GatewayChatQueueResponseInput, GatewayClarifyDeltaInput, GatewayClarifyRespondInput,
-    GatewayController,
-    GatewayStatusSnapshot,
+    GatewayController, GatewayStatusSnapshot,
 };
 use crate::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
 use crate::services::tunnel::{
@@ -351,8 +350,8 @@ fn gateway_api_base_url(remote: &RemoteSettingsPayload) -> Result<String, String
     } else {
         format!("https://{raw}")
     };
-    let mut url =
-        reqwest::Url::parse(&normalized).map_err(|e| format!("Invalid gateway URL {raw:?}: {e}"))?;
+    let mut url = reqwest::Url::parse(&normalized)
+        .map_err(|e| format!("Invalid gateway URL {raw:?}: {e}"))?;
     url.set_port(Some(port))
         .map_err(|_| format!("Gateway URL {raw:?} cannot take a port"))?;
     url.set_path("");
@@ -366,32 +365,58 @@ fn gateway_api_base_url(remote: &RemoteSettingsPayload) -> Result<String, String
 /// The desktop WebView is a different origin from the gateway and the gateway
 /// sends no CORS headers, so the request has to go through the Rust side. The
 /// gateway token never leaves this process, and callers can only reach `/api/`.
+/// The longest a single gateway API call may run, and the cap on a caller's
+/// own request. Mesh dispatches run a real agent turn on a peer and routinely
+/// take tens of seconds, so the old fixed 30s was too short for them; the cap
+/// exists so a caller cannot hold a connection open indefinitely.
+const GATEWAY_API_MAX_TIMEOUT_SECS: u64 = 180;
+const GATEWAY_API_DEFAULT_TIMEOUT_SECS: u64 = 30;
+
+/// Resolve a gateway API base URL and a caller-supplied path to one final URL,
+/// refusing anything that would leave /api/.
+///
+/// The prefix check must happen on the RESOLVED path, not the raw string: a
+/// path like "/api/../../admin" passes a naive starts_with("/api/") and is
+/// then normalised by the URL parser when the request is made, letting
+/// webview-controlled code reach endpoints outside /api/ with the stored
+/// bearer token. Parsing first normalises the dot segments, so checking the
+/// parsed path closes that.
+fn resolve_gateway_api_url(base: &str, path: &str) -> Result<reqwest::Url, String> {
+    let url = reqwest::Url::parse(&format!("{base}{}", path.trim()))
+        .map_err(|e| format!("Invalid gateway URL: {e}"))?;
+    if !url.path().starts_with("/api/") {
+        return Err("Gateway API path must start with /api/.".to_string());
+    }
+    Ok(url)
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn gateway_api_request(
     method: String,
     path: String,
     body: Option<Value>,
+    timeout_secs: Option<u64>,
 ) -> Result<Value, String> {
     let conn = open_db()?;
     let remote = load_remote_settings(&conn)?;
-    let path = path.trim();
-    if !path.starts_with("/api/") {
-        return Err("Gateway API path must start with /api/.".to_string());
-    }
     if remote.token.trim().is_empty() {
         return Err("No gateway token is configured. Set it in Settings > Remote.".to_string());
     }
     let base = gateway_api_base_url(&remote)?;
+    // Resolve BEFORE the request is built, so the guard sees the final path.
+    let url = resolve_gateway_api_url(&base, &path)?;
 
+    let timeout_secs = timeout_secs
+        .unwrap_or(GATEWAY_API_DEFAULT_TIMEOUT_SECS)
+        .clamp(1, GATEWAY_API_MAX_TIMEOUT_SECS);
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
         .map_err(|e| format!("Failed to build the gateway client: {e}"))?;
 
-    let url = format!("{base}{path}");
     let request = match method.to_ascii_uppercase().as_str() {
-        "GET" => client.get(&url),
-        "POST" => client.post(&url).json(&body.unwrap_or(Value::Null)),
+        "GET" => client.get(url),
+        "POST" => client.post(url).json(&body.unwrap_or(Value::Null)),
         other => return Err(format!("Unsupported gateway API method: {other}")),
     };
     let response = request
@@ -421,4 +446,44 @@ pub async fn gateway_api_request(
         return Err(message);
     }
     Ok(parsed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_gateway_api_url;
+
+    const BASE: &str = "http://127.0.0.1:3000";
+
+    #[test]
+    fn plain_api_path_is_allowed() {
+        let url = resolve_gateway_api_url(BASE, "/api/mesh/agents").expect("allowed");
+        assert_eq!(url.path(), "/api/mesh/agents");
+    }
+
+    #[test]
+    fn dot_segments_cannot_escape_the_api_prefix() {
+        // This is the shape the audit flagged: a naive starts_with("/api/")
+        // accepts it, and the URL parser then normalises it outside /api/.
+        assert!(resolve_gateway_api_url(BASE, "/api/../../admin/secret").is_err());
+        assert!(resolve_gateway_api_url(BASE, "/api/foo/../../../admin").is_err());
+        assert!(resolve_gateway_api_url(BASE, "/api/..").is_err());
+    }
+
+    #[test]
+    fn a_path_that_stays_inside_after_normalising_is_allowed() {
+        let url = resolve_gateway_api_url(BASE, "/api/mesh/dispatch").expect("allowed");
+        assert!(url.path().starts_with("/api/"));
+    }
+
+    #[test]
+    fn a_non_api_path_is_refused() {
+        assert!(resolve_gateway_api_url(BASE, "/admin").is_err());
+        assert!(resolve_gateway_api_url(BASE, "api/mesh/agents").is_err());
+    }
+
+    #[test]
+    fn whitespace_is_trimmed_but_the_path_is_still_checked() {
+        let url = resolve_gateway_api_url(BASE, "  /api/status  ").expect("allowed");
+        assert_eq!(url.path(), "/api/status");
+    }
 }

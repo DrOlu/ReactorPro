@@ -167,6 +167,8 @@ mod tests {
             enable_web_ssh_terminal: false,
             enable_web_git: false,
             enable_web_tunnels: false,
+            enable_mesh_chat: false,
+            mesh_chat_timeout_ms: 120_000,
         });
 
         assert_eq!(normalized.gateway_url, "https://agent.cnweb.org");
@@ -240,6 +242,8 @@ mod tests {
                 enable_web_ssh_terminal: true,
                 enable_web_git: true,
                 enable_web_tunnels: true,
+                enable_mesh_chat: false,
+                mesh_chat_timeout_ms: 120_000,
             },
         )
         .expect("seed manual Agent ID");

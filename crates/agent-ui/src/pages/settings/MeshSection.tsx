@@ -16,7 +16,11 @@ import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { emptyMeshStatus, type MeshAgent, type MeshStatus } from "@liveagent/ui/lib/mesh/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { SettingsGroup, SettingsRow } from "@liveagent/ui/pages/settings/shared";
+import {
+  AgentActivationSwitch,
+  SettingsGroup,
+  SettingsRow,
+} from "@liveagent/ui/pages/settings/shared";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 /**
@@ -50,8 +54,9 @@ function ActionRow({
  * gateway API rather than a local setting: it reports the bridge state and
  * offers the mesh operations the gateway exposes.
  */
-export function MeshSection(_props: SettingsSectionProps) {
+export function MeshSection(props: SettingsSectionProps) {
   const { t } = useLocale();
+  const { settings, setSettings } = props;
   const [status, setStatus] = useState<MeshStatus>(emptyMeshStatus);
   const [agents, setAgents] = useState<MeshAgent[]>([]);
   const [error, setError] = useState("");
@@ -304,6 +309,54 @@ export function MeshSection(_props: SettingsSectionProps) {
                   .map((item) => `${item.subject} (${item.received})`)
                   .join(", ")}
               </span>
+            }
+          />
+        ) : null}
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.meshChatTitle")}>
+        <GroupNote text={t("settings.meshChatHint")} />
+        <SettingsRow
+          title={t("settings.meshChatEnable")}
+          description={t("settings.meshChatEnableHint")}
+          control={
+            <AgentActivationSwitch
+              checked={settings.remote.enableMeshChat === true}
+              title={t("settings.meshChatEnable")}
+              onToggle={() =>
+                setSettings((prev) => ({
+                  ...prev,
+                  remote: { ...prev.remote, enableMeshChat: !prev.remote.enableMeshChat },
+                }))
+              }
+            />
+          }
+        />
+        {settings.remote.enableMeshChat ? (
+          <SettingsRow
+            title={t("settings.meshChatTimeout")}
+            description={t("settings.meshChatTimeoutHint")}
+            control={
+              <Input
+                type="number"
+                min={5000}
+                max={600000}
+                step={5000}
+                value={Math.round(settings.remote.meshChatTimeoutMs / 1000)}
+                onChange={(event) => {
+                  const seconds = Number(event.target.value);
+                  if (!Number.isFinite(seconds)) return;
+                  setSettings((prev) => ({
+                    ...prev,
+                    remote: {
+                      ...prev.remote,
+                      // Stored in ms; clamped on save, so a wild draft cannot persist.
+                      meshChatTimeoutMs: Math.min(600_000, Math.max(5_000, seconds * 1000)),
+                    },
+                  }));
+                }}
+                className="h-8 w-[120px] text-xs"
+              />
             }
           />
         ) : null}

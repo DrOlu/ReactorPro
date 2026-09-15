@@ -4,10 +4,18 @@ import {
   type MeshApproval,
   type MeshClient,
   type MeshDiscoverFilter,
+  type MeshDispatchReply,
+  type MeshDispatchRequest,
+  normalizeMeshDispatchReply,
   normalizeMeshStatus,
 } from "@liveagent/ui/lib/mesh/types";
 
 import { loadToken } from "@/lib/storage";
+
+/**
+ * The default wait for a cross-fleet dispatch — an agent turn on the peer.
+ */
+export const DEFAULT_DISPATCH_TIMEOUT_MS = 120_000;
 
 /**
  * WebUI mesh client.
@@ -68,6 +76,19 @@ export const meshClient: MeshClient = {
       `/api/mesh/agents${buildDiscoverQuery(filter)}`,
     );
     return payload.agents ?? [];
+  },
+
+  async dispatch(request: MeshDispatchRequest): Promise<MeshDispatchReply> {
+    const timeoutMs = request.timeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS;
+    // fetch has no timeout of its own; an agent turn can legitimately take
+    // minutes, so only the gateway's own dispatch timeout bounds the wait.
+    const payload = await gatewayApiRequest<unknown>("POST", "/api/mesh/dispatch", {
+      target: request.target,
+      skill: "invoke",
+      input: { text: request.text },
+      timeoutMs,
+    });
+    return normalizeMeshDispatchReply(payload);
   },
 
   async register() {

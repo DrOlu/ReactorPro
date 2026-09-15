@@ -58,6 +58,14 @@ pub struct RemoteSettingsPayload {
     pub enable_web_git: bool,
     #[serde(default)]
     pub enable_web_tunnels: bool,
+    /// Mesh chat tools (MeshPeers/MeshSend). App-side only: the gateway has its
+    /// own mesh configuration, so this is not part of the gateway sync payload.
+    #[serde(default)]
+    pub enable_mesh_chat: bool,
+    /// One MeshSend budget in milliseconds; a dispatch runs a real agent turn
+    /// on the peer, so this is minutes-scale.
+    #[serde(default = "default_mesh_chat_timeout_ms")]
+    pub mesh_chat_timeout_ms: u64,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeSshProxyConfig {

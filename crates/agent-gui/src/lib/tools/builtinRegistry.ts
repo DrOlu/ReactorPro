@@ -31,6 +31,7 @@ import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
+import { createMeshTools } from "./meshTools";
 import { createExitPlanModeTools, isPlanModeAllowedTool } from "./planModeTools";
 import { createShellTools, type ShellSandboxSettings } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
@@ -198,6 +199,10 @@ type BuildBuiltinBaseToolRegistryParams = {
   /** Allows CUA tools to target ReactorPro itself; defaults to false, see cuaSelfGuard.ts. */
   cuaAllowSelfTargeting?: boolean;
   memoryToolMode?: "rw" | "ro";
+  /** Mesh chat tools (MeshPeers/MeshSend). Off unless the user enabled them. */
+  meshChatEnabled?: boolean;
+  /** One MeshSend budget; a dispatch runs a real agent turn on the peer. */
+  meshChatTimeoutMs?: number;
   remoteWebTunnelsEnabled?: boolean;
   tunnelProjectPathKey?: string;
   tunnelPublicBaseUrl?: string;
@@ -272,6 +277,11 @@ async function buildBaseBuiltinToolBundles(
     createMemoryTools({
       workdir: params.workdir,
       mode: params.memoryToolMode ?? "rw",
+    }),
+    createMeshTools({
+      enabled: params.meshChatEnabled === true,
+      runtimeScope: params.runtimeScope,
+      timeoutMs: params.meshChatTimeoutMs ?? 120_000,
     }),
     createTunnelManagerTools({
       enabled: params.remoteWebTunnelsEnabled === true && params.runtimeScope === "chat",

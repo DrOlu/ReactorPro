@@ -4,9 +4,19 @@ import {
   type MeshApproval,
   type MeshClient,
   type MeshDiscoverFilter,
+  type MeshDispatchReply,
+  type MeshDispatchRequest,
+  normalizeMeshDispatchReply,
   normalizeMeshStatus,
 } from "@liveagent/ui/lib/mesh/types";
 import { invoke } from "@tauri-apps/api/core";
+
+/**
+ * The default wait for a cross-fleet dispatch. A dispatch runs a real agent
+ * turn on the peer (observed 7-19s against live peers, and an agent turn can
+ * legitimately take far longer), so this is minutes-scale.
+ */
+export const DEFAULT_DISPATCH_TIMEOUT_MS = 120_000;
 
 /**
  * Desktop mesh client.
@@ -19,11 +29,14 @@ async function gatewayApiRequest<T>(
   method: "GET" | "POST",
   path: string,
   body?: unknown,
+  /** The Rust proxy caps this (see GATEWAY_API_MAX_TIMEOUT_SECS). */
+  timeoutSecs?: number,
 ): Promise<T> {
   return (await invoke<T>("gateway_api_request", {
     method,
     path,
     body: body ?? null,
+    timeoutSecs: timeoutSecs ?? null,
   })) as T;
 }
 
@@ -38,6 +51,24 @@ export const meshClient: MeshClient = {
       `/api/mesh/agents${buildDiscoverQuery(filter)}`,
     );
     return payload.agents ?? [];
+  },
+
+  async dispatch(request: MeshDispatchRequest): Promise<MeshDispatchReply> {
+    // A dispatch runs a real agent turn on the peer, so the default budget is
+    // minutes, not the proxy's 30s default.
+    const timeoutMs = request.timeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS;
+    const payload = await gatewayApiRequest<unknown>(
+      "POST",
+      "/api/mesh/dispatch",
+      {
+        target: request.target,
+        skill: "invoke",
+        input: { text: request.text },
+        timeoutMs,
+      },
+      Math.ceil(timeoutMs / 1000) + 5,
+    );
+    return normalizeMeshDispatchReply(payload);
   },
 
   async register() {

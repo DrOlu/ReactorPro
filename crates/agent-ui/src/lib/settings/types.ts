@@ -682,6 +682,13 @@ export type RemoteSettings = {
   enableWebSshTerminal: boolean;
   enableWebGit: boolean;
   enableWebTunnels: boolean;
+  /**
+   * Mesh chat tools (MeshPeers/MeshSend) in the agent's tool table. App-side
+   * only: never synced to the gateway, which has its own mesh configuration.
+   */
+  enableMeshChat: boolean;
+  /** The wait budget for one MeshSend, in milliseconds. */
+  meshChatTimeoutMs: number;
 };
 
 export type AppSettings = {
