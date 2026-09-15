@@ -2,11 +2,13 @@ package mesh
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -369,4 +371,104 @@ func TestIntegrationRegistryBroadcastModeNeverUsesJetStream(t *testing.T) {
 	if _, ok := manifestByID(peers, a.AgentID()); !ok {
 		t.Fatalf("broadcast discovery must find %q: %+v", a.AgentID(), peers)
 	}
+}
+
+// TestIntegrationHeartbeatRefreshesRegistrationWithTheLiveDirectory pins the
+// bug found live on a production edge: registration ran once at Start with an
+// empty agent directory (agents connect after Start), the KV entry expired
+// with its TTL, and peers never saw the edge's agents. The heartbeat must now
+// re-put a manifest built from the directory as it stands.
+func TestIntegrationHeartbeatRefreshesRegistrationWithTheLiveDirectory(t *testing.T) {
+	url := startTestNATSJetStream(t)
+
+	// A directory that starts empty and gains an agent after Start — the
+	// shape every real gateway boots in. The provider runs on the heartbeat
+	// goroutine, so it must be safe to call concurrently — the real
+	// gateway's provider reads the session registry under its own mutex,
+	// and the test models that contract.
+	var dirMu sync.Mutex
+	directory := []LocalAgent{}
+	jetStreamAndFastHeartbeat := func(c *Config) {
+		c.RegistryMode = RegistryJetStream
+		c.HeartbeatInterval = 40 * time.Millisecond
+		c.RegistryTTL = 800 * time.Millisecond
+	}
+	agent := testAgent(t, url, uniqueID("acme/lagos/edge"), jetStreamAndFastHeartbeat)
+	agent.SetLocalAgentsProvider(func() []LocalAgent {
+		dirMu.Lock()
+		defer dirMu.Unlock()
+		return directory
+	})
+
+	// The entry must exist in the bucket at all — before the fix it expired
+	// after the TTL and was never re-put.
+	kv := registryBucketFor(t, url, agent)
+	key := registryKey(agent.AgentID())
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if entry, err := kv.Get(key); err == nil && len(entry.Value()) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	entry, err := kv.Get(key)
+	if err != nil || len(entry.Value()) == 0 {
+		t.Fatalf("the heartbeat never re-put the registry entry: %v", err)
+	}
+
+	// The directory gains an agent; within a heartbeat the published manifest
+	// must carry it, both in the stored snapshot and in the bucket.
+	dirMu.Lock()
+	directory = []LocalAgent{{ID: "agent-7", Name: "Warehouse", Online: true, Capabilities: []string{"task"}}}
+	dirMu.Unlock()
+	found := false
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if agent.Manifest().LocalAgentTotal > 0 {
+			found = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !found {
+		t.Fatalf("the stored manifest never picked up the attached agent: %+v", agent.Manifest().LocalAgents)
+	}
+
+	entry, err = kv.Get(key)
+	if err != nil {
+		t.Fatalf("read the refreshed registry entry: %v", err)
+	}
+	var published Manifest
+	if err := json.Unmarshal(entry.Value(), &published); err != nil {
+		t.Fatalf("the registry entry is not a manifest: %v", err)
+	}
+	if published.LocalAgentTotal != 1 || len(published.LocalAgents) != 1 ||
+		published.LocalAgents[0].ID != "agent-7" {
+		t.Fatalf("the bucket's manifest does not carry the live directory: %+v", published.LocalAgents)
+	}
+
+	// The describe skill serves the stored snapshot, so it must carry the
+	// directory too — this is what peers actually ask.
+	if agent.Manifest().LocalAgents[0].Name != "Warehouse" {
+		t.Fatalf("describe would not show the agent's friendly name: %+v", agent.Manifest().LocalAgents)
+	}
+}
+
+// registryBucketFor opens the KV bucket the agent publishes into.
+func registryBucketFor(t *testing.T, url string, agent *Agent) nats.KeyValue {
+	t.Helper()
+	conn, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	js, err := conn.JetStream()
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	kv, err := js.KeyValue(DefaultConfig().RegistryBucket)
+	if err != nil {
+		t.Fatalf("registry bucket %q: %v", DefaultConfig().RegistryBucket, err)
+	}
+	return kv
 }

@@ -131,7 +131,7 @@ type Task struct {
 	// Conversation is the desktop conversation the run lives in. It is what
 	// makes an answered task resume in place rather than start over: the
 	// desktop agent sees its own question and the requester's answer together.
-	Conversation string `json:"conversation,omitempty"`
+	Conversation string    `json:"conversation,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
