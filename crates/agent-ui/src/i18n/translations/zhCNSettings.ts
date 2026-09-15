@@ -1391,7 +1391,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "MeshSend triggers real work on a remote peer and follows the tool approval policy like any other side-effecting tool.",
   "settings.meshChatTimeout": "Send timeout (seconds)",
   "settings.meshChatTimeoutHint":
-    "A dispatch runs a real agent turn on the peer, so this is minutes-scale, not seconds-scale.",
+    "A dispatch runs a real agent turn on the peer, so this is minutes-scale, not seconds-scale. 5 s to 1800 s (30 min) — a fleet query can legitimately take several minutes.",
   "settings.meshRefresh": "Refresh",
   "settings.meshStatus": "Connection",
   "settings.meshNoUrl": "No NATS URL configured",
