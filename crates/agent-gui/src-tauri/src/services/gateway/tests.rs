@@ -1,8 +1,7 @@
 use super::{
     build_gateway_runtime_status_envelope, build_local_settings_update_event_payload,
-    effective_agent_id,
-    gateway_connection_needs_restart, gateway_connection_stale_after, gateway_reconnect_backoff,
-    history_share_resolve_error_code, is_chat_runtime_wake_request_id,
+    effective_agent_id, gateway_connection_needs_restart, gateway_connection_stale_after,
+    gateway_reconnect_backoff, history_share_resolve_error_code, is_chat_runtime_wake_request_id,
     merge_settings_sync_snapshot, merge_settings_update_into_snapshot, proto,
     removed_workspace_project_ids, required_terminal_project_path_key, set_disconnected_status,
     GatewayChatRequestEvent, GatewayController, GatewayStatusSnapshot, RemoteChatInboxRecord,
@@ -347,7 +346,10 @@ fn conversation_cancel_preserves_gui_queued_remote_requests() {
 
 #[test]
 fn history_share_resolve_error_code_maps_public_share_failures() {
-    assert_eq!(history_share_resolve_error_code("Share token must not be empty"), 400);
+    assert_eq!(
+        history_share_resolve_error_code("Share token must not be empty"),
+        400
+    );
     assert_eq!(
         history_share_resolve_error_code("Share link does not exist or has been closed"),
         404
@@ -608,6 +610,9 @@ fn set_disconnected_status_resets_runtime_fields_for_new_config() {
         enable_web_ssh_terminal: false,
         enable_web_git: false,
         enable_web_tunnels: false,
+        enable_mesh_chat: false,
+        mesh_chat_timeout_ms: 120_000,
+        mesh_chat_peer_allowlist: Vec::new(),
     };
     let mut status = GatewayStatusSnapshot {
         online: true,
@@ -676,6 +681,9 @@ fn gateway_connection_nudge_detects_offline_and_stale_sessions() {
         enable_web_ssh_terminal: false,
         enable_web_git: false,
         enable_web_tunnels: false,
+        enable_mesh_chat: false,
+        mesh_chat_timeout_ms: 120_000,
+        mesh_chat_peer_allowlist: Vec::new(),
     };
     assert_eq!(
         gateway_connection_stale_after(&config),

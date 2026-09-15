@@ -602,6 +602,11 @@ export function normalizeRemoteSettings(input: unknown): RemoteSettings {
     enableWebSshTerminal: obj.enableWebSshTerminal === true,
     enableWebGit: obj.enableWebGit === true,
     enableWebTunnels: obj.enableWebTunnels === true,
+    enableMeshChat: obj.enableMeshChat === true,
+    meshChatTimeoutMs: Math.min(600_000, normalizePositiveInteger(obj.meshChatTimeoutMs, 120_000)),
+    meshChatPeerAllowlist: Array.isArray(obj.meshChatPeerAllowlist)
+      ? obj.meshChatPeerAllowlist.filter((item) => typeof item === "string" && item.trim() !== "")
+      : [],
   };
 }
 
@@ -1599,6 +1604,9 @@ export function getDefaultSettings(): AppSettings {
       enableWebSshTerminal: false,
       enableWebGit: false,
       enableWebTunnels: false,
+      enableMeshChat: false,
+      meshChatTimeoutMs: 120_000,
+      meshChatPeerAllowlist: [],
     },
     memory: normalizeMemorySettings({}, customProviders),
     customSettings: normalizeCustomSettings({}, customProviders),

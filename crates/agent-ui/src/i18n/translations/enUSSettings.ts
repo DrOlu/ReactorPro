@@ -1359,6 +1359,25 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.meshTitle": "NATS mesh and Synapse bridge",
   "settings.meshDescription":
     "ReactorPro can join the NATS event mesh and act as a Synapse agent. The bridge runs in the gateway: enable it there with LIVEAGENT_GATEWAY_MESH_ENABLED and a NATS URL. Nothing connects until then.",
+  "settings.meshChatAllowlist": "Peer allowlist",
+  "settings.meshChatAllowlistHint":
+    "Peer ids MeshSend may contact, one per line. Empty allows every discovered peer; a non-empty list is a fence — anything outside it is refused.",
+  "settings.meshAskPeer": "Ask",
+  "settings.meshAskTo": "Ask",
+  "settings.meshAskPlaceholder": "What should this peer's agent do?",
+  "settings.meshAskSend": "Send",
+  "settings.meshAskSending": "Waiting for the peer…",
+  "settings.meshAskCancel": "Close",
+  "settings.meshAskEmptyReply": "the peer replied with no text",
+  "settings.meshChatTitle": "Mesh chat in the agent",
+  "settings.meshChatHint":
+    "App-side tools: let the local agent list remote peers (MeshPeers) and run a prompt on one (MeshSend). Off by default. The gateway's own mesh configuration is unchanged; this only controls whether the agent gets the tools.",
+  "settings.meshChatEnable": "Enable MeshPeers and MeshSend",
+  "settings.meshChatEnableHint":
+    "MeshSend triggers real work on a remote peer and follows the tool approval policy like any other side-effecting tool.",
+  "settings.meshChatTimeout": "Send timeout (seconds)",
+  "settings.meshChatTimeoutHint":
+    "A dispatch runs a real agent turn on the peer, so this is minutes-scale, not seconds-scale.",
   "settings.meshRefresh": "Refresh",
   "settings.meshStatus": "Connection",
   "settings.meshNoUrl": "No NATS URL configured",

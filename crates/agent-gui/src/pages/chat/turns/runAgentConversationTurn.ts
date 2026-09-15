@@ -311,6 +311,9 @@ export type RunAgentConversationTurnParams = {
   /** Plan mode (turn-level snapshot): when true, this turn injects only read-only tools + the ExitPlanMode submission gate. */
   planModeEnabled?: boolean;
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
+  meshChatEnabled?: boolean;
+  meshChatTimeoutMs?: number;
+  meshChatAllowlist?: readonly string[];
   remoteWebTunnelsEnabled?: boolean;
   tunnelPublicBaseUrl?: string;
   onTunnelsChanged?: (change: TunnelManagerChange) => void;
@@ -403,6 +406,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     commandSafetyMode,
     planModeEnabled,
     applyMcpOps,
+    meshChatEnabled,
+    meshChatTimeoutMs,
+    meshChatAllowlist,
     remoteWebTunnelsEnabled,
     tunnelPublicBaseUrl,
     onTunnelsChanged,
@@ -679,6 +685,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     currentChatModel: selectedModel,
     getMcpSettings,
     applyMcpOps,
+    meshChatEnabled,
+    meshChatTimeoutMs,
+    meshChatAllowlist,
     remoteWebTunnelsEnabled,
     tunnelProjectPathKey: workspaceProjectPathKey(effectiveWorkdir),
     tunnelPublicBaseUrl,

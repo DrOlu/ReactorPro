@@ -1731,6 +1731,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
                 }),
               );
             },
+            meshChatEnabled: settings.remote.enableMeshChat,
+            meshChatTimeoutMs: settings.remote.meshChatTimeoutMs,
+            meshChatAllowlist: settings.remote.meshChatPeerAllowlist,
             remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,
             tunnelPublicBaseUrl: settings.remote.gatewayUrl.trim(),
             sshHosts: settings.ssh.hosts,
