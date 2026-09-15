@@ -131,9 +131,12 @@ jobs:
           ext=""
           [ "$GOOS" = "windows" ] && ext=".exe"
           out="reactorpro-gateway-${GOOS}-${GOARCH}${ext}"
+          worker="reactorpro-agentd-${GOOS}-${GOARCH}${ext}"
           mkdir -p "$GITHUB_WORKSPACE/dist"
           CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "$GITHUB_WORKSPACE/dist/$out" ./cmd/gateway
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "$GITHUB_WORKSPACE/dist/$worker" ./cmd/agentd
           echo "built $out"
+          echo "built $worker"
 
       # A mislabeled asset is worse than a missing one: it fails on the server,
       # far from the build. Check the header before publishing.
@@ -146,17 +149,18 @@ jobs:
           set -euo pipefail
           ext=""
           [ "$GOOS" = "windows" ] && ext=".exe"
-          out="reactorpro-gateway-${GOOS}-${GOARCH}${ext}"
-          info="$(file -b "$out")"
-          echo "$out: $info"
-          case "${GOOS}/${GOARCH}" in
-            linux/amd64)   want="x86-64" ;;
-            linux/arm64)   want="aarch64" ;;
-            darwin/amd64)  want="x86_64" ;;
-            darwin/arm64)  want="arm64" ;;
-            windows/amd64) want="x86-64" ;;
-          esac
-          echo "$info" | grep -qi "$want" || { echo "::error::$out is not $want"; exit 1; }
+          for out in "reactorpro-gateway-${GOOS}-${GOARCH}${ext}" "reactorpro-agentd-${GOOS}-${GOARCH}${ext}"; do
+            info="$(file -b "$out")"
+            echo "$out: $info"
+            case "${GOOS}/${GOARCH}" in
+              linux/amd64)   want="x86-64" ;;
+              linux/arm64)   want="aarch64" ;;
+              darwin/amd64)  want="x86_64" ;;
+              darwin/arm64)  want="arm64" ;;
+              windows/amd64) want="x86-64" ;;
+            esac
+            echo "$info" | grep -qi "$want" || { echo "::error::$out is not $want"; exit 1; }
+          done
 
       - uses: actions/upload-artifact@v7
         with:
@@ -185,7 +189,7 @@ jobs:
         run: |
           set -euo pipefail
           ls -l
-          sha256sum reactorpro-gateway-* > SHA256SUMS
+          sha256sum reactorpro-gateway-* reactorpro-agentd-* > SHA256SUMS
           cat SHA256SUMS
 
       # The desktop release workflow publishes to the same tag and may still be
@@ -195,7 +199,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          assets=(dist/reactorpro-gateway-* dist/SHA256SUMS)
+          assets=(dist/reactorpro-gateway-* dist/reactorpro-agentd-* dist/SHA256SUMS)
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
           else
