@@ -61,7 +61,15 @@ func (i desktopMeshInvoker) InvokeLocalAgent(ctx context.Context, request mesh.L
 		return mesh.LocalInvokeResult{}, translateInvokeError(err)
 	}
 
-	result, err := i.manager.SubmitRemoteTask(ctx, request.AgentID, arguments.Prompt)
+	// A streaming task gets the live view: growth deltas as the desktop commits
+	// snapshots. The transport is unchanged otherwise — an ordinary invoke
+	// answers whole, and the mesh's streamer is what makes deltas into chunks.
+	var result session.RemoteTaskResult
+	if request.Progress != nil {
+		result, err = i.manager.SubmitRemoteTaskProgress(ctx, request.AgentID, arguments.Prompt, request.Progress)
+	} else {
+		result, err = i.manager.SubmitRemoteTask(ctx, request.AgentID, arguments.Prompt)
+	}
 	if err != nil {
 		return mesh.LocalInvokeResult{}, translateInvokeError(err)
 	}

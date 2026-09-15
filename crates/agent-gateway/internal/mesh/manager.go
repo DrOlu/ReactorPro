@@ -95,6 +95,13 @@ type Manager struct {
 	// CreateRemoteTask drains the entry for its task after saving; entries
 	// age out on their own so the map cannot grow without bound.
 	taskPendingEvents map[string]pendingTaskEvent
+	// taskStreams holds the live chunk emitters for tasks that opted into
+	// streaming; taskChunks their bounded tail rings, with taskChunkOrder the
+	// FIFO that bounds how many tasks keep a ring at all. Progress views, not
+	// durable state: the canonical text is the task's result.
+	taskStreams    map[string]*taskChunkStream
+	taskChunks     map[string][]TaskChunk
+	taskChunkOrder []string
 	// taskMu serialises task read-modify-write cycles against the store, so a
 	// run finishing concurrently with a cancel resolves the same way every time.
 	taskMu sync.Mutex

@@ -352,6 +352,21 @@ Tasks change the unit of work from "a reply" to "an object with a state":
   because events go to whoever subscribes and a result belongs to its caller.
   A gateway creating a remote task keeps a stub, updated by those events, with
   a short buffered-event window covering the create→save race.
+- **Streaming is opt-in per task** (`stream: true` in the invoke input, or
+  `"stream": true` on the REST create): the assistant text's growth is
+  published as ordered chunks on `mesh.event.task.<task_id>.chunk` —
+  `{task_id, seq, text, last}`, seq strictly increasing, exactly one terminal
+  chunk (which may be empty; its job is to say the stream is over). The growth
+  comes from the same conversation snapshots the terminal result comes from,
+  so a live listener watches the answer build with no second channel to the
+  desktop. Chunks share the plaintext posture of the rest of the mesh — a
+  dispatch's prompt and reply are already visible to whoever can subscribe —
+  which is why they are opt-in rather than the default. A bounded tail ring
+  (last 128 chunks, at most 256 tasks) lets a reconnecting listener catch up:
+  `task.get` with `{"task_id": ..., "tail": 20}` or the REST
+  `GET /api/mesh/tasks/{id}?tail=N`. The canonical text is always the task's
+  result; the chunk stream is a progress view, and a truncation or rewrite
+  closes the stream rather than repeating content.
 - **Synchronous peers still work**: an edge or bridge without task support
   answers the old way, and the caller records that answer as an
   already-completed task (`completed_sync`), so every caller gets the same

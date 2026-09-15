@@ -291,6 +291,7 @@ type meshTaskCreateRequest struct {
 	Skill           string         `json:"skill"`
 	Input           map[string]any `json:"input"`
 	TaskID          string         `json:"taskId"`
+	Stream          bool           `json:"stream"`
 	CreateTimeoutMs int64          `json:"createTimeoutMs"`
 }
 
@@ -317,6 +318,7 @@ func MeshTaskCreate(m *mesh.Manager) http.HandlerFunc {
 			Skill:         request.Skill,
 			Input:         request.Input,
 			TaskID:        request.TaskID,
+			Stream:        request.Stream,
 			CreateTimeout: time.Duration(request.CreateTimeoutMs) * time.Millisecond,
 		})
 		if err != nil {
@@ -387,13 +389,22 @@ func MeshTaskList(m *mesh.Manager) http.HandlerFunc {
 // MeshTaskGet returns one task. A stub (a task this gateway created on a
 // peer) is the default; `caller` selects one of this edge's executed tasks,
 // because executor records are keyed per tenant and may not be read without
-// naming one.
+// naming one. `tail=N` returns the task plus its recent chunk tail — the
+// streaming view, which only the owning edge holds, so a stub with a tail is
+// fetched from the peer.
 func MeshTaskGet(m *mesh.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		taskID := strings.TrimSpace(r.PathValue("id"))
 		if taskID == "" {
 			writeError(w, http.StatusBadRequest, "task id is required")
 			return
+		}
+		tail := 0
+		if parsed, err := strconv.Atoi(r.URL.Query().Get("tail")); err == nil && parsed > 0 {
+			if parsed > 128 {
+				parsed = 128
+			}
+			tail = parsed
 		}
 		if caller := strings.TrimSpace(r.URL.Query().Get("caller")); caller != "" {
 			task, ok, err := m.ExecutorTask(caller, taskID)
@@ -405,7 +416,11 @@ func MeshTaskGet(m *mesh.Manager) http.HandlerFunc {
 				writeError(w, http.StatusNotFound, fmt.Sprintf("no task %q for caller %q", taskID, caller))
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"task": task})
+			response := mesh.TaskWithChunks{Task: task}
+			if tail > 0 {
+				response.Chunks = m.TaskTail(caller, taskID, tail)
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"task": response})
 			return
 		}
 		stub, ok, err := m.TaskStubByID(taskID)
@@ -417,16 +432,24 @@ func MeshTaskGet(m *mesh.Manager) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("no task %q", taskID))
 			return
 		}
-		if r.URL.Query().Get("refresh") == "true" {
-			// Ask the owning edge. The stub is this gateway's cache; the
-			// peer's task.get is the truth, and a missed event should not
-			// make a caller wait for a poll that says the wrong thing.
-			refreshed, _, err := m.RefreshTaskStub(r.Context(), taskID)
+		// Ask the owning edge for the freshest state — and, when a tail is
+		// requested, the chunk view. The stub is this gateway's cache; the
+		// peer's task.get is the truth, and a missed event should not make a
+		// caller wait for a poll that says the wrong thing. A tail implies the
+		// fetch, because only the owner holds the streamed chunks.
+		var chunks []mesh.TaskChunk
+		if refresh := r.URL.Query().Get("refresh") == "true" || tail > 0; refresh {
+			refreshed, refreshedTask, err := m.RefreshTaskStub(r.Context(), taskID, tail)
 			if err == nil {
 				stub = refreshed
+				chunks = refreshedTask.Chunks
 			}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"task": stub})
+		response := map[string]any{"task": stub}
+		if len(chunks) > 0 {
+			response["chunks"] = chunks
+		}
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 

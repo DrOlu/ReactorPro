@@ -96,6 +96,7 @@ func (m *Manager) startAsyncTask(request InvokeInput, meta RequestMeta, agent Lo
 		Arguments:         request.Arguments,
 		State:             TaskQueued,
 		TraceID:           traceID,
+		Stream:            request.Stream,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
@@ -104,6 +105,12 @@ func (m *Manager) startAsyncTask(request InvokeInput, meta RequestMeta, agent Lo
 	}
 	observability.Usage.MeshTaskCreatedTotal.Add(1)
 	m.publishTaskEvent(task)
+
+	// Streaming is a task property: register the emitter before the run
+	// starts so the very first growth delta has somewhere to go.
+	if request.Stream {
+		m.startTaskStream(meta.From, taskID)
+	}
 
 	runCtx, cancel := context.WithTimeout(context.Background(), m.taskRunTimeout(request))
 	m.mu.Lock()
@@ -181,6 +188,17 @@ func (m *Manager) executeTask(runCtx context.Context, task Task) {
 		arguments = json.RawMessage("null")
 	}
 	timeout := m.taskRunTimeout(InvokeInput{})
+	// The live view: a task that opted into streaming feeds the transport's
+	// growth deltas into its emitter. The emitter coalesces and publishes; the
+	// terminal chunk is closed by finishTask, so every stream ends exactly once.
+	var progress func(string)
+	if stream := m.taskStreamFor(task.Caller, task.TaskID); stream != nil {
+		progress = func(delta string) {
+			stream.feed(delta, func(seq int, text string, last bool) {
+				m.emitTaskChunk(task.Caller, task.TaskID, seq, text, last)
+			})
+		}
+	}
 	result, err := invoker.InvokeLocalAgent(runCtx, LocalInvokeRequest{
 		AgentID:           task.Agent,
 		TaskID:            task.TaskID,
@@ -189,6 +207,7 @@ func (m *Manager) executeTask(runCtx context.Context, task Task) {
 		Operation:         task.Operation,
 		Arguments:         arguments,
 		Timeout:           timeout,
+		Progress:          progress,
 	})
 
 	switch {
@@ -282,6 +301,26 @@ func (m *Manager) finishTask(task Task, to TaskState, errorCode, errorMessage st
 		observability.Usage.MeshTaskCanceledTotal.Add(1)
 	}
 	m.publishTaskEvent(current)
+	// A stream ends exactly once, on the same transition that ended the task:
+	// the completed case closes it with the result's tail; every other
+	// terminal closes it without content. A listener that saw the last chunk
+	// never waits for a state event that may not be the one it gets.
+	if to == TaskCompleted {
+		// The invoker's result is {"text": ...}; the canonical text is what the
+		// terminal chunk must extend.
+		resultText := ""
+		if len(current.Result) > 0 {
+			var decoded struct {
+				Text string `json:"text"`
+			}
+			if json.Unmarshal(current.Result, &decoded) == nil {
+				resultText = decoded.Text
+			}
+		}
+		m.closeTaskStream(current.Caller, current.TaskID, resultText)
+	} else {
+		m.closeTaskStream(current.Caller, current.TaskID, "")
+	}
 }
 
 // publishTaskEvent announces a state change. State only — never the result:
@@ -348,12 +387,16 @@ func (m *Manager) cancelTask(caller, taskID string) (Task, error) {
 func TaskSkills() []string { return []string{SkillTaskGet, SkillTaskCancel} }
 
 // skillTaskGet serves task.get: the creating caller's task, and nobody else's.
+//
+// An optional tail ({"task_id": ..., "tail": 20}) returns the task plus its
+// recent chunk tail — how a reconnecting client catches up on a streaming
+// task without having been subscribed at the time.
 func (m *Manager) skillTaskGet(_ context.Context, input any, meta RequestMeta) (any, error) {
 	store := m.taskStoreSnapshot()
 	if store == nil {
 		return nil, coded(CodeInternalError, "this edge has no task store configured")
 	}
-	taskID, err := taskIDFromInput(input)
+	taskID, tail, err := taskInputFrom(input)
 	if err != nil {
 		return nil, err
 	}
@@ -367,12 +410,15 @@ func (m *Manager) skillTaskGet(_ context.Context, input any, meta RequestMeta) (
 		// information to give, not this one's to take.
 		return nil, coded(CodeSkillNotFound, "no task %q for this caller", taskID)
 	}
+	if tail > 0 {
+		return TaskWithChunks{Task: task, Chunks: m.taskTail(meta.From, taskID, tail)}, nil
+	}
 	return task, nil
 }
 
 // skillTaskCancel serves task.cancel, gated to the creating caller.
 func (m *Manager) skillTaskCancel(_ context.Context, input any, meta RequestMeta) (any, error) {
-	taskID, err := taskIDFromInput(input)
+	taskID, _, err := taskInputFrom(input)
 	if err != nil {
 		return nil, err
 	}
@@ -383,25 +429,31 @@ func (m *Manager) skillTaskCancel(_ context.Context, input any, meta RequestMeta
 	return task, nil
 }
 
-func taskIDFromInput(input any) (string, error) {
+// taskInputFrom reads the shared shape of the task skills: a task id, and for
+// task.get an optional chunk-tail length.
+func taskInputFrom(input any) (taskID string, tail int, err error) {
 	if input == nil {
-		return "", coded(CodeInvalidEnvelope, "the task skills require an input object with a task_id")
+		return "", 0, coded(CodeInvalidEnvelope, "the task skills require an input object with a task_id")
 	}
 	raw, err := json.Marshal(input)
 	if err != nil {
-		return "", coded(CodeInvalidEnvelope, "task input is not encodable: %v", err)
+		return "", 0, coded(CodeInvalidEnvelope, "task input is not encodable: %v", err)
 	}
 	var parsed struct {
 		TaskID string `json:"task_id"`
+		Tail   int    `json:"tail"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", coded(CodeInvalidEnvelope, "task input is malformed: %v", err)
+		return "", 0, coded(CodeInvalidEnvelope, "task input is malformed: %v", err)
 	}
-	taskID := strings.TrimSpace(parsed.TaskID)
+	taskID = strings.TrimSpace(parsed.TaskID)
 	if taskID == "" {
-		return "", coded(CodeInvalidEnvelope, "a task_id is required")
+		return "", 0, coded(CodeInvalidEnvelope, "a task_id is required")
 	}
-	return taskID, nil
+	if parsed.Tail < 0 || parsed.Tail > taskChunkRingMax {
+		parsed.Tail = 0
+	}
+	return taskID, parsed.Tail, nil
 }
 
 // pendingTaskEvent is a task state event that out-ran the stub it belongs to.
@@ -458,6 +510,9 @@ func (m *Manager) drainPendingTaskEvent(taskID string) (taskEvent, bool) {
 func handleFor(task Task) TaskHandle {
 	note := "the task continues whether or not the caller stays connected; " +
 		"query it with the task.get skill, or watch mesh.event.task." + task.TaskID
+	if task.Stream {
+		note += " and mesh.event.task." + task.TaskID + ".chunk for the streamed answer"
+	}
 	return TaskHandle{
 		TaskID:    task.TaskID,
 		State:     task.State,
@@ -486,6 +541,8 @@ type CreateRemoteTaskParams struct {
 	Input map[string]any
 	// TaskID is caller-minted; empty mints one here.
 	TaskID string
+	// Stream opts the task into chunked streaming on the peer.
+	Stream bool
 	// CreateTimeout bounds only the handle reply, not the run.
 	CreateTimeout time.Duration
 }
@@ -517,7 +574,9 @@ func (m *Manager) CreateRemoteTask(ctx context.Context, params CreateRemoteTaskP
 	}
 	input["async"] = true
 	input["task_id"] = taskID
-
+	if params.Stream {
+		input["stream"] = true
+	}
 	timeout := params.CreateTimeout
 	if timeout <= 0 {
 		timeout = 30 * time.Second
@@ -619,36 +678,48 @@ func decodeTaskHandle(output any) (TaskHandle, error) {
 	return handle, nil
 }
 
+// TaskTail returns the recent chunk tail of one of this edge's executed
+// tasks, for the REST surface.
+func (m *Manager) TaskTail(caller, taskID string, limit int) []TaskChunk {
+	return m.taskTail(caller, taskID, limit)
+}
+
 // RefreshTaskStub queries the owning peer for a task's current state and
 // records what it learns. The stub is the caller's cache, never the truth;
-// this is how it catches up when events were missed.
-func (m *Manager) RefreshTaskStub(ctx context.Context, taskID string) (TaskStub, Task, error) {
+// this is how it catches up when events were missed. A tail also asks the
+// owner for the streamed chunk view, which only it holds.
+func (m *Manager) RefreshTaskStub(ctx context.Context, taskID string, tail int) (TaskStub, TaskWithChunks, error) {
 	store := m.taskStoreSnapshot()
 	if store == nil {
-		return TaskStub{}, Task{}, coded(CodeInternalError, "this gateway has no task store configured")
+		return TaskStub{}, TaskWithChunks{}, coded(CodeInternalError, "this gateway has no task store configured")
 	}
 	stub, ok, err := store.GetTaskStub(taskID)
 	if err != nil {
-		return TaskStub{}, Task{}, coded(CodeInternalError, "task store lookup failed: %v", err)
+		return TaskStub{}, TaskWithChunks{}, coded(CodeInternalError, "task store lookup failed: %v", err)
 	}
 	if !ok {
-		return TaskStub{}, Task{}, coded(CodeSkillNotFound, "no task %q", taskID)
+		return TaskStub{}, TaskWithChunks{}, coded(CodeSkillNotFound, "no task %q", taskID)
 	}
 	// A sync-completed stub has no task.get to ask — its peer answered the
 	// old way, and a task.get dispatched there would be spent as a real agent
 	// turn for nothing. Everything else may fetch: task.get on a task-capable
 	// edge is a store read, and a terminal stub with no cached result is a
 	// cache miss, not a finished conversation — fetching the result is the
-	// one thing refresh exists for.
+	// one thing refresh exists for. A tail widens the fetch only: a terminal
+	// task's chunks are a read on the owner, not an agent turn.
 	if stub.CompletedSync {
-		return stub, Task{}, nil
+		return stub, TaskWithChunks{}, nil
 	}
-	if TaskTerminal(stub.State) && len(stub.Result) > 0 {
-		return stub, Task{}, nil
+	if TaskTerminal(stub.State) && tail <= 0 && len(stub.Result) > 0 {
+		return stub, TaskWithChunks{}, nil
 	}
-	envelope, err := m.Dispatch(ctx, stub.Target, SkillTaskGet, map[string]any{"task_id": taskID}, 30*time.Second)
+	input := map[string]any{"task_id": taskID}
+	if tail > 0 {
+		input["tail"] = tail
+	}
+	envelope, err := m.Dispatch(ctx, stub.Target, SkillTaskGet, input, 30*time.Second)
 	if err != nil {
-		return stub, Task{}, err
+		return stub, TaskWithChunks{}, err
 	}
 	var respond RespondPayload
 	if len(envelope.Payload) > 0 {
@@ -656,7 +727,7 @@ func (m *Manager) RefreshTaskStub(ctx context.Context, taskID string) (TaskStub,
 	}
 	task, err := taskFromOutput(respond.Output)
 	if err != nil {
-		return stub, Task{}, err
+		return stub, TaskWithChunks{}, err
 	}
 	stub.State = task.State
 	stub.UpdatedAt = time.Now().UTC()
@@ -700,17 +771,17 @@ func (m *Manager) CancelTaskByStub(ctx context.Context, taskID string) (TaskStub
 	return stub, nil
 }
 
-func taskFromOutput(output any) (Task, error) {
+func taskFromOutput(output any) (TaskWithChunks, error) {
 	if output == nil {
-		return Task{}, coded(CodeInternalError, "the peer did not return a task object")
+		return TaskWithChunks{}, coded(CodeInternalError, "the peer did not return a task object")
 	}
 	raw, err := json.Marshal(output)
 	if err != nil {
-		return Task{}, coded(CodeInternalError, "the peer's task object is not encodable: %v", err)
+		return TaskWithChunks{}, coded(CodeInternalError, "the peer's task object is not encodable: %v", err)
 	}
-	var task Task
+	var task TaskWithChunks
 	if err := json.Unmarshal(raw, &task); err != nil || task.TaskID == "" {
-		return Task{}, coded(CodeInternalError, "the peer did not return a task object")
+		return TaskWithChunks{}, coded(CodeInternalError, "the peer did not return a task object")
 	}
 	return task, nil
 }
@@ -725,6 +796,13 @@ func (m *Manager) ConsumeTaskEvents(ctx context.Context) error {
 		return err
 	}
 	_, err = agent.Subscribe(ctx, "task.>", func(_ context.Context, _ string, event EventPayload) {
+		// Chunk events are a progress view for live listeners; the stub tracks
+		// state only. A chunk's data carries no state field, so without this
+		// branch it would parse as a state of "" and corrupt the stub. Task ids
+		// cannot contain '.', so the suffix cannot collide with a state event.
+		if strings.HasSuffix(event.EventType, ".chunk") {
+			return
+		}
 		raw, err := json.Marshal(event.Data)
 		if err != nil {
 			return
