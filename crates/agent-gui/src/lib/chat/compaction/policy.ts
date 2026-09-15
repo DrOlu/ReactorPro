@@ -99,6 +99,19 @@ export function resolvePruneOptions(pressure: CompactionPressure): PruneOptions 
 // providers. For OpenAI-family models "input cap = total window - output cap"
 // (GPT-5: 400K = 272K + 128K), and factor >= 1 ensures the threshold never exceeds
 // the real input cap.
+//
+// The output reserve a threshold may subtract is capped at a third of the window.
+// Relays publish degraded limits — a live relay declared maxOutputToken at 72-90%
+// of the window for models whose real output cap is a tenth of that (z-ai/glm-5.3:
+// 943,718 of 1,310,720), and 1.5x of such a "reserve" exceeds the window outright,
+// flooring the threshold at 1024 tokens: compaction fired on every turn while the
+// usage ring read 1-5%. The catalog's own generation rule already caps the output
+// reservation at a quarter of the window for the same reason; honest output caps
+// (claude 16% of window, codex 32%) sit under a third and are unaffected, while
+// degraded data can no longer push the optimization threshold below half the
+// window — the same point at which the usage ring turns yellow.
+const MAX_OUTPUT_RESERVE_WINDOW_SHARE = 3;
+
 export function resolveCompactionThreshold(params: {
   intent: CompactionIntent;
   contextWindow: number;
@@ -109,7 +122,11 @@ export function resolveCompactionThreshold(params: {
     params.intent === "optimization" ? OPTIMIZATION_THRESHOLD_FACTOR : PROTECTION_THRESHOLD_FACTOR;
   const effectiveFactor =
     params.intent === "protection" && params.pressureLevel >= MAX_PRESSURE_LEVEL ? 1.0 : factor;
-  return Math.max(1024, Math.floor(params.contextWindow - params.maxOutputToken * effectiveFactor));
+  const outputReserve = Math.min(
+    params.maxOutputToken,
+    Math.max(1, Math.floor(params.contextWindow / MAX_OUTPUT_RESERVE_WINDOW_SHARE)),
+  );
+  return Math.max(1024, Math.floor(params.contextWindow - outputReserve * effectiveFactor));
 }
 
 export function decideCompaction(params: {
