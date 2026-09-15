@@ -612,6 +612,7 @@ fn set_disconnected_status_resets_runtime_fields_for_new_config() {
         enable_web_tunnels: false,
         enable_mesh_chat: false,
         mesh_chat_timeout_ms: 120_000,
+        mesh_chat_peer_allowlist: Vec::new(),
     };
     let mut status = GatewayStatusSnapshot {
         online: true,
@@ -682,6 +683,7 @@ fn gateway_connection_nudge_detects_offline_and_stale_sessions() {
         enable_web_tunnels: false,
         enable_mesh_chat: false,
         mesh_chat_timeout_ms: 120_000,
+        mesh_chat_peer_allowlist: Vec::new(),
     };
     assert_eq!(
         gateway_connection_stale_after(&config),

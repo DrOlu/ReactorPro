@@ -106,6 +106,7 @@ async function listPeers(toolCall: ToolCall): Promise<ToolResultMessage> {
 async function sendToPeer(
   toolCall: ToolCall,
   timeoutMs: number,
+  allowlist: readonly string[],
   signal?: AbortSignal,
 ): Promise<ToolResultMessage> {
   const args = asRecord(toolCall.arguments);
@@ -115,6 +116,17 @@ async function sendToPeer(
     return toolResult(
       toolCall,
       "MeshSend needs both a target (the peer's mesh agent id) and a text prompt.",
+      true,
+    );
+  }
+  // A non-empty allowlist is a fence, not a hint: it exists precisely so the
+  // model cannot widen it by asking nicely. Empty means every discovered peer.
+  if (allowlist.length > 0 && !allowlist.includes(target)) {
+    return toolResult(
+      toolCall,
+      `The user has not allowed MeshSend to contact ${target}. The allowlist in ` +
+        "Settings → Mesh decides which peers may be contacted; ask the user " +
+        "instead of trying a different route around it.",
       true,
     );
   }
@@ -163,6 +175,11 @@ export function createMeshTools(params: {
   runtimeScope: "chat" | "cron_auto_prompt";
   /** The wait for one MeshSend. Minutes-scale: the peer runs a real agent turn. */
   timeoutMs: number;
+  /**
+   * Peer ids MeshSend may contact. Empty means every discovered peer; a
+   * non-empty list is a fence — anything outside it is refused outright.
+   */
+  allowlist: readonly string[];
 }): BuiltinToolBundle {
   const registered = params.enabled && params.runtimeScope === "chat";
   const tools = registered ? [MESH_PEERS_TOOL, MESH_SEND_TOOL] : [];
@@ -174,7 +191,7 @@ export function createMeshTools(params: {
         return listPeers(toolCall);
       }
       if (toolCall.name === "MeshSend") {
-        return sendToPeer(toolCall, params.timeoutMs, signal);
+        return sendToPeer(toolCall, params.timeoutMs, params.allowlist, signal);
       }
       return Promise.resolve(toolResult(toolCall, `Unknown tool: ${toolCall.name}`, true));
     },

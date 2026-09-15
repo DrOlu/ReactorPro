@@ -203,6 +203,8 @@ type BuildBuiltinBaseToolRegistryParams = {
   meshChatEnabled?: boolean;
   /** One MeshSend budget; a dispatch runs a real agent turn on the peer. */
   meshChatTimeoutMs?: number;
+  /** Peer ids MeshSend may contact; empty means every discovered peer. */
+  meshChatAllowlist?: readonly string[];
   remoteWebTunnelsEnabled?: boolean;
   tunnelProjectPathKey?: string;
   tunnelPublicBaseUrl?: string;
@@ -282,6 +284,7 @@ async function buildBaseBuiltinToolBundles(
       enabled: params.meshChatEnabled === true,
       runtimeScope: params.runtimeScope,
       timeoutMs: params.meshChatTimeoutMs ?? 120_000,
+      allowlist: params.meshChatAllowlist ?? [],
     }),
     createTunnelManagerTools({
       enabled: params.remoteWebTunnelsEnabled === true && params.runtimeScope === "chat",

@@ -13,6 +13,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
+import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { emptyMeshStatus, type MeshAgent, type MeshStatus } from "@liveagent/ui/lib/mesh/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
@@ -63,6 +64,13 @@ export function MeshSection(props: SettingsSectionProps) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [subscribeSubject, setSubscribeSubject] = useState("");
+  // The Ask-this-peer mini round trip: one peer, one prompt, one reply.
+  const [askTarget, setAskTarget] = useState("");
+  const [askPrompt, setAskPrompt] = useState("");
+  const [askReply, setAskReply] = useState("");
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState("");
+  const [allowlistDraft, setAllowlistDraft] = useState<string | null>(null);
   const [eventType, setEventType] = useState("");
   const [eventData, setEventData] = useState("{}");
   const [operator, setOperator] = useState("operator");
@@ -82,6 +90,33 @@ export function MeshSection(props: SettingsSectionProps) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const sendAsk = useCallback(async () => {
+    const target = askTarget.trim();
+    const prompt = askPrompt.trim();
+    if (!target || !prompt) return;
+    setAsking(true);
+    setAskError("");
+    setAskReply("");
+    try {
+      const reply = await meshClient.dispatch({
+        target,
+        text: prompt,
+        timeoutMs: settings.remote.meshChatTimeoutMs,
+      });
+      // The panel is a person driving it, so a peer's refusal is shown as the
+      // peer's own answer rather than hidden behind an error toast.
+      if (reply.error) {
+        setAskError(`${target} refused: ${reply.error.message} (code ${reply.error.code})`);
+        return;
+      }
+      setAskReply(reply.text || `(${t("settings.meshAskEmptyReply")})`);
+    } catch (cause) {
+      setAskError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAsking(false);
+    }
+  }, [askTarget, askPrompt, settings.remote.meshChatTimeoutMs, t]);
 
   const run = useCallback(async (action: () => Promise<void>) => {
     setBusy(true);
@@ -360,6 +395,40 @@ export function MeshSection(props: SettingsSectionProps) {
             }
           />
         ) : null}
+        {settings.remote.enableMeshChat ? (
+          <SettingsRow
+            title={t("settings.meshChatAllowlist")}
+            description={t("settings.meshChatAllowlistHint")}
+            control={
+              <Textarea
+                value={allowlistDraft ?? settings.remote.meshChatPeerAllowlist.join("\n")}
+                onChange={(event) => setAllowlistDraft(event.target.value)}
+                onBlur={() => {
+                  if (allowlistDraft === null) return;
+                  const entries = allowlistDraft
+                    .split(/[\n,]/)
+                    .map((entry) => entry.trim())
+                    .filter(Boolean);
+                  setAllowlistDraft(null);
+                  if (
+                    entries.length === settings.remote.meshChatPeerAllowlist.length &&
+                    entries.every(
+                      (entry, index) => entry === settings.remote.meshChatPeerAllowlist[index],
+                    )
+                  ) {
+                    return;
+                  }
+                  setSettings((prev) => ({
+                    ...prev,
+                    remote: { ...prev.remote, meshChatPeerAllowlist: entries },
+                  }));
+                }}
+                placeholder="grip-001\nomp-cli-001"
+                className="h-20 w-[240px] font-mono text-xs"
+              />
+            }
+          />
+        ) : null}
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.meshAgents")}>
@@ -377,15 +446,74 @@ export function MeshSection(props: SettingsSectionProps) {
                 .filter(Boolean)
                 .join(" · ")}
               control={
-                <span className="text-xs text-muted-foreground">
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
                   {agent.skills.length > 0
                     ? agent.skills.map((skill) => skill.id).join(", ")
                     : t("settings.meshNoSkills")}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={asking}
+                    onClick={() => {
+                      setAskTarget(agent.id);
+                      setAskPrompt("");
+                      setAskReply("");
+                      setAskError("");
+                    }}
+                  >
+                    {t("settings.meshAskPeer")}
+                  </Button>
                 </span>
               }
             />
           ))
         )}
+
+        {askTarget ? (
+          <div className="border-t border-border/60 px-5 py-4">
+            <p className="mb-2 text-xs font-medium">
+              {t("settings.meshAskTo")} <span className="font-mono">{askTarget}</span>
+            </p>
+            <Textarea
+              value={askPrompt}
+              onChange={(event) => setAskPrompt(event.target.value)}
+              placeholder={t("settings.meshAskPlaceholder")}
+              className="mb-2 h-16 w-full text-xs"
+              disabled={asking}
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                disabled={asking || !askPrompt.trim()}
+                onClick={() => void sendAsk()}
+              >
+                {asking ? t("settings.meshAskSending") : t("settings.meshAskSend")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={asking}
+                onClick={() => {
+                  setAskTarget("");
+                  setAskPrompt("");
+                  setAskReply("");
+                  setAskError("");
+                }}
+              >
+                {t("settings.meshAskCancel")}
+              </Button>
+            </div>
+            {askError ? <p className="mt-2 text-xs text-destructive">{askError}</p> : null}
+            {askReply ? (
+              <p className="mt-2 whitespace-pre-wrap rounded-md bg-muted/60 px-3 py-2 font-mono text-xs leading-relaxed">
+                {askReply}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </SettingsGroup>
 
       {status.pendingApprovals.length > 0 ? (

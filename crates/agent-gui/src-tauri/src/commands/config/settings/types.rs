@@ -66,6 +66,9 @@ pub struct RemoteSettingsPayload {
     /// on the peer, so this is minutes-scale.
     #[serde(default = "default_mesh_chat_timeout_ms")]
     pub mesh_chat_timeout_ms: u64,
+    /// Peer ids MeshSend may contact; empty means every discovered peer.
+    #[serde(default)]
+    pub mesh_chat_peer_allowlist: Vec<String>,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeSshProxyConfig {

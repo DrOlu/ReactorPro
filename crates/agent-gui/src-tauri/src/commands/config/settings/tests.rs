@@ -169,6 +169,7 @@ mod tests {
             enable_web_tunnels: false,
             enable_mesh_chat: false,
             mesh_chat_timeout_ms: 120_000,
+            mesh_chat_peer_allowlist: Vec::new(),
         });
 
         assert_eq!(normalized.gateway_url, "https://agent.cnweb.org");
@@ -244,6 +245,7 @@ mod tests {
                 enable_web_tunnels: true,
                 enable_mesh_chat: false,
                 mesh_chat_timeout_ms: 120_000,
+            mesh_chat_peer_allowlist: Vec::new(),
             },
         )
         .expect("seed manual Agent ID");

@@ -313,6 +313,7 @@ export type RunAgentConversationTurnParams = {
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   meshChatEnabled?: boolean;
   meshChatTimeoutMs?: number;
+  meshChatAllowlist?: readonly string[];
   remoteWebTunnelsEnabled?: boolean;
   tunnelPublicBaseUrl?: string;
   onTunnelsChanged?: (change: TunnelManagerChange) => void;
@@ -407,6 +408,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     applyMcpOps,
     meshChatEnabled,
     meshChatTimeoutMs,
+    meshChatAllowlist,
     remoteWebTunnelsEnabled,
     tunnelPublicBaseUrl,
     onTunnelsChanged,
@@ -685,6 +687,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     applyMcpOps,
     meshChatEnabled,
     meshChatTimeoutMs,
+    meshChatAllowlist,
     remoteWebTunnelsEnabled,
     tunnelProjectPathKey: workspaceProjectPathKey(effectiveWorkdir),
     tunnelPublicBaseUrl,

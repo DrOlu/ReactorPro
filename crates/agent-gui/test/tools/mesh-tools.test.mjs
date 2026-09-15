@@ -52,7 +52,7 @@ function loadTools(overrides) {
 
 test("the bundle is invisible until the user enables it", () => {
   const { createMeshTools } = loadTools();
-  const bundle = createMeshTools({ enabled: false, runtimeScope: "chat", timeoutMs: 120_000 });
+  const bundle = createMeshTools({ enabled: false, runtimeScope: "chat", timeoutMs: 120_000, allowlist: [] });
   assert.equal(bundle.tools.length, 0, "a disabled bundle must register no tools");
   assert.equal(bundle.metadataByName.size, 0);
 });
@@ -63,13 +63,14 @@ test("cron scope never gets the tools, even when enabled", () => {
     enabled: true,
     runtimeScope: "cron_auto_prompt",
     timeoutMs: 120_000,
+    allowlist: [],
   });
   assert.equal(bundle.tools.length, 0, "mesh chat is a chat-scoped capability");
 });
 
 test("an enabled bundle exposes exactly the two tools with the right read-only flags", () => {
   const { createMeshTools } = loadTools();
-  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000 });
+  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000, allowlist: [] });
   assert.deepEqual(
     bundle.tools.map((tool) => tool.name).sort(),
     ["MeshPeers", "MeshSend"],
@@ -91,7 +92,7 @@ test("MeshPeers lists the directory", async () => {
       },
     ],
   });
-  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000 });
+  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000, allowlist: [] });
   const result = await bundle.executeToolCall(callOf("MeshPeers", {}));
   assert.equal(result.isError, false);
   assert.match(textOf(result), /id: grip-001/);
@@ -100,7 +101,7 @@ test("MeshPeers lists the directory", async () => {
 
 test("MeshPeers reports an empty mesh as guidance, not as a failure", async () => {
   const { createMeshTools } = loadTools({ discover: [] });
-  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000 });
+  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000, allowlist: [] });
   const result = await bundle.executeToolCall(callOf("MeshPeers", {}));
   assert.equal(result.isError, false);
   assert.match(textOf(result), /No peer agents/);
@@ -108,7 +109,7 @@ test("MeshPeers reports an empty mesh as guidance, not as a failure", async () =
 
 test("MeshSend dispatches the prompt and frames the reply as untrusted remote output", async () => {
   const { createMeshTools, state } = loadTools();
-  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 90_000 });
+  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 90_000, allowlist: [] });
   const result = await bundle.executeToolCall(
     callOf("MeshSend", { target: "grip-001", text: "Summarise the Q3 report" }),
   );
@@ -128,7 +129,7 @@ test("a peer's refusal is reported in the peer's own words, as an error", async 
   const { createMeshTools } = loadTools({
     dispatch: { from: "grip-001", text: "", error: { code: 4001, message: "No text in request" } },
   });
-  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000 });
+  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000, allowlist: [] });
   const result = await bundle.executeToolCall(
     callOf("MeshSend", { target: "grip-001", text: "hello" }),
   );
@@ -138,7 +139,7 @@ test("a peer's refusal is reported in the peer's own words, as an error", async 
 
 test("a transport failure points at the settings instead of blaming the peer", async () => {
   const { createMeshTools } = loadTools({ dispatchError: "no reply within 120s" });
-  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000 });
+  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000, allowlist: [] });
   const result = await bundle.executeToolCall(
     callOf("MeshSend", { target: "grip-001", text: "hello" }),
   );
@@ -149,7 +150,7 @@ test("a transport failure points at the settings instead of blaming the peer", a
 
 test("MeshSend refuses to guess: both a target and a prompt are required", async () => {
   const { createMeshTools, state } = loadTools();
-  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000 });
+  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000, allowlist: [] });
   const missingTarget = await bundle.executeToolCall(
     callOf("MeshSend", { text: "hello" }),
   );
@@ -159,8 +160,55 @@ test("MeshSend refuses to guess: both a target and a prompt are required", async
 
 test("an unknown tool name in this group is an error, never a silent success", async () => {
   const { createMeshTools } = loadTools();
-  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000 });
+  const bundle = createMeshTools({ enabled: true, runtimeScope: "chat", timeoutMs: 120_000, allowlist: [] });
   const result = await bundle.executeToolCall(callOf("MeshNonsense", {}));
   assert.equal(result.isError, true);
   assert.match(textOf(result), /Unknown tool: MeshNonsense/);
+});
+
+// The allowlist is a fence, not a hint — these pin both directions.
+test("an empty allowlist allows every peer", async () => {
+  const { createMeshTools, state } = loadTools();
+  const bundle = createMeshTools({
+    enabled: true,
+    runtimeScope: "chat",
+    timeoutMs: 120_000,
+    allowlist: [],
+  });
+  const result = await bundle.executeToolCall(
+    callOf("MeshSend", { target: "grip-001", text: "hello" }),
+  );
+  assert.equal(result.isError, false);
+  assert.equal(state.dispatchCalls.length, 1);
+});
+
+test("a non-empty allowlist refuses a peer outside it, and dispatches nothing", async () => {
+  const { createMeshTools, state } = loadTools();
+  const bundle = createMeshTools({
+    enabled: true,
+    runtimeScope: "chat",
+    timeoutMs: 120_000,
+    allowlist: ["omp-cli-001", "agentspan-001"],
+  });
+  const result = await bundle.executeToolCall(
+    callOf("MeshSend", { target: "grip-001", text: "hello" }),
+  );
+  assert.equal(result.isError, true);
+  assert.match(textOf(result), /has not allowed MeshSend to contact grip-001/);
+  assert.equal(state.dispatchCalls.length, 0, "nothing may be dispatched past the fence");
+});
+
+test("an allowed peer passes the fence, exact id match", async () => {
+  const { createMeshTools, state } = loadTools();
+  const bundle = createMeshTools({
+    enabled: true,
+    runtimeScope: "chat",
+    timeoutMs: 120_000,
+    allowlist: ["grip-001"],
+  });
+  const result = await bundle.executeToolCall(
+    callOf("MeshSend", { target: "grip-001", text: "hello" }),
+  );
+  assert.equal(result.isError, false);
+  assert.equal(state.dispatchCalls.length, 1);
 });

@@ -47,6 +47,7 @@ impl Default for RemoteSettingsPayload {
             enable_web_tunnels: false,
             enable_mesh_chat: false,
             mesh_chat_timeout_ms: default_mesh_chat_timeout_ms(),
+            mesh_chat_peer_allowlist: Vec::new(),
         }
     }
 }
@@ -72,6 +73,12 @@ pub(crate) fn normalize_remote_settings_payload(
         enable_web_tunnels: payload.enable_web_tunnels,
         enable_mesh_chat: payload.enable_mesh_chat,
         mesh_chat_timeout_ms: payload.mesh_chat_timeout_ms.clamp(5_000, 600_000),
+        mesh_chat_peer_allowlist: payload
+            .mesh_chat_peer_allowlist
+            .iter()
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty())
+            .collect(),
     }
 }
 
