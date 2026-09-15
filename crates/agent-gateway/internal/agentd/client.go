@@ -228,9 +228,46 @@ func (c *Client) handleGatewayEnvelope(envelope *gatewayv2.GatewayEnvelope) {
 			c.logger.Warn("agentd ingress record refused",
 				"run", ack.GetRunId(), "code", code, "message", ack.GetErrorMessage())
 		}
+	case *gatewayv2.GatewayEnvelope_HistoryList:
+		// The agentd keeps no conversation history — its runs are remote
+		// turns recorded by whoever dispatched them. An empty list is the
+		// honest answer, and it keeps the UI from waiting on a timeout.
+		_ = c.writeFrame(&gatewayv2.AgentClientFrame{
+			Payload: &gatewayv2.AgentClientFrame_Envelope{
+				Envelope: &gatewayv2.AgentEnvelope{
+					RequestId: envelope.GetRequestId(),
+					Timestamp: time.Now().Unix(),
+					Payload: &gatewayv2.AgentEnvelope_HistoryListResp{
+						HistoryListResp: &gatewayv2.HistoryListResponse{
+							Conversations: nil,
+							TotalCount:    0,
+						},
+					},
+				},
+			},
+		})
 	default:
-		// Everything else is desktop territory (settings, history, fs, …):
-		// the agentd is an executor, not a desktop, and ignores it.
+		// Everything else is desktop territory (settings, providers, fs,
+		// history details, …) — but every correlated request MUST be
+		// answered, the same contract the desktop honours with its own
+		// error responses. Ignoring made the browser time out ("Gateway
+		// websocket request timed out: settings get"); a typed refusal is
+		// the honest, immediate answer instead.
+		_ = c.writeFrame(&gatewayv2.AgentClientFrame{
+			Payload: &gatewayv2.AgentClientFrame_Envelope{
+				Envelope: &gatewayv2.AgentEnvelope{
+					RequestId: envelope.GetRequestId(),
+					Timestamp: time.Now().Unix(),
+					Payload: &gatewayv2.AgentEnvelope_Error{
+						Error: &gatewayv2.ErrorResponse{
+							Code: 501,
+							Message: fmt.Sprintf(
+								"the headless agent runtime (reactorpro-agentd %s) does not implement this operation; it is an executor, not a desktop — chat commands and skills are served, desktop settings and history are not", Version),
+						},
+					},
+				},
+			},
+		})
 	}
 }
 
