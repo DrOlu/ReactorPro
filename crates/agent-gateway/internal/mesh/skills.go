@@ -25,6 +25,10 @@ const (
 	// SkillTaskCancel stops the creating caller's task. Idempotent — a cancel
 	// of a finished task reports the task's real state rather than failing.
 	SkillTaskCancel = "task.cancel"
+	// SkillTaskRetry re-runs the creating caller's failed or canceled task,
+	// under the same id. The manual-resume primitive: a long task that
+	// outlived a restart or a runtime budget is one call from running again.
+	SkillTaskRetry = "task.retry"
 )
 
 // builtinSkillIDs is the served set, in a stable order for the UI and tests.
@@ -49,7 +53,7 @@ func BuiltinSkillIDs() []string {
 // acceptable names even though they only register with a task store, so an
 // operator's allowlist does not have to track this edge's storage.
 func servableSkillIDs() []string {
-	return append(append(BuiltinSkillIDs(), SkillTaskGet, SkillTaskCancel), SkillInvoke)
+	return append(append(BuiltinSkillIDs(), SkillTaskGet, SkillTaskCancel, SkillTaskRetry), SkillInvoke)
 }
 
 // registerBuiltinSkills exposes the read-only introspection surface.
@@ -82,6 +86,7 @@ func (m *Manager) registerBuiltinSkills(agent *Agent) error {
 	if m.taskStoreSnapshot() != nil {
 		handlers[SkillTaskGet] = m.skillTaskGet
 		handlers[SkillTaskCancel] = m.skillTaskCancel
+		handlers[SkillTaskRetry] = m.skillTaskRetry
 	}
 
 	for _, id := range builtinSkillIDs {

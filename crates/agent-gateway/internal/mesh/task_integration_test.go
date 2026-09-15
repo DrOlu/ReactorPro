@@ -7,15 +7,19 @@ package mesh
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/liveagent/agent-gateway/internal/observability"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nuid"
 )
@@ -576,6 +580,209 @@ func TestIntegrationStreamedTaskPublishesOrderedChunksAndATerminalTail(t *testin
 	if invoker.requests[len(invoker.requests)-1].Progress != nil {
 		t.Fatal("a task that did not opt into streaming must not reach the invoker with a progress callback")
 	}
+}
+
+// webhookReceipt is one notification a receiver accepted, kept raw enough to
+// verify the signature against the sender's advertised identity — the exact
+// flow a serverless consumer would run.
+type webhookReceipt struct {
+	body        []byte
+	agentID     string
+	fingerprint string
+	publicKey   string
+	signature   string
+	taskState   string
+}
+
+// TestIntegrationTaskWebhookIsSignedAndDeliveredOnTerminal is the push
+// contract end to end: a task created with a notify URL on one edge, running
+// on a second edge, completes; the creator POSTs the stub to the receiver,
+// signed with the mesh identity trio; the receiver verifies with
+// VerifySignedBody and pins the fingerprint against the gateway's status —
+// with zero prior contact between receiver and gateway.
+func TestIntegrationTaskWebhookIsSignedAndDeliveredOnTerminal(t *testing.T) {
+	url := startTestNATS(t)
+	executorID := uniqueID("acme/lagos/executor")
+	callerID := uniqueID("globex/berlin/caller")
+
+	_ = taskEdge(t, url, executorID,
+		&recordingInvoker{result: LocalInvokeResult{OK: true, Result: json.RawMessage(`{"text":"Q3 is up."}`)}},
+		newFakeTaskStore(), nil)
+	callerStore := newFakeTaskStore()
+	caller := taskEdge(t, url, callerID, &recordingInvoker{}, callerStore, nil)
+
+	// The receiver: a plain HTTP server, as a Lambda or mobile backend would
+	// be. It records the raw body and the identity headers.
+	receipts := make(chan webhookReceipt, 4)
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		// The public key arrives base64-encoded: a PEM block cannot travel in
+		// an HTTP header (newlines), so the receiver decodes before verifying.
+		publicKey, err := base64.StdEncoding.DecodeString(r.Header.Get(WebhookHeaderPublicKey))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		receipts <- webhookReceipt{
+			body:        body,
+			agentID:     r.Header.Get(WebhookHeaderAgent),
+			fingerprint: r.Header.Get(WebhookHeaderFingerprint),
+			publicKey:   string(publicKey),
+			signature:   r.Header.Get(WebhookHeaderSignature),
+			taskState:   r.Header.Get(WebhookHeaderTaskState),
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer receiver.Close()
+
+	stub, err := caller.CreateRemoteTask(t.Context(), CreateRemoteTaskParams{
+		Target:    executorID,
+		TaskID:    "push-1",
+		NotifyURL: receiver.URL,
+		Input: map[string]any{
+			"target":    "agent-1",
+			"operation": OperationTask,
+			"arguments": map[string]any{"prompt": "Summarise Q3"},
+		},
+		CreateTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("CreateRemoteTask: %v", err)
+	}
+	_ = stub
+
+	waitStubState(t, callerStore, "push-1", TaskCompleted)
+
+	// The notification arrives asynchronously (it fires on the event path);
+	// the deadline is generous because retries are allowed to have happened.
+	select {
+	case receipt := <-receipts:
+		// The recipient's whole job, in one call — and it must pass with no
+		// prior contact with this gateway.
+		if err := VerifySignedBody(receipt.agentID, receipt.fingerprint,
+			receipt.publicKey, receipt.body, receipt.signature); err != nil {
+			t.Fatalf("the webhook body did not verify: %v", err)
+		}
+		// The pinned-fingerprint check: the claimed identity is the gateway's
+		// real one, as a receiver that had met this edge before would demand.
+		if receipt.fingerprint != caller.Status().Fingerprint {
+			t.Fatalf("webhook fingerprint %s is not the gateway's %s",
+				receipt.fingerprint, caller.Status().Fingerprint)
+		}
+		if receipt.taskState != string(TaskCompleted) {
+			t.Fatalf("the state header should say completed, got %s", receipt.taskState)
+		}
+		var delivered TaskStub
+		if err := json.Unmarshal(receipt.body, &delivered); err != nil {
+			t.Fatalf("the payload is not the stub JSON: %v", err)
+		}
+		if delivered.TaskID != "push-1" || delivered.State != TaskCompleted {
+			t.Fatalf("the payload stub is wrong: %+v", delivered)
+		}
+		if string(delivered.Result) != `{"text":"Q3 is up."}` {
+			t.Fatalf("the payload should carry the result: %s", delivered.Result)
+		}
+		// Exactly once: no second notification may follow.
+		select {
+		case extra := <-receipts:
+			t.Fatalf("a second notification arrived: %+v", extra)
+		case <-time.After(300 * time.Millisecond):
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the webhook was never delivered (attempts=%d failures=%d)",
+			observability.Usage.MeshTaskWebhookTotal.Load(),
+			observability.Usage.MeshTaskWebhookFailedTotal.Load())
+	}
+}
+
+// TestIntegrationTaskRetryRunsAgainAcrossEdges: a failed task on one edge is
+// retried through the task.retry skill by its creating caller and completes on
+// the second attempt — the manual-resume primitive over the wire.
+func TestIntegrationTaskRetryRunsAgainAcrossEdges(t *testing.T) {
+	url := startTestNATS(t)
+	executorID := uniqueID("acme/lagos/worker")
+	callerID := uniqueID("globex/berlin/caller")
+
+	// The invoker fails the first run and succeeds the second.
+	invoker := &flakyInvoker{failuresRemaining: 1, result: LocalInvokeResult{OK: true, Result: json.RawMessage(`{"text":"second try worked."}`)}}
+	executorStore := newFakeTaskStore()
+	executor := taskEdge(t, url, executorID, invoker, executorStore, nil)
+	_ = executor
+	callerStore := newFakeTaskStore()
+	caller := taskEdge(t, url, callerID, &recordingInvoker{}, callerStore, nil)
+
+	if _, err := caller.CreateRemoteTask(t.Context(), CreateRemoteTaskParams{
+		Target: executorID,
+		TaskID: "flaky-run-1",
+		Input: map[string]any{
+			"target":    "agent-1",
+			"operation": OperationTask,
+			"arguments": map[string]any{"prompt": "hello"},
+		},
+		CreateTimeout: 5 * time.Second,
+	}); err != nil {
+		t.Fatalf("CreateRemoteTask: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if task, ok, _ := executorStore.GetTask(callerID, "flaky-run-1"); ok && task.State == TaskFailed {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// The creating caller retries over the wire, through the skill.
+	envelope, err := caller.Dispatch(t.Context(), executorID, SkillTaskRetry,
+		map[string]any{"task_id": "flaky-run-1"}, 10*time.Second)
+	if err != nil {
+		t.Fatalf("task.retry dispatch: %v", err)
+	}
+	var respond RespondPayload
+	if len(envelope.Payload) > 0 {
+		_ = json.Unmarshal(envelope.Payload, &respond)
+	}
+	retried, err := taskFromOutput(respond.Output)
+	if err != nil {
+		t.Fatalf("the retry reply was not a task: %v", err)
+	}
+	if retried.State != TaskQueued {
+		t.Fatalf("a retry requeues, got %s", retried.State)
+	}
+
+	// The second run completes under the same id.
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if task, ok, _ := executorStore.GetTask(callerID, "flaky-run-1"); ok && task.State == TaskCompleted {
+			if string(task.Result) != `{"text":"second try worked."}` {
+				t.Fatalf("second-run result: %s", task.Result)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	task, _, _ := executorStore.GetTask(callerID, "flaky-run-1")
+	t.Fatalf("the retried task never completed (state %s)", task.State)
+}
+
+// flakyInvoker fails its first N invocations and then succeeds — the shape of
+// work that a retry exists for.
+type flakyInvoker struct {
+	failuresRemaining int
+	result            LocalInvokeResult
+	requests          []LocalInvokeRequest
+}
+
+func (f *flakyInvoker) InvokeLocalAgent(ctx context.Context, request LocalInvokeRequest) (LocalInvokeResult, error) {
+	f.requests = append(f.requests, request)
+	if f.failuresRemaining > 0 {
+		f.failuresRemaining--
+		return LocalInvokeResult{}, &codedError{code: CodeInternalError, reason: "transient"}
+	}
+	return f.result, nil
 }
 
 // TestIntegrationEdgeWithoutStoreDoesNotAdvertiseTasks: the honest manifest.

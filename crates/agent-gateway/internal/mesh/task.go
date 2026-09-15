@@ -145,6 +145,11 @@ type TaskStub struct {
 	State        TaskState       `json:"state"`
 	Result       json.RawMessage `json:"result,omitempty"`
 	ErrorMessage string          `json:"error_message,omitempty"`
+	// NotifyURL is where this task's terminal state is pushed. Local operator
+	// input only — set through the REST create, never read from a remote
+	// peer's invoke input, because a peer-supplied URL would let anyone who
+	// can dispatch a task aim this gateway's POSTs at internal addresses.
+	NotifyURL string `json:"notify_url,omitempty"`
 	// CompletedSync records that the peer answered the old synchronous way —
 	// an unupgraded edge or a text-based bridge — so the handle and the answer
 	// arrived in one reply. The caller still gets a completed task object.

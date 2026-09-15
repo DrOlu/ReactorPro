@@ -52,6 +52,11 @@ type ProtoUsage struct {
 	MeshTaskCompletedTotal atomic.Int64
 	MeshTaskFailedTotal    atomic.Int64
 	MeshTaskCanceledTotal  atomic.Int64
+	// Mesh task webhooks. Total counts notifications actually dispatched
+	// (after dedup); Failed counts deliveries abandoned after their retries —
+	// a webhook is best-effort, and the task record stays queryable regardless.
+	MeshTaskWebhookTotal       atomic.Int64
+	MeshTaskWebhookFailedTotal atomic.Int64
 }
 
 // Usage is a process-level singleton; each protocol layer increments it directly.
@@ -92,5 +97,7 @@ func (u *ProtoUsage) Snapshot() map[string]int64 {
 		"mesh_task_completed_total":                u.MeshTaskCompletedTotal.Load(),
 		"mesh_task_failed_total":                   u.MeshTaskFailedTotal.Load(),
 		"mesh_task_canceled_total":                 u.MeshTaskCanceledTotal.Load(),
+		"mesh_task_webhook_total":                  u.MeshTaskWebhookTotal.Load(),
+		"mesh_task_webhook_failed_total":           u.MeshTaskWebhookFailedTotal.Load(),
 	}
 }

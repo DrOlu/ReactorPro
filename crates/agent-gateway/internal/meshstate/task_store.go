@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS mesh_task_stubs (
 	state          TEXT NOT NULL,
 	result_json    TEXT,
 	error_message  TEXT NOT NULL DEFAULT '',
+	notify_url     TEXT NOT NULL DEFAULT '',
 	completed_sync INTEGER NOT NULL DEFAULT 0,
 	created_at     TEXT NOT NULL,
 	updated_at    TEXT NOT NULL
@@ -75,6 +76,11 @@ func (s *Store) initTaskSchema() error {
 	for _, statement := range []string{taskSchema, stubSchema} {
 		if _, err := s.pool.Exec(statement); err != nil {
 			return fmt.Errorf("init mesh task schema: %w", err)
+		}
+	}
+	if !taskColumnExists(s.pool, "mesh_task_stubs", "notify_url") {
+		if _, err := s.pool.Exec(`ALTER TABLE mesh_task_stubs ADD COLUMN notify_url TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("migrate mesh_task_stubs notify_url column: %w", err)
 		}
 	}
 	if !taskColumnExists(s.pool, "mesh_tasks", "stream") {
@@ -289,19 +295,20 @@ func (s *Store) SaveTaskStub(stub mesh.TaskStub) error {
 	}
 	_, err := s.pool.Exec(`
 		INSERT INTO mesh_task_stubs
-			(task_id, target, skill, state, result_json, error_message, completed_sync, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(task_id, target, skill, state, result_json, error_message, notify_url, completed_sync, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(task_id) DO UPDATE SET
 			target         = excluded.target,
 			skill          = excluded.skill,
 			state          = excluded.state,
 			result_json    = excluded.result_json,
 			error_message  = excluded.error_message,
+			notify_url     = excluded.notify_url,
 			completed_sync = excluded.completed_sync,
 			created_at     = excluded.created_at,
 			updated_at    = excluded.updated_at`,
 		stub.TaskID, stub.Target, stub.Skill, string(stub.State), result,
-		stub.ErrorMessage, syncFlag,
+		stub.ErrorMessage, stub.NotifyURL, syncFlag,
 		formatTaskTime(stub.CreatedAt), formatTaskTime(stub.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("save mesh task stub: %w", err)
@@ -316,10 +323,10 @@ func (s *Store) GetTaskStub(taskID string) (mesh.TaskStub, bool, error) {
 	var result sql.NullString
 	var syncFlag int
 	err := s.pool.QueryRow(`
-		SELECT task_id, target, skill, state, result_json, error_message, completed_sync, created_at, updated_at
+		SELECT task_id, target, skill, state, result_json, error_message, notify_url, completed_sync, created_at, updated_at
 		FROM mesh_task_stubs WHERE task_id = ?`, taskID).
 		Scan(&stub.TaskID, &stub.Target, &stub.Skill, &state, &result,
-			&stub.ErrorMessage, &syncFlag, &createdAt, &updatedAt)
+			&stub.ErrorMessage, &stub.NotifyURL, &syncFlag, &createdAt, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return mesh.TaskStub{}, false, nil
 	}
@@ -343,7 +350,7 @@ func (s *Store) GetTaskStub(taskID string) (mesh.TaskStub, bool, error) {
 // ListTaskStubs returns stubs newest-first with the same cursor rule as tasks.
 func (s *Store) ListTaskStubs(before time.Time, limit int) ([]mesh.TaskStub, error) {
 	query := `
-		SELECT task_id, target, skill, state, result_json, error_message, completed_sync, created_at, updated_at
+		SELECT task_id, target, skill, state, result_json, error_message, notify_url, completed_sync, created_at, updated_at
 		FROM mesh_task_stubs`
 	args := []any{}
 	if !before.IsZero() {
@@ -367,7 +374,7 @@ func (s *Store) ListTaskStubs(before time.Time, limit int) ([]mesh.TaskStub, err
 		var result sql.NullString
 		var syncFlag int
 		if err := rows.Scan(&stub.TaskID, &stub.Target, &stub.Skill, &state, &result,
-			&stub.ErrorMessage, &syncFlag, &createdAt, &updatedAt); err != nil {
+			&stub.ErrorMessage, &stub.NotifyURL, &syncFlag, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan mesh task stub: %w", err)
 		}
 		stub.State = mesh.TaskState(state)
