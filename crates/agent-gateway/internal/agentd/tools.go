@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -39,16 +40,23 @@ type Tool struct {
 	Run func(ctx context.Context, args map[string]any) (string, error)
 }
 
-// Toolset builds the enabled tools around a sandbox root.
+// Toolset builds the enabled tools around a sandbox root, plus an optional
+// read-only skills library.
 type Toolset struct {
-	root  string
-	shell bool
-	fetch bool
+	root   string
+	shell  bool
+	fetch  bool
+	skills map[string]Skill
 }
 
-// NewToolset binds the enabled tools to a workdir root.
-func NewToolset(root string, shell, fetch bool) *Toolset {
-	return &Toolset{root: root, shell: shell, fetch: fetch}
+// NewToolset binds the enabled tools to a workdir root and a scanned skills
+// library (nil or empty disables the skill tools).
+func NewToolset(root string, shell, fetch bool, skills []Skill) *Toolset {
+	byName := map[string]Skill{}
+	for _, skill := range skills {
+		byName[skill.Name] = skill
+	}
+	return &Toolset{root: root, shell: shell, fetch: fetch, skills: byName}
 }
 
 // Tools returns the enabled tools in a stable order (order matters: it is the
@@ -120,7 +128,86 @@ func (t *Toolset) Tools() []Tool {
 			Run: t.runFetch,
 		})
 	}
+	if len(t.skills) > 0 {
+		tools = append(tools,
+			Tool{
+				Name:        "read_skill",
+				Description: "Load a skill's SKILL.md instructions from the library by name. Do this before following a skill.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"skill": map[string]any{"type": "string", "description": "The skill name exactly as listed in the system prompt."},
+					},
+					"required": []string{"skill"},
+				},
+				Run: t.runReadSkill,
+			},
+			Tool{
+				Name:        "read_skill_file",
+				Description: "Read a supporting file inside a skill's directory (references, scripts).",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"skill": map[string]any{"type": "string", "description": "The skill name exactly as listed in the system prompt."},
+						"path":  map[string]any{"type": "string", "description": "Path relative to the skill's directory."},
+					},
+					"required": []string{"skill", "path"},
+				},
+				Run: t.runReadSkillFile,
+			},
+		)
+	}
 	return tools
+}
+
+// Skills returns the scanned library sorted by name, for the system prompt.
+func (t *Toolset) Skills() []Skill {
+	out := make([]Skill, 0, len(t.skills))
+	for _, skill := range t.skills {
+		out = append(out, skill)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// resolveSkill finds a scanned skill by name — only scanned names are
+// servable, so a model cannot probe the filesystem with invented names.
+func (t *Toolset) resolveSkill(name string) (Skill, error) {
+	skill, ok := t.skills[strings.TrimSpace(name)]
+	if !ok {
+		return Skill{}, fmt.Errorf("no skill %q in the library (use a name from the system prompt)", name)
+	}
+	return skill, nil
+}
+
+func (t *Toolset) runReadSkill(_ context.Context, args map[string]any) (string, error) {
+	skill, err := t.resolveSkill(argString(args, "skill"))
+	if err != nil {
+		return "", err
+	}
+	content, err := os.ReadFile(filepath.Join(skill.Dir, skillFile))
+	if err != nil {
+		return "", fmt.Errorf("read skill %q: %v", skill.Name, err)
+	}
+	return capString(string(content), skillOutputCap), nil
+}
+
+func (t *Toolset) runReadSkillFile(_ context.Context, args map[string]any) (string, error) {
+	skill, err := t.resolveSkill(argString(args, "skill"))
+	if err != nil {
+		return "", err
+	}
+	// Same confinement rule as the workdir, applied to the skill's own
+	// directory: the model may read inside the skill, nowhere else.
+	target := filepath.Join(skill.Dir, filepath.Clean(strings.TrimSpace(argString(args, "path"))))
+	if !withinRoot(skill.Dir, target) {
+		return "", fmt.Errorf("path %q escapes the skill directory", argString(args, "path"))
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		return "", fmt.Errorf("read skill %q file %q: %v", skill.Name, argString(args, "path"), err)
+	}
+	return capString(string(content), skillOutputCap), nil
 }
 
 // resolvePath anchors a tool-supplied path inside the sandbox root and refuses

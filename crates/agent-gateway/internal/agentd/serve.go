@@ -22,7 +22,11 @@ func Serve(ctx context.Context, cfg *Config, logger *slog.Logger) error {
 	}
 	provider := NewProvider(cfg.ProviderURL, cfg.ProviderKey, cfg.ProviderModel,
 		cfg.MaxTokens, cfg.RequestTimeout)
-	tools := NewToolset(cfg.Workdir, cfg.ShellEnabled, cfg.FetchEnabled)
+	skills, err := LoadSkills(cfg.SkillsDir)
+	if err != nil {
+		return err
+	}
+	tools := NewToolset(cfg.Workdir, cfg.ShellEnabled, cfg.FetchEnabled, skills)
 	SetCommandTimeout(cfg.CommandTimeout)
 
 	client := NewClient(cfg, logger, nil, nil, nil, nil)
@@ -37,7 +41,7 @@ func Serve(ctx context.Context, cfg *Config, logger *slog.Logger) error {
 		"agent_id", cfg.AgentID, "gateway", cfg.GatewayURL,
 		"model", cfg.ProviderModel, "workdir", cfg.Workdir,
 		"concurrency", cfg.Concurrency,
-		"tools", toolNames(tools))
+		"tools", toolNames(tools), "skills", len(skills))
 	return client.Run(ctx)
 }
 
