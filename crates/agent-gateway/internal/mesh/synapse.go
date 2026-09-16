@@ -301,6 +301,29 @@ func (a *Agent) Start(ctx context.Context) error {
 		a.logger.Warn("mesh heartbeat subscription failed", "error", err)
 	}
 
+	// Flush the subscriptions to the server before doing anything else. The
+	// inbox subscription above is what makes this agent answerable on the
+	// mesh: without a flush the SUB can still be sitting in the client's write
+	// buffer when Start returns, so a caller that dispatches immediately
+	// publishes to a subject the server has no subscriber for. Core NATS drops
+	// that request and the caller times out. The Register/heartbeat publishes
+	// below are async and do not force a flush themselves, so this is the only
+	// point that guarantees the agent is actually listening before it is used.
+	if err := conn.Flush(); err != nil {
+		_ = sub.Unsubscribe()
+		if discoverSub != nil {
+			_ = discoverSub.Unsubscribe()
+		}
+		if heartbeatSub != nil {
+			_ = heartbeatSub.Unsubscribe()
+		}
+		a.mu.Lock()
+		a.conn = nil
+		a.mu.Unlock()
+		conn.Close()
+		return fmt.Errorf("flush mesh subscriptions: %w", err)
+	}
+
 	a.setManifest(a.buildManifest())
 
 	// Probe and bind the discovery registry before going live. In jetstream mode
