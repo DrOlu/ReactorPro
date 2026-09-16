@@ -82,7 +82,30 @@ type Agent struct {
 	// collision records a peer seen using this edge's own id, which makes the
 	// mesh ambiguous. Empty when none has been seen.
 	collision string
+
+	// inboundDone closes when the agent stops, releasing the inbound request
+	// workers. Created by Start; nil before it.
+	inboundDone chan struct{}
 }
+
+// The inbound dispatch model.
+//
+// A synchronous handler on the subscription's single delivery goroutine would
+// head-of-line block the whole edge: an invoke legally holds its handler for
+// up to the invoke deadline — minutes — and every other mesh message arriving
+// on the inbox (ping, describe, status, task.cancel, another peer's invoke,
+// even one aimed at a different attached agent) would queue behind it, its
+// caller's timeout firing while the envelope sat unprocessed. So the inbox is
+// a channel feeding a bounded worker pool: concurrent requests run
+// concurrently, a burst queues in the channel (and then in the subscription's
+// own pending buffer), and the per-sender rate limiter — already the guard's
+// first check — is what bounds a flood. Handlers are safe to run in parallel:
+// the guard's stores are mutex'd, and the skills they reach are built for
+// concurrent callers.
+const (
+	inboundDispatchWorkers = 16
+	inboundDispatchQueue   = 256
+)
 
 // NewAgent builds an agent. It does not connect until Start is called.
 func NewAgent(config Config, identity *Identity, logger *slog.Logger) *Agent {
@@ -275,15 +298,40 @@ func (a *Agent) Start(ctx context.Context) error {
 	a.conn = conn
 	a.mu.Unlock()
 
-	// Serve inbound skill requests.
+	// Serve inbound skill requests on a bounded worker pool — see the
+	// inboundDispatchWorkers note for why the handler must not run on the
+	// subscription's delivery goroutine.
 	inbox := AgentInboxSubject(a.agentID)
-	sub, err := conn.Subscribe(inbox, a.handleInboundRequest)
+	requests := make(chan *nats.Msg, inboundDispatchQueue)
+	sub, err := conn.ChanSubscribe(inbox, requests)
 	if err != nil {
 		a.mu.Lock()
 		a.conn = nil
 		a.mu.Unlock()
 		conn.Close()
 		return fmt.Errorf("subscribe to %s: %w", inbox, err)
+	}
+	inboundDone := make(chan struct{})
+	a.mu.Lock()
+	a.inboundDone = inboundDone
+	a.mu.Unlock()
+	for i := 0; i < inboundDispatchWorkers; i++ {
+		go func() {
+			// The done channel is captured, not read off the agent: Stop nils
+			// the field under a.mu, and reading it here per iteration is
+			// exactly the data race the -race build exists to catch.
+			for {
+				select {
+				case <-inboundDone:
+					return
+				case message, ok := <-requests:
+					if !ok {
+						return
+					}
+					a.handleInboundRequest(message)
+				}
+			}
+		}()
 	}
 	// Answer discovery queries directly. The Synapse SDK's agents do this, and
 	// without it discovery only works when a separate registry service happens
@@ -407,14 +455,22 @@ func (a *Agent) Stop(ctx context.Context) error {
 	started := a.started
 	agentID := a.agentID
 	registry := a.registry
+	done := a.inboundDone
 	a.started = false
 	a.conn = nil
 	a.subs = nil
 	a.registry = nil
+	a.inboundDone = nil
 	a.mu.Unlock()
 
 	if !started || conn == nil {
 		return nil
+	}
+	if done != nil {
+		// Release the inbound workers. An in-flight handler still finishes —
+		// its reply publish is a no-op once the connection is gone — the same
+		// contract a mid-flight callback had before the pool existed.
+		close(done)
 	}
 	for _, sub := range subs {
 		_ = sub.Unsubscribe()
