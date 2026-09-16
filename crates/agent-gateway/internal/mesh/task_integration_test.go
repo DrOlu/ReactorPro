@@ -56,7 +56,10 @@ func taskEdge(t *testing.T, url, agentID string, invoker LocalInvoker, store Tas
 // not what it asserts.
 func waitStubState(t *testing.T, store TaskStore, taskID string, want TaskState) TaskStub {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	// Cross-edge state events traverse the mesh asynchronously and the race
+	// detector multiplies the cost; 15s mirrors the deadline the rest of this
+	// suite's integration waits use, and stays well under CI's per-test budget.
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		stub, ok, _ := store.GetTaskStub(taskID)
 		if ok && stub.State == want {
