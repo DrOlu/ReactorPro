@@ -268,6 +268,16 @@ type conversationStreamStore struct {
 	reaperOnce sync.Once
 	isOnline   func(string) bool
 
+	// retainFinishedSnapshot, when set, marks agents whose finished runs
+	// keep their final projection on the stream. A desktop holds its own
+	// conversation history, so the gateway's snapshot is only a live-tail
+	// aid and is dropped at run finish. A headless worker keeps no history
+	// of its own — the stream IS the record — so its final projections are
+	// retained until the whole stream is reaped, which is what keeps the
+	// management interface's history view alive past the event log's
+	// (shorter) retention clock.
+	retainFinishedSnapshot func(agentID string) bool
+
 	// tunable in tests
 	eventRetention       time.Duration
 	maxEvents            int
@@ -746,7 +756,8 @@ func (s *conversationStreamStore) runFinishedLocked(
 		stream.finishedRuns = stream.finishedRuns[1:]
 		delete(s.runs, agentScopedKey(stream.agentID, evicted))
 	}
-	if stream.latestSnapshot != nil && stream.latestSnapshot.RunID == runID {
+	if stream.latestSnapshot != nil && stream.latestSnapshot.RunID == runID &&
+		(s.retainFinishedSnapshot == nil || !s.retainFinishedSnapshot(stream.agentID)) {
 		stream.latestSnapshot = nil
 	}
 	if stream.activity != nil && stream.activity.RunID == runID {

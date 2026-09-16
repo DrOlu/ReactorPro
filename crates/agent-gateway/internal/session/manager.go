@@ -90,6 +90,13 @@ func NewManager() *Manager {
 		clarifyDeltas:    newClarifyDeltaHub(),
 	}
 	m.convStreams = newConversationStreamStore(m.IsOnline)
+	// A headless worker keeps no conversation history of its own — the
+	// gateway's stream IS the record — so its finished runs retain their
+	// final projection until the stream is reaped. Evaluated lazily at run
+	// finish, by which time the registry is live.
+	m.convStreams.retainFinishedSnapshot = func(agentID string) bool {
+		return m.AgentSupportsCapability(agentID, HeadlessWorkerCapability)
+	}
 	go m.tunnelExpirySweepLoop()
 	return m
 }
