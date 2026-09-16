@@ -766,3 +766,38 @@ func TestInvokeTaskRefusalCodesMapOntoMeshCodes(t *testing.T) {
 		})
 	}
 }
+
+// conversation_id travels both ways of a synchronous invoke: the caller's
+// continuation request reaches the transport intact, and the conversation the
+// run happened in comes back so the next invoke can continue it — that pair is
+// the whole session-persistence contract on the wire.
+func TestSkillInvokeConversationIDTravelsBothWays(t *testing.T) {
+	invoker := &recordingInvoker{result: LocalInvokeResult{
+		OK:             true,
+		Result:         json.RawMessage(`{"summary":"done"}`),
+		ConversationID: "remote-task-conv-continue-1",
+	}}
+	manager := invokeTestManager(t, invokeAgents(), nil)
+	manager.SetLocalInvoker(invoker)
+
+	output, err := manager.skillInvoke(t.Context(), map[string]any{
+		"target":          "agent-2",
+		"operation":       OperationTask,
+		"arguments":       map[string]any{"prompt": "continue where we left off"},
+		"conversation_id": "  remote-task-conv-continue-1  ",
+	}, verifiedCaller())
+	if err != nil {
+		t.Fatalf("skillInvoke: %v", err)
+	}
+
+	if sent := invoker.requests[0]; sent.ConversationID != "remote-task-conv-continue-1" {
+		t.Fatalf("invoker conversation = %q, want the caller's (trimmed)", sent.ConversationID)
+	}
+	result, ok := output.(InvokeOutput)
+	if !ok {
+		t.Fatalf("output = %T, want InvokeOutput", output)
+	}
+	if result.ConversationID != "remote-task-conv-continue-1" {
+		t.Fatalf("output conversation = %q, want the run's", result.ConversationID)
+	}
+}

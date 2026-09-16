@@ -387,3 +387,197 @@ func readBrowserResponse(t *testing.T, conn *websocket.Conn, requestID string) *
 	t.Fatalf("no response arrived for %s within the deadline — the request would hang at the browser", requestID)
 	return nil
 }
+
+// echoProvider answers with the last user message verbatim, so a resumed
+// conversation's answer proves exactly what context the far side saw: if the
+// prior turns were rehydrated, the echo carries them; if not, it is only the
+// new prompt.
+func echoProvider() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var request struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.Unmarshal(body, &request)
+		answer := ""
+		for _, message := range request.Messages {
+			if message.Role == "user" {
+				answer = message.Content
+			}
+		}
+		encoded, err := json.Marshal(answer)
+		if err != nil {
+			encoded = []byte(`""`)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":%s,"tool_calls":null}}]}`, encoded)
+	}))
+}
+
+func remoteTaskAnswerText(t *testing.T, result session.RemoteTaskResult) string {
+	t.Helper()
+	if !result.OK {
+		t.Fatalf("the remote task failed: %s (%s)", result.ErrorMessage, result.ErrorCode)
+	}
+	var payload struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(result.Output, &payload); err != nil {
+		t.Fatalf("task output %s is not the answer shape: %v", result.Output, err)
+	}
+	return payload.Text
+}
+
+// A headless worker is stateless by design — but an invoke that continues a
+// conversation must arrive WITH that conversation's prior turns, or the
+// "resume" continues in name only. The gateway rehydrates the retained
+// transcript into the prompt, which is what this test pins from both sides:
+// the resumed answer carries the earlier turn, the fresh one does not.
+func TestE2EAgentdConversationPersistence(t *testing.T) {
+	provider := echoProvider()
+	t.Cleanup(provider.Close)
+	manager := startE2E(t, 1, provider.URL)
+
+	if err := chatcmd.ProbeRuntimeForCommand(context.Background(), manager, e2eAgentID); err != nil {
+		t.Fatalf("runtime probe (ping/pong): %v", err)
+	}
+
+	first, err := manager.SubmitRemoteTask(context.Background(), e2eAgentID,
+		"remember this codeword: banana-42")
+	if err != nil {
+		t.Fatalf("first SubmitRemoteTask: %v", err)
+	}
+	firstAnswer := remoteTaskAnswerText(t, first)
+	if !strings.Contains(firstAnswer, "banana-42") {
+		t.Fatalf("the echo provider did not echo the prompt: %q", firstAnswer)
+	}
+
+	// The resumed turn: same conversation, new question. What the worker
+	// saw is exactly what the echo reports back.
+	resumed, err := manager.SubmitRemoteTaskInConversation(context.Background(), e2eAgentID,
+		first.ConversationID, "what was the codeword?", nil)
+	if err != nil {
+		t.Fatalf("SubmitRemoteTaskInConversation: %v", err)
+	}
+	if resumed.ConversationID != first.ConversationID {
+		t.Fatalf("the resumed task ran in %q, want the original %q",
+			resumed.ConversationID, first.ConversationID)
+	}
+	resumedAnswer := remoteTaskAnswerText(t, resumed)
+	if !strings.Contains(resumedAnswer, "banana-42") {
+		t.Fatalf("the resumed turn did not receive the prior transcript (memory missing): %q", resumedAnswer)
+	}
+
+	// A fresh conversation is a clean slate: the codeword must NOT leak in.
+	fresh, err := manager.SubmitRemoteTask(context.Background(), e2eAgentID,
+		"what was the codeword?")
+	if err != nil {
+		t.Fatalf("fresh SubmitRemoteTask: %v", err)
+	}
+	if fresh.ConversationID == first.ConversationID {
+		t.Fatalf("a task without a conversation id resumed %q", first.ConversationID)
+	}
+	if freshAnswer := remoteTaskAnswerText(t, fresh); strings.Contains(freshAnswer, "banana-42") {
+		t.Fatalf("memory leaked into a fresh conversation: %q", freshAnswer)
+	}
+}
+
+// The management interface's history arms must be answered by the gateway for
+// a headless worker: its conversations live in the gateway's store, and the
+// worker itself would answer an empty list. The desktop path is untouched —
+// an agent without the headless marker is still relayed to as before.
+func TestE2EAgentdHistoryServedToTheBrowser(t *testing.T) {
+	provider := echoProvider()
+	t.Cleanup(provider.Close)
+	manager, browserURL := startE2EBrowserAndAgent(t, provider.URL)
+
+	if err := chatcmd.ProbeRuntimeForCommand(context.Background(), manager, e2eAgentID); err != nil {
+		t.Fatalf("runtime probe (ping/pong): %v", err)
+	}
+	result, err := manager.SubmitRemoteTask(context.Background(), e2eAgentID,
+		"the marker for the history test is mango-77")
+	if err != nil {
+		t.Fatalf("SubmitRemoteTask: %v", err)
+	}
+	remoteTaskAnswerText(t, result)
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(browserURL, "http"), nil)
+	if err != nil {
+		t.Fatalf("browser dial: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	writeBrowserFrame(conn, &gatewayv2.WebClientFrame{
+		Payload: &gatewayv2.WebClientFrame_Hello{Hello: &gatewayv2.ClientHello{
+			ProtocolVersion: 2,
+			Token:           e2eToken,
+			ClientName:      "e2e-history-browser",
+		}},
+	})
+	if _, raw, err := conn.ReadMessage(); err != nil {
+		t.Fatalf("browser hello: %v", err)
+	} else {
+		var frame gatewayv2.WebServerFrame
+		if err := decodeProto(raw, &frame); err != nil || frame.GetHello() == nil || !frame.GetHello().GetOk() {
+			t.Fatalf("browser handshake failed")
+		}
+	}
+
+	// history_list: the conversation the task ran in must be listed.
+	writeBrowserFrame(conn, &gatewayv2.WebClientFrame{
+		RequestId: "history-list-1",
+		AgentId:   e2eAgentID,
+		Payload: &gatewayv2.WebClientFrame_AgentRequest{AgentRequest: &gatewayv2.GatewayEnvelope{
+			RequestId: "history-list-1",
+			Timestamp: time.Now().Unix(),
+			Payload:   &gatewayv2.GatewayEnvelope_HistoryList{HistoryList: &gatewayv2.HistoryListRequest{}},
+		}},
+	})
+	response := readBrowserResponse(t, conn, "history-list-1")
+	list := response.GetAgentResponse().GetHistoryListResp()
+	if list == nil {
+		t.Fatalf("history_list pass-through = %+v, want a locally served list", response.GetPayload())
+	}
+	var listed *gatewayv2.ConversationSummary
+	for _, summary := range list.GetConversations() {
+		if summary.GetId() == result.ConversationID {
+			listed = summary
+		}
+	}
+	if listed == nil {
+		t.Fatalf("the remote task's conversation %q is not listed (total %d): %+v",
+			result.ConversationID, list.GetTotalCount(), list.GetConversations())
+	}
+	if !strings.Contains(listed.GetTitle(), "mango-77") {
+		t.Fatalf("the conversation title %q does not derive from the prompt", listed.GetTitle())
+	}
+	if listed.GetMessageCount() < 2 {
+		t.Fatalf("the conversation should carry the user message and the answer, has %d", listed.GetMessageCount())
+	}
+
+	// history_get for that conversation: the transcript entries.
+	writeBrowserFrame(conn, &gatewayv2.WebClientFrame{
+		RequestId: "history-get-1",
+		AgentId:   e2eAgentID,
+		Payload: &gatewayv2.WebClientFrame_AgentRequest{AgentRequest: &gatewayv2.GatewayEnvelope{
+			RequestId: "history-get-1",
+			Timestamp: time.Now().Unix(),
+			Payload: &gatewayv2.GatewayEnvelope_HistoryGet{HistoryGet: &gatewayv2.HistoryGetRequest{
+				ConversationId: result.ConversationID,
+			}},
+		}},
+	})
+	response = readBrowserResponse(t, conn, "history-get-1")
+	detail := response.GetAgentResponse().GetHistoryGetResp()
+	if detail == nil {
+		t.Fatalf("history_get pass-through = %+v, want a locally served transcript", response.GetPayload())
+	}
+	if detail.GetConversationId() != result.ConversationID || detail.GetReturnedMessageCount() < 2 {
+		t.Fatalf("history_get = %+v, want the conversation with its entries", detail)
+	}
+	if !strings.Contains(detail.GetMessagesJson(), "mango-77") {
+		t.Fatalf("the served transcript %q does not carry the prompt", detail.GetMessagesJson())
+	}
+}

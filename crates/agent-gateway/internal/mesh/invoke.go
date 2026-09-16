@@ -96,6 +96,13 @@ type InvokeInput struct {
 	// resumes. Opt-in for the same reason streaming is: an agent that has not
 	// been told the convention must not have its questions reinterpreted.
 	AllowInput bool `json:"allow_input,omitempty"`
+	// ConversationID continues an existing conversation instead of starting
+	// a fresh one — the session-persistence path. Pass the conversation_id a
+	// previous reply returned and the run picks up where the last one ended:
+	// the desktop continues its own conversation, and a headless worker is
+	// rehydrated with the prior turns by the edge. Empty (the default)
+	// starts a new conversation, exactly as before.
+	ConversationID string `json:"conversation_id,omitempty"`
 }
 
 // InvokeOutput is returned to the caller on success.
@@ -103,6 +110,10 @@ type InvokeOutput struct {
 	Agent     string          `json:"agent"`
 	Operation string          `json:"operation"`
 	Result    json.RawMessage `json:"result,omitempty"`
+	// ConversationID is the conversation the run happened in. A caller that
+	// wants the next invoke to continue this one passes it back as
+	// conversation_id on the next request.
+	ConversationID string `json:"conversation_id,omitempty"`
 }
 
 // codedError lets a skill choose the mesh error code a peer sees, instead of
@@ -319,6 +330,7 @@ func (m *Manager) skillInvoke(ctx context.Context, input any, meta RequestMeta) 
 		Operation:         request.Operation,
 		Arguments:         request.Arguments,
 		Timeout:           timeout,
+		ConversationID:    request.ConversationID,
 	})
 	if err != nil {
 		observability.Usage.MeshInvokeFailedTotal.Add(1)
@@ -339,9 +351,10 @@ func (m *Manager) skillInvoke(ctx context.Context, input any, meta RequestMeta) 
 		"agent", agent.ID, "caller", meta.From, "operation", request.Operation, "task", meta.TaskID)
 
 	return InvokeOutput{
-		Agent:     agent.ID,
-		Operation: request.Operation,
-		Result:    result.Result,
+		Agent:          agent.ID,
+		Operation:      request.Operation,
+		Result:         result.Result,
+		ConversationID: result.ConversationID,
 	}, nil
 }
 
@@ -366,6 +379,7 @@ func decodeInvokeInput(input any) (InvokeInput, error) {
 	request.Target = strings.TrimSpace(request.Target)
 	request.Capability = strings.TrimSpace(request.Capability)
 	request.Operation = strings.TrimSpace(request.Operation)
+	request.ConversationID = strings.TrimSpace(request.ConversationID)
 	return request, nil
 }
 
