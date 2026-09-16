@@ -35,6 +35,20 @@ type Entry struct {
 	ID   string `json:"id"`
 	Kind string `json:"kind"`
 	Text string `json:"text"`
+	// Attachments rides on user entries as an empty array. It is load-bearing
+	// for the webui: its snapshot validation requires an attachments ARRAY on
+	// every user entry and silently discards the whole projection when one is
+	// missing — the desktop's entries have always carried it, so a worker's
+	// minimal entries rendered as a prompt with no answer. A pointer with
+	// omitempty keeps every other entry byte-identical to today.
+	Attachments *[]any `json:"attachments,omitempty"`
+}
+
+// userEntry builds the turn's user record with the empty attachments array
+// the webui's projection validation requires (see Entry.Attachments).
+func userEntry(id, text string) Entry {
+	attachments := []any{}
+	return Entry{ID: id, Kind: KindUser, Text: text, Attachments: &attachments}
 }
 
 // Entry kinds, matching the desktop transcript's vocabulary so a conversation

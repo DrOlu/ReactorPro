@@ -205,7 +205,7 @@ func (r *Runner) execute(parent context.Context, next job) {
 		// spending a provider call. A lone terminal is a complete run on the
 		// wire — the gateway synthesises the start — so the peer sees a clean
 		// cancel instead of a watchdog timeout.
-		entries := []Entry{{ID: "u1", Kind: KindUser, Text: next.prompt}}
+		entries := []Entry{userEntry("u1", next.prompt)}
 		_ = writer.terminal(entries, TerminalCancelled, "cancelled", "the run was cancelled")
 		return
 	}
@@ -244,7 +244,7 @@ func (r *Runner) execute(parent context.Context, next job) {
 	// and seeds the transcript with the prompt. This is also what makes the
 	// turn stream: each later checkpoint is a content snapshot the mesh's
 	// chunk emitter derives from.
-	entries := []Entry{{ID: "u1", Kind: KindUser, Text: next.prompt}}
+	entries := []Entry{userEntry("u1", next.prompt)}
 	if err := writer.checkpoint(entries); err != nil {
 		r.logger.Warn("agentd could not start a run", "run", next.runID, "error", err)
 		return
