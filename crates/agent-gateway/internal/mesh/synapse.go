@@ -75,6 +75,9 @@ type Agent struct {
 	// mailboxErr records why the mailbox is not running, so a failure is
 	// reported rather than only logged. Empty when it started or is off.
 	mailboxErr string
+	// stopped is latched by Stop; it is what the in-flight registry probe
+	// checks, because "not started yet" is a normal race it must survive.
+	stopped bool
 
 	// collision records a peer seen using this edge's own id, which makes the
 	// mesh ambiguous. Empty when none has been seen.
@@ -354,6 +357,13 @@ func (a *Agent) Start(ctx context.Context) error {
 
 // Stop deregisters and drains the connection. It is safe to call twice.
 func (a *Agent) Stop(ctx context.Context) error {
+	a.mu.Lock()
+	if a.stopped {
+		a.mu.Unlock()
+		return nil
+	}
+	a.stopped = true
+	a.mu.Unlock()
 	a.lifecycle.Lock()
 	defer a.lifecycle.Unlock()
 
@@ -445,7 +455,15 @@ func (a *Agent) setRegistryClient(client *registryClient) {
 func (a *Agent) installRegistryIfStarted(client *registryClient) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if !a.started {
+	// The gate is STOP, not started: the probe is launched mid-Start, and on a
+	// fast JetStream with an existing bucket it routinely completes before
+	// Start reaches a.started = true — the mailbox's start-up work alone
+	// outweighs the probe. Gating on started silently discarded the probe
+	// result on every boot since the mailbox shipped, which is why the
+	// registry went dark on production edges: no "ready" line, a nil client,
+	// and a bucket that expired empty. Stopped is set at the top of Stop, so
+	// a probe landing during teardown is still discarded.
+	if a.stopped {
 		return false
 	}
 	a.registry = client
