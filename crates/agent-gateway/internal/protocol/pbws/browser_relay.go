@@ -32,21 +32,46 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 	// in THIS gateway's conversation store, committed by the reliable ingress.
 	// Serving the history arms from the store makes the worker's runs visible
 	// in the management interface instead of the empty list the worker itself
-	// would answer. The desktop is untouched: it declares a large capability
-	// surface and never the headless marker, so its own history keeps serving
-	// the pass-through exactly as before.
+	// would answer. settings_get is served too, with the webui's plain-text
+	// execution mode: without it the settings sync fails, the webui falls back
+	// to its default ("tools") mode, and the sidebar's scope resolves to "none"
+	// — an empty list without a single request reaching the gateway. Text mode
+	// is the designed lever for "no workspace machinery", which is exactly
+	// what a headless worker is. The desktop is untouched: it declares a large
+	// capability surface and never the headless marker.
 	if c.sm.AgentSupportsCapability(agentID, session.HeadlessWorkerCapability) {
 		if history := env.GetHistoryList(); history != nil {
 			list := c.sm.HeadlessConversationList(agentID, history.GetPage(), history.GetPageSize())
-			c.sendHeadlessHistory(requestID, agentID, &gatewayv2.AgentEnvelope{
+			c.sendHeadlessResponse(requestID, agentID, &gatewayv2.AgentEnvelope{
 				Payload: &gatewayv2.AgentEnvelope_HistoryListResp{HistoryListResp: list},
 			})
 			return
 		}
 		if get := env.GetHistoryGet(); get != nil {
 			detail := c.sm.HeadlessConversationGet(agentID, get.GetConversationId(), get.GetMaxMessages())
-			c.sendHeadlessHistory(requestID, agentID, &gatewayv2.AgentEnvelope{
+			c.sendHeadlessResponse(requestID, agentID, &gatewayv2.AgentEnvelope{
 				Payload: &gatewayv2.AgentEnvelope_HistoryGetResp{HistoryGetResp: detail},
+			})
+			return
+		}
+		if settings := env.GetSettingsGet(); settings != nil {
+			c.sendHeadlessResponse(requestID, agentID, &gatewayv2.AgentEnvelope{
+				Payload: &gatewayv2.AgentEnvelope_SettingsGetResp{
+					SettingsGetResp: &gatewayv2.SettingsGetResponse{
+						SettingsJson: session.HeadlessSettingsJSON,
+					},
+				},
+			})
+			return
+		}
+		if workdirs := env.GetHistoryWorkdirs(); workdirs != nil {
+			c.sendHeadlessResponse(requestID, agentID, &gatewayv2.AgentEnvelope{
+				Payload: &gatewayv2.AgentEnvelope_HistoryWorkdirsResp{
+					// A remote-task conversation has no project directory, so
+					// the workdir picker for a headless worker is honestly
+					// empty — rather than the typed refusal it used to get.
+					HistoryWorkdirsResp: &gatewayv2.HistoryWorkdirsResponse{},
+				},
 			})
 			return
 		}
@@ -124,12 +149,12 @@ func (c *browserConn) handleAgentRequest(requestID, agentID string, env *gateway
 	})
 }
 
-// sendHeadlessHistory answers a history arm locally on the gateway's behalf:
-// the frame is the AgentEnvelope shape the browser expects from the relay,
-// but its payload is the conversation store's answer rather than a round
-// trip to an agent that has no history to serve. No request-id namespacing
-// is needed — nothing is being forwarded.
-func (c *browserConn) sendHeadlessHistory(requestID, agentID string, response *gatewayv2.AgentEnvelope) {
+// sendHeadlessResponse answers a desktop-surface arm locally on the gateway's
+// behalf: the frame is the AgentEnvelope shape the browser expects from the
+// relay, but its payload is the gateway's own answer rather than a round trip
+// to a worker that has nothing to serve. No request-id namespacing is needed
+// — nothing is being forwarded.
+func (c *browserConn) sendHeadlessResponse(requestID, agentID string, response *gatewayv2.AgentEnvelope) {
 	response.RequestId = requestID
 	response.Timestamp = time.Now().Unix()
 	_ = c.send(wscore.FrameResponse, "agent_response", &gatewayv2.WebServerFrame{
