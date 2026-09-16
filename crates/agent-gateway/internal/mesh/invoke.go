@@ -42,7 +42,14 @@ var ErrAgentOffline = errors.New("local agent is offline")
 // Config built from literals rather than DefaultConfig would fail instantly and
 // look like a broken desktop. Falling back to a real deadline keeps the failure
 // mode honest.
-const DefaultInvokeTimeout = 60 * time.Second
+//
+// 3 minutes, not 1: the invocation is a synchronous agent turn, and the mesh's
+// own guidance is that a real turn takes 10–60s+ — a 60s ceiling 4001'd turns
+// that were still working fine (a skill load plus a tool round plus a provider
+// call routinely crosses it, measured live on production edges). Callers can
+// still narrow it per invoke with timeout_ms; hours-long work belongs to the
+// async task API, not this path.
+const DefaultInvokeTimeout = 3 * time.Minute
 
 // InvokeInput is the payload of the invoke skill.
 //
