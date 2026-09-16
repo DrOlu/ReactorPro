@@ -257,9 +257,13 @@ func (s *conversationStreamStore) headlessConversationSummaries(agentID string) 
 	s.mu.Lock()
 	sources := make([]headlessConversationData, 0, 8)
 	for _, stream := range s.streams {
-		if stream.agentID != agentID || len(stream.events) == 0 {
+		if stream.agentID != agentID {
 			continue
 		}
+		// No len(events) gate here: the store trims conversation events on a
+		// retention clock shorter than a stream's idle life, and a finished
+		// conversation whose events have been trimmed still serves from its
+		// latest snapshot — the same hydration the subscription path uses.
 		if data := s.headlessDataLocked(stream); data != nil {
 			sources = append(sources, *data)
 		}
@@ -291,7 +295,9 @@ func (s *conversationStreamStore) headlessConversationSummaries(agentID string) 
 func (s *conversationStreamStore) headlessConversationRawEntries(agentID, conversationID string) ([]json.RawMessage, []headlessTranscriptEntry, int64) {
 	s.mu.Lock()
 	var data *headlessConversationData
-	if stream := s.streams[agentScopedKey(agentID, conversationID)]; stream != nil && len(stream.events) > 0 {
+	if stream := s.streams[agentScopedKey(agentID, conversationID)]; stream != nil {
+		// No len(events) gate: a trimmed stream still serves from its latest
+		// snapshot (see headlessConversationSummaries).
 		data = s.headlessDataLocked(stream)
 	}
 	s.mu.Unlock()
@@ -322,8 +328,14 @@ func (s *conversationStreamStore) headlessDataLocked(stream *conversationStream)
 	data := &headlessConversationData{
 		conversationID: stream.conversationID,
 		runEntries:     map[string]string{},
-		createdAt:      stream.events[0].ReceivedAt,
 		updatedAt:      stream.updatedAt,
+	}
+	if len(stream.events) > 0 {
+		data.createdAt = stream.events[0].ReceivedAt
+	} else {
+		// A trimmed log: the snapshot is all that is known about when the
+		// conversation was last touched.
+		data.createdAt = stream.updatedAt
 	}
 	for _, event := range stream.events {
 		if event.Type != StreamEventContentSnapshot {
@@ -336,11 +348,17 @@ func (s *conversationStreamStore) headlessDataLocked(stream *conversationStream)
 			data.runEntries[event.RunID] = raw
 		}
 	}
-	if len(data.runs) == 0 && stream.latestSnapshot != nil && stream.latestSnapshot.RunID != "" {
-		// A stream whose snapshot outlived its events (the log was evicted)
-		// still has its newest projection to serve.
-		data.runs = append(data.runs, stream.latestSnapshot.RunID)
-		data.runEntries[stream.latestSnapshot.RunID] = stream.latestSnapshot.EntriesJSON
+	// The latest snapshot always has the authoritative newest projection:
+	// it covers the case where its event was trimmed (and supersedes an
+	// older event for the same run, which cannot happen for the newest run
+	// but keeps the merge honest regardless).
+	if snapshot := stream.latestSnapshot; snapshot != nil && snapshot.RunID != "" {
+		if _, seen := data.runEntries[snapshot.RunID]; !seen {
+			data.runs = append(data.runs, snapshot.RunID)
+		}
+		if strings.TrimSpace(snapshot.EntriesJSON) != "" {
+			data.runEntries[snapshot.RunID] = snapshot.EntriesJSON
+		}
 	}
 	if len(data.runs) == 0 {
 		return nil
