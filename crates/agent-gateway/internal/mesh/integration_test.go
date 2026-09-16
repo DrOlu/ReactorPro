@@ -889,3 +889,51 @@ func TestIntegrationRemoteInvocationRefusesAnUnsignedCaller(t *testing.T) {
 		t.Fatalf("an unsigned caller reached the desktop %d times, want 0", len(invoker.requests))
 	}
 }
+
+// A slow skill handler must not block the inbox. An invoke legally holds its
+// handler for minutes (the invoke deadline), and before the inbound worker
+// pool every other mesh message — ping, task.cancel, another peer's invoke —
+// queued behind it on the subscription's single delivery goroutine, its
+// caller's timeout firing while the envelope sat unprocessed.
+func TestInboundRequestsRunConcurrently(t *testing.T) {
+	url := startTestNATS(t)
+	serving := testAgent(t, url, uniqueID("acme/lagos/edge"), nil)
+	caller := testAgent(t, url, uniqueID("acme/lagos/caller"), nil)
+
+	slowStarted := make(chan struct{})
+	releaseSlow := make(chan struct{})
+	defer func() { close(releaseSlow) }()
+	serving.RegisterSkill("slow", func(ctx context.Context, input any, meta RequestMeta) (any, error) {
+		close(slowStarted)
+		<-releaseSlow
+		return "slow done", nil
+	})
+	serving.RegisterSkill("quick", func(ctx context.Context, input any, meta RequestMeta) (any, error) {
+		return "quick done", nil
+	})
+
+	go func() {
+		// The result is irrelevant; what matters is that the handler is parked
+		// inside the skill while the quick request is served.
+		_, _ = caller.Dispatch(t.Context(), serving.AgentID(), "slow", nil, 15*time.Second)
+	}()
+	select {
+	case <-slowStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the slow skill never started")
+	}
+
+	quickDone := make(chan error, 1)
+	go func() {
+		_, err := caller.Dispatch(t.Context(), serving.AgentID(), "quick", nil, 10*time.Second)
+		quickDone <- err
+	}()
+	select {
+	case err := <-quickDone:
+		if err != nil {
+			t.Fatalf("the concurrent quick dispatch failed: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the quick request queued behind the slow handler — head-of-line blocking is back")
+	}
+}
