@@ -123,7 +123,10 @@ func (m *Manager) HeadlessConversationList(agentID string, page, pageSize int32)
 
 // HeadlessConversationGet answers a history_get for a headless worker: the
 // transcript of one conversation, newest entries last, as the projection
-// entries the stream already serves. MaxMessages of 0 returns everything
+// entries the stream already serves. The entries are passed through raw —
+// including fields this package does not model (the webui's entry validation
+// requires an attachments array on user entries, for one), so anything the
+// worker commits survives the round trip. MaxMessages of 0 returns everything
 // retained.
 func (m *Manager) HeadlessConversationGet(agentID, conversationID string, maxMessages int32) *gatewayv2.HistoryGetResponse {
 	agentID = strings.TrimSpace(agentID)
@@ -132,14 +135,14 @@ func (m *Manager) HeadlessConversationGet(agentID, conversationID string, maxMes
 	if agentID == "" || conversationID == "" {
 		return response
 	}
-	entries, updatedAt := m.convStreams.headlessConversationEntries(agentID, conversationID)
-	if entries == nil {
+	rawEntries, entries, updatedAt := m.convStreams.headlessConversationRawEntries(agentID, conversationID)
+	if rawEntries == nil {
 		return response
 	}
-	if maxMessages > 0 && int32(len(entries)) > maxMessages {
-		entries = entries[len(entries)-int(maxMessages):]
+	if maxMessages > 0 && int32(len(rawEntries)) > maxMessages {
+		rawEntries = rawEntries[len(rawEntries)-int(maxMessages):]
 	}
-	raw, err := json.Marshal(entries)
+	raw, err := json.Marshal(rawEntries)
 	if err != nil {
 		// Entries are strings all the way down; a marshal failure means the
 		// store is holding something unrepresentable, and an empty answer is
@@ -147,8 +150,8 @@ func (m *Manager) HeadlessConversationGet(agentID, conversationID string, maxMes
 		return response
 	}
 	response.MessagesJson = string(raw)
-	response.TotalMessageCount = int32(len(entries))
-	response.ReturnedMessageCount = int32(len(entries))
+	response.TotalMessageCount = int32(len(rawEntries))
+	response.ReturnedMessageCount = int32(len(rawEntries))
 	response.Conversation = headlessConversationSummary(conversationID, entries, time.Unix(updatedAt, 0))
 	return response
 }
@@ -163,7 +166,7 @@ func (m *Manager) HeadlessResumePrompt(agentID, conversationID, prompt string) s
 	if agentID == "" || conversationID == "" {
 		return prompt
 	}
-	entries, _ := m.convStreams.headlessConversationEntries(agentID, conversationID)
+	_, entries, _ := m.convStreams.headlessConversationRawEntries(agentID, conversationID)
 	turns := headlessTurnsFromEntries(entries)
 	if len(turns) == 0 {
 		return prompt
@@ -281,10 +284,11 @@ func (s *conversationStreamStore) headlessConversationSummaries(agentID string) 
 	return out
 }
 
-// headlessConversationEntries returns the retained transcript of one
-// conversation and its last update time. A nil result means nothing is
-// retained.
-func (s *conversationStreamStore) headlessConversationEntries(agentID, conversationID string) ([]headlessTranscriptEntry, int64) {
+// headlessConversationRawEntries returns the retained transcript of one
+// conversation in two views: the raw entry objects (lossless, for serving)
+// and the parsed light view (for summaries and prompts), plus its last update
+// time. A nil raw result means nothing is retained.
+func (s *conversationStreamStore) headlessConversationRawEntries(agentID, conversationID string) ([]json.RawMessage, []headlessTranscriptEntry, int64) {
 	s.mu.Lock()
 	var data *headlessConversationData
 	if stream := s.streams[agentScopedKey(agentID, conversationID)]; stream != nil && len(stream.events) > 0 {
@@ -292,9 +296,9 @@ func (s *conversationStreamStore) headlessConversationEntries(agentID, conversat
 	}
 	s.mu.Unlock()
 	if data == nil {
-		return nil, 0
+		return nil, nil, 0
 	}
-	return data.mergedEntries(), data.updatedAt.Unix()
+	return data.mergedRawEntries(), data.mergedEntries(), data.updatedAt.Unix()
 }
 
 // headlessConversationData is a conversation's run-scoped projections,
@@ -350,6 +354,25 @@ func (d headlessConversationData) mergedEntries() []headlessTranscriptEntry {
 	var merged []headlessTranscriptEntry
 	for _, runID := range d.runs {
 		merged = append(merged, headlessParseEntries(d.runEntries[runID])...)
+	}
+	return merged
+}
+
+// mergedRawEntries is the lossless view of the same merge: the raw entry
+// objects exactly as the worker committed them, so fields this package does
+// not model survive serving.
+func (d headlessConversationData) mergedRawEntries() []json.RawMessage {
+	var merged []json.RawMessage
+	for _, runID := range d.runs {
+		trimmed := strings.TrimSpace(d.runEntries[runID])
+		if trimmed == "" || trimmed == "[]" {
+			continue
+		}
+		var raw []json.RawMessage
+		if err := json.Unmarshal([]byte(trimmed), &raw); err != nil {
+			continue
+		}
+		merged = append(merged, raw...)
 	}
 	return merged
 }

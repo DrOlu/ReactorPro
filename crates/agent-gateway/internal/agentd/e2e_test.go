@@ -583,6 +583,12 @@ func TestE2EAgentdHistoryServedToTheBrowser(t *testing.T) {
 	if !strings.Contains(detail.GetMessagesJson(), "mango-77") {
 		t.Fatalf("the served transcript %q does not carry the prompt", detail.GetMessagesJson())
 	}
+	// The user entry must carry an attachments array: the webui's snapshot
+	// validation silently discards a whole projection whose user entry lacks
+	// one, which renders as a prompt with no answer.
+	if !strings.Contains(detail.GetMessagesJson(), `"attachments":[]`) {
+		t.Fatalf("the served transcript %q lacks the user entry's attachments array", detail.GetMessagesJson())
+	}
 
 	// history_workdirs: an honest empty list rather than the typed refusal —
 	// the workdir picker for a headless worker has nothing to offer.
