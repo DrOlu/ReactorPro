@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -89,6 +90,16 @@ type registryClient struct {
 	bucket string
 	ttl    time.Duration
 	logger *slog.Logger
+
+	// mu serialises publish against remove. remove deletes this edge's entry
+	// on a clean shutdown, but a heartbeat tick that entered publish just
+	// before Stop latched would re-create the entry AFTER the delete —
+	// resurrecting a stopped edge in discovery until its TTL expires. Holding
+	// the lock across both operations makes the delete the last word: a
+	// publish already in flight lands first and is deleted; one that follows
+	// sees closed and refuses.
+	mu     sync.Mutex
+	closed bool
 }
 
 func newRegistryClient(kv nats.KeyValue, bucket string, ttl time.Duration, logger *slog.Logger) *registryClient {
@@ -111,6 +122,14 @@ func (r *registryClient) publish(manifest Manifest) error {
 	if err != nil {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		// A publish racing shutdown: the entry was already removed (or is
+		// being removed under this lock). Skipping is the correct outcome,
+		// not an error to log.
+		return nil
+	}
 	if _, err := r.kv.Put(registryKey(manifest.ID), raw); err != nil {
 		return fmt.Errorf("write registry entry for %q: %w", manifest.ID, err)
 	}
@@ -118,11 +137,16 @@ func (r *registryClient) publish(manifest Manifest) error {
 }
 
 // remove deletes this edge's entry, used on a clean shutdown so a stopped edge
-// disappears immediately rather than lingering until its TTL expires.
+// disappears immediately rather than lingering until its TTL expires. It also
+// closes the client: no later publish may re-create the entry (see the struct
+// comment for the race this closes).
 func (r *registryClient) remove(agentID string) error {
 	if r == nil || strings.TrimSpace(agentID) == "" {
 		return nil
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.closed = true
 	if err := r.kv.Delete(registryKey(agentID)); err != nil && !errors.Is(err, nats.ErrKeyNotFound) {
 		return fmt.Errorf("delete registry entry for %q: %w", agentID, err)
 	}

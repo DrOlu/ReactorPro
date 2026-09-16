@@ -506,3 +506,118 @@ func registryBucketFor(t *testing.T, url string, agent *Agent) nats.KeyValue {
 	}
 	return kv
 }
+
+// remove must be the last word on this edge's registry entry. A heartbeat
+// tick whose publish lands after Stop's delete — the tick was in flight when
+// Stop latched — would resurrect a stopped edge in discovery until its TTL
+// expires, telling every peer there is an agent where none is running. The
+// client serialises publish against remove and refuses publishes once
+// removed, so the delete can never be undone by a straggler.
+func TestRegistryRemoveIsTheLastWord(t *testing.T) {
+	url := startTestNATSJetStream(t)
+	conn, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	js, err := conn.JetStream()
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	// Bucket names may not carry "/" (agent ids may); each test runs against
+	// its own private server, so a nuid suffix is uniqueness enough.
+	bucket := "reg-race-" + nuid.Next()[:8]
+	kv, err := js.CreateKeyValue(&nats.KeyValueConfig{
+		Bucket:  bucket,
+		TTL:     30 * time.Second,
+		History: 1,
+	})
+	if err != nil {
+		t.Fatalf("create bucket: %v", err)
+	}
+
+	client := newRegistryClient(kv, bucket, 30*time.Second, nil)
+	manifest := Manifest{ID: uniqueID("acme/lagos/edge"), Name: "Edge", Endpoint: "mesh.agent.x.inbox"}
+	if err := client.publish(manifest); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	if _, err := kv.Get(registryKey(manifest.ID)); err != nil {
+		t.Fatalf("publish did not create the entry: %v", err)
+	}
+
+	if err := client.remove(manifest.ID); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if _, err := kv.Get(registryKey(manifest.ID)); !errors.Is(err, nats.ErrKeyNotFound) {
+		t.Fatalf("remove did not delete the entry: %v", err)
+	}
+
+	// The resurrection attempt: a late heartbeat publish after remove. It
+	// must skip, not error and not re-create.
+	if err := client.publish(manifest); err != nil {
+		t.Fatalf("publish after remove must skip, not error: %v", err)
+	}
+	if _, err := kv.Get(registryKey(manifest.ID)); !errors.Is(err, nats.ErrKeyNotFound) {
+		t.Fatal("a publish after remove resurrected the registry entry")
+	}
+}
+
+// The agent-level guard on top of the client-level one: a heartbeat tick that
+// fires after a clean Stop must not re-register the edge through any path —
+// refreshManifest refuses outright on a stopped agent, so the entry Stop
+// removed stays removed even before the connection (and the nil registry
+// handle) would have made the attempt harmless anyway.
+func TestRefreshManifestDoesNotResurrectAStoppedAgent(t *testing.T) {
+	url := startTestNATSJetStream(t)
+
+	// Pre-create the bucket, the production shape (see the heartbeat test).
+	preconnect, err := nats.Connect(url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { preconnect.Close() })
+	preJS, err := preconnect.JetStream()
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	if _, err := preJS.CreateKeyValue(&nats.KeyValueConfig{
+		Bucket:  DefaultConfig().RegistryBucket,
+		TTL:     800 * time.Millisecond,
+		History: 1,
+	}); err != nil {
+		t.Fatalf("pre-create registry bucket: %v", err)
+	}
+
+	agent := testAgent(t, url, uniqueID("acme/lagos/edge"), func(c *Config) {
+		c.RegistryMode = RegistryJetStream
+	})
+	kv := registryBucketFor(t, url, agent)
+	key := registryKey(agent.AgentID())
+
+	// Registered and visible.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := kv.Get(key); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := kv.Get(key); err != nil {
+		t.Fatalf("the agent never registered: %v", err)
+	}
+
+	// A clean stop removes the entry at once — that is Stop's contract.
+	if err := agent.Stop(context.Background()); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	if _, err := kv.Get(key); !errors.Is(err, nats.ErrKeyNotFound) {
+		t.Fatalf("stop did not remove the registry entry: %v", err)
+	}
+
+	// The late heartbeat tick: refreshManifest on the stopped agent must be
+	// a no-op, leaving the entry absent.
+	agent.refreshManifest()
+	if _, err := kv.Get(key); !errors.Is(err, nats.ErrKeyNotFound) {
+		t.Fatal("refreshManifest resurrected a stopped agent's registry entry")
+	}
+}

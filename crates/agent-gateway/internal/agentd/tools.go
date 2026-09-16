@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -327,7 +328,15 @@ func (t *Toolset) runCommand(ctx context.Context, args map[string]any) (string, 
 	}
 	cmdCtx, cancel := context.WithTimeout(ctx, toolsetCommandTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(cmdCtx, "sh", "-c", line)
+	// The windows-amd64 asset is published alongside the rest, and there is
+	// no sh on Windows: cmd /c carries the same one-shot "run this line and
+	// exit" semantics. Everywhere else the POSIX shell is the contract.
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.CommandContext(cmdCtx, "cmd", "/c", line)
+	} else {
+		cmd = exec.CommandContext(cmdCtx, "sh", "-c", line)
+	}
 	cmd.Dir = t.root
 	output, err := cmd.CombinedOutput()
 	if err != nil {
