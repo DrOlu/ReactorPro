@@ -171,10 +171,20 @@ func (m *Manager) submitRemoteTask(
 	}
 
 	runID := RemoteTaskRunPrefix + uuid.NewString()
+	resuming := conversationID != ""
 	if conversationID == "" {
 		conversationID = RemoteTaskConversationPrefix + uuid.NewString()
 	}
 	clientRequestID := RemoteTaskRequestPrefix + uuid.NewString()
+
+	// A headless worker has no history of its own: every turn starts from a
+	// blank slate, so a resumed conversation would otherwise continue in name
+	// only. Rehydrating the prior turns into the prompt gives the run its
+	// memory — the desktop needs no such help because its runtime keeps the
+	// conversation itself.
+	if resuming && m.AgentSupportsCapability(agentID, HeadlessWorkerCapability) {
+		prompt = m.HeadlessResumePrompt(agentID, conversationID, prompt)
+	}
 
 	// Register the run before anything else so the gateway can correlate the
 	// ingress that comes back. A non-empty conversation id binds the run

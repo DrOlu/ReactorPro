@@ -113,7 +113,16 @@ func (c *Client) runOnce(ctx context.Context) error {
 		AgentVersion:    Version,
 		ClientName:      "reactorpro-agentd",
 		ClientVersion:   Version,
-		Capabilities:    []string{gatewayv2.ChatIngressV1Capability},
+		// The wire protocol capability plus the headless-worker marker: the
+		// gateway keys its headless conveniences on "agentd" — serving the
+		// management UI's history arms from the conversation store and
+		// rehydrating resumed conversations into the turn's prompt. The
+		// desktop never declares it, so the marker is unambiguous.
+		Capabilities: []string{
+			gatewayv2.ChatIngressV1Capability,
+			"task",
+			"agentd",
+		},
 	}
 	if err := c.writeFrame(&gatewayv2.AgentClientFrame{
 		Payload: &gatewayv2.AgentClientFrame_Hello{Hello: hello},
