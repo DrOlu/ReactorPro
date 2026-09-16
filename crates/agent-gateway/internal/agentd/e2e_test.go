@@ -580,4 +580,39 @@ func TestE2EAgentdHistoryServedToTheBrowser(t *testing.T) {
 	if !strings.Contains(detail.GetMessagesJson(), "mango-77") {
 		t.Fatalf("the served transcript %q does not carry the prompt", detail.GetMessagesJson())
 	}
+
+	// A resumed conversation must present its WHOLE thread, not the resumed
+	// run's projection alone: the title stays the original question and the
+	// merged transcript carries both runs' turns.
+	resumed, err := manager.SubmitRemoteTaskInConversation(context.Background(), e2eAgentID,
+		result.ConversationID, "and this follow-up is papaya-88", nil)
+	if err != nil {
+		t.Fatalf("SubmitRemoteTaskInConversation: %v", err)
+	}
+	remoteTaskAnswerText(t, resumed)
+
+	writeBrowserFrame(conn, &gatewayv2.WebClientFrame{
+		RequestId: "history-list-2",
+		AgentId:   e2eAgentID,
+		Payload: &gatewayv2.WebClientFrame_AgentRequest{AgentRequest: &gatewayv2.GatewayEnvelope{
+			RequestId: "history-list-2",
+			Timestamp: time.Now().Unix(),
+			Payload:   &gatewayv2.GatewayEnvelope_HistoryList{HistoryList: &gatewayv2.HistoryListRequest{}},
+		}},
+	})
+	response = readBrowserResponse(t, conn, "history-list-2")
+	list = response.GetAgentResponse().GetHistoryListResp()
+	for _, summary := range list.GetConversations() {
+		if summary.GetId() != result.ConversationID {
+			continue
+		}
+		if !strings.Contains(summary.GetTitle(), "mango-77") {
+			t.Fatalf("the resumed conversation's title %q must derive from the ORIGINAL prompt", summary.GetTitle())
+		}
+		if summary.GetMessageCount() < 4 {
+			t.Fatalf("the merged conversation should carry both runs' turns, has %d", summary.GetMessageCount())
+		}
+		return
+	}
+	t.Fatalf("the conversation %q vanished from the list after the resume", result.ConversationID)
 }

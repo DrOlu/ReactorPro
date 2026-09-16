@@ -240,46 +240,21 @@ func headlessConversationTitle(entries []headlessTranscriptEntry) string {
 // headlessConversationSummaries lists a headless worker's retained
 // conversations, newest first.
 func (s *conversationStreamStore) headlessConversationSummaries(agentID string) []*gatewayv2.ConversationSummary {
-	type summarySource struct {
-		conversationID string
-		entriesJSON    string
-		createdAt      time.Time
-		updatedAt      time.Time
-	}
 	s.mu.Lock()
-	sources := make([]summarySource, 0, 8)
+	sources := make([]headlessConversationData, 0, 8)
 	for _, stream := range s.streams {
 		if stream.agentID != agentID || len(stream.events) == 0 {
 			continue
 		}
-		entriesJSON := ""
-		if stream.latestSnapshot != nil {
-			entriesJSON = stream.latestSnapshot.EntriesJSON
+		if data := s.headlessDataLocked(stream); data != nil {
+			sources = append(sources, *data)
 		}
-		if entriesJSON == "" {
-			for index := len(stream.events) - 1; index >= 0; index-- {
-				event := stream.events[index]
-				if event.Type != StreamEventContentSnapshot {
-					continue
-				}
-				if raw, ok := event.Payload["entries_json"].(string); ok {
-					entriesJSON = raw
-					break
-				}
-			}
-		}
-		sources = append(sources, summarySource{
-			conversationID: stream.conversationID,
-			entriesJSON:    entriesJSON,
-			createdAt:      stream.events[0].ReceivedAt,
-			updatedAt:      stream.updatedAt,
-		})
 	}
 	s.mu.Unlock()
 
 	out := make([]*gatewayv2.ConversationSummary, 0, len(sources))
 	for _, source := range sources {
-		entries := headlessParseEntries(source.entriesJSON)
+		entries := source.mergedEntries()
 		if entries == nil {
 			// A conversation whose runs never checkpointed has nothing to
 			// show; listing it would open onto an empty transcript.
@@ -296,32 +271,76 @@ func (s *conversationStreamStore) headlessConversationSummaries(agentID string) 
 }
 
 // headlessConversationEntries returns the retained transcript of one
-// conversation (its latest projection) and its last update time. A nil result
-// means nothing is retained.
+// conversation and its last update time. A nil result means nothing is
+// retained.
 func (s *conversationStreamStore) headlessConversationEntries(agentID, conversationID string) ([]headlessTranscriptEntry, int64) {
 	s.mu.Lock()
-	var entriesJSON string
-	var updatedAt time.Time
+	var data *headlessConversationData
 	if stream := s.streams[agentScopedKey(agentID, conversationID)]; stream != nil && len(stream.events) > 0 {
-		if stream.latestSnapshot != nil {
-			entriesJSON = stream.latestSnapshot.EntriesJSON
-		}
-		if entriesJSON == "" {
-			for index := len(stream.events) - 1; index >= 0; index-- {
-				event := stream.events[index]
-				if event.Type != StreamEventContentSnapshot {
-					continue
-				}
-				if raw, ok := event.Payload["entries_json"].(string); ok {
-					entriesJSON = raw
-					break
-				}
-			}
-		}
-		updatedAt = stream.updatedAt
+		data = s.headlessDataLocked(stream)
 	}
 	s.mu.Unlock()
-	return headlessParseEntries(entriesJSON), updatedAt.Unix()
+	if data == nil {
+		return nil, 0
+	}
+	return data.mergedEntries(), data.updatedAt.Unix()
+}
+
+// headlessConversationData is a conversation's run-scoped projections,
+// captured under the store lock and parsed outside it.
+type headlessConversationData struct {
+	conversationID string
+	// runs is the run ids in first-appearance order; runEntries holds each
+	// run's LAST projection (a run's checkpoints are cumulative within the
+	// run, so only the last is authoritative).
+	runs       []string
+	runEntries map[string]string
+	createdAt  time.Time
+	updatedAt  time.Time
+}
+
+// headlessDataLocked collects a stream's content snapshots per run. A
+// headless worker's projections are run-scoped — unlike the desktop's, which
+// carry the whole conversation — so the conversation's transcript is the
+// runs' latest projections concatenated in order.
+func (s *conversationStreamStore) headlessDataLocked(stream *conversationStream) *headlessConversationData {
+	data := &headlessConversationData{
+		conversationID: stream.conversationID,
+		runEntries:     map[string]string{},
+		createdAt:      stream.events[0].ReceivedAt,
+		updatedAt:      stream.updatedAt,
+	}
+	for _, event := range stream.events {
+		if event.Type != StreamEventContentSnapshot {
+			continue
+		}
+		if _, seen := data.runEntries[event.RunID]; !seen {
+			data.runs = append(data.runs, event.RunID)
+		}
+		if raw, ok := event.Payload["entries_json"].(string); ok {
+			data.runEntries[event.RunID] = raw
+		}
+	}
+	if len(data.runs) == 0 && stream.latestSnapshot != nil && stream.latestSnapshot.RunID != "" {
+		// A stream whose snapshot outlived its events (the log was evicted)
+		// still has its newest projection to serve.
+		data.runs = append(data.runs, stream.latestSnapshot.RunID)
+		data.runEntries[stream.latestSnapshot.RunID] = stream.latestSnapshot.EntriesJSON
+	}
+	if len(data.runs) == 0 {
+		return nil
+	}
+	return data
+}
+
+// mergedEntries concatenates the runs' latest projections, parsing off the
+// store lock.
+func (d headlessConversationData) mergedEntries() []headlessTranscriptEntry {
+	var merged []headlessTranscriptEntry
+	for _, runID := range d.runs {
+		merged = append(merged, headlessParseEntries(d.runEntries[runID])...)
+	}
+	return merged
 }
 
 // headlessParseEntries decodes a projection's entries; nil when there is
