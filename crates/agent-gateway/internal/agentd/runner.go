@@ -35,10 +35,40 @@ type Runner struct {
 
 	// jobs is the polite queue: work beyond the concurrency cap waits here
 	// instead of being refused — a peer's burst becomes a line, not an error.
+	//
+	// byConversation maps a conversation to its execution slot. The slot is
+	// created at submit time under the runner lock, which makes the one-run-
+	// per-conversation check and the registration a single atomic step: the
+	// previous shape (check at submit, register in the worker) let two rapid
+	// commands both pass the check and then clobber each other's cancel func
+	// in the map — two concurrent turns per conversation, each writing
+	// ingress sequence numbers the other had already used.
 	jobs           chan job
-	byConversation map[string]context.CancelFunc
+	byConversation map[string]*convSlot
 	mu             sync.Mutex
 	activeRuns     atomic.Int32
+}
+
+// convSlot is one conversation's execution slot, claimed at submit and held
+// until the job's worker exits. The cancelled flag covers the queued phase:
+// a cancel that lands while the job still waits in the queue is remembered,
+// and the worker settles the run as cancelled without spending a provider
+// call on it.
+type convSlot struct {
+	mu        sync.Mutex
+	cancelled bool
+	cancel    context.CancelFunc
+}
+
+// stop marks the slot cancelled and cancels the live run, if one is running.
+// Safe to call more than once and from any goroutine.
+func (s *convSlot) stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cancelled = true
+	if s.cancel != nil {
+		s.cancel()
+	}
 }
 
 // job is one accepted chat command.
@@ -47,6 +77,7 @@ type job struct {
 	conversationID  string
 	clientRequestID string
 	prompt          string
+	slot            *convSlot
 }
 
 // NewRunner wires the executor. Call Start to begin consuming.
@@ -58,7 +89,7 @@ func NewRunner(cfg *Config, provider *Provider, tools *Toolset, sink CommandSink
 		sink:           sink,
 		logger:         logger,
 		jobs:           make(chan job, 1024),
-		byConversation: map[string]context.CancelFunc{},
+		byConversation: map[string]*convSlot{},
 	}
 }
 
@@ -106,6 +137,11 @@ func (r *Runner) SubmitChatCommand(runID string, command *gatewayv2.ChatCommandR
 			"conversation", conversationID)
 		return
 	}
+	// Claim the conversation here, under the same lock as the busy check, so
+	// the claim cannot race a worker: two rapid commands for one conversation
+	// resolve to one accepted run, not two.
+	slot := &convSlot{}
+	r.byConversation[conversationID] = slot
 	r.mu.Unlock()
 
 	next := job{
@@ -113,13 +149,20 @@ func (r *Runner) SubmitChatCommand(runID string, command *gatewayv2.ChatCommandR
 		conversationID:  conversationID,
 		clientRequestID: strings.TrimSpace(request.GetClientRequestId()),
 		prompt:          strings.TrimSpace(request.GetMessage()),
+		slot:            slot,
 	}
 	select {
 	case r.jobs <- next:
 	default:
 		// A full queue is an operator-sizing problem, and refusing is the
 		// honest move: the gateway fails the run as never started rather
-		// than the peer waiting on a phantom.
+		// than the peer waiting on a phantom. The slot must go back too, or
+		// the conversation would read as busy forever.
+		r.mu.Lock()
+		if r.byConversation[conversationID] == slot {
+			delete(r.byConversation, conversationID)
+		}
+		r.mu.Unlock()
 		r.logger.Warn("agentd run queue is full; command refused",
 			"conversation", conversationID, "queue", cap(r.jobs))
 	}
@@ -133,21 +176,42 @@ func (r *Runner) execute(parent context.Context, next job) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 
-	r.mu.Lock()
-	r.byConversation[next.conversationID] = cancel
-	r.mu.Unlock()
-	defer func() {
-		r.mu.Lock()
-		delete(r.byConversation, next.conversationID)
-		r.mu.Unlock()
-	}()
-
-	r.activeRuns.Add(1)
-	defer r.activeRuns.Add(-1)
-
 	writer := newIngress(next.runID, next.conversationID, func(seq uint64, record *gatewayv2.ChatIngressRecord) error {
 		return r.sink.SendIngress(next.runID, next.conversationID, seq, record)
 	})
+
+	// Hand the slot this run's cancel, and observe a cancel that arrived while
+	// the job was still queued.
+	next.slot.mu.Lock()
+	cancelledWhileQueued := next.slot.cancelled
+	next.slot.cancel = cancel
+	next.slot.mu.Unlock()
+	defer func() {
+		// Release the conversation only if the map still points at this slot:
+		// DropAll may have cleared it (and a newer submit re-claimed the
+		// conversation) while this job waited in the queue.
+		r.mu.Lock()
+		if r.byConversation[next.conversationID] == next.slot {
+			delete(r.byConversation, next.conversationID)
+		}
+		r.mu.Unlock()
+		next.slot.mu.Lock()
+		next.slot.cancel = nil
+		next.slot.mu.Unlock()
+	}()
+
+	if cancelledWhileQueued {
+		// Cancelled before the turn began: settle as cancelled without
+		// spending a provider call. A lone terminal is a complete run on the
+		// wire — the gateway synthesises the start — so the peer sees a clean
+		// cancel instead of a watchdog timeout.
+		entries := []Entry{{ID: "u1", Kind: KindUser, Text: next.prompt}}
+		_ = writer.terminal(entries, TerminalCancelled, "cancelled", "the run was cancelled")
+		return
+	}
+
+	r.activeRuns.Add(1)
+	defer r.activeRuns.Add(-1)
 
 	// Heartbeats: a long tool round that produces no checkpoints must never
 	// look stale to the gateway's reaper. The ticker goroutine stops when
@@ -310,36 +374,41 @@ func (r *Runner) executeTool(ctx context.Context, call ToolCall, entryID *int, e
 	return result
 }
 
-// CancelConversation stops the live run of one conversation. If none is live
-// the cancel is a no-op — the gateway's own cancel path is idempotent.
+// CancelConversation stops the run of one conversation — a live turn, or a
+// job still waiting in the queue (which then settles as cancelled without
+// running). If neither exists the cancel is a no-op — the gateway's own
+// cancel path is idempotent.
 func (r *Runner) CancelConversation(conversationID string) {
 	conversationID = strings.TrimSpace(conversationID)
 	r.mu.Lock()
-	cancel := r.byConversation[conversationID]
+	slot := r.byConversation[conversationID]
 	r.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	if slot != nil {
+		slot.stop()
 	}
 }
 
-// DropAll cancels every live run with a reason — used when the connection to
-// the gateway is lost. Runs whose terminal cannot be delivered are left to
-// the gateway's honest timeout failure; the local context cancellation stops
-// the work, which is the part that matters (a departed listener must not
-// keep burning this worker's provider quota).
+// DropAll cancels every live and queued run with a reason — used when the
+// connection to the gateway is lost. The map is cleared so a post-reconnect
+// submit can re-claim any conversation at once; queued jobs carry their slot
+// by pointer, so they still see the cancellation and refuse to run. Runs
+// whose terminal cannot be delivered are left to the gateway's honest timeout
+// failure; the local cancellation stops the work, which is the part that
+// matters (a departed listener must not keep burning this worker's provider
+// quota).
 func (r *Runner) DropAll(reason string) {
 	r.mu.Lock()
-	cancels := make([]context.CancelFunc, 0, len(r.byConversation))
-	for conversationID, cancel := range r.byConversation {
-		cancels = append(cancels, cancel)
-		delete(r.byConversation, conversationID)
+	slots := make([]*convSlot, 0, len(r.byConversation))
+	for _, slot := range r.byConversation {
+		slots = append(slots, slot)
 	}
+	r.byConversation = map[string]*convSlot{}
 	r.mu.Unlock()
-	for _, cancel := range cancels {
-		cancel()
+	for _, slot := range slots {
+		slot.stop()
 	}
-	if len(cancels) > 0 {
-		r.logger.Warn("agentd dropped live runs", "count", len(cancels), "reason", reason)
+	if len(slots) > 0 {
+		r.logger.Warn("agentd dropped live runs", "count", len(slots), "reason", reason)
 	}
 }
 

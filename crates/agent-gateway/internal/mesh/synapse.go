@@ -197,6 +197,17 @@ func (a *Agent) SetLocalAgentsProvider(provider LocalAgentProvider) {
 // re-published the stale snapshot a tick early). Re-registering then announces
 // the same value on the registry subject.
 func (a *Agent) refreshManifest() {
+	a.mu.RLock()
+	stopped := a.stopped
+	a.mu.RUnlock()
+	if stopped {
+		// A heartbeat tick that lands during Stop must not re-register this
+		// edge after its registry entry was removed — that would resurrect a
+		// stopped edge in discovery until the TTL expires. (A tick already
+		// inside this function is covered by the registry client, which
+		// refuses publishes after remove.)
+		return
+	}
 	manifest := a.buildManifest()
 	a.publishManifestToRegistry(manifest)
 	a.setManifest(manifest)
@@ -1200,8 +1211,12 @@ func (a *Agent) handleHeartbeatPeers(message *nats.Msg) {
 }
 
 func (a *Agent) stopHeartbeat() {
-	// The heartbeat goroutine exits with the caller's context; nothing to do
-	// here beyond letting the connection drain.
+	// The heartbeat goroutine exits with the caller's context, which Stop's
+	// caller cancels — so a tick can still land in flight during teardown.
+	// That late tick is made harmless twice over: refreshManifest refuses on
+	// a stopped agent, and the registry client refuses publishes after its
+	// entry was removed. Nothing to do here beyond letting the connection
+	// drain.
 }
 
 // manifestsFrom accepts both response shapes seen in the fleet: a registry
