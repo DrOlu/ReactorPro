@@ -280,8 +280,11 @@ func TestE2EBrowserPassThroughIsAnswered(t *testing.T) {
 		}
 	}
 
-	// settings_get through the pass-through: must come back promptly with
-	// the typed refusal, not time out.
+	// settings_get through the pass-through: answered by the GATEWAY for a
+	// headless worker, with the plain-text execution mode the webui's sidebar
+	// needs to scope to "all conversations" (a settings failure leaves the
+	// default "tools" mode, which scopes an empty sidebar). The worker's own
+	// typed 501 is only reachable behind an un-upgraded gateway.
 	writeBrowserFrame(conn, &gatewayv2.WebClientFrame{
 		RequestId: "browser-settings-1",
 		AgentId:   e2eAgentID,
@@ -292,9 +295,9 @@ func TestE2EBrowserPassThroughIsAnswered(t *testing.T) {
 		}},
 	})
 	response := readBrowserResponse(t, conn, "browser-settings-1")
-	if response.GetAgentResponse() == nil || response.GetAgentResponse().GetError() == nil ||
-		response.GetAgentResponse().GetError().GetCode() != 501 {
-		t.Fatalf("settings_get pass-through = %+v, want the typed refusal", response.GetPayload())
+	settings := response.GetAgentResponse().GetSettingsGetResp()
+	if settings == nil || !strings.Contains(settings.GetSettingsJson(), `"executionMode":"text"`) {
+		t.Fatalf("settings_get pass-through = %+v, want the served text-mode settings", response.GetPayload())
 	}
 
 	// history_list: an honest empty list.
@@ -579,6 +582,22 @@ func TestE2EAgentdHistoryServedToTheBrowser(t *testing.T) {
 	}
 	if !strings.Contains(detail.GetMessagesJson(), "mango-77") {
 		t.Fatalf("the served transcript %q does not carry the prompt", detail.GetMessagesJson())
+	}
+
+	// history_workdirs: an honest empty list rather than the typed refusal —
+	// the workdir picker for a headless worker has nothing to offer.
+	writeBrowserFrame(conn, &gatewayv2.WebClientFrame{
+		RequestId: "history-workdirs-1",
+		AgentId:   e2eAgentID,
+		Payload: &gatewayv2.WebClientFrame_AgentRequest{AgentRequest: &gatewayv2.GatewayEnvelope{
+			RequestId: "history-workdirs-1",
+			Timestamp: time.Now().Unix(),
+			Payload:   &gatewayv2.GatewayEnvelope_HistoryWorkdirs{HistoryWorkdirs: &gatewayv2.HistoryWorkdirsRequest{}},
+		}},
+	})
+	response = readBrowserResponse(t, conn, "history-workdirs-1")
+	if workdirs := response.GetAgentResponse().GetHistoryWorkdirsResp(); workdirs == nil || len(workdirs.GetWorkdirs()) != 0 {
+		t.Fatalf("history_workdirs pass-through = %+v, want an empty list", response.GetPayload())
 	}
 
 	// A resumed conversation must present its WHOLE thread, not the resumed

@@ -42,6 +42,17 @@ import (
 // its own history.
 const HeadlessWorkerCapability = "agentd"
 
+// HeadlessSettingsJSON is the settings_get answer the gateway serves for a
+// headless worker. Two requirements drove the exact shape: the webui merges
+// the payload into its settings with the incoming system object as the base,
+// so workspaceProjects must be present (the merge maps over it
+// unconditionally); and the execution mode must read "text" so the webui
+// scopes the sidebar to "all conversations" — a worker that reports no
+// workspace would otherwise leave the sidebar scoped to "none", an empty
+// list that never even asks the gateway. Everything else the webui
+// normalizes to its defaults on merge.
+const HeadlessSettingsJSON = `{"system":{"executionMode":"text","workspaceProjects":[],"activeWorkspaceProjectId":""}}`
+
 // headlessHistoryMaxPageSize bounds one history_list page served for a
 // headless worker.
 const headlessHistoryMaxPageSize = 200
