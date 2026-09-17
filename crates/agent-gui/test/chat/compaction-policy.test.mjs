@@ -283,3 +283,39 @@ test("prune-first fires on recent compaction or raised pressure; advisory at max
     true,
   );
 });
+
+// Settings-driven compaction mode: "off" disables everything (manual included), "manualOnly"
+// turns the automatic triggers off while the manual bypass still passes through, and "auto"/
+// undefined keeps today's behavior.
+test("decideCompaction honors the history compaction mode", () => {
+  // "off" always refuses — even the manual bypass and even with oversized tokens.
+  for (const bypass of [undefined, true]) {
+    const decision = decide({
+      mode: "off",
+      totalTokens: 199_000,
+      bypassThresholdAndCooldown: bypass,
+    });
+    assert.equal(decision.shouldCompact, false);
+    assert.equal(decision.reason, "disabled");
+    assert.equal(decision.threshold, 0);
+  }
+  // "off" wins even before the contextWindow data gate.
+  assert.equal(decide({ mode: "off", modelConfig: undefined }).reason, "disabled");
+
+  // "manualOnly" rejects the automatic intents but passes the manual bypass through untouched.
+  const autoRejected = decide({ mode: "manualOnly", totalTokens: 199_000 });
+  assert.equal(autoRejected.shouldCompact, false);
+  assert.equal(autoRejected.reason, "disabled-by-settings");
+  const manualAllowed = decide({
+    mode: "manualOnly",
+    totalTokens: 199_000,
+    bypassThresholdAndCooldown: true,
+  });
+  assert.equal(manualAllowed.shouldCompact, true);
+  assert.equal(manualAllowed.reason, "threshold-exceeded");
+
+  // "auto"/undefined keeps the default behavior.
+  assert.equal(decide({ mode: "auto", totalTokens: 199_000 }).shouldCompact, true);
+  assert.equal(decide({ totalTokens: 199_000 }).shouldCompact, true);
+  assert.equal(decide({ totalTokens: 10_000 }).reason, "below-threshold");
+});

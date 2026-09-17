@@ -64,8 +64,22 @@ export function ContextUsageRing(props: {
    * general display option for the shared ring, for future mount points where low usage should yield the space.
    */
   hideBelowWarn?: boolean;
+  /**
+   * Optional one-line compaction status appended under the usage/window lines in the tooltip
+   * (e.g. a running compaction, the last checkpoint time, or the last failure). Undefined
+   * (typically the idle phase) renders no extra line.
+   */
+  compactionLine?: string;
 }) {
-  const { totalTokens, contextWindow, disabled, onConfirm, className, hideBelowWarn } = props;
+  const {
+    totalTokens,
+    contextWindow,
+    disabled,
+    onConfirm,
+    className,
+    hideBelowWarn,
+    compactionLine,
+  } = props;
   const { t, locale } = useLocale();
   const isCoarsePointer = useSyncExternalStore(
     subscribeCoarsePointer,
@@ -113,6 +127,7 @@ export function ContextUsageRing(props: {
     <span className="flex flex-col gap-0.5">
       <span>{usageLine}</span>
       <span className="text-muted-foreground">{windowLine}</span>
+      {compactionLine ? <span className="text-muted-foreground">{compactionLine}</span> : null}
     </span>
   );
 

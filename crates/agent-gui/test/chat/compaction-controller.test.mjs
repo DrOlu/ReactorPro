@@ -1143,3 +1143,98 @@ test("a null persist result aborts the checkpoint like false", async () => {
       .every(([, state]) => state.meta.activeSegmentIndex === 0),
   );
 });
+
+// Settings-driven mode gate on the controller: "off" makes every trigger a no-op (manual
+// included), "manualOnly" no-ops the automatic triggers (pre-send / mid-stream / post-tool)
+// while the manual path still compacts.
+test("mode gate: 'off' turns pre-send, mid-stream, post-tool, and manual into no-ops", async () => {
+  const controller = new CompactionController();
+  let completeCalls = 0;
+  const state = bigState();
+  const { recorder } = bindController(controller, {
+    mode: "off",
+    complete: async () => {
+      completeCalls += 1;
+      return summaryResponse();
+    },
+    presend: {
+      baseState: state,
+      pendingUserText: "next question",
+      composeAppliedState: (current) => current,
+    },
+  });
+
+  const presend = await controller.maybeCompactPreSend({
+    budgetContext: conversationState.buildRequestContext(state),
+  });
+  assert.equal(presend, false);
+
+  assert.equal(controller.shouldProtectMidStream(1_000_000), false);
+
+  const postTool = await controller.compactDuringRun({ trigger: "post-tool", state });
+  assert.equal(postTool.context, null);
+  assert.equal(postTool.outcome, "skipped");
+  assert.equal(postTool.reason, "disabled");
+
+  const midStream = await controller.compactDuringRun({
+    trigger: "mid-stream",
+    state,
+    budgetContext: conversationState.buildRequestContext(state),
+  });
+  assert.equal(midStream.outcome, "skipped");
+  assert.equal(midStream.reason, "disabled");
+  assert.ok(midStream.context);
+
+  // Manual compaction is refused with the "disabled" hard guard too.
+  controller.unbindTurn();
+  const manual = manualBinding({ mode: "off" });
+  const manualOutcome = await controller.compactManually(manual.binding, state);
+  assert.equal(manualOutcome.status, "skipped");
+  assert.equal(manualOutcome.reason, "disabled");
+
+  assert.equal(completeCalls, 0);
+  assert.equal(recorder.events.length, 0);
+  assert.equal(manual.recorder.events.length, 0);
+});
+
+test("mode gate: 'manualOnly' no-ops auto triggers while manual compaction still compacts", async () => {
+  const controller = new CompactionController();
+  let completeCalls = 0;
+  const state = bigState();
+  const { recorder } = bindController(controller, {
+    mode: "manualOnly",
+    complete: async () => {
+      completeCalls += 1;
+      return summaryResponse();
+    },
+    presend: {
+      baseState: state,
+      pendingUserText: "next question",
+      composeAppliedState: (current) => current,
+    },
+  });
+
+  assert.equal(controller.shouldProtectMidStream(1_000_000), false);
+
+  const postTool = await controller.compactDuringRun({ trigger: "post-tool", state });
+  assert.equal(postTool.context, null);
+  assert.equal(postTool.outcome, "skipped");
+  assert.equal(postTool.reason, "disabled-by-settings");
+
+  const presend = await controller.maybeCompactPreSend({
+    budgetContext: conversationState.buildRequestContext(state),
+  });
+  assert.equal(presend, false);
+
+  // No auto trigger left any side effects.
+  assert.equal(recorder.events.length, 0);
+
+  // Manual compaction still runs: compactManually's own bindTurn carries mode "manualOnly",
+  // and the manual bypass keeps the decision untouched.
+  controller.unbindTurn();
+  const manual = manualBinding({ mode: "manualOnly" });
+  const manualOutcome = await controller.compactManually(manual.binding, state);
+  assert.equal(manualOutcome.status, "compacted");
+  // completeCalls stays 0: the manual path uses the manualBinding's own complete fn.
+  assert.ok(manual.recorder.byKind("queueCheckpoint").length >= 1);
+});

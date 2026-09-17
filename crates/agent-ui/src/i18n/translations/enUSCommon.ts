@@ -500,6 +500,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.manualCompactBelowThreshold": "Context usage is below 50%; compaction is not needed yet",
   "chat.manualCompactEmpty": "This conversation has no context to compact",
   "chat.manualCompactUnavailable": "Context compaction is unavailable for the current model",
+  "chat.manualCompactOff": "History compaction is turned off in Settings",
   "chat.manualCompactFailed": "Context compaction failed. Please try again",
   "chat.manualCompactTimedOut":
     "Context compaction did not return a result. Check the desktop connection and try again",

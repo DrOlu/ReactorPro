@@ -23,6 +23,7 @@ import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
   Activity,
   ChevronDown,
+  Layers,
   Pencil,
   Plus,
   RefreshCw,
@@ -398,6 +399,12 @@ function CustomSettingsDrawer(
     both: t("settings.composerContextDisplayBothDesc"),
     ring: t("settings.composerContextDisplayRingDesc"),
   } as const;
+  // Dynamic description for the three history-compaction tiers: same convention, one line for the currently selected tier.
+  const historyCompactionModeDesc = {
+    auto: t("settings.historyCompactionAutoDesc"),
+    manualOnly: t("settings.historyCompactionManualOnlyDesc"),
+    off: t("settings.historyCompactionOffDesc"),
+  } as const;
 
   function handleModelSettingChange(
     key: "conversationTitleModel" | "commitMessageModel" | "promptClarifyModel",
@@ -543,6 +550,33 @@ function CustomSettingsDrawer(
                 />
                 <p className="text-[11px] leading-relaxed text-muted-foreground/70">
                   {contextDisplayModeDesc[settings.customSettings.composerContextDisplay]}
+                </p>
+              </div>
+            </section>
+            {/* History compaction mode (three-tier slider): automatic triggers / manual only /
+                fully off. The manual entry point is the usage ring's compaction action. */}
+            <section className="py-5">
+              <DrawerSectionHeader
+                icon={<Layers className="h-3.5 w-3.5" />}
+                title={t("settings.historyCompaction")}
+                hint={t("settings.historyCompactionHint")}
+              />
+              <div className="mt-3.5 space-y-2">
+                <SegmentedSlider
+                  aria-label={t("settings.historyCompaction")}
+                  className="w-full"
+                  value={settings.customSettings.historyCompaction}
+                  options={[
+                    { value: "auto", label: t("settings.historyCompactionAuto") },
+                    { value: "manualOnly", label: t("settings.historyCompactionManualOnly") },
+                    { value: "off", label: t("settings.historyCompactionOff") },
+                  ]}
+                  onValueChange={(mode) =>
+                    setSettings((prev) => updateCustomSettings(prev, { historyCompaction: mode }))
+                  }
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+                  {historyCompactionModeDesc[settings.customSettings.historyCompaction]}
                 </p>
               </div>
             </section>

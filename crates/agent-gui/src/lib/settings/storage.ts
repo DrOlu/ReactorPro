@@ -134,6 +134,11 @@ function readLocalUiSettings(): {
         obj.composerContextDisplay === "ring" || obj.composerContextDisplay === "both"
           ? obj.composerContextDisplay
           : "statsBar",
+      // Three-value enum (same convention as normalizeCustomSettings): dirty values/default fall back to automatic compaction.
+      historyCompaction:
+        obj.historyCompaction === "manualOnly" || obj.historyCompaction === "off"
+          ? obj.historyCompaction
+          : "auto",
       // fontFamily was the single pre-split preference. Read it only to migrate
       // old local settings into the interface-specific field.
       interfaceFontFamily: normalizeFontFamily(obj.interfaceFontFamily ?? obj.fontFamily),

@@ -2113,6 +2113,24 @@ export function ChatPage(props: ChatPageProps) {
     return displayedConversationWorkdir || undefined;
   })();
   const isCompactionRunning = compactionStatus.phase === "running";
+  // Compaction line for the usage ring's tooltip (plain English, matching the other
+  // status strings on this page): running shows the active trigger, completed the last
+  // checkpoint time, failed the failure message; idle renders no line at all.
+  const compactionTooltipLine = (() => {
+    if (compactionStatus.phase === "running") {
+      return `Compacting history (${compactionStatus.trigger})…`;
+    }
+    if (compactionStatus.phase === "completed") {
+      const completedAt = new Date(compactionStatus.completedAt);
+      const hours = String(completedAt.getHours()).padStart(2, "0");
+      const minutes = String(completedAt.getMinutes()).padStart(2, "0");
+      return `Last checkpoint ${hours}:${minutes}`;
+    }
+    if (compactionStatus.phase === "failed") {
+      return `Last compaction failed: ${compactionStatus.message}`;
+    }
+    return undefined;
+  })();
   const isConversationHydrating = currentConversationHydrationPhase === "hydrating";
   const isConversationHydrationFailed = currentConversationHydrationPhase === "failed";
   const composerPlaceholder = isCompactionRunning
@@ -2368,6 +2386,7 @@ export function ChatPage(props: ChatPageProps) {
       contextUsageTokensSource,
       contextWindow: currentModelContextWindow,
       contextDisplayMode: settings.customSettings.composerContextDisplay,
+      compactionLine: compactionTooltipLine,
       gitClient: tauriGitClient,
       workspaceActivityClient: tauriWorkspaceActivityClient,
       onOpenWorktree: handleOpenWorktree,

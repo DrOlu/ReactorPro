@@ -707,6 +707,18 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
     "The stats bar plus the usage ring at the composer's lower right.",
   "settings.composerContextDisplayRingDesc":
     "Only the always-visible usage ring at the composer's lower right.",
+  "settings.historyCompaction": "History compaction",
+  "settings.historyCompactionHint":
+    "Controls how the conversation history is compacted into summary checkpoints to free context space.",
+  "settings.historyCompactionAuto": "Automatic",
+  "settings.historyCompactionManualOnly": "Manual only",
+  "settings.historyCompactionOff": "Off",
+  "settings.historyCompactionAutoDesc":
+    "Compacts automatically before sending, mid-run, and after tool calls; the manual entry stays available.",
+  "settings.historyCompactionManualOnlyDesc":
+    "Automatic compaction is off; only the usage ring's manual compaction still works.",
+  "settings.historyCompactionOffDesc":
+    "Compaction is fully disabled, including the usage ring's manual entry.",
   "settings.failoverTitle": "Auto Failover",
   "settings.failoverToggleHint":
     "When a {vendor} request fails, retry it on the next {vendor} provider in the queue with the same model, staying on the provider that succeeds. Never crosses vendors.",

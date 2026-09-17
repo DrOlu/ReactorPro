@@ -31,6 +31,7 @@ import type {
   CompactionDecision,
   CompactionDecisionReason,
   CompactionIntent,
+  CompactionMode,
   CompactionStatus,
   CompactionTrigger,
   ProviderRuntimeConfig,
@@ -89,6 +90,9 @@ export type CompactionTurnBinding = {
   providerId: ProviderId;
   model: string;
   runtime: ProviderRuntimeConfig;
+  // Settings-driven compaction mode ("auto" when unset): gates every decision this
+  // binding makes, including the manual trigger reusing this binding type.
+  mode?: CompactionMode;
   cancellation: TurnCancellation;
   debugLogger?: StreamDebugLogger;
   complete?: CompleteAssistantFn;
@@ -206,6 +210,10 @@ export class CompactionController {
    */
   private fixedOverheadTokens = 0;
   private binding: CompactionTurnBinding | null = null;
+  // Compaction mode from the current turn binding (defaults to "auto"): every decide() call —
+  // pre-send, mid-stream protection, post-tool, and the manual probe — reads it, so the
+  // settings gate applies uniformly without each call site threading it separately.
+  private mode: CompactionMode = "auto";
   private rollbackSnapshot: RollbackSnapshot | null = null;
   private inFlight = false;
   private statusPhase: CompactionStatus["phase"] = "idle";
@@ -289,6 +297,7 @@ export class CompactionController {
     // A defensive rebind must not strand the previous observer interval.
     this.settleAbortedIfRunning();
     this.binding = binding;
+    this.mode = binding.mode ?? "auto";
     this.rollbackSnapshot = null;
     this.inFlight = false;
   }
@@ -298,6 +307,7 @@ export class CompactionController {
     // tears down the turn without first reaching the ordinary completion path.
     this.settleAbortedIfRunning();
     this.binding = null;
+    this.mode = "auto";
     this.rollbackSnapshot = null;
     this.inFlight = false;
   }
@@ -886,6 +896,7 @@ export class CompactionController {
       inFlight: this.inFlight,
       now,
       bypassThresholdAndCooldown,
+      mode: this.mode,
     });
   }
 

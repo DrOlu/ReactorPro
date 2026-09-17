@@ -1,5 +1,5 @@
 import type { ProviderModelConfig } from "../../settings";
-import type { CompactionDecision, CompactionIntent } from "./types";
+import type { CompactionDecision, CompactionIntent, CompactionMode } from "./types";
 
 export const OPTIMIZATION_THRESHOLD_FACTOR = 1.5;
 export const PROTECTION_THRESHOLD_FACTOR = 1.2;
@@ -144,6 +144,9 @@ export function decideCompaction(params: {
   // cooldown short-circuits are skipped; the disabled / no-active-messages /
   // in-flight hard guards still apply.
   bypassThresholdAndCooldown?: boolean;
+  // Settings-driven compaction mode: checked before the contextWindow data gate so the
+  // setting wins even for models whose catalog has no window data.
+  mode?: CompactionMode;
 }): CompactionDecision {
   const contextWindow = Math.max(0, Math.floor(params.modelConfig?.contextWindow ?? 0));
   const maxOutputToken = Math.max(0, Math.floor(params.modelConfig?.maxOutputToken ?? 0));
@@ -154,6 +157,15 @@ export function decideCompaction(params: {
     contextWindow,
     maxOutputToken,
   };
+
+  // "off" disables compaction entirely — the manual trigger included.
+  if (params.mode === "off") {
+    return { ...base, shouldCompact: false, reason: "disabled", threshold: 0 };
+  }
+  // "manualOnly" turns the automatic triggers off; the manual trigger (bypass=true) passes through untouched.
+  if (params.mode === "manualOnly" && !params.bypassThresholdAndCooldown) {
+    return { ...base, shouldCompact: false, reason: "disabled-by-settings", threshold: 0 };
+  }
 
   if (contextWindow <= 0 || maxOutputToken <= 0) {
     return {

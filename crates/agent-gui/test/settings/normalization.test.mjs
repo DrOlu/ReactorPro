@@ -3602,3 +3602,55 @@ test("legacy gateway messages without sidebar shortcuts preserve the current pre
     assert.deepEqual(applied.customSettings.sidebarShortcuts, current.customSettings.sidebarShortcuts);
   }
 });
+
+test("history compaction normalizes to the three-state union", () => {
+  // Defaults to today's automatic behavior; dirty values fall back to "auto", leaving no fourth state.
+  assert.equal(settings.getDefaultSettings().customSettings.historyCompaction, "auto");
+  assert.equal(
+    settings.normalizeSettings({ customSettings: {} }).customSettings.historyCompaction,
+    "auto",
+  );
+  for (const mode of ["manualOnly", "off"]) {
+    assert.equal(
+      settings.normalizeSettings({ customSettings: { historyCompaction: mode } })
+        .customSettings.historyCompaction,
+      mode,
+    );
+  }
+  assert.equal(
+    settings.normalizeSettings({ customSettings: { historyCompaction: "sometimes" } })
+      .customSettings.historyCompaction,
+    "auto",
+  );
+  assert.equal(
+    settings.normalizeSettings({ customSettings: { historyCompaction: null } })
+      .customSettings.historyCompaction,
+    "auto",
+  );
+});
+
+test("gateway sync carries the history compaction mode and never resets it from an old peer", () => {
+  const current = settings.normalizeSettings({
+    customSettings: { historyCompaction: "manualOnly" },
+  });
+  for (const mode of ["manualOnly", "off", "auto"]) {
+    const incoming = sync.buildGatewaySettingsSyncPayload(
+      settings.normalizeSettings({ customSettings: { historyCompaction: mode } }),
+    );
+    assert.equal(incoming.customSettings.historyCompaction, mode);
+    assert.equal(
+      sync.applyGatewaySettingsSyncPayload(current, incoming).customSettings.historyCompaction,
+      mode,
+    );
+  }
+  // An old peer that predates the field keeps the local value.
+  const legacyPayload = sync.buildGatewaySettingsSyncPayload(
+    settings.normalizeSettings({ customSettings: { historyCompaction: "manualOnly" } }),
+  );
+  delete legacyPayload.customSettings.historyCompaction;
+  assert.equal(
+    sync.applyGatewaySettingsSyncPayload(current, legacyPayload).customSettings
+      .historyCompaction,
+    "manualOnly",
+  );
+});

@@ -603,7 +603,10 @@ export function normalizeRemoteSettings(input: unknown): RemoteSettings {
     enableWebGit: obj.enableWebGit === true,
     enableWebTunnels: obj.enableWebTunnels === true,
     enableMeshChat: obj.enableMeshChat === true,
-    meshChatTimeoutMs: Math.min(1_800_000, normalizePositiveInteger(obj.meshChatTimeoutMs, 120_000)),
+    meshChatTimeoutMs: Math.min(
+      1_800_000,
+      normalizePositiveInteger(obj.meshChatTimeoutMs, 120_000),
+    ),
     meshChatPeerAllowlist: Array.isArray(obj.meshChatPeerAllowlist)
       ? obj.meshChatPeerAllowlist.filter((item) => typeof item === "string" && item.trim() !== "")
       : [],
@@ -1547,6 +1550,11 @@ export function normalizeCustomSettings(
       obj.composerContextDisplay === "ring" || obj.composerContextDisplay === "both"
         ? obj.composerContextDisplay
         : "statsBar",
+    // Three-value enum: dirty values/default fall back to the automatic compaction behavior.
+    historyCompaction:
+      obj.historyCompaction === "manualOnly" || obj.historyCompaction === "off"
+        ? obj.historyCompaction
+        : "auto",
     // fontFamily was the single pre-split preference. Read it only to migrate
     // saved local settings into the new interface-specific field.
     interfaceFontFamily: normalizeFontFamily(obj.interfaceFontFamily ?? obj.fontFamily),
