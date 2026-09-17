@@ -1,5 +1,6 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
 import {
+  CONTEXT_USAGE_DANGER_RATIO,
   canManualCompact,
   contextUsageRatio,
   positiveTokenCount,
@@ -413,10 +414,23 @@ export class CompactionController {
   // O(1): ledger reading + streaming-increment estimate + pure decision, no state construction
   // or serialization. pendingTokenUnits is accumulated by the caller from streaming deltas using
   // estimateTextTokenUnits.
+  //
+  // Over-threshold usage alone no longer arms the mid-stream path: aborting the partial stream,
+  // folding it, and re-kicking generation is expensive and user-visible, while at pressure
+  // level 0 there is slack to wait for the round boundary, where the post-tool trigger compacts
+  // without discarding in-flight generation. Mid-stream protection stays reserved for the
+  // emergencies it was meant for: escalated pressure or usage inside the danger band.
   shouldProtectMidStream(pendingTokenUnits: number): boolean {
     if (!this.binding || this.inFlight) return false;
-    return this.decide("protection", this.ledger.totalWithPendingTokens(pendingTokenUnits))
-      .shouldCompact;
+    const decision = this.decide(
+      "protection",
+      this.ledger.totalWithPendingTokens(pendingTokenUnits),
+    );
+    if (!decision.shouldCompact) return false;
+    const inDangerBand =
+      decision.contextWindow > 0 &&
+      decision.totalTokens >= CONTEXT_USAGE_DANGER_RATIO * decision.contextWindow;
+    return this.pressure.level >= 1 || inDangerBand;
   }
 
   async maybeCompactPreSend(params: {

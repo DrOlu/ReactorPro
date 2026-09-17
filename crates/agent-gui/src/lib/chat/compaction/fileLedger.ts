@@ -213,6 +213,20 @@ export function mergeMessagesIntoLedger(
   return merged;
 }
 
+/**
+ * The most recently touched paths (at most `max`), for compaction's post-summary cross-check:
+ * modifications take priority (sticky, and the artifacts a summary must never lose), with the
+ * newest reads as the fallback when nothing was modified. Both lists are old -> new, so the
+ * tail is the newest.
+ */
+export function recentLedgerPaths(ledger: FileLedger | undefined, max = 3): string[] {
+  const modified = ledger?.modifiedFiles ?? [];
+  const source = modified.length > 0 ? modified : (ledger?.readFiles ?? []);
+  const take = Math.max(0, Math.floor(max));
+  const recent = take === 0 ? [] : source.slice(-take);
+  return recent.filter((path) => typeof path === "string" && path.trim() !== "");
+}
+
 function isEmptyLedger(ledger: FileLedger | undefined): boolean {
   return (
     !ledger || ((ledger.readFiles?.length ?? 0) === 0 && (ledger.modifiedFiles?.length ?? 0) === 0)

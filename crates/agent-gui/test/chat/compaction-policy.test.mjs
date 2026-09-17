@@ -31,7 +31,7 @@ test("threshold: every provider reserves the output buffer from the total window
       maxOutputToken: 32_000,
       pressureLevel: 0,
     }),
-    200_000 - 32_000 * 1.5,
+    200_000 - 32_000 * 1.4,
   );
 
   assert.equal(
@@ -73,7 +73,7 @@ test("threshold: sustained pressure pins the protection factor to 1.0", () => {
     maxOutputToken: 32_000,
     pressureLevel: 2,
   });
-  assert.equal(optimizationUnchanged, 200_000 - 32_000 * 1.5);
+  assert.equal(optimizationUnchanged, 200_000 - 32_000 * 1.4);
 });
 
 test("decideCompaction covers every reason", () => {
@@ -99,7 +99,7 @@ test("decideCompaction covers every reason", () => {
   const fire = decide({ totalTokens: 199_000 });
   assert.equal(fire.shouldCompact, true);
   assert.equal(fire.reason, "threshold-exceeded");
-  assert.equal(fire.threshold, 152_000);
+  assert.equal(fire.threshold, 155_200);
 });
 
 // A live relay (provider-declared limits, limitsSource "provider") publishes
@@ -111,7 +111,7 @@ test("decideCompaction covers every reason", () => {
 test("threshold: an inflated relay output cap cannot collapse compaction to the floor", () => {
   // z-ai/glm-5.3 as declared by the relay: 1,310,720-token window, 943,718
   // declared output (72% of it). Uncapped, the optimization threshold is
-  // 1,310,720 - 1.5*943,718 < 0 -> the 1024 floor.
+  // 1,310,720 - 1.4*943,718 < 0 -> the 1024 floor.
   const glm = policy.resolveCompactionThreshold({
     intent: "optimization",
     contextWindow: 1_310_720,
@@ -119,9 +119,9 @@ test("threshold: an inflated relay output cap cannot collapse compaction to the 
     pressureLevel: 0,
   });
   // The reserve is capped at a third of the window (436,906), so the
-  // threshold sits at exactly half the window — not the floor.
-  assert.equal(glm, 1_310_720 - Math.floor(1_310_720 / 3) * 1.5);
-  assert.equal(glm, 655_361);
+  // threshold stays above half the window — not the floor.
+  assert.equal(glm, Math.floor(1_310_720 - Math.floor(1_310_720 / 3) * 1.4));
+  assert.equal(glm, 699_051);
   assert.ok(glm >= 1_310_720 / 2, "compaction must not fire below half the window");
 
   // meta/muse-spark-1.3 declared output at 90% of its 1,048,576 window.
@@ -152,7 +152,7 @@ test("threshold: an inflated relay output cap cannot collapse compaction to the 
   });
   assert.equal(decision.reason, "below-threshold");
   assert.equal(decision.shouldCompact, false);
-  assert.equal(decision.threshold, 655_361);
+  assert.equal(decision.threshold, 699_051);
 });
 
 test("threshold: honest output caps are untouched by the reserve cap", () => {
@@ -165,7 +165,7 @@ test("threshold: honest output caps are untouched by the reserve cap", () => {
       maxOutputToken: 32_000,
       pressureLevel: 0,
     }),
-    200_000 - 32_000 * 1.5,
+    200_000 - 32_000 * 1.4,
   );
   assert.equal(
     policy.resolveCompactionThreshold({

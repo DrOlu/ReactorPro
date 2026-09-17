@@ -220,6 +220,29 @@ test("message-level merge preserves next's true order: a late read survives evic
   assert.equal(merged.omittedCount, MAX);
 });
 
+// The compaction validation cross-check input: the newest few touched paths, modifications
+// first (sticky, the artifacts a summary must never lose), reads only as the fallback.
+test("recentLedgerPaths takes the newest modified files, falling back to reads", () => {
+  assert.deepEqual(
+    fileLedger.recentLedgerPaths({
+      readFiles: ["r1.ts"],
+      modifiedFiles: ["m1.ts", "m2.ts", "m3.ts", "m4.ts", "m5.ts"],
+    }),
+    // Both lists are old -> new: the tail (m3..m5) is the newest.
+    ["m3.ts", "m4.ts", "m5.ts"],
+  );
+  // Reads only participate when nothing was modified.
+  assert.deepEqual(
+    fileLedger.recentLedgerPaths({
+      readFiles: ["r1.ts", "r2.ts", "r3.ts", "r4.ts"],
+      modifiedFiles: [],
+    }),
+    ["r2.ts", "r3.ts", "r4.ts"],
+  );
+  assert.deepEqual(fileLedger.recentLedgerPaths(undefined), []);
+  assert.deepEqual(fileLedger.recentLedgerPaths({ readFiles: [], modifiedFiles: [] }), []);
+});
+
 test("render is bounded by the total character budget", () => {
   // 300 modified paths of ~60 chars each would be ~18k chars unbounded.
   const many = Array.from({ length: 300 }, (_, i) => `src/very/deep/nested/module-${i}/${"z".repeat(40)}.ts`);

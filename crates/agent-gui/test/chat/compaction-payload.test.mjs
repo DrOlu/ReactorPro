@@ -11,6 +11,7 @@ const {
   shrinkCompactionPayload,
   fitCompactionPayloadToBudget,
   estimateCompactionPayloadTokens,
+  resolveCompactionPayloadTokenCeiling,
   trimText,
 } = payloadModule;
 
@@ -275,4 +276,49 @@ test("fitCompactionPayloadToBudget converges under the model budget", () => {
     fitCompactionPayloadToBudget({ payload: tiny, modelConfig: { contextWindow: 200_000, maxOutputToken: 32_000 } }),
     tiny,
   );
+});
+
+// The payload ceiling scales with the window (window/8 clamped to [32K, 96K]) instead of the flat
+// 32K cap: a 1.3M-token window otherwise summarizes from a needlessly thin slice. Small windows
+// keep the 32K floor.
+test("payload token ceiling: window/8 clamped to [32K, 96K]", () => {
+  // 128K/8 = 16K -> floored at 32K; 200K/8 = 25K -> floored at 32K.
+  assert.equal(resolveCompactionPayloadTokenCeiling(128_000), 32_000);
+  assert.equal(resolveCompactionPayloadTokenCeiling(200_000), 32_000);
+  // 400K/8 = 50K -> kept as-is.
+  assert.equal(resolveCompactionPayloadTokenCeiling(400_000), 50_000);
+  // 1.3M/8 = 162.5K -> capped at the 96K ceiling.
+  assert.equal(resolveCompactionPayloadTokenCeiling(1_310_720), 96_000);
+  // Missing window data cannot scale: the flat 32K cap.
+  assert.equal(resolveCompactionPayloadTokenCeiling(0), 32_000);
+  assert.equal(resolveCompactionPayloadTokenCeiling(undefined), 32_000);
+});
+
+test("a large window earns a bigger payload budget; small windows keep the 32K cap", () => {
+  const messages = Array.from({ length: 80 }, (_, i) =>
+    serializeMessageForCompaction(toolResult("y".repeat(6000), i), i),
+  );
+  const payload = {
+    compaction_reason: { trigger: "t", context_tokens: 1, threshold: 1 },
+    system_prompt: "p",
+    previous_summary: null,
+    active_segment_messages: messages,
+  };
+
+  // 1.3M window, 64K output: budget = min(96K ceiling, floor((1_310_720 - 32_768 - 1_500) * 0.9)) = 96K.
+  const fitted = fitCompactionPayloadToBudget({
+    payload,
+    modelConfig: { contextWindow: 1_310_720, maxOutputToken: 65_536 },
+  });
+  assert.equal(fitted.compaction_reason.reduced_input, true);
+  assert.equal(fitted.compaction_reason.payload_budget_tokens, 96_000);
+  assert.ok(estimateCompactionPayloadTokens(fitted) <= 96_000);
+
+  // 200K window: the budget stays at the flat 32K cap.
+  const small = fitCompactionPayloadToBudget({
+    payload,
+    modelConfig: { contextWindow: 200_000, maxOutputToken: 32_000 },
+  });
+  assert.equal(small.compaction_reason.payload_budget_tokens, 32_000);
+  assert.ok(estimateCompactionPayloadTokens(small) <= 32_000);
 });

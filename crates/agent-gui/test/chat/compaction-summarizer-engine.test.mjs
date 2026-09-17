@@ -165,6 +165,65 @@ test("verification repair identifies the exact recent technical references", asy
   assert.equal(outcome.state.segments.length, 2);
 });
 
+// The merged file ledger is the deterministic witness computed client-side (never sent to the
+// summarizer): a summary that passes the signals check but drops every touched file still fails
+// validation and gets exactly one self-repair round-trip.
+test("a summary that drops the ledger file fails validation and triggers one repair", async () => {
+  const calls = [];
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "base prompt",
+    messages: [
+      user("run cargo build --release next", 1),
+      {
+        role: "assistant",
+        content: [
+          { type: "toolCall", id: "tc-write", name: "Write", arguments: { path: "src/app.ts", content: "x" } },
+        ],
+        stopReason: "toolUse",
+        timestamp: 2,
+      },
+      {
+        role: "toolResult",
+        toolCallId: "tc-write",
+        toolName: "Write",
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+        timestamp: 3,
+      },
+    ],
+  });
+  // Passes the signals check (the cargo command survives verbatim) but the only touched file,
+  // src/app.ts (tracked by the ledger), never appears.
+  const ledgerDroppingSummary = `<summary>
+<task>Run the build</task>
+<state>Ran cargo build --release next; entry point rewritten ${"x".repeat(300)}</state>
+<artifacts>
+- [file] src/other.ts | modified | rewired entry point
+</artifacts>
+<next_steps>
+1. wire the controller
+</next_steps>
+</summary>`;
+
+  const outcome = await runCompaction(
+    runParams(
+      async (params) => {
+        calls.push(params);
+        if (calls.length === 1) {
+          return summaryResponse(ledgerDroppingSummary);
+        }
+        return summaryResponse();
+      },
+      { state },
+    ),
+  );
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].context.messages[2].content, /file ledger cross-check/);
+  assert.match(calls[1].context.messages[2].content, /src\/app\.ts/);
+  assert.equal(outcome.state.segments.length, 2);
+});
+
 test("an unrepairable summary rejects after the single repair attempt", async () => {
   let calls = 0;
   await assert.rejects(

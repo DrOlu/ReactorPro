@@ -1,7 +1,10 @@
 import type { ProviderModelConfig } from "../../settings";
 import type { CompactionDecision, CompactionIntent, CompactionMode } from "./types";
 
-export const OPTIMIZATION_THRESHOLD_FACTOR = 1.5;
+// 1.4 (not 1.5): biased toward compacting in the invisible pre-send window — the earlier the
+// optimization trigger fires below the protection threshold, the less often mid-run protection
+// has to abort and re-kick generation.
+export const OPTIMIZATION_THRESHOLD_FACTOR = 1.4;
 export const PROTECTION_THRESHOLD_FACTOR = 1.2;
 export const MIN_COMPACTION_INTERVAL_MS = 60_000;
 export const MIN_COMPACTION_USER_MESSAGES = 3;

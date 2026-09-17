@@ -15,7 +15,11 @@ import {
 import { estimateTextTokens } from "./tokenLedger";
 import type { CompactionIntent } from "./types";
 
+// Floor of the payload-token ceiling: small windows keep the flat 32K cap.
 export const COMPACTION_PAYLOAD_TOKEN_CAP = 32_000;
+// Ceiling for large windows: without it a 1.3M-token window would summarize from a needlessly
+// thin 32K slice and lose context.
+export const COMPACTION_PAYLOAD_TOKEN_MAX = 96_000;
 const COMPACTION_PROMPT_TOKEN_BUDGET = 1_500;
 const COMPACTION_HISTORY_BUDGET_FACTOR = 0.9;
 const COMPACTION_OUTPUT_RESERVE_FACTOR = 0.5;
@@ -342,11 +346,24 @@ export function shrinkCompactionPayload(payload: CompactionPayload): CompactionP
   };
 }
 
+// The payload-token ceiling scales with the context window: floor(window / 8), clamped to
+// [32K, 96K]. A bigger summarizer payload preserves more context but slows the summarizer
+// round-trip, so the scaling is bounded by the 96K ceiling; small windows keep the flat 32K cap.
+export function resolveCompactionPayloadTokenCeiling(contextWindow?: number): number {
+  const window = Math.max(0, Math.floor(contextWindow ?? 0));
+  return Math.max(
+    COMPACTION_PAYLOAD_TOKEN_CAP,
+    Math.min(COMPACTION_PAYLOAD_TOKEN_MAX, Math.floor(window / 8)),
+  );
+}
+
 function resolveCompactionPayloadBudget(modelConfig?: ProviderModelConfig) {
   const contextWindow = Math.max(0, Math.floor(modelConfig?.contextWindow ?? 0));
   const maxOutputToken = Math.max(0, Math.floor(modelConfig?.maxOutputToken ?? 0));
+  const tokenCeiling = resolveCompactionPayloadTokenCeiling(contextWindow);
   if (contextWindow <= 0 || maxOutputToken <= 0) {
-    return COMPACTION_PAYLOAD_TOKEN_CAP;
+    // No window data to scale from: the clamp floors the ceiling at the flat 32K cap.
+    return tokenCeiling;
   }
 
   const outputReserve = Math.max(
@@ -355,15 +372,12 @@ function resolveCompactionPayloadBudget(modelConfig?: ProviderModelConfig) {
   );
   const availableTokens = contextWindow - outputReserve - COMPACTION_PROMPT_TOKEN_BUDGET;
   if (availableTokens <= 0) {
-    return COMPACTION_PAYLOAD_TOKEN_CAP;
+    return tokenCeiling;
   }
 
   return Math.max(
     1_024,
-    Math.min(
-      COMPACTION_PAYLOAD_TOKEN_CAP,
-      Math.floor(availableTokens * COMPACTION_HISTORY_BUDGET_FACTOR),
-    ),
+    Math.min(tokenCeiling, Math.floor(availableTokens * COMPACTION_HISTORY_BUDGET_FACTOR)),
   );
 }
 
@@ -430,7 +444,7 @@ export function fitCompactionPayloadToBudget(params: {
   params.debugLogger?.logResult({
     event: "compaction_payload_budgeted",
     budgetTokens,
-    hardCapTokens: COMPACTION_PAYLOAD_TOKEN_CAP,
+    hardCapTokens: resolveCompactionPayloadTokenCeiling(params.modelConfig?.contextWindow),
     estimatedTokens,
     fitsBudget: estimatedTokens <= budgetTokens,
     omittedMessageCount: nextPayload.compaction_reason.omitted_message_count ?? 0,
