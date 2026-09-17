@@ -341,3 +341,20 @@ func TestGetenvBool(t *testing.T) {
 		t.Fatalf("an unset variable must yield the fallback, got %v", got)
 	}
 }
+
+// The invoke deadline's flag default must be the mesh package's own default,
+// not a literal. A 60s literal here silently overrode mesh.DefaultInvokeTimeout
+// (3 minutes): the gateway always applies this flag value over the mesh
+// package's config, so the raised default never reached a live edge and every
+// turn longer than a minute was 4001'd and cancelled mid-work.
+func TestLoadMeshInvokeTimeoutDefaultMatchesMesh(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	resetFlagsForTest(t)
+	cfg := Load()
+	if cfg.MeshInvokeTimeout != mesh.DefaultInvokeTimeout {
+		t.Fatalf("MeshInvokeTimeout default = %s, want the mesh package default %s", cfg.MeshInvokeTimeout, mesh.DefaultInvokeTimeout)
+	}
+	if got := cfg.MeshConfig().InvokeTimeout; got != mesh.DefaultInvokeTimeout {
+		t.Fatalf("MeshConfig().InvokeTimeout = %s, want %s", got, mesh.DefaultInvokeTimeout)
+	}
+}
