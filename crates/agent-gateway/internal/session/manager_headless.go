@@ -28,9 +28,11 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
@@ -65,6 +67,13 @@ const headlessResumeTurns = 16
 // headlessResumePromptCap bounds the rehydrated transcript in bytes.
 const headlessResumePromptCap = 24 * 1024
 
+// headlessToolsLineMax caps the tool trace one assistant turn carries.
+const headlessToolsLineMax = 3
+
+// headlessTrimHeadFraction weights the head of a trimmed turn against its
+// tail: 60% head, 40% tail.
+const headlessTrimHeadFraction = 0.6
+
 // headlessTranscriptEntry mirrors one entry of a conversation's projection.
 type headlessTranscriptEntry struct {
 	ID   string `json:"id"`
@@ -76,6 +85,12 @@ type headlessTranscriptEntry struct {
 type headlessTurn struct {
 	Kind string // "user" | "assistant"
 	Text string
+	// Tools are the one-line tool calls the assistant turn issued, e.g.
+	// "write_file(out.txt)". Tool RESULT bodies stay out of the resume
+	// prompt (the worker re-derives them from its sandbox), but which
+	// tools ran is memory worth keeping: it is what tells a resumed turn
+	// what was already done.
+	Tools []string
 }
 
 // AgentSupportsCapability reports whether the attached agent declared the
@@ -174,47 +189,156 @@ func (m *Manager) HeadlessResumePrompt(agentID, conversationID, prompt string) s
 	return renderHeadlessResumePrompt(prompt, turns)
 }
 
-// renderHeadlessResumePrompt is the pure shape of a resume prompt: bounded to
-// the newest turns, oldest dropped first, the new message last so the answer
-// extraction (assistant entries after the final user entry) is unaffected.
+// renderHeadlessResumePrompt is the pure shape of a resume prompt: the
+// newest turns kept whole, the one turn that straddles the budget trimmed
+// head-and-tail, everything older than that dropped whole — the new message
+// last, so the answer extraction (assistant entries after the final user
+// entry) is unaffected.
 func renderHeadlessResumePrompt(prompt string, turns []headlessTurn) string {
 	if len(turns) > headlessResumeTurns {
 		turns = turns[len(turns)-headlessResumeTurns:]
 	}
+	// Fit newest-first: the most recent turns are the context a continuation
+	// actually needs, so they win the budget. kept accumulates newest ->
+	// oldest and is reversed into chronological order at the end.
+	kept := make([]string, 0, len(turns))
+	budget := headlessResumePromptCap
+	trimmedOne := false
+	for i := len(turns) - 1; i >= 0; i-- {
+		line := headlessTurnLine(turns[i])
+		if len(line) > budget {
+			if trimmedOne {
+				break // one trim per prompt; older turns drop whole
+			}
+			// One oversized turn must not evict every turn older than it:
+			// trim it into HALF the remaining budget — a fair split between
+			// the straddling turn and its elders — and let the loop carry
+			// on with what is left.
+			trimmed := headlessTrimmedTurnLine(turns[i], budget/2)
+			if trimmed == "" {
+				break
+			}
+			kept = append(kept, trimmed)
+			budget -= len(trimmed)
+			trimmedOne = true
+			continue
+		}
+		kept = append(kept, line)
+		budget -= len(line)
+	}
 	var builder strings.Builder
 	builder.WriteString("You are continuing an existing conversation with the same requester. ")
 	builder.WriteString("The transcript of the conversation so far:\n\n")
-	budget := headlessResumePromptCap
-	for _, turn := range turns {
-		line := turn.Kind + ": " + strings.TrimSpace(turn.Text) + "\n\n"
-		if len(line) > budget {
-			// Keep the newest turns whole; drop whole oldest lines rather
-			// than truncating a message mid-sentence.
-			break
-		}
-		builder.WriteString(line)
-		budget -= len(line)
+	for i := len(kept) - 1; i >= 0; i-- {
+		builder.WriteString(kept[i])
 	}
 	builder.WriteString("The requester's new message: ")
 	builder.WriteString(strings.TrimSpace(prompt))
 	return builder.String()
 }
 
-// headlessTurnsFromEntries keeps only the conversational kinds. Tool traffic
-// is context the worker can re-derive; what it needs to remember is what was
-// asked and what was answered.
+// headlessTurnLine renders one turn as it rides the transcript: kind, text,
+// and — for an assistant turn that issued tools — the one-line tool trace.
+func headlessTurnLine(turn headlessTurn) string {
+	line := turn.Kind + ": " + strings.TrimSpace(turn.Text)
+	if trace := headlessToolsLine(turn.Tools); trace != "" {
+		line += "\n" + trace
+	}
+	return line + "\n\n"
+}
+
+// headlessToolsLine is the capped tool trace for one assistant turn:
+// what ran, never the bodies.
+func headlessToolsLine(tools []string) string {
+	if len(tools) == 0 {
+		return ""
+	}
+	shown := tools
+	more := 0
+	if len(shown) > headlessToolsLineMax {
+		shown, more = shown[:headlessToolsLineMax], len(tools)-headlessToolsLineMax
+	}
+	line := "[tools used: " + strings.Join(shown, "; ")
+	if more > 0 {
+		line += fmt.Sprintf("; +%d more", more)
+	}
+	return line + "]"
+}
+
+// headlessTrimmedTurnLine fits one oversized turn into a byte budget by
+// keeping the head and the tail around a marker — the turn stays recognizable
+// instead of evicting its elders. "" when even the trimmed shape cannot fit.
+func headlessTrimmedTurnLine(turn headlessTurn, budget int) string {
+	marker := fmt.Sprintf("[…trimmed %d characters…]", len([]rune(strings.TrimSpace(turn.Text))))
+	overhead := len(turn.Kind) + 2 + len(marker) + 4 // "kind: ", marker, newlines, "\n\n"
+	if budget <= overhead {
+		return ""
+	}
+	runes := []rune(strings.TrimSpace(turn.Text))
+	head, tail := splitRunesByBytes(runes, budget-overhead)
+	if head == "" || tail == "" {
+		return ""
+	}
+	return turn.Kind + ": " + head + "\n" + marker + "\n" + tail + "\n\n"
+}
+
+// splitRunesByBytes splits runes into a head and a tail whose combined byte
+// length fits maxBytes, head-weighted 60/40 — byte-accurate so the trimmed
+// line really fits the budget it was given.
+func splitRunesByBytes(runes []rune, maxBytes int) (string, string) {
+	if maxBytes <= 0 {
+		return "", ""
+	}
+	headBudget := int(float64(maxBytes) * headlessTrimHeadFraction)
+	head, tail := make([]rune, 0, headBudget/2), make([]rune, 0, 16)
+	n := 0
+	for _, r := range runes {
+		if n+utf8.RuneLen(r) > headBudget {
+			break
+		}
+		head = append(head, r)
+		n += utf8.RuneLen(r)
+	}
+	for i := len(runes) - 1; i >= len(head); i-- {
+		if n+utf8.RuneLen(runes[i]) > maxBytes {
+			break
+		}
+		tail = append([]rune{runes[i]}, tail...)
+		n += utf8.RuneLen(runes[i])
+	}
+	return string(head), string(tail)
+}
+
+// headlessTurnsFromEntries keeps the conversational kinds and the tool-call
+// trace. Tool RESULT bodies stay out (the worker re-derives them from its
+// sandbox); what a resume needs to remember is what was asked, what was
+// answered, and which tools already ran.
 func headlessTurnsFromEntries(entries []headlessTranscriptEntry) []headlessTurn {
 	turns := make([]headlessTurn, 0, len(entries))
 	for _, entry := range entries {
 		kind := strings.ToLower(strings.TrimSpace(entry.Kind))
-		if kind != "user" && kind != "assistant" {
-			continue
+		switch kind {
+		case "user", "assistant":
+			text := strings.TrimSpace(entry.Text)
+			if text == "" || strings.Contains(entry.ID, ":err:") {
+				continue
+			}
+			turns = append(turns, headlessTurn{Kind: kind, Text: text})
+		case "tool_call":
+			// Attach the call to the assistant turn that issued it — the
+			// entries follow it in transcript order, already shaped
+			// "name(one-line arguments)" by the worker.
+			if len(turns) == 0 {
+				continue
+			}
+			last := &turns[len(turns)-1]
+			if last.Kind != "assistant" {
+				continue
+			}
+			if call := strings.TrimSpace(entry.Text); call != "" {
+				last.Tools = append(last.Tools, call)
+			}
 		}
-		text := strings.TrimSpace(entry.Text)
-		if text == "" || strings.Contains(entry.ID, ":err:") {
-			continue
-		}
-		turns = append(turns, headlessTurn{Kind: kind, Text: text})
 	}
 	return turns
 }
