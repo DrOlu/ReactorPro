@@ -284,6 +284,13 @@ func (r *Runner) runTurn(ctx context.Context, next job, entries *[]Entry, writer
 	var answers []string
 
 	for round := 0; round < r.cfg.MaxRounds; round++ {
+		compacted := false
+		if round > 0 {
+			// The context budget applies between rounds, before the next
+			// provider call: the model's history is shaped, never the
+			// transcript (checkpoints keep publishing the full entries).
+			messages, compacted = r.compactTurnContext(next.runID, messages, writer)
+		}
 		completion, err := r.provider.Complete(ctx, messages, tools)
 		if err != nil {
 			return strings.Join(answers, "\n\n"), fmt.Errorf("round %d: %w", round+1, err)
@@ -296,6 +303,15 @@ func (r *Runner) runTurn(ctx context.Context, next job, entries *[]Entry, writer
 				Text: completion.Text,
 			})
 			entryID++
+			// A compaction status that fired before this round has done its
+			// job once the answer lands; clear it with the same event.
+			if compacted {
+				_ = writer.delta(map[string]any{
+					"type":         "tool_status",
+					"status":       nil,
+					"isCompaction": true,
+				}, r.cfg.AgentID)
+			}
 			if err := writer.checkpoint(*entries); err != nil {
 				return strings.Join(answers, "\n\n"), err
 			}
@@ -323,6 +339,37 @@ func (r *Runner) runTurn(ctx context.Context, next job, entries *[]Entry, writer
 	// The round bound is a turn-ending condition the gateway sees as a
 	// normal completion: the transcript holds everything the turn did.
 	return strings.Join(answers, "\n\n"), nil
+}
+
+// compactTurnContext applies the within-turn context budget between rounds:
+// over budget, the model-visible history is compacted mechanically (see
+// context.go), the compaction is logged, and a best-effort tool_status event
+// tells the live viewers what is happening — the same event the desktop's
+// compaction surfaces ride, held until the round's answer lands. Under
+// budget, or with the module off, this is a no-op. It returns the (possibly
+// new) message list and whether a compaction fired.
+func (r *Runner) compactTurnContext(runID string, messages []Message, writer *ingress) ([]Message, bool) {
+	budget := contextBudgetFromConfig(r.cfg)
+	if budget.maxTokens <= 0 {
+		return messages, false
+	}
+	result := compactMessages(messages, budget)
+	if result.elidedToolResults == 0 && result.droppedExchanges == 0 {
+		return messages, false
+	}
+	r.logger.Info("agentd compacted turn context",
+		"run", runID,
+		"tokens_before", result.estimatedBefore,
+		"tokens_after", result.estimatedAfter,
+		"elided_tool_results", result.elidedToolResults,
+		"dropped_exchanges", result.droppedExchanges)
+	// Best-effort visibility; a failed status event never touches the turn.
+	_ = writer.delta(map[string]any{
+		"type":        "tool_status",
+		"status":      fmt.Sprintf("Compacting turn context (%d old tool outputs elided, %d exchanges dropped)", result.elidedToolResults, result.droppedExchanges),
+		"isCompaction": true,
+	}, r.cfg.AgentID)
+	return result.messages, true
 }
 
 // executeTool resolves and runs one tool call, checkpointing the transcript

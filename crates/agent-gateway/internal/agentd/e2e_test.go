@@ -38,6 +38,12 @@ const e2eToken = "e2e-gateway-token"
 // startE2E stands up a real gateway agent endpoint and a real agentd against
 // it, both in-process, wired to the given provider URL.
 func startE2E(t *testing.T, concurrency int, providerURL string) *session.Manager {
+	return startE2EMutated(t, concurrency, providerURL, nil)
+}
+
+// startE2EMutated is startE2E with a hook for one-off Config changes — used
+// by tests that need non-default behaviour (context budgets, flags).
+func startE2EMutated(t *testing.T, concurrency int, providerURL string, mutate func(*Config)) *session.Manager {
 	t.Helper()
 
 	manager := session.NewManager()
@@ -63,6 +69,9 @@ func startE2E(t *testing.T, concurrency int, providerURL string) *session.Manage
 	cfg.Concurrency = concurrency
 	cfg.Heartbeat = 10 * time.Millisecond
 	cfg.RequestTimeout = 10 * time.Second
+	if mutate != nil {
+		mutate(&cfg)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -492,6 +501,101 @@ func TestE2EAgentdConversationPersistence(t *testing.T) {
 // a headless worker: its conversations live in the gateway's store, and the
 // worker itself would answer an empty list. The desktop path is untouched —
 // an agent without the headless marker is still relayed to as before.
+// fatCompactionProvider drives a tool-heavy turn: five fat run_command
+// rounds, then a final answer that reports what the MODEL saw — whether an
+// elision marker reached the message list, and how long the newest tool
+// result was (it must stay verbatim). The round count is a server-side
+// counter of ISSUED calls, deliberately not the number of tool messages in
+// the request: compaction may legitimately remove or mark those, and a
+// script that fights the module never terminates.
+func fatCompactionProvider() *httptest.Server {
+	// The run_command tool wraps its argument in sh -c itself, so this is
+	// the bare pipeline: 48 KiB of NULs translated to 'x'.
+	fatCommand := `dd if=/dev/zero bs=1024 count=48 2>/dev/null | tr '\0' x`
+	var issued int
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var request struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.Unmarshal(body, &request)
+		w.Header().Set("Content-Type", "application/json")
+
+		sawMarker := false
+		lastLen := 0
+		toolSeen := 0
+		for _, m := range request.Messages {
+			if m.Role != "tool" {
+				continue
+			}
+			toolSeen++
+			lastLen = len(m.Content)
+			if strings.Contains(m.Content, elisionMarkerPrefix) {
+				sawMarker = true
+			}
+		}
+		issued++
+		if issued <= 5 {
+			// The arguments field is itself a JSON-encoded STRING, so the
+			// command object must be marshalled twice: once into the
+			// {"command":"..."} document, once into the string literal that
+			// document rides in. Hand-built quoting would terminate the
+			// arguments string at the first inner quote.
+			rawArgs, _ := json.Marshal(map[string]string{"command": fatCommand})
+			safeArgs, _ := json.Marshal(string(rawArgs))
+			fmt.Fprintf(w, `{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":"","tool_calls":[{"id":"call-%d","type":"function","function":{"name":"run_command","arguments":%s}}]}}]}`,
+				issued, safeArgs)
+			return
+		}
+		// The final round reports the model-visible context: an elision
+		// marker must have arrived, and the newest tool result must still
+		// be whole.
+		fmt.Fprintf(w, `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"marker:%s lastlen:%d toolmessages:%d","tool_calls":null}}]}`,
+			map[bool]string{true: "yes", false: "no"}[sawMarker], lastLen, toolSeen)
+	}))
+}
+
+// The context budget in the loop: a turn fat enough to blow the budget
+// still completes, the MODEL's history carries the elision marker, the
+// newest tool result arrives verbatim — and none of that touches the
+// transcript the checkpoints publish.
+func TestE2EAgentdContextBudgetCompactsTheModelHistory(t *testing.T) {
+	provider := fatCompactionProvider()
+	t.Cleanup(provider.Close)
+	// Five ~12.3k-token tool results put the turn near 62k tokens; a 55k
+	// budget lets elision alone fire (one result marked, the newest four
+	// verbatim) — the drop-middle stage stays pinned by the unit tests,
+	// where it can be asserted directly.
+	manager := startE2EMutated(t, 1, provider.URL, func(cfg *Config) {
+		cfg.ContextBudgetTokens = 55000
+	})
+
+	if err := chatcmd.ProbeRuntimeForCommand(context.Background(), manager, e2eAgentID); err != nil {
+		t.Fatalf("runtime probe (ping/pong): %v", err)
+	}
+	result, err := manager.SubmitRemoteTask(context.Background(), e2eAgentID,
+		"Run the fat command five times, then report.")
+	if err != nil {
+		t.Fatalf("SubmitRemoteTask: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("the remote task failed: %s (%s)", result.ErrorMessage, result.ErrorCode)
+	}
+	answer := remoteTaskAnswerText(t, result)
+	if !strings.Contains(answer, "marker:yes") {
+		t.Fatalf("the model-visible history never carried an elision marker: %q", answer)
+	}
+	if !strings.Contains(answer, "lastlen:49152") {
+		t.Fatalf("the newest tool result did not arrive verbatim (48 KiB of x = 49152): %q", answer)
+	}
+	if !strings.Contains(answer, "toolmessages:5") {
+		t.Fatalf("the elided tool message must stay in the model's history as a marker: %q", answer)
+	}
+}
+
 func TestE2EAgentdHistoryServedToTheBrowser(t *testing.T) {
 	provider := echoProvider()
 	t.Cleanup(provider.Close)

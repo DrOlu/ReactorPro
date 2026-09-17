@@ -105,6 +105,11 @@ type ingress struct {
 	nextSeq        uint64
 	revision       uint64
 	send           func(seq uint64, record *gatewayv2.ChatIngressRecord) error
+	// deltasDead disables further delta records for this run after the
+	// first send failure — the same posture as heartbeats, but heartbeats
+	// retry because liveness is cheap; a progress path that fails once
+	// must never risk the checkpoints and terminal behind it.
+	deltasDead bool
 }
 
 func newIngress(runID, conversationID string, send func(seq uint64, record *gatewayv2.ChatIngressRecord) error) *ingress {
@@ -139,6 +144,44 @@ func (i *ingress) heartbeat() error {
 			},
 		}
 	})
+}
+
+// delta emits one non-lifecycle event record — the desktop's live event
+// vocabulary (tool_status, token, …) rendered during a run, in the same
+// event_json shape the desktop's run mirror produces, so the webui renders a
+// worker turn exactly like a desktop turn. Deltas are best-effort: a send
+// failure is returned to the caller (who logs and carries on) and disables
+// further deltas for the run, because checkpoints and the terminal remain the
+// authoritative record and must not be endangered by a progress path the
+// gateway can live without. The gateway treats a delta's arrival as run
+// activity too, so a delta cadence also feeds the stale-run reaper.
+func (i *ingress) delta(event map[string]any, workerID string) error {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	i.mu.Lock()
+	dead := i.deltasDead
+	i.mu.Unlock()
+	if dead {
+		return nil
+	}
+	err = i.emit(func(_, _ uint64) *gatewayv2.ChatIngressRecord {
+		return &gatewayv2.ChatIngressRecord{
+			Payload: &gatewayv2.ChatIngressRecord_Delta{
+				Delta: &gatewayv2.ChatIngressDelta{
+					EventJson: string(payload),
+					WorkerId:  workerID,
+				},
+			},
+		}
+	})
+	if err != nil {
+		i.mu.Lock()
+		i.deltasDead = true
+		i.mu.Unlock()
+	}
+	return err
 }
 
 // checkpoint publishes the transcript as it stands — the record the gateway
