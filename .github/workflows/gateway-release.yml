@@ -215,11 +215,29 @@ jobs:
           fi
           # One file at a time so a single 422 (already exists / untagged draft)
           # cannot abort the rest. --clobber should overwrite; if it does not,
-          # delete the colliding asset and retry.
+          # delete the colliding asset and retry. GitHub's uploads API also
+          # returns intermittent HTTP 500s ("Error saving asset" / "Error
+          # creating asset temp dir") on large binaries — retry with backoff
+          # instead of failing the whole job on the first blip, and keep going
+          # so one bad file does not leave the rest unpublished.
+          failed=0
           for asset in "${assets[@]}"; do
             name=$(basename "$asset")
-            if ! gh release upload "$RELEASE_TAG" "$asset" --clobber; then
+            uploaded=0
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "$RELEASE_TAG" "$asset" --clobber; then
+                uploaded=1
+                break
+              fi
+              echo "upload $name failed (attempt $attempt), retrying..."
               gh release delete-asset "$RELEASE_TAG" "$name" --yes || true
-              gh release upload "$RELEASE_TAG" "$asset" --clobber
+              sleep $((attempt * 5))
+            done
+            if [ "$uploaded" -ne 1 ]; then
+              echo "::error::failed to upload $name after retries"
+              failed=1
             fi
           done
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
