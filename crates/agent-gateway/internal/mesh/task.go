@@ -90,6 +90,21 @@ func CanTransitionTask(from, to TaskState) bool {
 	return false
 }
 
+// shouldApplyStubState reports whether a caller-side stub may take a
+// peer-reported state. Same-state updates are allowed (they refresh
+// timestamps and error text). Terminal stubs refuse every other state —
+// finishTask already decided the outcome, and a racing task.input reply is
+// a snapshot of "working" taken before launchTaskRun published completed.
+func shouldApplyStubState(current, reported TaskState) bool {
+	if current == reported {
+		return true
+	}
+	if TaskTerminal(current) {
+		return false
+	}
+	return CanTransitionTask(current, reported)
+}
+
 // ErrTaskState is the refusal an illegal transition returns.
 var ErrTaskState = errors.New("task state transition is not allowed")
 

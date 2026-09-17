@@ -910,13 +910,24 @@ func (m *Manager) SubmitTaskInput(ctx context.Context, taskID string, input json
 	if err != nil {
 		return stub, err
 	}
-	stub.State = task.State
-	stub.PendingInput = task.PendingInput
-	stub.ErrorMessage = task.ErrorMessage
-	stub.UpdatedAt = time.Now().UTC()
-	if err := store.SaveTaskStub(stub); err != nil {
-		m.logger.Warn("could not persist a resumed task stub", "task", taskID, "error", err)
+	// The peer's reply is the task at input-accept time (working). The run
+	// is already in flight: launchTaskRun may publish completed — and the
+	// event handler may have applied it — before this snapshot is written.
+	// Re-read under taskMu and refuse to move a finished stub backwards.
+	m.taskMu.Lock()
+	if latest, ok, getErr := store.GetTaskStub(taskID); getErr == nil && ok {
+		stub = latest
 	}
+	if shouldApplyStubState(stub.State, task.State) {
+		stub.State = task.State
+		stub.PendingInput = task.PendingInput
+		stub.ErrorMessage = task.ErrorMessage
+		stub.UpdatedAt = time.Now().UTC()
+		if err := store.SaveTaskStub(stub); err != nil {
+			m.logger.Warn("could not persist a resumed task stub", "task", taskID, "error", err)
+		}
+	}
+	m.taskMu.Unlock()
 	// Leaving input-required re-arms the caller's own input notification, so
 	// a peer that asks twice nudges this gateway's operator twice.
 	m.clearWebhookFired(taskID, m.resolveTaskWebhook(stub), webhookClassInput)
@@ -1000,11 +1011,17 @@ func (m *Manager) ConsumeTaskEvents(ctx context.Context) error {
 		if store == nil {
 			return
 		}
+		// Serialize with SubmitTaskInput: the input reply is a working
+		// snapshot that must not overwrite a completed event that already
+		// landed, and the event must not be overwritten by that snapshot.
+		m.taskMu.Lock()
 		stub, ok, err := store.GetTaskStub(update.TaskID)
 		if err != nil {
+			m.taskMu.Unlock()
 			return
 		}
 		if !ok {
+			m.taskMu.Unlock()
 			// No stub yet: either another pair's task (ignored forever) or a
 			// task this gateway created microseconds ago, whose event outran
 			// the save. Buffer it — the create path drains it, and the buffer
@@ -1013,12 +1030,15 @@ func (m *Manager) ConsumeTaskEvents(ctx context.Context) error {
 			return
 		}
 		previous := stub.State
-		stub.State = update.State
-		stub.ErrorMessage = update.ErrorMessage
-		stub.UpdatedAt = time.Now().UTC()
-		if err := store.SaveTaskStub(stub); err != nil {
-			m.logger.Warn("could not update a task stub from an event", "task", update.TaskID, "error", err)
+		if shouldApplyStubState(previous, update.State) {
+			stub.State = update.State
+			stub.ErrorMessage = update.ErrorMessage
+			stub.UpdatedAt = time.Now().UTC()
+			if err := store.SaveTaskStub(stub); err != nil {
+				m.logger.Warn("could not update a task stub from an event", "task", update.TaskID, "error", err)
+			}
 		}
+		m.taskMu.Unlock()
 		// Input-required is the one non-terminal state a webhook is fired
 		// for: the peer's agent asked a question, and the caller's sleeping
 		// backend needs to be woken to answer it. Entering the state notifies;

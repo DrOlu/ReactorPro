@@ -181,6 +181,29 @@ func TestTaskStateMachinePinsTheVocabulary(t *testing.T) {
 	}
 }
 
+func TestShouldApplyStubStateRefusesToRegressATerminalStub(t *testing.T) {
+	// The CI flake: SubmitTaskInput writes the working snapshot from the
+	// task.input reply after ConsumeTaskEvents has already applied completed.
+	if shouldApplyStubState(TaskCompleted, TaskWorking) {
+		t.Fatal("a completed stub must not take the working snapshot from task.input")
+	}
+	if shouldApplyStubState(TaskFailed, TaskWorking) {
+		t.Fatal("a failed stub must not take working")
+	}
+	if shouldApplyStubState(TaskCanceled, TaskCompleted) {
+		t.Fatal("a canceled stub must not be un-canceled")
+	}
+	if !shouldApplyStubState(TaskInputRequired, TaskWorking) {
+		t.Fatal("answering input-required should move the stub to working")
+	}
+	if !shouldApplyStubState(TaskWorking, TaskCompleted) {
+		t.Fatal("a working stub should accept completed")
+	}
+	if !shouldApplyStubState(TaskCompleted, TaskCompleted) {
+		t.Fatal("same-state refresh must still apply")
+	}
+}
+
 func containsState(states []TaskState, want TaskState) bool {
 	for _, state := range states {
 		if state == want {
