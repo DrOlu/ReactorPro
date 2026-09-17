@@ -159,6 +159,12 @@ type conversationStream struct {
 	latestContentSnapshotSeq int64
 	agentEpoch               uint64
 	snapshotDirty            bool
+	// retainedFinishStatus and retainedFinishMessage record how the run
+	// whose projection is being retained finished, so a replay that
+	// hydrates from the retained snapshot can synthesize a faithful
+	// run_finished event (the real one was trimmed away with the log).
+	retainedFinishStatus  string
+	retainedFinishMessage string
 	// runNeedsSnapshot marks an active run whose early events the buffer
 	// cannot reproduce (gateway restarted mid-run, or the agent reconnected
 	// mid-run and tokens were lost) — late joiners hydrate from the snapshot.
@@ -460,6 +466,45 @@ func (m *Manager) SubscribeConversationStream(
 		// client the runtime snapshot to rebuild the live tail.
 		snapshotCopy := *stream.latestSnapshot
 		snapshot = &snapshotCopy
+	} else if stream.activity == nil &&
+		stream.latestSnapshot != nil &&
+		stream.latestSnapshot.RunID != "" &&
+		afterSeq < stream.latestSnapshot.AsOfSeq &&
+		stream.evictedThroughSeq >= stream.latestSnapshot.AsOfSeq {
+		// A finished run whose event log the reaper has trimmed past its
+		// final projection. Headless conversations retain that projection on
+		// the stream (retainFinishedSnapshot) precisely so the record
+		// outlives the event clock; hand it to the subscriber so the
+		// transcript rebuilds, with a synthesized run_finished carrying the
+		// remembered status so the rebuilt turn renders settled rather than
+		// eternally streaming. Desktop streams never take this branch: their
+		// snapshots are dropped at run finish, so their own history store
+		// remains the only record, exactly as before.
+		snapshotCopy := *stream.latestSnapshot
+		snapshot = &snapshotCopy
+		terminalSeq := snapshotCopy.AsOfSeq + 1
+		status := stream.retainedFinishStatus
+		if status == "" {
+			status = "completed"
+		}
+		payload := map[string]any{
+			"conversation_id": stream.conversationID,
+			"run_id":          snapshotCopy.RunID,
+			"seq":             terminalSeq,
+			"type":            StreamEventRunFinished,
+			"status":          status,
+		}
+		if message := strings.TrimSpace(stream.retainedFinishMessage); message != "" {
+			payload["message"] = message
+		}
+		replay = append(replay, &ConversationEvent{
+			ConversationID: stream.conversationID,
+			RunID:          snapshotCopy.RunID,
+			Seq:            terminalSeq,
+			Type:           StreamEventRunFinished,
+			Payload:        payload,
+			ReceivedAt:     stream.updatedAt,
+		})
 	}
 
 	var activity *RunActivity
@@ -756,9 +801,16 @@ func (s *conversationStreamStore) runFinishedLocked(
 		stream.finishedRuns = stream.finishedRuns[1:]
 		delete(s.runs, agentScopedKey(stream.agentID, evicted))
 	}
-	if stream.latestSnapshot != nil && stream.latestSnapshot.RunID == runID &&
-		(s.retainFinishedSnapshot == nil || !s.retainFinishedSnapshot(stream.agentID)) {
-		stream.latestSnapshot = nil
+	if stream.latestSnapshot != nil && stream.latestSnapshot.RunID == runID {
+		if s.retainFinishedSnapshot == nil || !s.retainFinishedSnapshot(stream.agentID) {
+			stream.latestSnapshot = nil
+		} else {
+			// The projection outlives the event log for this conversation;
+			// remember how the run ended so a trimmed-log replay can
+			// synthesize a faithful run_finished alongside it.
+			stream.retainedFinishStatus = status
+			stream.retainedFinishMessage = message
+		}
 	}
 	if stream.activity != nil && stream.activity.RunID == runID {
 		stream.activity = nil
