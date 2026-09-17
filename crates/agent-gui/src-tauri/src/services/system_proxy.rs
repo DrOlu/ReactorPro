@@ -12,6 +12,13 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde_json::Value;
 use std::net::Ipv6Addr;
 use std::sync::{OnceLock, RwLock};
+use std::time::Duration;
+
+// Same policy as the proxy server's upstream client: fail fast on a dead
+// endpoint (connect), bound the silence between bytes (read idle), but never
+// a total timeout — streamed answers must not be cut by the clock.
+const UPSTREAM_CONNECT_TIMEOUT_SECS: u64 = 15;
+const UPSTREAM_READ_IDLE_TIMEOUT_SECS: u64 = 300;
 
 const SYSTEM_PROXY_TYPE_HTTP: &str = "http";
 pub const SYSTEM_PROXY_TYPE_SOCKS5: &str = "socks5";
@@ -232,7 +239,10 @@ fn build_proxy(config: &SystemProxyConfig) -> Result<reqwest::Proxy, String> {
 }
 
 fn async_client_builder_for_mode(mode: &ProxyMode) -> Result<reqwest::ClientBuilder, String> {
-    let builder = reqwest::Client::builder().no_proxy();
+    let builder = reqwest::Client::builder()
+        .no_proxy()
+        .connect_timeout(Duration::from_secs(UPSTREAM_CONNECT_TIMEOUT_SECS))
+        .read_timeout(Duration::from_secs(UPSTREAM_READ_IDLE_TIMEOUT_SECS));
     match mode {
         ProxyMode::Disabled => Ok(builder),
         ProxyMode::Invalid(error) => Err(error.clone()),
@@ -243,7 +253,11 @@ fn async_client_builder_for_mode(mode: &ProxyMode) -> Result<reqwest::ClientBuil
 fn blocking_client_builder_for_mode(
     mode: &ProxyMode,
 ) -> Result<reqwest::blocking::ClientBuilder, String> {
-    let builder = reqwest::blocking::Client::builder().no_proxy();
+    // The blocking builder has no read_timeout: connect still fails fast,
+    // and its callers are short-lived requests rather than streams.
+    let builder = reqwest::blocking::Client::builder()
+        .no_proxy()
+        .connect_timeout(Duration::from_secs(UPSTREAM_CONNECT_TIMEOUT_SECS));
     match mode {
         ProxyMode::Disabled => Ok(builder),
         ProxyMode::Invalid(error) => Err(error.clone()),

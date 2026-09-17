@@ -48,6 +48,13 @@ const ALLOW_METHODS_VALUE: &str = "GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD";
 const VARY_VALUE: &str = "Origin, Access-Control-Request-Method, Access-Control-Request-Headers";
 const IMAGE_PROXY_MAX_BYTES: usize = 25 * 1024 * 1024;
 const IMAGE_PROXY_TIMEOUT_SECS: u64 = 20;
+// Upstream (provider) requests must fail fast on a dead endpoint without ever
+// cutting a live stream: connect_timeout bounds the dial, read_timeout bounds
+// the silence between bytes. There is deliberately NO total timeout — a
+// streamed chat answer may legitimately run for many minutes, and the only
+// thing that should kill it is the upstream going quiet, not the clock.
+const UPSTREAM_CONNECT_TIMEOUT_SECS: u64 = 15;
+const UPSTREAM_READ_IDLE_TIMEOUT_SECS: u64 = 300;
 const IMAGE_PROXY_ACCEPT: &str = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
 const IMAGE_PROXY_ACCEPT_LANGUAGE: &str = "en-US,en;q=0.9";
 const IMAGE_PROXY_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -98,6 +105,8 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
         },
         client: reqwest::Client::builder()
             .no_proxy()
+            .connect_timeout(Duration::from_secs(UPSTREAM_CONNECT_TIMEOUT_SECS))
+            .read_timeout(Duration::from_secs(UPSTREAM_READ_IDLE_TIMEOUT_SECS))
             .build()
             .map_err(|err| format!("failed to create local proxy HTTP client: {err}"))?,
     });
