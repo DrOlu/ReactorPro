@@ -75,8 +75,10 @@ type Config struct {
 	// blast radius, so an operator can ship a read-only worker.
 	ShellEnabled bool
 	FetchEnabled bool
-	// CommandTimeout bounds one shell command; RequestTimeout one provider
-	// HTTP call.
+	// CommandTimeout bounds one shell command; RequestTimeout is the
+	// provider's idle timeout — the longest one streamed round may stay
+	// silent between bytes before it is declared stalled (a per-round hard
+	// cap backstops providers that trickle keepalives forever).
 	CommandTimeout time.Duration
 	RequestTimeout time.Duration
 
@@ -150,7 +152,7 @@ func (c *Config) RegisterFlags(fs *flag.FlagSet) {
 	fs.DurationVar(&c.CommandTimeout, "command-timeout", getenvDuration("LIVEAGENT_AGENTD_COMMAND_TIMEOUT", c.CommandTimeout),
 		"timeout for one shell command")
 	fs.DurationVar(&c.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_AGENTD_REQUEST_TIMEOUT", c.RequestTimeout),
-		"timeout for one provider request")
+		"idle timeout for one streamed provider request (max silence between bytes; rounds are hard-capped at 15m)")
 }
 
 // Validate refuses a configuration the agentd cannot honour honestly: better
