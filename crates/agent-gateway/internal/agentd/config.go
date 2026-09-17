@@ -25,7 +25,7 @@ import (
 // Version is the agentd's own version line, independent of the gateway's —
 // a gateway on any v1.5.x speaks to any agentd, because the wire contract is
 // the gateway's v2 protocol, not either product's version.
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 // Config is the whole operating surface of one agentd process. It is
 // deliberately small: an agentd is a worker, not a policy point — every
@@ -82,6 +82,23 @@ type Config struct {
 	CommandTimeout time.Duration
 	RequestTimeout time.Duration
 
+	// ContextBudgetTokens bounds the ESTIMATED token count of the
+	// model-visible history within one turn. Above it the worker compacts
+	// mechanically: old tool results are elided in place (marked, newest
+	// kept verbatim), then whole middle exchanges drop. The transcript the
+	// checkpoints publish is never rewritten. 0 disables the module.
+	ContextBudgetTokens int
+	// ContextKeepToolResults is how many of the newest tool results stay
+	// verbatim when the budget fires. It also protects that many newest
+	// exchanges from the drop-middle stage — the current round is always
+	// among them.
+	ContextKeepToolResults int
+	// ContextSummarize is a reserved seam for provider-side summarization
+	// of over-budget regions. v0.2 ships the mechanical ladder only; the
+	// flag is accepted and reported so configurations written against this
+	// agentd stay valid when the seam is honoured.
+	ContextSummarize bool
+
 	// Heartbeat is how often a running turn emits an ingress heartbeat
 	// record (the gateway's stale-run reaper is what a silent long run
 	// would otherwise meet).
@@ -110,7 +127,12 @@ func DefaultConfig() Config {
 		FetchEnabled:   true,
 		CommandTimeout: 60 * time.Second,
 		RequestTimeout: 120 * time.Second,
-		Heartbeat:      2 * time.Second,
+		// The default budget never fires for the large-context models this
+		// worker is typically pointed at; for a small-window model it
+		// degrades a tool-heavy turn instead of failing it.
+		ContextBudgetTokens:   65536,
+		ContextKeepToolResults: 4,
+		Heartbeat:             2 * time.Second,
 		ConnectTimeout: 10 * time.Second,
 		ReconnectMin:   500 * time.Millisecond,
 		ReconnectMax:   30 * time.Second,
@@ -153,6 +175,12 @@ func (c *Config) RegisterFlags(fs *flag.FlagSet) {
 		"timeout for one shell command")
 	fs.DurationVar(&c.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_AGENTD_REQUEST_TIMEOUT", c.RequestTimeout),
 		"idle timeout for one streamed provider request (max silence between bytes; rounds are hard-capped at 15m)")
+	fs.IntVar(&c.ContextBudgetTokens, "context-budget-tokens", getenvInt("LIVEAGENT_AGENTD_CONTEXT_BUDGET_TOKENS", c.ContextBudgetTokens),
+		"estimated-token budget for one turn's model-visible history; above it old tool results are elided and middle exchanges drop (0 disables)")
+	fs.IntVar(&c.ContextKeepToolResults, "context-keep-tool-results", getenvInt("LIVEAGENT_AGENTD_CONTEXT_KEEP_TOOL_RESULTS", c.ContextKeepToolResults),
+		"how many of the newest tool results stay verbatim when the context budget fires")
+	fs.BoolVar(&c.ContextSummarize, "context-summarize", getenvBool("LIVEAGENT_AGENTD_CONTEXT_SUMMARIZE", c.ContextSummarize),
+		"reserved: summarize over-budget regions via the provider instead of eliding (not yet implemented; the mechanical ladder applies)")
 }
 
 // Validate refuses a configuration the agentd cannot honour honestly: better
@@ -181,6 +209,12 @@ func (c *Config) Validate() error {
 	}
 	if c.MaxRounds < 1 {
 		return errString("max-rounds must be at least 1")
+	}
+	if c.ContextBudgetTokens < 0 {
+		return errString("context-budget-tokens must be 0 (off) or a positive token estimate")
+	}
+	if c.ContextBudgetTokens > 0 && c.ContextKeepToolResults < 1 {
+		return errString("context-keep-tool-results must be at least 1 when the context budget is on")
 	}
 	return nil
 }
