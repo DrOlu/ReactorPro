@@ -50,6 +50,14 @@ type Provider struct {
 // longest the provider may stay silent between bytes within one round; the
 // round itself is capped at providerHardCap.
 func NewProvider(baseURL, apiKey, model string, maxTokens int, idleTimeout time.Duration) *Provider {
+	// The default transport pools at 2 idle conns per host — fine for one
+	// turn at a time, thrash for a worker whose every round (across all its
+	// concurrent turns) hits the same provider host. Widen the pool so
+	// rounds ride warm connections: fewer handshakes, sooner first byte.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = 64
+	transport.MaxIdleConns = 256
+	transport.IdleConnTimeout = 90 * time.Second
 	return &Provider{
 		baseURL:     strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		apiKey:      strings.TrimSpace(apiKey),
@@ -58,7 +66,7 @@ func NewProvider(baseURL, apiKey, model string, maxTokens int, idleTimeout time.
 		idleTimeout: idleTimeout,
 		// No total timeout: a streaming round may legitimately run for as
 		// long as it keeps making progress (see streamWatchdog).
-		client: &http.Client{},
+		client: &http.Client{Transport: transport},
 	}
 }
 
@@ -139,6 +147,22 @@ type Completion struct {
 
 // Complete performs one chat-completions call, streaming the answer.
 func (p *Provider) Complete(ctx context.Context, messages []Message, tools []Tool) (Completion, error) {
+	return p.complete(ctx, messages, toolDescriptors(tools), nil)
+}
+
+// CompleteStream performs one streamed call, invoking onDelta with each
+// content delta as it arrives — the hook a live viewer's token stream is
+// built from. The answer itself is unchanged: onDelta observes the stream,
+// it never alters the completion. A nil onDelta behaves exactly like
+// Complete.
+func (p *Provider) CompleteStream(ctx context.Context, messages []Message, tools []Tool, onDelta func(string)) (Completion, error) {
+	return p.complete(ctx, messages, toolDescriptors(tools), onDelta)
+}
+
+// complete is the machinery behind both entries; descriptors arrive
+// pre-derived so a turn that already knows its tools does not re-derive
+// them per round.
+func (p *Provider) complete(ctx context.Context, messages []Message, descriptors []interface{}, onDelta func(string)) (Completion, error) {
 	request := completionRequest{
 		Model:    p.model,
 		Messages: messages,
@@ -147,8 +171,8 @@ func (p *Provider) Complete(ctx context.Context, messages []Message, tools []Too
 	if p.maxTokens > 0 {
 		request.MaxTokens = p.maxTokens
 	}
-	if len(tools) > 0 {
-		request.Tools = toolDescriptors(tools)
+	if len(descriptors) > 0 {
+		request.Tools = descriptors
 	}
 	body, err := json.Marshal(request)
 	if err != nil {
@@ -176,10 +200,11 @@ func (p *Provider) Complete(ctx context.Context, messages []Message, tools []Too
 	}
 	if !strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
 		// The provider answered the streamed request with a plain JSON
-		// completion (streaming ignored or unsupported) — serve it.
+		// completion (streaming ignored or unsupported) — serve it. There
+		// are no deltas to observe on this path: the answer arrives whole.
 		return p.completeFromJSON(response)
 	}
-	return p.consumeStream(response, watchdog)
+	return p.consumeStream(response, watchdog, onDelta)
 }
 
 // completeFromJSON parses a whole-body completion — the legacy shape, kept
@@ -209,8 +234,9 @@ func (p *Provider) completeFromJSON(response *http.Response) (Completion, error)
 
 // consumeStream assembles one completion from server-sent events. Every read
 // resets the watchdog's silence clock, so keepalive comments from a slow
-// provider keep the round alive while it is genuinely still working.
-func (p *Provider) consumeStream(response *http.Response, watchdog *streamWatchdog) (Completion, error) {
+// provider keep the round alive while it is genuinely still working. onDelta
+// observes each content delta as it folds in — nil when nobody is watching.
+func (p *Provider) consumeStream(response *http.Response, watchdog *streamWatchdog, onDelta func(string)) (Completion, error) {
 	var (
 		out    Completion
 		finish string
@@ -245,6 +271,9 @@ func (p *Provider) consumeStream(response *http.Response, watchdog *streamWatchd
 			finish = choice.FinishReason
 		}
 		out.Text += choice.Delta.Content
+		if onDelta != nil && choice.Delta.Content != "" {
+			onDelta(choice.Delta.Content)
+		}
 		for _, call := range choice.Delta.ToolCalls {
 			slot, ok := calls[call.Index]
 			if !ok {

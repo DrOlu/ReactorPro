@@ -281,6 +281,7 @@ func (r *Runner) runTurn(ctx context.Context, next job, entries *[]Entry, writer
 		{Role: "user", Content: next.prompt},
 	}
 	tools := r.tools.Tools()
+	descriptors := toolDescriptors(tools) // derived once per turn, not per round
 	var answers []string
 
 	for round := 0; round < r.cfg.MaxRounds; round++ {
@@ -291,7 +292,22 @@ func (r *Runner) runTurn(ctx context.Context, next job, entries *[]Entry, writer
 			// transcript (checkpoints keep publishing the full entries).
 			messages, compacted = r.compactTurnContext(next.runID, messages, writer)
 		}
-		completion, err := r.provider.Complete(ctx, messages, tools)
+		// Token deltas: a live viewer watches the answer grow at the mesh
+		// chunk grain instead of waiting for the round's checkpoint. A nil
+		// coalescer (flag off) is a no-op on both add and flush.
+		var deltas *deltaCoalescer
+		if r.cfg.StreamDeltas {
+			deltas = &deltaCoalescer{writer: writer, workerID: r.cfg.AgentID, round: round + 1}
+		}
+		var onDelta func(string)
+		if deltas != nil {
+			onDelta = deltas.add
+		}
+		completion, err := r.provider.complete(ctx, messages, descriptors, onDelta)
+		// Whatever the round buffered flushes NOW, before any checkpoint:
+		// deltas and snapshots stay ordered, and a failed round still
+		// showed the viewer how far the answer had grown.
+		deltas.flush()
 		if err != nil {
 			return strings.Join(answers, "\n\n"), fmt.Errorf("round %d: %w", round+1, err)
 		}
