@@ -8,6 +8,7 @@ package session
 // subscription path gives late joiners.
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -148,5 +149,119 @@ func TestTrimmedFinishedRunReplaysFromRetainedSnapshot(t *testing.T) {
 	resumed.Cleanup()
 	if resumed.Snapshot != nil || len(resumed.Events) != 0 {
 		t.Fatalf("a resume past the snapshot must not re-hydrate: snapshot=%v events=%d", resumed.Snapshot, len(resumed.Events))
+	}
+}
+
+// The resume prompt's rendering contract, pinned as pure functions: the
+// NEWEST turns win the budget (the pre-trim renderer iterated oldest-first
+// and dropped everything newer than the first oversized line — backwards
+// from its own comment), one straddling turn is trimmed head-and-tail
+// instead of evicting its elders, and assistant turns carry a capped
+// one-line tool trace so a resumed turn knows what already ran.
+
+func TestRenderHeadlessResumePromptKeepsTheNewestTurnsWhole(t *testing.T) {
+	turns := []headlessTurn{
+		{Kind: "user", Text: "first question"},
+		{Kind: "assistant", Text: strings.Repeat("old answer ", 2400)}, // ~26KB: over the cap
+		{Kind: "user", Text: "second question"},
+		{Kind: "assistant", Text: "the newest answer"},
+	}
+	prompt := renderHeadlessResumePrompt("what next?", turns)
+	if !strings.Contains(prompt, "the newest answer") {
+		t.Fatal("the newest turn must survive the budget")
+	}
+	if !strings.Contains(prompt, "second question") {
+		t.Fatal("the second-newest turn must survive the budget")
+	}
+	if !strings.Contains(prompt, "first question") {
+		t.Fatal("the oldest turn should still fit: only the huge middle turn is trimmed")
+	}
+	if !strings.Contains(prompt, "old answer") {
+		t.Fatal("the huge turn's head should survive as a trimmed view")
+	}
+	if !strings.Contains(prompt, "[…trimmed ") {
+		t.Fatal("the trimmed turn must carry its marker")
+	}
+}
+
+func TestRenderHeadlessResumePromptTrimsRatherThanEvicts(t *testing.T) {
+	// One turn alone exceeds the whole prompt cap; the renderer must keep
+	// the newest turns, a trimmed view of the huge one, and — because the
+	// trim takes only half the remaining budget — the oldest turn too.
+	turns := []headlessTurn{
+		{Kind: "user", Text: "old question"},
+		{Kind: "user", Text: strings.Repeat("huge ", 20<<10)}, // ~100KB
+		{Kind: "assistant", Text: "newest answer"},
+	}
+	prompt := renderHeadlessResumePrompt("continue", turns)
+	if !strings.Contains(prompt, "newest answer") {
+		t.Fatal("the newest turn must be whole")
+	}
+	if !strings.Contains(prompt, "[…trimmed ") {
+		t.Fatal("the huge turn should appear as a trimmed view, not vanish")
+	}
+	if !strings.Contains(prompt, "old question") {
+		t.Fatal("the trim must leave budget for the elders — that is its whole point")
+	}
+	if len(prompt) > headlessResumePromptCap+512 {
+		t.Fatalf("the prompt blew its budget: %d bytes", len(prompt))
+	}
+}
+
+func TestRenderHeadlessResumePromptBoundsTurnCount(t *testing.T) {
+	turns := make([]headlessTurn, 0, headlessResumeTurns+10)
+	for i := 0; i < headlessResumeTurns+10; i++ {
+		turns = append(turns, headlessTurn{Kind: "user", Text: fmt.Sprintf("turn %d", i)})
+	}
+	prompt := renderHeadlessResumePrompt("next", turns)
+	if strings.Contains(prompt, "turn 0") || strings.Contains(prompt, "turn 5") {
+		t.Fatal("turns beyond the newest window must not be rehydrated")
+	}
+	if !strings.Contains(prompt, fmt.Sprintf("turn %d", headlessResumeTurns+9)) {
+		t.Fatal("the newest turn must be rehydrated")
+	}
+}
+
+func TestHeadlessTurnsFromEntriesAttachesTheToolTrace(t *testing.T) {
+	entries := []headlessTranscriptEntry{
+		{ID: "1", Kind: "user", Text: "write it"},
+		{ID: "a1", Kind: "assistant", Text: "on it"},
+		{ID: "t1", Kind: "tool_call", Text: "write_file(out.txt)"},
+		{ID: "r1", Kind: "tool_result", Text: "wrote 21 bytes"},
+		{ID: "t2", Kind: "tool_call", Text: "run_command(npm test)"},
+		{ID: "r2", Kind: "tool_result", Text: "ok"},
+		{ID: "a2", Kind: "assistant", Text: "done"},
+	}
+	turns := headlessTurnsFromEntries(entries)
+	if len(turns) != 3 {
+		t.Fatalf("user + 2 assistant turns, got %d", len(turns))
+	}
+	if len(turns[1].Tools) != 2 || turns[1].Tools[0] != "write_file(out.txt)" {
+		t.Fatalf("tool calls must attach to their assistant turn: %+v", turns[1].Tools)
+	}
+	if len(turns[2].Tools) != 0 {
+		t.Fatalf("the final assistant turn issued no tools: %+v", turns[2].Tools)
+	}
+	// Tool results stay out of the resume memory entirely.
+	prompt := renderHeadlessResumePrompt("again", turns)
+	if strings.Contains(prompt, "wrote 21 bytes") {
+		t.Fatal("tool result bodies must not ride the resume prompt")
+	}
+	if !strings.Contains(prompt, "[tools used: write_file(out.txt); run_command(npm test)]") {
+		t.Fatalf("the tool trace must ride the assistant turn: %q", prompt)
+	}
+}
+
+func TestHeadlessToolsLineCapsTheTrace(t *testing.T) {
+	tools := []string{"a(x)", "b(y)", "c(z)", "d(w)", "e(v)"}
+	line := headlessToolsLine(tools)
+	if !strings.Contains(line, "a(x)") || !strings.Contains(line, "c(z)") {
+		t.Fatalf("the first three calls must be named: %q", line)
+	}
+	if strings.Contains(line, "d(w)") {
+		t.Fatalf("beyond three the trace must count, not list: %q", line)
+	}
+	if !strings.Contains(line, "+2 more") {
+		t.Fatalf("the dropped calls must be counted: %q", line)
 	}
 }
