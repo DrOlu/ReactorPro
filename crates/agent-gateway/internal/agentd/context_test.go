@@ -191,11 +191,11 @@ func TestEstimateTextTokensIsCJKAware(t *testing.T) {
 	if western < 900 || western > 1100 {
 		t.Fatalf("4000 western chars should estimate near 1000 tokens, got %.0f", western)
 	}
-	cjk := estimateTextTokens(strings.Repeat("世", 1000)) // 0.7/char = 700
+	cjk := estimateTextTokens(strings.Repeat("\u4e16", 1000)) // CJK ideograph, 0.7/char = 700
 	if cjk < 650 || cjk > 750 {
 		t.Fatalf("1000 CJK chars should estimate near 700 tokens, got %.0f", cjk)
 	}
-	mixed := estimateTextTokens(strings.Repeat("a", 400) + strings.Repeat("世", 100))
+	mixed := estimateTextTokens(strings.Repeat("a", 400) + strings.Repeat("\u4e16", 100))
 	want := 100.0 + 70.0 // 400/4 + 100*0.7
 	if mixed < want*0.9 || mixed > want*1.1 {
 		t.Fatalf("mixed text estimate drifted: %.0f (want ~%.0f)", mixed, want)
