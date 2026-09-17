@@ -251,6 +251,13 @@ export function useManualCompaction(params: {
       };
 
       const run = async (): Promise<ManualCompactionResult> => {
+        // "off" in settings refuses manual compaction outright, before any run state is
+        // claimed or bridge events queued (the controller's decision gate would reject it
+        // as "disabled" anyway; this path gives the user the explicit reason).
+        if (settings.customSettings.historyCompaction === "off") {
+          return { status: "skipped", message: t("chat.manualCompactOff") };
+        }
+
         if (isConversationRunning(conversationId)) {
           return { status: "busy", message: t("chat.manualCompactRejected") };
         }
@@ -437,6 +444,10 @@ export function useManualCompaction(params: {
             providerId,
             model,
             runtime,
+            // Settings-driven mode: "manualOnly" passes the manual trigger through, while
+            // "off" makes the controller's probe reject with "disabled" (defense in depth
+            // behind the early gate above).
+            mode: settings.customSettings.historyCompaction,
             cancellation,
             sinks,
             buildPreparedContext: (state, tools, options) =>

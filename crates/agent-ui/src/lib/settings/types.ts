@@ -165,6 +165,14 @@ export type ChatTranscriptSettings = {
  */
 export type ComposerContextDisplayMode = "statsBar" | "both" | "ring";
 
+/**
+ * History compaction mode: "auto" keeps the automatic pre-send/mid-stream/post-tool
+ * triggers and the manual compaction entry; "manualOnly" turns the automatic
+ * triggers off while the manual entry (usage ring at ≥50%) still works; "off"
+ * disables compaction entirely, manual included.
+ */
+export type HistoryCompactionMode = "auto" | "manualOnly" | "off";
+
 export type CustomSettings = {
   sidebarShortcuts: SidebarShortcuts;
   conversationTitleModel?: SelectedModel;
@@ -183,6 +191,7 @@ export type CustomSettings = {
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
   composerContextDisplay: ComposerContextDisplayMode;
+  historyCompaction: HistoryCompactionMode;
   // Empty strings select the built-in stacks for each typography role.
   interfaceFontFamily: string;
   chatFontFamily: string;

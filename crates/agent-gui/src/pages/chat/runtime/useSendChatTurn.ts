@@ -1371,6 +1371,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       providerId,
       model,
       runtime: providerConfig,
+      // Settings-driven compaction mode: the controller's decisions (pre-send / mid-stream /
+      // post-tool) consult it uniformly; "manualOnly" keeps the manual entry alive, "off" gates it too.
+      mode: settings.customSettings.historyCompaction,
       cancellation,
       debugLogger: compactionDebugLogger,
       buildPreparedContext,

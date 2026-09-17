@@ -1274,6 +1274,10 @@ export function applyGatewaySettingsSyncPayload(
       composerContextDisplay:
         incomingCustomSettings.composerContextDisplay ??
         current.customSettings.composerContextDisplay,
+      // The compaction mode is the same (global preference + old-peer compatibility): when an old
+      // peer's payload lacks this field, keep the local value and never reset it to "auto".
+      historyCompaction:
+        incomingCustomSettings.historyCompaction ?? current.customSettings.historyCompaction,
       // The clarify-prompt master switch is the same (global preference + old-peer compatibility);
       // promptClarifyModel rides along with sync via the spread above -- its default is "follow the
       // current conversation model", on the same track as the title/commit models.

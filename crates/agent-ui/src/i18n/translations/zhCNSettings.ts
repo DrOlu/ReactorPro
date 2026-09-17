@@ -713,6 +713,18 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
     "Shows both the status bar and the usage ring at the bottom-right of the input box.",
   "settings.composerContextDisplayRingDesc":
     "Shows only the always-visible usage ring at the bottom-right of the input box.",
+  "settings.historyCompaction": "History compaction",
+  "settings.historyCompactionHint":
+    "Controls how the conversation history is compacted into summary checkpoints to free context space.",
+  "settings.historyCompactionAuto": "Automatic",
+  "settings.historyCompactionManualOnly": "Manual only",
+  "settings.historyCompactionOff": "Off",
+  "settings.historyCompactionAutoDesc":
+    "Compacts automatically before sending, mid-run, and after tool calls; the manual entry stays available.",
+  "settings.historyCompactionManualOnlyDesc":
+    "Automatic compaction is off; only the usage ring's manual compaction still works.",
+  "settings.historyCompactionOffDesc":
+    "Compaction is fully disabled, including the usage ring's manual entry.",
   "settings.failoverTitle": "Automatic failover",
   "settings.failoverToggleHint":
     "When a {vendor} request fails, switches to the next {vendor} provider in queue order to retry (model unchanged), and stays with that provider on success. Does not fail over across vendors.",

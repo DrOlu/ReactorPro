@@ -250,8 +250,9 @@ function ComposerContextUsageRing(props: {
   contextWindow?: number;
   disabled?: boolean;
   onConfirm?: (() => void) | (() => Promise<unknown>);
+  compactionLine?: string;
 }) {
-  const { source, totalTokens, contextWindow, disabled, onConfirm } = props;
+  const { source, totalTokens, contextWindow, disabled, onConfirm, compactionLine } = props;
   const readStatic = useCallback(() => totalTokens, [totalTokens]);
   const liveTokens = useSyncExternalStore(
     source?.subscribe ?? noopSubscribe,
@@ -264,6 +265,7 @@ function ComposerContextUsageRing(props: {
       contextWindow={contextWindow}
       disabled={disabled}
       onConfirm={onConfirm}
+      compactionLine={compactionLine}
       // The ring renders in the "ring" / "both" display modes (see contextDisplayMode) and must be
       // always visible starting from 0% -- in "ring" mode it is the only occupancy reading, so the
       // low-occupancy hide threshold no longer applies.
@@ -328,6 +330,8 @@ export type ChatComposerBarProps = {
   onManualCompactConfirm?: (() => void) | (() => Promise<unknown>);
   /** Disables clicking the usage ring while compaction is in progress / a request is in flight. */
   manualCompactBlocked?: boolean;
+  /** Optional one-line compaction status appended to the usage ring's tooltip (undefined = idle, no line). */
+  compactionLine?: string;
   workspaceActivityClient?: WorkspaceActivityClient | null;
   /** After a worktree is created successfully, adds the backend-returned path and repository identity to the sidebar. */
   onOpenWorktree?: (worktree: { path: string; repositoryPath: string; branch: string }) => void;
@@ -429,6 +433,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     contextWindow,
     onManualCompactConfirm,
     manualCompactBlocked,
+    compactionLine,
     workspaceActivityClient,
     onOpenWorktree,
     onWorktreeRemoved,
@@ -1833,6 +1838,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
                 contextWindow={contextWindow}
                 disabled={controlsDisabled || isSending || manualCompactBlocked}
                 onConfirm={onManualCompactConfirm}
+                compactionLine={compactionLine}
               />
             ) : null}
           </div>
