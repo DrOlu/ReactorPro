@@ -420,9 +420,15 @@ type remoteTaskAccumulator struct {
 	errMessage string
 	settled    bool
 	lastSeq    int64
-	// onDelta, when set, receives each snapshot's assistant-text growth.
+	// onDelta, when set, receives the assistant-text growth: token events
+	// when the producer streams them, otherwise each snapshot's growth.
 	onDelta  func(delta string)
 	streamer remoteTaskDeltaStream
+	// tokenFed switches the delta source: once token events were observed
+	// for this run, snapshot-derived growth is suppressed — the snapshots
+	// still update `entries` (the terminal result stays canonical), but
+	// their text must not be delivered a second time on top of the deltas.
+	tokenFed bool
 }
 
 // remoteTaskDeltaStream turns successive conversation snapshots into the
@@ -473,13 +479,28 @@ func (a *remoteTaskAccumulator) observe(event *ConversationEvent) {
 		}
 		// The live view: each meaningful snapshot's assistant-text growth is
 		// handed to the delta listener, if there is one, after the entries are
-		// recorded (so a terminal snapshot always dominates the stream).
-		if a.onDelta != nil && raw != "[]" {
+		// recorded (so a terminal snapshot always dominates the stream) —
+		// unless this run already streams its own token events, in which
+		// case the snapshot would double-deliver text the listener has.
+		if a.onDelta != nil && raw != "[]" && !a.tokenFed {
 			if text, err := extractRemoteTaskText(raw); err == nil && text != "" {
 				if delta := a.streamer.delta(text); delta != "" {
 					a.onDelta(delta)
 				}
 			}
+		}
+	case "token":
+		// Token deltas from a streaming producer (the desktop's run mirror,
+		// a streaming agentd): forwarded to the listener verbatim — a finer
+		// grain than snapshots can ever give. First one flips the source:
+		// snapshots keep updating `entries` but stop feeding the stream,
+		// because their text has already arrived by token.
+		if a.onDelta == nil {
+			return
+		}
+		if text, _ := event.Payload["text"].(string); strings.TrimSpace(text) != "" {
+			a.tokenFed = true
+			a.onDelta(text)
 		}
 	case StreamEventRunFinished:
 		a.settled = true
