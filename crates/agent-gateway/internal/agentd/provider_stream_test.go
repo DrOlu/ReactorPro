@@ -215,3 +215,40 @@ func TestProviderServesAPlainJSONCompletion(t *testing.T) {
 		t.Fatalf("completion = %+v, want the JSON answer with finish flow", completion)
 	}
 }
+
+func TestProviderEmitsContentDeltasInOrder(t *testing.T) {
+	server := httptest.NewServer(sseHandler(
+		`data: {"choices":[{"delta":{"role":"assistant","content":"first "}}]}`,
+		`data: {"choices":[{"delta":{"content":"sec"}}]}`,
+		`data: {"choices":[{"delta":{"content":"ond"}}]}`,
+		`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		"data: [DONE]",
+	))
+	t.Cleanup(server.Close)
+
+	provider := NewProvider(server.URL, "test-key", "test-model", 64, 5*time.Second)
+	var observed []string
+	completion, err := provider.CompleteStream(t.Context(),
+		[]Message{{Role: "user", Content: "hi"}}, nil, func(delta string) {
+			observed = append(observed, delta)
+		})
+	if err != nil {
+		t.Fatalf("CompleteStream: %v", err)
+	}
+	if strings.Join(observed, "") != completion.Text {
+		t.Fatalf("delta concatenation %q != final text %q", strings.Join(observed, ""), completion.Text)
+	}
+	if len(observed) != 3 {
+		t.Fatalf("the empty delta and the finish chunk must not fire the callback: %d callbacks", len(observed))
+	}
+	if observed[0] != "first " || observed[2] != "ond" {
+		t.Fatalf("deltas arrived out of order: %+v", observed)
+	}
+
+	// A nil callback is exactly Complete — no panic, same answer.
+	plain, err := provider.CompleteStream(t.Context(),
+		[]Message{{Role: "user", Content: "hi"}}, nil, nil)
+	if err != nil || plain.Text != completion.Text {
+		t.Fatalf("nil-callback stream drifted from Complete: %q vs %q (%v)", plain.Text, completion.Text, err)
+	}
+}

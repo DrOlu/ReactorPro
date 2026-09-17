@@ -103,6 +103,12 @@ type Config struct {
 	// record (the gateway's stale-run reaper is what a silent long run
 	// would otherwise meet).
 	Heartbeat time.Duration
+	// StreamDeltas emits the provider's content deltas as chat-ingress
+	// delta records while a round streams, coalesced to the mesh chunk
+	// grain — a live viewer watches the answer grow instead of waiting
+	// for the round's checkpoint. Best-effort: checkpoints and the
+	// terminal remain the authoritative records.
+	StreamDeltas bool
 	// ConnectTimeout bounds one dial; ReconnectMin/Max bound the reconnect
 	// backoff.
 	ConnectTimeout time.Duration
@@ -133,6 +139,7 @@ func DefaultConfig() Config {
 		ContextBudgetTokens:   65536,
 		ContextKeepToolResults: 4,
 		Heartbeat:             2 * time.Second,
+		StreamDeltas:          true,
 		ConnectTimeout: 10 * time.Second,
 		ReconnectMin:   500 * time.Millisecond,
 		ReconnectMax:   30 * time.Second,
@@ -181,6 +188,8 @@ func (c *Config) RegisterFlags(fs *flag.FlagSet) {
 		"how many of the newest tool results stay verbatim when the context budget fires")
 	fs.BoolVar(&c.ContextSummarize, "context-summarize", getenvBool("LIVEAGENT_AGENTD_CONTEXT_SUMMARIZE", c.ContextSummarize),
 		"reserved: summarize over-budget regions via the provider instead of eliding (not yet implemented; the mechanical ladder applies)")
+	fs.BoolVar(&c.StreamDeltas, "stream-deltas", getenvBool("LIVEAGENT_AGENTD_STREAM_DELTAS", c.StreamDeltas),
+		"emit the provider's streamed content deltas as chat-ingress token records (best-effort; checkpoints and the terminal stay authoritative)")
 }
 
 // Validate refuses a configuration the agentd cannot honour honestly: better

@@ -745,3 +745,40 @@ func TestE2EAgentdHistoryServedToTheBrowser(t *testing.T) {
 	}
 	t.Fatalf("the conversation %q vanished from the list after the resume", result.ConversationID)
 }
+
+// A streamed turn through the real gateway: the conversation stream carries
+// token events as the answer grows — the same records the desktop's own run
+// mirror emits — and the terminal projection is the full answer. Nothing in
+// the chain (worker transport, ingress, gateway) rewrites or reorders them.
+func TestE2EAgentdStreamsTokenDeltasThroughTheGateway(t *testing.T) {
+	provider := streamingProvider()
+	t.Cleanup(provider.Close)
+	manager := startE2E(t, 1, provider.URL)
+
+	if err := chatcmd.ProbeRuntimeForCommand(context.Background(), manager, e2eAgentID); err != nil {
+		t.Fatalf("runtime probe (ping/pong): %v", err)
+	}
+	result, err := manager.SubmitRemoteTask(context.Background(), e2eAgentID, "answer at length")
+	if err != nil {
+		t.Fatalf("SubmitRemoteTask: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("the remote task failed: %s (%s)", result.ErrorMessage, result.ErrorCode)
+	}
+	answer := remoteTaskAnswerText(t, result)
+	if !strings.Contains(answer, "chunk-0123") {
+		t.Fatalf("the streamed answer lost its text: %q", answer)
+	}
+
+	subscription := manager.SubscribeConversationStream(e2eAgentID, result.ConversationID, 0, "")
+	subscription.Cleanup()
+	tokens := 0
+	for _, event := range subscription.Events {
+		if event.Type == "token" {
+			tokens++
+		}
+	}
+	if tokens == 0 {
+		t.Fatalf("the conversation stream carried no token events — a viewer of this turn would have watched silence")
+	}
+}

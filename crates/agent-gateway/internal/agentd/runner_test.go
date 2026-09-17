@@ -12,10 +12,12 @@ package agentd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,15 +27,22 @@ import (
 )
 
 // recordingSink captures every ingress record the runner emits, by run.
+// failDeltas, when > 0, fails the next that-many delta sends — the hook for
+// pinning the disable-on-failure posture.
 type recordingSink struct {
-	mu      sync.Mutex
-	records map[string][]*gatewayv2.ChatIngressRecord
+	mu          sync.Mutex
+	records     map[string][]*gatewayv2.ChatIngressRecord
+	failDeltas  int
 }
 
 func (s *recordingSink) SendIngress(runID, conversationID string, seq uint64, record *gatewayv2.ChatIngressRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.records[runID] = append(s.records[runID], record)
+	if record.GetDelta() != nil && s.failDeltas > 0 {
+		s.failDeltas--
+		return fmt.Errorf("delta send failed (test)")
+	}
 	return nil
 }
 
@@ -47,6 +56,13 @@ func (s *recordingSink) terminalState(runID string) string {
 		}
 	}
 	return ""
+}
+
+// recordsFor returns the run's captured records in wire order.
+func (s *recordingSink) recordsFor(runID string) []*gatewayv2.ChatIngressRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]*gatewayv2.ChatIngressRecord{}, s.records[runID]...)
 }
 
 func (s *recordingSink) count(runID string) int {
@@ -189,5 +205,105 @@ func TestRunnerDropAllCancelsQueuedWorkAndFreesTheConversation(t *testing.T) {
 	if hits.Load() != 1 || sink.terminalState("run-2") != "completed" {
 		t.Fatalf("the fresh job did not run cleanly (hits=%d, state=%q)",
 			hits.Load(), sink.terminalState("run-2"))
+	}
+}
+
+
+// streamingProvider answers with plain text in small SSE content deltas —
+// the shape the token-delta coalescer consumes.
+func streamingProvider() *httptest.Server {
+	events := make([]string, 0, 30)
+	for i := 0; i < 20; i++ {
+		payload, _ := json.Marshal(map[string]any{
+			"choices": []map[string]any{{"delta": map[string]any{"content": "chunk-0123 "}}},
+		})
+		events = append(events, "data: "+string(payload))
+	}
+	events = append(events,
+		`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		"data: [DONE]")
+	return httptest.NewServer(sseHandler(events...))
+}
+
+// A streamed turn emits its token deltas AHEAD of the checkpoint that
+// contains them — the viewer watches the answer grow, then the snapshot
+// lands. The coalescer keeps every record at the mesh chunk grain, rounds
+// are 1-based like the desktop's, and the delta text concatenates to
+// exactly the answer.
+func TestRunnerStreamsTokenDeltasAheadOfTheCheckpoint(t *testing.T) {
+	provider := streamingProvider()
+	t.Cleanup(provider.Close)
+	runner, sink := newTestRunner(t, provider.URL)
+
+	runner.SubmitChatCommand("run-1", chatCommand("conv-1", "answer at length"))
+	runner.execute(context.Background(), <-runner.jobs)
+
+	if sink.terminalState("run-1") != "completed" {
+		t.Fatalf("terminal = %q, want completed", sink.terminalState("run-1"))
+	}
+	records := sink.recordsFor("run-1")
+	var concatenated strings.Builder
+	deltas, checkpoints := 0, 0
+	for _, record := range records {
+		if record.GetCheckpoint() != nil {
+			checkpoints++
+		}
+		if delta := record.GetDelta(); delta != nil {
+			deltas++
+			if checkpoints < 1 {
+				t.Fatal("a delta arrived before the run's first checkpoint")
+			}
+			var event map[string]any
+			if err := json.Unmarshal([]byte(delta.GetEventJson()), &event); err != nil {
+				t.Fatalf("delta event_json is not JSON: %v", err)
+			}
+			if event["type"] != "token" {
+				t.Fatalf("delta type = %v, want token", event["type"])
+			}
+			if event["round"] != float64(1) {
+				t.Fatalf("round = %v, want 1 (1-based, matching the desktop)", event["round"])
+			}
+			text, _ := event["text"].(string)
+			concatenated.WriteString(text)
+			if runes := len([]rune(text)); runes > deltaFlushRunes+8 {
+				t.Fatalf("a coalesced record carried %d runes — over the grain", runes)
+			}
+		}
+	}
+	if deltas == 0 {
+		t.Fatal("the turn emitted no token deltas (StreamDeltas defaults on)")
+	}
+	if checkpoints < 2 {
+		t.Fatalf("expected the initial checkpoint and the answer checkpoint, got %d", checkpoints)
+	}
+	if concatenated.Len() == 0 {
+		t.Fatal("no delta text reached the records")
+	}
+}
+
+// A failing delta send must never fail the turn: the deltas die (disabled on
+// first failure), checkpoints and the terminal carry on — the progress path
+// is subordinate to the authoritative records.
+func TestRunnerSurvivesAFailingDeltaPath(t *testing.T) {
+	provider := streamingProvider()
+	t.Cleanup(provider.Close)
+	runner, sink := newTestRunner(t, provider.URL)
+	sink.failDeltas = 1 // one failure poisons every later delta for the run
+
+	runner.SubmitChatCommand("run-1", chatCommand("conv-1", "answer anyway"))
+	runner.execute(context.Background(), <-runner.jobs)
+
+	if sink.terminalState("run-1") != "completed" {
+		t.Fatalf("terminal = %q, want completed — a dead delta path must not fail the turn",
+			sink.terminalState("run-1"))
+	}
+	deltas := 0
+	for _, record := range sink.recordsFor("run-1") {
+		if record.GetDelta() != nil {
+			deltas++
+		}
+	}
+	if deltas > 1 {
+		t.Fatalf("the failing delta path kept sending: %d delta records", deltas)
 	}
 }
