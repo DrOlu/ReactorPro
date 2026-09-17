@@ -251,6 +251,75 @@ test("single-flight: a concurrent trigger is rejected while a compaction is in f
   assert.equal(completeCalls, 1);
 });
 
+// Mid-stream protection aborts the partial stream, folds it, and re-kicks generation —
+// expensive and user-visible — so over-threshold usage alone no longer arms it: at pressure
+// level 0 the post-tool trigger can compact at the round boundary without discarding the
+// in-flight stream, and only escalated pressure or the danger usage band fires mid-stream.
+test("shouldProtectMidStream fires only under pressure or in the danger band", async () => {
+  // ~100K window: protection threshold = 100K - 32K*1.2 = 61.6K; danger band >= 80% = 80K.
+  const runtime = {
+    baseUrl: "https://example",
+    apiKey: "k",
+    modelConfig: { contextWindow: 100_000, maxOutputToken: 32_000 },
+  };
+  const stateAt = (tokens) =>
+    conversationState.createConversationStateFromContext({
+      systemPrompt: "sys",
+      messages: [
+        user("please fix src/app.ts", 1),
+        assistantWithUsage("working on src/app.ts", tokens, 2),
+      ],
+    });
+
+  // 70% usage at pressure 0: above the protection threshold but below the danger band —
+  // wait for the round boundary instead of aborting the stream.
+  const calm = new CompactionController();
+  const { recorder: calmRecorder } = bindController(calm, { runtime });
+  const calmState = stateAt(70_000);
+  calm.beginRequest(conversationState.buildRequestContext(calmState), calmState);
+  assert.equal(calm.shouldProtectMidStream(0), false);
+  // The query stays side-effect free whether or not it fires.
+  assert.equal(calmRecorder.events.length, 0);
+
+  // 85% usage at pressure 0: inside the danger band.
+  const danger = new CompactionController();
+  bindController(danger, { runtime });
+  const dangerState = stateAt(85_000);
+  danger.beginRequest(conversationState.buildRequestContext(dangerState), dangerState);
+  assert.equal(danger.shouldProtectMidStream(0), true);
+
+  // 70% usage at pressure 1 (after one ineffective compaction): fires.
+  const pressured = new CompactionController();
+  bindController(pressured, {
+    runtime,
+    complete: async () => summaryResponse(),
+    // The post-compaction reading stays above 90% of the threshold -> judged ineffective,
+    // pushing the pressure ladder to level 1.
+    buildResumeContext: () => ({
+      systemPrompt: "sys",
+      messages: [assistantWithUsage("still huge", 70_000, 99)],
+    }),
+  });
+  const result = await pressured.compactDuringRun({
+    trigger: "post-tool",
+    state: stateAt(70_000),
+  });
+  assert.equal(result.outcome, "compacted");
+  // Re-arm the turn meta for the next stream (the checkpoint segment starts empty); three
+  // user messages bypass the post-compaction cooldown window, like bigState above.
+  const nextState = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [
+      user("please fix src/app.ts", 1),
+      user("continue with src/app.ts", 2),
+      user("check src/app.ts again", 3),
+      assistantWithUsage("working on src/app.ts", 70_000, 4),
+    ],
+  });
+  pressured.beginRequest(conversationState.buildRequestContext(nextState), nextState);
+  assert.equal(pressured.shouldProtectMidStream(0), true);
+});
+
 test("user stop chains into the summarizer; handleTurnAbort rolls back and persists", async () => {
   const controller = new CompactionController();
   const observed = [];

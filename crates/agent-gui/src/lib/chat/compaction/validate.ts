@@ -1,3 +1,4 @@
+import { type FileLedger, recentLedgerPaths } from "./fileLedger";
 import type { CompactionPayload } from "./payload";
 import { estimateTextTokens } from "./tokenLedger";
 
@@ -152,6 +153,7 @@ export function validateCompactionSummary(
   raw: string,
   sourceTokens: number,
   payload: CompactionPayload,
+  fileLedger?: FileLedger,
 ) {
   const parsed = parseCompactionSummaryXml(raw);
   const errors: string[] = [];
@@ -181,13 +183,34 @@ export function validateCompactionSummary(
   }
 
   const verificationSignals = buildVerificationSignals(payload);
-  if (verificationSignals.length > 0) {
+  const ledgerPaths = recentLedgerPaths(fileLedger);
+  if (verificationSignals.length > 0 || ledgerPaths.length > 0) {
     const corpus = collectSummarySearchCorpus(parsed);
-    const matchedCount = verificationSignals.filter((signal) =>
-      corpus.some((entry) => entry.includes(signal.toLowerCase())),
-    ).length;
-    if (matchedCount === 0) {
-      errors.push("verification pass missing recent technical refs");
+    if (verificationSignals.length > 0) {
+      const matchedCount = verificationSignals.filter((signal) =>
+        corpus.some((entry) => entry.includes(signal.toLowerCase())),
+      ).length;
+      // Rich-evidence payloads clear a higher bar: with 4+ extracted signals a single verbatim
+      // match is a weak hallucination guard, so require two; signal-poor payloads (short
+      // technical turns) keep the one-match floor to avoid false failures.
+      const requiredMatches = verificationSignals.length >= 4 ? 2 : 1;
+      if (matchedCount < requiredMatches) {
+        errors.push("verification pass missing recent technical refs");
+      }
+    }
+    // Deterministic floor: the merged file ledger is derived client-side from tool calls and
+    // deliberately not sent to the summarizer, so it is an independent witness. When recent
+    // touched files are known and none appears in the summary corpus, the summary lost its file
+    // context wholesale — fail so the self-repair retry (and the prune fallback beyond it) runs.
+    if (ledgerPaths.length > 0) {
+      const ledgerMatched = ledgerPaths.some((path) =>
+        corpus.some((entry) => entry.includes(path.toLowerCase())),
+      );
+      if (!ledgerMatched) {
+        errors.push(
+          `file ledger cross-check: summary must reference a recently touched file (${ledgerPaths.join(", ")})`,
+        );
+      }
     }
   }
 

@@ -3,10 +3,11 @@ import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import { assistantMessageToText, completeAssistantMessage } from "../../providers/llm";
 import type { ProviderId } from "../../settings";
+import type { FileLedger } from "./fileLedger";
 import {
-  COMPACTION_PAYLOAD_TOKEN_CAP,
   type CompactionPayload,
   estimateCompactionPayloadTokens,
+  resolveCompactionPayloadTokenCeiling,
   shrinkCompactionPayload,
   stringifyCompactionPayload,
 } from "./payload";
@@ -108,7 +109,7 @@ async function requestSummary(params: SummarizerRequest): Promise<AssistantMessa
     event: "compaction_payload_prepared",
     payloadChars: serializedPayload.length,
     payloadTokens: estimateTextTokens(serializedPayload),
-    hardCapTokens: COMPACTION_PAYLOAD_TOKEN_CAP,
+    hardCapTokens: resolveCompactionPayloadTokenCeiling(params.runtime.modelConfig?.contextWindow),
     messageCount: params.payload.active_segment_messages.length,
     summaryLanguage: summaryLanguage ?? "english-default",
     repair: Boolean(params.repair),
@@ -164,6 +165,9 @@ export async function summarizeConversation(params: {
   signal?: AbortSignal;
   debugLogger?: StreamDebugLogger;
   complete?: CompleteAssistantFn;
+  // Machine-derived touched-files ledger, deliberately NOT serialized into the payload: it is
+  // threaded straight into validation as a deterministic cross-check on the model's summary.
+  fileLedger?: FileLedger;
 }): Promise<SummarizeConversationResult> {
   const complete = params.complete ?? completeAssistantMessage;
   let payload = params.payload;
@@ -208,6 +212,7 @@ export async function summarizeConversation(params: {
         assistantMessageToText(validated),
         payloadTokens,
         payload,
+        params.fileLedger,
       );
       return {
         summaryText,

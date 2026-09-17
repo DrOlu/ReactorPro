@@ -125,3 +125,80 @@ test("summaries that drop every recent technical reference fail the verification
     payload,
   );
 });
+
+// The signal-rich bar: with 4+ extracted signals a single verbatim match is a weak
+// hallucination guard, so two matches are required; signal-poor payloads (short technical
+// turns, < 4 signals) keep the one-match floor to avoid false failures.
+test("verification pass: signal-rich payloads must retain two of their signals", () => {
+  const signalsPayload = (pathsText) =>
+    payloadWith([
+      {
+        index: 0,
+        role: "toolResult",
+        timestamp: null,
+        toolName: "Bash",
+        toolCallId: "t",
+        isError: false,
+        content: pathsText,
+      },
+    ]);
+  const oneArtifactMatch = summaryXml({ artifacts: "- [file] a/b.ts | modified" });
+  const twoArtifactMatches = summaryXml({
+    artifacts: "- [file] a/b.ts | modified\n- [file] c/d.ts | read",
+  });
+
+  // 3 signals, 1 match: still enough.
+  validateCompactionSummary(
+    oneArtifactMatch,
+    10_000,
+    signalsPayload("touch a/b.ts and c/d.ts plus e/f.ts"),
+  );
+
+  // 4 signals, 1 match: no longer enough.
+  assert.throws(
+    () =>
+      validateCompactionSummary(
+        oneArtifactMatch,
+        10_000,
+        signalsPayload("touch a/b.ts and c/d.ts plus e/f.ts and g/h.ts"),
+      ),
+    /verification pass missing recent technical refs/,
+  );
+
+  // 4 signals, 2 matches: passes.
+  validateCompactionSummary(
+    twoArtifactMatches,
+    10_000,
+    signalsPayload("touch a/b.ts and c/d.ts plus e/f.ts and g/h.ts"),
+  );
+});
+
+// The merged file ledger is derived client-side from tool calls and deliberately never sent to
+// the summarizer, so it serves as a deterministic witness: when recent touched files are known
+// and none appears in the summary, the summary lost its file context wholesale.
+test("file ledger cross-check: a summary referencing a ledger path passes", () => {
+  validateCompactionSummary(
+    summaryXml({ artifacts: "- [file] src/lib/chat/history/chatHistory.ts | modified" }),
+    10_000,
+    EMPTY_PAYLOAD,
+    { readFiles: [], modifiedFiles: ["src/lib/chat/history/chatHistory.ts"] },
+  );
+});
+
+test("file ledger cross-check: an otherwise-valid summary that drops every ledger path fails", () => {
+  assert.throws(
+    () =>
+      validateCompactionSummary(summaryXml(), 10_000, EMPTY_PAYLOAD, {
+        readFiles: [],
+        modifiedFiles: ["src/lib/chat/history/chatHistory.ts"],
+      }),
+    /file ledger cross-check/,
+  );
+
+  // An empty ledger cannot witness anything: the check is skipped.
+  validateCompactionSummary(summaryXml(), 10_000, EMPTY_PAYLOAD, {
+    readFiles: [],
+    modifiedFiles: [],
+  });
+  validateCompactionSummary(summaryXml(), 10_000, EMPTY_PAYLOAD);
+});

@@ -9,6 +9,7 @@ import {
   getActiveSegment,
   INTERNAL_RESUME_MESSAGE_TEXT,
 } from "../conversation/conversationState";
+import { type FileLedger, mergeMessagesIntoLedger } from "./fileLedger";
 import { buildCompactionPayload, fitCompactionPayloadToBudget } from "./payload";
 import { type CompleteAssistantFn, summarizeConversation } from "./summarizer";
 import { COMPACTION_PROMPT_VERSION } from "./summaryPrompt";
@@ -92,6 +93,15 @@ export async function runCompaction(params: {
   debugLogger?: StreamDebugLogger;
   complete?: CompleteAssistantFn;
 }): Promise<CompactionOutcome> {
+  // The merged ledger (previous checkpoint's ledger + this segment's raw messages) is the same
+  // cumulative witness the next checkpoint persists; computed client-side and deliberately not
+  // sent to the summarizer, it is threaded into validation as a deterministic cross-check.
+  const activeSegment = getActiveSegment(params.state);
+  const fileLedger: FileLedger = mergeMessagesIntoLedger(
+    activeSegment?.summary?.summaryMeta.fileLedger,
+    activeSegment?.messages ?? [],
+  );
+
   const payload = fitCompactionPayloadToBudget({
     payload: buildCompactionPayload({
       state: params.state,
@@ -112,6 +122,7 @@ export async function runCompaction(params: {
     signal: params.signal,
     debugLogger: params.debugLogger,
     complete: params.complete,
+    fileLedger,
   });
 
   const checkpointMessage = buildCheckpointMessage({
