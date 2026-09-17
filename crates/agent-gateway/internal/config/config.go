@@ -155,7 +155,11 @@ func Load() *Config {
 	flag.BoolVar(&cfg.MeshAllowRemoteInvoke, "mesh-allow-remote-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_ALLOW_REMOTE_INVOKE", true), "allow peers to invoke operations on desktop agents behind this edge")
 	flag.BoolVar(&cfg.MeshRequireVerifiedInvoke, "mesh-require-verified-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_REQUIRE_VERIFIED_INVOKE", true), "refuse remote invocation whose caller identity was not verified (needs a signed, trusted peer)")
 	flag.StringVar(&cfg.MeshInvokeOperations, "mesh-invoke-operations", getenv("LIVEAGENT_GATEWAY_MESH_INVOKE_OPERATIONS", mesh.OperationTask), "comma-separated operations a peer may invoke remotely; empty exposes none")
-	flag.DurationVar(&cfg.MeshInvokeTimeout, "mesh-invoke-timeout", getenvDuration("LIVEAGENT_GATEWAY_MESH_INVOKE_TIMEOUT", 60*time.Second), "how long one remote invocation may run before the edge gives up on it")
+	// The default is mesh.DefaultInvokeTimeout, not a literal: a 60s literal
+	// here silently overrode the mesh package's 3-minute default, so every
+	// turn longer than a minute was 4001'd and cancelled mid-work while the
+	// code read as if the deadline had been raised. One constant, one truth.
+	flag.DurationVar(&cfg.MeshInvokeTimeout, "mesh-invoke-timeout", getenvDuration("LIVEAGENT_GATEWAY_MESH_INVOKE_TIMEOUT", mesh.DefaultInvokeTimeout), "how long one remote invocation may run before the edge gives up on it")
 	flag.DurationVar(&cfg.MeshTaskMaxRuntime, "mesh-task-max-runtime", getenvDuration("LIVEAGENT_GATEWAY_MESH_TASK_MAX_RUNTIME", 0), "how long one async task may run before the edge fails it (0 uses thirty minutes)")
 	flag.DurationVar(&cfg.MeshTaskRetention, "mesh-task-retention", getenvDuration("LIVEAGENT_GATEWAY_MESH_TASK_RETENTION", 0), "how long a finished task stays queryable before it is pruned (0 uses seven days)")
 	flag.StringVar(&cfg.MeshTaskWebhook, "mesh-task-webhook", getenv("LIVEAGENT_GATEWAY_MESH_TASK_WEBHOOK", ""), "default URL to POST a signed task notification to when a task this gateway created finishes (a per-task notifyUrl on the create takes precedence)")
