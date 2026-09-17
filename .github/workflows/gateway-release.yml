@@ -176,7 +176,13 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
+      # Pin to the triggering SHA (or the dispatch tag). Default checkout
+      # verifies github.ref against github.sha and fails when a tag is moved
+      # after the workflow starts — which is how we cut a follow-up fix onto
+      # the same version.
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.sha }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -200,8 +206,20 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           assets=(dist/reactorpro-gateway-* dist/reactorpro-agentd-* dist/SHA256SUMS)
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
-          else
-            gh release create "$RELEASE_TAG" "${assets[@]}" --title "$RELEASE_TAG" --generate-notes
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "::error::no gateway assets to publish"
+            exit 1
           fi
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
+          fi
+          # One file at a time so a single 422 (already exists / untagged draft)
+          # cannot abort the rest. --clobber should overwrite; if it does not,
+          # delete the colliding asset and retry.
+          for asset in "${assets[@]}"; do
+            name=$(basename "$asset")
+            if ! gh release upload "$RELEASE_TAG" "$asset" --clobber; then
+              gh release delete-asset "$RELEASE_TAG" "$name" --yes || true
+              gh release upload "$RELEASE_TAG" "$asset" --clobber
+            fi
+          done
