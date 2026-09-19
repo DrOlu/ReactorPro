@@ -26,7 +26,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-09-13";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-09-19";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -153,6 +153,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "glm-5.2", contextWindow: 1000000, maxOutputToken: 131072, inputModalities: ["text"], thinking: { levels: ["high", "max"], off: false } },
     { id: "glm-5.3", contextWindow: 1000000, maxOutputToken: 131072, inputModalities: ["text"], thinking: { levels: ["low", "high", "max"], off: false } },
     { id: "glm-5.3-flash", contextWindow: 1000000, maxOutputToken: 131072, inputModalities: ["text", "image", "video", "pdf"], thinking: { levels: ["low", "high", "max"], off: false } },
+    { id: "glm-5.3-flashx", contextWindow: 1000000, maxOutputToken: 131072, inputModalities: ["text", "image", "video", "pdf"], thinking: { levels: ["low", "high", "max"], off: false } },
     { id: "glm-5v-turbo", contextWindow: 200000, maxOutputToken: 131072, inputModalities: ["text", "image", "video", "pdf"], thinking: { levels: ["high"], off: true } },
   ],
   moonshotai: [
@@ -201,6 +202,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "deepseek-v3-1", contextWindow: 131072, maxOutputToken: 65536, inputModalities: ["text"] },
     { id: "deepseek-v3-2-exp", contextWindow: 131072, maxOutputToken: 65536, inputModalities: ["text"] },
     { id: "deepseek-v4-flash-0731", contextWindow: 1000000, maxOutputToken: 384000, inputModalities: ["text"], thinking: { levels: ["high", "max"], off: true } },
+    { id: "deepseek-v4.1-flash", contextWindow: 1000000, maxOutputToken: 384000, inputModalities: ["text", "image"], thinking: { levels: ["low", "high", "max"], off: true } },
     { id: "kimi-k2-thinking", contextWindow: 262144, maxOutputToken: 16384, inputModalities: ["text"], thinking: { levels: ["minimal", "low", "medium", "high"], off: false } },
     { id: "kimi-k2.5", contextWindow: 262144, maxOutputToken: 32768, inputModalities: ["text", "image", "video"], thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "moonshot-kimi-k2-instruct", contextWindow: 131072, maxOutputToken: 8192, inputModalities: ["text"] },
