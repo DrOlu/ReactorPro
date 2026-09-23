@@ -5,12 +5,10 @@
 // over the Rust commands in commands/integration/neuralos.rs.
 
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
 import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
+import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
-
-const CHAT_ONLY: readonly SystemToolRuntimeScope[] = ["chat"];
 
 function asErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : String(err);
@@ -82,7 +80,6 @@ export function createNeuralosTools(params: {
     toolCall: ToolCall,
     signal?: AbortSignal,
   ): Promise<ToolResultMessage> {
-    const now = Date.now();
     if (signal?.aborted) {
       return toolResult(toolCall, "Cancelled", true);
     }
