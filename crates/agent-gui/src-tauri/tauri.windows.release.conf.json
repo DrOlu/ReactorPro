@@ -32,7 +32,7 @@
       }
     },
     "resources": {
-      "neuralos": "neuralos"
+      "resources/neuralos": "neuralos"
     }
   }
 }

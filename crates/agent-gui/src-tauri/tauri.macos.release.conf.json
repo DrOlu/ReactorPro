@@ -19,7 +19,7 @@
       "infoPlist": "Info.plist"
     },
     "resources": {
-      "neuralos": "neuralos"
+      "resources/neuralos": "neuralos"
     }
   }
 }
