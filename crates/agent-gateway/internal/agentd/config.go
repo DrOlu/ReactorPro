@@ -25,7 +25,7 @@ import (
 // Version is the agentd's own version line, independent of the gateway's —
 // a gateway on any v1.5.x speaks to any agentd, because the wire contract is
 // the gateway's v2 protocol, not either product's version.
-const Version = "0.2.0"
+const Version = "0.3.0"
 
 // Config is the whole operating surface of one agentd process. It is
 // deliberately small: an agentd is a worker, not a policy point — every
@@ -75,6 +75,21 @@ type Config struct {
 	// blast radius, so an operator can ship a read-only worker.
 	ShellEnabled bool
 	FetchEnabled bool
+
+	// NeuralOSInstancesDir points at a directory of neuralOS instances —
+	// folders each holding needle_menu.json + bridge.py over a live data
+	// source. Empty disables the neuralOS tools entirely: the on-device
+	// needle engine only ever selects a probe; the instance's own bridge
+	// executes it and holds its credentials, so nothing here widens the
+	// blast radius beyond reading the named directory.
+	NeuralOSInstancesDir string
+	// NeuralOSEngine / NeuralOSCact / NeuralOSPython override the needle
+	// engine binary, the needle3.cact weights, and the python interpreter
+	// used to run instance bridges. Empty falls back to "needle" on PATH,
+	// needle3.cact beside the engine, and "python3" respectively.
+	NeuralOSEngine string
+	NeuralOSCact   string
+	NeuralOSPython string
 	// CommandTimeout bounds one shell command; RequestTimeout is the
 	// provider's idle timeout — the longest one streamed round may stay
 	// silent between bytes before it is declared stalled (a per-round hard
@@ -136,13 +151,13 @@ func DefaultConfig() Config {
 		// The default budget never fires for the large-context models this
 		// worker is typically pointed at; for a small-window model it
 		// degrades a tool-heavy turn instead of failing it.
-		ContextBudgetTokens:   65536,
+		ContextBudgetTokens:    65536,
 		ContextKeepToolResults: 4,
-		Heartbeat:             2 * time.Second,
-		StreamDeltas:          true,
-		ConnectTimeout: 10 * time.Second,
-		ReconnectMin:   500 * time.Millisecond,
-		ReconnectMax:   30 * time.Second,
+		Heartbeat:              2 * time.Second,
+		StreamDeltas:           true,
+		ConnectTimeout:         10 * time.Second,
+		ReconnectMin:           500 * time.Millisecond,
+		ReconnectMax:           30 * time.Second,
 	}
 }
 
@@ -178,6 +193,14 @@ func (c *Config) RegisterFlags(fs *flag.FlagSet) {
 		"enable the fetch_url tool")
 	fs.StringVar(&c.SkillsDir, "skills-dir", getenv("LIVEAGENT_AGENTD_SKILLS_DIR", c.SkillsDir),
 		"directory of SKILL.md collections exposed to the worker (read-only; empty disables skills)")
+	fs.StringVar(&c.NeuralOSInstancesDir, "neuralos-instances", getenv("LIVEAGENT_AGENTD_NEURALOS_INSTANCES", c.NeuralOSInstancesDir),
+		"directory of neuralOS instances (needle_menu.json + bridge.py each); empty disables the neuralOS tools")
+	fs.StringVar(&c.NeuralOSEngine, "neuralos-engine", getenv("LIVEAGENT_AGENTD_NEURALOS_ENGINE", c.NeuralOSEngine),
+		"path to the needle engine binary (default: \"needle\" on PATH)")
+	fs.StringVar(&c.NeuralOSCact, "neuralos-cact", getenv("LIVEAGENT_AGENTD_NEURALOS_CACT", c.NeuralOSCact),
+		"path to needle3.cact weights (default: needle3.cact beside the engine)")
+	fs.StringVar(&c.NeuralOSPython, "neuralos-python", getenv("LIVEAGENT_AGENTD_NEURALOS_PYTHON", c.NeuralOSPython),
+		"python interpreter that runs instance bridges (default: python3)")
 	fs.DurationVar(&c.CommandTimeout, "command-timeout", getenvDuration("LIVEAGENT_AGENTD_COMMAND_TIMEOUT", c.CommandTimeout),
 		"timeout for one shell command")
 	fs.DurationVar(&c.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_AGENTD_REQUEST_TIMEOUT", c.RequestTimeout),

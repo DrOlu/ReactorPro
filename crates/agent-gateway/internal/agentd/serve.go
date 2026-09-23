@@ -26,7 +26,13 @@ func Serve(ctx context.Context, cfg *Config, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	tools := NewToolset(cfg.Workdir, cfg.ShellEnabled, cfg.FetchEnabled, skills)
+	tools := NewToolset(cfg.Workdir, cfg.ShellEnabled, cfg.FetchEnabled, skills).
+		EnableNeuralOS(&NeuralOSConfig{
+			InstancesDir: cfg.NeuralOSInstancesDir,
+			Engine:       cfg.NeuralOSEngine,
+			Cact:         cfg.NeuralOSCact,
+			Python:       cfg.NeuralOSPython,
+		})
 	SetCommandTimeout(cfg.CommandTimeout)
 
 	client := NewClient(cfg, logger, nil, nil, nil, nil)

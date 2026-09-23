@@ -33,6 +33,7 @@ pub use integration_commands::gateway;
 pub use integration_commands::mcp;
 pub use integration_commands::mcp_oauth;
 pub use integration_commands::memory;
+pub use integration_commands::neuralos;
 
 pub use runtime_commands::process;
 pub use runtime_commands::sftp;

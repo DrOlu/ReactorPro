@@ -6,6 +6,9 @@
       "appimage",
       "deb",
       "rpm"
-    ]
+    ],
+    "resources": {
+      "neuralos": "neuralos"
+    }
   }
 }

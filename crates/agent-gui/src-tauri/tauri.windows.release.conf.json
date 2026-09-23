@@ -30,6 +30,9 @@
       "nsis": {
         "installerIcon": "icons/icon-windows.ico"
       }
+    },
+    "resources": {
+      "neuralos": "neuralos"
     }
   }
 }

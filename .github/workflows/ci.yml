@@ -258,7 +258,7 @@ jobs:
         # libtest accepts multiple filters (their union), so one invocation lets each test group run in parallel.
         run: >
           cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml --lib --
-          chat_history ssh_local_forward shell_runner integration_commands::mcp
+          chat_history ssh_local_forward shell_runner integration_commands::mcp integration_commands::neuralos
 
   ui-boundaries:
     name: Shared UI Boundaries

@@ -17,6 +17,9 @@
       "hardenedRuntime": true,
       "entitlements": "Entitlements.plist",
       "infoPlist": "Info.plist"
+    },
+    "resources": {
+      "neuralos": "neuralos"
     }
   }
 }

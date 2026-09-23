@@ -157,6 +157,28 @@ jobs:
             "dmgbuild==1.6.5"
           echo "$RUNNER_TEMP/dmgbuild-venv/bin" >> "$GITHUB_PATH"
 
+      - name: Fetch neuralOS engine (best-effort)
+        shell: bash
+        env:
+          NEURALOS_PLATFORM: ${{ matrix.target == 'aarch64-apple-darwin' && 'macos-arm64' || 'macos-x86_64' }}
+        run: |
+          set -uo pipefail
+          dest="crates/agent-gui/src-tauri/resources/neuralos"
+          mkdir -p "$dest"
+          venv="$RUNNER_TEMP/neuralos-venv"
+          if python3 -m venv "$venv"; then
+            vpy="$venv/bin/python"
+            [ -x "$vpy" ] || vpy="$venv/Scripts/python.exe"
+            if "$vpy" -m pip install --quiet cactus-needle==3.0.2 \
+               && "$vpy" scripts/neuralos/fetch_engine.py --platform "$NEURALOS_PLATFORM" --dest "$dest"; then
+              echo "neuralOS engine bundled for $NEURALOS_PLATFORM"
+            fi
+          fi
+          if [ ! -e "$dest/needle3.cact" ]; then
+            echo "::warning::neuralOS engine not bundled for this release; the app falls back to PATH/app-data resolution"
+            printf 'The neuralOS engine was not bundled for this build.\nInstall it via Settings or set REACTORPRO_NEURALOS_ENGINE.\n' > "$dest/README.txt"
+          fi
+
       - name: Build macOS bundles
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -250,6 +272,28 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile --filter liveagent...
+
+      - name: Fetch neuralOS engine (best-effort)
+        shell: bash
+        env:
+          NEURALOS_PLATFORM: windows-x86_64
+        run: |
+          set -uo pipefail
+          dest="crates/agent-gui/src-tauri/resources/neuralos"
+          mkdir -p "$dest"
+          venv="$RUNNER_TEMP/neuralos-venv"
+          if python3 -m venv "$venv"; then
+            vpy="$venv/bin/python"
+            [ -x "$vpy" ] || vpy="$venv/Scripts/python.exe"
+            if "$vpy" -m pip install --quiet cactus-needle==3.0.2 \
+               && "$vpy" scripts/neuralos/fetch_engine.py --platform "$NEURALOS_PLATFORM" --dest "$dest"; then
+              echo "neuralOS engine bundled for $NEURALOS_PLATFORM"
+            fi
+          fi
+          if [ ! -e "$dest/needle3.cact" ]; then
+            echo "::warning::neuralOS engine not bundled for this release; the app falls back to PATH/app-data resolution"
+            printf 'The neuralOS engine was not bundled for this build.\nInstall it via Settings or set REACTORPRO_NEURALOS_ENGINE.\n' > "$dest/README.txt"
+          fi
 
       - name: Build Windows bundles
         working-directory: crates/agent-gui
@@ -373,6 +417,28 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile --filter liveagent...
+
+      - name: Fetch neuralOS engine (best-effort)
+        shell: bash
+        env:
+          NEURALOS_PLATFORM: linux-x86_64
+        run: |
+          set -uo pipefail
+          dest="crates/agent-gui/src-tauri/resources/neuralos"
+          mkdir -p "$dest"
+          venv="$RUNNER_TEMP/neuralos-venv"
+          if python3 -m venv "$venv"; then
+            vpy="$venv/bin/python"
+            [ -x "$vpy" ] || vpy="$venv/Scripts/python.exe"
+            if "$vpy" -m pip install --quiet cactus-needle==3.0.2 \
+               && "$vpy" scripts/neuralos/fetch_engine.py --platform "$NEURALOS_PLATFORM" --dest "$dest"; then
+              echo "neuralOS engine bundled for $NEURALOS_PLATFORM"
+            fi
+          fi
+          if [ ! -e "$dest/needle3.cact" ]; then
+            echo "::warning::neuralOS engine not bundled for this release; the app falls back to PATH/app-data resolution"
+            printf 'The neuralOS engine was not bundled for this build.\nInstall it via Settings or set REACTORPRO_NEURALOS_ENGINE.\n' > "$dest/README.txt"
+          fi
 
       - name: Build Linux bundles
         working-directory: crates/agent-gui
