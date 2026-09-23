@@ -298,18 +298,18 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinToolCategory.intelligence": "Intelligence & memory",
   "settings.builtinToolCategory.automation": "Automation",
   "settings.builtinToolCategory.connectivity": "Connectivity & integrations",
-  "settings.builtinTool.neuralos_instances.name": "neuralOS 实例列表",
-  "settings.builtinTool.neuralos_instances.desc": "列出已安装的 neuralOS 数据实例",
+  "settings.builtinTool.neuralos_instances.name": "NeuralOS Instances",
+  "settings.builtinTool.neuralos_instances.desc": "List installed neuralOS data instances",
   "settings.builtinTool.neuralos_instances.detail":
-    "枚举本机的实例库（数据库、云账号、平台等），供查询使用。",
-  "settings.builtinTool.neuralos_query.name": "neuralOS 查询",
-  "settings.builtinTool.neuralos_query.desc": "用自然语言查询已安装的 neuralOS 实例",
+    "Enumerates the on-device instance fleet (databases, cloud accounts, platforms) available for queries.",
+  "settings.builtinTool.neuralos_query.name": "NeuralOS Query",
+  "settings.builtinTool.neuralos_query.desc": "Ask an installed neuralOS instance a question",
   "settings.builtinTool.neuralos_query.detail":
-    "本机 needle 模型选择只读探针，由实例自身的 bridge 执行并返回校验过的摘要。凭据不会离开 bridge。",
-  "settings.builtinTool.neuralos_setup.name": "neuralOS 环境安装",
-  "settings.builtinTool.neuralos_setup.desc": "安装 neuralOS bridge 的 Python 环境",
+    "The on-device needle model selects a read probe; the instance's own bridge executes it and returns a validated digest. Credentials never leave the bridge.",
+  "settings.builtinTool.neuralos_setup.name": "NeuralOS Setup",
+  "settings.builtinTool.neuralos_setup.desc": "Install the neuralOS bridge python environment",
   "settings.builtinTool.neuralos_setup.detail":
-    "创建托管虚拟环境并安装实例 bridge 所需的库（pymysql、boto3、requests、pydantic）。",
+    "Creates the managed virtualenv and installs the libraries the instance bridges need (pymysql, boto3, requests, pydantic).",
   "settings.builtinTool.read.name": "Read file",
   "settings.builtinTool.read.desc": "Read the text content of files in the project",
   "settings.builtinTool.read.detail":
