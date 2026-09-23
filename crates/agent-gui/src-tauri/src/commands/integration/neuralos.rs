@@ -140,7 +140,10 @@ fn parse_selection(stdout: &[u8]) -> Result<(String, serde_json::Value, f64), St
         .as_str()
         .ok_or_else(|| "engine selected a call without a name".to_string())?
         .to_string();
-    let arguments = call["arguments"].clone().unwrap_or(serde_json::json!({}));
+    let arguments = match call.get("arguments") {
+        Some(v) if !v.is_null() => v.clone(),
+        _ => serde_json::json!({}),
+    };
     Ok((name, arguments, confidence))
 }
 
