@@ -13,6 +13,13 @@ on:
 permissions:
   contents: write
 
+# A force-pushed tag (same refs/tags/vX) must cancel the in-flight release
+# rather than let Publish GitHub Release fail 20+ minutes later because
+# actions/checkout refuses a retargeted tag.
+concurrency:
+  group: desktop-release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: 22.19.0
 
@@ -530,16 +537,39 @@ jobs:
       LIVEAGENT_IS_PRERELEASE: ${{ needs.release-metadata.outputs.is_prerelease }}
       LIVEAGENT_RELEASE_TAG: ${{ needs.release-metadata.outputs.release_tag }}
     steps:
+      # Pin to this run's commit. Default checkout of the tag fails when the
+      # tag is moved while platform builds are still running.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Skip publish if the tag was retargeted
+        id: tagcheck
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ needs.release-metadata.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          current="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          echo "tag_commit=${current}"
+          echo "run_commit=${EXPECTED_SHA}"
+          if [ "$current" != "$EXPECTED_SHA" ]; then
+            echo "::notice::Tag ${RELEASE_TAG} now points to ${current}, not this run's ${EXPECTED_SHA}. Superseded; skipping publish."
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/download-artifact@v8
+        if: steps.tagcheck.outputs.superseded != 'true'
         with:
           path: release-artifacts
           merge-multiple: true
 
       - name: Publish assets
+        if: steps.tagcheck.outputs.superseded != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
