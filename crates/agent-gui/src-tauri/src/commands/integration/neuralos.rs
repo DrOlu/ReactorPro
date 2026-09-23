@@ -596,7 +596,7 @@ mod tests {
         let root = temp_root("bridge");
         std::fs::write(
             root.join("bridge.py"),
-            "TOYS = {'echo': lambda **kw: {'echo': kw}}\n",
+            "def echo(**kwargs):\n    return {'echo': kwargs}\n",
         )
         .unwrap();
         std::fs::write(root.join("needle_menu.json"), "[]").unwrap();
