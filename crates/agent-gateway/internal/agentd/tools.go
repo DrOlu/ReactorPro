@@ -7,7 +7,9 @@ package agentd
 // read-only worker is one flag away.
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,10 +46,30 @@ type Tool struct {
 // Toolset builds the enabled tools around a sandbox root, plus an optional
 // read-only skills library.
 type Toolset struct {
-	root   string
-	shell  bool
-	fetch  bool
-	skills map[string]Skill
+	root     string
+	shell    bool
+	fetch    bool
+	skills   map[string]Skill
+	neuralos *NeuralOSConfig
+}
+
+// NeuralOSConfig pins where the on-device needle engine, the needle3.cact
+// weights, and the python interpreter that runs instance bridges live. A nil
+// config (or an empty InstancesDir) disables the neuralOS tools.
+type NeuralOSConfig struct {
+	InstancesDir string
+	Engine       string
+	Cact         string
+	Python       string
+}
+
+// EnableNeuralOS installs the neuralOS tool pair (instance list + query).
+// Chained after NewToolset so the existing constructor call sites stay put.
+func (t *Toolset) EnableNeuralOS(cfg *NeuralOSConfig) *Toolset {
+	if cfg != nil && strings.TrimSpace(cfg.InstancesDir) != "" {
+		t.neuralos = cfg
+	}
+	return t
 }
 
 // NewToolset binds the enabled tools to a workdir root and a scanned skills
@@ -128,6 +150,28 @@ func (t *Toolset) Tools() []Tool {
 			},
 			Run: t.runFetch,
 		})
+	}
+	if t.neuralos != nil {
+		tools = append(tools,
+			Tool{
+				Name:        "neuralos_instances",
+				Description: "List the installed neuralOS data instances. Each exposes validated read probes over one live data source (MySQL, Cloudflare, AWS, ...).",
+				Parameters:  map[string]any{"type": "object", "properties": map[string]any{}},
+				Run:         t.runNeuralOSInstances,
+			},
+			Tool{
+				Name:        "neuralos_query",
+				Description: "Ask one neuralOS instance a question in plain language. The on-device needle model selects a read probe and the instance's own bridge executes it, returning a small validated JSON digest. Prefer this over raw shell commands when the question is about the instance's data.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"instance": map[string]any{"type": "string", "description": "The instance name exactly as listed by neuralos_instances."},
+						"question": map[string]any{"type": "string", "description": "The question, phrased like the instance's canonical probe questions."},
+					},
+					"required": []string{"instance", "question"},
+				},
+				Run: t.runNeuralOSQuery,
+			})
 	}
 	if len(t.skills) > 0 {
 		tools = append(tools,
@@ -373,6 +417,163 @@ func (t *Toolset) runFetch(ctx context.Context, args map[string]any) (string, er
 		return "", fmt.Errorf("fetch %q: %v", raw, err)
 	}
 	return capString(string(body), fetchCap), nil
+}
+
+// isNeuralOSProbeName mirrors the menu grammar: snake_case identifiers only,
+// no dunders, no separators — the string reaches getattr in the bridge.
+func isNeuralOSProbeName(name string) bool {
+	if name == "" || len(name) > 64 || strings.HasPrefix(name, "__") {
+		return false
+	}
+	for i, r := range name {
+		ok := r == '_' || (r >= 'a' && r <= 'z') || (i > 0 && r >= '0' && r <= '9')
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *Toolset) runNeuralOSInstances(_ context.Context, _ map[string]any) (string, error) {
+	entries, err := os.ReadDir(t.neuralos.InstancesDir)
+	if err != nil {
+		return "", fmt.Errorf("neuralos_instances: %v", err)
+	}
+	var lines []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		menu, err := os.ReadFile(filepath.Join(t.neuralos.InstancesDir, entry.Name(), "needle_menu.json"))
+		if err != nil {
+			continue
+		}
+		var parsed struct {
+			Probes int `json:"probes"`
+		}
+		_ = json.Unmarshal(menu, &parsed)
+		if arr := json.RawMessage(menu); len(arr) > 0 {
+			var list []json.RawMessage
+			if json.Unmarshal(arr, &list) == nil {
+				parsed.Probes = len(list)
+			}
+		}
+		lines = append(lines, fmt.Sprintf("%s\t%d probes", entry.Name(), parsed.Probes))
+	}
+	if len(lines) == 0 {
+		return "(no neuralOS instances installed)", nil
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+// needleSelection is the engine's call-selection output.
+type needleSelection struct {
+	FunctionCalls []struct {
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
+	} `json:"function_calls"`
+	Confidence float64 `json:"confidence"`
+}
+
+// neuralOSBridgeSnippet executes the selected probe through the instance's
+// own bridge — the same contract the desktop integration uses: the needle
+// engine only selects, the bridge executes and holds its credentials.
+const neuralOSBridgeSnippet = `import json, sys
+sys.path.insert(0, sys.argv[1])
+import bridge
+fn = getattr(bridge, sys.argv[2])
+args = json.load(sys.stdin)
+out = fn(**args)
+print(json.dumps({"probe": sys.argv[2], "result": out}, ensure_ascii=False, default=str))
+`
+
+func (t *Toolset) runNeuralOSQuery(ctx context.Context, args map[string]any) (string, error) {
+	instance := argString(args, "instance")
+	question := argString(args, "question")
+	if instance == "" || question == "" {
+		return "", fmt.Errorf("neuralos_query: instance and question are required")
+	}
+	if strings.ContainsAny(instance, "/\\") || strings.Contains(instance, "..") {
+		return "", fmt.Errorf("neuralos_query: invalid instance name %q", instance)
+	}
+	instanceDir := filepath.Join(t.neuralos.InstancesDir, instance)
+	if _, err := os.Stat(filepath.Join(instanceDir, "needle_menu.json")); err != nil {
+		return "", fmt.Errorf("neuralos_query: instance %q not found (run neuralos_instances first)", instance)
+	}
+
+	engine := t.neuralOS_Engine()
+	cact := t.neuralOS_Cact(engine)
+	python := t.neuralOS_Python()
+
+	// Phase A — selection (on-device, deterministic).
+	selCtx, selCancel := context.WithTimeout(ctx, toolsetCommandTimeout)
+	defer selCancel()
+	sel := exec.CommandContext(selCtx, engine,
+		"--model", cact,
+		"--tools", filepath.Join(instanceDir, "needle_menu.json"),
+		"--prompt", question)
+	var stderr bytes.Buffer
+	sel.Stderr = &stderr
+	selOut, err := sel.Output()
+	if err != nil {
+		return "", fmt.Errorf("neuralos_query: engine selection failed: %v: %s", err, capString(stderr.String(), 400))
+	}
+	var selection needleSelection
+	if err := json.Unmarshal(bytes.TrimSpace(selOut), &selection); err != nil {
+		return "", fmt.Errorf("neuralos_query: engine output unparseable: %v", err)
+	}
+	if len(selection.FunctionCalls) == 0 {
+		return fmt.Sprintf("no probe selected (confidence %.2f) — rephrase closer to the instance's canonical questions", selection.Confidence), nil
+	}
+	probe := selection.FunctionCalls[0].Name
+	probeArgs := string(selection.FunctionCalls[0].Arguments)
+	if !isNeuralOSProbeName(probe) {
+		return "", fmt.Errorf("neuralos_query: engine selected invalid probe name %q", probe)
+	}
+
+	// Phase B — execution through the instance bridge.
+	bridgeCtx, bridgeCancel := context.WithTimeout(ctx, toolsetCommandTimeout)
+	defer bridgeCancel()
+	bridge := exec.CommandContext(bridgeCtx, python, "-c", neuralOSBridgeSnippet, instanceDir, probe)
+	bridge.Stdin = strings.NewReader(probeArgs)
+	bridge.Env = append(os.Environ(), "NEEDLE_TELEMETRY=0", "DO_NOT_TRACK=1", "PYTHONIOENCODING=utf-8")
+	var berr bytes.Buffer
+	bridge.Stderr = &berr
+	bridgeOut, err := bridge.Output()
+	if err != nil {
+		return "", fmt.Errorf("neuralos_query: bridge execution failed for %s: %v: %s", probe, err, capString(berr.String(), 400))
+	}
+	return capString(string(bridgeOut), toolOutputCap), nil
+}
+
+func (t *Toolset) neuralOS_Engine() string {
+	if t.neuralos.Engine != "" {
+		return t.neuralos.Engine
+	}
+	if path, err := exec.LookPath("needle"); err == nil {
+		return path
+	}
+	return "needle"
+}
+
+func (t *Toolset) neuralOS_Cact(engine string) string {
+	if t.neuralos.Cact != "" {
+		return t.neuralos.Cact
+	}
+	if engine != "" {
+		candidate := filepath.Join(filepath.Dir(engine), "needle3.cact")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return "needle3.cact"
+}
+
+func (t *Toolset) neuralOS_Python() string {
+	if t.neuralos.Python != "" {
+		return t.neuralos.Python
+	}
+	return "python3"
 }
 
 // toolsetCommandTimeout bounds one shell command; Serve installs the
