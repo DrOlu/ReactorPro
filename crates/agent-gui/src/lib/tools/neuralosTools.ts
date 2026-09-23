@@ -5,20 +5,16 @@
 // over the Rust commands in commands/integration/neuralos.rs.
 
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
 import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
-import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
 
 function asErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : String(err);
 }
 
-function toolResult(
-  toolCall: ToolCall,
-  text: string,
-  isError: boolean,
-): ToolResultMessage {
+function toolResult(toolCall: ToolCall, text: string, isError: boolean): ToolResultMessage {
   return {
     role: "toolResult",
     toolCallId: toolCall.id,
@@ -86,9 +82,10 @@ export function createNeuralosTools(params: {
     try {
       switch (toolCall.name) {
         case "NeuralOsInstances": {
-          const instances = await invoke<
-            Array<{ name: string; probes: number; hasBridge: boolean; path: string }>
-          >("neuralos_list_instances");
+          const instances =
+            await invoke<Array<{ name: string; probes: number; hasBridge: boolean; path: string }>>(
+              "neuralos_list_instances",
+            );
           if (instances.length === 0) {
             return toolResult(
               toolCall,
@@ -111,11 +108,7 @@ export function createNeuralosTools(params: {
           const instance = typeof args.instance === "string" ? args.instance.trim() : "";
           const question = typeof args.question === "string" ? args.question.trim() : "";
           if (!instance || !question) {
-            return toolResult(
-              toolCall,
-              "NeuralOsQuery requires both instance and question.",
-              true,
-            );
+            return toolResult(toolCall, "NeuralOsQuery requires both instance and question.", true);
           }
           const digest = await invoke<{
             probe: string;
@@ -146,11 +139,7 @@ export function createNeuralosTools(params: {
       )
         ? "\nHint: run NeuralOsSetup to install the bridge python environment."
         : "";
-      return toolResult(
-        toolCall,
-        `neuralOS failed: ${message}${hint}`,
-        true,
-      );
+      return toolResult(toolCall, `neuralOS failed: ${message}${hint}`, true);
     }
   }
 
