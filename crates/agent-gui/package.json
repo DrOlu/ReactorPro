@@ -1,7 +1,7 @@
 {
   "name": "liveagent",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "ReactorPro desktop application by Hyperspace Technologies.",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "license": "MIT",
@@ -21,7 +21,7 @@
     "lint:fix": "biome check --write src/"
   },
   "dependencies": {
-    "@base-ui/react": "^1.6.0",
+    "@base-ui/react": "^1.6.1",
     "@earendil-works/pi-agent-core": "^0.84.2",
     "@earendil-works/pi-ai": "^0.84.2",
     "@git-diff-view/file": "^0.1.3",

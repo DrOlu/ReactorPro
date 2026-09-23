@@ -32,6 +32,7 @@ import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
 import { createMeshTools } from "./meshTools";
+import { createNeuralosTools } from "./neuralosTools";
 import { createExitPlanModeTools, isPlanModeAllowedTool } from "./planModeTools";
 import { createShellTools, type ShellSandboxSettings } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
@@ -265,6 +266,10 @@ async function buildBaseBuiltinToolBundles(
     createCronTools({
       currentChatModel: params.currentChatModel,
       workdir: params.workdir,
+    }),
+    createNeuralosTools({
+      enabled: params.runtimeScope === "chat",
+      runtimeScope: params.runtimeScope,
     }),
     createMcpManagerTools({
       workdir: params.workdir,

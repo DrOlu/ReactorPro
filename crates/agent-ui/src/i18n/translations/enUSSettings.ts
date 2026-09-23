@@ -298,7 +298,19 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinToolCategory.intelligence": "Intelligence & Memory",
   "settings.builtinToolCategory.automation": "Automation",
   "settings.builtinToolCategory.connectivity": "Connectivity & Integrations",
-  "settings.builtinTool.read.name": "Read File",
+    "settings.builtinTool.neuralos_instances.name": "NeuralOS Instances",
+  "settings.builtinTool.neuralos_instances.desc": "List installed neuralOS data instances",
+  "settings.builtinTool.neuralos_instances.detail":
+    "Enumerates the on-device instance fleet (databases, cloud accounts, platforms) available for queries.",
+  "settings.builtinTool.neuralos_query.name": "NeuralOS Query",
+  "settings.builtinTool.neuralos_query.desc": "Ask an installed neuralOS instance a question",
+  "settings.builtinTool.neuralos_query.detail":
+    "The on-device needle model selects a read probe; the instance's own bridge executes it and returns a validated digest. Credentials never leave the bridge.",
+  "settings.builtinTool.neuralos_setup.name": "NeuralOS Setup",
+  "settings.builtinTool.neuralos_setup.desc": "Install the neuralOS bridge python environment",
+  "settings.builtinTool.neuralos_setup.detail":
+    "Creates the managed virtualenv and installs the libraries the instance bridges need (pymysql, boto3, requests, pydantic).",
+"settings.builtinTool.read.name": "Read File",
   "settings.builtinTool.read.desc": "Read text content from files in the project",
   "settings.builtinTool.read.detail":
     "Reads file content line by line within the project directory, with optional offset and line count — ideal for inspecting code and configuration files. Read-only; never modifies anything.",

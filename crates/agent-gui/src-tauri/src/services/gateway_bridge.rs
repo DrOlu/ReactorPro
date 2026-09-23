@@ -1519,6 +1519,9 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "TaskUpdate"
             | "TaskList"
             | "TunnelManager"
+            | "NeuralOsInstances"
+            | "NeuralOsQuery"
+            | "NeuralOsSetup"
             | "Write"
     )
 }
