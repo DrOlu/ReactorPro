@@ -565,7 +565,9 @@ jobs:
           fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            edit_args=(--title "ReactorPro $RELEASE_TAG" --notes-file "$notes_path")
+            # Existing tag releases are often created as drafts (e.g. by gateway-release).
+            # GitHub 422s "Latest release cannot be draft or prerelease" unless we undraft first.
+            edit_args=(--title "ReactorPro $RELEASE_TAG" --notes-file "$notes_path" --draft=false)
             if [ "$is_prerelease" = true ]; then
               edit_args+=(--prerelease)
             else
