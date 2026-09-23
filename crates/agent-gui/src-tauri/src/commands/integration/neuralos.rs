@@ -140,7 +140,7 @@ fn parse_selection(stdout: &[u8]) -> Result<(String, serde_json::Value, f64), St
         .as_str()
         .ok_or_else(|| "engine selected a call without a name".to_string())?
         .to_string();
-    let arguments = call["arguments"].cloned().unwrap_or(serde_json::json!({}));
+    let arguments = call["arguments"].clone().unwrap_or(serde_json::json!({}));
     Ok((name, arguments, confidence))
 }
 
@@ -213,13 +213,9 @@ fn run_captured(
         .map_err(|e| format!("{label} output read failed: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr = stderr
-            .lines()
-            .rev()
-            .take(6)
-            .collect::<Vec<_>>()
-            .rev()
-            .join("\n");
+        let mut last_lines: Vec<&str> = stderr.lines().rev().take(6).collect();
+        last_lines.reverse();
+        let stderr = last_lines.join("\n");
         return Err(format!(
             "{label} failed ({}): {stderr}",
             output.status
