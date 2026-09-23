@@ -323,6 +323,7 @@ macro_rules! app_invoke_handler {
             commands::neuralos::neuralos_list_instances,
             commands::neuralos::neuralos_run_probe,
             commands::neuralos::neuralos_install_instance,
+            commands::neuralos::neuralos_setup_environment,
             commands::cua_driver::cua_driver_list_installed_apps,
             commands::gateway::gateway_connect,
             commands::gateway::gateway_disconnect,

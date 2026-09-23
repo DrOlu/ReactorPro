@@ -163,6 +163,16 @@ fn resolve_python_candidates(app_data: &Path) -> Vec<PathBuf> {
     );
     #[cfg(not(target_os = "windows"))]
     candidates.push(app_data.join("neuralos").join("venv").join("bin").join("python3"));
+    // Finder-launched apps inherit a minimal PATH; probe the common absolute
+    // locations before falling back to PATH lookup.
+    #[cfg(not(target_os = "windows"))]
+    for abs in ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"] {
+        candidates.push(PathBuf::from(abs));
+    }
+    #[cfg(target_os = "windows")]
+    for abs in ["C:\\Python312\\python.exe", "C:\\Python311\\python.exe"] {
+        candidates.push(PathBuf::from(abs));
+    }
     candidates.push(PathBuf::from("python3"));
     candidates
 }
@@ -492,6 +502,76 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupResult {
+    pub python: String,
+    pub installed: Vec<String>,
+}
+
+/// One-command bridge environment: managed venv + the libraries the bundled
+/// instance fleet needs. Idempotent — re-running upgrades nothing and repairs
+/// a missing venv. "Install the app and nothing else, ever" is the contract.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn neuralos_setup_environment(app: tauri::AppHandle) -> Result<SetupResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        let neuralos_dir = data.join("neuralos");
+        std::fs::create_dir_all(neuralos_dir.join("neuralos-instances"))
+            .map_err(|e| e.to_string())?;
+        let venv = neuralos_dir.join("venv");
+
+        #[cfg(target_os = "windows")]
+        let venv_python = venv.join("Scripts").join("python.exe");
+        #[cfg(not(target_os = "windows"))]
+        let venv_python = venv.join("bin").join("python3");
+
+        // Bootstrap interpreter for venv creation: any system python will do.
+        let bootstrap = first_existing(&resolve_python_candidates(&data))
+            .ok_or("no python interpreter found to create the bridge environment")?;
+
+        if !venv_python.exists() {
+            let mut cmd = Command::new(&bootstrap);
+            cmd.arg("-m").arg("venv").arg(&venv);
+            run_captured(cmd, None, Duration::from_secs(180), "venv creation")?;
+        }
+        if !venv_python.exists() {
+            return Err(format!(
+                "venv created but interpreter missing at {}",
+                venv_python.display()
+            ));
+        }
+
+        // The union of the shipped fleet's bridge dependencies. Kept
+        // deliberate and small; instances with exotic needs document them in
+        // their own READMEs and can be installed into this venv by hand.
+        const BRIDGE_DEPS: &[&str] = &["pymysql", "boto3", "requests"];
+
+        let mut pip = Command::new(&venv_python);
+        pip.arg("-m")
+            .arg("pip")
+            .arg("install")
+            .arg("--quiet")
+            .arg("--disable-pip-version-check");
+        for dep in BRIDGE_DEPS {
+            pip.arg(dep);
+        }
+        run_captured(
+            pip,
+            None,
+            Duration::from_secs(600),
+            "bridge dependency install",
+        )?;
+
+        Ok(SetupResult {
+            python: venv_python.to_string_lossy().into_owned(),
+            installed: BRIDGE_DEPS.iter().map(|s| s.to_string()).collect(),
+        })
+    })
+    .await
+    .map_err(|e| format!("neuralos_setup_environment join failed: {e}"))?
 }
 
 #[cfg(test)]

@@ -172,6 +172,11 @@ jobs:
             if "$vpy" -m pip install --quiet cactus-needle==3.0.2 \
                && "$vpy" scripts/neuralos/fetch_engine.py --platform "$NEURALOS_PLATFORM" --dest "$dest"; then
               echo "neuralOS engine bundled for $NEURALOS_PLATFORM"
+            else
+              echo "::warning::neuralOS engine fetch failed; retrying with full output for diagnosis"
+              "$vpy" -m pip install cactus-needle==3.0.2 || true
+              "$vpy" scripts/neuralos/fetch_engine.py --platform "$NEURALOS_PLATFORM" --dest "$dest" \
+                || echo "::warning::neuralOS engine still not bundled; PATH/app-data fallback applies"
             fi
           fi
           if [ ! -e "$dest/needle3.cact" ]; then
