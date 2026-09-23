@@ -16,7 +16,10 @@ jobs:
   governance:
     name: Check PR compliance
     runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft && github.event.pull_request.state == 'open' }}
+    # Skip only a draft's initial `opened` event. After auto-convert-to-draft,
+    # body edits / new commits / ready_for_review must still run so a later
+    # `Closes #123` actually re-evaluates instead of staying skipped.
+    if: ${{ github.event.pull_request.state == 'open' && (!github.event.pull_request.draft || github.event.action != 'opened') }}
     steps:
       - uses: actions/github-script@v8
         env:
@@ -24,9 +27,25 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
-            const pr = context.payload.pull_request;
-            const body = (pr.body || '').replace(/<!--[\s\S]*?-->/g, '');
+            const prNumber = context.payload.pull_request.number;
             const MARKER = '<!-- pr-governance-report -->';
+
+            // Event payload body is often the template (`Closes #` with no number)
+            // or empty on `opened`. Always read the live PR, and retry briefly.
+            const CLOSING_RE = /(clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed))\s*:?\s+(?:[\w.-]+\/[\w.-]+)?#\d+/i;
+            const stripComments = (s) => (s || '').replace(/<!--[\s\S]*?-->/g, '');
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber,
+            });
+            let body = stripComments(pr.body);
+            for (let i = 0; i < 4 && !CLOSING_RE.test(body); i++) {
+              await new Promise((r) => setTimeout(r, 3000));
+              const { data } = await github.rest.pulls.get({
+                owner, repo, pull_number: prNumber,
+              });
+              Object.assign(pr, data);
+              body = stripComments(pr.body);
+            }
 
             // Skip checks for bot PRs (such as Dependabot) and PRs a maintainer explicitly exempted.
             const labels = pr.labels.map((l) => l.name);
@@ -50,8 +69,7 @@ jobs:
             );
             const linkedByGithub =
               gql.repository.pullRequest.closingIssuesReferences.totalCount > 0;
-            const linkedByText =
-              /(clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed))\s*:?\s+(?:[\w.-]+\/[\w.-]+)?#\d+/i.test(body);
+            const linkedByText = CLOSING_RE.test(body);
             if (!linkedByGithub && !linkedByText) {
               problems.push(
                 '**No linked issue**: the PR body must contain `Closes #123` / `Fixes #123` / `Resolves #123`. ' +
