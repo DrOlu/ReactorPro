@@ -121,7 +121,7 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "tooltip.closeSidebar": "Close Sidebar",
   "tooltip.openSidebar": "Open Sidebar",
   "chat.newConversation": "New Conversation",
-  "chat.resizeSidebar": "调整侧边栏大小",
+  "chat.resizeSidebar": "Resize sidebar",
   "chat.pendingTitle": "New Chat",
   "chat.recentConversation": "Conversations",
   "chat.searchConversations": "Search conversations",

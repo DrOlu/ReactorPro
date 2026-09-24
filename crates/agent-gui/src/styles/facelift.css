@@ -311,7 +311,7 @@ pre {
 }
 
 /* ── Rails: side panels contrast with the chat panel ────────────
-   LiveAgent-style shaded rails: the left sidebar and the right
+   ReactorPro-style shaded rails: the left sidebar and the right
    project-tools panel sit a full step off the chat background. */
 .project-tools-panel {
   background-color: hsl(var(--sidebar-bg));
