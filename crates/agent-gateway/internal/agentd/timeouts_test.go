@@ -50,7 +50,11 @@ func TestNeuralOSQueryKillsAHangingEngine(t *testing.T) {
 
 	// An engine that never answers: selection must hit the toolset deadline
 	// and surface a killed-process error instead of hanging the whole turn.
-	hanging := fakeEngine(t, root, "#!/bin/sh\nsleep 30\n")
+	// Written directly (not via fakeEngine, which printf-wraps its payload).
+	hanging := filepath.Join(root, "hanging-needle")
+	if err := os.WriteFile(hanging, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	prev := toolsetCommandTimeout
 	SetCommandTimeout(200 * time.Millisecond)
