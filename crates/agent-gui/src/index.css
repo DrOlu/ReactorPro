@@ -3,7 +3,6 @@
 @import "../../agent-ui/src/styles/transcript.css";
 @import "../../agent-ui/src/styles/common.css";
 @import "./styles/facelift.css";
-@import "@fontsource-variable/inter";
 @config "../tailwind.config.js";
 @source "../../agent-ui/src";
 

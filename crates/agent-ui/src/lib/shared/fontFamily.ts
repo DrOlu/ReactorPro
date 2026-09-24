@@ -1,8 +1,8 @@
 export const DEFAULT_INTERFACE_FONT_FAMILY =
-  'ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
+  '"Gellix", ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
 export const DEFAULT_APP_FONT_FAMILY = DEFAULT_INTERFACE_FONT_FAMILY;
 export const DEFAULT_CHAT_FONT_FAMILY =
-  '"OpenAI Sans Semibold", "PingFang SC", "Microsoft YaHei", sans-serif';
+  '"Gellix", ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
 export const DEFAULT_CODE_FONT_FAMILY =
   '"SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono", monospace';
 
@@ -14,6 +14,7 @@ export const FONT_FAMILY_CUSTOM_SELECT_VALUE = "__custom__";
 
 // Curated families always offered even when queryLocalFonts is unavailable.
 export const COMMON_FONT_FAMILIES = [
+  "Gellix",
   "Inter",
   "SF Pro Text",
   "PingFang SC",
