@@ -1364,7 +1364,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           <span className="truncate">{draggedTitle}</span>
         </div>
       ) : null}
-      <div className="chat-history-sidebar-inner flex w-[272px] min-w-[272px] min-h-0 flex-1 flex-col">
+      <div className="chat-history-sidebar-inner flex w-full min-w-0 min-h-0 flex-1 flex-col">
         {headerTop}
         <div className="shrink-0 border-b border-border/50 px-2 pb-3 pt-3">
           <div className="flex items-center justify-between gap-2">
