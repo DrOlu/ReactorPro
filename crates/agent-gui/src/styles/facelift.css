@@ -26,17 +26,17 @@
     --card-foreground: 228 18% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 228 18% 11%;
-    --primary: 228 18% 12%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 235 16% 95%;
-    --secondary-foreground: 228 18% 12%;
+    --primary: 256 68% 54%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 255 24% 95%;
+    --secondary-foreground: 258 30% 30%;
     --muted: 235 16% 95%;
-    --muted-foreground: 230 10% 42%;
-    --accent: 235 16% 94%;
-    --accent-foreground: 228 18% 12%;
-    --border: 235 14% 90%;
-    --input: 235 14% 91%;
-    --ring: 228 12% 62%;
+    --muted-foreground: 232 12% 44%;
+    --accent: 255 40% 95%;
+    --accent-foreground: 258 40% 34%;
+    --border: 250 16% 89%;
+    --input: 250 16% 90%;
+    --ring: 256 60% 60%;
     --sidebar-bg: 235 18% 96%;
     --chip-bg: 233 14% 92%;
     --chip-bg-hover: 233 14% 87%;
@@ -51,17 +51,17 @@
     --card-foreground: 216 28% 94%;
     --popover: 228 22% 9.5%;
     --popover-foreground: 216 28% 94%;
-    --primary: 210 36% 96%;
-    --primary-foreground: 228 24% 8%;
-    --secondary: 226 16% 13.5%;
-    --secondary-foreground: 216 28% 94%;
+    --primary: 256 78% 68%;
+    --primary-foreground: 250 40% 10%;
+    --secondary: 255 20% 16%;
+    --secondary-foreground: 255 30% 92%;
     --muted: 226 16% 13.5%;
     --muted-foreground: 217 13% 66%;
-    --accent: 226 16% 14.5%;
-    --accent-foreground: 216 28% 94%;
+    --accent: 255 26% 18%;
+    --accent-foreground: 255 40% 92%;
     --border: 227 13% 17%;
     --input: 227 13% 19%;
-    --ring: 213 32% 72%;
+    --ring: 256 60% 66%;
     --sidebar-bg: 229 24% 7.5%;
     --hub-canvas: 229 26% 4.6%;
     --chip-bg: 226 14% 16%;
@@ -85,10 +85,10 @@
   }
 
   ::selection {
-    background: hsl(var(--primary) / 0.14);
+    background: hsl(var(--primary) / 0.22);
   }
   .dark ::selection {
-    background: hsl(213 60% 55% / 0.32);
+    background: hsl(var(--primary) / 0.38);
   }
 }
 
@@ -144,6 +144,17 @@
     border-radius: calc(var(--radius) - 2px);
   }
 
+  /* Primary actions carry the signature. */
+  .bg-primary:not(input):not(textarea) {
+    background-image: linear-gradient(to bottom, hsl(var(--primary) / 0.92), hsl(var(--primary)));
+  }
+  .dark .bg-primary:not(input):not(textarea) {
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.35),
+      0 2px 12px hsl(var(--primary) / 0.22);
+    background-image: none;
+  }
+
   /* Cards and popovers gain a whisper of depth in light mode; dark keeps the
      flat elevated look (shadows read as noise on dark canvases). */
   :root:not(.dark) .bg-card,
@@ -151,6 +162,16 @@
     box-shadow:
       0 1px 2px rgb(16 24 40 / 0.04),
       0 1px 3px rgb(16 24 40 / 0.03);
+  }
+
+  /* Chat identity: the user's own bubble carries the accent. */
+  :root {
+    --chat-user-bg: 256 45% 93%;
+    --chat-user-fg: 258 40% 22%;
+  }
+  .dark {
+    --chat-user-bg: 257 34% 26%;
+    --chat-user-fg: 255 50% 94%;
   }
 
   /* Monospace runs get the refreshed code face + a touch more air. */
