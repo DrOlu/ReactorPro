@@ -504,6 +504,11 @@ func (t *Toolset) runNeuralOSQuery(ctx context.Context, args map[string]any) (st
 		"--model", cact,
 		"--tools", filepath.Join(instanceDir, "needle_menu.json"),
 		"--prompt", question)
+	// The deadline must bound the TOOL, not just the direct child: when the
+	// ctx fires, WaitDelay closes the inherited pipes (and re-kills) so
+	// grandchildren holding them cannot stall runNeuralOSQuery past its
+	// deadline.
+	sel.WaitDelay = 2 * time.Second
 	var stderr bytes.Buffer
 	sel.Stderr = &stderr
 	selOut, err := sel.Output()
@@ -528,6 +533,7 @@ func (t *Toolset) runNeuralOSQuery(ctx context.Context, args map[string]any) (st
 	defer bridgeCancel()
 	bridge := exec.CommandContext(bridgeCtx, python, "-c", neuralOSBridgeSnippet, instanceDir, probe)
 	bridge.Stdin = strings.NewReader(probeArgs)
+	bridge.WaitDelay = 2 * time.Second
 	bridge.Env = append(os.Environ(), "NEEDLE_TELEMETRY=0", "DO_NOT_TRACK=1", "PYTHONIOENCODING=utf-8")
 	var berr bytes.Buffer
 	bridge.Stderr = &berr
