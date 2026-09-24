@@ -92,6 +92,7 @@ test("font family select helpers map default/custom sentinels and build options"
       '"Cascadia Code"',
       "Consolas",
       '"Fira Code"',
+      "Gellix",
       "Georgia",
       '"Helvetica Neue"',
       '"Hiragino Sans GB"',

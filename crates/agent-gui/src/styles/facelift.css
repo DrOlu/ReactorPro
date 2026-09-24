@@ -1,82 +1,161 @@
 /* ==========================================================================
-   ReactorPro visual refresh — "openship" direction.
-   Quieter surfaces, softer geometry, sharper type, one calm accent.
-   Token-level only: components keep their semantics, utilities still win.
-   Loaded last (see index.css import order) so it may refine base tokens.
+   ReactorPro x openship facelift (v1.6.5)
+   Ported from oblien/openship apps/dashboard:
+     - styles/fonts.css  → Gellix typeface (vendored woff2, /fonts/)
+     - styles/theme.css  → monochrome surface system, lifted borderless cards
+     - app/globals.css   → hidden scrollbars, border overrides, antialiasing
+   Identity: monochrome black/white surfaces, #f9f9f9 light page / #000 dark
+   page, cards lift by fill (never a resting border), mono primary buttons,
+   one loud gradient CTA in the sidebar.
+   Token values are HSL triplets ("H S% L%") matching ReactorPro's shadcn
+   bridge so hsl(var(--x) / a) utilities keep working everywhere.
    ========================================================================== */
+
+/* ── Gellix ───────────────────────────────────────────────────── */
+@font-face {
+  font-family: "Gellix";
+  src: url("/fonts/Gellix-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gellix";
+  src: url("/fonts/Gellix-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gellix";
+  src: url("/fonts/Gellix-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gellix";
+  src: url("/fonts/Gellix-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gellix";
+  src: url("/fonts/Gellix-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 @layer base {
   :root {
-    /* Typography — Inter Variable carries the UI; system fallbacks keep CJK
-       and legacy platforms intact. */
+    /* Typography — Gellix carries the UI (openship's face); system + CJK
+       fallbacks keep other scripts intact. */
     --app-font-family:
-      "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "SF Pro Text",
-      "PingFang SC", "Microsoft YaHei", sans-serif;
+      "Gellix", ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "PingFang SC",
+      "Microsoft YaHei", sans-serif;
+    --chat-font-family:
+      "Gellix", ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei",
+      sans-serif;
     --code-font-family:
-      "JetBrains Mono", "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", ui-monospace,
-      monospace;
+      "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", ui-monospace, monospace;
 
-    /* Softer, more contemporary geometry. */
+    /* openship radius: 0.75rem shadcn scale, cards at 1rem. */
     --radius: 0.75rem;
 
-    /* Light — warm paper, not clinical white. */
-    --background: 240 20% 99%;
-    --foreground: 228 18% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 228 18% 11%;
+    /* ── Light — grey page (#f9f9f9), white cards that need no border ── */
+    --background: 0 0% 97.6%; /* #f9f9f9 page, deliberately not white */
+    --foreground: 0 0% 10%; /* title-strength black */
+    --card: 0 0% 100%; /* white card lifts off the grey page */
+    --card-foreground: 0 0% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 228 18% 11%;
-    --primary: 256 68% 54%;
+    --popover-foreground: 0 0% 10%;
+    /* Primary is MONOCHROME: near-black fill, white text (openship .th-btn). */
+    --primary: 0 0% 9%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 255 24% 95%;
-    --secondary-foreground: 258 30% 30%;
-    --muted: 235 16% 95%;
-    --muted-foreground: 232 12% 44%;
-    --accent: 255 40% 95%;
-    --accent-foreground: 258 40% 34%;
-    --border: 250 16% 89%;
-    --input: 250 16% 90%;
-    --ring: 256 60% 60%;
-    --sidebar-bg: 235 18% 96%;
-    --chip-bg: 233 14% 92%;
-    --chip-bg-hover: 233 14% 87%;
-    --hub-canvas: 240 20% 98%;
+    --secondary: 0 0% 95%; /* sf-05 */
+    --secondary-foreground: 0 0% 18%;
+    --muted: 0 0% 96%; /* sf-04 */
+    --muted-foreground: 0 0% 45%; /* ~.52 black */
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 8%;
+    --destructive: 0 74% 48%;
+    --destructive-foreground: 0 0% 100%;
+    /* Borders exist only for inputs/dividers — never for resting cards. */
+    --border: 0 0% 91%; /* #e8e8e8 */
+    --input: 0 0% 88%; /* #e0e0e0 */
+    --ring: 0 0% 20%; /* on-20 */
+    --sidebar-bg: 0 0% 97.6%; /* sidebar shares the page plane */
+    --hub-canvas: 0 0% 97.6%;
+    --chip-bg: 0 0% 93%;
+    --chip-bg-hover: 0 0% 89%;
+    --send-disabled-bg: 0 0% 91%;
+
+    /* Chat surfaces — neutral, mono. */
+    --chat-user-bg: 0 0% 94.5%;
+    --chat-user-fg: 0 0% 10%;
+    --chat-assistant-bg: 0 0% 100%;
+    --chat-assistant-fg: 0 0% 10%;
+    --chat-tool-bg: 0 0% 100%;
+    --chat-tool-border: 0 0% 91%;
+    --chat-thinking-bg: 0 0% 97%;
+    --chat-thinking-border: 0 0% 92%;
+    --chat-success: 160 84% 32%;
+    --chat-error: 0 74% 46%;
+    --chat-running: 0 0% 30%;
   }
 
   .dark {
-    /* Dark — deep blue-black canvas; surfaces lift in small, even steps. */
-    --background: 228 24% 6%;
-    --foreground: 216 28% 94%;
-    --card: 229 22% 8.5%;
-    --card-foreground: 216 28% 94%;
-    --popover: 228 22% 9.5%;
-    --popover-foreground: 216 28% 94%;
-    --primary: 256 78% 68%;
-    --primary-foreground: 250 40% 10%;
-    --secondary: 255 20% 16%;
-    --secondary-foreground: 255 30% 92%;
-    --muted: 226 16% 13.5%;
-    --muted-foreground: 217 13% 66%;
-    --accent: 255 26% 18%;
-    --accent-foreground: 255 40% 92%;
-    --border: 227 13% 17%;
-    --input: 227 13% 19%;
-    --ring: 256 60% 66%;
-    --sidebar-bg: 229 24% 7.5%;
-    --hub-canvas: 229 26% 4.6%;
-    --chip-bg: 226 14% 16%;
-    --chip-bg-hover: 226 14% 21%;
-    --chat-thinking-bg: 226 16% 11%;
-    --chat-thinking-border: 226 13% 18%;
+    /* ── Dark — hard black page (#000), cards lift by +5% white ── */
+    --background: 0 0% 0%; /* #000000 */
+    --foreground: 0 0% 95%;
+    --card: 0 0% 5.1%; /* rgba(255,255,255,.05) on black = #0d0d0d */
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 8.6%; /* #161616 */
+    --popover-foreground: 0 0% 95%;
+    /* Primary is MONOCHROME: white fill, black text. */
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 13%;
+    --secondary-foreground: 0 0% 85%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 8%; /* rgba(255,255,255,.08) */
+    --input: 0 0% 10%;
+    --ring: 0 0% 20%; /* on-20 */
+    --sidebar-bg: 0 0% 0%;
+    --hub-canvas: 0 0% 0%;
+    --chip-bg: 0 0% 13%;
+    --chip-bg-hover: 0 0% 18%;
+    --send-disabled-bg: 0 0% 13%;
+
+    /* Chat surfaces — neutral, mono. */
+    --chat-user-bg: 0 0% 14%;
+    --chat-user-fg: 0 0% 96%;
+    --chat-assistant-bg: 0 0% 0%;
+    --chat-assistant-fg: 0 0% 95%;
+    --chat-tool-bg: 0 0% 6%;
+    --chat-tool-border: 0 0% 10%;
+    --chat-thinking-bg: 0 0% 6%;
+    --chat-thinking-border: 0 0% 10%;
+    --chat-success: 158 64% 52%;
+    --chat-error: 0 84% 65%;
+    --chat-running: 0 0% 70%;
   }
 
-  body {
+  html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  body {
     text-rendering: optimizeLegibility;
   }
 
-  /* Tighter display rhythm without touching every component. */
   h1,
   h2,
   h3,
@@ -84,101 +163,159 @@
     letter-spacing: -0.015em;
   }
 
+  /* openship keeps selection neutral — no accent tint. */
   ::selection {
-    background: hsl(var(--primary) / 0.22);
+    background: hsl(var(--foreground) / 0.85);
+    color: hsl(var(--background));
   }
   .dark ::selection {
-    background: hsl(var(--primary) / 0.38);
+    background: hsl(var(--foreground) / 0.85);
+    color: hsl(var(--background));
   }
 }
 
-/* Surface & control polish. Lives in the components layer so Tailwind
-   utilities used by any component still override these. */
-@layer components {
-  /* Slim, rounded scrollbars everywhere (WebKit + Firefox). */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: hsl(var(--foreground) / 0.18) transparent;
-  }
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: hsl(var(--foreground) / 0.14);
-    border-radius: 999px;
-    border: 2.5px solid transparent;
-    background-clip: content-box;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--foreground) / 0.26);
-    background-clip: content-box;
-  }
-  ::-webkit-scrollbar-corner {
-    background: transparent;
-  }
+/* ════════════════════════════════════════════════════════════════
+   Unlayered component rules — unlayered rules outrank Tailwind's
+   utilities layer (same trick openship uses in app/globals.css).
+   ════════════════════════════════════════════════════════════════ */
 
-  /* Controls ease between states instead of snapping. */
-  button:not(:disabled),
-  [role="button"]:not([aria-disabled="true"]),
-  a,
-  input,
-  select,
-  textarea,
-  [tabindex]:not([tabindex="-1"]) {
-    transition:
-      background-color 140ms ease,
-      border-color 140ms ease,
-      color 140ms ease,
-      box-shadow 140ms ease,
-      opacity 140ms ease;
-  }
+/* ── Scrollbars: openship hides them entirely ─────────────────── */
+* {
+  scrollbar-width: none;
+}
+::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 
-  /* One consistent, soft focus language. */
-  :where(button, a, input, select, textarea, [tabindex]):focus-visible {
-    outline: 2px solid hsl(var(--ring) / 0.55);
-    outline-offset: 2px;
-    border-radius: calc(var(--radius) - 2px);
-  }
+/* ── Borderless lifted cards ────────────────────────────────────
+   Cards separate from the page by fill contrast alone; a hairline
+   makes containers read as boxed-in. Only NEUTRAL border utilities
+   are silenced — colored/stateful borders (selected, destructive)
+   are never touched. */
+.bg-card.border-border\/50,
+.bg-card.border-border\/60 {
+  border-color: transparent;
+}
 
-  /* Primary actions carry the signature. */
-  .bg-primary:not(input):not(textarea) {
-    background-image: linear-gradient(to bottom, hsl(var(--primary) / 0.92), hsl(var(--primary)));
-  }
-  .dark .bg-primary:not(input):not(textarea) {
-    box-shadow:
-      0 0 0 1px hsl(var(--primary) / 0.35),
-      0 2px 12px hsl(var(--primary) / 0.22);
-    background-image: none;
-  }
+/* Exceptions: card-filled controls and single-edge separators keep
+   their border (matched by EXACT classes, openship-style). */
+input.bg-card,
+select.bg-card,
+textarea.bg-card,
+.bg-card.border-b,
+.bg-card.border-t,
+.bg-card.border-s,
+.bg-card.border-e,
+.bg-card.border-2 {
+  border-color: var(--color-border, hsl(var(--border)));
+}
 
-  /* Cards and popovers gain a whisper of depth in light mode; dark keeps the
-     flat elevated look (shadows read as noise on dark canvases). */
-  :root:not(.dark) .bg-card,
-  :root:not(.dark) [data-slot="card"] {
-    box-shadow:
-      0 1px 2px rgb(16 24 40 / 0.04),
-      0 1px 3px rgb(16 24 40 / 0.03);
-  }
+/* Nested card: recess to page level so the borderless language holds
+   (light's opaque white-on-white would vanish otherwise). */
+html:not(.dark) .bg-card .bg-card:not(input):not(select):not(textarea) {
+  background-color: hsl(var(--foreground) / 0.03);
+}
+html.dark .bg-card .bg-card:not(input):not(select):not(textarea) {
+  background-color: hsl(var(--foreground) / 0.03);
+}
 
-  /* Chat identity: the user's own bubble carries the accent. */
-  :root {
-    --chat-user-bg: 256 45% 93%;
-    --chat-user-fg: 258 40% 22%;
-  }
-  .dark {
-    --chat-user-bg: 257 34% 26%;
-    --chat-user-fg: 255 50% 94%;
-  }
+/* ── Primary actions: flat monochrome, openship .th-btn ───────── */
+.bg-primary:not(input):not(textarea) {
+  background-image: none;
+  box-shadow: none;
+}
+.bg-primary:not(input):not(textarea):hover:not(:disabled) {
+  background-color: hsl(var(--primary) / 0.85);
+}
+.dark .bg-primary:not(input):not(textarea):hover:not(:disabled) {
+  background-color: hsl(var(--primary) / 0.9);
+}
+.bg-primary:not(input):not(textarea):disabled {
+  opacity: 0.42;
+}
 
-  /* Monospace runs get the refreshed code face + a touch more air. */
-  code,
-  kbd,
-  samp,
-  pre {
-    font-family: var(--code-font-family);
-  }
+/* ── Dropdown/popover shadow ladder (openship .th-dropdown) ───── */
+:root:not(.dark) [role="menu"],
+:root:not(.dark) [role="listbox"],
+:root:not(.dark) [data-slot="popover-content"],
+:root:not(.dark) [data-slot="dropdown-menu-content"] {
+  box-shadow:
+    0 16px 40px rgb(0 0 0 / 0.1),
+    0 4px 8px rgb(0 0 0 / 0.06);
+}
+.dark [role="menu"],
+.dark [role="listbox"],
+.dark [data-slot="popover-content"],
+.dark [data-slot="dropdown-menu-content"] {
+  box-shadow:
+    0 20px 48px rgb(0 0 0 / 0.5),
+    0 4px 12px rgb(0 0 0 / 0.32);
+}
+
+/* ── Focus: one consistent soft ring ──────────────────────────── */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid hsl(var(--foreground) / 0.35);
+  outline-offset: 2px;
+}
+
+/* ── The one loud element: sidebar "New Conversation" CTA ───────
+   openship's gradient pill (sidebar.tsx): violet→blue in light,
+   amber→orange→rose in hard dark. */
+.chat-history-new-conversation-button {
+  background-image: linear-gradient(
+    to right,
+    hsl(258 90% 66% / 0.92),
+    hsl(240 84% 64% / 0.9),
+    hsl(217 91% 60% / 0.92)
+  );
+  color: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 6px hsl(258 90% 66% / 0.25);
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    filter 150ms ease;
+}
+.chat-history-new-conversation-button > * {
+  color: #fff;
+}
+.chat-history-new-conversation-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 2px 10px hsl(258 90% 66% / 0.35);
+  background-color: transparent;
+}
+.chat-history-new-conversation-button:disabled {
+  opacity: 0.42;
+}
+html.dark .chat-history-new-conversation-button {
+  background-image: linear-gradient(
+    to right,
+    hsl(45 96% 65% / 0.9),
+    hsl(25 95% 53% / 0.9),
+    hsl(350 89% 60% / 0.9)
+  );
+  box-shadow: 0 1px 6px hsl(25 95% 53% / 0.25);
+}
+html.dark .chat-history-new-conversation-button:hover:not(:disabled) {
+  box-shadow: 0 2px 10px hsl(25 95% 53% / 0.35);
+}
+
+/* ── Monospace runs keep the code face ────────────────────────── */
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--code-font-family);
+}
+
+/* ── Body plane: openship paints page → body, not just app root ─ */
+html body {
+  font-family: var(--app-font-family);
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+html {
+  background-color: hsl(var(--background));
 }
