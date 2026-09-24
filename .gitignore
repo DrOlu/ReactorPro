@@ -53,3 +53,7 @@ workspace.zip
 /.trellis
 /AGENTS.md
 /CLAUDE.md
+
+# The reactorpro npm CLI ships a bin/ script — do not ignore it.
+!npm/reactorpro/bin/
+!npm/reactorpro/bin/**
