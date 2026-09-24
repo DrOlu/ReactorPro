@@ -146,7 +146,10 @@ func DefaultConfig() Config {
 		Concurrency:    4,
 		ShellEnabled:   true,
 		FetchEnabled:   true,
-		CommandTimeout: 60 * time.Second,
+		// 3m: neuralOS engine selection is on-device model inference (~20s of
+		// CPU) and a loaded host can give a child well under half a core — 60s
+		// produced spurious SIGKILLs exactly when the machine was busiest.
+		CommandTimeout: 3 * time.Minute,
 		RequestTimeout: 120 * time.Second,
 		// The default budget never fires for the large-context models this
 		// worker is typically pointed at; for a small-window model it
