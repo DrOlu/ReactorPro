@@ -35,6 +35,8 @@ import {
 } from "./conversationWorkspaceMove";
 
 type ChatSidebarContainerProps = ChatHistorySidebarContainerSource & {
+  sidebarWidth?: number;
+  onSidebarWidthChange?: (width: number) => void;
   store: SidebarStore;
   approvalStore: ConversationApprovalStore;
   questionStore: ConversationQuestionStore;
@@ -291,6 +293,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       brand={<DesktopSidebarBrand />}
       hideCloseButton={hideDesktopSidebarCloseButton()}
       footerTrailing={<DesktopSidebarUpdate appUpdate={props.appUpdate} />}
+      width={props.sidebarWidth}
+      onWidthChange={props.onSidebarWidthChange}
     />
   );
 }

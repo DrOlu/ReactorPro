@@ -298,7 +298,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinToolCategory.intelligence": "Intelligence & Memory",
   "settings.builtinToolCategory.automation": "Automation",
   "settings.builtinToolCategory.connectivity": "Connectivity & Integrations",
-    "settings.builtinTool.neuralos_instances.name": "NeuralOS Instances",
+  "settings.builtinTool.neuralos_instances.name": "NeuralOS Instances",
   "settings.builtinTool.neuralos_instances.desc": "List installed neuralOS data instances",
   "settings.builtinTool.neuralos_instances.detail":
     "Enumerates the on-device instance fleet (databases, cloud accounts, platforms) available for queries.",
@@ -315,10 +315,11 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.neuralos_refresh_menu.detail":
     "Re-exports needle_menu.json from the instance's instance.py after probes were added or changed.",
   "settings.builtinTool.neuralos_generate.name": "NeuralOS Generate",
-  "settings.builtinTool.neuralos_generate.desc": "Create a new neuralOS instance from a data source",
+  "settings.builtinTool.neuralos_generate.desc":
+    "Create a new neuralOS instance from a data source",
   "settings.builtinTool.neuralos_generate.detail":
     "Profiles a DSN, file path, or URL and generates a pydantic model, query bridge and probe menu in one step.",
-"settings.builtinTool.read.name": "Read File",
+  "settings.builtinTool.read.name": "Read File",
   "settings.builtinTool.read.desc": "Read text content from files in the project",
   "settings.builtinTool.read.detail":
     "Reads file content line by line within the project directory, with optional offset and line count — ideal for inspecting code and configuration files. Read-only; never modifies anything.",

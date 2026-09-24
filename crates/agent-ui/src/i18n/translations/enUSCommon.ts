@@ -121,6 +121,7 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "tooltip.closeSidebar": "Close Sidebar",
   "tooltip.openSidebar": "Open Sidebar",
   "chat.newConversation": "New Conversation",
+  "chat.resizeSidebar": "Resize sidebar",
   "chat.pendingTitle": "New Chat",
   "chat.recentConversation": "Conversations",
   "chat.searchConversations": "Search conversations",

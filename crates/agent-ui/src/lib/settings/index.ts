@@ -1541,6 +1541,7 @@ export function normalizeCustomSettings(
     chatSidebar: {
       projectsCollapsed: chatSidebar.projectsCollapsed === true,
       recentCollapsed: chatSidebar.recentCollapsed === true,
+      width: normalizeIntegerInRange(chatSidebar.width, 220, 480, 272),
     },
     sidebarShortcuts: normalizeSidebarShortcuts(obj.sidebarShortcuts),
     chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
@@ -2116,6 +2117,17 @@ export function updateRightDockWidth(prev: AppSettings, width: number): AppSetti
   return updateCustomSettings(prev, {
     rightDock: {
       ...prev.customSettings.rightDock,
+      width: nextWidth,
+    },
+  });
+}
+
+export function updateChatSidebarWidth(prev: AppSettings, width: number): AppSettings {
+  const nextWidth = normalizeIntegerInRange(width, 220, 480, 272);
+  if (prev.customSettings.chatSidebar.width === nextWidth) return prev;
+  return updateCustomSettings(prev, {
+    chatSidebar: {
+      ...prev.customSettings.chatSidebar,
       width: nextWidth,
     },
   });

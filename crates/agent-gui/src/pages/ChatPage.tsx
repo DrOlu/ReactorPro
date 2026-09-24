@@ -785,6 +785,7 @@ export function ChatPage(props: ChatPageProps) {
     handleChatTranscriptWidthChange,
     handleRightDockWidthChange,
     handleRightDockProjectStateChange,
+    handleChatSidebarWidthChange,
     handleRightDockFileTreeStateChange,
     handleSshProjectHostIdsChange,
   } = useRightDockSettings({ settings, setSettings, terminalProjectPathKey });
@@ -3960,6 +3961,8 @@ export function ChatPage(props: ChatPageProps) {
       {workbenchDragGhost}
       {/* ---- Left column: navigation/sidebar ---- */}
       <ChatSidebarContainer
+        sidebarWidth={settings.customSettings.chatSidebar.width}
+        onSidebarWidthChange={handleChatSidebarWidthChange}
         pinnedOrder={settings.system.sidebarPinnedOrder}
         onReorderPinned={(sidebarPinnedOrder) =>
           setSettings((previous) => ({

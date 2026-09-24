@@ -86,7 +86,7 @@
     --border: 0 0% 91%; /* #e8e8e8 */
     --input: 0 0% 88%; /* #e0e0e0 */
     --ring: 0 0% 20%; /* on-20 */
-    --sidebar-bg: 0 0% 97.6%; /* sidebar shares the page plane */
+    --sidebar-bg: 0 0% 93.5%; /* #ededed rail, darker than the chat panel */
     --hub-canvas: 0 0% 97.6%;
     --chip-bg: 0 0% 93%;
     --chip-bg-hover: 0 0% 89%;
@@ -128,7 +128,7 @@
     --border: 0 0% 8%; /* rgba(255,255,255,.08) */
     --input: 0 0% 10%;
     --ring: 0 0% 20%; /* on-20 */
-    --sidebar-bg: 0 0% 0%;
+    --sidebar-bg: 0 0% 4%; /* lifted rail on the #000 chat plane */
     --hub-canvas: 0 0% 0%;
     --chip-bg: 0 0% 13%;
     --chip-bg-hover: 0 0% 18%;
@@ -308,6 +308,13 @@ kbd,
 samp,
 pre {
   font-family: var(--code-font-family);
+}
+
+/* ── Rails: side panels contrast with the chat panel ────────────
+   LiveAgent-style shaded rails: the left sidebar and the right
+   project-tools panel sit a full step off the chat background. */
+.project-tools-panel {
+  background-color: hsl(var(--sidebar-bg));
 }
 
 /* ── Body plane: openship paints page → body, not just app root ─ */

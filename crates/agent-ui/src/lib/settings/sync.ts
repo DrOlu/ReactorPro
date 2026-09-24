@@ -472,6 +472,7 @@ function syncableCustomSettings(
     chatSidebar: {
       projectsCollapsed: false,
       recentCollapsed: false,
+      width: 272,
     },
     // Typography, scale, and transcript width are local UI preferences; fixed
     // defaults prevent visual preferences from being broadcast through the gateway.
