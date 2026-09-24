@@ -86,7 +86,7 @@
     --border: 0 0% 91%; /* #e8e8e8 */
     --input: 0 0% 88%; /* #e0e0e0 */
     --ring: 0 0% 20%; /* on-20 */
-    --sidebar-bg: 0 0% 93.5%; /* #ededed rail, darker than the chat panel */
+    --sidebar-bg: 0 0% 91%; /* #e8e8e8 rail — a conspicuous step off the chat plane */
     --hub-canvas: 0 0% 97.6%;
     --chip-bg: 0 0% 93%;
     --chip-bg-hover: 0 0% 89%;
@@ -128,7 +128,7 @@
     --border: 0 0% 8%; /* rgba(255,255,255,.08) */
     --input: 0 0% 10%;
     --ring: 0 0% 20%; /* on-20 */
-    --sidebar-bg: 0 0% 4%; /* lifted rail on the #000 chat plane */
+    --sidebar-bg: 0 0% 7%; /* #121212 rail — a conspicuous step off the #000 chat plane */
     --hub-canvas: 0 0% 0%;
     --chip-bg: 0 0% 13%;
     --chip-bg-hover: 0 0% 18%;
@@ -258,6 +258,40 @@ html.dark .bg-card .bg-card:not(input):not(select):not(textarea) {
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid hsl(var(--foreground) / 0.35);
   outline-offset: 2px;
+}
+
+/* ── Sent user messages carry the CTA gradient ──────────────────
+   Same gradient family as the sidebar "New Conversation" pill, so
+   the user's own turns are instantly findable when scrolling back. */
+.chat-user-bubble {
+  border-color: transparent;
+  background-color: transparent;
+  background-image: linear-gradient(
+    135deg,
+    hsl(258 90% 66% / 0.94),
+    hsl(240 84% 64% / 0.92),
+    hsl(217 91% 60% / 0.94)
+  );
+  color: #fff;
+  box-shadow: 0 1px 6px hsl(258 90% 66% / 0.22);
+}
+.chat-user-bubble :where(a) {
+  color: #fff;
+  text-decoration-color: rgb(255 255 255 / 0.6);
+}
+html.dark .chat-user-bubble {
+  background-image: linear-gradient(
+    135deg,
+    hsl(38 92% 50% / 0.95),
+    hsl(25 95% 53% / 0.95),
+    hsl(350 89% 60% / 0.95)
+  );
+  color: #211304;
+  box-shadow: 0 1px 6px hsl(25 95% 53% / 0.28);
+}
+html.dark .chat-user-bubble :where(a) {
+  color: #211304;
+  text-decoration-color: rgb(33 19 4 / 0.55);
 }
 
 /* ── The one loud element: sidebar "New Conversation" CTA ───────
