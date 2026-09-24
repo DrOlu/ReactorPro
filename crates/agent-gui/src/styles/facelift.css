@@ -260,40 +260,50 @@ html.dark .bg-card .bg-card:not(input):not(select):not(textarea) {
   outline-offset: 2px;
 }
 
-/* ── Sent user messages carry a quiet CTA wash ──────────────────
-   Same gradient family as the sidebar CTA but heavily toned down:
-   a tint over the neutral bubble, normal text colors — noticeable
-   without shouting. */
+/* ── Sent user messages carry the brand-red gradient ────────────
+   Bold again (v1.6.7 prominence) but recoloured to rhyme with the
+   ReactorPro R logo (#ED220C family): deep red → bright red-orange,
+   white text, soft brand glow. Same in both themes; the dark stops
+   are lifted slightly so they don't vibrate on the black plane. */
 .chat-user-bubble {
   border-color: transparent;
-  background-color: hsl(var(--chat-user-bg));
+  background-color: transparent;
   background-image: linear-gradient(
     135deg,
-    hsl(258 70% 60% / 0.16),
-    hsl(240 70% 58% / 0.13),
-    hsl(217 80% 56% / 0.16)
+    hsl(4 85% 46% / 0.96),
+    hsl(8 88% 50% / 0.94),
+    hsl(16 90% 52% / 0.96)
   );
-  color: hsl(var(--chat-user-fg));
-  box-shadow: none;
+  color: #fff;
+  box-shadow: 0 1px 6px hsl(4 85% 48% / 0.28);
+}
+.chat-user-bubble :where(a) {
+  color: #fff;
+  text-decoration-color: rgb(255 255 255 / 0.6);
 }
 html.dark .chat-user-bubble {
-  background-color: hsl(0 0% 13%);
   background-image: linear-gradient(
     135deg,
-    hsl(38 80% 55% / 0.17),
-    hsl(25 80% 52% / 0.15),
-    hsl(350 80% 58% / 0.17)
+    hsl(4 90% 52% / 0.96),
+    hsl(9 92% 56% / 0.94),
+    hsl(16 94% 58% / 0.96)
   );
-  color: hsl(0 0% 92%);
-  box-shadow: none;
+  color: #fff;
+  box-shadow: 0 1px 8px hsl(4 88% 50% / 0.35);
+}
+html.dark .chat-user-bubble :where(a) {
+  color: #fff;
+  text-decoration-color: rgb(255 255 255 / 0.6);
 }
 
-/* ── The thread in focus: active sidebar rows get the wash ────── */
+/* ── The thread in focus: active sidebar rows carry the brand ─── */
 .chat-history-sidebar .chat-history-row-title-button[aria-current="page"] {
-  background-image: linear-gradient(135deg, hsl(258 70% 60% / 0.15), hsl(217 80% 56% / 0.12));
+  background-image: linear-gradient(135deg, hsl(4 85% 50% / 0.18), hsl(16 90% 54% / 0.12));
+  box-shadow: inset 2.5px 0 0 hsl(4 85% 48% / 0.85);
 }
 html.dark .chat-history-sidebar .chat-history-row-title-button[aria-current="page"] {
-  background-image: linear-gradient(135deg, hsl(38 80% 55% / 0.16), hsl(350 80% 58% / 0.14));
+  background-image: linear-gradient(135deg, hsl(4 90% 55% / 0.22), hsl(16 92% 58% / 0.15));
+  box-shadow: inset 2.5px 0 0 hsl(6 90% 56% / 0.9);
 }
 
 /* ── The one loud element: sidebar "New Conversation" CTA ───────
