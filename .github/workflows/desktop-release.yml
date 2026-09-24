@@ -219,7 +219,53 @@ jobs:
           if [ -n "${LIVEAGENT_TAURI_VERSION_CONFIG:-}" ]; then
             args+=(--config "${LIVEAGENT_TAURI_VERSION_CONFIG}")
           fi
-          pnpm --dir crates/agent-gui tauri build "${args[@]}" --target "${DESKTOP_MACOS_TARGET}"
+          # Skip Tauri's bundle_dmg.sh. create-dmg/hdiutil AppleScript is flaky on
+          # hosted Intel runners (macos-15-intel) and failed v1.6.7 after a successful
+          # compile. Build the .app only, then write the DMG with dmgbuild — the same
+          # deterministic builder used for signed releases.
+          pnpm --dir crates/agent-gui tauri build "${args[@]}" --target "${DESKTOP_MACOS_TARGET}" --bundles app
+          app_path="target/${DESKTOP_MACOS_TARGET}/release/bundle/macos/ReactorPro.app"
+          if [ ! -d "$app_path" ]; then
+            echo "macOS app not found: $app_path"
+            exit 1
+          fi
+          if ! command -v dmgbuild >/dev/null 2>&1; then
+            echo "dmgbuild is required. The 'Install deterministic DMG builder' step must succeed first."
+            exit 1
+          fi
+          case "${DESKTOP_MACOS_TARGET}" in
+            x86_64-apple-darwin) dmg_arch=x64 ;;
+            aarch64-apple-darwin) dmg_arch=aarch64 ;;
+            *) dmg_arch="${DESKTOP_MACOS_TARGET}" ;;
+          esac
+          dmg_dir="target/${DESKTOP_MACOS_TARGET}/release/bundle/dmg"
+          mkdir -p "$dmg_dir"
+          dmg_path="${dmg_dir}/ReactorPro_${LIVEAGENT_APP_VERSION}_${dmg_arch}.dmg"
+          attempt=1
+          max_attempts=3
+          while true; do
+            if dmgbuild \
+              -s scripts/release/macos-dmg-settings.py \
+              -D app="$app_path" \
+              -D background="crates/agent-gui/src-tauri/dmg/background.png" \
+              -D volume_icon="crates/agent-gui/src-tauri/icons/icon.icns" \
+              "ReactorPro" "$dmg_path"; then
+              break
+            fi
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "dmgbuild failed after ${max_attempts} attempts"
+              exit 1
+            fi
+            echo "dmgbuild failed (attempt ${attempt}/${max_attempts}); detaching leftover disks and retrying"
+            hdiutil info | awk '/^\/dev\/disk/ { print $1 }' | while read -r dev; do
+              hdiutil detach "$dev" -force >/dev/null 2>&1 || true
+            done
+            rm -f "$dmg_path"
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          test -f "$dmg_path"
+          echo "Unsigned macOS DMG is ready: $dmg_path"
 
       - name: Stage macOS artifact
         env:
