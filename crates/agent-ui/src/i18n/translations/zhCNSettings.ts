@@ -310,6 +310,14 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.neuralos_setup.desc": "Install the neuralOS bridge python environment",
   "settings.builtinTool.neuralos_setup.detail":
     "Creates the managed virtualenv and installs the libraries the instance bridges need (pymysql, boto3, requests, pydantic).",
+  "settings.builtinTool.neuralos_refresh_menu.name": "NeuralOS Refresh Menu",
+  "settings.builtinTool.neuralos_refresh_menu.desc": "Regenerate an instance's probe menu",
+  "settings.builtinTool.neuralos_refresh_menu.detail":
+    "Re-exports needle_menu.json from the instance's instance.py after probes were added or changed.",
+  "settings.builtinTool.neuralos_generate.name": "NeuralOS Generate",
+  "settings.builtinTool.neuralos_generate.desc": "Create a new neuralOS instance from a data source",
+  "settings.builtinTool.neuralos_generate.detail":
+    "Profiles a DSN, file path, or URL and generates a pydantic model, query bridge and probe menu in one step.",
   "settings.builtinTool.read.name": "Read file",
   "settings.builtinTool.read.desc": "Read the text content of files in the project",
   "settings.builtinTool.read.detail":

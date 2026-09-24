@@ -919,6 +919,8 @@ export function isBuiltinShareToolName(name: string) {
     "NeuralOsInstances",
     "NeuralOsQuery",
     "NeuralOsSetup",
+    "NeuralOsRefreshMenu",
+    "NeuralOsGenerate",
     "ProcessStop",
     "ProcessWait",
     "McpManager",
