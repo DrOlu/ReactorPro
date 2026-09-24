@@ -236,12 +236,6 @@ html.dark .bg-card .bg-card:not(input):not(select):not(textarea) {
   opacity: 0.42;
 }
 
-/* ── Overlays: dark scrim must lighten on a black page ────────── */
-.dark [role=dialog]::backdrop,
-.dark dialog::backdrop {
-  background: rgb(20 20 20 / 60%);
-}
-
 /* ── Dropdown/popover shadow ladder (openship .th-dropdown) ───── */
 :root:not(.dark) [role="menu"],
 :root:not(.dark) [role="listbox"],
