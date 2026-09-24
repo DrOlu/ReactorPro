@@ -577,7 +577,11 @@ func (t *Toolset) neuralOS_Python() string {
 // toolsetCommandTimeout bounds one shell command; Serve installs the
 // configured value once at start-up, keeping the tool function signature free
 // of configuration plumbing.
-var toolsetCommandTimeout = 60 * time.Second
+// toolsetCommandTimeout bounds one engine/bridge exec. On-device model
+// inference (needle selection) needs ~20s of CPU and under load a child may
+// only get half a core, so 60s produced spurious SIGKILLs ("signal: killed")
+// exactly when the machine was busiest. 3 minutes keeps the bound honest.
+var toolsetCommandTimeout = 3 * time.Minute
 
 // SetCommandTimeout installs the shell command budget.
 func SetCommandTimeout(timeout time.Duration) {
