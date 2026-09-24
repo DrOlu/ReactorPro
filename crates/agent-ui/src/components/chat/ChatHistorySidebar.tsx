@@ -40,6 +40,7 @@ import {
   updateSidebarSelection,
 } from "@liveagent/ui/lib/sidebar/selection";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   type CSSProperties,
   Fragment,
@@ -184,6 +185,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     renameDraft,
     isOpen,
     fontScale = 1,
+    width: widthProp,
+    onWidthChange,
     conversationSearchRequestKey,
     activeView = "chat",
     showProjects = false,
@@ -1279,6 +1282,51 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       </Fragment>
     );
   };
+  // ── Resizable rail (mirrors the right dock's width behavior) ──
+  const resolvedSidebarWidth = Math.min(480, Math.max(220, Math.round(widthProp ?? 272)));
+  const [sidebarDragWidth, setSidebarDragWidth] = useState<number | null>(null);
+  const sidebarResizeRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const sidebarIsResizing = sidebarDragWidth !== null;
+  const sidebarRailWidth = sidebarDragWidth ?? resolvedSidebarWidth;
+  const handleSidebarResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!onWidthChange || event.button !== 0) return;
+      event.preventDefault();
+      sidebarResizeRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startWidth: resolvedSidebarWidth,
+      };
+      setSidebarDragWidth(resolvedSidebarWidth);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [onWidthChange, resolvedSidebarWidth],
+  );
+  const handleSidebarResizeMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const state = sidebarResizeRef.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    const next = Math.min(480, Math.max(220, state.startWidth + (event.clientX - state.startX)));
+    setSidebarDragWidth(next);
+  }, []);
+  const handleSidebarResizeEnd = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const state = sidebarResizeRef.current;
+      if (!state || state.pointerId !== event.pointerId) return;
+      sidebarResizeRef.current = null;
+      const finalWidth = Math.min(
+        480,
+        Math.max(220, state.startWidth + (event.clientX - state.startX)),
+      );
+      setSidebarDragWidth(null);
+      onWidthChange?.(finalWidth);
+    },
+    [onWidthChange],
+  );
+
   return (
     <aside
       aria-hidden={!isOpen}
@@ -1286,10 +1334,16 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       data-app-frame-column="sidebar"
       data-state={isOpen ? "open" : "closed"}
       className={cn(
-        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out",
-        isOpen ? "w-[272px] opacity-100" : "w-0 opacity-0",
+        "chat-history-sidebar relative zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] duration-200 ease-out",
+        sidebarIsResizing ? "transition-[opacity]" : "transition-[width,opacity]",
+        isOpen ? "opacity-100" : "w-0 opacity-0",
       )}
-      style={{ "--zone-font-scale": fontScale } as CSSProperties}
+      style={
+        {
+          "--zone-font-scale": fontScale,
+          ...(isOpen ? { width: `${sidebarRailWidth}px` } : {}),
+        } as CSSProperties
+      }
     >
       {reorder.draggingKey && draggedTitle ? (
         <div
@@ -1958,6 +2012,22 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         currentWorkdir={currentConversationWorkdir}
         onSelectConversation={handleSelectConversation}
       />
+      {isOpen && onWidthChange ? (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("chat.resizeSidebar")}
+          title={t("chat.resizeSidebar")}
+          data-sidebar-resize-handle
+          onPointerDown={handleSidebarResizeStart}
+          onPointerMove={handleSidebarResizeMove}
+          onPointerUp={handleSidebarResizeEnd}
+          onPointerCancel={handleSidebarResizeEnd}
+          className="group absolute inset-y-0 right-0 z-10 hidden w-2 cursor-col-resize touch-none select-none items-center justify-center md:flex"
+        >
+          <span className="h-10 w-0.5 rounded-full bg-foreground/0 transition-colors group-hover:bg-foreground/25" />
+        </div>
+      ) : null}
     </aside>
   );
 });

@@ -1099,6 +1099,7 @@ test("gateway settings sync payload redacts provider api keys", () => {
   assert.deepEqual(payload.customSettings.chatSidebar, {
     projectsCollapsed: false,
     recentCollapsed: false,
+    width: 272,
   });
   assert.deepEqual(payload.customSettings.rightDock, {
     width: 612,

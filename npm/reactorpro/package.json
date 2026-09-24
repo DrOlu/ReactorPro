@@ -1,0 +1,35 @@
+{
+  "name": "reactorpro",
+  "version": "1.6.6",
+  "description": "ReactorPro CLI — installer for the ReactorPro gateway and headless agent (agentd) binaries.",
+  "license": "MIT",
+  "author": "Hyperspace Technologies <agent@reactorpro.ng>",
+  "homepage": "https://reactorpro.ng",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DrOlu/ReactorPro.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DrOlu/ReactorPro/issues"
+  },
+  "keywords": [
+    "reactorpro",
+    "liveagent",
+    "ai-agent",
+    "gateway",
+    "agent",
+    "automation"
+  ],
+  "type": "module",
+  "bin": {
+    "reactorpro": "bin/reactorpro.mjs"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

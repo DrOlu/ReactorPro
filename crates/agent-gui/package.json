@@ -1,7 +1,7 @@
 {
   "name": "liveagent",
   "private": true,
-  "version": "1.6.5",
+  "version": "1.6.6",
   "description": "ReactorPro desktop application by Hyperspace Technologies.",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "license": "MIT",

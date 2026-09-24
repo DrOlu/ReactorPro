@@ -83,6 +83,8 @@ export type MemorySettings = {
 export type ChatSidebarSettings = {
   projectsCollapsed: boolean;
   recentCollapsed: boolean;
+  // Left sidebar rail width in px (resizable). Clamped on normalize.
+  width: number;
 };
 
 export const RIGHT_DOCK_TOOL_KINDS = ["fileTree", "gitReview", "tunnel", "sshTunnel"] as const;

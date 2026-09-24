@@ -64,6 +64,9 @@ export type ChatHistorySidebarProps = {
   renameDraft: string;
   isOpen: boolean;
   fontScale?: number;
+  // Resizable rail width in px. Unset keeps the built-in 272px column.
+  width?: number;
+  onWidthChange?: (width: number) => void;
   /** Incremented by the desktop host when its configured search shortcut fires. */
   conversationSearchRequestKey?: number;
   activeView?: ApplicationViewId;

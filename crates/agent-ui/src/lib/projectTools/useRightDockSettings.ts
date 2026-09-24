@@ -6,6 +6,7 @@ import {
   isRightDockSingletonTabOpen,
   type RightDockFileTreeStatePatch,
   type RightDockProjectState,
+  updateChatSidebarWidth,
   updateChatTranscriptWidth,
   updateRightDockFileTreeState,
   updateRightDockProjectState,
@@ -53,6 +54,12 @@ export function useRightDockSettings(params: UseRightDockSettingsParams) {
     },
     [setSettings],
   );
+  const handleChatSidebarWidthChange = useCallback(
+    (nextWidth: number) => {
+      setSettings((previousSettings) => updateChatSidebarWidth(previousSettings, nextWidth));
+    },
+    [setSettings],
+  );
   const handleRightDockProjectStateChange = useCallback(
     (updater: (current: RightDockProjectState) => RightDockProjectState) => {
       setSettings((previousSettings) =>
@@ -83,6 +90,7 @@ export function useRightDockSettings(params: UseRightDockSettingsParams) {
     rightDockFileTreeState,
     rightDockFileTreeOpen,
     associatedSshHostIds,
+    handleChatSidebarWidthChange,
     handleChatTranscriptWidthChange,
     handleRightDockWidthChange,
     handleRightDockProjectStateChange,

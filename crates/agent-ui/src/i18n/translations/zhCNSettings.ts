@@ -315,7 +315,8 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.neuralos_refresh_menu.detail":
     "Re-exports needle_menu.json from the instance's instance.py after probes were added or changed.",
   "settings.builtinTool.neuralos_generate.name": "NeuralOS Generate",
-  "settings.builtinTool.neuralos_generate.desc": "Create a new neuralOS instance from a data source",
+  "settings.builtinTool.neuralos_generate.desc":
+    "Create a new neuralOS instance from a data source",
   "settings.builtinTool.neuralos_generate.detail":
     "Profiles a DSN, file path, or URL and generates a pydantic model, query bridge and probe menu in one step.",
   "settings.builtinTool.read.name": "Read file",

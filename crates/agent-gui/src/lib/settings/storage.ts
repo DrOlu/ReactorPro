@@ -109,6 +109,12 @@ function readLocalUiSettings(): {
 } {
   const defaults = getDefaultSettings();
 
+  function clampSidebarWidth(input: unknown): number {
+    const raw = Number(input);
+    if (!Number.isFinite(raw)) return 272;
+    return Math.min(480, Math.max(220, Math.round(raw)));
+  }
+
   function normalizeLocalCustomSettings(input: unknown): AppSettings["customSettings"] {
     const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
     const chatSidebar = (
@@ -125,6 +131,7 @@ function readLocalUiSettings(): {
       chatSidebar: {
         projectsCollapsed: chatSidebar.projectsCollapsed === true,
         recentCollapsed: chatSidebar.recentCollapsed === true,
+        width: clampSidebarWidth(chatSidebar.width),
       },
       sidebarShortcuts: normalizeSidebarShortcuts(obj.sidebarShortcuts),
       chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
