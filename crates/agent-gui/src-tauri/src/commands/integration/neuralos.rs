@@ -80,6 +80,15 @@ fn scan_instances(dir: &Path) -> Vec<InstanceInfo> {
         if !path.is_dir() {
             continue;
         }
+        // Hidden folders (editor/OS droppings like .ipynb_checkpoints) are
+        // never instances.
+        if path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with('.'))
+        {
+            continue;
+        }
         let menu = path.join("needle_menu.json");
         if !menu.exists() {
             continue;
@@ -410,6 +419,9 @@ pub async fn neuralos_run_probe(
                 instances_dir.display()
             ));
         }
+        if question.trim().is_empty() {
+            return Err("question must not be empty".into());
+        }
         let (engine, cact) = resolve_engine_pair(&app)?;
         let app_data = app.path().app_data_dir().unwrap_or_default();
         let python = first_existing(&resolve_python_candidates(&app_data))
@@ -595,6 +607,15 @@ fn resolve_toolkit_file(app: &tauri::AppHandle, rel: &str) -> Option<PathBuf> {
     first_existing(&candidates)
 }
 
+fn chrono_now_suffix() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("{secs:x}")
+}
+
 fn sanitize_instance_name(name: &str) -> Result<String, String> {
     let trimmed = name.trim().to_ascii_lowercase();
     if trimmed.len() < 2
@@ -646,7 +667,26 @@ pub async fn neuralos_refresh_menu(
             .env("PYTHONPATH", &instance_dir)
             .env("NEEDLE_TELEMETRY", "0")
             .env("DO_NOT_TRACK", "1");
+        let menu_modified = {
+            let meta = std::fs::metadata(instance_dir.join("needle_menu.json"))
+                .map_err(|e| format!("instance has no needle_menu.json to refresh: {e}"))?;
+            meta.modified().ok()
+        };
         run_captured(cmd, None, Duration::from_secs(120), "menu export")?;
+
+        // A silent no-op export (script succeeded, nothing written) is
+        // reported honestly instead of pretending the menu is fresh.
+        if let (Some(before), Ok(after)) = (
+            menu_modified,
+            std::fs::metadata(instance_dir.join("needle_menu.json"))
+                .and_then(|m| m.modified()),
+        ) {
+            if after == before {
+                return Err(
+                    "menu export completed but needle_menu.json was not rewritten".into(),
+                );
+            }
+        }
 
         let menu = std::fs::read_to_string(instance_dir.join("needle_menu.json"))
             .map_err(|e| e.to_string())?;
@@ -690,6 +730,10 @@ pub async fn neuralos_generate_instance(
                 dest.display()
             ));
         }
+        // Generate into a staging directory and move into the fleet only on
+        // success: a failed pipeline must not leave a half-built instance
+        // that blocks the name on retry.
+        let staging = instances_dir.join(format!(".staging-{name}-{}", std::process::id()));
         let generator = |rel: &str| -> Result<PathBuf, String> {
             resolve_toolkit_file(&app, &format!("generator/{rel}"))
                 .ok_or_else(|| format!("generator script {rel} not found in bundled resources"))
@@ -736,27 +780,40 @@ pub async fn neuralos_generate_instance(
             .arg(&gen_instance_py)
             .arg("--profile").arg(work.join("profile.json"))
             .arg("--models").arg(work.join("models.py"))
-            .arg("--out").arg(&dest)
+            .arg("--out").arg(&staging)
             .arg("--db-dsn").arg(&source)
             .arg("--runtime").arg("python")
             .env("NEEDLE_TELEMETRY", "0")
             .env("DO_NOT_TRACK", "1");
         run_captured(env_instance, None, Duration::from_secs(300), "instance generation")?;
 
-        let menu_path = dest.join("needle_menu.json");
+        let menu_path = staging.join("needle_menu.json");
         let probes = std::fs::read_to_string(&menu_path)
             .ok()
             .and_then(|m| serde_json::from_str::<serde_json::Value>(&m).ok())
             .and_then(|v| v.as_array().map(|a| a.len()))
             .unwrap_or(0);
+
         let _ = std::fs::remove_dir_all(&work);
 
         if probes == 0 {
-            return Err(format!(
-                "instance generated at {} but the menu has 0 probes — check the source tables",
-                dest.display()
-            ));
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(
+                "generated instance has 0 probes — check the source tables".into(),
+            );
         }
+        // Promote staging -> fleet. If the destination appeared meanwhile,
+        // keep ours under a suffixed name rather than clobbering.
+        let final_dest = if dest.exists() {
+            instances_dir.join(format!("{name}-{}", chrono_now_suffix()))
+        } else {
+            dest.clone()
+        };
+        if let Err(e) = std::fs::rename(&staging, &final_dest) {
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(format!("failed to promote staged instance: {e}"));
+        }
+        let dest = final_dest;
         Ok(serde_json::json!({
             "instance": name,
             "path": dest.to_string_lossy(),
