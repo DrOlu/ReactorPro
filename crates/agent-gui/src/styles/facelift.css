@@ -237,7 +237,7 @@ html.dark .bg-card .bg-card:not(input):not(select):not(textarea) {
 }
 
 /* ── Overlays: dark scrim must lighten on a black page ────────── */
-.dark [role="dialog"]::backdrop,
+.dark [role=dialog]::backdrop,
 .dark dialog::backdrop {
   background: rgb(20 20 20 / 60%);
 }
