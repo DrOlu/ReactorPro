@@ -172,8 +172,16 @@ export function createNeuralosTools(params: {
             confidence: number;
             result: unknown;
           }>("neuralos_run_probe", { instance, question });
-          const rendered = JSON.stringify(digest.result, null, 1);
           const header = `probe=${digest.probe} (selected with confidence ${digest.confidence.toFixed(2)})`;
+          let rendered = JSON.stringify(digest.result, null, 1);
+          // A multi-kilobyte digest makes small downstream consumers lose the
+          // thread — cap honestly with a truncation marker.
+          const DIGEST_CAP = 12_000;
+          if (rendered.length > DIGEST_CAP) {
+            rendered =
+              rendered.slice(0, DIGEST_CAP) +
+              "\n…[truncated: digest exceeded 12,000 characters; narrow the question for a smaller result]";
+          }
           return toolResult(toolCall, `${header}\n${rendered}`, false);
         }
         case "NeuralOsRefreshMenu": {

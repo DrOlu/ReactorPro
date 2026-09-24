@@ -1,0 +1,163 @@
+/* ==========================================================================
+   ReactorPro visual refresh — "openship" direction.
+   Quieter surfaces, softer geometry, sharper type, one calm accent.
+   Token-level only: components keep their semantics, utilities still win.
+   Loaded last (see index.css import order) so it may refine base tokens.
+   ========================================================================== */
+
+@layer base {
+  :root {
+    /* Typography — Inter Variable carries the UI; system fallbacks keep CJK
+       and legacy platforms intact. */
+    --app-font-family:
+      "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "SF Pro Text",
+      "PingFang SC", "Microsoft YaHei", sans-serif;
+    --code-font-family:
+      "JetBrains Mono", "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", ui-monospace,
+      monospace;
+
+    /* Softer, more contemporary geometry. */
+    --radius: 0.75rem;
+
+    /* Light — warm paper, not clinical white. */
+    --background: 240 20% 99%;
+    --foreground: 228 18% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 228 18% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 228 18% 11%;
+    --primary: 228 18% 12%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 235 16% 95%;
+    --secondary-foreground: 228 18% 12%;
+    --muted: 235 16% 95%;
+    --muted-foreground: 230 10% 42%;
+    --accent: 235 16% 94%;
+    --accent-foreground: 228 18% 12%;
+    --border: 235 14% 90%;
+    --input: 235 14% 91%;
+    --ring: 228 12% 62%;
+    --sidebar-bg: 235 18% 96%;
+    --chip-bg: 233 14% 92%;
+    --chip-bg-hover: 233 14% 87%;
+    --hub-canvas: 240 20% 98%;
+  }
+
+  .dark {
+    /* Dark — deep blue-black canvas; surfaces lift in small, even steps. */
+    --background: 228 24% 6%;
+    --foreground: 216 28% 94%;
+    --card: 229 22% 8.5%;
+    --card-foreground: 216 28% 94%;
+    --popover: 228 22% 9.5%;
+    --popover-foreground: 216 28% 94%;
+    --primary: 210 36% 96%;
+    --primary-foreground: 228 24% 8%;
+    --secondary: 226 16% 13.5%;
+    --secondary-foreground: 216 28% 94%;
+    --muted: 226 16% 13.5%;
+    --muted-foreground: 217 13% 66%;
+    --accent: 226 16% 14.5%;
+    --accent-foreground: 216 28% 94%;
+    --border: 227 13% 17%;
+    --input: 227 13% 19%;
+    --ring: 213 32% 72%;
+    --sidebar-bg: 229 24% 7.5%;
+    --hub-canvas: 229 26% 4.6%;
+    --chip-bg: 226 14% 16%;
+    --chip-bg-hover: 226 14% 21%;
+    --chat-thinking-bg: 226 16% 11%;
+    --chat-thinking-border: 226 13% 18%;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Tighter display rhythm without touching every component. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.015em;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.14);
+  }
+  .dark ::selection {
+    background: hsl(213 60% 55% / 0.32);
+  }
+}
+
+/* Surface & control polish. Lives in the components layer so Tailwind
+   utilities used by any component still override these. */
+@layer components {
+  /* Slim, rounded scrollbars everywhere (WebKit + Firefox). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--foreground) / 0.18) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--foreground) / 0.14);
+    border-radius: 999px;
+    border: 2.5px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--foreground) / 0.26);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Controls ease between states instead of snapping. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a,
+  input,
+  select,
+  textarea,
+  [tabindex]:not([tabindex="-1"]) {
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      box-shadow 140ms ease,
+      opacity 140ms ease;
+  }
+
+  /* One consistent, soft focus language. */
+  :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid hsl(var(--ring) / 0.55);
+    outline-offset: 2px;
+    border-radius: calc(var(--radius) - 2px);
+  }
+
+  /* Cards and popovers gain a whisper of depth in light mode; dark keeps the
+     flat elevated look (shadows read as noise on dark canvases). */
+  :root:not(.dark) .bg-card,
+  :root:not(.dark) [data-slot="card"] {
+    box-shadow:
+      0 1px 2px rgb(16 24 40 / 0.04),
+      0 1px 3px rgb(16 24 40 / 0.03);
+  }
+
+  /* Monospace runs get the refreshed code face + a touch more air. */
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--code-font-family);
+  }
+}

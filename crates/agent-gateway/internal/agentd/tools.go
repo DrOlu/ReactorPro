@@ -448,17 +448,9 @@ func (t *Toolset) runNeuralOSInstances(_ context.Context, _ map[string]any) (str
 		if err != nil {
 			continue
 		}
-		var parsed struct {
-			Probes int `json:"probes"`
-		}
-		_ = json.Unmarshal(menu, &parsed)
-		if arr := json.RawMessage(menu); len(arr) > 0 {
-			var list []json.RawMessage
-			if json.Unmarshal(arr, &list) == nil {
-				parsed.Probes = len(list)
-			}
-		}
-		lines = append(lines, fmt.Sprintf("%s\t%d probes", entry.Name(), parsed.Probes))
+		var list []json.RawMessage
+		_ = json.Unmarshal(menu, &list)
+		lines = append(lines, fmt.Sprintf("%s\t%d probes", entry.Name(), len(list)))
 	}
 	if len(lines) == 0 {
 		return "(no neuralOS instances installed)", nil
@@ -549,6 +541,12 @@ func (t *Toolset) runNeuralOSQuery(ctx context.Context, args map[string]any) (st
 func (t *Toolset) neuralOS_Engine() string {
 	if t.neuralos.Engine != "" {
 		return t.neuralos.Engine
+	}
+	// Windows binaries carry .exe; LookPath does not infer it for us.
+	if runtime.GOOS == "windows" {
+		if path, err := exec.LookPath("needle.exe"); err == nil {
+			return path
+		}
 	}
 	if path, err := exec.LookPath("needle"); err == nil {
 		return path
