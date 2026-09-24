@@ -310,6 +310,14 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.builtinTool.neuralos_setup.desc": "安装 neuralOS bridge 的 Python 环境",
   "settings.builtinTool.neuralos_setup.detail":
     "创建托管虚拟环境并安装实例 bridge 所需的库（pymysql、boto3、requests、pydantic）。",
+  "settings.builtinTool.neuralos_refresh_menu.name": "neuralOS 菜单刷新",
+  "settings.builtinTool.neuralos_refresh_menu.desc": "重新生成实例的探针菜单",
+  "settings.builtinTool.neuralos_refresh_menu.detail":
+    "探针变更后，从实例的 instance.py 重新导出 needle_menu.json。",
+  "settings.builtinTool.neuralos_generate.name": "neuralOS 实例生成",
+  "settings.builtinTool.neuralos_generate.desc": "从数据源创建新的 neuralOS 实例",
+  "settings.builtinTool.neuralos_generate.detail":
+    "对 DSN、文件路径或 URL 进行画像，一步生成 pydantic 模型、查询 bridge 和探针菜单。",
   "settings.builtinTool.read.name": "Read file",
   "settings.builtinTool.read.desc": "Read the text content of files in the project",
   "settings.builtinTool.read.detail":

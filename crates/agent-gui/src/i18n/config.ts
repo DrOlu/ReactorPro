@@ -122,9 +122,51 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.globalShortcuts": "Keyboard Shortcuts",
     "settings.navShortcuts": "Shortcuts",
     "settings.navBackup": "Backup & Sync",
+    "settings.navNeuralOs": "neuralOS",
     "settings.backupLocalTitle": "Local backup",
     "settings.backupExport": "Export config",
     "settings.backupExportHint": "Save as a single JSON file",
+    "settings.neuralOsTitle": "neuralOS",
+    "settings.neuralOsDesc":
+      "On-device data instances: the bundled needle engine picks a probe, each instance's bridge executes it. No external tooling required.",
+    "settings.neuralOsRuntime": "Runtime",
+    "settings.neuralOsSetupEnv": "Set up bridge environment",
+    "settings.neuralOsSettingUp": "Setting up…",
+    "settings.neuralOsFleet": "Instances",
+    "settings.neuralOsNoInstances": "No instances installed yet.",
+    "settings.neuralOsInstallTitle": "Install instance",
+    "settings.neuralOsInstallPlaceholder":
+      "Path to an instance folder (needs needle_menu.json + bridge.py + instance.py)",
+    "settings.neuralOsInstall": "Install",
+    "settings.neuralOsGenerateTitle": "Generate instance from a data source",
+    "settings.neuralOsGenerateHint":
+      "Profiles the source, generates a pydantic model, a query bridge and a probe menu. The source string (typically a DSN) is stored only in the generated instance on this machine.",
+    "settings.neuralOsGenerateNamePlaceholder": "Instance name (2-40 chars: a-z, 0-9, - , _)",
+    "settings.neuralOsGenerateSourcePlaceholder":
+      "Source: mysql://user:pass@host/db — or a file path / https URL",
+    "settings.neuralOsGenerate": "Generate",
+    "settings.neuralOsGenerating": "Generating…",
+
+    "settings.neuralOsTitle": "neuralOS",
+    "settings.neuralOsDesc":
+      "On-device data instances: the bundled needle engine picks a probe, each instance's bridge executes it. No external tooling required.",
+    "settings.neuralOsRuntime": "Runtime",
+    "settings.neuralOsSetupEnv": "Set up bridge environment",
+    "settings.neuralOsSettingUp": "Setting up…",
+    "settings.neuralOsFleet": "Instances",
+    "settings.neuralOsNoInstances": "No instances installed yet.",
+    "settings.neuralOsInstallTitle": "Install instance",
+    "settings.neuralOsInstallPlaceholder":
+      "Path to an instance folder (needs needle_menu.json + bridge.py + instance.py)",
+    "settings.neuralOsInstall": "Install",
+    "settings.neuralOsGenerateTitle": "Generate instance from a data source",
+    "settings.neuralOsGenerateHint":
+      "Profiles the source, generates a pydantic model, a query bridge and a probe menu. The source string (typically a DSN) is stored only in the generated instance on this machine.",
+    "settings.neuralOsGenerateNamePlaceholder": "Instance name (2-40 chars: a-z, 0-9, - , _)",
+    "settings.neuralOsGenerateSourcePlaceholder":
+      "Source: mysql://user:pass@host/db — or a file path / https URL",
+    "settings.neuralOsGenerate": "Generate",
+    "settings.neuralOsGenerating": "Generating…",
     "settings.backupImport": "Import config",
     "settings.backupImportHint": "Restore from a backup file",
     "settings.backupExportDone": "Exported to: ",
@@ -414,9 +456,31 @@ export const GUI_TRANSLATION_OVERRIDES: Record<Locale, Record<string, string>> =
     "settings.globalShortcuts": "Keyboard Shortcuts",
     "settings.navShortcuts": "Shortcuts",
     "settings.navBackup": "Backup & Sync",
+    "settings.navNeuralOs": "neuralOS",
     "settings.backupLocalTitle": "Local backup",
     "settings.backupExport": "Export config",
     "settings.backupExportHint": "Save as a single JSON file",
+    "settings.neuralOsTitle": "neuralOS",
+    "settings.neuralOsDesc":
+      "On-device data instances: the bundled needle engine picks a probe, each instance's bridge executes it. No external tooling required.",
+    "settings.neuralOsRuntime": "Runtime",
+    "settings.neuralOsSetupEnv": "Set up bridge environment",
+    "settings.neuralOsSettingUp": "Setting up…",
+    "settings.neuralOsFleet": "Instances",
+    "settings.neuralOsNoInstances": "No instances installed yet.",
+    "settings.neuralOsInstallTitle": "Install instance",
+    "settings.neuralOsInstallPlaceholder":
+      "Path to an instance folder (needs needle_menu.json + bridge.py + instance.py)",
+    "settings.neuralOsInstall": "Install",
+    "settings.neuralOsGenerateTitle": "Generate instance from a data source",
+    "settings.neuralOsGenerateHint":
+      "Profiles the source, generates a pydantic model, a query bridge and a probe menu. The source string (typically a DSN) is stored only in the generated instance on this machine.",
+    "settings.neuralOsGenerateNamePlaceholder": "Instance name (2-40 chars: a-z, 0-9, - , _)",
+    "settings.neuralOsGenerateSourcePlaceholder":
+      "Source: mysql://user:pass@host/db — or a file path / https URL",
+    "settings.neuralOsGenerate": "Generate",
+    "settings.neuralOsGenerating": "Generating…",
+
     "settings.backupImport": "Import config",
     "settings.backupImportHint": "Restore from a backup file",
     "settings.backupExportDone": "Exported to: ",

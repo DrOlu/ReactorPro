@@ -1,9 +1,10 @@
-import { Archive, Info, Keyboard } from "@liveagent/ui/components/IconSet";
+import { Archive, Info, Keyboard, Server } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
 import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSpacer";
 import { AboutSection } from "../pages/settings/AboutSection";
 import { BackupSyncSection } from "../pages/settings/BackupSyncSection";
 import { GlobalShortcutsSection } from "../pages/settings/GlobalShortcutsSection";
+import { NeuralOsSection } from "../pages/settings/NeuralOsSection";
 import type { SettingsPageProps } from "../pages/settings/types";
 
 export function createSettingsExtension(props: SettingsPageProps): {
@@ -23,6 +24,15 @@ export function createSettingsExtension(props: SettingsPageProps): {
       mainLeading: <MacOsTitleBarSpacer />,
     },
     sections: [
+      {
+        id: "neuralos",
+        groupKey: "settings.groupOther",
+        groupOrder: 50,
+        order: 12,
+        labelKey: "settings.navNeuralOs",
+        icon: <Server className="h-3.5 w-3.5" />,
+        render: () => <NeuralOsSection />,
+      },
       {
         id: "shortcuts",
         groupKey: "settings.groupOther",

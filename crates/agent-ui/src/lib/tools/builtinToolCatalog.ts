@@ -354,4 +354,20 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     isReadOnly: false,
     runtimeScopes: CHAT_ONLY,
   },
+  {
+    id: "neuralos_refresh_menu",
+    toolName: "NeuralOsRefreshMenu",
+    icon: "wrench",
+    categoryId: "connectivity",
+    isReadOnly: false,
+    runtimeScopes: CHAT_ONLY,
+  },
+  {
+    id: "neuralos_generate",
+    toolName: "NeuralOsGenerate",
+    icon: "server",
+    categoryId: "connectivity",
+    isReadOnly: false,
+    runtimeScopes: CHAT_ONLY,
+  },
 ];

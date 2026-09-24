@@ -547,7 +547,7 @@ pub async fn neuralos_setup_environment(app: tauri::AppHandle) -> Result<SetupRe
         // The union of the shipped fleet's bridge dependencies. Kept
         // deliberate and small; instances with exotic needs document them in
         // their own READMEs and can be installed into this venv by hand.
-        const BRIDGE_DEPS: &[&str] = &["pymysql", "boto3", "requests"];
+        const BRIDGE_DEPS: &[&str] = &["pymysql", "boto3", "requests", "pydantic"];
 
         let mut pip = Command::new(&venv_python);
         pip.arg("-m")
@@ -572,6 +572,200 @@ pub async fn neuralos_setup_environment(app: tauri::AppHandle) -> Result<SetupRe
     })
     .await
     .map_err(|e| format!("neuralos_setup_environment join failed: {e}"))?
+}
+
+/// Resolve the bundled generator/export toolkit: resource dir first, then the
+/// app-data copy, then (read-only) an on-disk neuralOS skill checkout.
+fn resolve_toolkit_file(app: &tauri::AppHandle, rel: &str) -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(resource) = app.path().resource_dir() {
+        candidates.push(resource.join("neuralos").join(rel));
+    }
+    if let Ok(data) = app.path().app_data_dir() {
+        candidates.push(data.join("neuralos").join(rel));
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        candidates.push(PathBuf::from(&home)
+            .join(".agents/skills/neuralos-skill/scripts")
+            .join(rel.rsplit('/').next().unwrap_or(rel)));
+        candidates.push(PathBuf::from(&home)
+            .join(".agents/skills/neuralos/scripts")
+            .join(rel.rsplit('/').next().unwrap_or(rel)));
+    }
+    first_existing(&candidates)
+}
+
+fn sanitize_instance_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim().to_ascii_lowercase();
+    if trimmed.len() < 2
+        || trimmed.len() > 40
+        || !trimmed
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        || trimmed.starts_with('-')
+        || trimmed.starts_with('_')
+    {
+        return Err(format!(
+            "instance name must be 2-40 chars of [a-z0-9_-], got {name:?}"
+        ));
+    }
+    Ok(trimmed)
+}
+
+/// Regenerate one instance's `needle_menu.json` from its `instance.py` —
+/// the "probes were added, menu is stale" case. Uses the bundled
+/// export_tools.py via the managed python.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn neuralos_refresh_menu(
+    app: tauri::AppHandle,
+    instance: String,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if instance.contains('/') || instance.contains('\\') || instance.contains("..") {
+            return Err(format!("invalid instance name {instance:?}"));
+        }
+        let (instances_dir, _) = resolve_instances_dir(&app);
+        let instance_dir = instances_dir.join(&instance);
+        if !instance_dir.join("instance.py").exists() {
+            return Err(format!(
+                "instance {instance:?} has no instance.py to export from"
+            ));
+        }
+        let export_tools = resolve_toolkit_file(&app, "scripts/export_tools.py")
+            .ok_or("export_tools.py not found in bundled resources or skill paths")?;
+        let app_data = app.path().app_data_dir().unwrap_or_default();
+        let python = first_existing(&resolve_python_candidates(&app_data))
+            .ok_or("no python interpreter found")?;
+
+        let mut cmd = Command::new(&python);
+        cmd.arg(&export_tools)
+            .arg("instance.py")
+            .arg("-o")
+            .arg("needle_menu.json")
+            .current_dir(&instance_dir)
+            .env("PYTHONPATH", &instance_dir)
+            .env("NEEDLE_TELEMETRY", "0")
+            .env("DO_NOT_TRACK", "1");
+        run_captured(cmd, None, Duration::from_secs(120), "menu export")?;
+
+        let menu = std::fs::read_to_string(instance_dir.join("needle_menu.json"))
+            .map_err(|e| e.to_string())?;
+        let probes = serde_json::from_str::<serde_json::Value>(&menu)
+            .ok()
+            .and_then(|v| v.as_array().map(|a| a.len()))
+            .unwrap_or(0);
+        Ok(serde_json::json!({
+            "instance": instance,
+            "menu_regenerated": true,
+            "probes": probes,
+        }))
+    })
+    .await
+    .map_err(|e| format!("neuralos_refresh_menu join failed: {e}"))?
+}
+
+/// The /neuralos instance factory, in-app: profile a source -> pydantic
+/// models -> generated bridge/menu/instance, fully parameterized scripts
+/// bundled with the app. source is a DSN ("mysql://user:pass@host/db"),
+/// a file path, or an https URL — whatever profile_data.py accepts.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn neuralos_generate_instance(
+    app: tauri::AppHandle,
+    name: String,
+    source: String,
+    max_tables: Option<u32>,
+    sample: Option<u32>,
+    max_models: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let name = sanitize_instance_name(&name)?;
+        if source.trim().is_empty() {
+            return Err("source is required (DSN, file path, or https URL)".into());
+        }
+        let (instances_dir, _) = resolve_instances_dir(&app);
+        let dest = instances_dir.join(&name);
+        if dest.exists() {
+            return Err(format!(
+                "instance {name:?} already exists at {} — remove it first",
+                dest.display()
+            ));
+        }
+        let generator = |rel: &str| -> Result<PathBuf, String> {
+            resolve_toolkit_file(&app, &format!("generator/{rel}"))
+                .ok_or_else(|| format!("generator script {rel} not found in bundled resources"))
+        };
+        let profile_py = generator("profile_data.py")?;
+        let gen_pydantic_py = generator("gen_pydantic.py")?;
+        let gen_instance_py = generator("gen_needle_instance.py")?;
+
+        let app_data = app.path().app_data_dir().unwrap_or_default();
+        let python = first_existing(&resolve_python_candidates(&app_data))
+            .ok_or("no python interpreter found")?;
+
+        let work = std::env::temp_dir().join(format!("neuralos-gen-{}-{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&work);
+        std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
+
+        let max_tables = max_tables.unwrap_or(32).clamp(1, 64);
+        let sample = sample.unwrap_or(50).clamp(5, 500);
+        let max_models = max_models.unwrap_or(20).clamp(1, 32);
+
+        let mut env_profile = Command::new(&python);
+        env_profile
+            .arg(&profile_py)
+            .arg("--source").arg(&source)
+            .arg("--max-tables").arg(max_tables.to_string())
+            .arg("--sample").arg(sample.to_string())
+            .arg("--out").arg(work.join("profile.json"))
+            .env("NEEDLE_TELEMETRY", "0")
+            .env("DO_NOT_TRACK", "1");
+        run_captured(env_profile, None, Duration::from_secs(600), "profile")?;
+
+        let mut env_models = Command::new(&python);
+        env_models
+            .arg(&gen_pydantic_py)
+            .arg("--profile").arg(work.join("profile.json"))
+            .arg("--out").arg(work.join("models.py"))
+            .arg("--max-models").arg(max_models.to_string())
+            .env("NEEDLE_TELEMETRY", "0")
+            .env("DO_NOT_TRACK", "1");
+        run_captured(env_models, None, Duration::from_secs(300), "model generation")?;
+
+        let mut env_instance = Command::new(&python);
+        env_instance
+            .arg(&gen_instance_py)
+            .arg("--profile").arg(work.join("profile.json"))
+            .arg("--models").arg(work.join("models.py"))
+            .arg("--out").arg(&dest)
+            .arg("--db-dsn").arg(&source)
+            .arg("--runtime").arg("python")
+            .env("NEEDLE_TELEMETRY", "0")
+            .env("DO_NOT_TRACK", "1");
+        run_captured(env_instance, None, Duration::from_secs(300), "instance generation")?;
+
+        let menu_path = dest.join("needle_menu.json");
+        let probes = std::fs::read_to_string(&menu_path)
+            .ok()
+            .and_then(|m| serde_json::from_str::<serde_json::Value>(&m).ok())
+            .and_then(|v| v.as_array().map(|a| a.len()))
+            .unwrap_or(0);
+        let _ = std::fs::remove_dir_all(&work);
+
+        if probes == 0 {
+            return Err(format!(
+                "instance generated at {} but the menu has 0 probes — check the source tables",
+                dest.display()
+            ));
+        }
+        Ok(serde_json::json!({
+            "instance": name,
+            "path": dest.to_string_lossy(),
+            "probes": probes,
+            "note": "menu is live immediately; the engine picks up the menu on the next query",
+        }))
+    })
+    .await
+    .map_err(|e| format!("neuralos_generate_instance join failed: {e}"))?
 }
 
 #[cfg(test)]

@@ -1522,6 +1522,8 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "NeuralOsInstances"
             | "NeuralOsQuery"
             | "NeuralOsSetup"
+            | "NeuralOsRefreshMenu"
+            | "NeuralOsGenerate"
             | "Write"
     )
 }
