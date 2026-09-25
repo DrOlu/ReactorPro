@@ -252,86 +252,23 @@ function normalizeCodexRouting(
 }
 
 export function getBuiltinCustomProviders(): CustomProvider[] {
+  // Single builtin: SuperAgent (the former OpenAI entry, converted).
+  // https://api.superagent.ng speaks OpenAI-compatible chat completions.
   return [
     {
-      id: "builtin-claude_code",
+      id: "builtin-codex",
       name: "SuperAgent",
-      type: "claude_code",
+      type: "codex",
       baseUrl: "https://api.superagent.ng",
       isFullUrl: false,
       apiKey: "",
       customHeaders: [],
       models: [],
       activeModels: [],
-      reasoning: "off",
-      promptCachingEnabled: true,
-      nativeWebSearchEnabled: true,
-      useSystemProxy: false,
-      usageQuery: getDefaultUsageQueryConfig(),
-    },
-    {
-      id: "builtin-codex",
-      name: "OpenAI",
-      type: "codex",
-      baseUrl: "https://api.openai.com/v1",
-      isFullUrl: false,
-      apiKey: "",
-      customHeaders: [],
-      models: [],
-      activeModels: [],
-      requestFormat: "openai-responses",
+      requestFormat: "openai-completions",
       reasoning: "off",
       promptCachingEnabled: true,
       promptCacheHintMode: "auto",
-      nativeWebSearchEnabled: true,
-      useSystemProxy: false,
-      usageQuery: getDefaultUsageQueryConfig(),
-    },
-    {
-      id: "builtin-gemini",
-      name: "Gemini",
-      type: "gemini",
-      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-      isFullUrl: false,
-      apiKey: "",
-      customHeaders: [],
-      models: [],
-      activeModels: [],
-      reasoning: "off",
-      promptCachingEnabled: false,
-      nativeWebSearchEnabled: true,
-      useSystemProxy: false,
-      usageQuery: getDefaultUsageQueryConfig(),
-    },
-    {
-      id: "builtin-xai",
-      name: "Grok",
-      type: "xai",
-      baseUrl: "https://api.x.ai/v1",
-      isFullUrl: false,
-      apiKey: "",
-      customHeaders: [],
-      models: [],
-      activeModels: [],
-      requestFormat: "openai-responses",
-      reasoning: "high",
-      promptCachingEnabled: false,
-      nativeWebSearchEnabled: true,
-      useSystemProxy: false,
-      usageQuery: getDefaultUsageQueryConfig(),
-    },
-    {
-      id: "builtin-deepseek",
-      name: "DeepSeek",
-      type: "deepseek",
-      baseUrl: "https://api.deepseek.com",
-      isFullUrl: false,
-      apiKey: "",
-      customHeaders: [],
-      models: [],
-      activeModels: [],
-      reasoning: "high",
-      promptCachingEnabled: false,
       nativeWebSearchEnabled: true,
       useSystemProxy: false,
       usageQuery: getDefaultUsageQueryConfig(),
@@ -871,7 +808,7 @@ function normalizeProviderId(input: unknown): ProviderId {
 function normalizeProviderName(id: string, input: unknown): string {
   const name = typeof input === "string" && input.trim() ? input.trim() : "Unnamed Provider";
   if (id === "builtin-claude_code" && name === "Claude Code") return "SuperAgent";
-  if (id === "builtin-codex" && name === "Codex") return "OpenAI";
+  if (id === "builtin-codex" && (name === "Codex" || name === "OpenAI")) return "SuperAgent";
   if (id === "builtin-xai" && (name === "xAI" || name === "XAI")) return "Grok";
   return name;
 }
@@ -1036,13 +973,23 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
         (obj.promptCachingEnabled === false ? "none" : "auto"))
       : undefined;
 
+  let normalizedBaseUrl = codexRouting
+    ? codexRouting.baseUrl
+    : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : "");
+  // Migrate the default OpenAI provider to SuperAgent (v1.7.3): only the old
+  // default URL (or an empty one) moves — user-customized endpoints survive.
+  if (
+    id === "builtin-codex" &&
+    (normalizedBaseUrl === "" || normalizedBaseUrl === "https://api.openai.com/v1")
+  ) {
+    normalizedBaseUrl = "https://api.superagent.ng";
+  }
+
   return {
     id,
     name: normalizeProviderName(id, obj.name),
     type,
-    baseUrl: codexRouting
-      ? codexRouting.baseUrl
-      : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : ""),
+    baseUrl: normalizedBaseUrl,
     isFullUrl,
     ...(type !== "gemini" && typeof obj.modelsUrl === "string" && obj.modelsUrl.trim()
       ? { modelsUrl: obj.modelsUrl.trim() }

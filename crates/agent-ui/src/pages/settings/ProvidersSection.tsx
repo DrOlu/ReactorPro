@@ -20,6 +20,7 @@ import {
   updateModelFailover,
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import superagentLogoUrl from "../../assets/superagent-logo.png";
 import {
   PROVIDER_UI_TABS,
   SUPERAGENT_PRESET_BASE_URL,
@@ -1113,12 +1114,14 @@ export function ProvidersSection(
                     : "hover:text-foreground/80",
                 )}
               >
-                {tab.id === SUPERAGENT_UI_TAB_ID ? (
-                  <WandSparkles className="h-4 w-4 text-[hsl(4_85%_48%)]" />
-                ) : (
-                  <ProviderBrandIcon type={tab.id} />
-                )}
-                {tab.id === SUPERAGENT_UI_TAB_ID ? SUPERAGENT_PRESET_NAME : getProviderLabel(tab.id)}
+                <img
+                  src={superagentLogoUrl}
+                  alt=""
+                  className="h-4 w-4 rounded object-contain"
+                />
+                {tab.id === SUPERAGENT_UI_TAB_ID
+                  ? SUPERAGENT_PRESET_NAME
+                  : getProviderLabel(tab.id)}
                 {providerCountByType[tab.id] > 0 ? (
                   <span
                     className={cn(
