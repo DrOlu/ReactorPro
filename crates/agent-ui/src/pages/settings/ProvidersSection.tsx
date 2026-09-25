@@ -1117,7 +1117,7 @@ export function ProvidersSection(
                 <img
                   src={superagentLogoUrl}
                   alt=""
-                  className="h-4 w-4 rounded-[3px] object-contain"
+                  className="h-4 w-4 rounded object-contain"
                 />
                 {tab.id === SUPERAGENT_UI_TAB_ID
                   ? SUPERAGENT_PRESET_NAME
