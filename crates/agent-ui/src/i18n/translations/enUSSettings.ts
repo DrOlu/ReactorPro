@@ -455,6 +455,7 @@ export const EN_US_SETTINGS_TRANSLATIONS = {
   "settings.toolBadgeCustom": "Custom",
   "settings.toolConditionalNote": "Conditional",
   "settings.addProvider": "Add Provider",
+  "settings.obtainApiKey": "Obtain Key",
   "settings.addProviderShort": "Add",
   "settings.importProviders": "Import",
   "settings.importProvidersHint": "Import providers from desktop developer tools",

@@ -89,7 +89,10 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
   const terminalItem =
     shellOptions.length > 1 ? (
       <DropdownMenuSub>
-        <DropdownMenuSubTrigger disabled={!terminalReady || creating} className="gap-2 text-xs">
+        <DropdownMenuSubTrigger
+          disabled={!terminalReady || creating}
+          className="project-tools-create-item gap-2 text-xs"
+        >
           <Terminal className="h-3.5 w-3.5" />
           <span className="min-w-0 flex-1">{t("projectTools.newTerminal")}</span>
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
@@ -113,7 +116,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
       <DropdownMenuItem
         onSelect={() => onCreateTerminal()}
         disabled={!terminalReady || creating}
-        className="gap-2 text-xs"
+        className="project-tools-create-item gap-2 text-xs"
         title={terminalDisabledMessage}
       >
         <Terminal className="h-3.5 w-3.5" />
@@ -154,7 +157,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
               key={definition.kind}
               onSelect={() => onStartTool(definition.kind)}
               disabled={definition.projectRequired ? !projectReady : !tunnelAvailable}
-              className="gap-2 text-xs"
+              className="project-tools-create-item gap-2 text-xs"
             >
               {definition.icon("h-3.5 w-3.5")}
               {t(definition.createTitleKey)}
@@ -162,7 +165,10 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
           ),
         )}
         {leasedTools.has("backgroundTasks") ? null : (
-          <DropdownMenuItem onSelect={onOpenBackgroundTasks} className="gap-2 text-xs">
+          <DropdownMenuItem
+            onSelect={onOpenBackgroundTasks}
+            className="project-tools-create-item gap-2 text-xs"
+          >
             <Cpu className="h-3.5 w-3.5" />
             {t("projectTools.backgroundTasksTitle")}
           </DropdownMenuItem>

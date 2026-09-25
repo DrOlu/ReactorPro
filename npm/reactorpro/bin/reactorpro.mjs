@@ -9,7 +9,7 @@ import { homedir, platform, arch } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 
-const VERSION = "1.7.1";
+const VERSION = "1.7.2";
 const OWNER = "DrOlu";
 const REPO = "ReactorPro";
 const INSTALL_DIR = path.join(homedir(), ".reactorpro", "bin");

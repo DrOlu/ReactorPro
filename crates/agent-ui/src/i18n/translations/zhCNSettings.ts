@@ -458,6 +458,7 @@ export const ZH_CN_SETTINGS_TRANSLATIONS = {
   "settings.toolBadgeCustom": "Custom",
   "settings.toolConditionalNote": "Registered conditionally",
   "settings.addProvider": "Add provider",
+  "settings.obtainApiKey": "获取密钥",
   "settings.addProviderShort": "Add",
   "settings.importProviders": "Import",
   "settings.importProvidersHint": "Import providers from desktop dev tools",
