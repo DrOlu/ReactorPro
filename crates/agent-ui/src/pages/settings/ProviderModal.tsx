@@ -64,6 +64,9 @@ import {
 type ModalProps = {
   providerType: ProviderId;
   initialData?: CustomProvider;
+  // Add-mode prefills (e.g. the SuperAgent tab seeds its base URL).
+  defaultName?: string;
+  defaultBaseUrl?: string;
   onSave: (data: Omit<CustomProvider, "id">) => void;
   onClose: () => void;
 };
@@ -126,14 +129,16 @@ function reconcileModelOrder(
   return next;
 }
 
-function useProviderModalController({ providerType, initialData, onSave, onClose }: ModalProps) {
+function useProviderModalController(
+  { providerType, initialData, defaultName, defaultBaseUrl, onSave, onClose }: ModalProps,
+) {
   const { t } = useLocale();
   const isGatewayWebui = isGatewayWebuiRuntime();
   const initialApiKey = initialData?.apiKey ?? "";
   const initialUsesRedactedApiKey =
     isGatewayWebui && initialApiKey.trim() === "" && initialData?.apiKeyConfigured === true;
-  const [name, setName] = useState(initialData?.name ?? "");
-  const [baseUrl, setBaseUrl] = useState(initialData?.baseUrl ?? "");
+  const [name, setName] = useState(initialData?.name ?? defaultName ?? "");
+  const [baseUrl, setBaseUrl] = useState(initialData?.baseUrl ?? defaultBaseUrl ?? "");
   const [isFullUrl, setIsFullUrl] = useState(initialData?.isFullUrl ?? false);
   const [modelsUrl, setModelsUrl] = useState(
     providerType === "gemini" ? "" : (initialData?.modelsUrl ?? ""),

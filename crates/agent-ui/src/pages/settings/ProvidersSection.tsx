@@ -21,8 +21,17 @@ import {
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
+  PROVIDER_UI_TABS,
+  SUPERAGENT_PRESET_BASE_URL,
+  SUPERAGENT_PRESET_NAME,
+  SUPERAGENT_UI_TAB_ID,
+  type ProviderUiTab,
+  resolveProviderUiTabProviderType,
+} from "../../lib/settings/providerUiTabs";
+import {
   Activity,
   ChevronDown,
+  Key,
   Layers,
   Pencil,
   Plus,
@@ -55,7 +64,6 @@ import {
   DrawerSectionHeader,
   getProviderLabel,
   itemsByIdOrder,
-  PROVIDER_TABS,
   ProviderBrandIcon,
   UsagePlanLine,
   usageRelativeTimeText,
@@ -597,7 +605,7 @@ const PROVIDER_ACTION_CLASS =
   "settings-provider-action h-full min-w-0 gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium shadow-none";
 
 function ProviderActionGroup(props: {
-  activeTab: ProviderId;
+  activeTab: ProviderUiTab;
   settings: SettingsSectionProps["settings"];
   setSettings: SettingsSectionProps["setSettings"];
   customSettingsOpen: boolean;
@@ -607,6 +615,7 @@ function ProviderActionGroup(props: {
   const { t } = useLocale();
   const { activeTab, settings, setSettings, customSettingsOpen, onAdd, onOpenCustomSettings } =
     props;
+  const activeProviderType = resolveProviderUiTabProviderType(activeTab);
 
   return (
     <fieldset
@@ -625,8 +634,19 @@ function ProviderActionGroup(props: {
         <Plus className="h-3.5 w-3.5" />
         <span className="settings-provider-action-label">{t("settings.addProviderShort")}</span>
       </Button>
+      <a
+        href="https://paystack.com/buy/reactor-api-key"
+        target="_blank"
+        rel="noreferrer"
+        className={cn(PROVIDER_ACTION_CLASS, "settings-provider-action--primary")}
+        title={t("settings.obtainApiKey")}
+        aria-label={t("settings.obtainApiKey")}
+      >
+        <Key className="h-3.5 w-3.5" />
+        <span className="settings-provider-action-label">{t("settings.obtainApiKey")}</span>
+      </a>
       <ProviderSettingsExtension
-        activeTab={activeTab}
+        activeTab={activeProviderType}
         settings={settings}
         setSettings={setSettings}
         triggerClassName={PROVIDER_ACTION_CLASS}
@@ -971,7 +991,7 @@ export function ProvidersSection(
 ) {
   const { settings, setSettings, initialProviderId, onInitialProviderHandled } = props;
 
-  const [activeTab, setActiveTab] = useState<ProviderId>("claude_code");
+  const [activeTab, setActiveTab] = useState<ProviderUiTab>(SUPERAGENT_UI_TAB_ID);
   const [modalOpen, setModalOpen] = useState(false);
   const [customSettingsOpen, setCustomSettingsOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<CustomProvider | null>(null);
@@ -1051,15 +1071,27 @@ export function ProvidersSection(
     });
   }
 
-  const activeTabIndex = Math.max(0, PROVIDER_TABS.indexOf(activeTab));
+  const activeTabIndex = Math.max(
+    0,
+    PROVIDER_UI_TABS.findIndex((tab) => tab.id === activeTab),
+  );
+  const activeProviderType = resolveProviderUiTabProviderType(activeTab);
   // Inline display of the configured count within each vendor tab, replacing the former standalone count row above the list.
   const providerCountByType = useMemo(() => {
-    const counts = Object.fromEntries(PROVIDER_TABS.map((tab) => [tab, 0])) as Record<
-      ProviderId,
-      number
-    >;
+    const counts = Object.fromEntries(
+      PROVIDER_UI_TABS.map((tab) => [tab.id, 0]),
+    ) as Record<ProviderUiTab, number>;
     for (const provider of settings.customProviders) {
-      if (counts[provider.type] !== undefined) counts[provider.type] += 1;
+      for (const tab of PROVIDER_UI_TABS) {
+        if (provider.type !== tab.providerType) continue;
+        if (
+          tab.id === SUPERAGENT_UI_TAB_ID &&
+          !provider.baseUrl.includes("superagent.ng")
+        ) {
+          continue;
+        }
+        counts[tab.id] += 1;
+      }
     }
     return counts;
   }, [settings.customProviders]);
@@ -1069,30 +1101,34 @@ export function ProvidersSection(
       <div className="settings-provider-section flex min-h-0 flex-1 flex-col">
         <div className="settings-provider-tabs-wrap mb-4 flex shrink-0 items-center justify-between gap-3">
           <div className="settings-provider-tabs inline-flex h-9 min-w-0 items-center overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground">
-            {PROVIDER_TABS.map((tab) => (
+            {PROVIDER_UI_TABS.map((tab) => (
               <button
-                key={tab}
+                key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab)}
+                onClick={() => setActiveTab(tab.id)}
                 className={cn(
                   "settings-provider-tab inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all",
-                  activeTab === tab
+                  activeTab === tab.id
                     ? "bg-background text-foreground shadow"
                     : "hover:text-foreground/80",
                 )}
               >
-                <ProviderBrandIcon type={tab} />
-                {getProviderLabel(tab)}
-                {providerCountByType[tab] > 0 ? (
+                {tab.id === SUPERAGENT_UI_TAB_ID ? (
+                  <WandSparkles className="h-4 w-4 text-[hsl(4_85%_48%)]" />
+                ) : (
+                  <ProviderBrandIcon type={tab.id} />
+                )}
+                {tab.id === SUPERAGENT_UI_TAB_ID ? SUPERAGENT_PRESET_NAME : getProviderLabel(tab.id)}
+                {providerCountByType[tab.id] > 0 ? (
                   <span
                     className={cn(
                       "inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none tabular-nums transition-colors",
-                      activeTab === tab
+                      activeTab === tab.id
                         ? "bg-foreground/[0.08] text-foreground/70"
                         : "bg-foreground/[0.06] text-muted-foreground/80",
                     )}
                   >
-                    {providerCountByType[tab]}
+                    {providerCountByType[tab.id]}
                   </span>
                 ) : null}
               </button>
@@ -1113,15 +1149,15 @@ export function ProvidersSection(
             className="flex h-full transition-transform duration-300 ease-in-out"
             style={{ transform: `translateX(-${activeTabIndex * 100}%)` }}
           >
-            {PROVIDER_TABS.map((tab) => (
+            {PROVIDER_UI_TABS.map((tab) => (
               <div
-                key={tab}
+                key={tab.id}
                 className="w-full shrink-0 overflow-hidden"
-                aria-hidden={activeTab !== tab}
-                inert={activeTab !== tab}
+                aria-hidden={activeTab !== tab.id}
+                inert={activeTab !== tab.id}
               >
                 <ProviderList
-                  type={tab}
+                  type={tab.providerType}
                   providers={settings.customProviders}
                   onAdd={openAdd}
                   onEdit={openEdit}
@@ -1139,8 +1175,12 @@ export function ProvidersSection(
 
       {modalOpen ? (
         <ProviderModal
-          providerType={activeTab}
+          providerType={activeProviderType}
           initialData={editingProvider ?? undefined}
+          defaultName={activeTab === SUPERAGENT_UI_TAB_ID ? SUPERAGENT_PRESET_NAME : undefined}
+          defaultBaseUrl={
+            activeTab === SUPERAGENT_UI_TAB_ID ? SUPERAGENT_PRESET_BASE_URL : undefined
+          }
           onSave={handleSave}
           onClose={closeModal}
         />
@@ -1149,7 +1189,7 @@ export function ProvidersSection(
         <CustomSettingsDrawer
           settings={settings}
           setSettings={setSettings}
-          providerType={activeTab}
+          providerType={activeProviderType}
           onClose={() => setCustomSettingsOpen(false)}
         />
       ) : null}
