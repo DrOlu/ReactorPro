@@ -43,6 +43,13 @@ describe("brand gradient contract (R logo red)", () => {
     assert.match(css, /inset 2\.5px 0 0 hsl\(6 90% 56% \/ 0\.9\)/, "dark accent bar missing");
   });
 
+  it("targets the create menu globally (dropdowns render in a portal)", () => {
+    // Regression: scoping under .project-tools-panel missed the portaled
+    // menu — the selector must be global.
+    assert.doesNotMatch(css, /\.project-tools-panel \[role="menu"\]/);
+    assert.match(css, /\[role="menu\"] \.project-tools-create-item \{/);
+  });
+
   it("keeps the logo hue stops inside the favicon's colour family", () => {
     // favicon.svg fills: #ED220C / #EE220C / #ED0A08 → hue 2-5, sat 87-100%.
     // Gradients must stay within that red-orange family (hue 0-20).

@@ -307,19 +307,19 @@ html.dark .chat-history-sidebar .chat-history-row-title-button[aria-current="pag
 }
 
 /* ── Project tools "+" menu: brand-red create actions ─────────── */
-.project-tools-panel [role="menu"] .project-tools-create-item {
+[role="menu"] .project-tools-create-item {
   color: hsl(4 85% 46%);
   font-weight: 500;
 }
-.project-tools-panel [role="menu"] .project-tools-create-item:hover,
-.project-tools-panel [role="menu"] .project-tools-create-item[data-highlighted] {
+[role="menu"] .project-tools-create-item:hover,
+[role="menu"] .project-tools-create-item[data-highlighted] {
   color: hsl(4 85% 40%);
 }
-html.dark .project-tools-panel [role="menu"] .project-tools-create-item {
+html.dark [role="menu"] .project-tools-create-item {
   color: hsl(6 90% 60%);
 }
-html.dark .project-tools-panel [role="menu"] .project-tools-create-item:hover,
-html.dark .project-tools-panel [role="menu"] .project-tools-create-item[data-highlighted] {
+html.dark [role="menu"] .project-tools-create-item:hover,
+html.dark [role="menu"] .project-tools-create-item[data-highlighted] {
   color: hsl(8 92% 66%);
 }
 

@@ -9,25 +9,20 @@ const tabs = loader.loadModule("@liveagent/ui/lib/settings/providerUiTabs.ts");
 // (handler/types.go: selected_model.provider_type).
 const CLOSED_PROVIDER_IDS = ["codex", "claude_code", "gemini", "xai", "deepseek"];
 
-test("the SuperAgent tab is first, before Anthropic", () => {
+test("exactly one tab: SuperAgent — a conversion of the OpenAI (codex) tab", () => {
+  assert.equal(tabs.PROVIDER_UI_TABS.length, 1);
   assert.equal(tabs.PROVIDER_UI_TABS[0].id, "superagent");
-  assert.equal(tabs.PROVIDER_UI_TABS[1].id, "claude_code");
-  assert.equal(tabs.PROVIDER_UI_TABS.length, 6);
+  // The OpenAI tab's provider type (codex) is preserved — a conversion, not a
+  // new provider type.
+  assert.equal(tabs.PROVIDER_UI_TABS[0].providerType, "codex");
 });
 
-test("the SuperAgent tab rides claude_code and stays inside the closed ProviderId union", () => {
-  assert.equal(
-    tabs.resolveProviderUiTabProviderType("superagent"),
-    "claude_code",
-    "SuperAgent must ride the Anthropic-compatible surface",
-  );
-  for (const id of CLOSED_PROVIDER_IDS) {
-    assert.equal(tabs.resolveProviderUiTabProviderType(id), id, `${id} must map to itself`);
-  }
+test("the SuperAgent tab rides codex and stays inside the closed ProviderId union", () => {
+  assert.equal(tabs.resolveProviderUiTabProviderType("superagent"), "codex");
   assert.doesNotThrow(() =>
     tabs.assertProviderUiTabsStayInClosedUnion(CLOSED_PROVIDER_IDS),
   );
-  assert.throws(() => tabs.assertProviderUiTabsStayInClosedUnion(["codex", "claude_code"]));
+  assert.throws(() => tabs.assertProviderUiTabsStayInClosedUnion(["claude_code"]));
 });
 
 test("the SuperAgent preset base URL matches the deployed endpoint", () => {

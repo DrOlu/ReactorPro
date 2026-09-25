@@ -277,22 +277,22 @@ test("gemini provider normalization keeps native routing and model limits", () =
   assert.equal(provider.models[0].maxOutputToken, 65_536);
 });
 
-test("DeepSeek is the fifth built-in provider with Responses search enabled", () => {
+test("SuperAgent is the only built-in provider (the converted OpenAI entry)", () => {
   const providers = settings.getBuiltinCustomProviders();
   assert.deepEqual(
     providers.map((provider) => provider.type),
-    ["claude_code", "codex", "gemini", "xai", "deepseek"],
+    ["codex"],
   );
 
   const provider = providers.at(-1);
-  assert.equal(provider.id, "builtin-deepseek");
-  assert.equal(provider.name, "DeepSeek");
-  assert.equal(provider.baseUrl, "https://api.deepseek.com");
-  assert.equal(provider.reasoning, "high");
-  assert.equal(provider.promptCachingEnabled, false);
-  assert.equal(provider.promptCacheHintMode, undefined);
+  assert.equal(provider.id, "builtin-codex");
+  assert.equal(provider.name, "SuperAgent");
+  assert.equal(provider.baseUrl, "https://api.superagent.ng");
+  assert.equal(provider.reasoning, "off");
+  assert.equal(provider.promptCachingEnabled, true);
+  assert.equal(provider.promptCacheHintMode, "auto");
   assert.equal(provider.nativeWebSearchEnabled, true);
-  assert.equal(provider.requestFormat, undefined);
+  assert.equal(provider.requestFormat, "openai-completions");
 });
 
 test("DeepSeek provider normalization keeps native routing and native search", () => {
