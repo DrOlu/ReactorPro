@@ -153,7 +153,11 @@ async fn handle_image_proxy(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
-        .or_else(|| required_header(&headers, PROXY_TOKEN_HEADER).ok());
+        .or_else(|| {
+            required_header(&headers, PROXY_TOKEN_HEADER)
+                .ok()
+                .map(str::to_owned)
+        });
     let Some(provided_token) = provided_token else {
         return error_response(StatusCode::UNAUTHORIZED, "Missing proxy token", &headers);
     };
@@ -168,9 +172,16 @@ async fn handle_image_proxy(
     // SSRF guard: never dial loopback / private / link-local targets (the
     // gateway's outbound_http does the same via safeurl). Fails closed when
     // the host cannot be resolved.
+    let Some(port) = target_url.port_or_known_default() else {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Image URL is missing a port",
+            &headers,
+        );
+    };
     if let Err(message) = ensure_publicly_dialable(
         target_url.host_str().unwrap_or_default(),
-        target_url.port_or_known_default(),
+        port,
     )
     .await
     {
@@ -304,12 +315,12 @@ fn is_blocked_ip(ip: std::net::IpAddr) -> bool {
                 || v4.is_multicast()
                 || o[0] == 0
                 || o[0] == 10
-                || (o[0] == 172 & o[1] >= 16 & o[1] <= 31)
-                || (o[0] == 192 & o[1] == 168)
-                || (o[0] == 169 & o[1] == 254)
-                || (o[0] == 100 & o[1] >= 64 & o[1] <= 127)
-                || (o[0] == 198 & (o[1] == 18 || o[1] == 19))
-                || (o[0] == 192 & o[1] == 0 & o[2] == 2)
+                || (o[0] == 172 && o[1] >= 16 && o[1] <= 31)
+                || (o[0] == 192 && o[1] == 168)
+                || (o[0] == 169 && o[1] == 254)
+                || (o[0] == 100 && o[1] >= 64 && o[1] <= 127)
+                || (o[0] == 198 && (o[1] == 18 || o[1] == 19))
+                || (o[0] == 192 && o[1] == 0 && o[2] == 2)
                 || o[0] >= 240
         }
         std::net::IpAddr::V6(v6) => {
@@ -352,11 +363,14 @@ async fn ensure_publicly_dialable(host: &str, port: u16) -> Result<(), String> {
         };
     }
     let target = format!("{host}:{port}");
-    let addrs =
-        tokio::task::spawn_blocking(move || target.to_socket_addrs().map(|it| it.collect::<Vec<_>>()))
-            .await
-            .map_err(|err| format!("Image URL host resolution failed: {err}"))
-            .map_err(|err| format!("Image URL host '{host}' could not be resolved: {err}"))?;
+    let addrs = tokio::task::spawn_blocking(move || {
+        target
+            .to_socket_addrs()
+            .map(|it| it.collect::<Vec<_>>())
+    })
+    .await
+    .map_err(|err| format!("Image URL host resolution failed: {err}"))?
+    .map_err(|err| format!("Image URL host '{host}' could not be resolved: {err}"))?;
     if addrs.is_empty() {
         return Err(format!("Image URL host '{host}' could not be resolved"));
     }
