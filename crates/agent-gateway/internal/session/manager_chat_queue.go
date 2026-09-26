@@ -17,12 +17,23 @@ type chatQueueSnapshotRecord struct {
 // existing snapshots for every Agent (snapshots are stored per Agent in their own
 // entry; replayed frames carry a source label).
 func (m *Manager) SubscribeChatQueueEvents() (<-chan Tagged[*gatewayv2.ChatQueueEvent], func()) {
+	// Hold chatQueueMu across registration AND the snapshot walk so the
+	// replay-then-subscribe sequence is atomic with respect to
+	// broadcastChatQueueEvent (which takes the same lock around its own
+	// snapshot write + delivery). Without this, an event broadcast in the gap
+	// between snapshot collection and subscription would be silently missed
+	// by the new subscriber (classic TOCTOU).
+	m.syncHub.chatQueueMu.Lock()
+	defer m.syncHub.chatQueueMu.Unlock()
+
 	replay := make([]Tagged[*gatewayv2.ChatQueueEvent], 0)
 	for _, agentID := range m.knownAgentIDs() {
 		entry := m.entryFor(agentID)
 		if entry == nil {
 			continue
 		}
+		// Lock ordering: chatQueueMu -> chatQueueSnapshotsMu, the same order
+		// broadcastChatQueueEvent uses while holding chatQueueMu.
 		entry.chatQueueSnapshotsMu.Lock()
 		conversationIDs := make([]string, 0, len(entry.chatQueueSnapshots))
 		for conversationID := range entry.chatQueueSnapshots {
@@ -38,12 +49,10 @@ func (m *Manager) SubscribeChatQueueEvents() (<-chan Tagged[*gatewayv2.ChatQueue
 		entry.chatQueueSnapshotsMu.Unlock()
 	}
 
-	m.syncHub.chatQueueMu.Lock()
 	ch := make(chan Tagged[*gatewayv2.ChatQueueEvent], 128+len(replay))
 	subID := m.syncHub.nextChatQueueSubID
 	m.syncHub.nextChatQueueSubID += 1
 	m.syncHub.chatQueueSubscribers[subID] = ch
-	m.syncHub.chatQueueMu.Unlock()
 
 	for _, event := range replay {
 		ch <- event
@@ -106,6 +115,12 @@ func (m *Manager) broadcastChatQueueEvent(agentID string, event *gatewayv2.ChatQ
 	}
 	sessionEpoch := m.sessionEpochOf(agentID)
 
+	// Hold chatQueueMu across the snapshot write AND delivery so a
+	// concurrent SubscribeChatQueueEvents either sees both the snapshot and
+	// the delivery, or neither — never a missed revision. Lock ordering
+	// (chatQueueMu -> chatQueueSnapshotsMu) matches the subscribe path.
+	m.syncHub.chatQueueMu.Lock()
+
 	if conversationID != "" {
 		entry.chatQueueSnapshotsMu.Lock()
 		if existing := entry.chatQueueSnapshots[conversationID]; existing.event != nil && existing.sessionEpoch == sessionEpoch {
@@ -113,6 +128,7 @@ func (m *Manager) broadcastChatQueueEvent(agentID string, event *gatewayv2.ChatQ
 			incomingRevision := normalized.GetRevision()
 			if existingRevision > 0 && (incomingRevision == 0 || incomingRevision < existingRevision) {
 				entry.chatQueueSnapshotsMu.Unlock()
+				m.syncHub.chatQueueMu.Unlock()
 				return
 			}
 		}
@@ -123,7 +139,6 @@ func (m *Manager) broadcastChatQueueEvent(agentID string, event *gatewayv2.ChatQ
 		entry.chatQueueSnapshotsMu.Unlock()
 	}
 
-	m.syncHub.chatQueueMu.Lock()
 	subscribers := make([]chan Tagged[*gatewayv2.ChatQueueEvent], 0, len(m.syncHub.chatQueueSubscribers))
 	for _, ch := range m.syncHub.chatQueueSubscribers {
 		subscribers = append(subscribers, ch)

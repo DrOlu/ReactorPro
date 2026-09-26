@@ -165,7 +165,11 @@ export function buildProxyBaseUrl(
   };
 }
 
-export function buildImageProxyUrl(imageUrl: string, proxyServerBaseUrl: string): string {
+export function buildImageProxyUrl(
+  imageUrl: string,
+  proxyServerBaseUrl: string,
+  proxyToken?: string
+): string {
   const normalizedImageUrl = imageUrl.trim();
   if (!normalizedImageUrl) {
     throw new Error("Image URL cannot be empty");
@@ -177,12 +181,16 @@ export function buildImageProxyUrl(imageUrl: string, proxyServerBaseUrl: string)
   if (!normalizedProxyServerBaseUrl) {
     throw new Error("Local proxy base URL is empty");
   }
-  return `${normalizedProxyServerBaseUrl}/image-proxy?url=${encodeURIComponent(parsed.toString())}`;
+  // <img> requests cannot carry headers, so the proxy token rides as a query
+  // parameter and the Rust side validates it with the same constant-time
+  // comparison as the header path.
+  const tokenSuffix = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : "";
+  return `${normalizedProxyServerBaseUrl}/image-proxy?url=${encodeURIComponent(parsed.toString())}${tokenSuffix}`;
 }
 
 export async function prepareImageProxyUrl(imageUrl: string): Promise<string> {
   const proxyServerInfo = await getProxyServerInfo();
-  return buildImageProxyUrl(imageUrl, proxyServerInfo.baseUrl);
+  return buildImageProxyUrl(imageUrl, proxyServerInfo.baseUrl, proxyServerInfo.token);
 }
 
 export type PreparedUpstreamProxyRequest = {

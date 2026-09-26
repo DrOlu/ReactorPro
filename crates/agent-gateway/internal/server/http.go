@@ -42,10 +42,13 @@ func NewHTTPServerWithMesh(cfg *config.Config, sm *session.Manager, tokens *agen
 	rootMux.Handle("/ws/v2/terminal", v2.TerminalHandler())
 
 	rootMux.HandleFunc("/t/", publicTunnelProxy(sm))
-	rootMux.HandleFunc("GET /image-proxy", handler.ImageProxy(cfg.RequestTimeout))
 	rootMux.HandleFunc("GET /api/public/history-shares/{token}", publicHistoryShare(cfg, sm))
 
 	apiMux := http.NewServeMux()
+	// Registered behind the auth middleware: /image-proxy reflects arbitrary
+	// origins (SSRF-guarded by safeurl) but must not be an unauthenticated
+	// fetch relay for anyone who can reach the gateway.
+	apiMux.HandleFunc("GET /api/image-proxy", handler.ImageProxy(cfg.RequestTimeout))
 	apiMux.HandleFunc("GET /api/status", handler.Status(sm))
 	apiMux.HandleFunc("POST /api/files/import", handler.ImportReadableFiles(sm, cfg.RequestTimeout))
 	apiMux.HandleFunc("POST /api/files/import-directory", handler.ImportDirectory(sm, cfg.RequestTimeout))
