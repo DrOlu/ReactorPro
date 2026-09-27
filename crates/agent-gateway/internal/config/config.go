@@ -97,6 +97,8 @@ type Config struct {
 	MeshAllowRemoteInvoke     bool
 	MeshRequireVerifiedInvoke bool
 	MeshInvokeOperations      string // comma-separated operation names
+	MeshSkillProxyTargets     string // comma-separated local harness agent ids the skill proxy may reach
+	MeshSkillProxyTimeout     int    // seconds; 0 uses the mesh default
 	MeshInvokeTimeout         time.Duration
 
 	// Mesh task lifecycle bounds.
@@ -155,6 +157,8 @@ func Load() *Config {
 	flag.BoolVar(&cfg.MeshAllowRemoteInvoke, "mesh-allow-remote-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_ALLOW_REMOTE_INVOKE", true), "allow peers to invoke operations on desktop agents behind this edge")
 	flag.BoolVar(&cfg.MeshRequireVerifiedInvoke, "mesh-require-verified-invoke", getenvBool("LIVEAGENT_GATEWAY_MESH_REQUIRE_VERIFIED_INVOKE", true), "refuse remote invocation whose caller identity was not verified (needs a signed, trusted peer)")
 	flag.StringVar(&cfg.MeshInvokeOperations, "mesh-invoke-operations", getenv("LIVEAGENT_GATEWAY_MESH_INVOKE_OPERATIONS", mesh.OperationTask), "comma-separated operations a peer may invoke remotely; empty exposes none")
+	flag.StringVar(&cfg.MeshSkillProxyTargets, "mesh-skill-proxy-targets", getenv("LIVEAGENT_GATEWAY_MESH_SKILL_PROXY_TARGETS", ""), "comma-separated local harness agent ids the skillproxy skill may reach; empty disables the proxy")
+	flag.IntVar(&cfg.MeshSkillProxyTimeout, "mesh-skill-proxy-timeout", getenvInt("LIVEAGENT_GATEWAY_MESH_SKILL_PROXY_TIMEOUT", 0), "seconds bounding one proxied request; 0 uses the mesh default")
 	// The default is mesh.DefaultInvokeTimeout, not a literal: a 60s literal
 	// here silently overrode the mesh package's 3-minute default, so every
 	// turn longer than a minute was 4001'd and cancelled mid-work while the
@@ -374,6 +378,10 @@ func (c *Config) MeshConfig() mesh.Config {
 	cfg.AllowRemoteInvoke = c.MeshAllowRemoteInvoke
 	cfg.RequireVerifiedInvoke = c.MeshRequireVerifiedInvoke
 	cfg.InvokeOperations = splitList(c.MeshInvokeOperations)
+	cfg.SkillProxyTargets = splitList(c.MeshSkillProxyTargets)
+	if c.MeshSkillProxyTimeout > 0 {
+		cfg.SkillProxyTimeout = time.Duration(c.MeshSkillProxyTimeout) * time.Second
+	}
 	if c.MeshInvokeTimeout > 0 {
 		cfg.InvokeTimeout = c.MeshInvokeTimeout
 	}

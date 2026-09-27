@@ -189,6 +189,12 @@ func (m *Manager) Start(ctx context.Context) error {
 	if err := m.registerInvokeSkill(agent); err != nil {
 		m.logger.Warn("mesh invoke skill registration failed", "error", err)
 	}
+	// Same first-manifest reasoning as invoke: a configured skill proxy should
+	// be visible immediately. An unconfigured edge registers nothing, which is
+	// the honest answer rather than an advertised refusal.
+	if err := m.registerSkillProxySkill(agent); err != nil {
+		m.logger.Warn("mesh skill proxy registration failed", "error", err)
+	}
 	// Durable state: rehydrate what a previous run recorded, then arrange for
 	// anything learned from here on to be written back. Restore runs first so
 	// reloaded state is not immediately written out again.
