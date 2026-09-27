@@ -21,6 +21,11 @@ import (
 // may be routed sits in front of it (see the Config fields and skillInvoke).
 const SkillInvoke = "invoke"
 
+// SkillProxy forwards verified peer requests to local raw-synapse skill
+// servers (harnesses) listed in Config.SkillProxyTargets. Registered only when
+// targets are configured; see skillproxy.go.
+const SkillProxy = "skillproxy"
+
 // OperationTask asks a desktop agent to run a task with its own tool surface.
 // This is the cross-organisation case: agent in org A asks agent in org B to do
 // something, rather than merely asking what it is.
@@ -194,6 +199,15 @@ func (m *Manager) localInvokerSnapshot() LocalInvoker {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.localInvoker
+}
+
+// agentSnapshot returns the bridge's live agent, or nil while the bridge is
+// not running. The skill proxy needs it to reach local skill servers over the
+// edge's own connection.
+func (m *Manager) agentSnapshot() *Agent {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.agent
 }
 
 // registerInvokeSkill exposes remote invocation, subject to configuration.

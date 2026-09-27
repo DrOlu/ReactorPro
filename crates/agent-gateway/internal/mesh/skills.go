@@ -57,8 +57,9 @@ func BuiltinSkillIDs() []string {
 // acceptable names even though they only register with a task store, so an
 // operator's allowlist does not have to track this edge's storage.
 func servableSkillIDs() []string {
-	return append(append(BuiltinSkillIDs(),
-		SkillTaskGet, SkillTaskCancel, SkillTaskRetry, SkillTaskInput), SkillInvoke)
+	return append(append(append(BuiltinSkillIDs(),
+		SkillTaskGet, SkillTaskCancel, SkillTaskRetry, SkillTaskInput), SkillInvoke),
+		SkillProxy)
 }
 
 // registerBuiltinSkills exposes the read-only introspection surface.

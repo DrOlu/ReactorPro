@@ -219,6 +219,15 @@ type Config struct {
 	// exactly. An empty set means none, never all — exposing something is a
 	// deliberate act, so an unset list must not read as "anything goes".
 	InvokeOperations []string `json:"invokeOperations"`
+	// SkillProxyTargets is the allowlist of local raw-synapse skill servers
+	// (harnesses) the skillproxy skill may reach. Harnesses have no mesh
+	// identity of their own, so this edge vouches for them by name: a target
+	// not on the list is refused before any request is made. An empty list
+	// disables the skill entirely — the skill proxy is never on by default.
+	SkillProxyTargets []string `json:"skillProxyTargets"`
+	// SkillProxyTimeout bounds one proxied request when the caller does not
+	// name a timeout. The harness enforces its own deadline too.
+	SkillProxyTimeout time.Duration `json:"-"`
 	// InvokeTimeout bounds a single remote invocation. The desktop enforces its
 	// own deadline too; this one exists so an unresponsive agent cannot pin a
 	// remote caller.
@@ -402,6 +411,7 @@ func DefaultConfig() Config {
 		RequireVerifiedInvoke: true,
 		InvokeOperations:      []string{OperationTask},
 		InvokeTimeout:         DefaultInvokeTimeout,
+		SkillProxyTimeout:     DefaultSkillProxyTimeout,
 		Reputation:            DefaultReputationConfig(),
 		Governance:            DefaultGovernanceConfig(),
 	}
