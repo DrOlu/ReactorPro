@@ -1,7 +1,7 @@
 {
   "name": "reactorpro",
-  "version": "1.7.4",
-  "description": "ReactorPro CLI — installer for the ReactorPro gateway and headless agent (agentd) binaries.",
+  "version": "1.7.5",
+  "description": "ReactorPro CLI \u2014 installer for the ReactorPro gateway and headless agent (agentd) binaries.",
   "license": "MIT",
   "author": "Hyperspace Technologies <agent@reactorpro.ng>",
   "homepage": "https://reactorpro.ng",
