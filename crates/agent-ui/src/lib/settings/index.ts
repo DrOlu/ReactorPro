@@ -949,16 +949,44 @@ export function normalizeProviderRetryPolicy(input: unknown): ProviderRetryPolic
   return undefined;
 }
 
+/**
+ * Canonical SuperAgent gateway origin.
+ *
+ * The gateway exposes an OpenAI-compatible surface at
+ * `<origin>/chat/completions` (and `/v1/chat/completions`), with the catalog on
+ * `GET /` and `/v1/models`. A request sent to the bare origin itself (or to
+ * `/v1`) answers `404 {"error":{"message":"Not Found"}}`, so the SuperAgent
+ * provider must never be persisted in full-URL mode against this host.
+ */
+const SUPERAGENT_GATEWAY_BASE_URL = "https://api.superagent.ng";
+
+function isSuperAgentGatewayHost(raw: unknown): boolean {
+  if (typeof raw !== "string" || raw.trim() === "") return false;
+  try {
+    return new URL(raw.trim()).hostname.toLowerCase() === "api.superagent.ng";
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const type = normalizeProviderId(obj.type);
   const isFullUrl = obj.isFullUrl === true;
+  // The SuperAgent gateway is OpenAI chat-completions only. The `codex` type
+  // otherwise defaults to the Responses API and can be persisted in full-URL
+  // mode, both of which misfire against this host — so pin it here.
+  const superAgentEndpoint = type === "codex" && isSuperAgentGatewayHost(obj.baseUrl);
   const codexRouting =
     type === "codex" || type === "xai"
       ? normalizeCodexRouting(
           obj.baseUrl,
           // xAI / Grok always use Responses; ignore completions from historical config.
-          type === "xai" ? "openai-responses" : obj.requestFormat,
+          type === "xai"
+            ? "openai-responses"
+            : superAgentEndpoint
+              ? "openai-completions"
+              : obj.requestFormat,
           isFullUrl,
         )
       : undefined;
@@ -982,7 +1010,17 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     id === "builtin-codex" &&
     (normalizedBaseUrl === "" || normalizedBaseUrl === "https://api.openai.com/v1")
   ) {
-    normalizedBaseUrl = "https://api.superagent.ng";
+    normalizedBaseUrl = SUPERAGENT_GATEWAY_BASE_URL;
+  }
+  // Canonicalise the SuperAgent gateway no matter how the row was persisted
+  // (imported config, a user toggled "full URL", or a save from a build whose
+  // codex default was the Responses API): always the canonical origin, never
+  // full-URL, so the runtime appends `/chat/completions` instead of POSTing to
+  // the bare origin (which answers 404 "Not Found").
+  let effectiveIsFullUrl = isFullUrl;
+  if (superAgentEndpoint || isSuperAgentGatewayHost(normalizedBaseUrl)) {
+    normalizedBaseUrl = SUPERAGENT_GATEWAY_BASE_URL;
+    effectiveIsFullUrl = false;
   }
 
   return {
@@ -990,7 +1028,7 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     name: normalizeProviderName(id, obj.name),
     type,
     baseUrl: normalizedBaseUrl,
-    isFullUrl,
+    isFullUrl: effectiveIsFullUrl,
     ...(type !== "gemini" && typeof obj.modelsUrl === "string" && obj.modelsUrl.trim()
       ? { modelsUrl: obj.modelsUrl.trim() }
       : {}),
