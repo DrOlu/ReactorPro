@@ -16,10 +16,12 @@ on:
 
 permissions:
   contents: read
+  id-token: write # PyPI trusted publishing (OIDC)
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: pypi
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
     steps:
@@ -53,11 +55,14 @@ jobs:
           ls -l synapse-dist/pypi/ synapse-dist/npm/*/ 2>/dev/null | head -40
           twine check synapse-dist/pypi/*.whl
 
-      - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: "__token__"
-          TWINE_PASSWORD: ${{ secrets.SYNASSE_PYPI_TOKEN }}
-        run: twine upload --non-interactive --skip-existing synapse-dist/pypi/*.whl
+      # Trusted publishing: register a PENDING publisher on pypi.org for the
+      # synapse-gateway project (owner DrOlu, repo ReactorPro, workflow
+      # publish-synapse-gateway.yml). No token required.
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: synapse-dist/pypi
+          skip-existing: true
 
       - uses: actions/setup-node@v4
         with:
