@@ -21,7 +21,12 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: pypi
+    environment:
+      name: pypi
+      url: https://pypi.org/p/synapse-gateway
+    permissions:
+      contents: read
+      id-token: write
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
     steps:
@@ -35,8 +40,12 @@ jobs:
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
           echo "publishing synapse-gateway from $RELEASE_TAG"
 
-      # Build tooling runs from main; the BINARIES come from the release tag.
+      # Build tooling always comes from main; binaries are downloaded from the
+      # release tag by scripts/build_synapse_gateway_packages.py. Checking out
+      # the tag itself fails because v1.7.6 (and older) predate the builder.
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - uses: actions/setup-python@v5
         with:
