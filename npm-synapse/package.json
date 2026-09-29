@@ -1,0 +1,38 @@
+{
+  "name": "@hyperspaceng/synapse-gateway",
+  "version": "1.7.6",
+  "description": "ReactorPro Gateway (Synapse) - headless agent mesh gateway + agentd worker as native binaries, offline after install",
+  "bin": {
+    "synapse-gateway": "bin-gateway.js",
+    "synapse-agentd": "bin-agentd.js"
+  },
+  "files": [
+    "resolve.js",
+    "bin-gateway.js",
+    "bin-agentd.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DrOlu/ReactorPro.git"
+  },
+  "keywords": [
+    "reactorpro",
+    "synapse",
+    "gateway",
+    "agent-mesh",
+    "nats",
+    "agentd"
+  ],
+  "optionalDependencies": {
+    "@hyperspaceng/synapse-gateway-darwin-arm64": "1.7.6",
+    "@hyperspaceng/synapse-gateway-darwin-x64": "1.7.6",
+    "@hyperspaceng/synapse-gateway-linux-x64-gnu": "1.7.6",
+    "@hyperspaceng/synapse-gateway-linux-arm64-gnu": "1.7.6",
+    "@hyperspaceng/synapse-gateway-win32-x64": "1.7.6"
+  }
+}
