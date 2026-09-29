@@ -218,6 +218,17 @@ func (r *Runner) execute(parent context.Context, next job) {
 	// the turn ends — turnDone closes before the wait, so a finished turn
 	// reclaims its worker immediately (waiting only on ctx would deadlock:
 	// cancel() is deferred and runs last).
+	//
+	// The drain must finish BEFORE the terminal record is written. The
+	// conversation slot is released in a defer that runs after this function
+	// returns; if we wrote the terminal first and then waited for the ticker
+	// goroutine, the gateway would unblock the caller (who immediately
+	// resumes the same conversation) while the slot was still held. The
+	// resume was then refused as a concurrent run — and a refused run never
+	// writes a terminal of its own, so the caller hung until the test
+	// timeout. Stopping the heartbeat first closes that window: by the time
+	// the peer sees the terminal, the next statement is return, then the
+	// slot defer.
 	turnDone := make(chan struct{})
 	heartbeatDone := make(chan struct{})
 	go func() {
@@ -235,10 +246,14 @@ func (r *Runner) execute(parent context.Context, next job) {
 			}
 		}
 	}()
-	defer func() {
-		close(turnDone)
-		<-heartbeatDone
-	}()
+	var stopHeartbeat sync.Once
+	drainHeartbeat := func() {
+		stopHeartbeat.Do(func() {
+			close(turnDone)
+			<-heartbeatDone
+		})
+	}
+	defer drainHeartbeat()
 
 	// The first checkpoint starts the run inside the gateway's settle window
 	// and seeds the transcript with the prompt. This is also what makes the
@@ -251,6 +266,9 @@ func (r *Runner) execute(parent context.Context, next job) {
 	}
 
 	answer, runErr := r.runTurn(ctx, next, &entries, writer)
+	// Drain heartbeats before settling so the terminal is the last write
+	// and the conversation slot is free as soon as the peer observes it.
+	drainHeartbeat()
 	switch {
 	case ctx.Err() != nil && parent.Err() == nil:
 		// Cancelled by command or conversation drop, not by shutdown.

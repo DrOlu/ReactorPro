@@ -453,11 +453,17 @@ func TestE2EAgentdConversationPersistence(t *testing.T) {
 	t.Cleanup(provider.Close)
 	manager := startE2E(t, 1, provider.URL)
 
-	if err := chatcmd.ProbeRuntimeForCommand(context.Background(), manager, e2eAgentID); err != nil {
+	// A refused resume (conversation slot still held after the first turn
+	// terminalled) never writes a terminal of its own. Bound this so a
+	// regression fails in seconds rather than eating the package's 10m timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	if err := chatcmd.ProbeRuntimeForCommand(ctx, manager, e2eAgentID); err != nil {
 		t.Fatalf("runtime probe (ping/pong): %v", err)
 	}
 
-	first, err := manager.SubmitRemoteTask(context.Background(), e2eAgentID,
+	first, err := manager.SubmitRemoteTask(ctx, e2eAgentID,
 		"remember this codeword: banana-42")
 	if err != nil {
 		t.Fatalf("first SubmitRemoteTask: %v", err)
@@ -469,7 +475,7 @@ func TestE2EAgentdConversationPersistence(t *testing.T) {
 
 	// The resumed turn: same conversation, new question. What the worker
 	// saw is exactly what the echo reports back.
-	resumed, err := manager.SubmitRemoteTaskInConversation(context.Background(), e2eAgentID,
+	resumed, err := manager.SubmitRemoteTaskInConversation(ctx, e2eAgentID,
 		first.ConversationID, "what was the codeword?", nil)
 	if err != nil {
 		t.Fatalf("SubmitRemoteTaskInConversation: %v", err)
@@ -484,7 +490,7 @@ func TestE2EAgentdConversationPersistence(t *testing.T) {
 	}
 
 	// A fresh conversation is a clean slate: the codeword must NOT leak in.
-	fresh, err := manager.SubmitRemoteTask(context.Background(), e2eAgentID,
+	fresh, err := manager.SubmitRemoteTask(ctx, e2eAgentID,
 		"what was the codeword?")
 	if err != nil {
 		t.Fatalf("fresh SubmitRemoteTask: %v", err)

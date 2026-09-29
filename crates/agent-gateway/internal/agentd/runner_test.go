@@ -145,6 +145,47 @@ func TestRunnerRefusesASecondConcreateCommandForAConversation(t *testing.T) {
 	}
 }
 
+// A follow-up command for the same conversation must be accepted as soon as
+// the first run's terminal is on the wire — not after the finishing worker
+// has also drained its heartbeat goroutine. Holding the slot through that
+// drain is what hung TestE2EAgentdConversationPersistence: the gateway
+// unblocked on the terminal, the resume arrived, and the runner refused it
+// as concurrent. A refused run never writes a terminal, so the caller waited
+// until the package timeout.
+func TestRunnerAcceptsResumeAsSoonAsTerminalLands(t *testing.T) {
+	var hits atomic.Int32
+	provider := countingProvider(&hits)
+	t.Cleanup(provider.Close)
+	runner, sink := newTestRunner(t, provider.URL)
+	runner.cfg.Heartbeat = time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	runner.Start(ctx, 1)
+
+	runner.SubmitChatCommand("run-1", chatCommand("conv-1", "first"))
+	waitTerminal(t, sink, "run-1", 5*time.Second)
+
+	runner.SubmitChatCommand("run-2", chatCommand("conv-1", "second"))
+	waitTerminal(t, sink, "run-2", 5*time.Second)
+	if hits.Load() != 2 {
+		t.Fatalf("expected both turns to spend a provider call, got %d", hits.Load())
+	}
+}
+
+func waitTerminal(t *testing.T, sink *recordingSink, runID string, d time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if sink.terminalState(runID) == "completed" {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("%s did not terminal as completed within %s (state=%q)",
+		runID, d, sink.terminalState(runID))
+}
+
 // A cancel that lands while the job is still queued must settle the run as
 // cancelled without spending a provider call — the queued job is work the
 // caller has already given up on, not work to start and then stop.
