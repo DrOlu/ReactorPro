@@ -83,15 +83,25 @@ jobs:
 
       - name: Publish to npm
         id: npm
-        continue-on-error: true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.SYNASSE_NPM_TOKEN }}
         run: |
+          set -euo pipefail
+          publish_one() {
+            local d="$1" name version
+            name=$(node -p "require('./${d}/package.json').name")
+            version=$(node -p "require('./${d}/package.json').version")
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo "already on registry: ${name}@${version} — skipping"
+              return 0
+            fi
+            echo "publishing $d (${name}@${version})"
+            npm publish "$d" --access public
+          }
           for d in synapse-dist/npm/darwin-arm64 synapse-dist/npm/darwin-x64 \
                    synapse-dist/npm/linux-x64-gnu synapse-dist/npm/linux-arm64-gnu \
                    synapse-dist/npm/win32-x64 synapse-dist/npm/main; do
-            echo "publishing $d"
-            npm publish "$d" --access public
+            publish_one "$d"
           done
 
       - name: Fail if a publish failed
