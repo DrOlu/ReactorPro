@@ -208,10 +208,10 @@ def build_pypi(version: str, targets: list[str], binaries: dict, dist: Path) -> 
         spec = TARGETS[target]
         shutil.rmtree(bindir, ignore_errors=True)
         bindir.mkdir(parents=True)
-        for key in ("bin", "agentd"):
-            src = binaries[target][key]
-            dest = bindir / src.name
-            shutil.copy2(src, dest)
+        exe = ".exe" if target == "windows-amd64" else ""
+        for key, canonical in (("bin", "reactorpro-gateway"), ("agentd", "reactorpro-agentd")):
+            dest = bindir / (canonical + exe)
+            shutil.copy2(binaries[target][key], dest)
             dest.chmod(dest.stat().st_mode | 0o111)
         wheel = retag(one_any_wheel(), spec["wheel"])
         print(f"built {wheel.name}")
@@ -230,8 +230,9 @@ def build_npm(version: str, targets: list[str], binaries: dict, dist: Path) -> l
         goos, goarch = target.split("-")
         pkg_dir = dist / "npm" / spec["npm"]
         (pkg_dir / "bin").mkdir(parents=True, exist_ok=True)
-        for key in ("bin", "agentd"):
-            shutil.copy2(binaries[target][key], pkg_dir / "bin" / binaries[target][key].name)
+        exe = ".exe" if target == "windows-amd64" else ""
+        for key, canonical in (("bin", "reactorpro-gateway"), ("agentd", "reactorpro-agentd")):
+            shutil.copy2(binaries[target][key], pkg_dir / "bin" / (canonical + exe))
         manifest = {
             "name": f"{NPM_SCOPE}/synapse-gateway-{spec['npm']}",
             "version": version,
