@@ -1,0 +1,77 @@
+name: Publish synapse-gateway (PyPI + npm)
+
+# Auto-update channel for the gateway distribution packages: whenever a
+# gateway release is published (or this workflow is dispatched with a tag),
+# rebuild the PyPI wheels and npm packages from that release's binaries and
+# publish them — so pip/npm always track the gateway version-for-version.
+
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish, for example v1.7.6
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+    steps:
+      - name: Resolve the release tag
+        run: |
+          set -euo pipefail
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "::error::no release tag resolved"
+            exit 1
+          fi
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "publishing synapse-gateway from $RELEASE_TAG"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: pip install build wheel setuptools twine
+
+      # The gateway-release workflow may still be uploading assets when the
+      # `released` event lands; the builder retries 404s with backoff.
+      - name: Build packages from the release binaries
+        run: python scripts/build_synapse_gateway_packages.py --release-tag "$RELEASE_TAG"
+
+      - name: Verify staged packages
+        run: |
+          ls -l synapse-dist/pypi/ synapse-dist/npm/*/ 2>/dev/null | head -40
+          twine check synapse-dist/pypi/*.whl
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: "__token__"
+          TWINE_PASSWORD: ${{ secrets.SYNASSE_PYPI_TOKEN }}
+        run: twine upload --non-interactive --skip-existing synapse-dist/pypi/*.whl
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.SYNASSE_NPM_TOKEN }}
+        run: |
+          for d in synapse-dist/npm/darwin-arm64 synapse-dist/npm/darwin-x64 \
+                   synapse-dist/npm/linux-x64-gnu synapse-dist/npm/linux-arm64-gnu \
+                   synapse-dist/npm/win32-x64 synapse-dist/npm/main; do
+            echo "publishing $d"
+            npm publish "$d" --access public
+          done

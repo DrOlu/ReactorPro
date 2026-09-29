@@ -52,12 +52,26 @@ TARGETS = {
 }
 
 
-def http_download(url: str, dest: Path) -> Path:
+def http_download(url: str, dest: Path, retries: int = 4) -> Path:
     print(f"downloading {url}", flush=True)
     request = urllib.request.Request(url, headers={"User-Agent": "synapse-gateway-build/1.0"})
-    with urllib.request.urlopen(request, timeout=600) as response, open(dest, "wb") as out:
-        shutil.copyfileobj(response, out)
-    return dest
+    import time
+
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(request, timeout=600) as response, open(dest, "wb") as out:
+                shutil.copyfileobj(response, out)
+            return dest
+        except urllib.error.HTTPError as exc:
+            # The `released` event can land while gateway-release is still
+            # uploading assets: retry fresh 404s with backoff.
+            if exc.code == 404 and attempt < retries - 1:
+                wait = 30 * (attempt + 1)
+                print(f"404 (attempt {attempt + 1}/{retries}); retrying in {wait}s", flush=True)
+                time.sleep(wait)
+                continue
+            raise
+    raise SystemExit(f"download failed after {retries} attempts: {url}")
 
 
 def fetch_binaries(tag: str, targets: list[str], cache: Path) -> dict:
