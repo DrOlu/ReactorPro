@@ -88,7 +88,7 @@ jobs:
         run: |
           set -euo pipefail
           publish_one() {
-            local d="$1" name version
+            local d="$1" name version out
             name=$(node -p "require('./${d}/package.json').name")
             version=$(node -p "require('./${d}/package.json').version")
             if npm view "${name}@${version}" version >/dev/null 2>&1; then
@@ -96,7 +96,17 @@ jobs:
               return 0
             fi
             echo "publishing $d (${name}@${version})"
-            npm publish "$d" --access public
+            if out=$(npm publish "$d" --access public 2>&1); then
+              echo "$out"
+              return 0
+            fi
+            echo "$out"
+            # Replica lag: view 404s while the version is already reserved.
+            if echo "$out" | grep -q "cannot publish over the previously published versions"; then
+              echo "already published: ${name}@${version} — skipping"
+              return 0
+            fi
+            return 1
           }
           for d in synapse-dist/npm/darwin-arm64 synapse-dist/npm/darwin-x64 \
                    synapse-dist/npm/linux-x64-gnu synapse-dist/npm/linux-arm64-gnu \
