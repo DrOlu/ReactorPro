@@ -145,7 +145,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synapse-gateway"
-dynamic = ["version"]
+version = "0.0.0"
 description = "ReactorPro Gateway (Synapse) as a pip-installable native binary - headless agent mesh gateway + agentd worker"
 requires-python = ">=3.9"
 readme = "README.md"
@@ -170,7 +170,7 @@ def build_pypi(version: str, targets: list[str], binaries: dict, dist: Path) -> 
     (work / "README.md").write_text(
         "# synapse-gateway\n\nThe ReactorPro Gateway (Synapse agent mesh) as native binaries:\n"
         "`pip install synapse-gateway` then run `synapse-gateway` / `synapse-agentd`.\n")
-    (work / "pyproject.toml").write_text(PYPROJECT)
+    (work / "pyproject.toml").write_text(PYPROJECT.replace("0.0.0", version))
 
     def one_any_wheel() -> Path:
         expected = dist / f"synapse_gateway-{version}-py3-none-any.whl"
