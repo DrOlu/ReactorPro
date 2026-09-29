@@ -57,8 +57,11 @@ jobs:
 
       # Trusted publishing: register a PENDING publisher on pypi.org for the
       # synapse-gateway project (owner DrOlu, repo ReactorPro, workflow
-      # publish-synapse-gateway.yml). No token required.
+      # publish-synapse-gateway.yml, environment pypi). First upload creates the
+      # project. Do not fail-fast — npm should still publish if PyPI is blocked.
       - name: Publish to PyPI (trusted publishing)
+        id: pypi
+        continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: synapse-dist/pypi
@@ -70,6 +73,8 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Publish to npm
+        id: npm
+        continue-on-error: true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.SYNASSE_NPM_TOKEN }}
         run: |
@@ -79,3 +84,9 @@ jobs:
             echo "publishing $d"
             npm publish "$d" --access public
           done
+
+      - name: Fail if a publish failed
+        if: always() && (steps.pypi.outcome != 'success' || steps.npm.outcome != 'success')
+        run: |
+          echo "pypi=${{ steps.pypi.outcome }} npm=${{ steps.npm.outcome }}"
+          exit 1
