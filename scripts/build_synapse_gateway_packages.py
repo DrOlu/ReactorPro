@@ -155,8 +155,8 @@ license = { text = "Apache-2.0" }
 synapse-gateway = "synapse_gateway:main_gateway"
 synapse-agentd = "synapse_gateway:main_agentd"
 
-[tool.setuptools]
-packages = ["synapse_gateway"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.package-data]
 synapse_gateway = ["bin/*"]
