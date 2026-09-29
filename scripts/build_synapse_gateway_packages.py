@@ -178,9 +178,12 @@ synapse_gateway = ["bin/*"]
 
 
 def build_pypi(version: str, targets: list[str], binaries: dict, dist: Path) -> list[Path]:
+    # work dir lives OUTSIDE the published dir: the PyPI action fails on any
+    # non-distribution entry inside packages-dir.
+    work = dist / "_pypi-work"
+    work.mkdir(parents=True, exist_ok=True)
     dist = dist / "pypi"
     dist.mkdir(parents=True, exist_ok=True)
-    work = dist / "_pypi"
     pkg = work / "src" / "synapse_gateway"
     pkg.mkdir(parents=True, exist_ok=True)
     (work / "README.md").write_text(
