@@ -64,17 +64,19 @@ jobs:
           ls -l synapse-dist/pypi/ synapse-dist/npm/*/ 2>/dev/null | head -40
           twine check synapse-dist/pypi/*.whl
 
-      # Trusted publishing: register a PENDING publisher on pypi.org for the
-      # synapse-gateway project (owner DrOlu, repo ReactorPro, workflow
-      # publish-synapse-gateway.yml, environment pypi). First upload creates the
-      # project. Do not fail-fast — npm should still publish if PyPI is blocked.
-      - name: Publish to PyPI (trusted publishing)
+      # Token auth: OIDC trusted publishing is not registered on pypi.org yet
+      # (`invalid-publisher`). SYNASSE_PYPI_TOKEN creates the project on first
+      # upload. Attestations require OIDC, so they stay off. Do not fail-fast —
+      # npm should still publish if PyPI is blocked.
+      - name: Publish to PyPI
         id: pypi
         continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: synapse-dist/pypi
           skip-existing: true
+          password: ${{ secrets.SYNASSE_PYPI_TOKEN }}
+          attestations: false
 
       - uses: actions/setup-node@v4
         with:
