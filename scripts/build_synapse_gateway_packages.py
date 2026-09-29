@@ -232,7 +232,9 @@ def build_npm(version: str, targets: list[str], binaries: dict, dist: Path) -> l
         (pkg_dir / "bin").mkdir(parents=True, exist_ok=True)
         exe = ".exe" if target == "windows-amd64" else ""
         for key, canonical in (("bin", "reactorpro-gateway"), ("agentd", "reactorpro-agentd")):
-            shutil.copy2(binaries[target][key], pkg_dir / "bin" / (canonical + exe))
+            dest = pkg_dir / "bin" / (canonical + exe)
+            shutil.copy2(binaries[target][key], dest)
+            dest.chmod(dest.stat().st_mode | 0o111)
         manifest = {
             "name": f"{NPM_SCOPE}/synapse-gateway-{spec['npm']}",
             "version": version,
