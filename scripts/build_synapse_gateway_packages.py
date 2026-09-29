@@ -178,6 +178,8 @@ synapse_gateway = ["bin/*"]
 
 
 def build_pypi(version: str, targets: list[str], binaries: dict, dist: Path) -> list[Path]:
+    dist = dist / "pypi"
+    dist.mkdir(parents=True, exist_ok=True)
     work = dist / "_pypi"
     pkg = work / "src" / "synapse_gateway"
     pkg.mkdir(parents=True, exist_ok=True)
