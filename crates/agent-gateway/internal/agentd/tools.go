@@ -479,6 +479,25 @@ out = fn(**args)
 print(json.dumps({"probe": sys.argv[2], "result": out}, ensure_ascii=False, default=str))
 `
 
+// neuralOSAskAnswered reports whether an ask.py envelope carries a real
+// answer (a selected probe plus a result) rather than a refusal. The
+// deterministic floor answers first; the engine is only the fallback seat.
+func neuralOSAskAnswered(out []byte) bool {
+	var env struct {
+		Probe   *string         `json:"probe"`
+		Result  json.RawMessage `json:"result"`
+		Refused bool            `json:"refused"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(out), &env); err != nil {
+		return false
+	}
+	if env.Refused || env.Probe == nil || !isNeuralOSProbeName(*env.Probe) {
+		return false
+	}
+	trimmed := bytes.TrimSpace(env.Result)
+	return len(trimmed) > 0 && string(trimmed) != "null"
+}
+
 func (t *Toolset) runNeuralOSQuery(ctx context.Context, args map[string]any) (string, error) {
 	instance := argString(args, "instance")
 	question := argString(args, "question")
@@ -496,6 +515,24 @@ func (t *Toolset) runNeuralOSQuery(ctx context.Context, args map[string]any) (st
 	engine := t.neuralOS_Engine()
 	cact := t.neuralOS_Cact(engine)
 	python := t.neuralOS_Python()
+
+	// Deterministic code answers first: an instance that ships ask.py runs
+	// its lexical floor and the engine is only the fallback seat — the same
+	// contract as the desktop integration. A refusal falls through below.
+	if _, statErr := os.Stat(filepath.Join(instanceDir, "ask.py")); statErr == nil {
+		askCtx, askCancel := context.WithTimeout(ctx, toolsetCommandTimeout)
+		defer askCancel()
+		ask := exec.CommandContext(askCtx, python, "ask.py", question)
+		ask.Dir = instanceDir
+		ask.WaitDelay = 2 * time.Second
+		ask.Env = append(os.Environ(), "PYTHONPATH="+instanceDir,
+			"NEEDLE_TELEMETRY=0", "DO_NOT_TRACK=1", "PYTHONIOENCODING=utf-8")
+		var askErrBuf bytes.Buffer
+		ask.Stderr = &askErrBuf
+		if askOut, askErr := ask.Output(); askErr == nil && neuralOSAskAnswered(askOut) {
+			return capString(strings.TrimSpace(string(askOut)), toolOutputCap), nil
+		}
+	}
 
 	// Phase A — selection (on-device, deterministic).
 	selCtx, selCancel := context.WithTimeout(ctx, toolsetCommandTimeout)

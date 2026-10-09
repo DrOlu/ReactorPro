@@ -362,7 +362,26 @@ def {tn}_by_{c}(value: str) -> dict:
     return body
 
 
+def _append_enum_wrappers(code, profile):
+    """The file/json menu advertises one `count_by_<column>` probe per
+    low-cardinality column, but the base bridge only implements the generic
+    `count_by_column`. Emit a thin wrapper per column so every advertised
+    probe name resolves — otherwise the selector picks `count_by_status` and
+    the direct `getattr(bridge, name)(...)` call raises AttributeError
+    (caught live by the ask.py floor on a generated instance)."""
+    wrappers = []
+    for col, _values in enum_fields(profile.get("fields", [])):
+        wrappers.append(
+            '\n\n\ndef count_by_' + snake(col) + '(value: str = "") -> dict:\n'
+            '    return count_by_column(' + json.dumps(col) + ', value)\n')
+    return code + "".join(wrappers)
+
+
 def bridge_files(profile, log, model_class="Record"):
+    return _append_enum_wrappers(_bridge_files_base(profile, log, model_class), profile)
+
+
+def _bridge_files_base(profile, log, model_class="Record"):
     model_import = "LogLine" if log else model_class
     head = BRIDGE_HEAD.format(now=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                               model_import=model_import)
@@ -649,6 +668,177 @@ if __name__ == "__main__":
         selection()
 '''
 
+# The deterministic-first ask path (the "ask.py lexical floor" from the
+# neuralOS contract: floor in ask.py, gates in the Router, banks in CI).
+# Standard library only; import-safe.
+ASK = '''#!/usr/bin/env python3
+"""{agent} - deterministic-first ask path (the ask.py lexical floor).
+
+Per the neuralOS instance contract the ANSWERING SURFACE IS DETERMINISTIC
+CODE: this lexical floor decides from the probe menu and the engine is only
+a fallback seat. It refuses ("no probe matched") when the best overlap score
+is <= 0 instead of guessing.
+
+    python ask.py "your question in plain English"
+    python ask.py "..." --engine ./needle --model needle3.cact
+
+stdout is one JSON envelope:
+    {"instance","question","probe","arguments","score","confidence",
+      "refused","result"|"error"}
+exit 0 = answered, 1 = refused/failed.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+MENU = os.path.join(HERE, "needle_menu.json")
+TOKEN_RE = re.compile("[a-z0-9]+")
+STOP = set((
+    "the a an of in on for to and or all me show give please how many much "
+    "what is are count list get by with from rows row table data"
+).split())
+
+
+def tokens(text):
+    return [t for t in TOKEN_RE.findall((text or "").lower())
+            if t not in STOP and len(t) > 1]
+
+
+def load_menu():
+    with open(MENU, encoding="utf-8") as fh:
+        menu = json.load(fh)
+    return menu if isinstance(menu, list) else menu.get("probes", [])
+
+
+COUNT_WORDS = ("how many", "count", "total", "number of")
+
+
+def score(question_tokens, entry, count_intent):
+    """A token in the probe NAME is worth 2, elsewhere 1; a count-shaped
+    question gets a nudge toward `*count*` probes so "how many records" lands
+    on count_records rather than the generic peek."""
+    name_tokens = set(tokens(entry.get("name", "")))
+    hay = set(name_tokens)
+    hay.update(tokens(entry.get("description", "")))
+    for trigger in entry.get("triggers") or []:
+        hay.update(tokens(trigger))
+    s = sum(2 if t in name_tokens else 1 for t in set(question_tokens) if t in hay)
+    if count_intent and "count" in entry.get("name", ""):
+        s += 1
+    return s
+
+
+def pick(question, menu):
+    qt = tokens(question)
+    if not qt:
+        return None, 0
+    count_intent = any(w in question.lower() for w in COUNT_WORDS)
+    best, best_score = None, 0
+    for entry in menu:
+        s = score(qt, entry, count_intent)
+        if s > best_score:
+            best, best_score = entry, s
+    return best, best_score
+
+
+def bind_arguments(entry, question):
+    """Fill the probe arguments from the question; refuse rather than fabricate."""
+    spec = entry.get("parameters") or {}
+    props = spec.get("properties") or {}
+    required = spec.get("required") or []
+    numbers = [int(n) for n in re.findall("[0-9]+", question)]
+    words = set(TOKEN_RE.findall(question.lower()))
+    args = {}
+    for key, prop in props.items():
+        if prop.get("enum"):
+            hit = next((v for v in prop["enum"] if str(v).lower() in words), None)
+            if hit is not None:
+                args[key] = hit
+            elif key in required:
+                return None, "argument " + repr(key) + " is required; its value is not in the question"
+            continue
+        if prop.get("type") == "integer":
+            if numbers:
+                args[key] = numbers[0]
+            elif key not in required:
+                args[key] = 10
+            continue
+        if key in required:
+            return None, "argument " + repr(key) + " is required and cannot be resolved from the question"
+    return args, None
+
+
+def execute(probe, arguments):
+    sys.path.insert(0, HERE)
+    import bridge
+    return getattr(bridge, probe)(**arguments)
+
+
+def engine_select(engine, model, question, menu):
+    proc = subprocess.run(
+        [engine, "--model", model, "--tools", MENU, "--prompt", question],
+        capture_output=True, text=True, timeout=60)
+    raw = proc.stdout.strip()
+    payload = json.loads(raw) if raw else {}
+    name = payload.get("name") or payload.get("tool")
+    if name and any(e.get("name") == name for e in menu):
+        return name, payload.get("arguments") or {}, float(payload.get("confidence") or 0.0)
+    return None, {}, 0.0
+
+
+def main(argv):
+    engine = model = None
+    if "--engine" in argv and argv.index("--engine") + 1 < len(argv):
+        engine = argv[argv.index("--engine") + 1]
+    if "--model" in argv and argv.index("--model") + 1 < len(argv):
+        model = argv[argv.index("--model") + 1]
+    question = " ".join(a for a in argv if not a.startswith("--")).strip() or {example}
+
+    env = {"instance": {agent}, "question": question, "probe": None,
+           "arguments": {}, "score": 0, "confidence": 0.0, "refused": False}
+    menu = load_menu()
+    entry, best = pick(question, menu)
+
+    if entry is None or best <= 0:
+        if engine and model:
+            try:
+                name, arguments, confidence = engine_select(engine, model, question, menu)
+            except Exception as exc:
+                name, arguments, confidence = None, {}, 0.0
+                env["error"] = "engine fallback failed: " + str(exc)
+            if name:
+                env.update(probe=name, arguments=arguments, confidence=confidence)
+            else:
+                env.update(refused=True,
+                           error=env.get("error", "no probe matched (engine returned nothing usable)"))
+        else:
+            env.update(refused=True, error="no probe matched")
+        print(json.dumps(env, ensure_ascii=False, default=str))
+        return 1
+
+    arguments, why = bind_arguments(entry, question)
+    if why:
+        env.update(probe=entry["name"], score=best, refused=True, error=why)
+        print(json.dumps(env, ensure_ascii=False, default=str))
+        return 1
+    env.update(probe=entry["name"], arguments=arguments, score=best, confidence=1.0)
+    try:
+        env["result"] = execute(entry["name"], arguments)
+    except Exception as exc:
+        env.update(refused=True, error="probe " + entry["name"] + " failed: " + str(exc))
+        print(json.dumps(env, ensure_ascii=False, default=str))
+        return 1
+    print(json.dumps(env, ensure_ascii=False, default=str))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
+'''
+
 README = '''# {agent} — generated needle instance
 
 Source kind : {kind}
@@ -665,6 +855,16 @@ Menu        : needle_menu.json ({n_probes} probes)
     {py} verify.py --full     # + 3-phrasing selection test
 Then compare one relayed number against a direct query of the source and
 record all three results in verification.txt.
+
+## Ask (deterministic floor)
+
+    {py} ask.py "your question in plain English"
+
+ask.py is the deterministic-first entrance: it answers from the menu triggers
+when the lexical overlap is positive and refuses ("no probe matched") when it
+is not. The on-device engine is only a fallback seat (add
+`--engine <needle> --model needle3.cact` to enable it). ReactorPro calls
+ask.py before the engine so refusals stay honest.
 
 ## Engine runtime
 
@@ -784,9 +984,9 @@ def main():
     if os.path.exists(graph_bridge_src):
         shutil.copy(graph_bridge_src, os.path.join(args.out, "graph_bridge.py"))
 
+    example = (f"give me the {snake(table or agent_name)} summary"
+               if kind == "database" else "show me a summary of the data")
     if args.runtime == "python":
-        example = (f"give me the {snake(table or agent_name)} summary"
-                   if kind == "database" else "show me a summary of the data")
         open(os.path.join(args.out, "instance.py"), "w", encoding="utf-8").write(
             instance_code(profile, table, agent_name, example))
 
@@ -808,6 +1008,10 @@ def main():
             "import bridge\n",
             "import bridge\nfrom models import " + pascal(table) + "\n")
     open(os.path.join(args.out, "verify.py"), "w", encoding="utf-8").write(verify_code)
+    # The deterministic-first entrance every instance ships and ReactorPro
+    # calls before the engine (see the neuralOS ask.py floor contract).
+    open(os.path.join(args.out, "ask.py"), "w", encoding="utf-8").write(
+        ASK.replace("{agent}", repr(agent_name)).replace("{example}", repr(example)))
     open(os.path.join(args.out, "README.md"), "w", encoding="utf-8").write(
         README.format(agent=agent_name, kind=kind, runtime=args.runtime,
                       n_probes=len(menu), out=os.path.abspath(args.out),

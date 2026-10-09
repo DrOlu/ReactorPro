@@ -31,6 +31,8 @@ use tauri::Manager;
 
 const ENGINE_TIMEOUT_SECS: u64 = 60;
 const BRIDGE_TIMEOUT_SECS: u64 = 180;
+/// ask.py runs the lexical floor then (optionally) the bridge; same budget as a bridge run.
+const ASK_TIMEOUT_SECS: u64 = 180;
 /// The generated `needle_menu.json` entries are snake_case identifiers; this
 /// doubles as an injection guard before the name reaches `getattr`.
 const PROBE_NAME_MAX_LEN: usize = 64;
@@ -41,6 +43,8 @@ pub struct InstanceInfo {
     pub name: String,
     pub probes: usize,
     pub has_bridge: bool,
+    /// True when the instance ships the deterministic-first `ask.py` entrance.
+    pub has_ask: bool,
     pub path: String,
 }
 
@@ -106,6 +110,7 @@ fn scan_instances(dir: &Path) -> Vec<InstanceInfo> {
                 .into_owned(),
             probes,
             has_bridge: path.join("bridge.py").exists(),
+            has_ask: path.join("ask.py").exists(),
             path: path.to_string_lossy().into_owned(),
         });
     }
@@ -286,6 +291,51 @@ fn run_bridge_probe(
     })
 }
 
+/// Parse the JSON envelope printed by an instance's `ask.py`. Returns the
+/// selection only when the deterministic floor actually answered; a refusal
+/// (`probe: null`), a malformed envelope, or a non-zero exit yields None so
+/// the caller falls back to engine selection instead of failing hard.
+fn parse_ask_envelope(stdout: &[u8]) -> Option<(String, serde_json::Value, f64)> {
+    let value: serde_json::Value = serde_json::from_slice(stdout).ok()?;
+    if value.get("refused").and_then(serde_json::Value::as_bool) == Some(true) {
+        return None;
+    }
+    let probe = value.get("probe")?.as_str()?.to_string();
+    if !is_valid_probe_name(&probe) {
+        return None;
+    }
+    let result = value.get("result")?.clone();
+    let confidence = value.get("confidence").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+    Some((probe, result, confidence))
+}
+
+/// Run an instance's `ask.py` (the deterministic floor). Never an error: any
+/// refusal, non-zero exit, or unparseable envelope returns None so the caller
+/// falls through to the engine.
+fn run_ask_py(
+    python: &Path,
+    instance_dir: &Path,
+    instance: &str,
+    question: &str,
+) -> Option<ProbeDigest> {
+    let mut cmd = Command::new(python);
+    cmd.arg("ask.py")
+        .arg(question)
+        .current_dir(instance_dir)
+        .env("PYTHONPATH", instance_dir)
+        .env("NEEDLE_TELEMETRY", "0")
+        .env("DO_NOT_TRACK", "1")
+        .env("PYTHONIOENCODING", "utf-8");
+    let stdout = run_captured(cmd, None, Duration::from_secs(ASK_TIMEOUT_SECS), "ask.py").ok()?;
+    let (probe, result, confidence) = parse_ask_envelope(&stdout)?;
+    Some(ProbeDigest {
+        instance: instance.to_string(),
+        probe,
+        confidence,
+        result,
+    })
+}
+
 // ------------------------------------------------------------------- commands
 
 fn resolve_engine_candidates(app: &tauri::AppHandle) -> Vec<PathBuf> {
@@ -422,10 +472,21 @@ pub async fn neuralos_run_probe(
         if question.trim().is_empty() {
             return Err("question must not be empty".into());
         }
-        let (engine, cact) = resolve_engine_pair(&app)?;
         let app_data = app.path().app_data_dir().unwrap_or_default();
         let python = first_existing(&resolve_python_candidates(&app_data))
             .ok_or("no python interpreter found for instance bridges")?;
+
+        // Deterministic code answers first: an instance that ships `ask.py`
+        // runs its lexical floor, and the on-device engine is only the
+        // fallback seat (this also lets an instance answer with no engine
+        // installed at all). A refusal falls through to selection below.
+        if instance_dir.join("ask.py").exists() {
+            if let Some(digest) = run_ask_py(&python, &instance_dir, &instance, &question) {
+                return Ok(digest);
+            }
+        }
+
+        let (engine, cact) = resolve_engine_pair(&app)?;
 
         // Phase A — selection.
         let mut select = Command::new(&engine);
@@ -831,6 +892,24 @@ mod tests {
     // `integration_commands::neuralos` filter.
     use super::*;
 
+    #[test]
+    fn ask_envelope_accepts_answers_and_rejects_refusals() {
+        let good = br#"{"probe":"count_records","result":{"count":4},"confidence":1.0,"refused":false}"#;
+        let parsed = parse_ask_envelope(good).expect("answer envelope should parse");
+        assert_eq!(parsed.0, "count_records");
+        assert_eq!(parsed.1["count"], 4);
+        assert_eq!(parsed.2, 1.0);
+
+        // A refusal must never be mistaken for an answer: the caller falls
+        // back to engine selection instead.
+        assert!(parse_ask_envelope(br#"{"probe":null,"refused":true,"error":"no probe matched"}"#).is_none());
+        // Probe names still pass the injection guard.
+        assert!(parse_ask_envelope(br#"{"probe":"os.system","result":{},"refused":false}"#).is_none());
+        // No result payload: nothing to hand back.
+        assert!(parse_ask_envelope(br#"{"probe":"peek","refused":false}"#).is_none());
+        assert!(parse_ask_envelope(b"not json").is_none());
+    }
+
     fn temp_root(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "reactorpro-neuralos-test-{}-{tag}",
@@ -848,6 +927,7 @@ mod tests {
         std::fs::create_dir_all(&good).unwrap();
         std::fs::write(good.join("needle_menu.json"), "[{\"name\":\"a\"}]").unwrap();
         std::fs::write(good.join("bridge.py"), "x = 1").unwrap();
+        std::fs::write(good.join("ask.py"), "# floor").unwrap();
         let menu_only = root.join("half");
         std::fs::create_dir_all(&menu_only).unwrap();
         std::fs::write(menu_only.join("needle_menu.json"), "[]").unwrap();
@@ -858,8 +938,10 @@ mod tests {
         let chinook = found.iter().find(|i| i.name == "chinook").unwrap();
         assert_eq!(chinook.probes, 1);
         assert!(chinook.has_bridge);
+        assert!(chinook.has_ask);
         let half = found.iter().find(|i| i.name == "half").unwrap();
         assert!(!half.has_bridge);
+        assert!(!half.has_ask);
         let _ = std::fs::remove_dir_all(&root);
     }
 

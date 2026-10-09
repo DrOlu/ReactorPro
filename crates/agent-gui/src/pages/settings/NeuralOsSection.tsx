@@ -13,6 +13,8 @@ type InstanceInfo = {
   name: string;
   probes: number;
   hasBridge: boolean;
+  /** True when the instance ships the deterministic-first ask.py entrance. */
+  hasAsk: boolean;
   path: string;
 };
 
@@ -143,6 +145,14 @@ export function NeuralOsSection() {
                     <Server className="h-3.5 w-3.5 shrink-0 opacity-60" />
                     {instance.name}
                     <span className="text-xs font-normal opacity-60">{instance.probes} probes</span>
+                    {instance.hasAsk ? (
+                      <span
+                        className="rounded bg-emerald-500/10 px-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                        title="Deterministic-first ask.py entrance"
+                      >
+                        ask.py
+                      </span>
+                    ) : null}
                   </div>
                   <div className="truncate font-mono text-[11px] opacity-50">{instance.path}</div>
                 </div>

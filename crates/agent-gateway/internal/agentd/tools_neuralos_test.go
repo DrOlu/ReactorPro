@@ -182,3 +182,21 @@ func TestConfigNeuralOSDefaultsDisabled(t *testing.T) {
 		t.Fatal("neuralOS config must default to disabled/empty")
 	}
 }
+
+func TestNeuralOSAskAnswered(t *testing.T) {
+	answered := []byte(`{"probe":"count_records","result":{"count":4},"confidence":1.0,"refused":false}`)
+	if !neuralOSAskAnswered(answered) {
+		t.Fatal("an answer envelope must report an answer")
+	}
+	for _, refused := range [][]byte{
+		[]byte(`{"probe":null,"refused":true,"error":"no probe matched"}`),
+		[]byte(`{"probe":"os.system","result":{},"refused":false}`),
+		[]byte(`{"probe":"peek","refused":false}`),
+		[]byte(`{"probe":"peek","result":null,"refused":false}`),
+		[]byte(`not json`),
+	} {
+		if neuralOSAskAnswered(refused) {
+			t.Fatalf("must not be treated as an answer: %s", refused)
+		}
+	}
+}
