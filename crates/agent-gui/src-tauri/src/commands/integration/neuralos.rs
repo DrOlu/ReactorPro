@@ -982,11 +982,11 @@ mod tests {
     #[test]
     fn ask_envelope_refusals_are_never_answers() {
         for refused in [
-            @A@b"{\"probe\":null,\"refused\":true,\"error\":\"no probe matched\"}"[..],
-            @A@b"{\"probe\":null,\"error\":\"no results produced for this question\"}"[..],
-            @A@b"{\"probe\":\"peek\",\"results\":null}"[..],
-            @A@b"{\"probe\":\"os.system\",\"results\":{}}"[..],
-            @A@b"not json"[..],
+            &b"{\"probe\":null,\"refused\":true,\"error\":\"no probe matched\"}"[..],
+            &b"{\"probe\":null,\"error\":\"no results produced for this question\"}"[..],
+            &b"{\"probe\":\"peek\",\"results\":null}"[..],
+            &b"{\"probe\":\"os.system\",\"results\":{}}"[..],
+            &b"not json"[..],
         ] {
             assert!(parse_ask_envelope(refused).is_none(), "must not answer: {:?}", refused);
         }
@@ -995,14 +995,14 @@ mod tests {
     #[test]
     fn menu_helpers_accept_arrays_and_wrappers() {
         let arr: serde_json::Value = serde_json::json!([{"name": "a"}, {"name": "b"}]);
-        assert_eq!(menu_probe_count(@A@arr), 2);
+        assert_eq!(menu_probe_count(&arr), 2);
 
         let wrapped: serde_json::Value =
             serde_json::json!({"name": "wema-bmc", "menu": [{"name": "open_incidents"}]});
-        assert_eq!(menu_probe_count(@A@wrapped), 1);
+        assert_eq!(menu_probe_count(&wrapped), 1);
 
         let empty: serde_json::Value = serde_json::json!({"nope": 1});
-        assert_eq!(menu_probe_count(@A@empty), 0);
+        assert_eq!(menu_probe_count(&empty), 0);
     }
 
     #[test]
@@ -1010,25 +1010,25 @@ mod tests {
         let root = temp_root("menu-normalize");
         let path = root.join("needle_menu.json");
         std::fs::write(
-            @A@path,
+            &path,
             r#"{"name": "wema-bmc", "menu": [{"name": "open_incidents"}, {"name": "open_changes"}]}"#,
         )
         .unwrap();
 
-        normalize_menu_file(@A@path);
+        normalize_menu_file(&path);
 
         let after: serde_json::Value =
-            serde_json::from_str(@A@std::fs::read_to_string(@A@path).unwrap()).unwrap();
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert!(after.is_array(), "wrapped menu must become a top-level array");
-        assert_eq!(menu_probe_count(@A@after), 2);
+        assert_eq!(menu_probe_count(&after), 2);
         assert!(root.join("needle_menu.json.wrapped.bak").exists(), "backup kept");
 
         // Idempotent: a canonical array is left alone.
-        normalize_menu_file(@A@path);
+        normalize_menu_file(&path);
         let again: serde_json::Value =
-            serde_json::from_str(@A@std::fs::read_to_string(@A@path).unwrap()).unwrap();
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert!(again.is_array());
-        let _ = std::fs::remove_dir_all(@A@root);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
