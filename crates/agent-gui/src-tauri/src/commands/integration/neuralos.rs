@@ -70,6 +70,46 @@ pub struct ProbeDigest {
 
 // ---------------------------------------------------------------- pure helpers
 
+/// Probe entries of a `needle_menu.json` value. The canonical shape is a
+/// top-level array; neuralosd-style instances wrap it as
+/// `{"name": ..., "menu": [...]}`. Both are accepted so such an instance is
+/// first-class — and `neuralos_install_instance` normalises it on the way in.
+fn menu_entries(value: &serde_json::Value) -> &[serde_json::Value] {
+    if let Some(list) = value.as_array() {
+        return list;
+    }
+    value
+        .get("menu")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+}
+
+fn menu_probe_count(value: &serde_json::Value) -> usize {
+    menu_entries(value).len()
+}
+
+/// Rewrite a wrapped menu into the canonical top-level array, keeping a
+/// `.wrapped.bak` beside it. No-op for an array or an unreadable file.
+fn normalize_menu_file(path: &Path) {
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return;
+    };
+    if value.is_array() {
+        return;
+    }
+    let Some(entries) = value.get("menu").and_then(serde_json::Value::as_array) else {
+        return;
+    };
+    let _ = std::fs::copy(path, path.with_extension("json.wrapped.bak"));
+    if let Ok(text) = serde_json::to_string_pretty(entries) {
+        let _ = std::fs::write(path, text);
+    }
+}
+
 /// Scan one directory for neuralOS instances (a folder containing
 /// `needle_menu.json`; `bridge.py` marks it runnable).
 fn scan_instances(dir: &Path) -> Vec<InstanceInfo> {
@@ -100,7 +140,7 @@ fn scan_instances(dir: &Path) -> Vec<InstanceInfo> {
         let probes = std::fs::read_to_string(&menu)
             .ok()
             .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.as_array().map(|a| a.len()))
+            .map(|v| menu_probe_count(&v))
             .unwrap_or(0);
         out.push(InstanceInfo {
             name: path
@@ -300,11 +340,19 @@ fn parse_ask_envelope(stdout: &[u8]) -> Option<(String, serde_json::Value, f64)>
     if value.get("refused").and_then(serde_json::Value::as_bool) == Some(true) {
         return None;
     }
-    let probe = value.get("probe")?.as_str()?.to_string();
+    // No probe ⇒ refusal / selection miss (neuralosd-style instances answer
+    // with `"probe": null` plus an `error` string).
+    let probe = value.get("probe").and_then(serde_json::Value::as_str)?.to_string();
     if !is_valid_probe_name(&probe) {
         return None;
     }
-    let result = value.get("result")?.clone();
+    // Two dialects: the ask.py this app generates prints `result`; the
+    // neuralosd-style instances print `results`. Accept either.
+    let result = value
+        .get("result")
+        .or_else(|| value.get("results"))
+        .filter(|v| !v.is_null())?
+        .clone();
     let confidence = value.get("confidence").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
     Some((probe, result, confidence))
 }
@@ -545,6 +593,9 @@ pub async fn neuralos_install_instance(
         let dest = fleet.join(&name);
         std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
         copy_dir_recursive(&src, &dest)?;
+        // Accept a wrapped menu as-is: normalise the copy so the fleet scan and
+        // the engine both see the canonical top-level array.
+        normalize_menu_file(&dest.join("needle_menu.json"));
         Ok(name)
     })
     .await
@@ -571,6 +622,15 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
             }
             copy_dir_recursive(&entry.path(), &target)?;
         } else {
+            // Sockets / FIFOs / devices (e.g. a Restate dev-server's `*.sock`
+            // under `restate-data/`) cannot be copied and are not part of the
+            // instance — skip them instead of failing the whole install.
+            let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+                continue;
+            };
+            if !meta.file_type().is_file() {
+                continue;
+            }
             std::fs::copy(entry.path(), &target).map_err(|e| e.to_string())?;
         }
     }
@@ -620,7 +680,17 @@ pub async fn neuralos_setup_environment(app: tauri::AppHandle) -> Result<SetupRe
         // The union of the shipped fleet's bridge dependencies. Kept
         // deliberate and small; instances with exotic needs document them in
         // their own READMEs and can be installed into this venv by hand.
-        const BRIDGE_DEPS: &[&str] = &["pymysql", "boto3", "requests", "pydantic"];
+        // `neuralosd` is the runtime a neuralosd-style instance's bridge/ask.py
+        // imports (it pulls no transitive deps); `openpyxl` reads spreadsheet
+        // sources. Without them such an instance installs but cannot answer.
+        const BRIDGE_DEPS: &[str] = &[
+            "pymysql",
+            "boto3",
+            "requests",
+            "pydantic",
+            "neuralosd",
+            "openpyxl",
+        ];
 
         let mut pip = Command::new(&venv_python);
         pip.arg("-m")
@@ -891,6 +961,75 @@ mod tests {
     // The CI `tauri-rust` job runs this module's tests via the
     // `integration_commands::neuralos` filter.
     use super::*;
+
+    #[test]
+    fn ask_envelope_accepts_both_dialects() {
+        // Dialect 1 — the ask.py this app generates.
+        let ours = br#"{"probe":"count_records","result":{"count":4},"confidence":1.0,"refused":false}"#;
+        let parsed = parse_ask_envelope(ours).expect("generated dialect should parse");
+        assert_eq!(parsed.0, "count_records");
+        assert_eq!(parsed.1["count"], 4);
+
+        // Dialect 2 — a neuralosd-style instance: `results`, `confidence: null`,
+        // pretty-printed across lines, and no `refused` key.
+        let neuralosd = b"{\n  \"probe\": \"row_count\",\n  \"confidence\": null,\n  \"results\": {\"count\": 51290}\n}\n";
+        let parsed = parse_ask_envelope(neuralosd).expect("neuralosd dialect should parse");
+        assert_eq!(parsed.0, "row_count");
+        assert_eq!(parsed.1["count"], 51290);
+        assert_eq!(parsed.2, 0.0);
+    }
+
+    #[test]
+    fn ask_envelope_refusals_are_never_answers() {
+        for refused in [
+            @A@b"{\"probe\":null,\"refused\":true,\"error\":\"no probe matched\"}"[..],
+            @A@b"{\"probe\":null,\"error\":\"no results produced for this question\"}"[..],
+            @A@b"{\"probe\":\"peek\",\"results\":null}"[..],
+            @A@b"{\"probe\":\"os.system\",\"results\":{}}"[..],
+            @A@b"not json"[..],
+        ] {
+            assert!(parse_ask_envelope(refused).is_none(), "must not answer: {:?}", refused);
+        }
+    }
+
+    #[test]
+    fn menu_helpers_accept_arrays_and_wrappers() {
+        let arr: serde_json::Value = serde_json::json!([{"name": "a"}, {"name": "b"}]);
+        assert_eq!(menu_probe_count(@A@arr), 2);
+
+        let wrapped: serde_json::Value =
+            serde_json::json!({"name": "wema-bmc", "menu": [{"name": "open_incidents"}]});
+        assert_eq!(menu_probe_count(@A@wrapped), 1);
+
+        let empty: serde_json::Value = serde_json::json!({"nope": 1});
+        assert_eq!(menu_probe_count(@A@empty), 0);
+    }
+
+    #[test]
+    fn normalize_menu_file_unwraps_and_backs_up() {
+        let root = temp_root("menu-normalize");
+        let path = root.join("needle_menu.json");
+        std::fs::write(
+            @A@path,
+            r#"{"name": "wema-bmc", "menu": [{"name": "open_incidents"}, {"name": "open_changes"}]}"#,
+        )
+        .unwrap();
+
+        normalize_menu_file(@A@path);
+
+        let after: serde_json::Value =
+            serde_json::from_str(@A@std::fs::read_to_string(@A@path).unwrap()).unwrap();
+        assert!(after.is_array(), "wrapped menu must become a top-level array");
+        assert_eq!(menu_probe_count(@A@after), 2);
+        assert!(root.join("needle_menu.json.wrapped.bak").exists(), "backup kept");
+
+        // Idempotent: a canonical array is left alone.
+        normalize_menu_file(@A@path);
+        let again: serde_json::Value =
+            serde_json::from_str(@A@std::fs::read_to_string(@A@path).unwrap()).unwrap();
+        assert!(again.is_array());
+        let _ = std::fs::remove_dir_all(@A@root);
+    }
 
     #[test]
     fn ask_envelope_accepts_answers_and_rejects_refusals() {

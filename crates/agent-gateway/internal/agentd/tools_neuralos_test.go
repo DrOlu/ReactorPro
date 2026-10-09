@@ -200,3 +200,37 @@ func TestNeuralOSAskAnswered(t *testing.T) {
 		}
 	}
 }
+
+func TestNeuralOSAskAnsweredBothDialects(t *testing.T) {
+	// Dialect 1 - the ask.py this app generates.
+	if !neuralOSAskAnswered([]byte(`{"probe":"count_records","result":{"count":4},"confidence":1.0,"refused":false}`)) {
+		t.Fatal("generated dialect must count as an answer")
+	}
+	// Dialect 2 - a neuralosd-style instance: results (plural), no refused key.
+	if !neuralOSAskAnswered([]byte(`{"probe":"row_count","confidence":null,"results":{"count":51290}}`)) {
+		t.Fatal("neuralosd dialect must count as an answer")
+	}
+	for _, refusal := range []string{
+		`{"probe":null,"refused":true,"error":"no probe matched"}`,
+		`{"probe":null,"error":"no results produced for this question"}`,
+		`{"probe":"os.system","results":{}}`,
+		`{"probe":"peek","result":null,"results":null}`,
+		`not json`,
+	} {
+		if neuralOSAskAnswered([]byte(refusal)) {
+			t.Fatalf("must not be treated as an answer: %s", refusal)
+		}
+	}
+}
+
+func TestNeuralOSMenuProbeCountBothShapes(t *testing.T) {
+	if got := neuralOSMenuProbeCount([]byte(`[{"name":"a"},{"name":"b"}]`)); got != 2 {
+		t.Fatalf("array menu: want 2 probes, got %d", got)
+	}
+	if got := neuralOSMenuProbeCount([]byte(`{"name":"wema-bmc","menu":[{"name":"open_incidents"},{"name":"open_changes"}]}`)); got != 2 {
+		t.Fatalf("wrapped menu: want 2 probes, got %d", got)
+	}
+	if got := neuralOSMenuProbeCount([]byte(`{"nope":1}`)); got != 0 {
+		t.Fatalf("unknown shape: want 0 probes, got %d", got)
+	}
+}

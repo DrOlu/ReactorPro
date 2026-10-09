@@ -448,9 +448,7 @@ func (t *Toolset) runNeuralOSInstances(_ context.Context, _ map[string]any) (str
 		if err != nil {
 			continue
 		}
-		var list []json.RawMessage
-		_ = json.Unmarshal(menu, &list)
-		lines = append(lines, fmt.Sprintf("%s\t%d probes", entry.Name(), len(list)))
+		lines = append(lines, fmt.Sprintf("%s\t%d probes", entry.Name(), neuralOSMenuProbeCount(menu)))
 	}
 	if len(lines) == 0 {
 		return "(no neuralOS instances installed)", nil
@@ -480,12 +478,17 @@ print(json.dumps({"probe": sys.argv[2], "result": out}, ensure_ascii=False, defa
 `
 
 // neuralOSAskAnswered reports whether an ask.py envelope carries a real
-// answer (a selected probe plus a result) rather than a refusal. The
+// answer (a selected probe plus a payload) rather than a refusal. The
 // deterministic floor answers first; the engine is only the fallback seat.
+//
+// Two dialects are accepted: the ask.py this app generates prints
+// `"result"` and `"refused"`; a neuralosd-style instance prints `"results"`
+// and signals a refusal with `"probe": null` plus an `"error"` string.
 func neuralOSAskAnswered(out []byte) bool {
 	var env struct {
 		Probe   *string         `json:"probe"`
 		Result  json.RawMessage `json:"result"`
+		Results json.RawMessage `json:"results"`
 		Refused bool            `json:"refused"`
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(out), &env); err != nil {
@@ -494,8 +497,28 @@ func neuralOSAskAnswered(out []byte) bool {
 	if env.Refused || env.Probe == nil || !isNeuralOSProbeName(*env.Probe) {
 		return false
 	}
-	trimmed := bytes.TrimSpace(env.Result)
+	payload := env.Result
+	if len(bytes.TrimSpace(payload)) == 0 {
+		payload = env.Results
+	}
+	trimmed := bytes.TrimSpace(payload)
 	return len(trimmed) > 0 && string(trimmed) != "null"
+}
+
+// neuralOSMenuProbeCount accepts both menu shapes: the canonical top-level
+// array and the neuralosd-style {"name": ..., "menu": [...]} wrapper.
+func neuralOSMenuProbeCount(menu []byte) int {
+	var list []json.RawMessage
+	if err := json.Unmarshal(menu, &list); err == nil {
+		return len(list)
+	}
+	var wrapped struct {
+		Menu []json.RawMessage `json:"menu"`
+	}
+	if err := json.Unmarshal(menu, &wrapped); err == nil {
+		return len(wrapped.Menu)
+	}
+	return 0
 }
 
 func (t *Toolset) runNeuralOSQuery(ctx context.Context, args map[string]any) (string, error) {
