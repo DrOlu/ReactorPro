@@ -683,7 +683,7 @@ pub async fn neuralos_setup_environment(app: tauri::AppHandle) -> Result<SetupRe
         // `neuralosd` is the runtime a neuralosd-style instance's bridge/ask.py
         // imports (it pulls no transitive deps); `openpyxl` reads spreadsheet
         // sources. Without them such an instance installs but cannot answer.
-        const BRIDGE_DEPS: &[str] = &[
+        const BRIDGE_DEPS: &[&str] = &[
             "pymysql",
             "boto3",
             "requests",
