@@ -3,8 +3,11 @@ name: Publish reactorpro (npm)
 # The `reactorpro` npm package is the tiny CLI launcher (`npx reactorpro`) that
 # installs the gateway / agentd binaries from the matching GitHub release. Keep
 # it version-for-version with the app: whenever a release is published, push
-# npm/reactorpro to the public registry. Dispatch with an existing tag to
-# (re)publish or backfill a specific tag.
+# npm/reactorpro to the public registry.
+#
+# Also dispatchable with an existing tag to (re)publish or backfill, e.g.
+#   gh workflow run publish-reactorpro-npm.yml -f tag=v1.7.5 -f npm_tag=backfill
+# Pass npm_tag=backfill to add an older version without moving `latest`.
 
 on:
   release:
@@ -15,7 +18,7 @@ on:
         description: Existing release tag to publish, for example v1.7.12
         required: true
       npm_tag:
-        description: npm dist-tag to publish under
+        description: npm dist-tag to publish under (default latest)
         required: false
         default: latest
 
@@ -75,14 +78,19 @@ jobs:
           set -euo pipefail
 
           name=$(node -p "require('./package.json').name")
+          tag_version="${RELEASE_TAG#v}"
+          committed=$(node -p "require('./package.json').version")
+
+          # The launcher version must equal the release tag, and nothing in the
+          # release pipeline bumps npm/reactorpro/package.json — so take the
+          # version from the tag itself. The warning keeps any drift visible.
+          if [ "${committed}" != "${tag_version}" ]; then
+            echo "::warning::npm/reactorpro/package.json is at ${committed} but ${RELEASE_TAG} was released — publishing ${tag_version}"
+            npm pkg set version="${tag_version}"
+          fi
+
           version=$(node -p "require('./package.json').version")
           echo "package: ${name}@${version}"
-
-          # Fail loudly rather than publishing a version the tag does not own.
-          if [ "${version}" != "${RELEASE_TAG#v}" ]; then
-            echo "::error::npm/reactorpro is at ${version} but the release tag is ${RELEASE_TAG} — bump the package version and re-tag"
-            exit 1
-          fi
 
           if npm view "${name}@${version}" version >/dev/null 2>&1; then
             echo "already on the registry: ${name}@${version} — nothing to do"
