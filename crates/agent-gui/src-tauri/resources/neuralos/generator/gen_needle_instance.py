@@ -22,7 +22,9 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
+import time
 from datetime import datetime, timezone
 
 ENUM_MAX = 12
@@ -732,6 +734,40 @@ def load_menu():
 COUNT_WORDS = ("how many", "count", "total", "number of")
 
 
+# Caged fast paths, carried over by `--migrate-ask`: a list of
+# (regex, probe, score). A declared cage is an explicit route — "show page 9"
+# must beat "page count" — so a hit here also exempts the question from the
+# gate's vocabulary rules (action-intent still applies).
+FAST_PATHS = []
+
+
+# Words that introduce a free-text argument ("which pages MENTION corporate
+# governance", "search the report FOR revenue"). Stripped when binding a plain
+# string argument that the menu does not cage.
+ROUTING_WORDS = frozenset("""
+    search find look mention mentions about for in into the a an of on
+    report document pdf pages page which what list show me
+""".split())
+
+
+def free_text(question):
+    """The payload of a search-style question, minus its routing words."""
+    words = [w for w in re.findall(r"[A-Za-z0-9_.-]+", question)
+             if w.lower() not in ROUTING_WORDS]
+    return " ".join(words).strip()
+
+
+def fast_path(question):
+    """(probe, score) for the first declared cage that matches, else (None, 0)."""
+    for pattern, probe, score in FAST_PATHS:
+        try:
+            if re.search(pattern, question, re.IGNORECASE):
+                return probe, float(score)
+        except re.error:
+            continue
+    return None, 0.0
+
+
 # ── refusal gate ──────────────────────────────────────────────────────────
 # Deterministic and menu-only: a question this instance cannot honestly answer
 # is REFUSED rather than answered with the nearest probe's number. A confident
@@ -794,7 +830,7 @@ def known_anywhere(token, menu_vocab):
     return False
 
 
-def gate_reason(question, entry, menu, arguments):
+def gate_reason(question, entry, menu, arguments, fast_hit=False):
     """None = answer it. Otherwise a reason to refuse.
 
     Computed from the MENU and the QUESTION only: no probe runs, no model is
@@ -810,6 +846,11 @@ def gate_reason(question, entry, menu, arguments):
     if first and first[0].lower() in ACTION_VERBS \
             and first[0].lower() not in menu_vocab:
         return "action_intent"
+
+    # A declared cage ("show page N") is the confidence signal: an explicit
+    # route is not a guess. action_intent above still outranks it.
+    if fast_hit:
+        return None
 
     # An extracted entity IS the confidence signal.
     for value in (arguments or {}).values():
@@ -908,6 +949,13 @@ def bind_arguments(entry, question):
             continue
         if key in required:
             return None, "argument " + repr(key) + " is required and cannot be resolved from the question"
+        # A plain (uncaged) string argument — a search term, a name, a filter
+        # value. Leaving it unbound is how a search probe ends up called with no
+        # term at all ("missing positional 'q'"), so bind the question's payload.
+        if prop.get("type") in (None, "string"):
+            payload = free_text(question)
+            if payload:
+                args[key] = payload
     return args, None
 
 
@@ -943,6 +991,13 @@ def main(argv):
     menu = load_menu()
     entry, best = pick(question, menu)
 
+    fast_probe, fast_score = fast_path(question)
+    fast_hit = False
+    if fast_probe:
+        caged = next((e for e in menu if e.get("name") == fast_probe), None)
+        if caged is not None:
+            entry, best, fast_hit = caged, max(int(fast_score), 1), True
+
     if entry is None or best <= 0:
         if engine and model:
             try:
@@ -967,7 +1022,7 @@ def main(argv):
                    refusal_reason="unbound_argument", error=why)
         print(json.dumps(env, ensure_ascii=False, default=str))
         return 1
-    reason = gate_reason(question, entry, menu, arguments)
+    reason = gate_reason(question, entry, menu, arguments, fast_hit=fast_hit)
     if reason:
         env.update(probe=None, score=best, refused=True,
                    refusal_reason=reason, gate_version=GATE_VERSION,
@@ -1035,6 +1090,147 @@ flag, with identity checks in the bridge.
 '''
 
 
+
+# ── ask.py lineages and migration ───────────────────────────────────────────
+# ask.py exists in at least three lineages in the wild: the gated template this
+# generator writes, an earlier generator template, and older hand-written
+# lexical+cache floors (wema-bmc 8 KB, mtn-annual-2019 1.6 KB). `--migrate-ask`
+# consolidates them onto the one generated implementation WITHOUT losing what an
+# instance added locally: declared caged routes move across verbatim, and
+# anything this tool cannot read with certainty is reported, never guessed.
+
+ASK_LINEAGE_GATED = "gated"
+ASK_LINEAGE_TEMPLATE = "template"
+ASK_LINEAGE_LEGACY = "legacy"
+
+_FAST_PATH_DECL = re.compile(r"^\s*FAST_PATHS\s*=\s*(\[.*?\])\s*$", re.M | re.S)
+_CAGED_RETURN = re.compile(
+    r"re\.search\(\s*r?[\"'](?P<pattern>(?:[^\"']|\\.)*)[\"']\s*,[^)]*\)"
+    r"(?P<body>.{0,200}?)return\s+[\"'](?P<probe>[a-z_][a-z0-9_]*)[\"']\s*,\s*(?P<score>[0-9.]+)",
+    re.S)
+# A whole caged route: one or more `re.search(...)` tests, optionally chained
+# with `or`, that funnel into a single `return "<probe>", <score>`. This is how
+# hand-written floors spell "these phrasings mean this probe" (mtn-build's
+# "show page N" is an OR of three patterns) — all its patterns are one route.
+# The whole `if <condition>:` block (condition may span lines with backslash
+# continuations) whose body is `return "<probe>", <score>`.
+_CAGED_ROUTE = re.compile(
+    r"if\s+(?P<cond>.*?):[ \t]*\n[ \t]*return\s+"
+    r"[\"'](?P<probe>[a-z_][a-z0-9_]*)[\"']\s*,\s*(?P<score>[0-9.]+)", re.S)
+_COND_PATTERN = re.compile(r"re\.search\(\s*r?[\"'](?P<pattern>(?:[^\"']|\\.)*)[\"']")
+
+
+def ask_lineage(text):
+    """Which ask.py flavour is this?"""
+    if "GATE_VERSION" in text or "def gate_reason(" in text:
+        return ASK_LINEAGE_GATED
+    if "FAST_PATHS" in text or "bind_arguments" in text:
+        return ASK_LINEAGE_TEMPLATE
+    return ASK_LINEAGE_LEGACY
+
+
+def extract_fast_paths(text):
+    """(carried, review): declared caged routes we can move verbatim, and the
+    ones we cannot read with certainty (reported, never guessed)."""
+    import ast
+
+    carried, review = [], []
+    decl = _FAST_PATH_DECL.search(text)
+    if decl:
+        try:
+            for pattern, probe, score in ast.literal_eval(decl.group(1)):
+                carried.append([str(pattern), str(probe), float(score)])
+            return carried, review
+        except Exception as exc:
+            review.append("FAST_PATHS is declared but unreadable (%s)" % exc)
+            return carried, review
+    routes = list(_CAGED_ROUTE.finditer(text))
+    if routes:
+        for route in routes:
+            patterns = [m.group("pattern") for m in _COND_PATTERN.finditer(route.group("cond"))]
+            if not patterns:
+                review.append("caged route for %r has no readable pattern" % route.group("probe"))
+                continue
+            for pattern in patterns:
+                carried.append([pattern, route.group("probe"), float(route.group("score"))])
+        return carried, review
+    for match in _CAGED_RETURN.finditer(text):
+        if "re.search" in match.group("body"):
+            review.append("caged route for %r is ambiguous" % match.group("probe"))
+            continue
+        carried.append([match.group("pattern"), match.group("probe"),
+                        float(match.group("score"))])
+    if not carried and re.search(r"re\.search\(", text):
+        review.append("regex-gated flow that cannot be mapped to a probe")
+    # A RICH legacy floor (audit trail, TTL cache, hashing) implements more than
+    # this template carries. Replacing it would silently drop those features, so
+    # it is reported for review rather than migrated — even though the gate +
+    # caged routes would transfer cleanly. Only --force overrides.
+    rich = sorted(set(re.findall(r"\b(cache|audit|ttl|hashlib)\b", text, re.I)))
+    if rich:
+        review.append("legacy floor carries %s this template does not implement"
+                      % ", ".join(rich))
+    return carried, review
+
+
+def render_ask(agent, example, fast_paths=None):
+    """The current template, with any carried caged routes spliced in."""
+    text = ASK.replace("{agent}", repr(agent)).replace("{example}", repr(example))
+    if fast_paths:
+        literal = "FAST_PATHS = [\n" + "".join(
+            "    (%r, %r, %r),\n" % (pattern, probe, score)
+            for pattern, probe, score in fast_paths) + "]"
+        text = text.replace("FAST_PATHS = []", literal, 1)
+    return text
+
+
+def migrate_ask_file(path, apply_=False, force=False):
+    """Plan (and optionally apply) one instance's ask.py migration."""
+    report = {"instance": os.path.basename(os.path.dirname(path)),
+              "path": path, "lineage": None, "action": None,
+              "carried": [], "review": [], "changed": False}
+    if not os.path.exists(path):
+        report["action"] = "absent"
+        return report
+    current = open(path, encoding="utf-8").read()
+    report["lineage"] = ask_lineage(current)
+    carried, review = extract_fast_paths(current)
+    report["carried"], report["review"] = carried, review
+    proposed = render_ask(report["instance"], "", carried)
+    if proposed == current:
+        report["action"] = "noop"
+        return report
+    if review and not force:
+        report["action"] = "blocked (needs review; --force to override)"
+        return report
+    report["action"] = "migrate"
+    if apply_:
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        shutil.copy2(path, path + ".premigrate-" + stamp)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(proposed)
+        report["changed"] = True
+        report["backup"] = path + ".premigrate-" + stamp
+    return report
+
+
+def migrate_ask(path, apply_=False, force=False, fleet=False):
+    """One instance directory, or every instance under a fleet root."""
+    looks_like_instance = os.path.exists(os.path.join(path, "ask.py")) or \
+        os.path.exists(os.path.join(path, "needle_menu.json"))
+    if not fleet and looks_like_instance:
+        return [migrate_ask_file(os.path.join(path, "ask.py"), apply_, force)]
+    reports = []
+    for entry in sorted(os.listdir(path)):
+        instance = os.path.join(path, entry)
+        if not os.path.isdir(instance) or entry.startswith("."):
+            continue
+        if not os.path.exists(os.path.join(instance, "needle_menu.json")):
+            continue
+        reports.append(migrate_ask_file(os.path.join(instance, "ask.py"), apply_, force))
+    return reports
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--profile", default="profile.json")
@@ -1045,7 +1241,33 @@ def main():
     ap.add_argument("--runtime", choices=["python", "engine"], default="python")
     ap.add_argument("--agent-name")
     ap.add_argument("--table", help="database table (default: first profiled)")
+    ap.add_argument("--migrate-ask", metavar="PATH",
+                    help="consolidate an instance's (or a fleet's) ask.py onto the "
+                         "current generated implementation")
+    ap.add_argument("--fleet", action="store_true",
+                    help="treat --migrate-ask PATH as a fleet root")
+    ap.add_argument("--apply", action="store_true",
+                    help="with --migrate-ask: write (default is a dry run)")
+    ap.add_argument("--force", action="store_true",
+                    help="with --migrate-ask: migrate even when something needs review")
     args = ap.parse_args()
+
+    if args.migrate_ask:
+        reports = migrate_ask(args.migrate_ask, apply_=args.apply,
+                              force=args.force, fleet=args.fleet)
+        blocked = 0
+        for report in reports:
+            print("%-22s %-9s %-9s carried=%d review=%d%s"
+                  % (report["instance"], report["lineage"] or "-", report["action"],
+                     len(report["carried"]), len(report["review"]),
+                     "  (dry run)" if report["action"] == "migrate" and not args.apply else ""))
+            for note in report["review"]:
+                print("    review: %s" % note)
+            if report["action"].startswith("blocked"):
+                blocked += 1
+        if not args.apply:
+            print("\ndry run: nothing written (re-run with --apply)")
+        return 1 if blocked else 0
 
     profile = json.load(open(args.profile, encoding="utf-8"))
     kind = profile["source"]["kind"]
@@ -1175,4 +1397,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main() returns an exit code for the ask.py migration modes (1 = blocked).
+    raise SystemExit(main())
