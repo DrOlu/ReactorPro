@@ -1,0 +1,92 @@
+name: Publish reactorpro (npm)
+
+# The `reactorpro` npm package is the tiny CLI launcher (`npx reactorpro`) that
+# installs the gateway / agentd binaries from the matching GitHub release. Keep
+# it version-for-version with the app: whenever a release is published, push
+# npm/reactorpro to the public registry. Dispatch with an existing tag to
+# (re)publish or backfill a specific tag.
+
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish, for example v1.7.12
+        required: true
+      npm_tag:
+        description: npm dist-tag to publish under
+        required: false
+        default: latest
+
+permissions:
+  contents: read
+
+# One publish per tag; never let two runs race the same version.
+concurrency:
+  group: publish-reactorpro-npm-${{ github.event.release.tag_name || github.event.inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+      NPM_TAG: ${{ github.event.inputs.npm_tag || 'latest' }}
+    steps:
+      - name: Resolve the release tag
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_TAG}" ]; then
+            echo "::error::no release tag resolved"
+            exit 1
+          fi
+          echo "publishing reactorpro from ${RELEASE_TAG} (npm dist-tag: ${NPM_TAG})"
+
+      # Publish exactly what was tagged, not whatever main holds today.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish npm/reactorpro
+        working-directory: npm/reactorpro
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.REACTORPRO_NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          echo "package: ${name}@${version}"
+
+          # Fail loudly rather than publishing a version the tag does not own.
+          if [ "${version}" != "${RELEASE_TAG#v}" ]; then
+            echo "::error::npm/reactorpro is at ${version} but the release tag is ${RELEASE_TAG} — bump the package version and re-tag"
+            exit 1
+          fi
+
+          if npm view "${name}@${version}" version >/dev/null 2>&1; then
+            echo "already on the registry: ${name}@${version} — nothing to do"
+            exit 0
+          fi
+
+          out=""
+          if out=$(npm publish --access public --tag "${NPM_TAG}" 2>&1); then
+            echo "${out}"
+            echo "published ${name}@${version} (dist-tag ${NPM_TAG})"
+            exit 0
+          fi
+
+          echo "${out}"
+          # Registry replica lag: `view` can 404 while the version is already
+          # reserved, so treat "already published" as success.
+          if printf '%s' "${out}" | grep -q "cannot publish over the previously published versions"; then
+            echo "already published: ${name}@${version} — skipping"
+            exit 0
+          fi
+          exit 1
