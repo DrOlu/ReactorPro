@@ -53,6 +53,20 @@ jobs:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
+      # Fail fast with a clear message if the token is missing or rotated,
+      # instead of surfacing it only at the moment of a real publish.
+      - name: Verify npm auth
+        working-directory: npm/reactorpro
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.REACTORPRO_NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::secret REACTORPRO_NPM_TOKEN is not set"
+            exit 1
+          fi
+          echo "authenticated to npm as: $(npm whoami)"
+
       - name: Publish npm/reactorpro
         working-directory: npm/reactorpro
         env:
