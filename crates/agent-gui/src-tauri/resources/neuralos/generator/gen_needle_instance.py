@@ -775,6 +775,11 @@ def fast_path(question):
 # guard (check_menu_bridge_alignment.py), so a regenerated ask.py cannot
 # silently drop this block.
 GATE_VERSION = 1
+# The SHARED exit-code contract across neuralOSd / SuperAgent / ReactorPro:
+# 0 = answered, 2 = nothing produced (refused or failed). Consumers keying on
+# "nothing produced" must not have to know which product they are talking to.
+ANSWERED_EXIT = 0
+REFUSED_EXIT = 2
 
 GENERIC_INTENT = frozenset("""
     how many much show list give tell me find get what which who where when
@@ -843,7 +848,12 @@ def action_intent_reason(question, menu):
 
 
 def gate_reason(question, entry, menu, arguments, fast_hit=False):
-    """None = answer it. Otherwise a reason to refuse.
+    """(reason, detail) to refuse, or (None, None) to answer.
+
+    `reason` is a BARE token from the shared grammar — action_intent,
+    dropped_filter, no_probe_matches, low_coverage — so exact-match consumers
+    work identically across neuralOSd, SuperAgent and ReactorPro. The
+    specifics live in `detail`, a separate envelope field.
 
     Computed from the MENU and the QUESTION only: no probe runs, no model is
     called. Qualifiers match whole words ("resolved" must not fire inside
@@ -857,12 +867,13 @@ def gate_reason(question, entry, menu, arguments, fast_hit=False):
     first = (question or "").split()[:1]
     if first and first[0].lower() in ACTION_VERBS \
             and first[0].lower() not in menu_vocab:
-        return "action_intent"
+        return "action_intent", {"rule": "action_intent",
+                                 "verb": first[0].lower()}
 
     # A declared cage ("show page N") is the confidence signal: an explicit
     # route is not a guess. action_intent above still outranks it.
     if fast_hit:
-        return None
+        return None, None
 
     # An extracted entity IS the confidence signal.
     for value in (arguments or {}).values():
@@ -870,7 +881,7 @@ def gate_reason(question, entry, menu, arguments, fast_hit=False):
             continue
         needle = " ".join(tokens(str(value)))
         if needle and needle in q_norm:
-            return None
+            return None, None
 
     words = set(re.findall(r"[a-z0-9]+", lowered))
     vocab = entry_vocab(entry)
@@ -878,7 +889,7 @@ def gate_reason(question, entry, menu, arguments, fast_hit=False):
         qw = qual.split()
         hit = (qw[0] in words) if len(qw) == 1 else (qual in lowered)
         if hit and qw[0] not in vocab:
-            return "dropped_filter:" + qw[0]
+            return "dropped_filter", {"rule": "dropped_filter", "word": qw[0]}
 
     qt = set(tokens(question))
     domain = set(t for t in qt - GENERIC_INTENT if not t.isdigit())
@@ -886,7 +897,7 @@ def gate_reason(question, entry, menu, arguments, fast_hit=False):
         domain = set(qt - GENERIC_INTENT) or qt
     unknown = sorted(t for t in domain if not known_anywhere(t, menu_vocab))
     if unknown:
-        return "no_probe_matches(unknown=" + ",".join(unknown) + ")"
+        return "no_probe_matches", {"rule": "no_probe_matches", "unknown": unknown}
 
     # Coverage is measured against the winner's FAMILY (probes sharing its first
     # name token), not the winner alone: "count records by status" is answered by
@@ -900,8 +911,8 @@ def gate_reason(question, entry, menu, arguments, fast_hit=False):
     known = plural_insensitive(vocab) | set(vocab) | plural_insensitive(family) | set(family)
     coverage = len(d.intersection(known)) / max(1, len(d))
     if MIN_QUESTION_COVERAGE > 0 and coverage < MIN_QUESTION_COVERAGE:
-        return "low_coverage(%.2f)" % coverage
-    return None
+        return "low_coverage", {"rule": "low_coverage", "coverage": round(coverage, 4)}
+    return None, None
 
 
 
@@ -1007,7 +1018,8 @@ def main(argv):
 
     env = {"instance": {agent}, "question": question, "probe": None,
            "arguments": {}, "score": 0, "confidence": 0.0, "refused": False,
-           "refusal_reason": None, "gate_version": GATE_VERSION}
+           "refusal_reason": None, "refusal_detail": None,
+           "gate_version": GATE_VERSION}
     menu = load_menu()
 
     # An imperative ACTION outranks everything: "delete all returned orders" is
@@ -1017,10 +1029,11 @@ def main(argv):
     action = action_intent_reason(question, menu)
     if action:
         env.update(probe=None, refused=True, refusal_reason=action,
+                   refusal_detail={"rule": action},
                    gate_version=GATE_VERSION,
                    error="refused (" + action + "): this instance only answers questions")
         print(json.dumps(env, ensure_ascii=False, default=str))
-        return 1
+        return REFUSED_EXIT
 
     entry, best = pick(question, menu)
 
@@ -1042,37 +1055,44 @@ def main(argv):
                 env.update(probe=name, arguments=arguments, confidence=confidence)
             else:
                 env.update(refused=True, refusal_reason="no_probe_matches",
+                           refusal_detail={"rule": "no_probe_matches", "why": "engine returned nothing usable"},
                            error=env.get("error", "no probe matched (engine returned nothing usable)"))
         else:
             env.update(refused=True, refusal_reason="no_probe_matches",
+                       refusal_detail={"rule": "no_probe_matches", "why": "no lexical overlap"},
                        error="no probe matched")
         print(json.dumps(env, ensure_ascii=False, default=str))
-        return 1
+        return REFUSED_EXIT
 
     arguments, why = bind_arguments(entry, question)
     if why:
         env.update(probe=entry["name"], score=best, refused=True,
-                   refusal_reason="unbound_argument", error=why)
+                   refusal_reason="unbound_argument",
+                   refusal_detail={"rule": "unbound_argument", "why": why},
+                   error=why)
         print(json.dumps(env, ensure_ascii=False, default=str))
-        return 1
-    reason = gate_reason(question, entry, menu, arguments, fast_hit=fast_hit)
+        return REFUSED_EXIT
+    reason, detail = gate_reason(question, entry, menu, arguments, fast_hit=fast_hit)
     if reason:
         env.update(probe=None, score=best, refused=True,
-                   refusal_reason=reason, gate_version=GATE_VERSION,
+                   refusal_reason=reason, refusal_detail=detail,
+                   gate_version=GATE_VERSION,
                    error="refused (" + reason + "): the best match could not "
                          "honestly answer this question")
         print(json.dumps(env, ensure_ascii=False, default=str))
-        return 1
+        return REFUSED_EXIT
     env.update(probe=entry["name"], arguments=arguments, score=best, confidence=1.0)
     try:
         env["result"] = execute(entry["name"], arguments)
     except Exception as exc:
         env.update(refused=True, refusal_reason="probe_error",
+                   refusal_detail={"rule": "probe_error", "probe": entry["name"],
+                                   "error": str(exc)},
                    error="probe " + entry["name"] + " failed: " + str(exc))
         print(json.dumps(env, ensure_ascii=False, default=str))
-        return 1
+        return REFUSED_EXIT
     print(json.dumps(env, ensure_ascii=False, default=str))
-    return 0
+    return ANSWERED_EXIT
 
 
 if __name__ == "__main__":

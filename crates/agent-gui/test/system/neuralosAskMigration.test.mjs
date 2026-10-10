@@ -221,7 +221,7 @@ test("a migrated instance refuses and answers exactly like a generated one", { s
     const refused = ask(inst, "how many incident attachments exist");
     assert.equal(refused.envelope.refused, true, "out-of-scope must be refused");
     assert.equal(refused.envelope.refusal_reason, "no_probe_matches");
-    assert.equal(refused.code, 1, "a refusal exits 1");
+    assert.equal(refused.code, 2, "a refusal exits 2 (nothing produced)");
 
     const action = ask(inst, "delete all open incidents");
     assert.equal(action.envelope.refusal_reason, "action_intent",

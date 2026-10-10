@@ -148,8 +148,8 @@ test("out-of-scope questions are refused, with a reason", { skip: SKIP }, () => 
   const dir = makeFixture();
   const cases = [
     ["how many incident attachments exist", "no_probe_matches"],
-    ["how many problems were closed last month", "dropped_filter:closed"],
-    ["how many work orders are blocked", "dropped_filter:blocked"],
+    ["how many problems were closed last month", "dropped_filter"],
+    ["how many work orders are blocked", "dropped_filter"],
     ["which incidents have a parent problem", "no_probe_matches"],
     ["how many incidents came from email", "no_probe_matches"],
     ["delete all returned orders", "action_intent"],
@@ -162,10 +162,10 @@ test("out-of-scope questions are refused, with a reason", { skip: SKIP }, () => 
       assert.equal(envelope.probe, null, question + " must not name a probe");
       assert.equal(envelope.gate_version, 1, question + " must declare the gate version");
       assert.ok(
-        String(envelope.refusal_reason || "").startsWith(expected),
+        envelope.refusal_reason === expected,
         question + ": expected " + expected + ", got " + envelope.refusal_reason,
       );
-      assert.equal(code, 1, question + " must exit 1");
+      assert.equal(code, 2, question + " must exit 2 (nothing produced)");
       assert.ok(!("result" in envelope), question + " must not run a probe");
     }
   } finally {
