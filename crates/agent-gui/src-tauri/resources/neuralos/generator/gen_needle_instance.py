@@ -830,6 +830,18 @@ def known_anywhere(token, menu_vocab):
     return False
 
 
+def action_intent_reason(question, menu):
+    """'action_intent' when the question opens with an imperative verb the menu
+    does not know — i.e. the user asked for an ACTION, not for data."""
+    menu_vocab = (frozenset().union(*[entry_vocab(e) for e in menu])
+                  if menu else frozenset())
+    first = (question or "").split()[:1]
+    if first and first[0].lower() in ACTION_VERBS \
+            and first[0].lower() not in menu_vocab:
+        return "action_intent"
+    return None
+
+
 def gate_reason(question, entry, menu, arguments, fast_hit=False):
     """None = answer it. Otherwise a reason to refuse.
 
@@ -876,8 +888,16 @@ def gate_reason(question, entry, menu, arguments, fast_hit=False):
     if unknown:
         return "no_probe_matches(unknown=" + ",".join(unknown) + ")"
 
-    d = plural_insensitive(domain)
-    known = plural_insensitive(vocab)
+    # Coverage is measured against the winner's FAMILY (probes sharing its first
+    # name token), not the winner alone: "count records by status" is answered by
+    # count_by_status while "records" is the count_records family's noun, and
+    # scoring it against the single winner false-refused that phrasing.
+    family = frozenset(
+        t for e in menu
+        if (e.get("name") or "").split("_")[0] == (entry.get("name") or "").split("_")[0]
+        for t in entry_vocab(e))
+    d = plural_insensitive(domain) | set(domain)
+    known = plural_insensitive(vocab) | set(vocab) | plural_insensitive(family) | set(family)
     coverage = len(d.intersection(known)) / max(1, len(d))
     if MIN_QUESTION_COVERAGE > 0 and coverage < MIN_QUESTION_COVERAGE:
         return "low_coverage(%.2f)" % coverage
@@ -989,6 +1009,19 @@ def main(argv):
            "arguments": {}, "score": 0, "confidence": 0.0, "refused": False,
            "refusal_reason": None, "gate_version": GATE_VERSION}
     menu = load_menu()
+
+    # An imperative ACTION outranks everything: "delete all returned orders" is
+    # a request to DO something, not a question, and it must be refused as such
+    # even when nothing on the menu scores (otherwise it degrades into a bland
+    # "no probe matched" and the real reason is lost).
+    action = action_intent_reason(question, menu)
+    if action:
+        env.update(probe=None, refused=True, refusal_reason=action,
+                   gate_version=GATE_VERSION,
+                   error="refused (" + action + "): this instance only answers questions")
+        print(json.dumps(env, ensure_ascii=False, default=str))
+        return 1
+
     entry, best = pick(question, menu)
 
     fast_probe, fast_score = fast_path(question)

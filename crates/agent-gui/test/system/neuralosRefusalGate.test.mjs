@@ -55,6 +55,15 @@ const MENU = [
   { name: "sales_by_region", description: "Sales by region.",
     parameters: { type: "object", properties: {}, required: [] },
     triggers: ["which region has the highest sales", "sales by region", "top region"] },
+  { name: "count_records", description: "Count the records in the source.",
+    parameters: { type: "object", properties: {}, required: [] },
+    triggers: ["how many records", "count records", "record count"] },
+  { name: "count_by_status", description: "Count records grouped by status.",
+    parameters: { type: "object",
+      properties: { value: { type: "string", description: "a status value",
+                             enum: ["paid", "unpaid"] } },
+      required: [] },
+    triggers: ["count records by status", "count by status"] },
   { name: "report_pages", description: "Pages with extractable text.",
     parameters: { type: "object", properties: {}, required: [] },
     triggers: ["how many pages", "page count", "report length"] },
@@ -79,6 +88,8 @@ const BRIDGE = [
   "def open_work_orders():\n    return {'count': 12}\n",
   "def sales_by_region():\n    return {'region': 'west'}\n",
   "def report_pages():\n    return {'pages_with_text': 123}\n",
+  "def count_records():\n    return {'count': 30}\n",
+  "def count_by_status(value=''):\n    return {'column': 'status', 'value': value}\n",
   "def search_report(q='', limit=10):\n    return {'term': q, 'pages_matched': 0}\n",
   "def get_page(n=1):\n    return {'page': n, 'chars': 10}\n",
 ].join("\n\n");
@@ -286,6 +297,38 @@ test("the menu writer keeps pattern, enum, bounds, defaults and required", { ski
     const reread = JSON.parse(readFileSync(join(dir, "menu.json"), "utf-8"));
     assert.ok(reread.find((e) => e.name === "search_report")
       .parameters.properties.q.pattern, "pattern must round-trip");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a sibling probe's noun is not a low-coverage refusal", { skip: SKIP }, () => {
+  // Regression (found testing the shipped 1.7.10 app): "count records by status"
+  // is answered by count_by_status while "records" belongs to the count_records
+  // family, so scoring coverage against the single winner false-refused it.
+  const dir = makeFixture();
+  try {
+    const { code, envelope } = ask(dir, "count records by status");
+    assert.notEqual(envelope.refused, true,
+      "a family phrasing must not be refused: " + JSON.stringify(envelope.refusal_reason));
+    assert.equal(envelope.probe, "count_by_status");
+    assert.equal(code, 0);
+    assert.equal(ask(dir, "how many records").envelope.probe, "count_records");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an imperative action is refused as action_intent even when nothing scores", { skip: SKIP }, () => {
+  // Regression: the floor's own score<=0 miss used to fire first and report a
+  // bland no_probe_matches, losing the fact that the user asked for an ACTION.
+  const dir = makeFixture();
+  try {
+    const { envelope } = ask(dir, "delete all invoices");
+    assert.equal(envelope.refused, true);
+    assert.equal(envelope.refusal_reason, "action_intent",
+      "an action verb must outrank the floor's own miss");
+    assert.equal(envelope.probe, null);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
