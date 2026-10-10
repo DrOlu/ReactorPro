@@ -708,12 +708,140 @@ def tokens(text):
 
 
 def load_menu():
+    """The probe menu.
+
+    READ-side tolerant (a bare array, or the {"probes": [...]} / {"menu": [...]}
+    wrappers seen in the wild) but LOUD on an unrecognised shape: a silently
+    empty menu is how a working instance turns into a refusal machine with no
+    error anywhere.
+    """
     with open(MENU, encoding="utf-8") as fh:
         menu = json.load(fh)
-    return menu if isinstance(menu, list) else menu.get("probes", [])
+    if isinstance(menu, list):
+        return menu
+    if isinstance(menu, dict):
+        for key in ("probes", "menu", "tools"):
+            entries = menu.get(key)
+            if isinstance(entries, list):
+                return entries
+    raise SystemExit(
+        "needle_menu.json has an unrecognised shape: expected a bare JSON "
+        "array (or one of probes/menu/tools), got %s" % type(menu).__name__)
 
 
 COUNT_WORDS = ("how many", "count", "total", "number of")
+
+
+# ── refusal gate ──────────────────────────────────────────────────────────
+# Deterministic and menu-only: a question this instance cannot honestly answer
+# is REFUSED rather than answered with the nearest probe's number. A confident
+# wrong number is worse than a refusal. GATE_VERSION is asserted by the fleet
+# guard (check_menu_bridge_alignment.py), so a regenerated ask.py cannot
+# silently drop this block.
+GATE_VERSION = 1
+
+GENERIC_INTENT = frozenset("""
+    how many much show list give tell me find get what which who where when
+    top best most least first last sample example preview all any
+    are is there exist exists please number status break down
+    some few several couple
+    a an the my our your their its
+    has have had
+""".split())
+
+# An imperative ACTION is not a question. A read-only instance must refuse
+# rather than answer with the nearest data.
+ACTION_VERBS = ("play", "erase", "delete", "remove", "drop", "wipe", "purge",
+                "send", "execute", "restart", "shutdown", "kill", "exploit",
+                "deploy", "cancel")
+
+# Status/time QUALIFIERS. A question carrying one the winning probe does not
+# carry is a dropped filter - "work orders are blocked" answered with an open
+# count is a wrong answer that looks right.
+QUALIFIERS = ("blocked", "overdue", "rejected", "closed", "resolved",
+              "pending", "escalated", "cancelled", "archived", "on hold",
+              "last week", "last month", "last year", "this week",
+              "this month", "yesterday", "today", "unassigned")
+
+# Fraction of the question's domain nouns the winner must know.
+MIN_QUESTION_COVERAGE = 0.5
+
+
+def entry_vocab(entry):
+    """Every token a probe can be said to know: triggers, name, enum values."""
+    v = set(tokens(" ".join(entry.get("triggers") or [])))
+    v.update(tokens((entry.get("name") or "").replace("_", " ")))
+    props = ((entry.get("parameters") or {}).get("properties") or {})
+    for spec in props.values():
+        if isinstance(spec, dict):
+            for val in spec.get("enum") or []:
+                v.update(tokens(str(val)))
+    return frozenset(v)
+
+
+def plural_insensitive(token_set):
+    return set(t[:-1] if len(t) > 3 and t.endswith("s") else t
+               for t in token_set)
+
+
+def known_anywhere(token, menu_vocab):
+    if token in menu_vocab:
+        return True
+    if len(token) > 3 and token.endswith("s") and token[:-1] in menu_vocab:
+        return True
+    if len(token) > 3 and (token + "s") in menu_vocab:
+        return True
+    return False
+
+
+def gate_reason(question, entry, menu, arguments):
+    """None = answer it. Otherwise a reason to refuse.
+
+    Computed from the MENU and the QUESTION only: no probe runs, no model is
+    called. Qualifiers match whole words ("resolved" must not fire inside
+    "unresolved") and articles/auxiliaries count as generic intent.
+    """
+    q_norm = " ".join(tokens(question))
+    lowered = (question or "").lower()
+    menu_vocab = (frozenset().union(*[entry_vocab(e) for e in menu])
+                  if menu else frozenset())
+
+    first = (question or "").split()[:1]
+    if first and first[0].lower() in ACTION_VERBS \
+            and first[0].lower() not in menu_vocab:
+        return "action_intent"
+
+    # An extracted entity IS the confidence signal.
+    for value in (arguments or {}).values():
+        if value in (None, ""):
+            continue
+        needle = " ".join(tokens(str(value)))
+        if needle and needle in q_norm:
+            return None
+
+    words = set(re.findall(r"[a-z0-9]+", lowered))
+    vocab = entry_vocab(entry)
+    for qual in QUALIFIERS:
+        qw = qual.split()
+        hit = (qw[0] in words) if len(qw) == 1 else (qual in lowered)
+        if hit and qw[0] not in vocab:
+            return "dropped_filter:" + qw[0]
+
+    qt = set(tokens(question))
+    domain = set(t for t in qt - GENERIC_INTENT if not t.isdigit())
+    if not domain:
+        domain = set(qt - GENERIC_INTENT) or qt
+    unknown = sorted(t for t in domain if not known_anywhere(t, menu_vocab))
+    if unknown:
+        return "no_probe_matches(unknown=" + ",".join(unknown) + ")"
+
+    d = plural_insensitive(domain)
+    known = plural_insensitive(vocab)
+    coverage = len(d.intersection(known)) / max(1, len(d))
+    if MIN_QUESTION_COVERAGE > 0 and coverage < MIN_QUESTION_COVERAGE:
+        return "low_coverage(%.2f)" % coverage
+    return None
+
 
 
 def score(question_tokens, entry, count_intent):
@@ -760,6 +888,18 @@ def bind_arguments(entry, question):
             elif key in required:
                 return None, "argument " + repr(key) + " is required; its value is not in the question"
             continue
+        if prop.get("pattern"):
+            # Pattern-caged args (free-text search terms, ids, logins). Without
+            # this branch such an arg is never bound, so a search probe is
+            # called with no term at all — and the gate cannot see the entity
+            # that should exempt the question from its vocabulary check.
+            match = re.search(prop["pattern"], question, re.IGNORECASE)
+            if match and match.groups():
+                args[key] = match.group(1).strip()
+            elif key in required:
+                return None, ("argument " + repr(key) + " is required and "
+                              "cannot be resolved from the question")
+            continue
         if prop.get("type") == "integer":
             if numbers:
                 args[key] = numbers[0]
@@ -798,7 +938,8 @@ def main(argv):
     question = " ".join(a for a in argv if not a.startswith("--")).strip() or {example}
 
     env = {"instance": {agent}, "question": question, "probe": None,
-           "arguments": {}, "score": 0, "confidence": 0.0, "refused": False}
+           "arguments": {}, "score": 0, "confidence": 0.0, "refused": False,
+           "refusal_reason": None, "gate_version": GATE_VERSION}
     menu = load_menu()
     entry, best = pick(question, menu)
 
@@ -812,23 +953,34 @@ def main(argv):
             if name:
                 env.update(probe=name, arguments=arguments, confidence=confidence)
             else:
-                env.update(refused=True,
+                env.update(refused=True, refusal_reason="no_probe_matches",
                            error=env.get("error", "no probe matched (engine returned nothing usable)"))
         else:
-            env.update(refused=True, error="no probe matched")
+            env.update(refused=True, refusal_reason="no_probe_matches",
+                       error="no probe matched")
         print(json.dumps(env, ensure_ascii=False, default=str))
         return 1
 
     arguments, why = bind_arguments(entry, question)
     if why:
-        env.update(probe=entry["name"], score=best, refused=True, error=why)
+        env.update(probe=entry["name"], score=best, refused=True,
+                   refusal_reason="unbound_argument", error=why)
+        print(json.dumps(env, ensure_ascii=False, default=str))
+        return 1
+    reason = gate_reason(question, entry, menu, arguments)
+    if reason:
+        env.update(probe=None, score=best, refused=True,
+                   refusal_reason=reason, gate_version=GATE_VERSION,
+                   error="refused (" + reason + "): the best match could not "
+                         "honestly answer this question")
         print(json.dumps(env, ensure_ascii=False, default=str))
         return 1
     env.update(probe=entry["name"], arguments=arguments, score=best, confidence=1.0)
     try:
         env["result"] = execute(entry["name"], arguments)
     except Exception as exc:
-        env.update(refused=True, error="probe " + entry["name"] + " failed: " + str(exc))
+        env.update(refused=True, refusal_reason="probe_error",
+                   error="probe " + entry["name"] + " failed: " + str(exc))
         print(json.dumps(env, ensure_ascii=False, default=str))
         return 1
     print(json.dumps(env, ensure_ascii=False, default=str))

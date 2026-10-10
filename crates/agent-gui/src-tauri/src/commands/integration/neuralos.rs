@@ -251,13 +251,38 @@ fn wait_with_timeout(
     }
 }
 
-/// Run a subprocess to completion, capturing stdout/stderr with a budget.
-fn run_captured(
+/// Collapse a child's stderr for display: a Python traceback is reduced to its
+/// final line so an instance misconfiguration can never leak a stack to a user.
+fn clean_child_error(stderr: &str) -> String {
+    let text = stderr.trim();
+    if !text.contains("Traceback") {
+        return text.chars().take(400).collect();
+    }
+    let last = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .next_back()
+        .unwrap_or("")
+        .trim();
+    format!("instance error: {last}")
+}
+
+/// Captured child output, including the failing case.
+struct CapturedOutput {
+    success: bool,
+    status: std::process::ExitStatus,
+    stdout: Vec<u8>,
+    stderr: String,
+}
+
+/// Run a subprocess to completion with a budget, WITHOUT judging the exit code.
+/// `ask.py` exits 1 to signal a refusal, so that envelope still has to be read.
+fn run_captured_raw(
     mut cmd: Command,
     stdin_text: Option<&str>,
     budget: Duration,
     label: &str,
-) -> Result<Vec<u8>, String> {
+) -> Result<CapturedOutput, String> {
     use std::io::Write;
     cmd.stdin(if stdin_text.is_some() {
         Stdio::piped()
@@ -278,17 +303,31 @@ fn run_captured(
     let output = child
         .wait_with_output()
         .map_err(|e| format!("{label} output read failed: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let mut last_lines: Vec<&str> = stderr.lines().rev().take(6).collect();
-        last_lines.reverse();
-        let stderr = last_lines.join("\n");
+    Ok(CapturedOutput {
+        success: output.status.success(),
+        status: output.status,
+        stdout: output.stdout,
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+/// Run a subprocess to completion, capturing stdout/stderr with a budget; a
+/// non-zero exit is an error (with any traceback collapsed).
+fn run_captured(
+    cmd: Command,
+    stdin_text: Option<&str>,
+    budget: Duration,
+    label: &str,
+) -> Result<Vec<u8>, String> {
+    let out = run_captured_raw(cmd, stdin_text, budget, label)?;
+    if !out.success {
         return Err(format!(
-            "{label} failed ({}): {stderr}",
-            output.status
+            "{label} failed ({}): {}",
+            out.status,
+            clean_child_error(&out.stderr)
         ));
     }
-    Ok(output.stdout)
+    Ok(out.stdout)
 }
 
 /// One-off bridge invocation: `python -c <SNIPPET> <instance_dir> <probe>`
@@ -335,37 +374,72 @@ fn run_bridge_probe(
 /// selection only when the deterministic floor actually answered; a refusal
 /// (`probe: null`), a malformed envelope, or a non-zero exit yields None so
 /// the caller falls back to engine selection instead of failing hard.
-fn parse_ask_envelope(stdout: &[u8]) -> Option<(String, serde_json::Value, f64)> {
-    let value: serde_json::Value = serde_json::from_slice(stdout).ok()?;
-    if value.get("refused").and_then(serde_json::Value::as_bool) == Some(true) {
-        return None;
-    }
-    // No probe ⇒ refusal / selection miss (neuralosd-style instances answer
-    // with `"probe": null` plus an `error` string).
-    let probe = value.get("probe").and_then(serde_json::Value::as_str)?.to_string();
-    if !is_valid_probe_name(&probe) {
-        return None;
-    }
-    // Two dialects: the ask.py this app generates prints `result`; the
-    // neuralosd-style instances print `results`. Accept either.
-    let result = value
-        .get("result")
-        .or_else(|| value.get("results"))
-        .filter(|v| !v.is_null())?
-        .clone();
-    let confidence = value.get("confidence").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
-    Some((probe, result, confidence))
+/// What an instance's `ask.py` had to say.
+enum AskOutcome {
+    /// The floor answered: (probe, result, confidence).
+    Answered(String, serde_json::Value, f64),
+    /// The floor REFUSED. Terminal — the engine selector must not be consulted,
+    /// or the refusal silently becomes the nearest probe's number.
+    Refused(String),
+    /// No usable envelope (no ask.py, crash, unparseable) — fall through.
+    Unusable,
 }
 
-/// Run an instance's `ask.py` (the deterministic floor). Never an error: any
-/// refusal, non-zero exit, or unparseable envelope returns None so the caller
-/// falls through to the engine.
+fn parse_ask_envelope(stdout: &[u8]) -> AskOutcome {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(stdout) else {
+        return AskOutcome::Unusable;
+    };
+    let refused_flag = value.get("refused").and_then(serde_json::Value::as_bool) == Some(true);
+    let refused_mode = value.get("mode").and_then(serde_json::Value::as_str) == Some("refused");
+    let declared_reason = value.get("refusal_reason").and_then(serde_json::Value::as_str);
+    let message = value
+        .get("reason")
+        .or_else(|| value.get("error"))
+        .and_then(serde_json::Value::as_str);
+    let probe = value.get("probe").and_then(serde_json::Value::as_str);
+    // Dialects: the ask.py this app generates prints `result`; neuralosd-style
+    // instances print `results`.
+    let payload = value
+        .get("result")
+        .or_else(|| value.get("results"))
+        .filter(|v| !v.is_null());
+
+    // 1. An explicit refusal is ALWAYS terminal, probe or not.
+    if refused_flag || refused_mode {
+        let reason = declared_reason
+            .or(message)
+            .unwrap_or("refused")
+            .to_string();
+        return AskOutcome::Refused(reason);
+    }
+    // 2. A null probe is a refusal only when the envelope says why; a silent
+    //    null is a crash/empty run and must not masquerade as one.
+    let Some(probe) = probe else {
+        return match declared_reason.or(message) {
+            Some(reason) => AskOutcome::Refused(reason.to_string()),
+            None => AskOutcome::Unusable,
+        };
+    };
+    if !is_valid_probe_name(probe) {
+        return AskOutcome::Unusable;
+    }
+    let Some(payload) = payload else {
+        return AskOutcome::Unusable;
+    };
+    let confidence = value.get("confidence").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+    AskOutcome::Answered(probe.to_string(), payload.clone(), confidence)
+}
+
+/// Run an instance's `ask.py` (the deterministic floor).
+///
+/// Reads the envelope even when the process exits non-zero (ask.py exits 1 on
+/// a refusal). Only a genuinely unusable run returns `Unusable`.
 fn run_ask_py(
     python: &Path,
     instance_dir: &Path,
-    instance: &str,
+    _instance: &str,
     question: &str,
-) -> Option<ProbeDigest> {
+) -> AskOutcome {
     let mut cmd = Command::new(python);
     cmd.arg("ask.py")
         .arg(question)
@@ -374,14 +448,42 @@ fn run_ask_py(
         .env("NEEDLE_TELEMETRY", "0")
         .env("DO_NOT_TRACK", "1")
         .env("PYTHONIOENCODING", "utf-8");
-    let stdout = run_captured(cmd, None, Duration::from_secs(ASK_TIMEOUT_SECS), "ask.py").ok()?;
-    let (probe, result, confidence) = parse_ask_envelope(&stdout)?;
-    Some(ProbeDigest {
-        instance: instance.to_string(),
-        probe,
-        confidence,
-        result,
-    })
+    match run_captured_raw(cmd, None, Duration::from_secs(ASK_TIMEOUT_SECS), "ask.py") {
+        Ok(out) => parse_ask_envelope(&out.stdout),
+        Err(_) => AskOutcome::Unusable,
+    }
+}
+
+/// Every probe a menu promises must exist as a top-level `def <name>(` in the
+/// instance's bridge.py. Returns a clean, actionable message for the first
+/// mismatch — otherwise an unaligned instance surfaces a raw Python traceback
+/// (`module 'bridge' has no attribute ...`) to the user.
+fn menu_bridge_misalignment(instance_dir: &Path) -> Option<String> {
+    let menu_raw = std::fs::read_to_string(instance_dir.join("needle_menu.json")).ok()?;
+    let menu: serde_json::Value = serde_json::from_str(&menu_raw).ok()?;
+    let source = std::fs::read_to_string(instance_dir.join("bridge.py")).ok()?;
+    // Top-level only: a nested def is not reachable via getattr(bridge, name).
+    let defined: Vec<&str> = source
+        .lines()
+        .filter_map(|line| line.strip_prefix("def "))
+        .filter_map(|rest| rest.split(['(', ' ']).next())
+        .collect();
+    for entry in menu_entries(&menu) {
+        let Some(name) = entry.get("name").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        if !defined.contains(&name) {
+            return Some(format!(
+                "instance {} is not aligned: its menu promises {:?} but bridge.py defines no such function",
+                instance_dir
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                name
+            ));
+        }
+    }
+    None
 }
 
 // ------------------------------------------------------------------- commands
@@ -517,6 +619,11 @@ pub async fn neuralos_run_probe(
                 instances_dir.display()
             ));
         }
+        // Load-time guard: a menu that promises probes its bridge cannot
+        // deliver must fail with this message, not with a Python traceback.
+        if let Some(problem) = menu_bridge_misalignment(&instance_dir) {
+            return Err(problem);
+        }
         if question.trim().is_empty() {
             return Err("question must not be empty".into());
         }
@@ -525,12 +632,27 @@ pub async fn neuralos_run_probe(
             .ok_or("no python interpreter found for instance bridges")?;
 
         // Deterministic code answers first: an instance that ships `ask.py`
-        // runs its lexical floor, and the on-device engine is only the
-        // fallback seat (this also lets an instance answer with no engine
-        // installed at all). A refusal falls through to selection below.
+        // runs its lexical floor, and the on-device engine is only the fallback
+        // seat (this also lets an instance answer with no engine installed).
         if instance_dir.join("ask.py").exists() {
-            if let Some(digest) = run_ask_py(&python, &instance_dir, &instance, &question) {
-                return Ok(digest);
+            match run_ask_py(&python, &instance_dir, &instance, &question) {
+                AskOutcome::Answered(probe, result, confidence) => {
+                    return Ok(ProbeDigest {
+                        instance,
+                        probe,
+                        confidence,
+                        result,
+                    });
+                }
+                // A REFUSAL IS TERMINAL. Falling through to the engine selector
+                // would answer an unanswerable question with the nearest
+                // probe's number, the exact failure this floor exists to stop.
+                AskOutcome::Refused(reason) => {
+                    return Err(format!(
+                        "refused ({reason}): {instance} cannot honestly answer this question"
+                    ));
+                }
+                AskOutcome::Unusable => {}
             }
         }
 
@@ -963,33 +1085,73 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ask_envelope_accepts_both_dialects() {
-        // Dialect 1 — the ask.py this app generates.
-        let ours = br#"{"probe":"count_records","result":{"count":4},"confidence":1.0,"refused":false}"#;
-        let parsed = parse_ask_envelope(ours).expect("generated dialect should parse");
-        assert_eq!(parsed.0, "count_records");
-        assert_eq!(parsed.1["count"], 4);
+    fn a_refusal_is_terminal_and_never_an_answer() {
+        // refusal flag
+        assert!(matches!(
+            parse_ask_envelope(b"{\"probe\":null,\"refused\":true,\"refusal_reason\":\"action_intent\",\"gate_version\":1}"),
+            AskOutcome::Refused(_)
+        ));
+        // mode refused
+        assert!(matches!(
+            parse_ask_envelope(b"{\"probe\":null,\"mode\":\"refused\",\"error\":\"no probe matched\"}"),
+            AskOutcome::Refused(_)
+        ));
+        // null probe + reason
+        assert!(matches!(
+            parse_ask_envelope(b"{\"probe\":null,\"error\":\"no results produced for this question\"}"),
+            AskOutcome::Refused(_)
+        ));
 
-        // Dialect 2 — a neuralosd-style instance: `results`, `confidence: null`,
-        // pretty-printed across lines, and no `refused` key.
-        let neuralosd = b"{\n  \"probe\": \"row_count\",\n  \"confidence\": null,\n  \"results\": {\"count\": 51290}\n}\n";
-        let parsed = parse_ask_envelope(neuralosd).expect("neuralosd dialect should parse");
-        assert_eq!(parsed.0, "row_count");
-        assert_eq!(parsed.1["count"], 51290);
-        assert_eq!(parsed.2, 0.0);
+        // A refusal reports why, in the envelope's own words.
+        match parse_ask_envelope(b"{\"probe\":null,\"refused\":true,\"refusal_reason\":\"action_intent\",\"gate_version\":1}") {
+            AskOutcome::Refused(reason) => assert_eq!(reason, "action_intent"),
+            _ => panic!("an explicit refusal must be Refused"),
+        }
+
+        // Answered, in both payload dialects.
+        match parse_ask_envelope(b"{\"probe\":\"count_records\",\"result\":{\"count\":4},\"confidence\":1.0}") {
+            AskOutcome::Answered(probe, value, confidence) => {
+                assert_eq!(probe, "count_records");
+                assert_eq!(value["count"], 4);
+                assert_eq!(confidence, 1.0);
+            }
+            _ => panic!("an answer must be Answered"),
+        }
+        assert!(matches!(
+            parse_ask_envelope(b"{\"probe\":\"row_count\",\"results\":{\"count\":9}}"),
+            AskOutcome::Answered(_, _, _)
+        ));
+
+        // Silence and garbage are UNUSABLE (fall through), never
+        // 'refused': a crash must not masquerade as an honest refusal.
+        assert!(matches!(parse_ask_envelope(b"not json"), AskOutcome::Unusable));
+        assert!(matches!(parse_ask_envelope(b"{}"), AskOutcome::Unusable));
+        assert!(matches!(parse_ask_envelope(b"{\"probe\":\"peek\"}"), AskOutcome::Unusable));
     }
 
     #[test]
-    fn ask_envelope_refusals_are_never_answers() {
-        for refused in [
-            &b"{\"probe\":null,\"refused\":true,\"error\":\"no probe matched\"}"[..],
-            &b"{\"probe\":null,\"error\":\"no results produced for this question\"}"[..],
-            &b"{\"probe\":\"peek\",\"results\":null}"[..],
-            &b"{\"probe\":\"os.system\",\"results\":{}}"[..],
-            &b"not json"[..],
-        ] {
-            assert!(parse_ask_envelope(refused).is_none(), "must not answer: {:?}", refused);
-        }
+    fn menu_bridge_misalignment_reports_a_clean_error() {
+        let root = temp_root("align");
+        std::fs::write(
+            root.join("needle_menu.json"),
+            b"[{\"name\": \"open_incidents\"}, {\"name\": \"list_open_incidents\"}]",
+        )
+        .unwrap();
+        std::fs::write(root.join("bridge.py"), b"def open_incidents():\n    return {}\n").unwrap();
+
+        let problem = menu_bridge_misalignment(&root).expect("misalignment must be reported");
+        assert!(problem.contains("list_open_incidents"), "{problem}");
+        assert!(problem.contains("not aligned"), "{problem}");
+        assert!(!problem.contains("Traceback"), "no stack may leak: {problem}");
+
+        // Aligned once the bridge defines every promised probe.
+        std::fs::write(
+            root.join("bridge.py"),
+            b"def open_incidents():\n    return {}\n\ndef list_open_incidents():\n    return []\n",
+        )
+        .unwrap();
+        assert!(menu_bridge_misalignment(&root).is_none());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -1029,34 +1191,6 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert!(again.is_array());
         let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn ask_envelope_accepts_answers_and_rejects_refusals() {
-        let good = br#"{"probe":"count_records","result":{"count":4},"confidence":1.0,"refused":false}"#;
-        let parsed = parse_ask_envelope(good).expect("answer envelope should parse");
-        assert_eq!(parsed.0, "count_records");
-        assert_eq!(parsed.1["count"], 4);
-        assert_eq!(parsed.2, 1.0);
-
-        // A refusal must never be mistaken for an answer: the caller falls
-        // back to engine selection instead.
-        assert!(parse_ask_envelope(br#"{"probe":null,"refused":true,"error":"no probe matched"}"#).is_none());
-        // Probe names still pass the injection guard.
-        assert!(parse_ask_envelope(br#"{"probe":"os.system","result":{},"refused":false}"#).is_none());
-        // No result payload: nothing to hand back.
-        assert!(parse_ask_envelope(br#"{"probe":"peek","refused":false}"#).is_none());
-        assert!(parse_ask_envelope(b"not json").is_none());
-    }
-
-    fn temp_root(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "reactorpro-neuralos-test-{}-{tag}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
     }
 
     #[test]

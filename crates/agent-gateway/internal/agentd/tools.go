@@ -477,32 +477,73 @@ out = fn(**args)
 print(json.dumps({"probe": sys.argv[2], "result": out}, ensure_ascii=False, default=str))
 `
 
-// neuralOSAskAnswered reports whether an ask.py envelope carries a real
-// answer (a selected probe plus a payload) rather than a refusal. The
-// deterministic floor answers first; the engine is only the fallback seat.
-//
-// Two dialects are accepted: the ask.py this app generates prints
-// `"result"` and `"refused"`; a neuralosd-style instance prints `"results"`
-// and signals a refusal with `"probe": null` plus an `"error"` string.
-func neuralOSAskAnswered(out []byte) bool {
+// A refusal is a first-class outcome, not "no answer": the instance is
+// saying it cannot honestly answer. Falling through to the engine selector
+// would replace that refusal with the nearest probe's number.
+type neuralOSAskOutcome int
+
+const (
+	neuralOSOutcomeUnusable neuralOSAskOutcome = iota
+	neuralOSOutcomeAnswered
+	neuralOSOutcomeRefused
+)
+
+// neuralOSAskOutcomeOf reads an ask.py envelope. Two dialects are accepted:
+// the ask.py this app generates ({probe, result, refused, refusal_reason})
+// and the neuralosd-style one ({probe: null, results, error}). A crash or
+// empty run is Unusable (fall through), never a refusal.
+func neuralOSAskOutcomeOf(out []byte) (neuralOSAskOutcome, string) {
 	var env struct {
-		Probe   *string         `json:"probe"`
-		Result  json.RawMessage `json:"result"`
-		Results json.RawMessage `json:"results"`
-		Refused bool            `json:"refused"`
+		Probe         *string         `json:"probe"`
+		Result        json.RawMessage `json:"result"`
+		Results       json.RawMessage `json:"results"`
+		Refused       bool            `json:"refused"`
+		Mode          string          `json:"mode"`
+		RefusalReason string          `json:"refusal_reason"`
+		Reason        string          `json:"reason"`
+		Error         string          `json:"error"`
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(out), &env); err != nil {
-		return false
+		return neuralOSOutcomeUnusable, ""
 	}
-	if env.Refused || env.Probe == nil || !isNeuralOSProbeName(*env.Probe) {
-		return false
+	reason := env.RefusalReason
+	if reason == "" {
+		reason = env.Reason
+	}
+	if reason == "" {
+		reason = env.Error
+	}
+	if env.Refused || env.Mode == "refused" {
+		if reason == "" {
+			reason = "refused"
+		}
+		return neuralOSOutcomeRefused, reason
+	}
+	if env.Probe == nil {
+		if reason != "" {
+			return neuralOSOutcomeRefused, reason
+		}
+		return neuralOSOutcomeUnusable, ""
+	}
+	if !isNeuralOSProbeName(*env.Probe) {
+		return neuralOSOutcomeUnusable, ""
 	}
 	payload := env.Result
 	if len(bytes.TrimSpace(payload)) == 0 {
 		payload = env.Results
 	}
 	trimmed := bytes.TrimSpace(payload)
-	return len(trimmed) > 0 && string(trimmed) != "null"
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return neuralOSOutcomeUnusable, ""
+	}
+	return neuralOSOutcomeAnswered, ""
+}
+
+// neuralOSAskAnswered reports whether an ask.py envelope carries a real
+// answer (a selected probe plus a payload) rather than a refusal.
+func neuralOSAskAnswered(out []byte) bool {
+	outcome, _ := neuralOSAskOutcomeOf(out)
+	return outcome == neuralOSOutcomeAnswered
 }
 
 // neuralOSMenuProbeCount accepts both menu shapes: the canonical top-level
@@ -552,8 +593,13 @@ func (t *Toolset) runNeuralOSQuery(ctx context.Context, args map[string]any) (st
 			"NEEDLE_TELEMETRY=0", "DO_NOT_TRACK=1", "PYTHONIOENCODING=utf-8")
 		var askErrBuf bytes.Buffer
 		ask.Stderr = &askErrBuf
-		if askOut, askErr := ask.Output(); askErr == nil && neuralOSAskAnswered(askOut) {
+		// ask.py exits 1 on a refusal, so stdout must be read regardless of
+		// the exit status.
+		askOut, _ := ask.Output()
+		if outcome, why := neuralOSAskOutcomeOf(askOut); outcome == neuralOSOutcomeAnswered {
 			return capString(strings.TrimSpace(string(askOut)), toolOutputCap), nil
+		} else if outcome == neuralOSOutcomeRefused {
+			return "refused (" + why + "): the instance cannot honestly answer this question", nil
 		}
 	}
 
