@@ -1084,6 +1084,18 @@ mod tests {
     // `integration_commands::neuralos` filter.
     use super::*;
 
+    /// Scratch directory for one test, keyed by process id so parallel test
+    /// binaries never collide.
+    fn temp_root(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "reactorpro-neuralos-test-{}-{tag}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
     #[test]
     fn a_refusal_is_terminal_and_never_an_answer() {
         // refusal flag
