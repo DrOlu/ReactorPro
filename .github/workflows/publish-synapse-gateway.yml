@@ -118,10 +118,7 @@ jobs:
         id: npm
         if: env.SKIP != 'true'
         env:
-          # Correctly-spelled secret first; the legacy misspelled SYNASSE_NPM_TOKEN
-          # is kept as a fallback until the next successful publish, after which
-          # it can be deleted from the repo.
-          NODE_AUTH_TOKEN: ${{ secrets.SYNAPSE_NPM_TOKEN || secrets.SYNASSE_NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.SYNAPSE_NPM_TOKEN }}
         run: |
           set -euo pipefail
           publish_one() {
