@@ -149,8 +149,7 @@ jobs:
           done
 
       - name: Fail if a publish failed
-        if: always() && (steps.pypi.outcome != 'success' || steps.npm.outcome != 'success')
-        if: env.SKIP != 'true'
+        if: always() && env.SKIP != 'true' && (steps.pypi.outcome != 'success' || steps.npm.outcome != 'success')
         run: |
           echo "pypi=${{ steps.pypi.outcome }} npm=${{ steps.npm.outcome }}"
           exit 1
