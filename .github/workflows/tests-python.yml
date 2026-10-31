@@ -1,0 +1,26 @@
+name: Tests (synapse-gateway builder)
+
+on:
+  push:
+    branches: [main]
+    paths: ["scripts/build_synapse_gateway_packages.py",
+            "tests/test_synapse_gateway_builder.py",
+            ".github/workflows/publish-synapse-gateway.yml",
+            ".github/workflows/tests-python.yml"]
+  pull_request:
+    paths: ["scripts/build_synapse_gateway_packages.py",
+            "tests/test_synapse_gateway_builder.py"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest build wheel setuptools
+      - name: Builder unit tests
+        run: pytest tests/test_synapse_gateway_builder.py -v
