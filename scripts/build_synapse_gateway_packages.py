@@ -81,9 +81,15 @@ def fetch_binaries(tag: str, targets: list[str], cache: Path) -> dict:
     try:
         http_download(f"{RELEASE_BASE}/{tag}/SHA256SUMS", sums_path)
         for line in sums_path.read_text().splitlines():
-            parts = line.split()
+            line = line.strip()
+            if not line:
+                continue
+            # sha256sum format: "<hash>  <file>" (two spaces) or
+            # "<hash> *<file>" (binary mode marker). split ONCE so filenames
+            # containing spaces are not silently dropped from verification.
+            parts = line.split(None, 1)
             if len(parts) == 2:
-                sums[parts[1]] = parts[0]
+                sums[parts[1].lstrip("*").strip()] = parts[0]
     except Exception as exc:
         print(f"WARNING: SHA256SUMS unavailable ({exc}); skipping verification")
 
@@ -97,10 +103,21 @@ def fetch_binaries(tag: str, targets: list[str], cache: Path) -> dict:
             dest = cache / asset
             if not dest.exists():
                 http_download(f"{RELEASE_BASE}/{tag}/{asset}", dest)
-            if asset in sums:
+            if sums:
+                # If a checksums file exists, EVERY expected asset must appear
+                # in it — a missing entry means the release is incomplete or
+                # renamed, and silently skipping verification here would ship
+                # unverified binaries (found: FN in the robustness sweep).
+                if asset not in sums:
+                    raise SystemExit(
+                        f"{asset} is missing from SHA256SUMS — refusing to "
+                        "publish unverified binaries")
                 actual = hashlib.sha256(dest.read_bytes()).hexdigest()
                 if actual != sums[asset]:
                     raise SystemExit(f"checksum mismatch for {asset}")
+            else:
+                print(f"WARNING: {asset} published WITHOUT checksum "
+                      "verification (no SHA256SUMS in the release)")
             entry[key] = dest
         binaries[target] = entry
     return binaries
@@ -236,6 +253,19 @@ def build_pypi(version: str, targets: list[str], binaries: dict, dist: Path) -> 
         print(f"built {wheel.name}")
         produced.append(wheel)
 
+    # fallback wheel LAST: every one_any_wheel() call unlinks the same
+    # py3-none-any filename, so a fallback built first was always deleted by
+    # the first platform build — the py3-none-any wheel never reached PyPI
+    # (confirmed: absent from 1.7.5/1.7.6), leaving unsupported platforms
+    # (musl/Alpine, BSD, 32-bit) with NO install path at all.
+    shutil.rmtree(bindir, ignore_errors=True)
+    (pkg / "__init__.py").write_text(
+        f'"""synapse-gateway - the ReactorPro Gateway (Synapse) native runtime."""\n\n'
+        f'__version__ = "{version}"\n' + LAUNCHER_BODY)
+    produced.append(one_any_wheel())
+    print(f"built {produced[-1].name} (fallback: no binaries, launcher "
+          "explains where to get them)")
+
     shutil.rmtree(bindir, ignore_errors=True)
     return produced
 
@@ -283,7 +313,7 @@ def build_npm(version: str, targets: list[str], binaries: dict, dist: Path) -> l
     return produced
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release-tag", required=True, help="gateway release tag, e.g. v1.7.6")
     parser.add_argument("--version", default=None,
@@ -292,9 +322,12 @@ def main() -> None:
     parser.add_argument("--out", default=str(DIST))
     parser.add_argument("--skip-pypi", action="store_true")
     parser.add_argument("--skip-npm", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    version = args.version or args.release_tag.lstrip("v")
+    # removeprefix, NOT lstrip: lstrip("v") strips every leading "v", so a
+    # tag like "vv1.7.6" (double-v, seen in the wild from scripted pushes)
+    # would silently produce version "1.7.6" from a different tag spelling.
+    version = args.version or args.release_tag.removeprefix("v")
     if not re.match(r"^\d+\.\d+\.\d+$", version):
         raise SystemExit(f"invalid version: {version!r}")
 

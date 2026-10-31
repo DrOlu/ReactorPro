@@ -173,7 +173,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # A PAT, not GITHUB_TOKEN: events created by GITHUB_TOKEN never
+      # trigger other workflows, so the `released` event never fired
+      # publish-synapse-gateway.yml — pip/npm sat at 1.7.6 while the
+      # gateway shipped 1.7.7..1.7.12.
+      GH_TOKEN: ${{ secrets.PR_GOVERNANCE_PAT }}   # proven in pr-governance.yml; SYNC_TOKEN's scopes are unknown
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       # Pin to the triggering SHA (or the dispatch tag). Default checkout
