@@ -46,10 +46,13 @@ jobs:
           fi
           echo "publishing reactorpro from ${RELEASE_TAG} (npm dist-tag: ${NPM_TAG})"
 
-      # Publish exactly what was tagged, not whatever main holds today.
+      # The LAUNCHER comes from main: moving a tag races the released event
+      # and a broken launcher can get published (reactorpro@1.7.13 shipped a
+      # 1.7.4 downloader this way). The binaries are not checked out at all —
+      # the launcher downloads them from the release matching its own version.
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+          ref: main
 
       - uses: actions/setup-node@v6
         with:
