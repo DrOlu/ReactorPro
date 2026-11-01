@@ -2,14 +2,19 @@
 // reactorpro CLI — installs the ReactorPro gateway / agentd binaries
 // from the official GitHub releases for the current platform.
 
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFileSync, writeFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { homedir, platform, arch } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 
-const VERSION = "1.7.4";
+// Derived from package.json at runtime: a hardcoded literal here shipped
+// once as 1.7.4 inside a 1.7.12 package — users installed v1.7.4 binaries
+// believing they were current. Drift is now structurally impossible.
+const VERSION = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 const OWNER = "DrOlu";
 const REPO = "ReactorPro";
 const INSTALL_DIR = path.join(homedir(), ".reactorpro", "bin");

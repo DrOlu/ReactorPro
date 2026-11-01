@@ -70,6 +70,16 @@ jobs:
           fi
           echo "authenticated to npm as: $(npm whoami)"
 
+      - name: Assert the launcher derives its version from package.json
+        working-directory: npm/reactorpro
+        run: |
+          set -euo pipefail
+          if grep -q 'const VERSION = "' bin/reactorpro.mjs; then
+            echo "::error::bin/reactorpro.mjs hardcodes VERSION — it must derive it from package.json (a hardcoded literal shipped 1.7.4 binaries in a 1.7.12 package)"
+            exit 1
+          fi
+          echo "launcher version resolves to: $(node bin/reactorpro.mjs --version)"
+
       - name: Publish npm/reactorpro
         working-directory: npm/reactorpro
         env:
