@@ -2,7 +2,8 @@
 // reactorpro CLI — installs the ReactorPro gateway / agentd binaries
 // from the official GitHub releases for the current platform.
 
-import { chmod, mkdir, readFileSync, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { homedir, platform, arch } from "node:os";
