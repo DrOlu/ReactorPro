@@ -116,8 +116,10 @@ jobs:
 
           echo "${out}"
           # Registry replica lag: `view` can 404 while the version is already
-          # reserved, so treat "already published" as success.
-          if printf '%s' "${out}" | grep -q "cannot publish over the previously published versions"; then
+          # reserved, so treat "already published" as success. npm reports this
+          # two ways: "cannot publish over the previously published versions"
+          # and "Cannot publish over previously staged version" (E409).
+          if printf '%s' "${out}" | grep -Eiq 'cannot publish over the previously published versions|cannot publish over previously staged version'; then
             echo "already published: ${name}@${version} — skipping"
             exit 0
           fi
