@@ -83,7 +83,7 @@ jobs:
             target: x86_64-apple-darwin
             suffix: x64
           - name: Apple Silicon
-            runner: macos-14
+            runner: macos-15
             target: aarch64-apple-darwin
             suffix: aarch64
     steps:
@@ -573,6 +573,11 @@ jobs:
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
+    # A single platform leg failing or being terminated (a retired
+    # runner image does this) must not suppress the whole release:
+    # publish whatever built and warn about the rest. `always()` is
+    # deliberate - `!cancelled()` is false when a job was terminated.
+    if: ${{ always() && needs.release-metadata.result == 'success' }}
     needs:
       - release-metadata
       - macos
@@ -613,6 +618,39 @@ jobs:
         with:
           path: release-artifacts
           merge-multiple: true
+
+      - name: Report missing platform artifacts
+        if: steps.tagcheck.outputs.superseded != 'true'
+        run: |
+          set -euo pipefail
+          # A platform leg that fails or is terminated (for example when GitHub
+          # retires a runner image) no longer blocks this job, so make the gap
+          # loud instead of quietly publishing an incomplete release.
+          missing=0
+          check() {
+            label="$1"
+            pattern="$2"
+            found=$(find release-artifacts -maxdepth 1 -type f -name "$pattern" -print -quit)
+            if [ -n "$found" ]; then
+              echo "ok:      $label -> $(basename "$found")"
+            else
+              echo "::warning::$label installers are MISSING from this release (no match for $pattern)"
+              missing=$((missing + 1))
+            fi
+          }
+          check "macOS Apple Silicon dmg" '*-macOS-aarch64.dmg'
+          check "macOS Intel dmg" '*-macOS-x64.dmg'
+          check "Windows Setup exe" '*-Windows-x64-Setup.exe'
+          check "Windows MSI" '*-Windows-x64.msi'
+          check "Windows portable zip" '*-Windows-x64-portable.zip'
+          check "Linux AppImage" '*-Linux-x86_64.AppImage'
+          check "Linux deb" '*-Linux-x86_64.deb'
+          check "Linux rpm" '*-Linux-x86_64.rpm'
+          if [ "$missing" -ne 0 ]; then
+            echo "::warning::$missing platform installer group(s) missing - this release is INCOMPLETE."
+          else
+            echo "All expected platform installers are present."
+          fi
 
       - name: Publish assets
         if: steps.tagcheck.outputs.superseded != 'true'
