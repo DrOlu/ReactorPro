@@ -70,10 +70,15 @@ const SECTIONS = [
   { key: "moonshotai", sources: ["moonshotai-cn", "moonshotai"], min: 4 },
   { key: "minimax", sources: ["minimax-cn", "minimax"], min: 5 },
   { key: "stepfun", sources: ["stepfun"], min: 4 },
-  { key: "xiaomi", sources: ["xiaomi"], min: 4 },
+  // Upstream (models.dev) replaced the mimo v2.x family with three v2.6
+  // models (flash/pro/pro-ultraspeed) in Nov 2026; 3 is the intended size,
+  // not truncation.
+  { key: "xiaomi", sources: ["xiaomi"], min: 3 },
   { key: "longcat", sources: ["longcat"], min: 1 },
   { key: "alibaba", sources: ["alibaba-cn", "alibaba"], min: 40 },
-  { key: "tencent", sources: ["tencent-coding-plan"], min: 4 },
+  // Upstream (models.dev) stripped Tencent Coding Plan down to the single
+  // tc-code-latest model (Nov 2026); the hunyuan entries were removed there.
+  { key: "tencent", sources: ["tencent-coding-plan"], min: 1 },
 ];
 
 // Models that must exist (with the expected thinking shape); their absence
